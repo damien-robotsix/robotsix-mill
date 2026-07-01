@@ -122,7 +122,10 @@ core:
   repo_visibility_default: public      # "public" | "private" — default visibility for new repos
   lint_on_edit: true                    # run ruff after each agent file edit
   read_file_max_chars: 50000            # cap on implicit full read_file payload (0 disables); ranged reads never truncated
-  language_instructions_dir: agent_definitions/language_instructions  # directory of per-language instruction snippets injected into implement agent prompt
+  # language_instructions_dir: unset — defaults to the bundled agent_definitions/language_instructions
+  # (resolved via robotsix_mill.data_paths.data_dir: installed-package copy in the production wheel,
+  # repo root in dev). Only set this to point at a custom snippet directory; a relative path here is
+  # CWD-relative and will NOT resolve inside the production image, which has no repo-root checkout.
   meta_periodic: false                  # enable the cross-repo meta-agent pass
   meta_interval_seconds: 86400          # seconds between meta-agent passes
 
@@ -158,7 +161,10 @@ sandbox:
   command_timeout: 1800                # wall-clock cap (seconds) for shell/test commands
   test_command: ""                     # global fallback. Precedence: per-repo .robotsix-mill/config.yaml test_command (highest) > repos.yaml.test_command > this. Empty everywhere = PASS short-circuit.
   smoke_command: ""                    # global fallback for the path-scoped smoke gate (runs after unit tests pass). Precedence: per-repo .robotsix-mill/config.yaml smoke_command (highest) > this global fallback > empty everywhere = no smoke gate (short-circuits to PASS).
-  skills_dir: skills                   # directory of skill docs injected into system prompts
+  # skills_dir: unset — defaults to the bundled skills/ directory (resolved via
+  # robotsix_mill.data_paths.data_dir: installed-package copy in the production wheel, repo root in
+  # dev). Only set this to point at a custom skills directory; a relative path here is CWD-relative
+  # and will NOT resolve inside the production image, which has no repo-root checkout.
 
 # ---------------------------------------------------------------------------
 #  web — web search (sub-agent) and fetch (isolated container)

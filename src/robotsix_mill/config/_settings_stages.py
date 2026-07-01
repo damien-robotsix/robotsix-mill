@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ..data_paths import data_dir
+
 
 class _StagesSettings(BaseModel):
     # --- agent web access (refine + implement) ---
@@ -90,15 +92,19 @@ class _StagesSettings(BaseModel):
     # config.
     read_file_max_chars: int = Field(default=50_000, ge=0)
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
-    # refine + implement agents' system prompt. Relative to CWD (/app in
-    # the container, repo root locally).
-    skills_dir: Path = Field(default=Path("skills"))
+    # refine + implement agents' system prompt. Defaults to the bundled
+    # ``skills/`` directory resolved via ``data_dir`` (force-included
+    # alongside the package in the production wheel, repo root in dev) so
+    # it resolves regardless of CWD. Overridable via env/YAML.
+    skills_dir: Path = Field(default_factory=lambda: data_dir("skills"))
     # Directory of per-language instruction Markdown snippets
     # (agent_definitions/language_instructions/<language>.md) injected
-    # into the implement agent's system prompt. Relative to CWD (/app
-    # in the container, repo root locally).
+    # into the implement agent's system prompt. Defaults to the bundled
+    # ``agent_definitions/language_instructions`` directory resolved via
+    # ``data_dir`` (installed layout or repo root) so it resolves
+    # regardless of CWD. Overridable via env/YAML.
     language_instructions_dir: Path = Field(
-        default=Path("agent_definitions/language_instructions"),
+        default_factory=lambda: data_dir("agent_definitions") / "language_instructions",
     )
 
     # --- human approval gate (refine -> implement) ---

@@ -88,6 +88,18 @@ robotsix-deploy = "robotsix_deploy.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill", "src/robotsix_deploy"]
 
+# Ship the three repo-root data directories INSIDE the installed package
+# (robotsix_mill/<name>) so they resolve in the production wheel — where
+# there is no repo-root checkout — as well as the dev/editable layout.
+# robotsix_mill.data_paths.data_dir() prefers this installed copy and
+# falls back to the repo root. Keeping the sources at the repo root (not
+# moving them under src/) preserves the dev COPY . /app stack and the
+# meta-agent / periodic-loader repo-root file scans.
+[tool.hatch.build.targets.wheel.force-include]
+"agent_definitions" = "robotsix_mill/agent_definitions"
+"expert_definitions" = "robotsix_mill/expert_definitions"
+"skills" = "robotsix_mill/skills"
+
 # Allow the direct git references in dependencies. Hatchling does not
 # process PEP 508 direct references by default, so keep this flag.
 [tool.hatch.metadata]

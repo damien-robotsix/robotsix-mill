@@ -16,15 +16,14 @@ from pydantic import BaseModel, Field
 from typing import Any, Literal
 
 from ..config import Settings
+from ..data_paths import data_dir
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
 
 log = logging.getLogger(__name__)
 
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent / "agent_definitions" / "review.yaml"
-)
+_SYSPROMPT_PATH = data_dir("agent_definitions") / "review.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -320,9 +319,7 @@ def run_review_agent(
         claude_sdk_supports_inline_image,
     )
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "review.yaml"
-    )
+    definition = load_agent_definition(data_dir("agent_definitions") / "review.yaml")
 
     tools: list = []
     if repo_dir is not None:

@@ -261,12 +261,18 @@ def test_default_sandbox_image():
 
 
 def test_default_language_instructions_dir():
-    """language_instructions_dir defaults to
-    agent_definitions/language_instructions."""
+    """language_instructions_dir defaults to the bundled
+    agent_definitions/language_instructions directory, resolved via
+    ``data_dir`` (absolute, works in both installed and dev layouts)."""
+    from robotsix_mill.data_paths import data_dir
+
     s = Settings()
-    assert s.language_instructions_dir == Path(
-        "agent_definitions/language_instructions"
+    assert (
+        s.language_instructions_dir
+        == data_dir("agent_definitions") / "language_instructions"
     )
+    # Must be an existing directory regardless of the process CWD.
+    assert s.language_instructions_dir.is_dir()
 
 
 # ===========================================================================

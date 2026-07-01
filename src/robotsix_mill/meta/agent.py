@@ -95,10 +95,9 @@ def _available_periodic_catalog() -> str:
     maintenance tasks.
     """
     from ..agents.periodic_loader import _BUILTIN_KINDS
+    from ..data_paths import data_dir
 
-    defs_dir = (
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic"
-    )
+    defs_dir = data_dir("agent_definitions") / "periodic"
     lines: list[str] = []
     for name, kind in _BUILTIN_KINDS.items():
         if kind not in _PER_REPO_PERIODIC_KINDS:

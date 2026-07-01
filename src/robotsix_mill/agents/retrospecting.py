@@ -274,11 +274,10 @@ def run_retrospect_agent(
 
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
+    from ..data_paths import data_dir
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "retrospect.yaml"
+        data_dir("agent_definitions") / "retrospect.yaml"
     )
 
     # Build read-only filesystem tools when a clone is available so

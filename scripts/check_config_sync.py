@@ -117,6 +117,15 @@ _MODEL_FIELDS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         "doc_request_limit",
         "default_repo_id",
         # stages: gates / review / CI / maintenance
+        # skills_dir / language_instructions_dir default to bundled data
+        # directories resolved via robotsix_mill.data_paths.data_dir (the
+        # installed-package copy in the production wheel, else the repo
+        # root). They are deliberately NOT routed through the YAML cascade:
+        # a cwd-relative YAML value does not resolve inside the production
+        # image (no repo-root checkout), which crash-looped the serve
+        # process. Override via the MILL_SKILLS_DIR /
+        # MILL_LANGUAGE_INSTRUCTIONS_DIR env vars with an absolute path.
+        "skills_dir",
         "language_instructions_dir",
         "auto_merge_main_debt_detection_enabled",
         "freshness_gate_enabled",

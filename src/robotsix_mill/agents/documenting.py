@@ -89,11 +89,10 @@ def run_doc_classifier(
     from .base import _safe_close, build_agent_from_definition
     from .retry import run_agent
     from .yaml_loader import load_agent_definition
+    from ..data_paths import data_dir
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "doc_classifier.yaml"
+        data_dir("agent_definitions") / "doc_classifier.yaml"
     )
 
     agent = build_agent_from_definition(
@@ -163,12 +162,9 @@ def run_doc_agent(
     from .fs_tools import build_fs_tools
     from .retry import run_agent
     from ..runners.pass_runner import load_memory, persist_memory
+    from ..data_paths import data_dir
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "document.yaml"
-    )
+    definition = load_agent_definition(data_dir("agent_definitions") / "document.yaml")
 
     # Load the doc memory ledger (empty string if unset / missing /
     # unreadable — first run starts a fresh ledger).  When board_id

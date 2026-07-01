@@ -71,12 +71,9 @@ def load_periodic_system_prompt(name: str) -> str:
     """
     import yaml
 
-    path = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{name}.yaml"
-    )
+    from ..data_paths import data_dir
+
+    path = data_dir("agent_definitions") / "periodic" / f"{name}.yaml"
     return yaml.safe_load(path.read_text())["system_prompt"]
 
 
@@ -256,12 +253,10 @@ def run_periodic_agent(
         definition = definition_override
     else:
         from .yaml_loader import load_agent_definition
+        from ..data_paths import data_dir
 
         yaml_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "agent_definitions"
-            / "periodic"
-            / f"{definition_name}.yaml"
+            data_dir("agent_definitions") / "periodic" / f"{definition_name}.yaml"
         )
         definition = load_agent_definition(yaml_path)
 

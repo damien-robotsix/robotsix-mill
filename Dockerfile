@@ -63,6 +63,14 @@ WORKDIR /build
 # source tree into the production image).
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
+# The three repo-root data directories are force-included INTO the wheel
+# (see [tool.hatch.build.targets.wheel.force-include] in pyproject.toml)
+# so they ship alongside the installed package in the production image,
+# which has no repo-root checkout. hatchling reads force-include sources
+# from the build context, so they must be present here before the build.
+COPY agent_definitions/ ./agent_definitions/
+COPY expert_definitions/ ./expert_definitions/
+COPY skills/ ./skills/
 # DO NOT switch this to `uv sync` / `UV_PROJECT_ENVIRONMENT=system`. That
 # env var is a venv PATH, not a mode: uv builds a venv at /build/system and
 # puts the `robotsix-mill` console script at /build/system/bin, so the base

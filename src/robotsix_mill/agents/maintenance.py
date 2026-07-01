@@ -567,10 +567,10 @@ def run_maintenance_agent(  # noqa: C901 — clone-failure degrade branch + meta
     from .yaml_loader import load_agent_definition
 
     # 1. Load the YAML definition
+    from ..data_paths import data_dir
+
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "maintenance.yaml"
+        data_dir("agent_definitions") / "maintenance.yaml"
     )
 
     # 2. Read the ticket draft (needed for tool + prompt)

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.duration import parse_duration
+from ..data_paths import data_dir
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -148,16 +149,11 @@ def load_periodic_agent_definition(
         override = Path(repo_dir) / ".robotsix-mill" / "agents" / f"{name}.yaml"
         if override.is_file():
             return load_agent_definition(override)
-    builtin = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{name}.yaml"
-    )
+    builtin = data_dir("agent_definitions") / "periodic" / f"{name}.yaml"
     return load_agent_definition(builtin)
 
 
-_ROOT = Path(__file__).parent.parent.parent.parent
+_ROOT = data_dir("agent_definitions").parent
 
 
 def load_and_run_agent(

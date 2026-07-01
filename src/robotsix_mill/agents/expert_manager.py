@@ -54,11 +54,10 @@ class ExpertManager:
         exist or contains no ``.yaml`` files (fail-fast at startup).
         """
         from .expert_loader import load_expert_definition
+        from ..data_paths import data_dir
 
         if definitions_dir is None:
-            definitions_dir = (
-                Path(__file__).parent.parent.parent.parent / "expert_definitions"
-            )
+            definitions_dir = data_dir("expert_definitions")
 
         if not definitions_dir.is_dir():
             raise FileNotFoundError(

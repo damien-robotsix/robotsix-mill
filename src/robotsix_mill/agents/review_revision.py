@@ -54,11 +54,10 @@ def run_review_revision_agent(
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
     from .fs_tools import build_fs_tools
+    from ..data_paths import data_dir
 
     definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "review_revision.yaml"
+        data_dir("agent_definitions") / "review_revision.yaml"
     )
 
     tools = build_fs_tools(Path(repo_dir), settings)

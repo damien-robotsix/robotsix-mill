@@ -185,12 +185,9 @@ def run_coordinator(
     from .fs_tools import build_fs_tools
     from .retry import run_agent
     from .changelog_tool import make_insert_changelog_entry_tool
+    from ..data_paths import data_dir
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "implement.yaml"
-    )
+    definition = load_agent_definition(data_dir("agent_definitions") / "implement.yaml")
 
     # Pre-seed fs_tools cache and build synthetic message_history when
     # reference files are provided (first invocation only, not a retry).

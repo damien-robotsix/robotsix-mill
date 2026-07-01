@@ -19,6 +19,7 @@ modules:
       Every other module depends on this.
     paths:
       - src/robotsix_mill/config/*.py
+      - src/robotsix_mill/data_paths.py
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/config.example.yaml

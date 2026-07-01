@@ -15,7 +15,6 @@ to work with; draft lists are clipped to ``MAX_DRAFTS`` (20).
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from ..config import Settings
 from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
@@ -70,12 +69,10 @@ def run_module_curator_agent(
         definition = definition_override
     else:
         from .yaml_loader import load_agent_definition
+        from ..data_paths import data_dir
 
         definition = load_agent_definition(
-            Path(__file__).parent.parent.parent.parent
-            / "agent_definitions"
-            / "periodic"
-            / "module_curator.yaml"
+            data_dir("agent_definitions") / "periodic" / "module_curator.yaml"
         )
 
     from ._repo_tools import _build_repo_tools

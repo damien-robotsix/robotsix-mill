@@ -23,6 +23,8 @@ import yaml as _yaml
 
 from pydantic import BaseModel, Field, model_validator
 
+from ..data_paths import data_dir
+
 from ..config import RepoConfig, Settings
 from .prompt_blocks import section
 
@@ -167,9 +169,7 @@ def _collect_test_warnings_block(
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
-)
+_SYSPROMPT_PATH = data_dir("agent_definitions") / "refine.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 
@@ -434,9 +434,7 @@ def triage_refine(
     from .base import build_agent_from_definition, _safe_close
     from .retry import run_agent
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "triage.yaml"
-    )
+    definition = load_agent_definition(data_dir("agent_definitions") / "triage.yaml")
 
     tools: list = []
     if repo_dir is not None:
@@ -906,9 +904,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     )
     from .retry import run_agent
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
-    )
+    definition = load_agent_definition(data_dir("agent_definitions") / "refine.yaml")
 
     from ._repo_tools import _build_repo_tools
 

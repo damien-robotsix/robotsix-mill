@@ -251,12 +251,9 @@ _NON_MERGE_FIELDS = frozenset({"name", "prompt_overlay", "system_prompt", "inter
 
 def _builtin_definition(name: str) -> AgentDefinition:
     """Load the shipped ``agent_definitions/periodic/<name>.yaml``."""
-    builtin = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{name}.yaml"
-    )
+    from ..data_paths import data_dir
+
+    builtin = data_dir("agent_definitions") / "periodic" / f"{name}.yaml"
     return load_agent_definition(builtin)
 
 
