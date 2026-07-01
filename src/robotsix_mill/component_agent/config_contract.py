@@ -11,27 +11,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from robotsix_agent_comm.protocol import ConfigContractError  # noqa: F401 — re-export
+
 from ..config.settings import Settings
 
 logger = logging.getLogger("robotsix_mill")
-
-# ---------------------------------------------------------------------------
-#  ConfigContractError
-# ---------------------------------------------------------------------------
-
-
-class ConfigContractError(Exception):
-    """Raised when a config operation fails validation or application.
-
-    Carries fields that map cleanly onto ``Error.to(..., code=, message=,
-    **details)`` so the responder can surface it over the wire.
-    """
-
-    def __init__(self, code: str, message: str, **details: Any) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.details = details
 
 
 # ---------------------------------------------------------------------------

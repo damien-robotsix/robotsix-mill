@@ -8,9 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from robotsix_agent_comm.protocol import ConfigContractError
+
 from robotsix_mill.component_agent.config_contract import (
     SETTABLE_KEYS,
-    ConfigContractError,
     _is_secret_key,
     apply_config_update,
     describe_config,

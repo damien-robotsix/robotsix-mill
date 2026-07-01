@@ -16,8 +16,9 @@ import logging
 from typing import Any
 
 from ..config.settings import Settings
+from robotsix_agent_comm.protocol import ConfigContractError
+
 from .config_contract import (
-    ConfigContractError,
     apply_config_update,
     describe_config,
     get_config_snapshot,
