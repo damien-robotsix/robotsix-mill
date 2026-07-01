@@ -238,7 +238,6 @@ ConfigSyncPassResult
 HealthPassResult
 ModuleCuratorPassResult
 TestGapPassResult
-SecurityPosturePassResult
 oversized_items
 query_traces_since
 query_recent_traces
