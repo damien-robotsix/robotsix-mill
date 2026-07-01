@@ -91,7 +91,7 @@ def _clone_all_repos(
             try:
                 token = github_token(settings, repo_config=rc)
             except RuntimeError:
-                pass
+                pass  # no token available — proceed without authentication
             git_ops.clone(remote, clone_dest, target, token)
             paths[repo_id] = clone_dest
             log.info("pin_bump: cloned %s → %s", repo_id, clone_dest)

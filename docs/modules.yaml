@@ -231,6 +231,7 @@ modules:
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/credit_balance_runner.py
       - src/robotsix_mill/runners/verify_runner.py
+      - src/robotsix_mill/runners/pin_bump_runner.py
       - tests/runners/test_pass_runner.py
       - tests/runners/test_periodic_runner.py
       - tests/runners/test_run_health_runner.py
@@ -492,6 +493,20 @@ modules:
       - src/robotsix_mill/autoupdate/**/*.py
       - tests/autoupdate/**/*.py
     dependencies: []
+
+  - id: dependency-graph
+    description: >-
+      Dependency-graph model for coordinated internal git-rev pin bumps.
+      Parses ``[tool.uv.sources]`` from every registered repo's
+      ``pyproject.toml``, builds a directed acyclic graph of internal
+      dependencies, topologically sorts it, and computes coherent target
+      SHAs so that ``uv lock`` succeeds across the stack.
+    paths:
+      - src/robotsix_mill/dependency_graph/__init__.py
+      - src/robotsix_mill/dependency_graph/models.py
+      - src/robotsix_mill/dependency_graph/parser.py
+      - src/robotsix_mill/dependency_graph/resolver.py
+    dependencies: [config, vcs]
 
   # -------------------------------------------------------------------
   # Agent definitions, skills, experts, docs

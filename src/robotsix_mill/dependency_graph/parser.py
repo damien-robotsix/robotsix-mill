@@ -159,7 +159,7 @@ def build_graph(
                 try:
                     token = github_token(settings, repo_config=rc)
                 except RuntimeError:
-                    pass
+                    pass  # no token available — proceed without authentication
                 git_ops.clone(
                     node.forge_remote_url,
                     clone_dest,
