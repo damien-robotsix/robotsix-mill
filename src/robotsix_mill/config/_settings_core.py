@@ -70,6 +70,13 @@ class _CoreSettings(BaseModel):
     web_knowledge_stale_days: int = Field(
         default=30,
     )
+    # How long since the last ``last_verified`` touch before a cached
+    # knowledge file is flagged as stale in the index (hours). When a
+    # file is stale the web_knowledge agent's system prompt warns it
+    # to cross-check claims with web_search before trusting the cache.
+    web_knowledge_cache_ttl_hours: int = Field(
+        default=72,
+    )
     # Bound on the web_knowledge sub-agent's tool requests per
     # consultation. Each request is one Markdown read, one web_search,
     # or one Markdown write.

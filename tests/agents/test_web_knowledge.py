@@ -29,6 +29,7 @@ from robotsix_mill.agents import web_knowledge
 from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.agents.web_knowledge import (
     _build_index,
+    _is_stale,
     _KnowledgeMeta,
     _parse_frontmatter,
     _slug,
@@ -56,10 +57,12 @@ def _stamped(
     ts: str,
     source_url: str = "",
     verified_at: str = "",
+    last_verified: str = "",
+    stale: bool = False,
 ) -> str:
     """Build a frontmatter-stamped knowledge file body with an
     explicit ``last_updated:`` timestamp string and optional
-    ``source_url`` / ``verified_at``."""
+    ``source_url`` / ``verified_at`` / ``last_verified`` / ``stale``."""
     lines = [
         "---",
         f"library: {library}",
@@ -69,6 +72,10 @@ def _stamped(
         lines.append(f"source_url: {source_url}")
     if verified_at:
         lines.append(f"verified_at: {verified_at}")
+    if last_verified:
+        lines.append(f"last_verified: {last_verified}")
+    if stale:
+        lines.append("stale: true")
     lines += ["---", body]
     return "\n".join(lines)
 
@@ -158,6 +165,8 @@ class TestHelpers:
         assert out.startswith("---\n")
         assert "library: imaplib\n" in out
         assert "last_updated:" in out
+        assert "last_verified:" in out
+        assert "stale: false" in out
         # The body trails after the closing delimiter.
         assert out.endswith("---\nthe body")
 
@@ -166,6 +175,9 @@ class TestHelpers:
         meta = _parse_frontmatter(out)
         assert meta.last_updated is not None
         assert meta.last_updated.tzinfo is not None
+        assert meta.last_verified is not None
+        assert meta.last_verified.tzinfo is not None
+        assert meta.stale is False
         assert meta.body == "preserve me"
         assert meta.source_url is None
         assert meta.verified_at is None
@@ -185,13 +197,18 @@ class TestHelpers:
         assert (now - meta.verified_at).total_seconds() < 5
 
     def test_stamp_frontmatter_without_source_url_no_verified_at(self):
-        """Without ``source_url``, no ``verified_at`` line is stamped."""
+        """Without ``source_url``, no ``verified_at`` line is stamped.
+        ``last_verified`` and ``stale`` are always present."""
         out = _stamp_frontmatter("lib", "body")
         assert "source_url:" not in out
         assert "verified_at:" not in out
+        assert "last_verified:" in out
+        assert "stale: false" in out
         meta = _parse_frontmatter(out)
         assert meta.source_url is None
         assert meta.verified_at is None
+        assert meta.last_verified is not None
+        assert meta.stale is False
 
     def test_stamp_frontmatter_with_explicit_verified_at(self):
         """Passing ``verified_at`` overrides the auto-now."""
@@ -203,10 +220,13 @@ class TestHelpers:
         assert meta.verified_at == explicit
 
     def test_stamp_frontmatter_empty_source_url_no_verified_at(self):
-        """Empty-string ``source_url`` is treated as not-provided."""
+        """Empty-string ``source_url`` is treated as not-provided.
+        ``last_verified`` and ``stale`` are still stamped."""
         out = _stamp_frontmatter("lib", "body", source_url="")
         assert "source_url:" not in out
         assert "verified_at:" not in out
+        assert "last_verified:" in out
+        assert "stale: false" in out
 
     def test_parse_frontmatter_extracts_source_url_and_verified_at(self):
         text = _stamped(
@@ -354,6 +374,116 @@ class TestHelpers:
         assert "stamps" in out
         assert "(no timestamp)" in out
 
+    # ----- _is_stale ---------------------------------------------------
+
+    def test_is_stale_missing_last_verified(self):
+        """``last_verified is None`` → always stale (never touched)."""
+        meta = _KnowledgeMeta(
+            last_updated=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_verified=None,
+        )
+        assert _is_stale(meta, ttl_hours=72) is True
+
+    def test_is_stale_recent_last_verified(self):
+        """``last_verified`` within the TTL → not stale."""
+        now = datetime.now(timezone.utc)
+        meta = _KnowledgeMeta(
+            last_updated=now,
+            last_verified=now,
+        )
+        assert _is_stale(meta, ttl_hours=72) is False
+
+    def test_is_stale_old_last_verified(self):
+        """``last_verified`` older than TTL → stale."""
+        old = datetime.now(timezone.utc).replace(year=2020)
+        meta = _KnowledgeMeta(
+            last_updated=old,
+            last_verified=old,
+        )
+        assert _is_stale(meta, ttl_hours=72) is True
+
+    # ----- _parse_frontmatter — last_verified + stale -----------------
+
+    def test_parse_frontmatter_with_last_verified(self):
+        text = _stamped(
+            "lib",
+            "body",
+            "2026-01-15T12:30:00+00:00",
+            last_verified="2026-06-01T12:00:00+00:00",
+        )
+        meta = _parse_frontmatter(text)
+        assert meta.last_verified == datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_parse_frontmatter_with_stale_true(self):
+        text = (
+            "---\n"
+            "library: lib\n"
+            "last_updated: 2026-01-01T00:00:00+00:00\n"
+            "last_verified: 2026-01-01T00:00:00+00:00\n"
+            "stale: true\n"
+            "---\nbody"
+        )
+        meta = _parse_frontmatter(text)
+        assert meta.stale is True
+
+    def test_parse_frontmatter_stale_false_by_default(self):
+        """When ``stale`` is absent from frontmatter, it defaults to False."""
+        text = _stamped("lib", "body", "2026-01-15T12:30:00+00:00")
+        meta = _parse_frontmatter(text)
+        assert meta.stale is False
+
+    def test_parse_frontmatter_last_verified_naive_becomes_utc(self):
+        text = (
+            "---\n"
+            "library: x\n"
+            "last_updated: 2026-01-01T00:00:00+00:00\n"
+            "last_verified: 2026-06-01T12:00:00\n"
+            "---\nbody"
+        )
+        meta = _parse_frontmatter(text)
+        assert meta.last_verified is not None
+        assert meta.last_verified.tzinfo == timezone.utc
+
+    def test_parse_frontmatter_malformed_last_verified(self):
+        """Unparseable last_verified → None, not an exception."""
+        text = (
+            "---\n"
+            "library: x\n"
+            "last_updated: 2026-01-01T00:00:00+00:00\n"
+            "last_verified: not-a-date\n"
+            "---\nbody"
+        )
+        meta = _parse_frontmatter(text)
+        assert meta.last_verified is None
+        assert meta.body == "body"
+
+    # ----- _build_index — stale flagging -------------------------------
+
+    def test_build_index_flags_stale_entry(self, tmp_path):
+        """An entry whose last_verified is missing is flagged [STALE]."""
+        s = _settings(tmp_path)
+        d = s.data_dir / "web_knowledge"
+        d.mkdir(parents=True)
+        # Old file with no last_verified field → stale.
+        (d / "oldlib.md").write_text(
+            _stamped("oldlib", "body", "2020-01-01T00:00:00+00:00"),
+            encoding="utf-8",
+        )
+        out = _build_index(s)
+        assert "oldlib" in out
+        assert "[STALE]" in out
+
+    def test_build_index_does_not_flag_recent_entry(self, tmp_path):
+        """A freshly stamped entry (with last_verified) is not stale."""
+        s = _settings(tmp_path)
+        d = s.data_dir / "web_knowledge"
+        d.mkdir(parents=True)
+        stamped = _stamp_frontmatter("newlib", "fresh body")
+        (d / "newlib.md").write_text(stamped, encoding="utf-8")
+        out = _build_index(s)
+        assert "newlib" in out
+        assert "[STALE]" not in out
+
 
 # ---------------------------------------------------------------------------
 # TestRunWebKnowledge — the single mockable seam
@@ -475,10 +605,12 @@ class TestRunWebKnowledge:
         instances = _patch_agent_chain(monkeypatch)
         s = _settings(tmp_path)
         s.web_knowledge_stale_days = 45
+        s.web_knowledge_cache_ttl_hours = 99
         asyncio.run(run_web_knowledge(settings=s, question="q"))
         assert len(instances) == 1
         assert "~45 days" in instances[0].system_prompt
         assert "~30 days" not in instances[0].system_prompt
+        assert "~99 hours" in instances[0].system_prompt
 
     def test_agent_failure_degrades_to_error_string(
         self, tmp_path, secrets_set, monkeypatch
