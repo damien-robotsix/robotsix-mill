@@ -29,6 +29,7 @@ from robotsix_mill.agents import web_knowledge
 from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.agents.web_knowledge import (
     _build_index,
+    _KnowledgeMeta,
     _parse_frontmatter,
     _slug,
     _stamp_frontmatter,
@@ -49,10 +50,27 @@ def _settings(tmp_path) -> Settings:
     return Settings(data_dir=str(tmp_path))
 
 
-def _stamped(library: str, body: str, ts: str) -> str:
+def _stamped(
+    library: str,
+    body: str,
+    ts: str,
+    source_url: str = "",
+    verified_at: str = "",
+) -> str:
     """Build a frontmatter-stamped knowledge file body with an
-    explicit ``last_updated:`` timestamp string."""
-    return f"---\nlibrary: {library}\nlast_updated: {ts}\n---\n{body}"
+    explicit ``last_updated:`` timestamp string and optional
+    ``source_url`` / ``verified_at``."""
+    lines = [
+        "---",
+        f"library: {library}",
+        f"last_updated: {ts}",
+    ]
+    if source_url:
+        lines.append(f"source_url: {source_url}")
+    if verified_at:
+        lines.append(f"verified_at: {verified_at}")
+    lines += ["---", body]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -87,37 +105,50 @@ class TestHelpers:
 
     def test_parse_frontmatter_valid_isoformat(self):
         text = _stamped("imaplib", "body content here", "2026-01-15T12:30:00+00:00")
-        ts, body = _parse_frontmatter(text)
-        assert ts == datetime(2026, 1, 15, 12, 30, 0, tzinfo=timezone.utc)
-        assert body == "body content here"
+        meta = _parse_frontmatter(text)
+        assert meta.last_updated == datetime(
+            2026, 1, 15, 12, 30, 0, tzinfo=timezone.utc
+        )
+        assert meta.body == "body content here"
+        assert meta.source_url is None
+        assert meta.verified_at is None
 
     def test_parse_frontmatter_missing_returns_none_and_original(self):
         text = "no frontmatter here, just body"
-        ts, body = _parse_frontmatter(text)
-        assert ts is None
-        assert body == text
+        meta = _parse_frontmatter(text)
+        assert meta.last_updated is None
+        assert meta.source_url is None
+        assert meta.verified_at is None
+        assert meta.body == text
 
     def test_parse_frontmatter_naive_datetime_becomes_utc_aware(self):
         text = _stamped("x", "body", "2026-01-15T12:30:00")  # no tz
-        ts, body = _parse_frontmatter(text)
-        assert ts is not None
-        assert ts.tzinfo is not None
-        assert ts == datetime(2026, 1, 15, 12, 30, 0, tzinfo=timezone.utc)
-        assert body == "body"
+        meta = _parse_frontmatter(text)
+        assert meta.last_updated is not None
+        assert meta.last_updated.tzinfo is not None
+        assert meta.last_updated == datetime(
+            2026, 1, 15, 12, 30, 0, tzinfo=timezone.utc
+        )
+        assert meta.body == "body"
 
     def test_parse_frontmatter_malformed_timestamp_returns_none(self):
         text = _stamped("x", "body", "not-a-real-date")
-        ts, body = _parse_frontmatter(text)
-        assert ts is None
+        meta = _parse_frontmatter(text)
+        assert meta.last_updated is None
         # When the timestamp is malformed the body is still returned
         # (the frontmatter regex matched).
-        assert body == "body"
+        assert meta.body == "body"
 
     def test_parse_frontmatter_no_last_updated_line(self):
         text = "---\nlibrary: x\nfoo: bar\n---\nbody"
-        ts, body = _parse_frontmatter(text)
-        assert ts is None
-        assert body == "body"
+        meta = _parse_frontmatter(text)
+        assert meta.last_updated is None
+        assert meta.body == "body"
+
+    def test_parse_frontmatter_returns_knowledge_meta_type(self):
+        text = _stamped("x", "body", "2026-01-15T12:30:00+00:00")
+        meta = _parse_frontmatter(text)
+        assert isinstance(meta, _KnowledgeMeta)
 
     # ----- _stamp_frontmatter --------------------------------------------
 
@@ -132,10 +163,94 @@ class TestHelpers:
 
     def test_stamp_frontmatter_round_trips_through_parse(self):
         out = _stamp_frontmatter("fastapi", "preserve me")
-        ts, body = _parse_frontmatter(out)
-        assert ts is not None
-        assert ts.tzinfo is not None
-        assert body == "preserve me"
+        meta = _parse_frontmatter(out)
+        assert meta.last_updated is not None
+        assert meta.last_updated.tzinfo is not None
+        assert meta.body == "preserve me"
+        assert meta.source_url is None
+        assert meta.verified_at is None
+
+    # --- source_url / verified_at round-trips ---------------------------
+
+    def test_stamp_frontmatter_with_source_url_sets_verified_at(self):
+        """When ``source_url`` is provided, ``verified_at`` is populated."""
+        out = _stamp_frontmatter("lib", "body", source_url="https://example.com")
+        assert "source_url: https://example.com" in out
+        assert "verified_at:" in out
+        meta = _parse_frontmatter(out)
+        assert meta.source_url == "https://example.com"
+        assert meta.verified_at is not None
+        # verified_at should be within the last second
+        now = datetime.now(timezone.utc)
+        assert (now - meta.verified_at).total_seconds() < 5
+
+    def test_stamp_frontmatter_without_source_url_no_verified_at(self):
+        """Without ``source_url``, no ``verified_at`` line is stamped."""
+        out = _stamp_frontmatter("lib", "body")
+        assert "source_url:" not in out
+        assert "verified_at:" not in out
+        meta = _parse_frontmatter(out)
+        assert meta.source_url is None
+        assert meta.verified_at is None
+
+    def test_stamp_frontmatter_with_explicit_verified_at(self):
+        """Passing ``verified_at`` overrides the auto-now."""
+        explicit = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        out = _stamp_frontmatter(
+            "lib", "body", source_url="https://x.com", verified_at=explicit
+        )
+        meta = _parse_frontmatter(out)
+        assert meta.verified_at == explicit
+
+    def test_stamp_frontmatter_empty_source_url_no_verified_at(self):
+        """Empty-string ``source_url`` is treated as not-provided."""
+        out = _stamp_frontmatter("lib", "body", source_url="")
+        assert "source_url:" not in out
+        assert "verified_at:" not in out
+
+    def test_parse_frontmatter_extracts_source_url_and_verified_at(self):
+        text = _stamped(
+            "lib",
+            "body",
+            "2026-06-30T21:34:15+00:00",
+            source_url="https://docs.example.com/api",
+            verified_at="2026-06-30T21:34:15+00:00",
+        )
+        meta = _parse_frontmatter(text)
+        assert meta.source_url == "https://docs.example.com/api"
+        assert meta.verified_at == datetime(
+            2026, 6, 30, 21, 34, 15, tzinfo=timezone.utc
+        )
+
+    def test_parse_frontmatter_verification_fields_absent_on_old_files(self):
+        """Old knowledge files without source_url/verified_at parse cleanly."""
+        text = _stamped("oldlib", "old body", "2026-01-01T00:00:00+00:00")
+        meta = _parse_frontmatter(text)
+        assert meta.source_url is None
+        assert meta.verified_at is None
+        assert meta.last_updated is not None
+        assert meta.body == "old body"
+
+    def test_parse_frontmatter_source_url_without_verified_at(self):
+        """source_url may exist without verified_at (e.g. manually edited)."""
+        text = "---\nlibrary: x\nlast_updated: 2026-01-01T00:00:00+00:00\nsource_url: https://x.com\n---\nbody"
+        meta = _parse_frontmatter(text)
+        assert meta.source_url == "https://x.com"
+        assert meta.verified_at is None
+
+    def test_parse_frontmatter_malformed_verified_at(self):
+        """Unparseable verified_at → None, not an exception."""
+        text = "---\nlibrary: x\nlast_updated: 2026-01-01T00:00:00+00:00\nverified_at: not-a-date\n---\nbody"
+        meta = _parse_frontmatter(text)
+        assert meta.verified_at is None
+        assert meta.body == "body"
+
+    def test_parse_frontmatter_verified_at_naive_becomes_utc(self):
+        """verified_at without tzinfo is treated as UTC."""
+        text = "---\nlibrary: x\nlast_updated: 2026-01-01T00:00:00+00:00\nverified_at: 2026-06-01T12:00:00\n---\nbody"
+        meta = _parse_frontmatter(text)
+        assert meta.verified_at is not None
+        assert meta.verified_at.tzinfo == timezone.utc
 
     # ----- _build_index --------------------------------------------------
 
