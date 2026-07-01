@@ -493,6 +493,20 @@ class _StagesSettings(BaseModel):
     trace_review_max_drafts_per_run: int = Field(
         default=5,
     )
+    # Minimum inspector confidence for a finding to be filed as a draft.
+    # The inspector deliberately downgrades weak/uncertain/non-concrete
+    # findings to ``confidence="low"`` (and prefixes ``proposed_solution``
+    # with ``REQUIRES_HUMAN_REVIEW:``). Defaulting the floor to ``"medium"``
+    # drops exactly those self-flagged-weak findings — the low-signal
+    # ``tool_error`` / ``agent_limitation`` telemetry (e.g. a single
+    # out-of-range ``read_file`` or a slow survey run) that flooded the
+    # human-approval gate one-ticket-per-observation — while preserving the
+    # long-standing "medium files" behaviour. Tighten to ``"high"`` (file
+    # only findings whose symptom was seen in the trace AND confirmed against
+    # code) for a stricter gate, or widen to ``"low"`` to file everything.
+    trace_review_min_confidence: Literal["high", "medium", "low"] = Field(
+        default="medium",
+    )
     # Hard cap on the number of LLM inspector calls per trace-review
     # run.  Directly bounds LLM spend independently of the draft cap
     # (which only counts filed findings — a zero-finding inspection

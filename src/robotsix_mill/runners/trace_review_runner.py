@@ -76,6 +76,10 @@ _PER_OBS_COST_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Ordinal rank of inspector confidence, for the ``trace_review_min_confidence``
+# floor. Higher = more grounded (symptom seen AND confirmed in code).
+_CONFIDENCE_RANK: dict[str, int] = {"low": 1, "medium": 2, "high": 3}
+
 
 @dataclass
 class _Baselines:
@@ -749,6 +753,9 @@ def run_trace_review_pass(
 
     inspections_cap = settings.trace_review_max_inspections_per_run
     max_drafts = settings.trace_review_max_drafts_per_run
+    min_confidence_rank = _CONFIDENCE_RANK.get(
+        settings.trace_review_min_confidence, _CONFIDENCE_RANK["high"]
+    )
 
     for idx, (trace, flags, detail) in enumerate(flagged):
         if inspections_cap > 0 and idx >= inspections_cap:
@@ -802,6 +809,20 @@ def run_trace_review_pass(
                     max_drafts,
                 )
                 break
+            # Confidence floor: drop findings below trace_review_min_confidence
+            # (default "high"). Low/medium tool_error & agent_limitation
+            # observations are telemetry, not actionable fixes, and flooded the
+            # human-approval gate one-ticket-per-observation.
+            if _CONFIDENCE_RANK.get(finding.confidence, 0) < min_confidence_rank:
+                log.info(
+                    "trace-review: dropping %s finding for trace %s below "
+                    "confidence floor %s (finding was %s)",
+                    finding.category,
+                    trace_id[:8],
+                    settings.trace_review_min_confidence,
+                    finding.confidence,
+                )
+                continue
             # Deterministic path-existence guard: suppress findings
             # that cite source paths none of which exist on HEAD (the
             # documented false-positive mode — e.g. a fictional

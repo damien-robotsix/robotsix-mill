@@ -762,6 +762,90 @@ class TestRunTraceReviewPass:
         assert "put uv sync in CI" in body
         assert "Inspector confidence" in body
 
+    def test_below_confidence_floor_finding_is_dropped(
+        self,
+        settings,
+        monkeypatch,
+        caplog,
+    ):
+        # Default floor is "medium"; a low-confidence finding is telemetry the
+        # inspector itself downgraded, and must not reach the approval gate.
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: [_trace(totalCost=0.10)],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        finding = TraceFinding(
+            category="agent_limitation",
+            symptom="survey agent spent ~94s on documentation research",
+            root_cause="unbounded web_research fan-out",
+            proposed_solution="cap web_research calls",
+            confidence="low",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(findings=[finding]),
+        )
+
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            result = run_trace_review_pass(
+                session_id="sess-floor", repo_config=_test_repo_config()
+            )
+        assert result.traces_flagged == 1
+        assert len(result.drafts_created) == 0
+        assert any(
+            "below" in r.message and "confidence floor" in r.message
+            for r in caplog.records
+        )
+        svc = TicketService(settings, board_id="test-board")
+        review = [t for t in svc.list() if t.source == SourceKind.TRACE_REVIEW]
+        assert review == []
+
+    def test_confidence_floor_configurable_to_low(
+        self,
+        settings,
+        monkeypatch,
+    ):
+        # Lowering the floor to "low" lets a low-confidence finding through.
+        settings.trace_review_min_confidence = "low"
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: [_trace(totalCost=0.10)],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [
+                    _obs("run_command", output="error: command failed"),
+                ]
+            },
+        )
+        finding = TraceFinding(
+            category="tool_error",
+            symptom="read_file refused an out-of-range line span",
+            root_cause="agent requested lines beyond EOF",
+            proposed_solution="clamp requested line range to file length",
+            confidence="low",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(findings=[finding]),
+        )
+
+        result = run_trace_review_pass(
+            session_id="sess-floor-low", repo_config=_test_repo_config()
+        )
+        assert len(result.drafts_created) == 1
+
     def test_classifier_flags_forwarded_to_inspector(
         self,
         settings,

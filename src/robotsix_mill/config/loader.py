@@ -448,6 +448,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.trace_review.obs_multiplier": "trace_review_obs_multiplier",
     "periodic.trace_review.max_repeated_tool": "trace_review_max_repeated_tool",
     "periodic.trace_review.max_drafts_per_run": "trace_review_max_drafts_per_run",
+    "periodic.trace_review.min_confidence": "trace_review_min_confidence",
     "periodic.trace_review.max_traces_per_run": "trace_review_max_traces_per_run",
     # -- periodic.trace_review.inspector (dynamic budget) --
     "periodic.trace_review.inspector_min_requests": "trace_review_inspector_min_requests",
