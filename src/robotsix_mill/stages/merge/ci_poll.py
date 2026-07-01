@@ -7,11 +7,12 @@ routes to FIXING_CI / REBASING / WAITING_AUTO_MERGE as appropriate.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 from ...config import target_branch_for
-from ...core.models import Ticket
+from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import Forge, get_forge
 from ..base import Outcome, StageContext
@@ -30,6 +31,16 @@ from ._shared import (
     _write_counter,
     log,
 )
+
+
+def _extract_tracked_pr_url(description: str) -> str | None:
+    """Extract the tracked PR URL from a tracker ticket description.
+
+    Looks for the line ``- URL: <url>`` written by ``_file_foreign_ticket`` /
+    ``_file_orphan_ticket``.  Returns ``None`` when not found.
+    """
+    m = re.search(r"- URL: (https://[^\s]+)", description)
+    return m.group(1) if m else None
 
 
 class CIPollMixin(_MergeStageBase):
@@ -68,6 +79,36 @@ class CIPollMixin(_MergeStageBase):
             return None, Outcome(same_state)
 
         if pr is None:
+            # For tracker tickets, the mill branch may have been deleted or
+            # never had a PR.  Fall back to checking the tracked PR by URL.
+            if ticket.source is SourceKind.ORPHANED_PR_CHECK:
+                description = ctx.service.workspace(ticket).read_description()
+                tracked_url = _extract_tracked_pr_url(description)
+                if tracked_url:
+                    try:
+                        tracked = get_forge(
+                            s, repo_config=ctx.repo_config
+                        ).pr_status_by_url(url=tracked_url)
+                    except Exception as exc:  # noqa: BLE001 — transient
+                        log.warning(
+                            "%s: tracked PR status check failed: %s",
+                            ticket.id,
+                            exc,
+                        )
+                        tracked = None
+                    if tracked is not None:
+                        if tracked.get("merged"):
+                            return None, Outcome(
+                                State.BLOCKED,
+                                f"Tracked PR merged ({tracked_url}) — "
+                                "reconcile pass will close",
+                            )
+                        if tracked.get("state") == "closed":
+                            return None, Outcome(
+                                State.BLOCKED,
+                                f"Tracked PR closed ({tracked_url}) — "
+                                "reconcile pass will close",
+                            )
             return None, Outcome(same_state)
         if pr.get("merged"):
             if verify_merge:

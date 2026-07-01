@@ -407,6 +407,50 @@ class _TransitionMixin(_ServiceBase):
                 self._on_transition(ticket)
             return comment, ticket
 
+    def close_tracker(self, ticket_id: str, note: str = "") -> Ticket:
+        """Close a tracking ticket from any non-terminal state.
+
+        Escape hatch for tracker tickets (source=ORPHANED_PR_CHECK): unlike
+        mark_done, works from BLOCKED and skips all merge/branch/changelog
+        verification (tracker tickets have no mill-authored commits).
+        Transitions directly to CLOSED — no retrospect stage.
+
+        Raises TransitionError when the ticket is already terminal.
+        """
+        _NON_CLOSEABLE = {State.DONE, State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
+        try:
+            board = self._board_for(ticket_id)
+        except ValueError:
+            board = self.board_id or ""
+        with db.session(self.settings, board) as s:
+            ticket = _get_ticket(s, ticket_id)
+            if ticket.state in _NON_CLOSEABLE:
+                raise TransitionError(
+                    f"{ticket_id}: cannot close tracker — "
+                    f"state {ticket.state} is already terminal"
+                )
+            ticket.blocked_from = None
+            ticket.paused_from = None
+            ticket.state = State.CLOSED
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.flush()
+            s.add(
+                _make_event(
+                    s,
+                    ticket_id=ticket_id,
+                    state=State.CLOSED,
+                    note=note,
+                )
+            )
+            s.commit()
+            s.refresh(ticket)
+            if self._on_transition is not None:
+                self._on_transition(ticket)
+        # Purge oldest terminal tickets if we just crossed the cap.
+        self._maybe_purge_archived()
+        return self.get(ticket_id) or ticket
+
     def mark_done(
         self, ticket_id: str, note: str = "", author: str = "user"
     ) -> tuple[Comment | None, Ticket]:

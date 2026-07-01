@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import enum
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, TYPE_CHECKING
@@ -211,6 +212,7 @@ class OrphanedPrCheckResult:
     human_pr_skipped: int = 0  # PRs skipped because author is not the bot
     foreign_filed: int = 0  # tracking tickets filed for non-board (foreign) PRs
     foreign_skipped: int = 0  # foreign PRs skipped (dedup / dry-run / cap)
+    stale_closed: int = 0
     dry_run: bool = True
     actions: list[str] = field(default_factory=list)
     classifications: list[ClassifiedOrphanPr] = field(default_factory=list)
@@ -325,6 +327,15 @@ def run_orphaned_pr_check_pass(
         if not settings.orphaned_pr_dry_run
         else frozenset()
     )
+
+    # Reconcile stale tracker tickets whose PRs are no longer open.
+    if open_prs:
+        _reconcile_closed_tracker_prs(service, open_prs, repo_config, settings, result)
+    else:
+        log.warning(
+            "orphaned-pr-check: open_prs empty — skipping tracker reconcile "
+            "to avoid false positives"
+        )
 
     _classify_branches(
         sorted(mill_prs, key=lambda p: p["branch"]),
@@ -729,3 +740,78 @@ def _file_orphan_ticket(
         description=body,
         source=SourceKind.ORPHANED_PR_CHECK,
     )
+
+
+def _reconcile_closed_tracker_prs(
+    service: TicketService,
+    open_prs: list[dict[str, Any]],
+    repo_config: RepoConfig,
+    settings: Settings,
+    result: OrphanedPrCheckResult,
+) -> None:
+    """Close tracker tickets whose tracked PR is no longer open.
+
+    Queries all non-terminal ORPHANED_PR_CHECK tickets for this board,
+    extracts the PR number or branch from the ticket title, and closes
+    any ticket whose PR is absent from *open_prs*.
+    """
+    open_pr_numbers: set[int] = {
+        pr["number"] for pr in open_prs if pr.get("number") is not None
+    }
+    open_pr_branches: set[str] = {pr["branch"] for pr in open_prs}
+
+    _ACTIVE_STATES_EXCL = {
+        State.DONE,
+        State.CLOSED,
+        State.ANSWERED,
+        State.EPIC_CLOSED,
+        State.ERRORED,
+    }
+    all_tickets: list[Ticket] = service.recent_proposals_for(
+        source=SourceKind.ORPHANED_PR_CHECK, limit=500
+    )
+    tickets: list[Ticket] = [
+        t for t in all_tickets if t.state not in _ACTIVE_STATES_EXCL
+    ]
+
+    for ticket in tickets:
+        # Match "Track external PR: <repo_id>#<number>"
+        m = re.fullmatch(
+            rf"Track external PR: {re.escape(repo_config.repo_id)}#(\d+)",
+            ticket.title,
+        )
+        if m:
+            pr_num = int(m.group(1))
+            stale = pr_num not in open_pr_numbers
+        else:
+            # Match "Track orphaned PR: <repo_id>/<branch>"
+            m = re.fullmatch(
+                rf"Track orphaned PR: {re.escape(repo_config.repo_id)}/(.*)",
+                ticket.title,
+            )
+            if m:
+                branch_name = m.group(1)
+                stale = branch_name not in open_pr_branches
+            else:
+                # Different repo_id or unknown format — skip.
+                continue
+
+        if stale:
+            action_label = (
+                "CLOSE_TRACKER" if not settings.orphaned_pr_dry_run else "DRY_RUN_CLOSE"
+            )
+            log_line = (
+                f"repo={repo_config.repo_id} ticket={ticket.id} "
+                f"title={ticket.title!r} action={action_label}"
+            )
+            log.info("orphaned-pr-check: %s", log_line)
+            result.actions.append(log_line)
+
+            if settings.orphaned_pr_dry_run:
+                result.skipped += 1
+            else:
+                service.close_tracker(
+                    ticket.id,
+                    note="Tracked PR is no longer open — auto-closed by reconcile pass",
+                )
+                result.stale_closed += 1
