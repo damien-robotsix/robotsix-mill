@@ -6,6 +6,7 @@
   redundant paid re-spawns.  The convergence backstop (empty diff after
   review) now also writes ``implement.md`` so the guard can prevent the
   same no-op on the next attempt.
+- Fix `config.example.yaml` and `web_knowledge.py` tool-description strings to reflect the new `web_knowledge_request_limit` default of 12 (follow-up to the bump from 8→12).
 - Increase `web_knowledge_request_limit` default from 8 to 12 to prevent
   budget-exhaustion errors during multi-step web-knowledge consultations.
 - Added `source_url` and `verified_at` tracking to the web-knowledge agent's
