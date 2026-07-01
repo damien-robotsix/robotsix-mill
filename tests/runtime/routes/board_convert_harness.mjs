@@ -22,7 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // never duplicate it.
 const BOARD_JS = path.resolve(
   __dirname,
-  "../../src/robotsix_mill/runtime/static/board-mill.js",
+  "../../../src/robotsix_mill/runtime/static/board-mill.js",
 );
 // board-mill.js wraps everything in an IIFE so it leaks no browser
 // globals. Strip that wrapper so the top-level function declarations

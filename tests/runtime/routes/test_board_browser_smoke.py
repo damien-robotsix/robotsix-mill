@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "board_browser_check.py"
+_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "board_browser_check.py"
 
 
 def _load_driver():

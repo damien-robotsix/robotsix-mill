@@ -151,38 +151,20 @@ modules:
       - src/robotsix_mill/runtime/stage_retry.py
       - src/robotsix_mill/runtime/static/*
       - tests/runtime/test_api.py
-      - tests/runtime/test_exception_handlers.py
-      - tests/runtime/test_routes.py
-      - tests/runtime/test_screenshot_upload.py
-      - tests/runtime/test_worker.py
-      - tests/runtime/test_stale_branch_cleanup.py
-      - tests/runtime/test_tracing.py
-      - tests/runtime/test_run_registry.py
-      - tests/runtime/test_ci_monitor.py
-      - tests/runtime/test_dependabot_ingest.py
-      - tests/runtime/test_cost_warm.py
-      - tests/runtime/test_recent_traces.py
-      - tests/runtime/test_bespoke_supervisor.py
-      - tests/runtime/test_member_sync_supervisor.py
-      - tests/runtime/test_transient_errors.py
-      - tests/runtime/test_credit_status.py
-      - tests/runtime/test_candidates_routes.py
-      - tests/runtime/test_deps.py
-      - tests/runtime/test_lifespan.py
-      - tests/runtime/test_stage_retry.py
-      - tests/runtime/test_board_agent_colors_js.py
-      - tests/runtime/board_agent_colors_harness.mjs
-      - tests/runtime/test_board_convert_js.py
-      - tests/runtime/board_convert_harness.mjs
-      - tests/runtime/test_board_refresh_filter_js.py
-      - tests/runtime/board_refresh_filter_harness.mjs
-      - tests/runtime/test_board_history_js.py
-      - tests/runtime/board_history_harness.mjs
-      - tests/runtime/test_board_browser_smoke.py
-      - tests/runtime/test_board_adapter.py
-      - tests/runtime/test_board_assets.py
-      - tests/runtime/test_board_html.py
       - tests/runtime/test_broadcaster.py
+      - tests/runtime/test_cost_warm.py
+      - tests/runtime/test_credit_status.py
+      - tests/runtime/test_deps.py
+      - tests/runtime/test_exception_handlers.py
+      - tests/runtime/test_lifespan.py
+      - tests/runtime/test_recent_traces.py
+      - tests/runtime/test_run_registry.py
+      - tests/runtime/test_stage_retry.py
+      - tests/runtime/test_tracing.py
+      - tests/runtime/test_transient_errors.py
+      - tests/runtime/routes/**/*.py
+      - tests/runtime/routes/**/*.mjs
+      - tests/runtime/worker/**/*.py
     dependencies: [config, core, forge, stages]
 
   # -------------------------------------------------------------------
