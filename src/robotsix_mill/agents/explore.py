@@ -13,10 +13,16 @@ network), like the other agent seams.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import random
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------
@@ -49,6 +55,16 @@ def reset_explore_budget_exhausted() -> None:
     coordinator run."""
     global _explore_budget_exhausted
     _explore_budget_exhausted = False
+
+
+# Number of outer retry attempts when the explore sub-agent fails with a
+# non-transient (or exhausts its transient retries) error.  Each retry
+# simplifies the question so the sub-agent has a better chance of
+# completing before another connection hiccup.
+_EXPLORE_MAX_ATTEMPTS = 3
+
+# Maximum backoff delay (seconds) between outer explore retries.
+_EXPLORE_BACKOFF_CAP = 30.0
 
 
 _SYSTEM_PROMPT = """\
@@ -218,6 +234,95 @@ def _compose_explore_prompt(
     )
 
 
+async def _run_single_explore_attempt(
+    *,
+    agent: Any,
+    prompt: str,
+    limits: object,
+    settings: Settings,
+) -> str:
+    """Run one explore agent attempt, handling truncation and budget exhaustion.
+
+    Returns the explore output on success.  Raises on failure — the caller
+    (``run_explore``) owns the outer retry loop.
+    """
+    from pydantic_ai import Agent
+    from pydantic_ai.exceptions import UsageLimitExceeded
+    from pydantic_ai.usage import UsageLimits
+
+    from .retry import acall_with_retry
+
+    with trace_stage("explore"):
+        try:
+            # Capture loop variables as defaults so the lambda binds
+            # them at definition time, not at call time (B023).
+            _agent = agent
+            _prompt = prompt
+            _limits = limits
+            result = await acall_with_retry(
+                lambda a=_agent, p=_prompt, lim=_limits: a.run(p, usage_limits=lim),  # type: ignore[misc]
+                what="explore",
+            )
+        except UsageLimitExceeded:
+            # Budget exhausted — retry ONCE with a stricter prompt and
+            # no tools.  The outer retry loop in run_explore handles
+            # connection errors, not budget caps, so this fires on
+            # every attempt.
+            retry_agent = Agent(
+                model=getattr(agent, "model", None),
+                system_prompt=(
+                    "You already exceeded your exploration budget on a "
+                    "previous attempt. Return ONLY your single best answer "
+                    "now — at most 3 file paths with one-line notes. Do "
+                    "NOT call any tools. No speculation, no preamble. If "
+                    "you cannot answer, say 'unable to answer'."
+                ),
+                output_type=str,
+                tools=[],
+                name="explore-retry",
+                model_settings=getattr(agent, "model_settings", None),
+            )
+            retry_limits = UsageLimits(request_limit=2)
+            try:
+                retry_result = await retry_agent.run(
+                    prompt,
+                    usage_limits=retry_limits,
+                )
+            except UsageLimitExceeded:
+                mark_explore_budget_exhausted()
+                raise
+            return str(retry_result.output).strip()
+
+    # Detect truncation (finish_reason == 'length') and auto-continue
+    # with a single follow-up call so the caller gets a complete answer.
+    output = str(result.output).strip()
+    finish_reason = getattr(getattr(result, "response", None), "finish_reason", None)
+    if finish_reason == "length":
+        all_msgs = getattr(result, "all_messages", None)
+        try:
+            history = all_msgs() if all_msgs is not None else None
+        except TypeError:
+            history = None
+        if history is not None:
+            continuation_result = await agent.run(
+                "Continue exactly from where you were cut off. "
+                "Do not repeat anything already said. "
+                "Start from the last incomplete sentence.",
+                message_history=history,
+                usage_limits=limits,
+            )
+        else:
+            continuation_result = await agent.run(
+                "Continue exactly from where you were cut off. "
+                "Do not repeat anything already said. "
+                "Start from the last incomplete sentence.",
+                usage_limits=limits,
+            )
+        output += "\n" + str(continuation_result.output).strip()
+
+    return output
+
+
 async def run_explore(
     *,
     settings: Settings,
@@ -241,8 +346,6 @@ async def run_explore(
     if not repo_dir.exists():
         return "explore unavailable: workspace repo directory does not exist — the repository has not been cloned yet"
 
-    prompt = _compose_explore_prompt(question, known_context, pre_seeded_paths)
-
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings
@@ -258,98 +361,72 @@ async def run_explore(
 
     from .base import _aclose_async_client, build_openrouter_model
 
-    # Dedicated cheap (level-1) explore model — cost + DeepSeek pin +
-    # reasoning-off policy come from llmio.
-    model, main_client = build_openrouter_model(1)
-    agent = Agent(
-        model=model,
-        system_prompt=_SYSTEM_PROMPT,
-        output_type=str,
-        tools=ro_tools,
-        name="explore",
-        model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
-    )
     limits = UsageLimits(request_limit=settings.explore_request_limit)
 
-    try:
-        from pydantic_ai.exceptions import UsageLimitExceeded
+    from pydantic_ai.exceptions import UsageLimitExceeded
 
-        from .retry import acall_with_retry
+    last_error: Exception | None = None
 
-        with trace_stage("explore"):
-            try:
-                result = await acall_with_retry(
-                    lambda: agent.run(prompt, usage_limits=limits),
-                    what="explore",
-                )
-            except UsageLimitExceeded:
-                # Budget exhausted — retry ONCE with a stricter prompt and no tools
-                retry_agent = Agent(
-                    model=model,
-                    system_prompt=(
-                        "You already exceeded your exploration budget on a "
-                        "previous attempt. Return ONLY your single best answer "
-                        "now — at most 3 file paths with one-line notes. Do "
-                        "NOT call any tools. No speculation, no preamble. If "
-                        "you cannot answer, say 'unable to answer'."
-                    ),
-                    output_type=str,
-                    tools=[],
-                    name="explore-retry",
-                    model_settings=ModelSettings(
-                        max_tokens=settings.explore_max_tokens
-                    ),
-                )
-                retry_limits = UsageLimits(request_limit=2)
-                try:
-                    retry_result = await retry_agent.run(
-                        prompt,
-                        usage_limits=retry_limits,
-                    )
-                except UsageLimitExceeded:
-                    mark_explore_budget_exhausted()
-                    raise
-                return str(retry_result.output).strip()
+    for attempt in range(1, _EXPLORE_MAX_ATTEMPTS + 1):
+        # Simplify question on retries so the sub-agent has a better
+        # chance of completing before another transient failure.
+        if attempt == 1:
+            current_question = question
+            current_known_context = known_context
+        elif attempt == 2:
+            current_question = question[:500] + "…" if len(question) > 500 else question
+            current_known_context = None
+        else:
+            current_question = question[:200] + "…" if len(question) > 200 else question
+            current_known_context = None
 
-        # Detect truncation (finish_reason == 'length') and auto-continue
-        # with a single follow-up call so the caller gets a complete answer.
-        output = str(result.output).strip()
-        finish_reason = getattr(
-            getattr(result, "response", None), "finish_reason", None
+        current_prompt = _compose_explore_prompt(
+            current_question, current_known_context, pre_seeded_paths
         )
-        if finish_reason == "length":
-            # Defensive: when the result object has all_messages(), pass the
-            # full history so the continuation call genuinely continues from
-            # the truncated output (not from an empty conversation).  Falls
-            # back to the old single-prompt behaviour when all_messages() is
-            # unavailable (e.g. a stubbed result in tests).
-            all_msgs = getattr(result, "all_messages", None)
-            try:
-                history = all_msgs() if all_msgs is not None else None
-            except TypeError:
-                history = None
-            if history is not None:
-                continuation_result = await agent.run(
-                    "Continue exactly from where you were cut off. "
-                    "Do not repeat anything already said. "
-                    "Start from the last incomplete sentence.",
-                    message_history=history,
-                    usage_limits=limits,
-                )
-            else:
-                continuation_result = await agent.run(
-                    "Continue exactly from where you were cut off. "
-                    "Do not repeat anything already said. "
-                    "Start from the last incomplete sentence.",
-                    usage_limits=limits,
-                )
-            output += "\n" + str(continuation_result.output).strip()
 
-        return output
-    except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
-        return f"explore failed: {e}"
-    finally:
-        await _aclose_async_client(main_client)
+        model, main_client = build_openrouter_model(1)
+        agent = Agent(
+            model=model,
+            system_prompt=_SYSTEM_PROMPT,
+            output_type=str,
+            tools=ro_tools,
+            name="explore",
+            model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
+        )
+
+        try:
+            result = await _run_single_explore_attempt(
+                agent=agent,
+                prompt=current_prompt,
+                limits=limits,
+                settings=settings,
+            )
+            return result
+        except UsageLimitExceeded:
+            # Budget cap exhausted even after no-tools retry —
+            # don't loop, return the failure immediately.
+            return f"explore failed: budget exhausted after {attempt} attempt(s)"
+        except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
+            last_error = e
+            if attempt < _EXPLORE_MAX_ATTEMPTS:
+                delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
+                delay += random.uniform(0, delay / 2)  # noqa: S311 — jitter, not crypto
+                log.warning(
+                    "explore attempt %d/%d failed (%s: %s) — "
+                    "retrying in %.1fs with simplified question",
+                    attempt,
+                    _EXPLORE_MAX_ATTEMPTS,
+                    type(e).__name__,
+                    e,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                # continue to next attempt
+            # else: final attempt failed — fall through to return below
+        finally:
+            await _aclose_async_client(main_client)
+
+    return f"explore failed after {_EXPLORE_MAX_ATTEMPTS} attempts: {last_error}"
 
 
 def make_explore_tool(

@@ -1,6 +1,16 @@
 ## 0.0.0 (unreleased)
 
 - Implement stage: add stuck-loop detection to abort early when the agent makes no progress across consecutive passes. Two independent heuristics: (a) after 3 consecutive passes with no file edits the loop BLOCKs as "stuck", and (b) after 50 cumulative tool calls across passes without a git diff the loop BLOCKs. Within-pass detection flags a same-tool repeat (e.g. calling ``read_ticket`` 5+ times consecutively without edits) as a stuck signal.
+- Add retry-with-backoff wrapper around the explore sub-agent: when a
+  transient API connection error exhausts the built-in retries, the
+  explore call is retried up to 3 times with progressive question
+  simplification and exponential backoff.  Budget-cap errors
+  (UsageLimitExceeded) still trigger the existing no-tools fallback
+  immediately without looping.
+- Add ``coordinator_timeout_seconds`` setting (default 600 s, env var
+  ``MILL_COORDINATOR_TIMEOUT_SECONDS``) that caps a single implement
+  agent pass; the stage reclaims control when the wall-clock budget is
+  exceeded.
 - Bump `actions/checkout` from v4 (SHA `34e1148`) to v6.0.3 (SHA `df4cb1c`) across all 6 workflow files.
 - Add `_is_rename_only_change` pre-implement check alongside the existing
   `_is_config_only_change` that detects purely mechanical file-rename
