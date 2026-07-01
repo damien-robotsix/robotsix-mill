@@ -212,20 +212,6 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     "automated passes)",
                 )
 
-        # 2) Ticket-lifetime implement-cycle cap: total passes across all
-        #    review rounds.  Set higher than review_max_rounds × typical
-        #    fix iterations so it only trips as a genuine runaway backstop.
-        if (
-            s.max_implement_review_cycles > 0
-            and ticket.implement_cycles >= s.max_implement_review_cycles
-        ):
-            return Outcome(
-                State.BLOCKED,
-                f"Implement-review cycle limit reached "
-                f"({ticket.implement_cycles}/{s.max_implement_review_cycles}) — "
-                "escalating to BLOCKED for human inspection",
-            )
-
         # Phase 2: deterministic, stage-owned implement loop.
         return self._implement_loop(
             ctx, ticket, repo_dir, branch, resuming, s, extra_roots=extra_roots

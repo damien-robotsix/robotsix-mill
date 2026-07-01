@@ -5100,8 +5100,8 @@ def test_scope_triage_new_file_summary_shows_content(
 
 
 def test_convergence_backstop_halts_at_cycle_cap(ctx_factory, tmp_path, monkeypatch):
-    """The implement↔review convergence backstop escalates to BLOCKED
-    when ``implement_cycles`` reaches ``max_implement_review_cycles``.
+    """The preflight gate escalates to BLOCKED when
+    ``implement_cycles`` reaches ``max_implement_review_cycles``.
     """
     remote = make_bare_repo(tmp_path)
 
@@ -5114,18 +5114,15 @@ def test_convergence_backstop_halts_at_cycle_cap(ctx_factory, tmp_path, monkeypa
     t = _ticket(ctx)
     _write_file_map(ctx, t, "feature.txt")
 
-    # Bypass gates that require a real sandbox / API key.
-    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
-    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
-
-    # Seed the counter at the cap so the next run trips it.
+    # Seed the counter at the cap so preflight trips it.
     ctx.service.set_implement_cycles(t.id, 2)
     # Reload so ticket.implement_cycles reflects the set value.
     t = ctx.service.get(t.id)
     assert t.implement_cycles == 2
 
-    out = ImplementStage().run(t, ctx)
+    out = ImplementStage().preflight(t, ctx)
 
+    assert out is not None
     assert out.next_state is State.BLOCKED
     assert "cycle limit reached" in out.note.lower()
     assert "2/2" in out.note
