@@ -2080,7 +2080,7 @@ class _FakeForge:
 
 def _patch_forge(monkeypatch, fake_forge):
     monkeypatch.setattr(
-        "robotsix_mill.runtime.routes._tickets.get_forge",
+        "robotsix_mill.runtime.routes._tickets_merge.get_forge",
         lambda s, repo_config=None: fake_forge,
     )
 
@@ -2121,7 +2121,7 @@ def test_merge_now_blocks_when_not_merged_to_mainline(client, service, monkeypat
     fake = _FakeForge(merge_result={"merged": True, "reason": "merged"})
     _patch_forge(monkeypatch, fake)
     monkeypatch.setattr(
-        "robotsix_mill.runtime.routes._tickets._verify_merge_ancestor",
+        "robotsix_mill.runtime.routes._tickets_merge._verify_merge_ancestor",
         lambda *a, **k: False,
     )
 
@@ -2146,7 +2146,7 @@ def test_merge_now_multi_repo_blocks_when_not_merged_to_mainline(
     forge_b = _FakeForge()
     _patch_multirepo_forge(monkeypatch, {"repo-a": forge_a, "repo-b": forge_b})
     monkeypatch.setattr(
-        "robotsix_mill.runtime.routes._tickets._verify_merge_ancestor",
+        "robotsix_mill.runtime.routes._tickets_merge._verify_merge_ancestor",
         lambda *a, **k: False,
     )
 
@@ -2248,7 +2248,7 @@ def _patch_multirepo_forge(monkeypatch, forges_by_repo):
         lambda entry: SimpleNamespace(repo_id=entry["repo_id"], working_branch=""),
     )
     monkeypatch.setattr(
-        "robotsix_mill.runtime.routes._tickets.get_forge",
+        "robotsix_mill.runtime.routes._tickets_merge.get_forge",
         lambda s, repo_config=None: forges_by_repo[repo_config.repo_id],
     )
 

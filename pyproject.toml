@@ -199,6 +199,7 @@ max-complexity = 10
 "src/robotsix_mill/runtime/routes.py" = ["F821", "C901"]
 "src/robotsix_mill/runtime/lifespan.py" = ["C901"]
 "src/robotsix_mill/runtime/routes/_tickets.py" = ["C901", "S110"]
+"src/robotsix_mill/runtime/routes/_tickets_merge.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/routes/_traces.py" = ["C901"]
 "src/robotsix_mill/runtime/worker/*.py" = ["C901", "S110", "S603", "S607"]
 "src/robotsix_mill/stages/implement/*.py" = ["C901", "S603", "S607"]
