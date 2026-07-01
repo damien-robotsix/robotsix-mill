@@ -261,3 +261,30 @@ def test_forge_parity_cli_command(monkeypatch):
     )
 
     assert main(["forge-parity"]) == 0
+
+
+def test_serve_does_not_exit_on_zero_repos(monkeypatch):
+    """An empty repos registry must NOT cause _serve() to return 2."""
+    import argparse
+    import sys
+    from unittest.mock import MagicMock
+
+    from robotsix_mill.cli.serve import _serve
+    from robotsix_mill.config import ReposRegistry
+
+    empty_repos = ReposRegistry(repos={})
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: empty_repos,
+    )
+
+    # Inject a mock uvicorn module so _serve()'s `import uvicorn` gets our mock
+    # instead of the real uvicorn (which would try to bind a port).
+    mock_uvicorn = MagicMock()
+    monkeypatch.setitem(sys.modules, "uvicorn", mock_uvicorn)
+
+    args = argparse.Namespace(repo_id=None)
+    result = _serve(args, MagicMock())  # settings is unused by this path
+
+    assert result == 0
+    mock_uvicorn.run.assert_called_once()

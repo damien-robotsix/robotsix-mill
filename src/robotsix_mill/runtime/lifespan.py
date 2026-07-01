@@ -140,9 +140,18 @@ def create_lifespan(
         # pick the first repo as the initial repo_config for the worker.
         if single_repo_id is not None:
             repo_config = repos.repos[single_repo_id]
-        else:
+        elif repos.repos:
             repo_config = next(iter(repos.repos.values()))
-        service = TicketService(settings, board_id=repo_config.board_id)
+        else:
+            repo_config = None  # zero-repo mode — fall back to synthetic meta board
+        if repo_config is None:
+            # No real repos configured: initialise the synthetic meta board DB so
+            # the service and worker have a backing store for periodic meta tasks.
+            db.init_db(settings, Worker._META_BOARD)
+        lead_board_id = (
+            repo_config.board_id if repo_config is not None else Worker._META_BOARD
+        )
+        service = TicketService(settings, board_id=lead_board_id)
         broadcaster = BoardBroadcaster()
         service._on_transition = broadcaster.broadcast_sync
         ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
@@ -169,7 +178,7 @@ def create_lifespan(
         # Default registry for the worker's own (board-less) periodic
         # ticks — points at the lead repo's registry so legacy
         # callers without repo context still record somewhere.
-        default_registry = run_registries[repo_config.board_id]
+        default_registry = run_registries[lead_board_id]
         worker = Worker(ctx, default_registry, run_registries=run_registries)
         app.state.settings = settings
         app.state.service = service
@@ -226,9 +235,9 @@ def create_lifespan(
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
 
-        if settings.board_agent_enabled:
+        if settings.board_agent_enabled and repo_config is not None:
             await _start_board_agent(app, settings, repo_config.board_id)
-        if settings.board_manager_enabled:
+        if settings.board_manager_enabled and repo_config is not None:
             await _start_board_manager(app, settings, repo_config.board_id)
         if settings.component_agent_enabled:
             await _start_component_agent(app, settings)

@@ -311,6 +311,42 @@ async def test_dev_mode_skips_network_and_volume(
 
 
 # ---------------------------------------------------------------------------
+# Zero-repo startup (healthy start with no repos configured)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_lifespan_zero_repos(settings, lifespan_mocks):
+    """Server starts healthy with no repos — meta board is used as fallback."""
+    from robotsix_mill.config import ReposRegistry
+    from robotsix_mill.runtime.worker import Worker
+
+    empty_repos = ReposRegistry(repos={})
+    lifespan = create_lifespan(settings, empty_repos)
+    app = FastAPI()
+
+    async with lifespan(app):
+        assert app.state.repos is empty_repos
+        assert app.state.single_repo_id is None
+        assert app.state.worker is lifespan_mocks["worker"]
+        # Service falls back to the synthetic meta board.
+        service = app.state.service
+        assert service.board_id == Worker._META_BOARD
+        # Only the meta board registry exists (no per-repo registries).
+        assert set(app.state.run_registries.keys()) == {"meta"}
+        assert app.state.run_registry is lifespan_mocks["rr_instance"]
+
+    # meta board DB initialized (not per-repo DBs — there are none).
+    lifespan_mocks["init_db"].assert_called_once_with(settings, Worker._META_BOARD)
+    # Worker still starts and requeues.
+    lifespan_mocks["worker"].start.assert_called_once()
+    lifespan_mocks["worker"].requeue_unfinished.assert_called_once()
+    # Board-agent and board-manager NOT started.
+    assert not hasattr(app.state, "board_agent")
+    assert not hasattr(app.state, "board_manager")
+
+
+# ---------------------------------------------------------------------------
 # BoardManager constructor compatibility (regression guard)
 # ---------------------------------------------------------------------------
 def test_board_manager_signature_accepts_mill_kwargs():
