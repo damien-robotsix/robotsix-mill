@@ -11,6 +11,8 @@
 - Fix `config.example.yaml` and `web_knowledge.py` tool-description strings to reflect the new `web_knowledge_request_limit` default of 12 (follow-up to the bump from 8→12).
 - Increase `web_knowledge_request_limit` default from 8 to 12 to prevent
   budget-exhaustion errors during multi-step web-knowledge consultations.
+- Enable the `security_posture` periodic agent for mill by adding the per-repo
+  opt-in trigger at `.robotsix-mill/periodic/security_posture.yaml`.
 - Added `source_url` and `verified_at` tracking to the web-knowledge agent's
   library cache. The `update_library` tool now accepts an optional
   `source_url` parameter; when provided, a `verified_at` timestamp is
