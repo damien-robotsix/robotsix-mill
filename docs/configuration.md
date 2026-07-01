@@ -398,6 +398,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.already_done_requests` | `MILL_ALREADY_DONE_REQUEST_LIMIT` | `8` | Per-call cap for the already-done verifier sub-agent (short-circuits when a prior no-change-needed memory entry matches the draft) |
 | `core.limits.dedup_max_candidates` | `MILL_DEDUP_MAX_CANDIDATES` | `8` | Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size |
 | `core.limits.coordinator_max_tool_calls` | `MILL_COORDINATOR_MAX_TOOL_CALLS` | `300` | Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget |
+| `core.limits.coordinator_timeout_seconds` | `MILL_COORDINATOR_TIMEOUT_SECONDS` | `600` | Wall-clock timeout (seconds) for a single implement agent pass. When the agent exceeds this duration the pass is terminated and the stage can retry (with a fresh budget) or escalate. Default 600 s (10 min) caps worst-case stuck-loop burn. Minimum 60 s |
 | `core.limits.max_refine_explore_calls` | `MILL_MAX_REFINE_EXPLORE_CALLS` | `4` | Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely |
 | `core.limits.max_refine_read_file_calls` | `MILL_MAX_REFINE_READ_FILE_CALLS` | `10` | Hard cap on read_file calls per refine/triage agent run. 0 disables the cap (unbounded reads) |
 | `core.limits.review_requests` | `MILL_REVIEW_REQUEST_LIMIT` | `80` | Per-run request cap for the review agent |
