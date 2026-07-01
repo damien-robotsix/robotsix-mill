@@ -5448,3 +5448,203 @@ def test_preflight_blocks_when_both_spec_and_epic_empty(
     assert out is not None
     assert out.next_state is State.BLOCKED
     assert "empty or missing specification" in out.note.lower()
+
+
+# --- stale re-spawn guard (spec fingerprint) ----------------------------
+
+
+def test_stale_respawn_guard_blocks_unchanged_spec(ctx_factory, tmp_path, monkeypatch):
+    """When implement.md records a BLOCKED outcome and the spec hasn't
+    changed, preflight must block BEFORE a trace opens."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Stale spec", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # First implement run: agent produces NO changes → BLOCKED.
+    # This writes implement.md with "BLOCKED — resumable" + spec-fingerprint.
+    def _agent_noop(*, repo_dir, spec, **kwargs):
+        return ("did nothing", [], "", None, None, True, "nothing to do")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent_noop)
+
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.DONE  # no_change_needed → DONE
+
+    # Reset ticket to READY to simulate a re-spawn.
+    ctx.service.transition(t.id, State.BLOCKED, "test reset")
+    ctx.service.transition(t.id, State.READY, "test reset")
+    t = ctx.service.get(t.id)
+
+    # Write implement.md simulating a prior BLOCKED outcome.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    # Preflight should block — spec unchanged, last outcome BLOCKED.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spec unchanged" in out.note.lower()
+    assert fp in out.note
+
+
+def test_stale_respawn_guard_allows_changed_spec(ctx_factory, tmp_path, monkeypatch):
+    """When the spec has changed since the last BLOCKED implement,
+    preflight must allow the re-spawn."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Changed spec", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Write implement.md with fingerprint of the OLD spec.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    old_body = "Old spec content"
+    old_fp = hashlib.sha256(old_body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {old_fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    # Preflight should allow — current spec differs from stored fingerprint.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow when spec changed, got: {out}"
+
+
+def test_stale_respawn_guard_skips_when_passed(ctx_factory, tmp_path, monkeypatch):
+    """When implement.md records a 'passed' outcome, preflight must NOT
+    block regardless of fingerprint match."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Passed ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Write implement.md with "passed" header — even with matching
+    # fingerprint, preflight should not block.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (passed)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\ncompleted successfully\n",
+        encoding="utf-8",
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow when last outcome passed, got: {out}"
+
+
+def test_stale_respawn_guard_skips_without_implement_md(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """On first implement run (no implement.md), preflight must proceed
+    normally — no false positive block."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Fresh ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # No implement.md exists — preflight should proceed.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow on first run, got: {out}"
+
+
+def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeypatch):
+    """When the convergence backstop fires (empty diff after review),
+    implement.md must be written so the stale re-spawn guard can
+    prevent the same no-op on the next attempt."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    t = _ticket(ctx, title="Convergence ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Run implement once so a branch and commits exist.
+    def _agent(*, repo_dir, spec, **kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Simulate returning from review with no new commits.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    branch = f"{ctx.settings.branch_prefix}{t.id}"
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "reset", "--hard", "origin/main"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "checkout", "-B", branch],
+        check=True,
+        capture_output=True,
+    )
+
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Second run: convergence backstop fires → BLOCKED.
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "empty diff" in out2.note.lower()
+
+    # implement.md must have been written with BLOCKED outcome.
+    md = ws.artifacts_dir / "implement.md"
+    assert md.exists(), "convergence backstop must write implement.md"
+    content = md.read_text(encoding="utf-8")
+    assert "BLOCKED — resumable" in content
+    assert "spec-fingerprint:" in content

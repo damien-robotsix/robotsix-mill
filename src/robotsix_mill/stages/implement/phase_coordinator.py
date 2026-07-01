@@ -106,6 +106,46 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 "escalating to BLOCKED for human inspection",
             )
 
+        # 4. Stale re-spawn guard: if the last implement attempt was not
+        #    successful ("BLOCKED — resumable") and the effective spec
+        #    (direct description + epic context) hasn't changed since
+        #    that attempt, re-spawning would produce the same result.
+        #    Fail fast before a trace opens to prevent the $0.00 trace /
+        #    no-op re-spawn pattern.
+        implement_md = ws.artifacts_dir / "implement.md"
+        if implement_md.exists():
+            try:
+                md_content = implement_md.read_text(encoding="utf-8")
+            except OSError:
+                md_content = ""
+            if "BLOCKED — resumable" in md_content:
+                # Assemble the effective spec the same way
+                # _load_implement_context does (epic context first,
+                # then direct description).
+                effective = spec or ""
+                if ticket.parent_id:
+                    epic_ctx2 = ctx.service.get_epic_context(ticket)
+                    if epic_ctx2:
+                        effective = epic_ctx2 + "\n\n" + effective
+                import hashlib
+
+                current_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+                # Extract stored fingerprint from implement.md.
+                stored_fp = ""
+                for line in md_content.splitlines():
+                    if line.startswith("spec-fingerprint: "):
+                        stored_fp = line.split("spec-fingerprint: ", 1)[1].strip()
+                        break
+                if stored_fp and stored_fp == current_fp:
+                    return Outcome(
+                        State.BLOCKED,
+                        "spec unchanged since last implement attempt "
+                        f"(fingerprint {current_fp}) — "
+                        "re-implementing would produce the same "
+                        "result.  Update the specification or delete "
+                        "artifacts/implement.md to reset.",
+                    )
+
         return None
 
     # ------------------------------------------------------------------
@@ -267,13 +307,23 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             ):
                 ahead = -1  # can't determine → don't block
             if ahead == 0:
-                return Outcome(
-                    State.BLOCKED,
+                note = (
                     "empty diff after review round — branch has no commits "
                     "beyond origin/main. Re-implementing would produce no "
                     "changes (review findings may be unfixable by further "
-                    "automated passes)",
+                    "automated passes)"
                 )
+                self._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=False,
+                    reference_files=None,
+                    extra_roots=extra_roots,
+                )
+                return Outcome(State.BLOCKED, note)
 
         # Phase 2: deterministic, stage-owned implement loop.
         return self._implement_loop(
@@ -612,9 +662,22 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         extra_roots: list[Path] | None = None,
     ) -> None:
         ws = ctx.service.workspace(ticket)
+        # Compute the effective spec fingerprint for the stale
+        # re-spawn guard in preflight.  Must match how preflight
+        # assembles the spec (epic context + direct description).
+        import hashlib
+
+        effective = ws.read_description() or ""
+        if ticket.parent_id:
+            epic_ctx = ctx.service.get_epic_context(ticket)
+            if epic_ctx:
+                effective = epic_ctx + "\n\n" + effective
+        fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
         (ws.artifacts_dir / "implement.md").write_text(
             f"# Implement ({'passed' if ok else 'BLOCKED — resumable'})\n"
-            f"branch: {branch}\n\n{summary}\n",
+            f"branch: {branch}\n"
+            f"spec-fingerprint: {fp}\n"
+            f"\n{summary}\n",
             encoding="utf-8",
         )
         # Persist agent-curated reference_files (paths-only) for retry
