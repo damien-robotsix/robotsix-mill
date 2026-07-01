@@ -156,42 +156,6 @@ make test
 Running the pipeline needs Docker (agents run in disposable containers);
 `make test` works without it.
 
-## Deploy Server
-
-The central deployment & lifecycle server (`robotsix-deploy`) manages
-service deployments across the robotsix suite.  It is packaged alongside
-the mill and can be run independently.
-
-### Quick start
-
-```sh
-# Build and run the deploy server image:
-docker compose -f docker-compose.deploy.yml up --build
-
-# Or run it directly:
-.venv/bin/robotsix-deploy serve
-```
-
-The server listens on `http://127.0.0.1:8080` by default.  Configure it
-via `DEPLOY_*` environment variables (see `src/robotsix_deploy/config.py`
-for the full list).
-
-### Endpoints
-
-| Method | Path      | Purpose                    |
-|--------|-----------|----------------------------|
-| GET    | `/health` | Liveness probe             |
-| GET    | `/ready`  | Readiness probe            |
-
-The lifecycle API endpoints (deploy, rollback, broker registration) are
-added by sibling tickets — this ticket delivers the scaffold only.
-
-### Image publish
-
-The `docker-compose.deploy.yml` service is published to GHCR on every
-push to `main` via `.github/workflows/deploy-server-release.yml`, which
-calls the shared `docker-release.yml` reusable workflow.
-
 Configuration loading order, multi-repo mode, and the full settings
 reference are covered in [docs/configuration.md](docs/configuration.md).
 

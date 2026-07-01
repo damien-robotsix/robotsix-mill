@@ -13,7 +13,7 @@ Every push to `main` triggers
 1. Parse conventional-commit history since the last tag.
 2. Compute the next version (major/minor/patch) from the commit types.
 3. Update `pyproject.toml`'s `[project].version` and the `__version__` variables
-   in `src/robotsix_mill/__init__.py` and `src/robotsix_deploy/__init__.py`.
+   in `src/robotsix_mill/__init__.py`.
 4. Auto-generate `CHANGELOG.md` from the commit messages.
 5. Create a Git tag and a GitHub Release with auto-generated release notes.
 6. Build the sdist + wheel (`uv build`).
