@@ -1,5 +1,14 @@
 ## 0.0.0 (unreleased)
 
+- Added `source_url` and `verified_at` tracking to the web-knowledge agent's
+  library cache. The `update_library` tool now accepts an optional
+  `source_url` parameter; when provided, a `verified_at` timestamp is
+  recorded so `read_library` can distinguish file-touch from
+  fact-verification. Updated `_parse_frontmatter` to return a
+  `_KnowledgeMeta` dataclass with all frontmatter fields. Updated the
+  system prompt to instruct the agent to treat unverified claims as suspect
+  regardless of `last_updated` recency — preventing stale cached facts from
+  cascading into 404s.
 - Add `Stage.preflight()` — a lightweight pre-trace gate that lets stages signal early-exit before a Langfuse trace is opened. The implement stage uses it to catch empty specs and exceeded cycle limits without consuming a spawn slot or emitting a $0.00 trace.
 - Remove five dead backward-compat re-exports from `orchestration.py`: `_persist_triage_complexity`, `_MIGRATE_NOTE_PREFIX`, `_anti_bounce_escalate`, `_parse_prior_boards`, `_is_sendback_reentry` (zero imports across the codebase).
 - Add implement-stage precondition checks: spec emptiness gate and per-ticket spawn counter (`implement_max_spawns_per_ticket`, default 3) to fail fast on known no-op conditions instead of burning paid LLM invocations on empty-spec or runaway re-spawn loops.
