@@ -377,9 +377,9 @@ triage_boilerplate_pass = _make_background_pass(
     runner_func="run_triage_boilerplate_pass",
     docstring="""Kick off a triage-boilerplate pass in the BACKGROUND and return at once.
 
-    The triage-boilerplate agent reviews the codebase for boilerplate
-    reduction opportunities, filing draft tickets for each finding.
-    New drafts appear on the board when it finishes.""",
+    The triage-boilerplate agent scans recent triage tickets for recurring
+    patterns and proposes boilerplate response templates, filing draft
+    tickets for each finding. New drafts appear on the board when it finishes.""",
 )
 router.post("/triage-boilerplate", status_code=202)(triage_boilerplate_pass)
 
