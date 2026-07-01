@@ -3,6 +3,7 @@ __pycache__/
 *.bak
 *.egg-info/
 .pytest_cache/
+_llmio_check/
 .mypy_cache/
 .ruff_cache/
 .coverage
