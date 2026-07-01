@@ -13,14 +13,17 @@ everything and never converged.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal, TypeVar
 
 from pydantic import BaseModel, model_validator
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
+
+_T = TypeVar("_T")
 
 
 log = logging.getLogger(__name__)
@@ -148,6 +151,27 @@ class ValidationResult(BaseModel):
             failure_summary="" if passed else feedback,
             iterations_used=iterations,
         )
+
+
+def _call_with_timeout(
+    fn: Callable[[], _T],
+    timeout_seconds: int,
+    what: str = "agent run",
+) -> _T:
+    """Run *fn* in a thread, return its result or raise TimeoutError.
+
+    Uses a single-thread executor so the stage can reclaim control when
+    the agent pass exceeds its wall-clock budget.  The abandoned thread
+    will eventually complete (or be cleaned up at process exit); the
+    stage retries with a fresh agent context on the next pass.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(fn)
+        try:
+            return future.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise TimeoutError(f"{what} timed out after {timeout_seconds}s") from None
 
 
 def run_coordinator(
@@ -423,14 +447,18 @@ def run_coordinator(
 
         from .structured_output_guard import reprompt_if_unstructured
 
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(
-                run_user_prompt,
-                message_history=final_message_history,
-                usage_limits=limits,
+        result = _call_with_timeout(
+            lambda: run_agent(
+                agent,
+                lambda h: h.run_sync(
+                    run_user_prompt,
+                    message_history=final_message_history,
+                    usage_limits=limits,
+                ),
+                what="implement",
             ),
-            what="implement",
+            timeout_seconds=settings.coordinator_timeout_seconds,
+            what="implement agent",
         )
         result = reprompt_if_unstructured(
             result=result,
