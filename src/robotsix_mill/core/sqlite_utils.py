@@ -1,10 +1,21 @@
 """Additive SQLite column migrations — shared helpers.
 
-These functions mirror the API of ``robotsix_llmio.core.sqlite_utils``
-(PR #255, commit ``8c5c98e``).  When the mill's pinned version of
-``robotsix-llmio`` is updated to include that PR, switch the imports in
-``db.py`` to ``from robosix_llmio.core.sqlite_utils import ...`` and
-delete this module.
+These functions mirror the intent of
+``robotsix_llmio.core.sqlite_utils`` but the llmio API is NOT a
+drop-in replacement as of llmio pin ``3da3c4317f4a``:
+
+* ``run_additive_migrations`` takes ``(table, column_ddls)`` in llmio
+  vs ``(list[tuple[str, str]])`` here — single-table only, different
+  signature.
+* llmio uses ``conn.execute(str)`` which works with raw
+  ``sqlite3.Connection`` but raises ``ObjectNotExecutableError`` on
+  SQLAlchemy ≥2.0 ``Connection``.  Mill passes a SA connection from
+  ``engine.begin()``, so llmio's version cannot be used as-is.
+
+Keep this module until llmio's ``sqlite_utils`` supports both
+``sqlite3.Connection`` and SQLAlchemy ``Connection`` (like the
+``_execute_sql`` adapter here does) AND its API matches the call-sites
+in ``db.py``.
 """
 
 from __future__ import annotations
