@@ -353,6 +353,20 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     indent=2,
                 )
             )
+        elif entry["format"] == "roadmap_sync":
+            print(
+                json.dumps(
+                    {
+                        "summary": result.summary,
+                        "created": result.created,
+                        "updated": result.updated,
+                        "skipped": result.skipped,
+                        "pr_url": result.pr_url,
+                        "session_id": result.session_id,
+                    },
+                    indent=2,
+                )
+            )
         elif entry["format"] == "drafts":
             print(
                 json.dumps(
@@ -435,6 +449,33 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     print(f"  - {d['id']}: {d.get('title', '')}")
             else:
                 print("No new draft tickets created.")
+        elif entry["format"] == "roadmap_sync":
+            print(f"{entry['label']} complete.")
+            print(
+                f"Created: {len(result.created)} | "
+                f"Updated: {len(result.updated)} | "
+                f"Skipped: {len(result.skipped)}"
+            )
+            if result.pr_url:
+                print(f"PR: {result.pr_url}")
+            if result.created:
+                print("Created:")
+                for item in result.created:
+                    print(f"  - {item.get('id', '?')}: {item.get('title', '')}")
+            if result.updated:
+                print("Updated:")
+                for item in result.updated:
+                    fields = item.get("fields", [])
+                    print(
+                        f"  - {item.get('id', '?')}: {item.get('title', '')}"
+                        f" ({', '.join(fields)})"
+                    )
+            if result.skipped:
+                print("Skipped:")
+                for item in result.skipped:
+                    print(f"  - {item.get('title', '?')}: {item.get('reason', '')}")
+            if not result.created and not result.updated and not result.skipped:
+                print("No changes.")
         elif entry["format"] == "drafts":
             print(f"{entry['label']} complete.")
             print(result.summary)
