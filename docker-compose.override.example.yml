@@ -29,3 +29,24 @@ services:
       args:
         MILL_BUILD_SHA: ${MILL_BUILD_SHA:-}
     image: robotsix/mill:dev
+    volumes:
+      # Claude SDK backend auth (only needed when llm_backend: claude_sdk, or
+      # an agent is in claude_sdk_agents). Mount the host's whole ~/.claude dir
+      # READ-WRITE so the in-container `claude` CLI sees the full login state
+      # (not just the token) AND can persist its periodic OAuth-token refresh.
+      #
+      # Do NOT mount just .credentials.json :ro — two traps:
+      #  1. The CLI reports "Not logged in" without the rest of the dir's state.
+      #  2. A single-file mount pins the inode at container-create; when the
+      #     host CLI refreshes the token (atomic rename → new inode) the
+      #     container keeps seeing the STALE file until a force-recreate.
+      # The host uid (typically 1000) must match the container's `mill` user
+      # (uid 1000) for the rw writes to work.
+      #
+      # NOTE: the container's bundled `claude` CLI version (from the
+      # claude-agent-sdk Python dep) must be compatible with the host's
+      # (the credential file format can differ across versions) — rebuild
+      # the image if the host CLI has moved ahead. Heads-up: this is
+      # a LIVE rw share with your own ~/.claude, so the container's CLI and
+      # any interactive `claude` session on the host write the same files.
+      - ${HOME}/.claude:/home/mill/.claude
