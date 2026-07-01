@@ -1,6 +1,17 @@
 ## 0.0.0 (unreleased)
 
 - Bump `actions/checkout` from v4 (SHA `34e1148`) to v6.0.3 (SHA `df4cb1c`) across all 6 workflow files.
+- Add `_is_rename_only_change` pre-implement check alongside the existing
+  `_is_config_only_change` that detects purely mechanical file-rename
+  tickets (git renames + config/doc stubs with zero behavioural delta).
+  When detected, `_select_agent_level` returns sentinel `0`, which
+  `_run_single_implement_pass` routes to a new deterministic
+  `_handle_rename_only_change` handler that finalizes and proceeds
+  directly to CODE_REVIEW — bypassing the LLM coordinator entirely.
+  Extended `_should_skip_test_gate` to also skip the full test suite
+  for rename-only diffs. Added 7 unit tests for the rename-only
+  detection and fixed 2 existing tests whose `subprocess.run` stubs
+  were caught by the new rename check. (mill: Add pre-implement check to bypass LLM coordinator for purely rename-only tickets (20260701T141629Z-add-pre-implement-check-to-bypass-llm-co-328a))
 - Bump anchore/sbom-action from v0.21.0 to v0.24.0 in `docker-publish.yml` (PR #617).
 - Dockerfile: drop redundant system `claude` CLI (`npm install -g @anthropic-ai/claude-code`); the `claude-agent-sdk` Python dep ships its own bundled binary (`_bundled/claude`) and prefers it. Also document the `~/.claude` rw mount in `docker-compose.override.example.yml`.
 - `_verify_merge_ancestor`: add content-level fallback when `git merge-base --is-ancestor` fails — diffs the feature commit against the target branch and checks whether changed files on the target branch contain the ticket ID. Catches squash and rebase merges where the log message does not mention the ticket.
