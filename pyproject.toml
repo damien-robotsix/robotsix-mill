@@ -83,10 +83,9 @@ robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
 robotsix-autoupdate = "robotsix_mill.autoupdate:main"
-robotsix-deploy = "robotsix_deploy.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/robotsix_mill", "src/robotsix_deploy"]
+packages = ["src/robotsix_mill"]
 
 # Allow the direct git references in dependencies. Hatchling does not
 # process PEP 508 direct references by default, so keep this flag.
@@ -110,7 +109,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["robotsix_mill", "robotsix_deploy"]
+source = ["robotsix_mill"]
 branch = true
 relative_files = true
 
@@ -306,7 +305,7 @@ DEP001 = ["playwright"]
 [tool.mypy]
 strict = true
 python_version = "3.14"
-packages = ["src/robotsix_mill", "src/robotsix_deploy"]
+packages = ["src/robotsix_mill"]
 ignore_missing_imports = true
 show_error_codes = true
 
@@ -314,7 +313,6 @@ show_error_codes = true
 version_toml = ["pyproject.toml"]
 version_variables = [
     "src/robotsix_mill/__init__.py:__version__",
-    "src/robotsix_deploy/__init__.py:__version__",
 ]
 branch = "main"
 build_command = "uv build"
