@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Update ``robotsix_llmio.core.sqlite_utils`` in the installed venv package to accept ``list[tuple[str, str]]`` (matching mill call-sites), support SQLAlchemy 2.0 ``Connection`` via ``exec_driver_sql`` fallback, and return ``list[bool]``. The upstream changes are staged in ``_llmio_check/`` for manual push; the vendored ``sqlite_utils.py`` docstring now documents the migration path.
 - Guard the implement stage against epic tickets: the preflight gate now
   blocks epic tickets (``TicketKind.EPIC``) with a BLOCKED outcome before
   any Langfuse trace opens, and the implement agent system prompt warns

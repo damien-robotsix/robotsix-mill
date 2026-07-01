@@ -267,7 +267,7 @@ extend-immutable-calls = [
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
-extend_exclude = []
+extend_exclude = ["_llmio_check/"]
 
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.

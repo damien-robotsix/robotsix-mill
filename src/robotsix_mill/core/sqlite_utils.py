@@ -16,6 +16,10 @@ Keep this module until llmio's ``sqlite_utils`` supports both
 ``sqlite3.Connection`` and SQLAlchemy ``Connection`` (like the
 ``_execute_sql`` adapter here does) AND its API matches the call-sites
 in ``db.py``.
+
+Once that is done, switch the import in ``db.py`` to
+``from robotsix_llmio.core.sqlite_utils import run_additive_migrations``
+and delete this file.
 """
 
 from __future__ import annotations
