@@ -23,7 +23,7 @@ from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
-from .sqlite_utils import run_additive_migrations
+from robotsix_llmio.core.sqlite_utils import run_additive_migrations
 
 log = logging.getLogger("robotsix_mill.db")
 
