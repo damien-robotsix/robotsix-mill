@@ -353,6 +353,10 @@ class GitLabForge(Forge):
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_open_pr_branches(project_path)
 
+    def list_open_prs(self) -> list[dict[str, Any]]:
+        project_path = _parse_gitlab_project_path(self._remote_url)
+        return self._list_open_prs(project_path)
+
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
     # ------------------------------------------------------------------
@@ -1046,6 +1050,40 @@ class GitLabForge(Forge):
                     out.add(ref)
         except Exception:
             return set()
+        return out
+
+    def _list_open_prs(self, project_path: str) -> list[dict[str, Any]]:
+        """GET /projects/:id/merge_requests?state=opened → per-MR metadata.
+
+        Returns [{'branch', 'author_login', 'number', 'url', 'title'}, ...].
+        Returns [] on any failure (MUST NOT raise).
+        """
+        out: list[dict[str, Any]] = []
+        try:
+            pid = self._resolve_project_id(project_path)
+
+            def _identity(mr: dict[str, Any]) -> dict[str, Any]:
+                return mr
+
+            for mr in self._paginated_get(
+                f"/projects/{pid}/merge_requests",
+                params={"state": "opened"},
+                item_fn=_identity,
+            ):
+                ref = mr.get("source_branch")
+                if not ref:
+                    continue
+                out.append(
+                    {
+                        "branch": ref,
+                        "author_login": (mr.get("author") or {}).get("username", ""),
+                        "number": mr.get("iid"),
+                        "url": mr.get("web_url", ""),
+                        "title": mr.get("title", ""),
+                    }
+                )
+        except Exception:
+            return []
         return out
 
 

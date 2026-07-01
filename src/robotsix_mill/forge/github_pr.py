@@ -703,7 +703,10 @@ class GitHubForgePRMixin:
         return out
 
     def _list_open_prs(self, *, owner: str, repo: str) -> list[dict]:
-        """Return [{'branch': str, 'author_login': str}, ...] for all open PRs.
+        """Return per-PR metadata dicts for all open PRs.
+
+        Each dict carries: ``branch`` (head ref), ``author_login``,
+        ``number`` (PR number), ``url`` (html_url), and ``title``.
 
         Uses the same pagination and 401-retry logic as _list_open_pr_branches().
         Returns [] on any failure (MUST NOT raise).
@@ -740,7 +743,15 @@ class GitHubForgePRMixin:
                             ref = (pr.get("head") or {}).get("ref")
                             author = (pr.get("user") or {}).get("login", "")
                             if ref:
-                                out.append({"branch": ref, "author_login": author})
+                                out.append(
+                                    {
+                                        "branch": ref,
+                                        "author_login": author,
+                                        "number": pr.get("number"),
+                                        "url": pr.get("html_url", ""),
+                                        "title": pr.get("title", ""),
+                                    }
+                                )
                         if len(items) < 100:
                             break
                         page += 1

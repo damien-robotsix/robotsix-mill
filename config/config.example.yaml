@@ -462,6 +462,7 @@ periodic:
     bot_logins: []                  # explicit bot author logins; empty = auto-detect from forge
     max_closes_per_pass: 10         # max close actions per pass
     max_files_per_pass: 5           # max file-ticket actions per pass
+    track_foreign_prs: false        # also file tracking tickets for non-mill PRs (dependabot/human); never closes them
 
   # -- CI monitor — enabled/interval are now per-repo fields in repos.yaml --
   #    ci_log_max_bytes stays here as a global operational cap.

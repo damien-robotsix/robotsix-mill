@@ -544,12 +544,15 @@ class PeriodicPassesMixin(_WorkerBase):
                     )
                     log.info(
                         "orphaned-pr-check: repo %s — scanned=%d closed=%d "
-                        "filed=%d skipped=%d dry_run=%s",
+                        "filed=%d skipped=%d foreign_filed=%d foreign_skipped=%d "
+                        "dry_run=%s",
                         repo_config.repo_id,
                         result.total_scanned,
                         result.closed,
                         result.filed,
                         result.skipped,
+                        result.foreign_filed,
+                        result.foreign_skipped,
                         result.dry_run,
                     )
                 except Exception:

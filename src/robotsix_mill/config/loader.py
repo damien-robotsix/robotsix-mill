@@ -582,6 +582,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.orphaned_pr_check.bot_logins": "orphaned_pr_bot_logins",
     "periodic.orphaned_pr_check.max_closes_per_pass": "orphaned_pr_max_closes_per_pass",
     "periodic.orphaned_pr_check.max_files_per_pass": "orphaned_pr_max_files_per_pass",
+    "periodic.orphaned_pr_check.track_foreign_prs": "orphaned_pr_track_foreign_prs",
     # -- service --
     "service.data_dir": "data_dir",
     "service.default_repo_id": "default_repo_id",
