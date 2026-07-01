@@ -32,6 +32,46 @@ from ._shared import (
 class PhaseCoordinatorMixin(_ImplementStageBase):
     """Run-loop orchestration for :class:`ImplementStage`."""
 
+    # ------------------------------------------------------------------
+    # preflight (pre-trace gate — no clone, no model, no trace overhead)
+    # ------------------------------------------------------------------
+
+    def preflight(self, ticket: Ticket, ctx: StageContext) -> Outcome | None:
+        """Cheap checks that can gate implement BEFORE a Langfuse trace opens.
+
+        Catches known-no-op conditions (empty spec, cycle limit) without
+        consuming a spawn slot or emitting a $0.00 trace.
+        """
+        s = ctx.settings
+
+        # 1. Spec must exist and be non-empty — without a spec the agent
+        #    has nothing to implement and would return empty/no-op.
+        spec = ctx.service.workspace(ticket).read_description()
+        if not spec or not spec.strip():
+            return Outcome(
+                State.BLOCKED,
+                "empty or missing specification — cannot implement without a spec",
+            )
+
+        # 2. Ticket-lifetime implement-cycle cap: catch the runaway
+        #    implement↔review loop before we clone or open a trace.
+        if (
+            s.max_implement_review_cycles > 0
+            and ticket.implement_cycles >= s.max_implement_review_cycles
+        ):
+            return Outcome(
+                State.BLOCKED,
+                f"Implement-review cycle limit reached "
+                f"({ticket.implement_cycles}/{s.max_implement_review_cycles}) — "
+                "escalating to BLOCKED for human inspection",
+            )
+
+        return None
+
+    # ------------------------------------------------------------------
+    # run
+    # ------------------------------------------------------------------
+
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a READY ticket: gate on dependencies, clone the repo, create the feature branch, and drive the implementation agent loop to produce code changes."""
         s = ctx.settings
@@ -171,20 +211,6 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     "changes (review findings may be unfixable by further "
                     "automated passes)",
                 )
-
-        # 2) Ticket-lifetime implement-cycle cap: total passes across all
-        #    review rounds.  Set higher than review_max_rounds × typical
-        #    fix iterations so it only trips as a genuine runaway backstop.
-        if (
-            s.max_implement_review_cycles > 0
-            and ticket.implement_cycles >= s.max_implement_review_cycles
-        ):
-            return Outcome(
-                State.BLOCKED,
-                f"Implement-review cycle limit reached "
-                f"({ticket.implement_cycles}/{s.max_implement_review_cycles}) — "
-                "escalating to BLOCKED for human inspection",
-            )
 
         # Phase 2: deterministic, stage-owned implement loop.
         return self._implement_loop(

@@ -79,6 +79,18 @@ class Stage(ABC):
     #: "ticket" traces into the session.
     traced: bool = True
 
+    def preflight(self, ticket: Ticket, ctx: StageContext) -> Outcome | None:
+        """Lightweight pre-trace gate — run BEFORE any Langfuse trace is opened.
+
+        Return an :class:`Outcome` to short-circuit the stage dispatch
+        without opening a trace or incrementing the dispatch counter.
+        Return ``None`` to proceed normally (trace opens, :meth:`run` called).
+
+        The default implementation returns ``None`` (always proceed).
+        Stages that have cheap early-exit conditions should override.
+        """
+        return None
+
     @abstractmethod
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process one ticket. Raise to fail the ticket (worker -> FAILED);
