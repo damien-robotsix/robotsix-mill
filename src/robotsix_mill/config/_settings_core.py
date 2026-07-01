@@ -74,7 +74,7 @@ class _CoreSettings(BaseModel):
     # consultation. Each request is one Markdown read, one web_search,
     # or one Markdown write.
     web_knowledge_request_limit: int = Field(
-        default=8,
+        default=12,
     )
     # Web-knowledge gateway sub-agent model. Defaults to the llmio
     # tier-1 flash model; override to route this agent to a different

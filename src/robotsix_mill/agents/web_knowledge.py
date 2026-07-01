@@ -579,7 +579,7 @@ def make_ask_web_knowledge_tool(
         to retrieve from.
 
         BUDGET: Each ask_web_knowledge call has a limited request
-        budget (8 model turns) and a shared 15-page fetch budget
+        budget (12 model turns) and a shared 15-page fetch budget
         (2 MB total text body) per consult. Prefer explore() for
         repo-local questions — ask_web_knowledge is for external
         APIs/frameworks. If the question is about code in a private
@@ -605,7 +605,7 @@ def make_ask_web_knowledge_tool(
                 "owns a per-repo knowledge base and decides whether to "
                 "answer from cache or web-search. This is your ONLY route "
                 "to the internet — there is no direct web_search tool. "
-                "BUDGET: 8 model turns + 15-page fetch budget per consult. "
+                "BUDGET: 12 model turns + 15-page fetch budget per consult. "
                 "Prefer explore() for repo-local questions."
             ),
             category="exploration",
