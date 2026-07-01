@@ -1,33 +1,24 @@
-"""GitLab forge adapter — open a Merge Request for an already-pushed
-branch via the GitLab REST API. The branch push is done by the deliver
-stage (it owns the repo dir); this only does the API call.
+"""GitLab forge adapter — core operations: MR lifecycle, branches, repo CRUD.
+
+Split from the monolithic ``forge/gitlab.py``.  The CI, code-scanning,
+and Dependabot operations live in sibling mixin modules; this file
+holds the main ``GitLabForge`` class, shared helpers, and repo-CRUD
+operations.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator
-from typing import Any, TypeVar
+from typing import Any
 
-import httpx
-
-from ._http import _ApiClient
-from ._log_utils import _capture_failure_window, _strip_runner_noise
-from .auth import gitlab_token
-from .base import BranchInfo, Forge, NotConfiguredError, RepoInfo
-from .github import _parse_iso_utc
-from .github_ci import _ANSI_RE, _MAX_FAILED_JOBS
-
-T = TypeVar("T")
-
-# Earliest-failure markers in a GitLab CI job log.  GitLab jobs don't
-# emit GitHub Actions–style ``##[error]`` lines; instead we match the
-# patterns that GitLab Runner / common build tools emit on failure.
-_LOG_FAILURE_RE = re.compile(
-    r"(?:^ERROR:\s|^ERROR\[|Job failed|exit code [1-9]|"
-    r"^\s*FAIL\b|FAILED\s|fatal:)",
-    re.MULTILINE,
-)
+from .._http import _ApiClient
+from ..auth import gitlab_token
+from ..base import BranchInfo, Forge, NotConfiguredError, RepoInfo
+from ..github import _parse_iso_utc
+from ._pagination import _paginated_get
+from .ci import GitLabForgeCIMixin
+from .code_scanning import GitLabForgeCodeScanningMixin
+from .dependabot import GitLabForgeDependabotMixin
 
 
 def _build_headers(token: str) -> dict:
@@ -56,7 +47,22 @@ def _parse_gitlab_project_path(remote_url: str) -> str:
     raise RuntimeError(f"cannot parse GitLab project path from {remote_url!r}")
 
 
-class GitLabForge(Forge):
+def _map_merge_status(merge_status: str) -> bool | None:
+    """Map GitLab merge_status to the standard mergeable field."""
+    if merge_status == "can_be_merged":
+        return True
+    if merge_status == "cannot_be_merged":
+        return False
+    # "checking", "unchecked" → None (treat as mergeable per base.py docstring)
+    return None
+
+
+class GitLabForge(
+    GitLabForgeCIMixin,
+    GitLabForgeCodeScanningMixin,
+    GitLabForgeDependabotMixin,
+    Forge,
+):
     """GitLab adapter — opens MRs, queries pipeline status, and merges via the GitLab API."""
 
     def __init__(self, settings, repo_config=None):
@@ -96,7 +102,7 @@ class GitLabForge(Forge):
                 "adapter; cross_repo_target is GitHub-only"
             )
         s = self.settings
-        from ..config import target_branch_for  # lazy: avoid import cycle
+        from ...config import target_branch_for  # lazy: avoid import cycle
 
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._create_mr(
@@ -141,28 +147,6 @@ class GitLabForge(Forge):
                 "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
                 "number": mr["iid"],
             }
-        except Exception:
-            return None
-
-    def check_status(self, *, source_branch: str) -> dict | None:
-        try:
-            project_path = _parse_gitlab_project_path(self._remote_url)
-            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
-            if mr is None:
-                return None
-
-            pipeline = self._get_latest_pipeline(project_path, mr["iid"])
-            if pipeline is None:
-                return {"conclusion": None, "failing": [], "pending": []}
-
-            status = pipeline.get("status", "")
-            conclusion = _map_pipeline_status(status)
-
-            failing: list[dict] = []
-            if conclusion == "failure":
-                failing = self._get_failed_jobs(project_path, pipeline["id"])
-
-            return {"conclusion": conclusion, "failing": failing, "pending": []}
         except Exception:
             return None
 
@@ -292,20 +276,6 @@ class GitLabForge(Forge):
             return None
         return self._pr_review_status(project_path=project_path, mr_iid=mr["iid"])
 
-    def list_workflow_runs(
-        self, *, branch: str | None = None, head_sha: str | None = None
-    ) -> list[dict]:
-        project_path = _parse_gitlab_project_path(self._remote_url)
-        return self._list_pipelines(
-            project_path=project_path, branch=branch, head_sha=head_sha
-        )
-
-    def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
-        project_path = _parse_gitlab_project_path(self._remote_url)
-        return self._fetch_pipeline_job_logs(
-            project_path=project_path, run_id=run_id, full_log=full_log
-        )
-
     def create_repo(
         self, *, name: str, owner: str, private: bool | None = None, description: str
     ) -> RepoInfo:
@@ -405,76 +375,6 @@ class GitLabForge(Forge):
         r.raise_for_status()
         return r.json()
 
-    def _get_latest_pipeline(self, project_path: str, mr_iid: int) -> dict | None:
-        """GET /projects/:id/merge_requests/:iid/pipelines?per_page=1."""
-        pid = self._resolve_project_id(project_path)
-        r = self._http.get(
-            f"/projects/{pid}/merge_requests/{mr_iid}/pipelines",
-            params={"per_page": 1},
-        )
-        r.raise_for_status()
-        items = r.json()
-        if not items:
-            return None
-        return items[0]
-
-    def _get_failed_jobs(self, project_path: str, pipeline_id: int) -> list[dict]:
-        """GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&per_page=20.
-
-        Each failed job's trace (``GET /projects/:id/jobs/:job_id/trace``) is
-        fetched and ANSI-stripped / failure-windowed via the shared
-        ``_capture_failure_window`` helper so ``check_status`` returns failure
-        detail (``summary``/``text``) comparable to the GitHub adapter. GitLab
-        exposes no per-line annotations, so ``annotations`` stays ``[]``.
-        """
-        pid = self._resolve_project_id(project_path)
-        log_max = self.settings.ci_log_max_bytes
-
-        with self._http.client() as (c, api, headers):
-            jobs_resp = c.get(
-                f"{api}/projects/{pid}/pipelines/{pipeline_id}/jobs",
-                headers=headers,
-                params={"scope": "failed", "per_page": 20},
-            )
-            jobs_resp.raise_for_status()
-            jobs = jobs_resp.json()
-
-            failing: list[dict[str, Any]] = []
-            for j in jobs:
-                job_id = j["id"]
-                try:
-                    log_resp = c.get(
-                        f"{api}/projects/{pid}/jobs/{job_id}/trace",
-                        headers=headers,
-                    )
-                    log_resp.raise_for_status()
-                    raw = log_resp.text
-                except Exception:
-                    raw = ""
-
-                clean = _capture_failure_window(
-                    _strip_runner_noise(_ANSI_RE.sub("", raw)),
-                    log_max,
-                    failure_re=_LOG_FAILURE_RE,
-                )
-                summary = clean or None
-                text = clean or None
-                if summary and len(summary) > 2000:
-                    summary = summary[:1999] + "…"
-                if text and len(text) > 4000:
-                    text = text[:3999] + "…"
-
-                failing.append(
-                    {
-                        "name": j.get("name", ""),
-                        "summary": summary,
-                        "text": text,
-                        "annotations": [],
-                    }
-                )
-
-        return failing
-
     def _mr_notes(self, *, project_path: str, mr_iid: int) -> list[dict]:
         """GET /projects/:id/merge_requests/:iid/notes?per_page=100."""
         pid = self._resolve_project_id(project_path)
@@ -551,104 +451,6 @@ class GitLabForge(Forge):
             "files": [f["path"] for f in files],
         }
 
-    def _list_pipelines(
-        self,
-        *,
-        project_path: str,
-        branch: str | None,
-        head_sha: str | None,
-    ) -> list[dict]:
-        """GET /projects/:id/pipelines?ref=…&sha=…&per_page=30."""
-        pid = self._resolve_project_id(project_path)
-        params: dict = {"per_page": 30}
-        if branch is not None:
-            params["ref"] = branch
-        if head_sha is not None:
-            params["sha"] = head_sha
-
-        r = self._http.get(
-            f"/projects/{pid}/pipelines",
-            params=params,
-        )
-        r.raise_for_status()
-        raw = r.json()
-        terminal = {"success", "failed", "canceled", "skipped"}
-        return [
-            {
-                "id": p["id"],
-                # GitLab pipelines have no name; surface the ref instead.
-                "name": p.get("ref", ""),
-                "workflow_id": None,
-                "head_sha": p.get("sha", ""),
-                "conclusion": _PIPELINE_CONCLUSION_MAP.get(p.get("status", "")),
-                "html_url": p.get("web_url", ""),
-                "created_at": p.get("created_at", ""),
-                "path": "",
-            }
-            for p in raw
-            if p.get("status") in terminal
-        ]
-
-    def _fetch_pipeline_job_logs(
-        self, *, project_path: str, run_id: int, full_log: bool = False
-    ) -> str:
-        """Concatenate ANSI-stripped, size-capped traces of failed jobs in a
-        pipeline.  *run_id* is a GitLab pipeline id.  Returns ``""`` when there
-        are no failed jobs.
-        """
-        s = self.settings
-        pid = self._resolve_project_id(project_path)
-
-        with self._http.client() as (c, api, headers):
-            jobs_resp = c.get(
-                f"{api}/projects/{pid}/pipelines/{run_id}/jobs",
-                headers=headers,
-                params={"scope": "failed", "per_page": 20},
-            )
-            jobs_resp.raise_for_status()
-            jobs = jobs_resp.json()
-
-        failed_jobs = jobs[:_MAX_FAILED_JOBS]
-        if not failed_jobs:
-            return ""
-
-        parts: list[str] = []
-        log_max = s.ci_log_max_bytes
-
-        with self._http.client() as (c, api, headers):
-            for j in failed_jobs:
-                job_id = j["id"]
-                job_name = j.get("name", f"job-{job_id}")
-                try:
-                    log_resp = c.get(
-                        f"{api}/projects/{pid}/jobs/{job_id}/trace",
-                        headers=headers,
-                    )
-                    log_resp.raise_for_status()
-                    raw = log_resp.text
-                except httpx.HTTPStatusError:
-                    raw = f"[log fetch failed for job {job_id}: HTTP {log_resp.status_code}]"
-                except Exception as exc:
-                    raw = f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
-                else:
-                    if not raw:
-                        raw = f"[log fetch returned empty body for job {job_id}]"
-
-                clean = _ANSI_RE.sub("", raw)
-                clean = _strip_runner_noise(clean)
-                if not full_log:
-                    clean = _capture_failure_window(
-                        clean,
-                        log_max,
-                        failure_re=_LOG_FAILURE_RE,
-                    )
-
-                parts.append(f"### Job: {job_name} (id={job_id})\n")
-                parts.append(clean)
-                parts.append("\n")
-
-        return "\n".join(parts)
-
     # -- shared helpers ---------------------------------------------------
 
     @staticmethod
@@ -675,7 +477,7 @@ class GitLabForge(Forge):
         if private is None:
             private = self.settings.repo_visibility_default == "private"
 
-        from ..config import get_secrets
+        from ...config import get_secrets
 
         # Prefer a dedicated repo-creation token when configured; fall
         # back to the normal forge token otherwise.  Mirrors the GitHub
@@ -725,7 +527,7 @@ class GitLabForge(Forge):
         target_namespace: str | None = None,
     ) -> RepoInfo:
         """POST /projects/:id/fork → RepoInfo."""
-        from ..config import get_secrets
+        from ...config import get_secrets
 
         # Prefer a dedicated repo-creation token when configured; fall
         # back to the normal forge token otherwise.
@@ -979,35 +781,6 @@ class GitLabForge(Forge):
         except Exception:
             return False
 
-    def _paginated_get(
-        self,
-        url_suffix: str,
-        *,
-        params: dict[str, Any],
-        item_fn: Callable[[dict[str, Any]], T],
-    ) -> Iterator[T]:
-        """Paginate through a GitLab API endpoint, yielding items via *item_fn*.
-
-        Each dict from the JSON array response is passed to *item_fn*; the
-        result is yielded.  Pagination stops when fewer than 100 items are
-        returned (last page).
-        """
-        with self._http.client() as (c, api, headers):
-            page = 1
-            while True:
-                r = c.get(
-                    f"{api}{url_suffix}",
-                    headers=headers,
-                    params={"per_page": 100, "page": page, **params},
-                )
-                r.raise_for_status()
-                items: list[dict[str, Any]] = r.json()
-                for item in items:
-                    yield item_fn(item)
-                if len(items) < 100:
-                    break
-                page += 1
-
     def _list_branches(self, project_path: str) -> list[BranchInfo]:
         """GET /projects/:id/repository/branches?per_page=100 (paginated)."""
         out: list[BranchInfo] = []
@@ -1022,7 +795,8 @@ class GitLabForge(Forge):
                     is_protected=bool(b.get("protected")),
                 )
 
-            for bi in self._paginated_get(
+            for bi in _paginated_get(
+                self._http,
                 f"/projects/{pid}/repository/branches",
                 params={},
                 item_fn=_mk,
@@ -1041,7 +815,8 @@ class GitLabForge(Forge):
             def _src_branch(mr: dict[str, Any]) -> str | None:
                 return mr.get("source_branch")
 
-            for ref in self._paginated_get(
+            for ref in _paginated_get(
+                self._http,
                 f"/projects/{pid}/merge_requests",
                 params={"state": "opened"},
                 item_fn=_src_branch,
@@ -1065,7 +840,8 @@ class GitLabForge(Forge):
             def _identity(mr: dict[str, Any]) -> dict[str, Any]:
                 return mr
 
-            for mr in self._paginated_get(
+            for mr in _paginated_get(
+                self._http,
                 f"/projects/{pid}/merge_requests",
                 params={"state": "opened"},
                 item_fn=_identity,
@@ -1085,47 +861,3 @@ class GitLabForge(Forge):
         except Exception:
             return []
         return out
-
-
-def _map_merge_status(merge_status: str) -> bool | None:
-    """Map GitLab merge_status to the standard mergeable field."""
-    if merge_status == "can_be_merged":
-        return True
-    if merge_status == "cannot_be_merged":
-        return False
-    # "checking", "unchecked" → None (treat as mergeable per base.py docstring)
-    return None
-
-
-# Direct mapping for _list_pipelines — preserves terminal granularity
-# (canceled, skipped, etc.) that _map_pipeline_status collapses to "pending".
-_PIPELINE_CONCLUSION_MAP: dict[str, str | None] = {
-    "success": "success",
-    "failed": "failure",
-    "canceled": "cancelled",
-    "skipped": "skipped",
-}
-
-
-def _map_pipeline_status(status: str) -> str | None:
-    """Map GitLab pipeline status to standard conclusion (for check_status)."""
-    if status == "success":
-        return "success"
-    if status == "failed":
-        return "failure"
-    if status in (
-        "pending",
-        "running",
-        "created",
-        "waiting_for_resource",
-        "preparing",
-        "manual",
-        "scheduled",
-        # Canceled / superseded pipelines don't represent a real verdict;
-        # treating them as failure triggers the same false-fix loop that
-        # GitHub's _INCONCLUSIVE_CONCLUSIONS guards against.
-        "canceled",
-        "skipped",
-    ):
-        return "pending"
-    return None

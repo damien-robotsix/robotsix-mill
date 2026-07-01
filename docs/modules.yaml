@@ -108,7 +108,12 @@ modules:
       - src/robotsix_mill/forge/github_ci.py
       - src/robotsix_mill/forge/github_code_scanning.py
       - src/robotsix_mill/forge/github_dependabot.py
-      - src/robotsix_mill/forge/gitlab.py
+      - src/robotsix_mill/forge/gitlab/__init__.py
+      - src/robotsix_mill/forge/gitlab/core.py
+      - src/robotsix_mill/forge/gitlab/ci.py
+      - src/robotsix_mill/forge/gitlab/code_scanning.py
+      - src/robotsix_mill/forge/gitlab/dependabot.py
+      - src/robotsix_mill/forge/gitlab/_pagination.py
       - src/robotsix_mill/forge/_http.py
       - src/robotsix_mill/forge/_log_utils.py
       - tests/forge/test_forge_auth.py

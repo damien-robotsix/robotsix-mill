@@ -6,6 +6,13 @@
   `_list_open_prs`, and `_pr_review_status`.
 - Add CLI subcommand `roadmap-sync` with `--json` and `--repo-id` flags, matching the existing POST route at `/roadmap-sync`.
 - Wire `triage_boilerplate` agent into all five on-demand dispatch layers (CLI ``_RUNNERS`` entry, POST route, board button, JS handler + window export, ``AGENT_COLORS`` / ``SOURCE_CLASS`` / CSS badge) matching all 13 other ``llm_agent`` peers.
+- Split ``forge/gitlab.py`` (monolithic 1131-line ``GitLabForge``) into a ``forge/gitlab/`` package mirroring the GitHub adapter architecture:
+  - ``core.py`` — MR lifecycle, branches, repo CRUD
+  - ``ci.py`` — ``GitLabForgeCIMixin`` with pipeline status, job log retrieval
+  - ``code_scanning.py`` — ``GitLabForgeCodeScanningMixin`` (placeholder)
+  - ``dependabot.py`` — ``GitLabForgeDependabotMixin`` (placeholder)
+  - ``_pagination.py`` — shared ``_paginated_get`` helper
+  - ``__init__.py`` — public re-exports preserving the existing import API
 - Align `web_knowledge_request_limit` in `config/config.example.yaml` (was 8) with the model default of 12.
 - Add test coverage for refine stage submodules: `_reconcile.py`, `_result_paths.py`, and `_triage.py` (146 tests across three new test files)
 - Add unit test coverage for ``MultiRepoCiFixMixin`` (``tests/stages/merge/test_ci_fix_mixin.py``) covering all three private methods with 29 test cases.
