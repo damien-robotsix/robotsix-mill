@@ -130,6 +130,18 @@ def _try_record_step_usage(
                 "_try_record_step_usage: tool-call extraction failed", exc_info=True
             )
 
+        # Detect billing backend from model name so the cost-analyst can
+        # distinguish subscription (Claude SDK, flat cost) from pay-per-token
+        # (OpenRouter, real marginal cost).  When model_name is empty the
+        # result came from a Claude SDK tool agent (which has no .response).
+        backend = ""
+        if not model_name:
+            backend = "claude_sdk"
+        elif "openrouter" in model_name.lower():
+            backend = "openrouter"
+        elif model_name.lower().startswith("claude"):
+            backend = "claude_sdk"
+
         from ..runtime.tracing import record_step_usage as _record
 
         _record(
@@ -142,6 +154,7 @@ def _try_record_step_usage(
             retry_reason=retry_reason,
             cache_read_input_tokens=cache_read_tokens,
             cache_creation_input_tokens=cache_write_tokens,
+            backend=backend,
         )
     except Exception:
         log.debug("_try_record_step_usage: failed to record step usage", exc_info=True)

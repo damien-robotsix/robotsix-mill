@@ -10,6 +10,7 @@ without failing.
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import time
 from typing import Any
@@ -512,9 +513,11 @@ def trace_observation_summary(trace: dict) -> dict:
     - ``warning_count``: number of WARNING-level observations
     - ``observation_count``: total number of observations
     - ``generations``: per-turn breakdown — list of ``{model, input_tokens,
-      output_tokens, name, startTime}`` for every GENERATION observation in
+      output_tokens, name, startTime, backend}`` for every GENERATION observation in
       chronological order.  Enables distinguishing "one oversized prompt"
       from "many redundant turns" without fetching the full trace detail.
+    - ``backend``: billing backend tag — ``"claude_sdk"`` (subscription) or
+      ``"openrouter"`` (pay-per-token), extracted from step-usage metadata.
     """
     observations = trace.get("observations") or []
 
@@ -524,6 +527,19 @@ def trace_observation_summary(trace: dict) -> dict:
     error_count = 0
     warning_count = 0
     generations: list[dict] = []
+
+    # Fallback from mill.step_usage metadata when GENERATION observations
+    # are absent or lack usage — the pydantic-ai OTel instrumentation path
+    # doesn't always produce GENERATION observations, but _try_record_step_usage
+    # stamps a langfuse.observation.metadata.mill.step_usage attribute on the
+    # root span that carries aggregated per-step token/model/tool data.
+    step_usage_model: str = ""
+    step_usage_input: int = 0
+    step_usage_output: int = 0
+    step_usage_tool_calls: dict[str, int] = {}
+    step_usage_generations: list[dict[str, Any]] = []
+    step_usage_backend: str = ""
+    step_usage_seen: bool = False
 
     for obs in observations:
         name = obs.get("name") or ""
@@ -545,6 +561,7 @@ def trace_observation_summary(trace: dict) -> dict:
                     "output_tokens": obs_output,
                     "name": name,
                     "startTime": obs.get("startTime") or "",
+                    "backend": "",
                 }
             )
 
@@ -557,16 +574,120 @@ def trace_observation_summary(trace: dict) -> dict:
         elif level == "WARNING":
             warning_count += 1
 
+        # Parse mill.step_usage from observation metadata (set by
+        # record_step_usage via the langfuse.observation.metadata.mill.step_usage
+        # span attribute).  Stored as a JSON string; multiple observations may
+        # carry it (e.g. the root span for each retry), so accumulate.
+        metadata = obs.get("metadata")
+        if isinstance(metadata, dict):
+            raw_step: object = metadata.get("mill.step_usage")
+            if isinstance(raw_step, str):
+                try:
+                    su = _json.loads(raw_step)
+                except _json.JSONDecodeError, TypeError:
+                    su = None
+                if isinstance(su, dict):
+                    step_usage_seen = True
+                    su_input = int(su.get("input_tokens") or 0)
+                    su_output = int(su.get("output_tokens") or 0)
+                    step_usage_input += su_input
+                    step_usage_output += su_output
+                    su_model: str = str(su.get("model_name") or "")
+                    if su_model and not step_usage_model:
+                        step_usage_model = su_model
+                    for tc in su.get("tool_calls") or []:
+                        tc_name = (
+                            str(tc.get("name", "")) if isinstance(tc, dict) else ""
+                        )
+                        if tc_name:
+                            step_usage_tool_calls[tc_name] = (
+                                step_usage_tool_calls.get(tc_name, 0) + 1
+                            )
+                    step_usage_generations.append(
+                        {
+                            "model": su_model,
+                            "input_tokens": su_input,
+                            "output_tokens": su_output,
+                            "name": "agent step",
+                            "startTime": obs.get("startTime") or "",
+                            "backend": str(su.get("backend") or ""),
+                        }
+                    )
+                    su_backend: str = str(su.get("backend") or "")
+                    if su_backend and not step_usage_backend:
+                        step_usage_backend = su_backend
+
+    # Fall back to trace-level metadata when the list endpoint returned
+    # zero observations (the Langfuse list API does not include the
+    # observation tree — only the detail endpoint does).  The root span's
+    # langfuse.observation.metadata.mill.step_usage attribute appears
+    # as trace.metadata.mill.step_usage.
+    if not step_usage_seen:
+        trace_meta = trace.get("metadata")
+        if isinstance(trace_meta, dict):
+            trace_step: object = trace_meta.get("mill.step_usage")
+            if isinstance(trace_step, str):
+                try:
+                    su = _json.loads(trace_step)
+                except _json.JSONDecodeError, TypeError:
+                    su = None
+                if isinstance(su, dict):
+                    step_usage_seen = True
+                    su_input = int(su.get("input_tokens") or 0)
+                    su_output = int(su.get("output_tokens") or 0)
+                    step_usage_input = su_input
+                    step_usage_output = su_output
+                    su_model = str(su.get("model_name") or "")
+                    if su_model and not step_usage_model:
+                        step_usage_model = su_model
+                    su_backend = str(su.get("backend") or "")
+                    if su_backend and not step_usage_backend:
+                        step_usage_backend = su_backend
+                    for tc in su.get("tool_calls") or []:
+                        tc_name = (
+                            str(tc.get("name", "")) if isinstance(tc, dict) else ""
+                        )
+                        if tc_name:
+                            step_usage_tool_calls[tc_name] = (
+                                step_usage_tool_calls.get(tc_name, 0) + 1
+                            )
+                    step_usage_generations.append(
+                        {
+                            "model": su_model,
+                            "input_tokens": su_input,
+                            "output_tokens": su_output,
+                            "name": "agent step",
+                            "startTime": "",
+                            "backend": su_backend,
+                        }
+                    )
+
+    # Fall back to mill.step_usage when no GENERATION observations carried
+    # token counts (the common case for traces that only have a root span).
+    had_generations: bool = bool(generations)
+    if not had_generations and step_usage_seen:
+        if step_usage_input > 0 or step_usage_output > 0:
+            input_tokens = max(input_tokens, step_usage_input)
+            output_tokens = max(output_tokens, step_usage_output)
+        if step_usage_generations:
+            generations = step_usage_generations
+        # Replace noise tool-call names (SPAN names like "refine") with
+        # the actual tool calls extracted from step_usage metadata.
+        if step_usage_tool_calls:
+            tool_calls = dict(step_usage_tool_calls)
+
     model = trace.get("model") or ""
     if not model:
         for obs in observations:
             if obs.get("type") == "GENERATION" and obs.get("model"):
                 model = obs.get("model") or ""
                 break
+    if not model:
+        model = step_usage_model
 
     tool_call_list = [
         {"name": k, "count": v}
-        for k, v in sorted(tool_calls.items(), key=lambda x: x[1], reverse=True)
+        for k, v in sorted(tool_calls.items(), key=lambda x: (-x[1], x[0]))
     ]
 
     return {
@@ -579,6 +700,7 @@ def trace_observation_summary(trace: dict) -> dict:
         "warning_count": warning_count,
         "observation_count": len(observations),
         "generations": generations,
+        "backend": step_usage_backend if step_usage_seen else "",
     }
 
 

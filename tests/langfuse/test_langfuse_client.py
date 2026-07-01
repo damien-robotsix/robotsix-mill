@@ -444,6 +444,7 @@ def test_trace_observation_summary_empty():
         "warning_count": 0,
         "observation_count": 0,
         "generations": [],
+        "backend": "",
     }
 
 
@@ -495,8 +496,8 @@ def test_trace_observation_summary_tool_calls():
     s = trace_observation_summary(trace)
     assert s["tool_calls"] == [
         {"name": "read_file", "count": 2},
-        {"name": "run_command", "count": 1},
         {"name": "explore run", "count": 1},
+        {"name": "run_command", "count": 1},
     ]
 
 
@@ -569,6 +570,7 @@ def test_trace_observation_summary_generations_per_turn():
             "output_tokens": 200,
             "name": "chat completion",
             "startTime": "2026-01-01T00:00:00Z",
+            "backend": "",
         },
         {
             "model": "openai/gpt-4o",
@@ -576,6 +578,7 @@ def test_trace_observation_summary_generations_per_turn():
             "output_tokens": 100,
             "name": "chat completion",
             "startTime": "2026-01-01T00:00:05Z",
+            "backend": "",
         },
     ]
     # Aggregates still correct
@@ -583,3 +586,192 @@ def test_trace_observation_summary_generations_per_turn():
     assert s["output_tokens"] == 300
     assert s["total_tokens"] == 1100
     assert s["observation_count"] == 3
+
+
+def test_trace_observation_summary_fallback_from_step_usage_metadata():
+    """When no GENERATION observations exist, fall back to
+    ``metadata.mill.step_usage`` on SPAN observations."""
+    trace = {
+        "observations": [
+            {
+                "name": "refine",
+                "type": "SPAN",
+                "level": "DEFAULT",
+                "metadata": {
+                    "mill.step_usage": (
+                        '{"model_name":"deepseek/deepseek-v4-pro",'
+                        '"input_tokens":12000,"output_tokens":3000,'
+                        '"request_count":3,'
+                        '"tool_calls":[{"name":"read_file","args":"..."},'
+                        '{"name":"run_command","args":"..."},'
+                        '{"name":"read_file","args":"..."}]}'
+                    ),
+                },
+            },
+            {
+                "name": "refine",
+                "type": "SPAN",
+                "level": "DEFAULT",
+                "metadata": {
+                    "mill.step_usage": (
+                        '{"model_name":"deepseek/deepseek-v4-pro",'
+                        '"input_tokens":8000,"output_tokens":1500,'
+                        '"request_count":2,'
+                        '"tool_calls":[{"name":"edit_file","args":"..."}]}'
+                    ),
+                },
+            },
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["model"] == "deepseek/deepseek-v4-pro"
+    assert s["input_tokens"] == 20000
+    assert s["output_tokens"] == 4500
+    assert s["total_tokens"] == 24500
+    assert s["observation_count"] == 2
+    assert s["generations"] == [
+        {
+            "model": "deepseek/deepseek-v4-pro",
+            "input_tokens": 12000,
+            "output_tokens": 3000,
+            "name": "agent step",
+            "startTime": "",
+            "backend": "",
+        },
+        {
+            "model": "deepseek/deepseek-v4-pro",
+            "input_tokens": 8000,
+            "output_tokens": 1500,
+            "name": "agent step",
+            "startTime": "",
+            "backend": "",
+        },
+    ]
+    # Tool calls de-duplicated and counted across both observations
+    assert s["tool_calls"] == [
+        {"name": "read_file", "count": 2},
+        {"name": "edit_file", "count": 1},
+        {"name": "run_command", "count": 1},
+    ]
+
+
+def test_trace_observation_summary_no_double_count_with_generations():
+    """When GENERATION observations already carry usage, step_usage
+    metadata is NOT used as a fallback (avoids double-counting)."""
+    trace = {
+        "observations": [
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "model": "openai/gpt-4o",
+                "usage": {"input": 500, "output": 200},
+                "startTime": "2026-01-01T00:00:00Z",
+                "level": "DEFAULT",
+            },
+            # A SPAN also carries step_usage metadata — must be ignored
+            # because GENERATION observations already provide token counts.
+            {
+                "name": "refine",
+                "type": "SPAN",
+                "level": "DEFAULT",
+                "metadata": {
+                    "mill.step_usage": (
+                        '{"model_name":"some-other-model",'
+                        '"input_tokens":99999,"output_tokens":99999}'
+                    ),
+                },
+            },
+        ],
+    }
+    s = trace_observation_summary(trace)
+    # Must use GENERATION data, not the step_usage fallback
+    assert s["input_tokens"] == 500
+    assert s["output_tokens"] == 200
+    assert s["total_tokens"] == 700
+    assert s["model"] == "openai/gpt-4o"
+    assert len(s["generations"]) == 1
+
+
+def test_trace_observation_summary_backend_from_step_usage():
+    """When step_usage metadata carries a backend tag, it is surfaced."""
+    trace = {
+        "observations": [
+            {
+                "name": "refine",
+                "type": "SPAN",
+                "level": "DEFAULT",
+                "metadata": {
+                    "mill.step_usage": (
+                        '{"model_name":"deepseek/deepseek-v4-pro",'
+                        '"input_tokens":1000,"output_tokens":500,'
+                        '"backend":"openrouter"}'
+                    ),
+                },
+            },
+        ],
+    }
+    s = trace_observation_summary(trace)
+    assert s["backend"] == "openrouter"
+    assert s["generations"][0]["backend"] == "openrouter"
+
+
+def test_trace_observation_summary_trace_level_metadata_fallback():
+    """When observations are absent (list endpoint), trace.metadata is
+    used as a fallback for step_usage data."""
+    trace = {
+        "metadata": {
+            "mill.step_usage": (
+                '{"model_name":"claude-sonnet-4-20250514",'
+                '"input_tokens":5000,"output_tokens":2000,'
+                '"tool_calls":[{"name":"read_file"},{"name":"run_command"}],'
+                '"backend":"claude_sdk"}'
+            ),
+        },
+    }
+    s = trace_observation_summary(trace)
+    assert s["model"] == "claude-sonnet-4-20250514"
+    assert s["input_tokens"] == 5000
+    assert s["output_tokens"] == 2000
+    assert s["total_tokens"] == 7000
+    assert s["backend"] == "claude_sdk"
+    assert s["tool_calls"] == [
+        {"name": "read_file", "count": 1},
+        {"name": "run_command", "count": 1},
+    ]
+    assert s["observation_count"] == 0
+    assert len(s["generations"]) == 1
+    assert s["generations"][0]["backend"] == "claude_sdk"
+
+
+def test_trace_observation_summary_trace_metadata_no_override_generations():
+    """When GENERATION observations already carry usage, trace-level
+    metadata is NOT used as a fallback (avoids double-counting)."""
+    trace = {
+        "observations": [
+            {
+                "name": "chat completion",
+                "type": "GENERATION",
+                "model": "openai/gpt-4o",
+                "usage": {"input": 500, "output": 200},
+                "startTime": "2026-01-01T00:00:00Z",
+                "level": "DEFAULT",
+            },
+        ],
+        # Trace-level metadata must be ignored because GENERATION
+        # observations already provide token counts.
+        "metadata": {
+            "mill.step_usage": (
+                '{"model_name":"some-other-model",'
+                '"input_tokens":99999,"output_tokens":99999,'
+                '"backend":"openrouter"}'
+            ),
+        },
+    }
+    s = trace_observation_summary(trace)
+    assert s["input_tokens"] == 500
+    assert s["output_tokens"] == 200
+    assert s["model"] == "openai/gpt-4o"
+    # Backend from trace.metadata is surfaced even when GENERATION data exists
+    # because GENERATION observations don't carry a backend tag.
+    assert s["backend"] == "openrouter"
+    assert len(s["generations"]) == 1
