@@ -11,27 +11,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from robotsix_agent_comm.protocol import ConfigContractError  # noqa: F401 — re-export
+
 from ..config.settings import Settings
 
 logger = logging.getLogger("robotsix_mill")
-
-# ---------------------------------------------------------------------------
-#  ConfigContractError
-# ---------------------------------------------------------------------------
-
-
-class ConfigContractError(Exception):
-    """Raised when a config operation fails validation or application.
-
-    Carries fields that map cleanly onto ``Error.to(..., code=, message=,
-    **details)`` so the responder can surface it over the wire.
-    """
-
-    def __init__(self, code: str, message: str, **details: Any) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.details = details
 
 
 # ---------------------------------------------------------------------------
@@ -118,13 +102,17 @@ SETTABLE_KEYS: frozenset[str] = frozenset(
 def get_config_snapshot(settings: Settings) -> dict[str, Any]:
     """Return a flat dotted-path view of *settings* with secrets redacted.
 
-    Iterates ``settings.model_dump()`` and redacts any key whose name
-    contains ``token``, ``api_key``, ``password``, or ``secret`` to
-    ``"***"``.  Reuses the redaction convention from ``config/secrets.py``.
+    Iterates ``Settings.model_fields`` keys via ``getattr`` and redacts any
+    key whose name contains ``token``, ``api_key``, ``password``, or
+    ``secret`` to ``"***"``.  Reuses the redaction convention from
+    ``config/secrets.py``.
+
+    Uses ``getattr`` per-field instead of ``model_dump()`` to avoid
+    allocating a full intermediate dict of ~347 fields on every call.
     """
-    raw = settings.model_dump()
     result: dict[str, Any] = {}
-    for key, value in raw.items():
+    for key in Settings.model_fields:
+        value = getattr(settings, key)
         if _is_secret_key(key):
             result[key] = "***"
         else:
