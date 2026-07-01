@@ -27,6 +27,7 @@ from ._shared import (
     _ImplementContext,
     _SinglePassResult,
     _is_config_only_change,
+    _is_rename_only_change,
     _should_skip_test_gate,
     log,
 )
@@ -43,7 +44,12 @@ class ImplementationLogicMixin(_ImplementStageBase):
         repo_dir: Path,
         target_branch: str,
     ) -> int | None:
-        """Pick the cheaper level-1 model for simple tickets.
+        """Pick the cheaper level-1 model for simple tickets, or bypass LLM
+        entirely for rename-only changes.
+
+        Returns ``0`` for:
+        * a rename-only change (every non-rename change is a config/doc
+          stub or zero-delta file) — bypass the LLM coordinator entirely.
 
         Returns ``1`` for:
         * a no-change-needed re-check (the previous attempt already
@@ -59,6 +65,8 @@ class ImplementationLogicMixin(_ImplementStageBase):
             return 1
         if _is_config_only_change(repo_dir, target_branch):
             return 1
+        if _is_rename_only_change(repo_dir, target_branch):
+            return 0
         return None
 
     @classmethod
@@ -643,6 +651,141 @@ class ImplementationLogicMixin(_ImplementStageBase):
         )
 
     @classmethod
+    def _handle_rename_only_change(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings,
+        ic: _ImplementContext,
+        target: str,
+        extra_roots: list[Path] | None,
+    ) -> _SinglePassResult:
+        """Handle a rename-only change deterministically — no LLM invocation.
+
+        Collects the rename list for the summary, persists artifacts,
+        runs the scope guardrail, and routes to test evaluation (which
+        will skip via :func:`_should_skip_test_gate`).
+        """
+        import subprocess as sp
+
+        # Collect renamed files for the summary.
+        rename_out = sp.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--diff-filter=R",
+                "--name-only",
+                f"origin/{target}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        renamed: list[str] = (
+            rename_out.stdout.strip().splitlines() if rename_out.returncode == 0 else []
+        )
+
+        # Collect all changed files for reference_files.
+        all_out = sp.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--name-only",
+                f"origin/{target}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        all_changed: list[str] = (
+            all_out.stdout.strip().splitlines() if all_out.returncode == 0 else []
+        )
+
+        # Build a deterministic summary.
+        renamed_preview = ", ".join(renamed[:5])
+        if len(renamed) > 5:
+            renamed_preview += f" (+{len(renamed) - 5} more)"
+        summary = f"rename-only change: {len(renamed)} file(s) renamed" + (
+            f" — {renamed_preview}" if renamed_preview else ""
+        )
+
+        ws = ctx.service.workspace(ticket)
+        memory_board_id = cls._memory_board_id(ctx, ticket)
+
+        # Persist artifacts (no memory update — no agent ran).
+        ref_files = all_changed
+        cls._persist_pass_artifacts(
+            ws,
+            ticket,
+            ic,
+            summary,
+            ref_files,
+            "",
+            settings,
+            memory_board_id,
+        )
+
+        # Run scope guardrail.
+        guardrail = cls._run_scope_guardrail(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ref_files,
+            ic.file_map,
+            settings,
+            ic.spec,
+            ic.feedback,
+        )
+        if guardrail.action == "return":
+            return _SinglePassResult(next_action="return", outcome=guardrail.outcome)
+
+        new_file_map = (
+            guardrail.file_map if guardrail.file_map is not None else ic.file_map
+        )
+        new_feedback = (
+            guardrail.feedback
+            if guardrail.action in ("continue", "skip_iteration")
+            else ic.feedback
+        )
+        new_ic = _ImplementContext(
+            spec=ic.spec,
+            memory_text=ic.memory_text,
+            reference_files=[{"path": p} for p in ref_files],
+            file_map=new_file_map,
+            feedback=new_feedback,
+            previous_attempt_summary=summary,
+            open_thread_ids=ic.open_thread_ids,
+        )
+        if guardrail.action == "continue":
+            return _SinglePassResult(next_action="retry", feedback=None, ic=new_ic)
+
+        # Route to test evaluation (which will skip via _should_skip_test_gate).
+        return cls._evaluate_test_results(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            new_ic,
+            summary,
+            ref_files,
+            None,  # new_msgs
+            False,  # no_change_needed
+            "",  # no_change_rationale
+            False,  # resuming
+            1,  # attempt
+            max(1, settings.max_fix_iterations),  # max_iters
+            extra_roots,
+        )
+
+    @classmethod
     def _run_single_implement_pass(
         cls,
         ctx: StageContext,
@@ -668,6 +811,19 @@ class ImplementationLogicMixin(_ImplementStageBase):
         )
         target = target_branch_for(settings, ctx.repo_config)
         agent_level = cls._select_agent_level(ic, settings, repo_dir, target)
+
+        # Rename-only changes bypass the LLM coordinator entirely.
+        if agent_level == 0:
+            return cls._handle_rename_only_change(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                ic,
+                target,
+                extra_roots,
+            )
 
         agent_result = cls._invoke_implement_agent(
             ctx,

@@ -13,6 +13,7 @@ import pytest
 from robotsix_mill.stages.implement._shared import (
     CONFIG_ONLY_EXTENSIONS,
     _is_config_only_change,
+    _is_rename_only_change,
     _should_skip_test_gate,
 )
 
@@ -171,6 +172,153 @@ class TestIsConfigOnlyChange:
 
 
 # ---------------------------------------------------------------------------
+# _is_rename_only_change
+# ---------------------------------------------------------------------------
+
+
+class TestIsRenameOnlyChange:
+    """Tests for ``_is_rename_only_change`` using a real git repo fixture."""
+
+    @pytest.fixture
+    def git_repo(self, tmp_path: Path) -> Path:
+        """Create a temp git repo with an origin/main ref for diffing.
+
+        Seeds the base commit with a README and two Python source files
+        so that subsequent ``git mv`` operations are detected as renames
+        (not additions) when diffed against ``origin/main``.
+        """
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+        )
+        (repo / "README.md").write_text("# Test Repo")
+        # Pre-seed source files so renames are detected as R, not A.
+        (repo / "src").mkdir()
+        (repo / "src" / "mod.py").write_text("x = 1")
+        (repo / "src" / "old_a.py").write_text("print('a')")
+        (repo / "src" / "old_b.py").write_text("print('b')")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "initial"], check=True)
+        subprocess.run(["git", "-C", str(repo), "branch", "-M", "main"], check=True)
+        remote = tmp_path / "remote.git"
+        remote.mkdir()
+        subprocess.run(["git", "-C", str(remote), "init", "--bare"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "remote", "add", "origin", str(remote)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "push", "-u", "origin", "main"],
+            check=True,
+        )
+        return repo
+
+    def test_pure_renames_only(self, git_repo: Path) -> None:
+        """Only git mv operations, no other changes → True."""
+        subprocess.run(
+            ["git", "-C", str(git_repo), "mv", "src/old_a.py", "src/new_a.py"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(git_repo), "mv", "src/old_b.py", "src/new_b.py"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "rename"],
+            check=True,
+        )
+        assert _is_rename_only_change(git_repo, "main") is True
+
+    def test_renames_with_config_stubs(self, git_repo: Path) -> None:
+        """Renames + config-only stub files (e.g. docs/modules.yaml) → True."""
+        subprocess.run(
+            ["git", "-C", str(git_repo), "mv", "src/mod.py", "src/new_mod.py"],
+            check=True,
+        )
+        # Also update a config file.
+        (git_repo / "docs").mkdir(exist_ok=True)
+        (git_repo / "docs" / "modules.yaml").write_text("- src/new_mod.py")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "rename + config"],
+            check=True,
+        )
+        assert _is_rename_only_change(git_repo, "main") is True
+
+    def test_renames_with_py_code_changes(self, git_repo: Path) -> None:
+        """Renames + a .py file with real content delta → False."""
+        subprocess.run(
+            ["git", "-C", str(git_repo), "mv", "src/mod.py", "src/new_mod.py"],
+            check=True,
+        )
+        # Add a .py file with real content.
+        (git_repo / "src" / "helper.py").write_text("def foo(): pass")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "rename + new code"],
+            check=True,
+        )
+        assert _is_rename_only_change(git_repo, "main") is False
+
+    def test_no_renames_at_all(self, git_repo: Path) -> None:
+        """No rename operations in the diff → False."""
+        # Just modify, no rename.
+        (git_repo / "src" / "mod.py").write_text("x = 2")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "modify"],
+            check=True,
+        )
+        assert _is_rename_only_change(git_repo, "main") is False
+
+    def test_rename_with_zero_delta_stub(self, git_repo: Path) -> None:
+        """Rename + a genuinely new empty .py stub file (zero delta) → True."""
+        subprocess.run(
+            ["git", "-C", str(git_repo), "mv", "src/mod.py", "src/new_mod.py"],
+            check=True,
+        )
+        # Create a brand-new empty file (not modifying an existing one).
+        (git_repo / "src" / "__init__.py").write_text("")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "rename + empty stub"],
+            check=True,
+        )
+        assert _is_rename_only_change(git_repo, "main") is True
+
+    def test_git_failure_returns_false(self, tmp_path: Path) -> None:
+        """Nonexistent origin/<branch> → git diff fails → False."""
+        repo = tmp_path / "noremote"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init"], check=True)
+        assert _is_rename_only_change(repo, "nonexistent") is False
+
+    def test_rename_with_nonzero_delta_py(self, git_repo: Path) -> None:
+        """Rename + a .py file with actual content (nonzero delta) → False."""
+        subprocess.run(
+            ["git", "-C", str(git_repo), "mv", "src/mod.py", "src/new_mod.py"],
+            check=True,
+        )
+        # Add a stub with content (nonzero delta).
+        (git_repo / "src" / "stub.py").write_text(
+            "# Re-export\nfrom src.new_mod import x"
+        )
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "rename + real stub"],
+            check=True,
+        )
+        assert _is_rename_only_change(git_repo, "main") is False
+
+
+# ---------------------------------------------------------------------------
 # _should_skip_test_gate truth table
 # ---------------------------------------------------------------------------
 
@@ -217,6 +365,10 @@ class TestShouldSkipTestGate:
     def test_config_only_agent_says_skip(self, monkeypatch) -> None:
         """config-only + agent says needs_full_suite=False → skip=True."""
         monkeypatch.setattr(
+            "robotsix_mill.stages.implement._shared._is_rename_only_change",
+            lambda repo_dir, target_branch: False,
+        )
+        monkeypatch.setattr(
             "robotsix_mill.stages.implement._shared._is_config_only_change",
             lambda repo_dir, target_branch: True,
         )
@@ -246,6 +398,10 @@ class TestShouldSkipTestGate:
 
     def test_config_only_agent_says_run(self, monkeypatch) -> None:
         """config-only + agent says needs_full_suite=True → skip=False."""
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement._shared._is_rename_only_change",
+            lambda repo_dir, target_branch: False,
+        )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement._shared._is_config_only_change",
             lambda repo_dir, target_branch: True,

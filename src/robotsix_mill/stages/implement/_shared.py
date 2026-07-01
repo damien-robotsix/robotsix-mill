@@ -292,6 +292,96 @@ CONFIG_ONLY_EXTENSIONS = (
 )
 
 
+def _is_rename_only_change(repo_dir: Path, target_branch: str) -> bool:
+    """True when the diff consists of file renames plus config/doc stubs.
+
+    Returns ``True`` when there is at least one git rename AND every
+    non-rename change (Added, Copied, Modified) is either a config/doc
+    file matching :data:`CONFIG_ONLY_EXTENSIONS` or a zero-delta stub
+    file (0 lines added, 0 lines removed).
+
+    Also checks the working tree diff so that unstaged edits from a
+    prior retry pass are detected before the author commits them.
+
+    Fail-closed: returns ``False`` on any git error, when there are no
+    renames, or when any non-rename change carries a real behavioural
+    delta.
+    """
+    # -- Renames ----------------------------------------------------------
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--diff-filter=R",
+            "--name-only",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    renames: list[str] = [p for p in result.stdout.strip().splitlines() if p]
+    if not renames:
+        return False  # No renames at all → not a rename-only change
+
+    # -- Non-rename changes (Added, Copied, Modified) --------------------
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--diff-filter=ACM",
+            "--name-only",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    non_renames: list[str] = [p for p in result.stdout.strip().splitlines() if p]
+
+    # Working tree: catches edits from a prior retry pass (unstaged).
+    wt = subprocess.run(
+        ["git", "-C", str(repo_dir), "diff", "--name-only"],
+        capture_output=True,
+        text=True,
+    )
+    if wt.returncode == 0 and wt.stdout.strip():
+        non_renames.extend(wt.stdout.strip().splitlines())
+
+    for p in non_renames:
+        # Config-only extension → allowed.
+        if p.lower().endswith(CONFIG_ONLY_EXTENSIONS):
+            continue
+        # Check whether the file is a zero-delta stub.
+        numstat = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--numstat",
+                f"origin/{target_branch}",
+                "--",
+                p,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if numstat.returncode != 0:
+            return False
+        parts = numstat.stdout.strip().split("\t")
+        if len(parts) < 2 or parts[0] != "0" or parts[1] != "0":
+            return False  # Non-zero delta → real behavioural change
+
+    return True
+
+
 def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
     """True when every changed file (added, copied, modified, renamed)
     relative to origin/<target_branch> has a config-only extension.
@@ -352,6 +442,11 @@ def _should_skip_test_gate(
     deterministic check already says config-only, so a real code change
     runs the full gate without ever paying for the LLM call.
     """
+    # Rename-only changes have zero behavioural delta — skip the full
+    # test suite without even consulting the test-scope LLM agent.
+    if _is_rename_only_change(repo_dir, target_branch):
+        return True, "rename-only change — skipping full test gate"
+
     config_only = _is_config_only_change(repo_dir, target_branch)
     if not config_only:
         return False, "non-config files in diff — running full test gate"
