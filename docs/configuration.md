@@ -618,15 +618,15 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
-`completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
+`pin_bump`, `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
 `copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
-> ² `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` do **not** have a
+> ² `trace_health`, `ci_monitor`, `member_sync`, `pin_bump`, and `diagnostic` do **not** have a
 > `memory_path` field — they write no per-agent memory ledger
-> (`member_sync` and `diagnostic` are deterministic passes with no LLM agent).
+> (`member_sync`, `pin_bump`, and `diagnostic` are deterministic passes with no LLM agent).
 >
 >
 > ³ In multi-repo mode, the default memory file path is
