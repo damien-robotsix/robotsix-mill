@@ -102,7 +102,7 @@ jobs:
             type=sha,format=short
 
       - id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           push: false
@@ -175,7 +175,7 @@ jobs:
 
       - name: Push Docker image
         id: push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           push: true
@@ -259,7 +259,7 @@ jobs:
             type=sha,format=short
 
       - id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           file: sandbox/Dockerfile
@@ -329,7 +329,7 @@ jobs:
 
       - name: Push Docker image
         id: push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           file: sandbox/Dockerfile
@@ -412,7 +412,7 @@ jobs:
             type=sha,format=short
 
       - id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           # context = sandbox/proxy so the Dockerfile's COPY tinyproxy.conf /
           # COPY filter resolve; `file` is relative to the workspace root
@@ -469,7 +469,7 @@ jobs:
 
       - name: Push Docker image
         id: push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           # context = sandbox/proxy so the Dockerfile's COPY tinyproxy.conf /
           # COPY filter resolve; `file` is relative to the workspace root
