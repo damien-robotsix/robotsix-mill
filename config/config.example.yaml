@@ -307,6 +307,7 @@ periodic:
     max_repeated_tool: 50           # absolute cap on repeated tool calls before flagging
     per_obs_cost_threshold: 0.001   # minimum per-observation cost to consider a trace for review
     max_drafts_per_run: 5           # cap on drafted findings per pass (prevents board flooding)
+    min_confidence: medium          # min inspector confidence to file a finding (high|medium|low); 'medium' drops the inspector's self-flagged 'low' telemetry, 'high' is a stricter gate
     max_traces_per_run: 300         # cap on traces detail-loaded per pass; watermark advances incrementally so a backlog drains with bounded memory (0 disables)
     max_tool_calls: 100             # hard cap on tool calls per trace inspector invocation
     max_errors: 20                  # hard cap on tool-call errors before auto-terminating the trace inspector
