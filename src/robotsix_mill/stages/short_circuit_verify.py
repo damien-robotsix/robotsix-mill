@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -336,6 +337,147 @@ def extract_replayable_edits(  # noqa: C901 — flat per-tool arg dispatch; bran
                     return None
                 ops.append({"kind": "edit", "path": path, "old": old, "new": new})
     return ops
+
+
+# --- stuck-loop detection ---------------------------------------------------
+
+# Tools whose repeated invocation without any file edits or test runs
+# signals a stuck agent (e.g. reading the ticket or listing epic children
+# in a loop).  ``run_command`` is absent because it is the primary test-
+# running tool — an agent that runs tests is at least verifying something.
+_NON_PROGRESS_TOOLS = frozenset(
+    {
+        "read_ticket",
+        "list_epic_children",
+        "list_threads",
+        "read_file",
+        "list_dir",
+        "explore",
+        "parallel_explore",
+        "consult_expert",
+        "ask_web_knowledge",
+    }
+)
+
+# Tools whose presence in a pass counts as "making progress" even if no
+# file diff results — e.g. the agent ran tests, posted a comment, or
+# paused to ask a question.  A pass with ONLY these + non-progress tools
+# is still stuck if it produced no diff, but they keep the "same tool
+# repeat" detector from firing spuriously when the agent is actually
+# testing / communicating.
+_PROGRESS_SIGNAL_TOOLS = frozenset(
+    {
+        "run_command",
+        "spawn_subtask",
+        "post_comment",
+        "insert_changelog_entry",
+        "ask_user",
+        "reply_to_thread",
+    }
+)
+
+
+def _extract_tool_names(messages: list[Any]) -> list[str]:
+    """Return the ordered tool-call names from a pydantic-ai message list."""
+    names: list[str] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("parts", []) or []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("part_kind") != "tool-call":
+                continue
+            name = part.get("tool_name")
+            if isinstance(name, str):
+                names.append(name)
+    return names
+
+
+def _detect_stuck_same_tool(
+    tool_names: list[str],
+    *,
+    same_tool_window: int,
+) -> str | None:
+    """Return the tool name if the tail of *tool_names* is a run of the
+    same non-progress tool >= *same_tool_window* long, else ``None``."""
+    total = len(tool_names)
+    if total < same_tool_window:
+        return None
+    tail_name = tool_names[-1]
+    if tail_name not in _NON_PROGRESS_TOOLS:
+        return None
+    run_len = 0
+    for i in range(total - 1, -1, -1):
+        if tool_names[i] == tail_name:
+            run_len += 1
+        else:
+            break
+    return tail_name if run_len >= same_tool_window else None
+
+
+def _trailing_non_progress_run(tool_names: list[str]) -> int:
+    """Return the length of the trailing run of consecutive non-progress
+    tool calls at the end of *tool_names*."""
+    run = 0
+    for i in range(len(tool_names) - 1, -1, -1):
+        if tool_names[i] in _NON_PROGRESS_TOOLS:
+            run += 1
+        else:
+            break
+    return run
+
+
+def analyze_pass_progress(
+    new_messages: bytes | str | None,
+    *,
+    same_tool_window: int = 5,
+) -> dict[str, Any]:
+    """Analyze *new_messages* for stuck-loop signals.
+
+    Returns a dict with:
+    - ``total``: total tool-call count in this pass
+    - ``edit_calls``: number of file-mutating tool calls
+    - ``progress_calls``: number of progress-signal tool calls
+    - ``stuck_same_tool``: name of the tool that was called *same_tool_window*
+      consecutive times as the most recent non-progress calls, or ``None``
+    - ``last_non_progress_run``: length of the trailing run of consecutive
+      non-progress tool calls
+
+    Malformed / empty input returns zeros / None.
+    """
+    empty = {
+        "total": 0,
+        "edit_calls": 0,
+        "progress_calls": 0,
+        "stuck_same_tool": None,
+        "last_non_progress_run": 0,
+    }
+    if not new_messages:
+        return empty
+    try:
+        messages = json.loads(new_messages)
+    except json.JSONDecodeError, TypeError, ValueError:
+        log.warning("analyze_pass_progress: invalid messages JSON; assuming empty")
+        return empty
+    if not isinstance(messages, list):
+        return empty
+
+    tool_names = _extract_tool_names(messages)
+
+    total = len(tool_names)
+    edit_calls = sum(1 for n in tool_names if n in _EDIT_TOOL_NAMES)
+    progress_calls = sum(1 for n in tool_names if n in _PROGRESS_SIGNAL_TOOLS)
+
+    return {
+        "total": total,
+        "edit_calls": edit_calls,
+        "progress_calls": progress_calls,
+        "stuck_same_tool": _detect_stuck_same_tool(
+            tool_names, same_tool_window=same_tool_window
+        ),
+        "last_non_progress_run": _trailing_non_progress_run(tool_names),
+    }
 
 
 def detect_edit_claim_contradiction(

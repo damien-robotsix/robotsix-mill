@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Implement stage: add stuck-loop detection to abort early when the agent makes no progress across consecutive passes. Two independent heuristics: (a) after 3 consecutive passes with no file edits the loop BLOCKs as "stuck", and (b) after 50 cumulative tool calls across passes without a git diff the loop BLOCKs. Within-pass detection flags a same-tool repeat (e.g. calling ``read_ticket`` 5+ times consecutively without edits) as a stuck signal.
 - Bump `actions/checkout` from v4 (SHA `34e1148`) to v6.0.3 (SHA `df4cb1c`) across all 6 workflow files.
 - Bump anchore/sbom-action from v0.21.0 to v0.24.0 in `docker-publish.yml` (PR #617).
 - Dockerfile: drop redundant system `claude` CLI (`npm install -g @anthropic-ai/claude-code`); the `claude-agent-sdk` Python dep ships its own bundled binary (`_bundled/claude`) and prefers it. Also document the `~/.claude` rw mount in `docker-compose.override.example.yml`.

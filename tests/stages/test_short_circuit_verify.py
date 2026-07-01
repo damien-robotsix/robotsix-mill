@@ -390,3 +390,159 @@ def test_extract_replayable_edits_no_edits_is_empty_list():
 def test_extract_replayable_edits_malformed_fails_closed():
     assert scv.extract_replayable_edits(b"{not json") is None
     assert scv.extract_replayable_edits(None) == []
+
+
+# --- analyze_pass_progress ---------------------------------------------------
+
+
+def _tool_msgs(*tool_names: str) -> bytes:
+    """Build a ``new_messages_json()``-shaped payload of *tool_names*.
+
+    Each name becomes its own message (one tool-call part per message)
+    so the order is unambiguous.  Non-tool-call parts are interleaved
+    to verify the scanner skips them.
+    """
+    messages: list[dict] = []
+    for name in tool_names:
+        messages.append(
+            {
+                "parts": [
+                    {"part_kind": "text", "content": "thinking..."},
+                    {
+                        "part_kind": "tool-call",
+                        "tool_name": name,
+                        "args": {},
+                        "tool_call_id": f"call_{name}_{len(messages)}",
+                    },
+                    {
+                        "part_kind": "tool-return",
+                        "tool_name": name,
+                        "content": "ok",
+                    },
+                ]
+            }
+        )
+    return json.dumps(messages).encode()
+
+
+def test_analyze_pass_progress_empty_none():
+    result = scv.analyze_pass_progress(None)
+    assert result == {
+        "total": 0,
+        "edit_calls": 0,
+        "progress_calls": 0,
+        "stuck_same_tool": None,
+        "last_non_progress_run": 0,
+    }
+
+
+def test_analyze_pass_progress_counts_edits():
+    result = scv.analyze_pass_progress(
+        _tool_msgs("read_file", "write_file", "edit_file", "delete_file")
+    )
+    assert result["total"] == 4
+    assert result["edit_calls"] == 3  # write_file, edit_file, delete_file
+    assert result["progress_calls"] == 0
+
+
+def test_analyze_pass_progress_counts_progress_signals():
+    result = scv.analyze_pass_progress(
+        _tool_msgs("read_file", "run_command", "post_comment", "spawn_subtask")
+    )
+    assert result["total"] == 4
+    assert result["edit_calls"] == 0
+    assert result["progress_calls"] == 3  # run_command, post_comment, spawn_subtask
+
+
+def test_analyze_pass_progress_no_stuck_same_tool_when_mixed():
+    result = scv.analyze_pass_progress(
+        _tool_msgs("read_ticket", "read_file", "write_file"),
+        same_tool_window=3,
+    )
+    assert result["stuck_same_tool"] is None
+
+
+def test_analyze_pass_progress_detects_stuck_same_tool():
+    # Last 5 calls are all read_ticket (a non-progress tool).
+    result = scv.analyze_pass_progress(
+        _tool_msgs(
+            "read_file",
+            "list_dir",
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+        ),
+        same_tool_window=5,
+    )
+    assert result["stuck_same_tool"] == "read_ticket"
+    assert result["last_non_progress_run"] == 7  # all 7 are non-progress
+
+
+def test_analyze_pass_progress_stuck_window_not_met():
+    # Only 4 consecutive read_ticket at tail — below window of 5.
+    result = scv.analyze_pass_progress(
+        _tool_msgs(
+            "read_file", "read_ticket", "read_ticket", "read_ticket", "read_ticket"
+        ),
+        same_tool_window=5,
+    )
+    assert result["stuck_same_tool"] is None
+    assert result["last_non_progress_run"] == 5
+
+
+def test_analyze_pass_progress_stuck_reset_by_progress_tool():
+    # run_command breaks the non-progress run, so the tail is only
+    # read_ticket × 3 (below window of 5).
+    result = scv.analyze_pass_progress(
+        _tool_msgs(
+            "read_ticket",
+            "read_ticket",
+            "run_command",
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+        ),
+        same_tool_window=5,
+    )
+    assert result["stuck_same_tool"] is None
+    assert result["last_non_progress_run"] == 3
+
+
+def test_analyze_pass_progress_edit_tool_breaks_stuck_run():
+    result = scv.analyze_pass_progress(
+        _tool_msgs(
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+            "read_ticket",
+            "edit_file",
+        ),
+        same_tool_window=5,
+    )
+    assert result["stuck_same_tool"] is None
+    assert result["last_non_progress_run"] == 0  # edit_file is not non-progress
+    assert result["edit_calls"] == 1
+
+
+def test_analyze_pass_progress_list_epic_children_loop():
+    result = scv.analyze_pass_progress(
+        _tool_msgs(
+            "list_epic_children",
+            "list_epic_children",
+            "list_epic_children",
+            "list_epic_children",
+            "list_epic_children",
+        ),
+        same_tool_window=5,
+    )
+    assert result["stuck_same_tool"] == "list_epic_children"
+    assert result["last_non_progress_run"] == 5
+
+
+def test_analyze_pass_progress_malformed_json_fails_open():
+    result = scv.analyze_pass_progress(b"{not json")
+    assert result["total"] == 0
+    assert result["stuck_same_tool"] is None

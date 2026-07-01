@@ -446,6 +446,7 @@ class _SinglePassResult:
     outcome: Outcome | None = None
     feedback: str | None = None
     ic: _ImplementContext | None = None
+    new_msgs: bytes | None = None
 
 
 @dataclass
