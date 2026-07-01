@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove five dead backward-compat re-exports from `orchestration.py`: `_persist_triage_complexity`, `_MIGRATE_NOTE_PREFIX`, `_anti_bounce_escalate`, `_parse_prior_boards`, `_is_sendback_reentry` (zero imports across the codebase).
 - Remove stale `.robotsix-board-agent-src` git submodule; the board-agent package is already managed by uv in `pyproject.toml` and the submodule reference pointed to a commit no longer reachable on the remote, breaking Dependabot's configured graph update
 - **dev**: add ``make format`` and ``make lint`` targets for quick local
   ruff/mypy checks across all Python sources (``src/``, ``tests/``,
