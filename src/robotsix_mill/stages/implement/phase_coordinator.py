@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ...agents.testing import ENV_ERROR_PREFIX
 from ...config import target_branch_for
-from ...core.models import SourceKind, Ticket
+from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...forge.auth import _resolve_remote_url
 from ...runners.pass_runner import load_memory
@@ -73,6 +73,17 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         """
         s = ctx.settings
         ws = ctx.service.workspace(ticket)
+
+        # 0. Epic guard: implement is for TASK tickets only.  An epic
+        #    reaching this stage signals a dispatch bug — block it
+        #    before any trace opens so a human can triage.
+        if ticket.kind == TicketKind.EPIC:
+            return Outcome(
+                State.BLOCKED,
+                "epic ticket routed to implement stage — epics must "
+                "be broken into child tasks; re-route to epic_breakdown "
+                "or refine for child generation",
+            )
 
         # 1. Spec must exist and be non-empty — without a spec the agent
         #    has nothing to implement and would return empty/no-op.
