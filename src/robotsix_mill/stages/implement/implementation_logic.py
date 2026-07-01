@@ -10,7 +10,7 @@ from ...agents import coding
 from ...agents.coding import AgentBudgetError, AgentRunError
 from ...agents.coordinating import ValidationResult
 from ...agents.testing import smoke_paths_match
-from ...config import ConfigError, get_repo_config, target_branch_for
+from ...config import ConfigError, Settings, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
 from ...config.repo_settings import load_repo_smoke_command
@@ -657,7 +657,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
         ticket: Ticket,
         repo_dir: Path,
         branch: str,
-        settings,
+        settings: Settings,
         ic: _ImplementContext,
         target: str,
         extra_roots: list[Path] | None,
