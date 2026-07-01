@@ -415,6 +415,20 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._list_open_prs(owner=owner, repo=repo)
 
+    def get_pr_labels(self, pr_number: int) -> list[str]:
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        return self._get_pr_labels(owner=owner, repo=repo, pr_number=pr_number)
+
+    def _get_pr_labels(self, *, owner: str, repo: str, pr_number: int) -> list[str]:
+        try:
+            r = self._http.get(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/issues/{pr_number}/labels"
+            )
+            r.raise_for_status()
+            return [label["name"] for label in r.json()]
+        except Exception:
+            return []
+
     def get_authenticated_user_login(self) -> str:
         """Return the login of the GitHub user/app associated with the current token.
 

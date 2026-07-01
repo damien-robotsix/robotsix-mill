@@ -225,6 +225,7 @@ modules:
       - src/robotsix_mill/runners/trace_review_runner.py
       - src/robotsix_mill/runners/langfuse_cleanup_runner.py
       - src/robotsix_mill/runners/bespoke_runner.py
+      - src/robotsix_mill/runners/changelog_autofill_runner.py
       - src/robotsix_mill/runners/data_dir_gc/__init__.py
       - src/robotsix_mill/runners/data_dir_gc/orphans.py
       - src/robotsix_mill/runners/orphaned_pr_check.py
@@ -244,6 +245,7 @@ modules:
       - tests/runners/test_trace_review_runner.py
       - tests/runners/test_langfuse_cleanup_runner.py
       - tests/runners/test_bespoke_runner.py
+      - tests/runners/test_changelog_autofill_runner.py
       - tests/runners/test_data_dir_gc_runner.py
       - tests/runners/test_credit_balance_runner.py
       - tests/runners/test_verify_runner.py
