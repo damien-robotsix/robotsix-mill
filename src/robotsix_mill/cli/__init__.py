@@ -160,6 +160,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Security-posture pass",
         "format": "memory_drafts",
     },
+    "roadmap-sync": {
+        "module": "runners.roadmap_sync_runner",
+        "function": "run_roadmap_sync_pass",
+        "label": "Roadmap-sync pass",
+        "format": "roadmap_sync",
+    },
     "verify": {
         "module": "runners.verify_runner",
         "function": "run_verify_pass",
@@ -247,6 +253,33 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             else:
                 rc = repos.repos[repo_id]
             result = func(session_id=session_id, repo_config=rc)
+        elif cmd == "roadmap-sync":
+            from ..runtime.tracing import make_session_id
+            from ..config import get_repos_config
+
+            session_id = make_session_id(cmd)
+            repos = get_repos_config()
+            repo_id = getattr(args, "repo_id", None)
+            if repo_id is None:
+                if len(repos.repos) == 1:
+                    rc = next(iter(repos.repos.values()))
+                else:
+                    print(
+                        "roadmap-sync: --repo-id is required (multiple repos "
+                        f"configured). Known repos: {sorted(repos.repos.keys())}",
+                        file=sys.stderr,
+                    )
+                    return 2
+            elif repo_id not in repos.repos:
+                print(
+                    f"roadmap-sync: unknown repo '{repo_id}'. "
+                    f"Known repos: {sorted(repos.repos.keys())}",
+                    file=sys.stderr,
+                )
+                return 2
+            else:
+                rc = repos.repos[repo_id]
+            result = func(session_id=session_id, repo_config=rc)
         else:
             from ..runtime.tracing import make_session_id
 
@@ -316,6 +349,20 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                         "traces_flagged": result.traces_flagged,
                         "window_start": result.window_start,
                         "window_end": result.window_end,
+                    },
+                    indent=2,
+                )
+            )
+        elif entry["format"] == "roadmap_sync":
+            print(
+                json.dumps(
+                    {
+                        "summary": result.summary,
+                        "created": result.created,
+                        "updated": result.updated,
+                        "skipped": result.skipped,
+                        "pr_url": result.pr_url,
+                        "session_id": result.session_id,
                     },
                     indent=2,
                 )
@@ -402,6 +449,33 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     print(f"  - {d['id']}: {d.get('title', '')}")
             else:
                 print("No new draft tickets created.")
+        elif entry["format"] == "roadmap_sync":
+            print(f"{entry['label']} complete.")
+            print(
+                f"Created: {len(result.created)} | "
+                f"Updated: {len(result.updated)} | "
+                f"Skipped: {len(result.skipped)}"
+            )
+            if result.pr_url:
+                print(f"PR: {result.pr_url}")
+            if result.created:
+                print("Created:")
+                for item in result.created:
+                    print(f"  - {item.get('id', '?')}: {item.get('title', '')}")
+            if result.updated:
+                print("Updated:")
+                for item in result.updated:
+                    fields = item.get("fields", [])
+                    print(
+                        f"  - {item.get('id', '?')}: {item.get('title', '')}"
+                        f" ({', '.join(fields)})"
+                    )
+            if result.skipped:
+                print("Skipped:")
+                for item in result.skipped:
+                    print(f"  - {item.get('title', '?')}: {item.get('reason', '')}")
+            if not result.created and not result.updated and not result.skipped:
+                print("No changes.")
         elif entry["format"] == "drafts":
             print(f"{entry['label']} complete.")
             print(result.summary)
@@ -726,6 +800,21 @@ def main(argv: list[str] | None = None) -> int:
     p_trace_review.add_argument(
         "--repo-id",
         help="repository to run trace-review for (required if multiple repos)",
+    )
+
+    # --- roadmap-sync command ---
+    p_roadmap_sync = sub.add_parser(
+        "roadmap-sync",
+        help="run a roadmap-sync pass",
+    )
+    p_roadmap_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output raw JSON instead of human-friendly text",
+    )
+    p_roadmap_sync.add_argument(
+        "--repo-id",
+        help="repository to run roadmap-sync for (required if multiple repos)",
     )
 
     # --- module-curator command ---
