@@ -1,1 +1,7 @@
+# Per-repo periodic workflow: presence enables security_posture for this repo.
+# Inspects CI workflows and pre-commit config, compares against evolving
+# OWASP/OpenSSF/SLSA best practices, and files draft tickets for missing
+# security scanning layers. Name-only → inherits the built-in
+# security_posture definition (robotsix-mill:
+# agent_definitions/periodic/security_posture.yaml).
 name: security_posture
