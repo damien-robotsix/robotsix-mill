@@ -334,6 +334,10 @@ class Forge(ABC):
         """
         return []
 
+    def get_pr_labels(self, pr_number: int) -> list[str]:
+        """Return label names on the given PR. Default: no labels."""
+        return []
+
     def get_authenticated_user_login(self) -> str:
         """Return the login of the authenticated user/app.
 
