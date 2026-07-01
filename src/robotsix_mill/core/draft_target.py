@@ -33,6 +33,7 @@ import logging
 import pathlib
 
 from ..config import Settings
+from ..vcs import git_ops
 from .dedup import paths_excluding_out_of_scope
 from .repo_layout import resolve_under_src
 from .service import TicketService
@@ -219,7 +220,8 @@ def referenced_mill_paths_absent(
     body: str | None,
     repo_dir: pathlib.Path | None,
 ) -> list[str]:
-    """Return mill-prefixed file-path tokens that are absent from *repo_dir*.
+    """Return mill-prefixed file-path tokens that are absent from *repo_dir*
+    **and not gitignored**.
 
     Extracts candidate path tokens from ``f"{title}\\n{body}"`` (via
     :func:`paths_excluding_out_of_scope`, which skips tokens inside
@@ -227,6 +229,14 @@ def referenced_mill_paths_absent(
     starts with one of :data:`MILL_PATH_PREFIXES` (case-insensitive),
     and returns the subset for which ``(repo_dir / token).exists()``
     is ``False``.
+
+    Gitignored paths (detected via ``git check-ignore``) are excluded
+    from the result — e.g. ``config/config.yaml``, created from the
+    committed example at deploy time and gitignored by design, is a
+    mill-prefixed path that will always be absent on a checkout but
+    should NOT trigger a consumer-migration ticket.  If ``git
+    check-ignore`` errors (not a git repo, git not on PATH, etc.) the
+    filter fails open — all absent paths are returned unmodified.
 
     When *repo_dir* is ``None`` returns an empty list immediately
     (no filesystem is available to check).  The function is pure /
@@ -252,6 +262,27 @@ def referenced_mill_paths_absent(
         if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
             if resolve_under_src(repo_dir, token) is None:
                 absent.append(token)
+
+    if not absent:
+        return absent
+
+    # Exclude gitignored paths — an operator-local file like
+    # config/config.yaml is always absent from a checkout because
+    # it is never committed, but it is NOT a missing consumer path.
+    try:
+        ignored = git_ops.ignored_paths(repo_dir, absent)
+    except Exception:
+        log.debug(
+            "referenced_mill_paths_absent: git check-ignore failed — "
+            "returning all absent paths unfiltered",
+            exc_info=True,
+        )
+        return absent
+
+    if ignored:
+        ignored_set = frozenset(ignored)
+        absent = [p for p in absent if p not in ignored_set]
+
     return absent
 
 
