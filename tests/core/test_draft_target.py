@@ -288,6 +288,97 @@ def test_referenced_mill_paths_absent_still_returns_in_scope_mill_paths(tmp_path
 
 
 # ---------------------------------------------------------------------------
+# Tests for ``referenced_mill_paths_absent`` — gitignore filtering
+# ---------------------------------------------------------------------------
+
+
+def test_referenced_mill_paths_absent_gitignored_path_excluded(tmp_path, monkeypatch):
+    """An absent mill-prefixed path that is gitignored → excluded from result."""
+    # Simulate git check-ignore returning the path as ignored.
+    monkeypatch.setattr(
+        "robotsix_mill.core.draft_target.git_ops.ignored_paths",
+        lambda _repo, paths: ["agent_definitions/missing.md"],
+    )
+    result = referenced_mill_paths_absent(
+        title="Update agent_definitions/missing.md",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+def test_referenced_mill_paths_absent_non_gitignored_still_returned(
+    tmp_path, monkeypatch
+):
+    """An absent mill-prefixed path NOT gitignored → still returned."""
+    monkeypatch.setattr(
+        "robotsix_mill.core.draft_target.git_ops.ignored_paths",
+        lambda _repo, paths: [],
+    )
+    result = referenced_mill_paths_absent(
+        title="Update agent_definitions/missing.md",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["agent_definitions/missing.md"]
+
+
+def test_referenced_mill_paths_absent_mixed_gitignored_and_not(tmp_path, monkeypatch):
+    """Mixed gitignored and non-gitignored absent paths → only non-gitignored."""
+    monkeypatch.setattr(
+        "robotsix_mill.core.draft_target.git_ops.ignored_paths",
+        lambda _repo, paths: ["agent_definitions/ignored.md"],
+    )
+    result = referenced_mill_paths_absent(
+        title=(
+            "Update agent_definitions/ignored.md and src/robotsix_mill/core/kept.py"
+        ),
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert "src/robotsix_mill/core/kept.py" in result
+    assert "agent_definitions/ignored.md" not in result
+    assert len(result) == 1
+
+
+def test_referenced_mill_paths_absent_git_check_ignore_fails_open(
+    tmp_path, monkeypatch
+):
+    """If git check-ignore errors → all absent paths returned (fail-open)."""
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("git not found")
+
+    monkeypatch.setattr(
+        "robotsix_mill.core.draft_target.git_ops.ignored_paths",
+        _raise,
+    )
+    result = referenced_mill_paths_absent(
+        title="Update agent_definitions/missing.md",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == ["agent_definitions/missing.md"]
+
+
+def test_referenced_mill_paths_absent_config_yaml_ignored_scenario(
+    tmp_path, monkeypatch
+):
+    """The specific ticket scenario: ``config/config.yaml`` is absent and
+    gitignored → excluded (no false-positive consumer-migration ticket)."""
+    monkeypatch.setattr(
+        "robotsix_mill.core.draft_target.git_ops.ignored_paths",
+        lambda _repo, paths: ["config/config.yaml"],
+    )
+    result = referenced_mill_paths_absent(
+        title="Fix config/config.yaml",
+        body="",
+        repo_dir=tmp_path,
+    )
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
 # Tests for ``referenced_local_deliverable_paths``
 # ---------------------------------------------------------------------------
 
