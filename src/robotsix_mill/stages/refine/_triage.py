@@ -76,12 +76,15 @@ def _triage_outcome(
     triage_note: str | None = None,
     write_file_map_args: list[dict[str, str]] | None = None,
     extract_paths_from_draft: bool = False,
+    state: State | None = None,
 ) -> Outcome:
-    """Write draft-original.md and file_map.json, then return a resolved Outcome.
+    """Write draft-original.md and file_map.json, then return an Outcome.
 
     Encapsulates the repeated 3-statement pattern found across triage
     decision handlers: write draft-original.md, write file_map.json,
-    and return a ``resolved_outcome``.
+    and return an ``Outcome`` (either resolved via
+    ``resolved_outcome``, or a direct ``Outcome(state, reason)`` when
+    *state* is provided).
     """
     (ws.artifacts_dir / "draft-original.md").write_text(
         draft if draft else "(title-only ticket, no body provided)",
@@ -103,6 +106,9 @@ def _triage_outcome(
         _reconcile.write_file_map(ws, write_file_map_args, only_if_absent=True)
     else:
         _reconcile.write_file_map(ws, [], only_if_absent=True)
+
+    if state is not None:
+        return Outcome(state, reason)
 
     return _result_paths.resolved_outcome(
         ctx,
@@ -357,13 +363,13 @@ def triage_skip(
             and s.maintenance_triage_enabled
             and ticket.source != SourceKind.CI
         ):
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
-            )
-            return Outcome(
-                State.MAINTENANCE,
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
                 f"maintenance triage (LLM): {triage.reason} — {title}",
+                state=State.MAINTENANCE,
             )
         if triage.decision == "NO_CHANGE":
             short_reason = triage.reason[:400] + (
@@ -383,14 +389,13 @@ def triage_skip(
                     source=ticket.source,
                     triage_note=triage.reason,
                 )
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
-            )
-            _reconcile.write_file_map(ws, [], only_if_absent=True)
-            return Outcome(
-                State.DONE,
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
                 f"triage NO_CHANGE: {short_reason}",
+                state=State.DONE,
             )
         if triage.decision == "SKIP":
             return _triage_outcome(
@@ -438,13 +443,9 @@ def triage_skip(
                     resolved_board,
                     ticket.board_id,
                 )
-                (ws.artifacts_dir / "draft-original.md").write_text(
-                    draft if draft else "(title-only ticket, no body provided)",
-                    encoding="utf-8",
-                )
-                _reconcile.write_file_map(ws, [], only_if_absent=True)
-                return _result_paths.resolved_outcome(
+                return _triage_outcome(
                     ctx,
+                    ws,
                     draft,
                     ticket.id,
                     f"triage MIGRATE invalid target: {triage.reason}",
@@ -470,13 +471,9 @@ def triage_skip(
                     ticket.id,
                     exc,
                 )
-                (ws.artifacts_dir / "draft-original.md").write_text(
-                    draft if draft else "(title-only ticket, no body provided)",
-                    encoding="utf-8",
-                )
-                _reconcile.write_file_map(ws, [], only_if_absent=True)
-                return _result_paths.resolved_outcome(
+                return _triage_outcome(
                     ctx,
+                    ws,
                     draft,
                     ticket.id,
                     f"triage MIGRATE failed: {exc} — {triage.reason}",
@@ -484,14 +481,13 @@ def triage_skip(
                     triage_note=triage.reason,
                 )
 
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
-            )
-            _reconcile.write_file_map(ws, [], only_if_absent=True)
-            return Outcome(
-                State.DRAFT,
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
                 f"migrated to board {resolved_board!r}: {triage.reason}",
+                state=State.DRAFT,
             )
 
         # --- mechanical draft fast-path ---
@@ -501,22 +497,9 @@ def triage_skip(
         ):
             try:
                 if ticket.source in _AUTO_APPROVE_SOURCES:
-                    (ws.artifacts_dir / "draft-original.md").write_text(
-                        draft if draft else "(title-only ticket, no body provided)",
-                        encoding="utf-8",
-                    )
-                    _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
-                    extracted = _PATH_RE.findall(draft)
-                    if extracted:
-                        _reconcile.write_file_map(
-                            ws,
-                            [{"file": p, "note": "from draft"} for p in extracted],
-                            only_if_absent=True,
-                        )
-                    else:
-                        _reconcile.write_file_map(ws, [], only_if_absent=True)
-                    return _result_paths.resolved_outcome(
+                    return _triage_outcome(
                         ctx,
+                        ws,
                         draft,
                         ticket.id,
                         f"mechanical draft fast-path "
@@ -524,6 +507,7 @@ def triage_skip(
                         f"— skipped refine LLM",
                         source=ticket.source,
                         triage_note=triage.reason,
+                        extract_paths_from_draft=True,
                     )
 
                 auto = refining.triage_auto_approve(
@@ -531,22 +515,9 @@ def triage_skip(
                     spec=_summarize_spec_for_auto_approve(f"{ticket.title}\n\n{draft}"),
                 )
                 if auto.decision == "APPROVE":
-                    (ws.artifacts_dir / "draft-original.md").write_text(
-                        draft if draft else "(title-only ticket, no body provided)",
-                        encoding="utf-8",
-                    )
-                    _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
-                    extracted = _PATH_RE.findall(draft)
-                    if extracted:
-                        _reconcile.write_file_map(
-                            ws,
-                            [{"file": p, "note": "from draft"} for p in extracted],
-                            only_if_absent=True,
-                        )
-                    else:
-                        _reconcile.write_file_map(ws, [], only_if_absent=True)
-                    return _result_paths.resolved_outcome(
+                    return _triage_outcome(
                         ctx,
+                        ws,
                         draft,
                         ticket.id,
                         f"mechanical draft fast-path — "
@@ -555,30 +526,19 @@ def triage_skip(
                         triage_note=(
                             f"triage REFINE → auto-approve APPROVE: {auto.reason}"
                         ),
+                        extract_paths_from_draft=True,
                     )
                 elif auto.decision == "NEEDS_APPROVAL":
-                    (ws.artifacts_dir / "draft-original.md").write_text(
-                        draft if draft else "(title-only ticket, no body provided)",
-                        encoding="utf-8",
-                    )
-                    _PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
-                    extracted = _PATH_RE.findall(draft)
-                    if extracted:
-                        _reconcile.write_file_map(
-                            ws,
-                            [{"file": p, "note": "from draft"} for p in extracted],
-                            only_if_absent=True,
-                        )
-                    else:
-                        _reconcile.write_file_map(ws, [], only_if_absent=True)
-                    return _result_paths.resolved_outcome(
+                    return _triage_outcome(
                         ctx,
+                        ws,
                         draft,
                         ticket.id,
                         f"mechanical draft fast-path — "
                         f"auto-approve NEEDS_APPROVAL (skipped refine): {auto.reason}",
                         source=ticket.source,
                         triage_note=triage.reason,
+                        extract_paths_from_draft=True,
                     )
             except Exception:
                 log.warning(
