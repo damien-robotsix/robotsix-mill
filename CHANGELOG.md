@@ -3,6 +3,21 @@
 - Remove stale `.robotsix-board-agent-src` git submodule; the board-agent package is already managed by uv in `pyproject.toml` and the submodule reference pointed to a commit no longer reachable on the remote, breaking Dependabot's configured graph update
 - **cleanup**: remove unused ``SecurityPosturePassResult`` backward-compat
   alias from ``periodic_runner.py`` and its vulture whitelist entry.
+- ``trace_observation_summary()`` now falls back to trace-level
+  ``metadata.mill.step_usage`` when the Langfuse list endpoint returns
+  zero observations, so cost-attribution works even without fetching
+  per-trace detail (the list endpoint does not include the observation
+  tree).
+- Add ``backend`` billing tag (``"claude_sdk"`` vs ``"openrouter"``) to
+  per-step usage data emitted by ``record_step_usage()``, and surface it
+  in ``trace_observation_summary()`` so the cost-analyst can distinguish
+  subscription (estimate-only) cost from real marginal cost.
+- Fix `trace_observation_summary()` to read per-step usage data from
+  `langfuse.observation.metadata.mill.step_usage` span attributes when
+  GENERATION observations are absent. The `record_step_usage()` write
+  path now uses the `langfuse.observation.metadata.` prefix so the
+  attribute is visible through Langfuse's REST API (previously it was
+  stored as a raw span attribute inaccessible to the read path).
 - **dev**: add ``make format`` and ``make lint`` targets for quick local
   ruff/mypy checks across all Python sources (``src/``, ``tests/``,
   ``scripts/``, ``vulture_whitelist.py``, ``deploy/split_config.py``,

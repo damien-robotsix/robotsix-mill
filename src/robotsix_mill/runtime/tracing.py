@@ -538,6 +538,7 @@ def record_step_usage(
     retry_reason: str = "",
     cache_read_input_tokens: int = 0,
     cache_creation_input_tokens: int = 0,
+    backend: str = "",
 ) -> None:
     """Record per-step usage data as span attributes on the current span.
 
@@ -551,6 +552,11 @@ def record_step_usage(
     (Claude SDK / OpenRouter with Anthropic-style cache_control). They
     are extracted from pydantic-ai's ``RunUsage`` and recorded as OTel
     span attributes for cost-attribution visibility.
+
+    *backend* is the billing backend tag — ``"claude_sdk"`` (Claude
+    subscription, flat cost) or ``"openrouter"`` (pay-per-token).  It
+    is recorded so the cost-analyst can distinguish subscription
+    (estimate-only) cost from real marginal cost.
 
     All parameters are keyword-only to keep call sites self-documenting.
     No-op when tracing is disabled or no span is recording.
@@ -580,8 +586,11 @@ def record_step_usage(
         data["cache_read_input_tokens"] = cache_read_input_tokens
     if cache_creation_input_tokens:
         data["cache_creation_input_tokens"] = cache_creation_input_tokens
+    if backend:
+        data["backend"] = backend
     set_current_span_attribute(
-        "mill.step_usage", _json.dumps(data, default=str, ensure_ascii=False)
+        "langfuse.observation.metadata.mill.step_usage",
+        _json.dumps(data, default=str, ensure_ascii=False),
     )
 
 
