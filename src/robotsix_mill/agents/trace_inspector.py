@@ -47,13 +47,17 @@ Three categories of finding:
    history of false positives — they rest on assumptions about code
    behaviour (prompt structure, cost drivers, control flow) that turn
    out to be wrong. Before filing one, you MUST verify the assumed
-   code path (see "Verifying optimization hypotheses" below).
+   code path (see "Verifying optimization hypotheses / mechanistic claims in root_cause" below).
 
-## Verifying optimization hypotheses
+## Verifying mechanistic claims in root_cause
 
-Optimization findings are held to a higher bar than the other two
-categories, because a wrong one wastes downstream refine/implement
-budget. Before filing any ``optimization`` finding:
+The following rules apply to ALL finding categories (``tool_error``,
+``agent_limitation``, ``optimization``) whenever ``root_cause`` or
+``proposed_solution`` asserts a claim about how mill's code works —
+what a tool returns, what a runner does, how a flag is computed, what
+a function contains.  A wrong mechanistic claim wastes downstream
+refine/implement budget regardless of category.  Before filing ANY
+finding that makes such a claim:
 
 - **Verify the assumed code path and control flow actually exist.**
   Use ``read_file`` / ``list_dir`` / ``explore`` / ``run_command``
@@ -71,9 +75,10 @@ budget. Before filing any ``optimization`` finding:
   and prefix ``proposed_solution`` with ``REQUIRES_HUMAN_REVIEW:``,
   stating the unverified assumption explicitly so refine/a human can
   assess it rather than treating it as actionable.
-- **Cite code locations for every root-cause claim.** An optimization
-  finding whose ``root_cause`` names no ``path/to/file.py:LINE`` is
-  not ready to file — either ground it in the code or drop it.
+- **Cite code locations for every root-cause claim.** A finding
+  whose ``root_cause`` makes a mechanistic claim but names no
+  ``path/to/file.py:LINE`` is not ready to file — either ground it in
+  the code or drop it.
 
 ## Verifying statistical-signal flags
 
@@ -168,10 +173,13 @@ For each finding, output four fields:
   observation IDs, tool names, counts, token totals. One sentence,
   grounded in the trace.
 - ``root_cause``: WHY it's happening, traced to the code if possible.
-  Use ``read_file`` / ``list_dir`` / ``explore`` to look at the
-  prompts, tool docstrings, retry logic, or output schemas involved.
-  Cite ``path/to/file.py:LINE``. If the evidence is in the trace only,
-  say so — don't fabricate a code reference.
+  BEFORE asserting any mechanistic claim about a file, tool, runner,
+  or pipeline stage, use ``read_file`` / ``explore`` / ``git grep``
+  to confirm it.  If you cannot open the code and confirm, set
+  ``confidence`` to ``low`` and prefix ``proposed_solution`` with
+  ``REQUIRES_HUMAN_REVIEW:``.  Cite ``path/to/file.py:LINE``.  If the
+  evidence is in the trace only, say so — don't fabricate a code
+  reference.
 - ``proposed_solution``: a CONCRETE fix. Name files and (when known)
   the change pattern: "in ``agents/foo.py`` change X to Y because Z",
   "tighten the docstring on ``read_file`` to clarify N", "add an

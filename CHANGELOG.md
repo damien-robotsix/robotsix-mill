@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add `.robotsix-mill/periodic/security_posture.yaml` trigger file to enable the security_posture periodic workflow in mill.
+- Broadened mandatory `read_file` verification in trace inspector from optimization-only to ALL finding categories when `root_cause` or `proposed_solution` makes a mechanistic claim about code behaviour.
 - Add stale re-spawn guard to implement stage preflight: when the last
   implement attempt was blocked and the spec hasn't changed, fail fast
   before opening a Langfuse trace — preventing $0.00 no-op traces and
