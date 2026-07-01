@@ -12,6 +12,8 @@ from fastapi import APIRouter
 from . import _health
 from . import _comments
 from . import _tickets
+from . import _tickets_merge
+from . import _tickets_transitions
 from . import _epics
 from . import _passes
 from . import _traces
@@ -24,6 +26,8 @@ router = APIRouter()
 router.include_router(_health.router)
 router.include_router(_comments.router)
 router.include_router(_tickets.router)
+router.include_router(_tickets_merge.router)
+router.include_router(_tickets_transitions.router)
 router.include_router(_epics.router)
 router.include_router(_passes.router)
 router.include_router(_traces.router)

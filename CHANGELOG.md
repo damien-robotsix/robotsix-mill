@@ -9,6 +9,11 @@
   the 401 token-invalidation + backoff boilerplate that was duplicated across
   `_create_pr`, `_get_pr`, `_list_branches`, `_list_open_pr_branches`,
   `_list_open_prs`, and `_pr_review_status`.
+- Split `_tickets.py` (1169 lines, 25 routes) into three sibling modules:
+  `_tickets.py` (core CRUD), `_tickets_merge.py` (merge/CI routes), and
+  `_tickets_transitions.py` (state transitions & enrichment). Follows the
+  existing route-module pattern and keeps merge-specific imports out of
+  the CRUD module.
 - Add CLI subcommand `roadmap-sync` with `--json` and `--repo-id` flags, matching the existing POST route at `/roadmap-sync`.
 - Wire `triage_boilerplate` agent into all five on-demand dispatch layers (CLI ``_RUNNERS`` entry, POST route, board button, JS handler + window export, ``AGENT_COLORS`` / ``SOURCE_CLASS`` / CSS badge) matching all 13 other ``llm_agent`` peers.
 - Split ``forge/gitlab.py`` (monolithic 1131-line ``GitLabForge``) into a ``forge/gitlab/`` package mirroring the GitHub adapter architecture:
