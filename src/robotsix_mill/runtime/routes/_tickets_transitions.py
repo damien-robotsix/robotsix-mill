@@ -110,7 +110,7 @@ def redraft(
 def mark_done(
     ticket_id: str,
     body: dict = Body({}),
-    request: Request = None,
+    request: Request = None,  # type: ignore[assignment]
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:

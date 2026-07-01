@@ -180,7 +180,7 @@ def get_merge_info(
             if pr is not None:
                 mergeable = pr.get("mergeable")
         except Exception:
-            pass
+            pass  # best-effort: mergeable is optional
 
     # --- CI conclusion / failing checks ----------------------------------
     ci_conclusion: str | None = None
@@ -199,7 +199,7 @@ def get_merge_info(
                         for f in (cs.get("failing") or [])
                     ]
         except Exception:
-            pass
+            pass  # best-effort: CI status is optional
 
     # --- files -----------------------------------------------------------
     files: list[dict] = []
@@ -213,7 +213,7 @@ def get_merge_info(
             )
             files = raw[:50]
         except Exception:
-            pass
+            pass  # best-effort: file list is optional
 
     return {
         "mergeable": mergeable,
