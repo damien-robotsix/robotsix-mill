@@ -116,11 +116,7 @@ def register_repo(
         )
 
     # Write the overlay YAML.
-    # Sanitize data_dir before path construction so CodeQL recognizes
-    # the os.path.realpath + os.path.join sanitizers (they do not
-    # propagate through helper functions).
-    _safe_root = os.path.realpath(os.fspath(settings.data_dir))
-    _safe_path = os.path.realpath(os.path.join(_safe_root, "registered_repos.yaml"))
+    _safe_path = _resolve_overlay_path(settings.data_dir)
     if os.path.exists(_safe_path):
         with open(_safe_path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
