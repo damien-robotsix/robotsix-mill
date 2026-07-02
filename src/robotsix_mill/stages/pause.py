@@ -112,30 +112,6 @@ def clear_conversation_state(ws: Workspace, stage_name: str) -> None:
         path.unlink()
 
 
-def build_resume_message_history(
-    conversation_state: bytes,
-    reply_text: str,
-) -> list:
-    """Deserialize the saved message history, append a synthetic user
-    message containing the operator's reply, and return the reconstructed
-    ``list[ModelMessage]`` ready for ``message_history=``.
-
-    Args:
-        conversation_state: Raw JSON bytes from a prior
-            ``all_messages_json()`` call.
-        reply_text: The operator's answer text.
-    """
-    messages = ModelMessagesTypeAdapter.validate_json(conversation_state)
-    messages.append(
-        ModelRequest(
-            parts=[
-                UserPromptPart(content=f"[Operator reply]: {reply_text}"),
-            ]
-        ),
-    )
-    return messages
-
-
 def build_compact_resume_message_history(
     saved_state: bytes,
     reply_text: str,
@@ -144,8 +120,8 @@ def build_compact_resume_message_history(
 ) -> list:
     """Build a compact 3-message resume history from the prior session.
 
-    Unlike :func:`build_resume_message_history` — which replays the
-    entire prior transcript — this helper extracts only the last
+    Unlike the former ``build_resume_message_history`` — which replayed
+    the entire prior transcript — this helper extracts only the last
     assistant text summary and constructs a fresh synthetic
     ``message_history`` that is small and safe to re-upload.
 

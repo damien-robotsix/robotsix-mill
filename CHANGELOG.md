@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove dead backward-compat function ``build_resume_message_history`` and its re-exports; all callers now use ``build_compact_resume_message_history`` instead.
 - Fixed `is` → `==` comparison against `SourceKind.ORPHANED_PR_CHECK` in `_check_pr_baseline` (ci_poll.py). `Ticket.source` is a plain `str` from the DB, so identity comparison always evaluated to `False`, making the tracker-ticket fallback dead code.
 - Update ``robotsix_llmio.core.sqlite_utils`` in the installed venv package to accept ``list[tuple[str, str]]`` (matching mill call-sites), support SQLAlchemy 2.0 ``Connection`` via ``exec_driver_sql`` fallback, and return ``list[bool]``. The upstream changes are staged in ``_llmio_check/`` for manual push; the vendored ``sqlite_utils.py`` docstring now documents the migration path.
 - Guard the implement stage against epic tickets: the preflight gate now

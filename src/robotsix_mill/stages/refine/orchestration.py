@@ -34,7 +34,6 @@ from ..base import Outcome, StageContext
 from ..pause import (
     acknowledge_unanswered_threads,  # noqa: F401 — re-exported for test monkeypatch compat
     build_compact_resume_message_history,
-    build_resume_message_history,  # noqa: F401 — kept for debugging/rollback
     check_for_pause,
     clear_conversation_state,
     load_conversation_state,
