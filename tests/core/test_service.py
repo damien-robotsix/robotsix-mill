@@ -3157,3 +3157,45 @@ class TestDbMaintenancePass:
             "comments_pruned",
             "tickets_pruned",
         }
+
+
+def test_close_tracker_from_blocked_clears_blocked_from(service):
+    """close_tracker transitions a BLOCKED ticket to CLOSED with blocked_from cleared."""
+    t = service.create("close tracker test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.BLOCKED
+    assert reloaded.blocked_from is not None
+
+    service.close_tracker(t.id)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.CLOSED
+    assert reloaded.blocked_from is None
+
+
+def test_close_tracker_raises_on_terminal_states(service):
+    """close_tracker raises TransitionError when ticket is already terminal."""
+    # DONE
+    t = service.create("done task")
+    service.transition(t.id, State.DONE)
+    with pytest.raises(TransitionError):
+        service.close_tracker(t.id)
+
+    # CLOSED
+    t2 = service.create("closed task")
+    _close_ticket(service, t2)
+    with pytest.raises(TransitionError):
+        service.close_tracker(t2.id)
+
+    # ANSWERED
+    t3 = service.create("answered inquiry", kind=TicketKind.INQUIRY)
+    _answer_ticket(service, t3)
+    with pytest.raises(TransitionError):
+        service.close_tracker(t3.id)
+
+    # EPIC_CLOSED
+    t4 = service.create("closed epic", kind=TicketKind.EPIC)
+    _close_epic(service, t4)
+    with pytest.raises(TransitionError):
+        service.close_tracker(t4.id)
