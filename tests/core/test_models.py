@@ -80,6 +80,7 @@ def test_sourcekind_member_count():
         "TRIAGE_BOILERPLATE",
         "META",
         "RUN_HEALTH",
+        "LANGFUSE_CLEANUP",
         "CI_FIX_DEPENDENCY",
         "IMPLEMENT_BASELINE_DEPENDENCY",
         "ORPHANED_PR_CHECK",

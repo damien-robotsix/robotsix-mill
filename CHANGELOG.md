@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add missing `SourceKind.LANGFUSE_CLEANUP` enum member, `SOURCE_CLASS` JS map entry, and `.src-langfuse-cleanup` CSS rule for board card styling of langfuse-cleanup runs.
 - Document `periodic.triage_boilerplate` in `docs/configuration.md` Section 12 (Periodic agents).
 - `robotsix-mill repos list` now shows a ``SOURCE`` column (``config`` or ``auto``) so operators can distinguish hand-configured repos from auto-registered overlay entries.
 - Add missing `track_foreign_prs` row to the orphaned_pr_check table in `docs/configuration.md`.
