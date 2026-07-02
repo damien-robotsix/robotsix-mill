@@ -68,7 +68,7 @@ def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
     except ConfigError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
-    print(f"{'REPO_ID':30s} {'BOARD_ID'}")
+    print(f"{'REPO_ID':30s} {'BOARD_ID':30s} {'SOURCE'}")
     for rc in repos.repos.values():
-        print(f"{rc.repo_id:30s} {rc.board_id}")
+        print(f"{rc.repo_id:30s} {rc.board_id:30s} {rc.source}")
     return 0
