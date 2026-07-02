@@ -540,7 +540,7 @@ def _try_grep_prefilter(question: str, repo_dir: Path) -> str | None:
                 cwd=str(repo_dir),
                 timeout=5,
             )
-        except subprocess.TimeoutExpired, FileNotFoundError, OSError:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             return None
 
         if result.returncode != 0:
