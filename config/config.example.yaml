@@ -214,7 +214,7 @@ gates:
   refine_subscription_model_default: sonnet  # Claude alias for simple level-3 refines (non-escalated)
   refine_subscription_model_complex: opus    # Claude alias for needs-exploration level-3 refines (escalated)
   refine_findings_downgrade_enabled: true    # downgrade Opus→cheaper when triage findings are substantial (root cause known)
-  refine_findings_downgrade_min_chars: 200   # minimum stripped-char length of findings for the downgrade to fire
+  refine_findings_downgrade_min_chars: 150   # minimum stripped-char length of findings for the downgrade to fire
   refine_subscription_model_findings: sonnet # Claude alias used when the findings-present downgrade fires
   reviewer_agreement_gate_enabled: true     # pre-Opus guard: skip refine when reviewer agrees with draft's no-change conclusion
   maintenance_triage_enabled: true         # cheap triage before a full maintenance pass

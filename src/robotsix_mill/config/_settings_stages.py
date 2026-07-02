@@ -428,7 +428,7 @@ class _StagesSettings(BaseModel):
     # Minimum stripped-character length of the triage exploration findings for
     # the Opus->cheaper downgrade above to fire. Below this, findings are
     # treated as insufficient and Opus is kept.
-    refine_findings_downgrade_min_chars: int = Field(default=200, ge=0)
+    refine_findings_downgrade_min_chars: int = Field(default=150, ge=0)
     # Claude model alias used when the findings-present downgrade fires.
     # Defaults to sonnet (same tier the "simple" path already trusts). Only
     # the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.

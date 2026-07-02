@@ -601,7 +601,7 @@ refinement pass.
 | `gates.refine_subscription_model_default` | `MILL_REFINE_SUBSCRIPTION_MODEL_DEFAULT` | `sonnet` | Claude alias for non-escalated (simple) level-3 refines |
 | `gates.refine_subscription_model_complex` | `MILL_REFINE_SUBSCRIPTION_MODEL_COMPLEX` | `opus` | Claude alias for escalated (needs-exploration) level-3 refines |
 | `gates.refine_findings_downgrade_enabled` | `MILL_REFINE_FINDINGS_DOWNGRADE_ENABLED` | `true` | Downgrade Opus → cheaper Claude alias when triage findings are substantial (root cause already known) |
-| `gates.refine_findings_downgrade_min_chars` | `MILL_REFINE_FINDINGS_DOWNGRADE_MIN_CHARS` | `200` | Minimum stripped-character length of triage findings for the Opus downgrade to fire |
+| `gates.refine_findings_downgrade_min_chars` | `MILL_REFINE_FINDINGS_DOWNGRADE_MIN_CHARS` | `150` | Minimum stripped-character length of triage findings for the Opus downgrade to fire |
 | `gates.refine_subscription_model_findings` | `MILL_REFINE_SUBSCRIPTION_MODEL_FINDINGS` | `sonnet` | Claude alias used when the findings-present downgrade fires |
 | `gates.max_re_refine_cycles_before_cheap` | `MILL_MAX_RE_REFINE_CYCLES_BEFORE_CHEAP` | `2` | Force cheap model after this many "changes requested" sendbacks; `0` disables |
 | — | `MILL_REFINE_DELTA_REUSE_ENABLED` | `true` | When re-entering refine after an operator sendback, reuse the prior refined description.md as the starting point instead of refining from scratch |
