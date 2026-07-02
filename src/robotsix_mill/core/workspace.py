@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -23,7 +24,15 @@ class Workspace:
         # Defend against path-injection: ticket_id must be a simple leaf name.
         if ticket_id != Path(ticket_id).name or ticket_id in (".", ".."):
             raise ValueError(f"Unsafe ticket_id: {ticket_id!r}")
-        self.dir = Path(root) / ticket_id
+        # Containment check in the realpath + prefix form so static
+        # analysis (CodeQL py/path-injection) recognises the barrier;
+        # the leaf-name check above already rejects separators, so this
+        # only guards against exotic resolution edge cases.
+        _root = os.path.realpath(os.fspath(root))
+        _dir = os.path.realpath(os.path.join(_root, ticket_id))
+        if not _dir.startswith(_root + os.sep):
+            raise ValueError(f"Unsafe ticket_id: {ticket_id!r}")
+        self.dir = Path(_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
 
     @property
