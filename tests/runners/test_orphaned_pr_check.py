@@ -837,7 +837,7 @@ class TestIdempotentFileTicket:
         )
         # First call: no existing tickets → file
         # Second call: existing ticket → dedup
-        svc.recent_proposals_for.side_effect = [[], [existing]]
+        svc.recent_proposals_for.side_effect = [[], [], [existing], [existing]]
 
         # First pass
         result1 = run_orphaned_pr_check_pass(repo_config=repo)
@@ -1178,7 +1178,14 @@ class TestForeignPrTracking:
             title="Track external PR: test-owner/test-repo#404",
             state=State.READY,
         )
-        svc.recent_proposals_for.side_effect = [[], [], [existing], [existing]]
+        svc.recent_proposals_for.side_effect = [
+            [],
+            [],
+            [],
+            [existing],
+            [existing],
+            [existing],
+        ]
 
         result1 = run_orphaned_pr_check_pass(repo_config=repo)
         result2 = run_orphaned_pr_check_pass(repo_config=repo)
@@ -1187,6 +1194,54 @@ class TestForeignPrTracking:
         assert result1.foreign_filed == 1
         assert result2.foreign_filed == 0
         assert result2.foreign_skipped >= 1
+
+    def test_dedup_includes_terminal_states(self, monkeypatch):
+        """A DONE tracking ticket also dedup-suppresses a foreign PR re-file."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(505)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        done_ticket = _ticket(
+            ticket_id="20250101T000000Z-done-tracker-a1b2",
+            title="Track external PR: test-owner/test-repo#505",
+            state=State.DONE,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        svc.recent_proposals_for.return_value = [done_ticket]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 0
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped >= 1
+        assert any("DEDUP_SKIP" in a and "foreign_pr" in a for a in result.actions)
+
+    def test_dedup_includes_closed_state(self, monkeypatch):
+        """A CLOSED tracking ticket also dedup-suppresses a foreign PR re-file."""
+        s = _settings(orphaned_pr_dry_run=False, orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(606)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        closed_ticket = _ticket(
+            ticket_id="20250101T000000Z-closed-tracker-a1b2",
+            title="Track external PR: test-owner/test-repo#606",
+            state=State.CLOSED,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        svc.recent_proposals_for.return_value = [closed_ticket]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 0
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped >= 1
+        assert any("DEDUP_SKIP" in a and "foreign_pr" in a for a in result.actions)
 
     def test_file_cap_limits_foreign_tickets(self, monkeypatch):
         """Many foreign PRs, max_files_per_pass=2 → only 2 filed."""

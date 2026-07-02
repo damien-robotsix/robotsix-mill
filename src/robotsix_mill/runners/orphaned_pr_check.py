@@ -326,6 +326,11 @@ def run_orphaned_pr_check_pass(
         if not settings.orphaned_pr_dry_run
         else frozenset()
     )
+    all_orphan_titles: frozenset[str] = (
+        _load_all_orphan_titles(service)
+        if not settings.orphaned_pr_dry_run
+        else frozenset()
+    )
 
     # Reconcile stale tracker tickets whose PRs are no longer open.
     if open_prs:
@@ -359,7 +364,7 @@ def run_orphaned_pr_check_pass(
             forge,
             repo_config,
             result,
-            open_orphan_titles,
+            all_orphan_titles,
         )
     return result
 
@@ -550,7 +555,7 @@ def _process_foreign_prs(
     forge: Forge,
     repo_config: RepoConfig,
     result: OrphanedPrCheckResult,
-    open_orphan_titles: frozenset[str] = frozenset(),
+    all_orphan_titles: frozenset[str] = frozenset(),
 ) -> None:
     """File tracking tickets for FOREIGN (non-board) open PRs.
 
@@ -585,7 +590,7 @@ def _process_foreign_prs(
 
         branch = pr["branch"]
         title = _foreign_ticket_title(repo_config, pr)
-        is_dedup = title in open_orphan_titles
+        is_dedup = title in all_orphan_titles
         action = "DEDUP_SKIP" if is_dedup else "FILE_TICKET"
         log_line = (
             f"repo={repo_config.repo_id} branch={branch} "
@@ -711,6 +716,18 @@ def _load_open_orphan_titles(service: TicketService) -> frozenset[str]:
         source=SourceKind.ORPHANED_PR_CHECK, limit=500
     )
     return frozenset(t.title for t in tickets if t.state not in _ORPHAN_STATES)
+
+
+def _load_all_orphan_titles(service: TicketService) -> frozenset[str]:
+    """Return titles of ALL orphaned-PR tracking tickets (including terminal).
+
+    Used for foreign-PR dedup where a DONE/CLOSED tracking ticket must
+    also suppress duplicate creation — the PR was already reviewed.
+    """
+    tickets: list[Ticket] = service.recent_proposals_for(
+        source=SourceKind.ORPHANED_PR_CHECK, limit=500
+    )
+    return frozenset(t.title for t in tickets)
 
 
 def _file_orphan_ticket(
