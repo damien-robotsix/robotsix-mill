@@ -55,7 +55,7 @@
 
 services:
   mill:
-    image: robotsix/mill:latest
+    image: ghcr.io/damien-robotsix/robotsix-mill:main
     labels:
       robotsix.deploy.primary: "true"
       robotsix.deploy.claude-mount: "true"
@@ -132,7 +132,7 @@ services:
     # network connecting this to the spawned mill-sbx-* containers is not
     # created by central-deploy (networks: ignored); the mill creates it and
     # attaches this container at startup (see FOLLOW-UP #2).
-    image: robotsix/mill-sandbox-proxy:latest
+    image: ghcr.io/damien-robotsix/robotsix-mill-sandbox-proxy:main
     container_name: sandbox-proxy
 
 volumes:
