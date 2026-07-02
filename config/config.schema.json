@@ -347,6 +347,12 @@
           "title": "Mill Claude Max Concurrency",
           "type": "integer"
         },
+        "MILL_COORDINATOR_TIMEOUT_SECONDS": {
+          "default": 600,
+          "minimum": 60,
+          "title": "Mill Coordinator Timeout Seconds",
+          "type": "integer"
+        },
         "MILL_INVESTIGATION_WORKSPACE": {
           "anyOf": [
             {
