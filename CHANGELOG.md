@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix Docker build failure: add missing `COPY skills/ ./skills/` in builder stage so hatchling's `force-include` for `skills/` resolves at wheel-build time.
 - Ship `skills/` directory in the production wheel via `[tool.hatch.build.targets.wheel.force-include]` and add `skills_dir()` to `_resources.py`, so `Settings.skills_dir` resolves correctly in both editable and installed modes.
 - Correct `docs/reusable-workflow-callers.md`: the shared `python-ci.yml` and `python-docs.yml` workflows live in `damien-robotsix/robotsix-github-workflows`, not in `robotsix-mill`. Updated all references, the wrong-org callout, and the local-form note accordingly.
 - Pass `usage_limits=UsageLimits(request_limit=100)` to `Agent.run_sync()` in the retrospect and review-revision agents to prevent `UsageLimitExceeded` errors on complex tasks.
