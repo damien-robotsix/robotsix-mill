@@ -33,17 +33,6 @@ def _sanitize_log_value(value: str) -> str:
     return value.replace("\n", " ").replace("\r", " ")
 
 
-def _resolve_overlay_path(data_dir: str | Path) -> Path:
-    """Resolve ``registered_repos.yaml`` within *data_dir*, raising on escape."""
-    root = os.path.realpath(os.fspath(data_dir))
-    resolved = os.path.realpath(os.path.join(root, "registered_repos.yaml"))
-    if not resolved.startswith(root + os.sep) and resolved != root:
-        raise ValueError(
-            f"Path escapes data directory: {resolved} is not within {root}"
-        )
-    return Path(resolved)
-
-
 class RepoRegistration(BaseModel):
     """Request body for POST /repos."""
 
@@ -116,7 +105,19 @@ def register_repo(
         )
 
     # Write the overlay YAML.
-    _safe_path = _resolve_overlay_path(settings.data_dir)
+    # Resolve and validate the overlay path: realpath + containment
+    # check prevents path traversal.  Both os.path.realpath calls are
+    # recognized as sanitizers by CodeQL's py/path-injection query.
+    _data_root = os.path.realpath(os.fspath(settings.data_dir))
+    _safe_path_str = os.path.realpath(os.path.join(_data_root, "registered_repos.yaml"))
+    if (
+        not _safe_path_str.startswith(_data_root + os.sep)
+        and _safe_path_str != _data_root
+    ):
+        raise ValueError(
+            f"Path escapes data directory: {_safe_path_str} is not within {_data_root}"
+        )
+    _safe_path = Path(_safe_path_str)
     if os.path.exists(_safe_path):
         with open(_safe_path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
