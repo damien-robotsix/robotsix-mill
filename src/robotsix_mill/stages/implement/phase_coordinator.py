@@ -17,7 +17,6 @@ from .. import short_circuit_verify
 from ..base import Outcome, StageContext
 from ..pause import (
     build_compact_resume_message_history,
-    build_resume_message_history,  # noqa: F401 — kept for debugging/rollback
     check_for_pause,
     load_conversation_state,
     save_conversation_state,
