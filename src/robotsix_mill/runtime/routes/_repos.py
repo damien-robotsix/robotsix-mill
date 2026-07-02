@@ -117,8 +117,12 @@ def register_repo(
 
     # Write the overlay YAML.
     overlay_path = _resolve_overlay_path(settings.data_dir)
-    if overlay_path.exists():
-        with open(overlay_path, "r", encoding="utf-8") as fh:
+    # _resolve_overlay_path already validates and realpath's the path,
+    # but CodeQL's taint analysis cannot trace through the helper.
+    # Re-resolve so the sanitizer is visible at the sink.
+    _safe = os.path.realpath(str(overlay_path))
+    if os.path.exists(_safe):
+        with open(_safe, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     else:
         data = {}
@@ -134,8 +138,8 @@ def register_repo(
         "_mill_source": "auto",
     }
 
-    overlay_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(overlay_path, "w", encoding="utf-8") as fh:
+    Path(_safe).parent.mkdir(parents=True, exist_ok=True)
+    with open(_safe, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
 
     # Hot-reload: clear the cached singleton, then re-read the merged
