@@ -110,10 +110,9 @@ def register_repo(
     # recognized as sanitizers by CodeQL's py/path-injection query.
     _data_root = os.path.realpath(os.fspath(settings.data_dir))
     _safe_path_str = os.path.realpath(os.path.join(_data_root, "registered_repos.yaml"))
-    if (
-        not _safe_path_str.startswith(_data_root + os.sep)
-        and _safe_path_str != _data_root
-    ):
+    # The joined leaf is a constant filename, so the resolved path always
+    # ends with "/<leaf>" under the root — a plain prefix check is exact.
+    if not _safe_path_str.startswith(_data_root + os.sep):
         raise ValueError(
             f"Path escapes data directory: {_safe_path_str} is not within {_data_root}"
         )

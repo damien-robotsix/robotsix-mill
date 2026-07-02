@@ -160,6 +160,12 @@ post_pr_comment
 
 # -- runtime routes (FastAPI decorator-registered handlers) ------------------
 get_trace_detail
+# POST /repos handler — invoked via @router.post decorator, not by direct
+# Python call. Tested via HTTP TestClient.
+register_repo
+# RepoRegistrationResult.registered — pydantic response-model field, read
+# only via serialization (and by API clients), never by name in src/.
+registered
 
 # -- meta --------------------------------------------------------------------
 todo_drafts_created
