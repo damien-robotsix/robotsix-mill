@@ -53,6 +53,7 @@ class SourceKind(StrEnum):
     TRIAGE_BOILERPLATE = "triage_boilerplate"
     META = "meta"
     RUN_HEALTH = "run-health"
+    LANGFUSE_CLEANUP = "langfuse-cleanup"
     CI_FIX_DEPENDENCY = "ci_fix_dependency"
     IMPLEMENT_BASELINE_DEPENDENCY = "implement_baseline_dependency"
     ORPHANED_PR_CHECK = "orphaned_pr_check"

@@ -105,6 +105,7 @@
     data_dir_gc: "data-dir-gc",
     meta: "meta",
     "run-health": "run-health",
+    "langfuse-cleanup": "langfuse-cleanup",
     security_posture: "security-posture",
     triage_boilerplate: "triage-boilerplate",
     ci_fix_dependency: "ci-fix-dependency",
