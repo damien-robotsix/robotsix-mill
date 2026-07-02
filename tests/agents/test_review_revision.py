@@ -20,7 +20,7 @@ class FakeAgent:
     def __init__(self, result: ReviewRevisionResult):
         self._result = result
 
-    def run_sync(self, msg, message_history=None, board_id=""):
+    def run_sync(self, msg, message_history=None, board_id="", usage_limits=None):
         return FakeRunSyncResult(self._result)
 
 
@@ -121,7 +121,9 @@ def test_memory_passthrough(settings, tmp_path, monkeypatch, secrets_set):
     )
 
     # Capture the user prompt by wrapping agent.run_sync
-    def capturing_run_sync(self, msg, message_history=None, board_id=""):
+    def capturing_run_sync(
+        self, msg, message_history=None, board_id="", usage_limits=None
+    ):
         captured_user_prompt[0] = msg
         return FakeRunSyncResult(self._result)
 

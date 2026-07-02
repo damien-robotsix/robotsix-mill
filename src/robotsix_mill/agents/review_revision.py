@@ -77,8 +77,12 @@ def run_review_revision_agent(
         + "Follow the system prompt exactly."
     )
 
+    from pydantic_ai.usage import UsageLimits
+
+    limits = UsageLimits(request_limit=100)
+
     try:
-        result = agent.run_sync(user_prompt)
+        result = agent.run_sync(user_prompt, usage_limits=limits)
     finally:
         _safe_close(agent)
 
