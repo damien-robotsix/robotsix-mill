@@ -171,6 +171,30 @@ system_prompt: |
     to-be-created instead.  The implement agent should defer
     `read_file` on such paths.
 
+  ## Distinguishing checkout-local paths from spec-described paths
+
+  When a spec or draft mentions file paths, not all of them refer to
+  files that should exist in the current checkout. Distinguish between:
+
+  - **Checkout-local paths**: paths that are part of the audited
+    repo's source tree — `src/`, `tests/`, `docs/`,
+    `agent_definitions/`, `pyproject.toml`, etc.  These should exist
+    in the checkout and their absence may indicate the ticket is
+    misrouted.
+  - **Spec-described paths**: paths that describe an **external
+    system's layout** — paths inside a container image, paths in a
+    user's docker-compose repo, paths under `/home/`, `/etc/`,
+    `/var/`, `/opt/`, or paths that appear in prose describing what
+    an operator should create or commit elsewhere.  These are
+    **concepts**, not files this checkout owns.
+
+  **Key rule:** a spec mentioning a path like `config/config.yaml` or
+  `config/config.example.yaml` in the context of *"the operator should
+  commit config/config.example.yaml to their repo"* is describing a
+  recommendation, not a file that must exist in the current checkout.
+  Do **not** treat such paths as evidence of misrouting.  Always read
+  the surrounding prose to determine WHICH kind of path a token is.
+
   ## Memory
 
   You are given a `memory` block — a Markdown ledger of cross-cutting,

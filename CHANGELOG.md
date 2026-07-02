@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Refine agent: add prompt rule distinguishing checkout-local paths from spec-described paths to prevent false misrouting when a spec describes an external system's layout (e.g. `config/config.yaml` inside a container image)
 - Consolidate GitHub 401 retry boilerplate: add `invalidate_and_backoff()` to `forge/auth.py`, replace ~14 duplicated `invalidate_github_token()` + `time.sleep(2)` sites across `github.py`, `github_ci.py`, and `github_pr.py`, and delete the standalone `_retry_after_401()` method.
 - Add missing `SourceKind.LANGFUSE_CLEANUP` enum member, `SOURCE_CLASS` JS map entry, and `.src-langfuse-cleanup` CSS rule for board card styling of langfuse-cleanup runs.
 - Add `robotsix-mill meta` CLI command for running the meta pass (extraction + alignment across all repos)
