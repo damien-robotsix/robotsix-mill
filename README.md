@@ -52,8 +52,9 @@ Settings are managed through a YAML pipeline (see
   configurable knob.
 - **Environment variables** — any `MILL_*` variable overrides the
   YAML value (e.g. `MILL_MODEL=anthropic/claude-sonnet-4`).
-- **`config/repos.yaml`** — per-repo board & Langfuse project config.
-  Template at `config/repos.example.yaml`.
+- **`repos:` key in `config/config.yaml`** — per-repo board config
+  (a standalone `config/repos.yaml` is no longer read). Example
+  entries at `config/repos.example.yaml`.
 
 The loading order is: `config/config.yaml` (else the committed
 `config/config.example.yaml`) → environment variables (highest). The
@@ -72,12 +73,14 @@ loader falls back to the committed example when `config.yaml` is absent.
 git clone https://github.com/damien-robotsix/robotsix-mill.git
 cd robotsix-mill
 cp config/config.example.yaml config/config.yaml         # set secrets.openrouter_api_key + any overrides
-cp config/repos.example.yaml config/repos.yaml           # edit: add your repo
+# then add a `repos:` block to config/config.yaml (example entries
+# in config/repos.example.yaml)
 ```
 
 > **Note:** `board_id` is mandatory — every ticket must belong to a repo
-> configured in `config/repos.yaml`. There is no longer a board-less
-> default. For single-repo deployments, configure exactly one repo.
+> configured under the `repos:` key of `config/config.yaml`. There is no
+> longer a board-less default. For single-repo deployments, configure
+> exactly one repo.
 
 ### 2. Start the server
 
