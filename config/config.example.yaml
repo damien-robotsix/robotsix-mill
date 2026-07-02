@@ -492,9 +492,9 @@ periodic:
 # ---------------------------------------------------------------------------
 
 service:
-  data_dir: .data                           # data directory for DB, workspaces, memory ledgers
+  data_dir: /data                           # data directory for DB, workspaces, memory ledgers (local dev: .data)
   default_repo_id: ""                       # default repo id for the mill (empty = none)
-  api_host: "127.0.0.1"                     # FastAPI listen address (container: 0.0.0.0)
+  api_host: "0.0.0.0"                        # FastAPI listen address
   api_port: 8077                            # FastAPI listen port
   api_url: http://127.0.0.1:8077            # base URL the CLI client uses
   shutdown_grace_seconds: 1800              # max seconds to wait for in-flight periodic passes on shutdown
