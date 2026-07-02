@@ -609,6 +609,73 @@ def test_triage_skip_reviewer_comments_blocks(ctx_factory, tmp_path):
     assert result is None
 
 
+def test_triage_skip_prior_skip_in_history_short_circuits(ctx_factory, tmp_path):
+    """When a prior refine pass already issued a triage SKIP (recorded
+    in the state-transition history), skip the LLM call and return the
+    SKIP outcome immediately."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    # Simulate a prior triage SKIP: ticket went DRAFT → READY with the
+    # SKIP note, then later (e.g. after implement sendback) returned to
+    # DRAFT for re-refinement.
+    ctx.service.transition(t.id, State.READY, note="triage SKIP: already precise")
+
+    triage_refine_called = []
+
+    def _fake_triage_refine(**kw):
+        triage_refine_called.append(1)
+        return _mock_triage_result("SKIP", "should not be called")
+
+    with patch.object(_triage.refining, "triage_refine", _fake_triage_refine):
+        with patch.object(_reconcile, "persist_triage_complexity"):
+            with patch.object(_reconcile, "write_file_map"):
+                result = _triage.triage_skip(
+                    ctx,
+                    t,
+                    "draft body",
+                    None,
+                    None,
+                    t.title,
+                    ws,
+                    ctx.settings,
+                    None,
+                )
+
+    assert result is not None
+    assert not triage_refine_called, "triage_refine should NOT be called"
+    assert "triage SKIP" in result.note
+    assert "prior verdict" in result.note
+
+
+def test_triage_skip_no_prior_skip_in_history_still_calls_triage(
+    ctx_factory,
+    tmp_path,
+):
+    """When there is no prior triage SKIP in the history, the triage
+    LLM call proceeds normally."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    # No "triage SKIP" in history — just a normal creation event.
+    triage_refine_called = []
+
+    def _fake_triage_refine(**kw):
+        triage_refine_called.append(1)
+        return _mock_triage_result("REFINE", "needs refinement")
+
+    with patch.object(_triage.refining, "triage_refine", _fake_triage_refine):
+        with patch.object(_reconcile, "persist_triage_complexity"):
+            result = _triage.triage_skip(
+                ctx, t, "draft body", None, None, t.title, ws, ctx.settings, None
+            )
+
+    assert result is None  # REFINE falls through
+    assert triage_refine_called, "triage_refine SHOULD have been called"
+
+
 def test_triage_skip_prescriptive_spec_threshold_met(ctx_factory, tmp_path):
     """When draft code block lines meet the threshold, skip refine."""
     ctx = ctx_factory(refine_prescriptive_spec_code_lines_threshold=3)
