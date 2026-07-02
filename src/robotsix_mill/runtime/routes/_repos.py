@@ -85,7 +85,12 @@ def register_repo(
         )
 
     # Write the overlay YAML.
-    overlay_path = Path(settings.data_dir) / "registered_repos.yaml"
+    data_dir = Path(settings.data_dir).resolve()
+    overlay_path = (data_dir / "registered_repos.yaml").resolve()
+    if not overlay_path.is_relative_to(data_dir):
+        raise ValueError(
+            f"Path escapes data directory: {overlay_path} is not within {data_dir}"
+        )
     if overlay_path.exists():
         with open(overlay_path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
@@ -146,10 +151,12 @@ def register_repo(
             new_repos.repos[rid] = rc
     request.app.state.repos = new_repos
 
+    _safe_repo_id = body.repo_id.replace("\n", "\\n").replace("\r", "\\r")
+    _safe_board_id = effective_board_id.replace("\n", "\\n").replace("\r", "\\r")
     log.info(
         "Registered repo %r (board %r) via runtime overlay",
-        body.repo_id,
-        effective_board_id,
+        _safe_repo_id,
+        _safe_board_id,
     )
 
     return RepoRegistrationResult(
