@@ -13,6 +13,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.core.draft_target import (
+    _is_spec_descriptive_path,
     has_unverifiable_cross_repo_refs,
     referenced_local_deliverable_paths,
     referenced_mill_paths_absent,
@@ -173,13 +174,14 @@ def test_referenced_mill_paths_absent_non_mill_prefixed_paths_ignored(tmp_path):
 
 
 def test_referenced_mill_paths_absent_config_mill_prefix(tmp_path):
-    """Path starting with ``config/config.`` prefix and absent → returned."""
+    """``config/config.example.yaml`` is a spec-descriptive path —
+    classified as conceptual, not a source-tree path → excluded."""
     result = referenced_mill_paths_absent(
         title="Tweak config/config.example.yaml",
         body="",
         repo_dir=tmp_path,
     )
-    assert result == ["config/config.example.yaml"]
+    assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -612,3 +614,69 @@ def test_has_unverifiable_cross_repo_refs_empty_title_body_returns_false(tmp_pat
         body=None,
         repo_dir=tmp_path,
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests for ``_is_spec_descriptive_path``
+# ---------------------------------------------------------------------------
+
+
+def test_is_spec_descriptive_path_source_tree_prefixes_return_false():
+    """Paths starting with src/, tests/, docs/, agent_definitions/
+    are never classified as spec-descriptive."""
+    assert not _is_spec_descriptive_path("src/robotsix_mill/core/foo.py")
+    assert not _is_spec_descriptive_path("tests/core/test_foo.py")
+    assert not _is_spec_descriptive_path("docs/guide.md")
+    assert not _is_spec_descriptive_path("agent_definitions/refine.yaml")
+
+
+def test_is_spec_descriptive_path_bare_config_yaml():
+    """Bare config/config.yaml and config/config.example.yaml are conceptual."""
+    assert _is_spec_descriptive_path("config/config.yaml")
+    assert _is_spec_descriptive_path("config/config.example.yaml")
+    assert _is_spec_descriptive_path("CONFIG/CONFIG.YAML")
+
+
+def test_is_spec_descriptive_path_config_under_src_not_conceptual():
+    """config/config.yaml under src/ is a source-tree path, not conceptual."""
+    assert not _is_spec_descriptive_path("src/robotsix_mill/config/config.yaml")
+    assert not _is_spec_descriptive_path("src/myapp/config/config.example.yaml")
+
+
+def test_is_spec_descriptive_path_absolute_paths():
+    """Absolute filesystem paths are conceptual."""
+    assert _is_spec_descriptive_path("/etc/nginx/nginx.conf")
+    assert _is_spec_descriptive_path("/app/config.yaml")
+    assert _is_spec_descriptive_path("~/config.yaml")
+    assert _is_spec_descriptive_path("./local/config.yaml")
+    assert _is_spec_descriptive_path("../parent/config.yaml")
+
+
+def test_is_spec_descriptive_path_container_paths():
+    """Container / host-filesystem paths are conceptual."""
+    assert _is_spec_descriptive_path("/app/src/server.py")
+    assert _is_spec_descriptive_path("/data/config.yaml")
+    assert _is_spec_descriptive_path("some/path/app/config.yaml")  # contains /app/
+    assert _is_spec_descriptive_path("some/data/file.txt")  # contains /data/
+
+
+def test_is_spec_descriptive_path_template_files():
+    """Template files (.example.yaml, .env.example) are conceptual."""
+    assert _is_spec_descriptive_path("config/config.example.yaml")
+    assert _is_spec_descriptive_path(".env.example")
+    assert _is_spec_descriptive_path("path/to/settings.example.yaml")
+
+
+def test_is_spec_descriptive_path_compose_files():
+    """Docker Compose files are conceptual."""
+    assert _is_spec_descriptive_path("compose.yaml")
+    assert _is_spec_descriptive_path("compose.yml")
+    assert _is_spec_descriptive_path("docker-compose.yaml")
+    assert _is_spec_descriptive_path("docker-compose.yml")
+
+
+def test_is_spec_descriptive_path_regular_source_paths():
+    """Regular source-tree paths are not conceptual."""
+    assert not _is_spec_descriptive_path("src/robotsix_mill/core/draft_target.py")
+    assert not _is_spec_descriptive_path("tests/core/test_something.py")
+    assert not _is_spec_descriptive_path("src/robotsix_llmio/core/sqlite_utils.py")

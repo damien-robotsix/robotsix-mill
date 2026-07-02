@@ -1369,6 +1369,120 @@ def test_mill_misroute_gate_pure_mill_no_local_still_redirects(
     mock_mill_svc.create.assert_called_once()
 
 
+def test_mill_misroute_gate_confidence_threshold_single_path_repo_exists(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A single absent mill path on a repo that clearly exists
+    (has pyproject.toml) → below confidence threshold → gate returns None."""
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    # Simulate a repo that clearly exists.
+    (tmp_path / "pyproject.toml").write_text("")
+    (tmp_path / "src").mkdir()
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths: list[str] = []
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(
+        ctx, t, _DEDUP_DRAFT, tmp_path, ctx.settings
+    )
+
+    # Below confidence threshold → no redirect.
+    assert out is None
+
+
+def test_mill_misroute_gate_confidence_threshold_two_paths_repo_exists(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Two absent mill paths on a repo that clearly exists → meets
+    confidence threshold → redirect still happens."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    (tmp_path / "pyproject.toml").write_text("")
+    (tmp_path / "src").mkdir()
+
+    absent_paths = [
+        "src/robotsix_mill/core/db.py",
+        "agent_definitions/triage.yaml",
+    ]
+    local_paths: list[str] = []
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    mock_mill_svc = MagicMock()
+    mock_mill_svc.board_id = "mill-board"
+    mock_mill_svc.create.return_value = MagicMock(id="mill-draft-456")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_mill_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(
+        ctx, t, _DEDUP_DRAFT, tmp_path, ctx.settings
+    )
+
+    assert out is not None
+    assert out.next_state is State.DONE
+
+
+def test_mill_misroute_gate_confidence_threshold_repo_dir_none_still_redirects(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """When repo_dir is None (no checkout), the confidence threshold
+    check is skipped → single absent path still redirects."""
+    from unittest.mock import MagicMock
+
+    ctx = ctx_factory()
+    ctx.settings.refine_mill_misroute_gate_enabled = True
+    t = _ticket(ctx)
+
+    absent_paths = ["src/robotsix_mill/core/db.py"]
+    local_paths: list[str] = []
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_mill_paths_absent",
+        lambda *a, **k: absent_paths,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.referenced_local_deliverable_paths",
+        lambda *a, **k: local_paths,
+    )
+    mock_mill_svc = MagicMock()
+    mock_mill_svc.board_id = "mill-board"
+    mock_mill_svc.create.return_value = MagicMock(id="mill-draft-789")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.gates.resolve_mill_service",
+        lambda *a, **k: mock_mill_svc,
+    )
+
+    out = RefineStage._run_mill_misroute_gate(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    # repo_dir=None → threshold skipped → redirect still happens.
+    assert out is not None
+    assert out.next_state is State.DONE
+
+
 # ===========================================================================
 # 8. _verify_advisory_dedup
 # ===========================================================================

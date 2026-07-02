@@ -215,6 +215,87 @@ def resolve_mill_service(
     return TicketService(settings, board_id=rc.board_id)
 
 
+# Known source-tree directory prefixes — paths starting with one of
+# these are actual committed source files, never conceptual references.
+_SOURCE_TREE_PREFIXES: frozenset[str] = frozenset(
+    {"src/", "tests/", "docs/", "agent_definitions/"}
+)
+
+
+def _is_spec_descriptive_path(token: str) -> bool:
+    """Return True when *token* is likely a conceptual/spec-descriptive
+    path rather than an actual source-tree path that could exist in a
+    checkout.
+
+    Source-tree paths (starting with ``src/``, ``tests/``, ``docs/``,
+    ``agent_definitions/``) are **never** classified as spec-descriptive.
+
+    Heuristics for conceptual paths (any match → ``True``):
+
+    - **Exact match:** ``config/config.yaml``, ``config/config.example.yaml``
+      (bare config paths are common deployment/onboarding concepts).
+    - **Starts with** ``/``, ``~``, ``./``, ``../`` — absolute filesystem
+      or relative container paths.
+    - **Contains** ``/app/``, ``/data/`` — container/host-filesystem paths.
+    - **Ends with** ``.example.yaml``, ``.env.example`` — template files.
+    - **Ends with** ``compose.yaml``, ``compose.yml`` or equals
+      ``docker-compose.yaml`` / ``docker-compose.yml`` — external
+      compose files.
+    """
+    token_lower = token.lower()
+
+    # Source-tree paths are never conceptual.
+    if any(token_lower.startswith(prefix) for prefix in _SOURCE_TREE_PREFIXES):
+        return False
+
+    # Exact-match deployment/onboarding concept paths.
+    if token_lower in ("config/config.yaml", "config/config.example.yaml"):
+        return True
+
+    # Absolute filesystem or container paths.
+    if token_lower.startswith(("/", "~", "./", "../")):
+        return True
+
+    # Container / host-filesystem paths.
+    for segment in ("/app/", "/data/"):
+        if segment in token_lower:
+            return True
+
+    # Template / external repo paths.
+    for suffix in (".example.yaml", ".env.example"):
+        if token_lower.endswith(suffix):
+            return True
+
+    if token_lower in (
+        "compose.yaml",
+        "compose.yml",
+        "docker-compose.yaml",
+        "docker-compose.yml",
+    ):
+        return True
+
+    return False
+
+
+def _candidate_is_absent_mill_path(token: str, repo_dir: pathlib.Path) -> str | None:
+    """Return *token* if it is a mill-prefixed path absent from *repo_dir*,
+    or ``None`` otherwise.  Skips spec-descriptive / conceptual paths."""
+    try:
+        token_lower = token.lower()
+    except Exception:
+        log.debug("_candidate_is_absent_mill_path: token.lower() failed for %r", token)
+        return None
+    # Skip spec-descriptive / conceptual paths — they name
+    # deployment patterns, container paths, or template files that
+    # are not actual source-tree paths in any checkout.
+    if _is_spec_descriptive_path(token):
+        return None
+    if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
+        if resolve_under_src(repo_dir, token) is None:
+            return token
+    return None
+
+
 def referenced_mill_paths_absent(
     title: str | None,
     body: str | None,
@@ -252,16 +333,9 @@ def referenced_mill_paths_absent(
         return []
     absent: list[str] = []
     for token in candidates:
-        try:
-            token_lower = token.lower()
-        except Exception:
-            log.debug(
-                "referenced_mill_paths_absent: token.lower() failed for %r", token
-            )
-            continue
-        if any(token_lower.startswith(prefix.lower()) for prefix in MILL_PATH_PREFIXES):
-            if resolve_under_src(repo_dir, token) is None:
-                absent.append(token)
+        result = _candidate_is_absent_mill_path(token, repo_dir)
+        if result is not None:
+            absent.append(result)
 
     if not absent:
         return absent
