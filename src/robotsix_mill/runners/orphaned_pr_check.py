@@ -212,7 +212,6 @@ class OrphanedPrCheckResult:
     human_pr_skipped: int = 0  # PRs skipped because author is not the bot
     foreign_filed: int = 0  # tracking tickets filed for non-board (foreign) PRs
     foreign_skipped: int = 0  # foreign PRs skipped (dedup / dry-run / cap)
-    stale_closed: int = 0
     dry_run: bool = True
     actions: list[str] = field(default_factory=list)
     classifications: list[ClassifiedOrphanPr] = field(default_factory=list)
@@ -814,4 +813,3 @@ def _reconcile_closed_tracker_prs(
                     ticket.id,
                     note="Tracked PR is no longer open — auto-closed by reconcile pass",
                 )
-                result.stale_closed += 1
