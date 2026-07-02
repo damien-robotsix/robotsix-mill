@@ -211,18 +211,6 @@ def test_default_triage_requests():
     assert s.triage_request_limit == 8
 
 
-def test_default_already_done_requests():
-    """already_done_request_limit defaults to 8."""
-    s = Settings()
-    assert s.already_done_request_limit == 8
-
-
-def test_default_scope_triage_requests():
-    """scope_triage_request_limit defaults to 8."""
-    s = Settings()
-    assert s.scope_triage_request_limit == 8
-
-
 def test_default_obsolescence_requests():
     """obsolescence_request_limit defaults to 6."""
     s = Settings()
@@ -292,11 +280,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("maintenance_request_limit", "MILL_MAINTENANCE_REQUEST_LIMIT", "33", 33),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
     # --- retry / backoff ---
-    ("transient_retries", "MILL_TRANSIENT_RETRIES", "3", 3),
-    ("transient_backoff_base", "MILL_TRANSIENT_BACKOFF_BASE", "5.0", 5.0),
-    ("transient_backoff_cap", "MILL_TRANSIENT_BACKOFF_CAP", "45.0", 45.0),
-    ("rate_limit_backoff_base", "MILL_RATE_LIMIT_BACKOFF_BASE", "60.0", 60.0),
-    ("rate_limit_backoff_cap", "MILL_RATE_LIMIT_BACKOFF_CAP", "180.0", 180.0),
     # --- stage retry ---
     ("stage_retry_max_attempts", "MILL_STAGE_RETRY_MAX_ATTEMPTS", "3", 3),
     ("stage_retry_base_delay", "MILL_STAGE_RETRY_BASE_DELAY", "4.0", 4.0),
@@ -442,12 +425,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ),
     ("epic_dedup_lookback_days", "MILL_EPIC_DEDUP_LOOKBACK_DAYS", "14", 14),
     # --- survey agent ---
-    (
-        "survey_memory_path",
-        "MILL_SURVEY_MEMORY_PATH",
-        "/mem/survey.md",
-        Path("/mem/survey.md"),
-    ),
     # --- review revision ---
     (
         "review_revision_memory_path",
@@ -485,63 +462,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("auto_fix_max_cycles", "MILL_AUTO_FIX_MAX_CYCLES", "4", 4),
     ("ping_pong_max_alternations", "MILL_PING_PONG_MAX_ALTERNATIONS", "2", 2),
     # --- rate-limit fallback ---
-    # --- board-agent env vars ---
-    ("board_agent_enabled", "MILL_BOARD_AGENT_ENABLED", "1", True),
-    (
-        "board_agent_api_url",
-        "MILL_BOARD_AGENT_API_URL",
-        "http://host.docker.internal:8077",
-        "http://host.docker.internal:8077",
-    ),
-    ("board_agent_api_token", "MILL_BOARD_AGENT_API_TOKEN", "mytoken", "mytoken"),
-    ("board_agent_repo_id", "MILL_BOARD_AGENT_REPO_ID", "my-repo", "my-repo"),
-    ("board_agent_write_ops", "MILL_BOARD_AGENT_WRITE_OPS", "0", False),
-    (
-        "board_agent_broker_host",
-        "MILL_BOARD_AGENT_BROKER_HOST",
-        "broker.example.com",
-        "broker.example.com",
-    ),
-    ("board_agent_broker_port", "MILL_BOARD_AGENT_BROKER_PORT", "8443", 8443),
-    ("board_agent_broker_scheme", "MILL_BOARD_AGENT_BROKER_SCHEME", "http", "http"),
-    (
-        "board_agent_broker_token",
-        "MILL_BOARD_AGENT_BROKER_TOKEN",
-        "brokertoken",
-        "brokertoken",
-    ),
-    # --- board-manager env vars ---
-    ("board_manager_enabled", "MILL_BOARD_MANAGER_ENABLED", "1", True),
-    (
-        "board_manager_broker_token",
-        "MILL_BOARD_MANAGER_BROKER_TOKEN",
-        "mgrtoken",
-        "mgrtoken",
-    ),
-    (
-        "board_manager_model",
-        "MILL_BOARD_MANAGER_MODEL",
-        "anthropic/claude-sonnet-4-20250514",
-        "anthropic/claude-sonnet-4-20250514",
-    ),
-    (
-        "board_manager_recall_model",
-        "MILL_BOARD_MANAGER_RECALL_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
-    ),
-    (
-        "board_manager_max_conversations",
-        "MILL_BOARD_MANAGER_MAX_CONVERSATIONS",
-        "100",
-        100,
-    ),
-    (
-        "board_manager_max_concurrent",
-        "MILL_BOARD_MANAGER_MAX_CONCURRENT",
-        "3",
-        3,
-    ),
     # --- claude sdk vision ---
     ("claude_sdk_vision_enabled", "MILL_CLAUDE_SDK_VISION_ENABLED", "1", True),
     # --- review stage tuning ---
@@ -589,12 +509,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- periodic bc_check ---
     ("bc_check_periodic", "MILL_BC_CHECK_PERIODIC", "0", False),
     ("bc_check_interval_seconds", "MILL_BC_CHECK_INTERVAL_SECONDS", "43200", 43200),
-    (
-        "bc_check_memory_path",
-        "MILL_BC_CHECK_MEMORY_PATH",
-        "/mem/bc_check.md",
-        Path("/mem/bc_check.md"),
-    ),
     # --- periodic completeness_check ---
     ("completeness_check_periodic", "MILL_COMPLETENESS_CHECK_PERIODIC", "0", False),
     (
@@ -604,19 +518,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     (
-        "completeness_check_memory_path",
-        "MILL_COMPLETENESS_CHECK_MEMORY_PATH",
-        "/mem/completeness_check.md",
-        Path("/mem/completeness_check.md"),
-    ),
-    (
         "completeness_check_request_limit",
         "MILL_COMPLETENESS_CHECK_REQUEST_LIMIT",
         "50",
         50,
     ),
     # --- periodic env-doc-sync ---
-    ("env_doc_sync_model", "MILL_ENV_DOC_SYNC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("env_doc_sync_periodic", "MILL_ENV_DOC_SYNC_PERIODIC", "0", False),
     (
         "env_doc_sync_interval_seconds",
@@ -624,22 +531,9 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "43200",
         43200,
     ),
-    (
-        "env_doc_sync_memory_path",
-        "MILL_ENV_DOC_SYNC_MEMORY_PATH",
-        "/mem/env_doc_sync.md",
-        Path("/mem/env_doc_sync.md"),
-    ),
     # --- periodic state-sync ---
-    ("state_sync_model", "MILL_STATE_SYNC_MODEL", "openai/gpt-4o", "openai/gpt-4o"),
     ("state_sync_periodic", "MILL_STATE_SYNC_PERIODIC", "0", False),
     ("state_sync_interval_seconds", "MILL_STATE_SYNC_INTERVAL_SECONDS", "43200", 43200),
-    (
-        "state_sync_memory_path",
-        "MILL_STATE_SYNC_MEMORY_PATH",
-        "/mem/state_sync.md",
-        Path("/mem/state_sync.md"),
-    ),
     # --- repo visibility default ---
     ("repo_visibility_default", "MILL_REPO_VISIBILITY_DEFAULT", "private", "private"),
     # --- enable_repo_creation ---
@@ -667,12 +561,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- copy_paste ---
     ("copy_paste_periodic", "MILL_COPY_PASTE_PERIODIC", "0", False),
     ("copy_paste_interval_seconds", "MILL_COPY_PASTE_INTERVAL_SECONDS", "43200", 43200),
-    (
-        "copy_paste_memory_path",
-        "MILL_COPY_PASTE_MEMORY_PATH",
-        "/mem/copy_paste.md",
-        Path("/mem/copy_paste.md"),
-    ),
     # --- forge_parity ---
     ("forge_parity_periodic", "MILL_FORGE_PARITY_PERIODIC", "0", False),
     (
@@ -681,12 +569,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "43200",
         43200,
     ),
-    (
-        "forge_parity_memory_path",
-        "MILL_FORGE_PARITY_MEMORY_PATH",
-        "/mem/forge_parity.md",
-        Path("/mem/forge_parity.md"),
-    ),
     # --- module_curator ---
     ("module_curator_periodic", "MILL_MODULE_CURATOR_PERIODIC", "0", False),
     (
@@ -694,12 +576,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "MILL_MODULE_CURATOR_INTERVAL_SECONDS",
         "43200",
         43200,
-    ),
-    (
-        "module_curator_memory_path",
-        "MILL_MODULE_CURATOR_MEMORY_PATH",
-        "/mem/module_curator.md",
-        Path("/mem/module_curator.md"),
     ),
     # --- stale_branch_cleanup ---
     ("stale_branch_cleanup_periodic", "MILL_STALE_BRANCH_CLEANUP_PERIODIC", "0", False),
@@ -740,12 +616,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "MILL_CONFIG_SYNC_INTERVAL_SECONDS",
         "43200",
         43200,
-    ),
-    (
-        "config_sync_memory_path",
-        "MILL_CONFIG_SYNC_MEMORY_PATH",
-        "/mem/config_sync.md",
-        Path("/mem/config_sync.md"),
     ),
     # --- dependabot_ingest ---
     ("dependabot_ingest_periodic", "MILL_DEPENDABOT_INGEST_PERIODIC", "0", False),
@@ -804,15 +674,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("doc_classifier_request_limit", "MILL_DOC_CLASSIFIER_REQUEST_LIMIT", "2", 2),
     # --- max_memory_chars ---
     ("max_memory_chars", "MILL_MAX_MEMORY_CHARS", "5000", 5000),
-    # --- reference_files_max_count ---
-    ("reference_files_max_count", "MILL_REFERENCE_FILES_MAX_COUNT", "3", 3),
-    # --- reference_files_max_total_lines ---
-    (
-        "reference_files_max_total_lines",
-        "MILL_REFERENCE_FILES_MAX_TOTAL_LINES",
-        "2000",
-        2000,
-    ),
     # --- board_list_cache_ttl_seconds ---
     ("board_list_cache_ttl_seconds", "MILL_BOARD_LIST_CACHE_TTL_SECONDS", "5.0", 5.0),
     # --- enable_repo_creation (string alias) ---

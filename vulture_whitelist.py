@@ -30,7 +30,6 @@ run_agent_check_agent
 run_audit_agent
 run_bc_check_agent
 reset_for_tests
-reset_board_manager_for_tests
 run_completeness_check_agent
 run_config_sync_agent
 run_env_doc_sync_agent
@@ -80,13 +79,6 @@ correct_form
 returncode_on_failure
 
 # -- config ------------------------------------------------------------------
-transient_retries
-transient_backoff_base
-transient_backoff_cap
-rate_limit_backoff_base
-rate_limit_backoff_cap
-reference_files_max_count
-reference_files_max_total_lines
 gitlab_api_url
 audit_periodic
 audit_interval_seconds
@@ -104,34 +96,26 @@ survey_periodic
 survey_interval_seconds
 bc_check_periodic
 bc_check_interval_seconds
-module_curator_memory_path
 module_curator_periodic
 module_curator_interval_seconds
 data_dir_gc_periodic
 data_dir_gc_interval_seconds
 completeness_check_periodic
 completeness_check_interval_seconds
-forge_parity_memory_path
 forge_parity_periodic
 forge_parity_interval_seconds
 state_sync_periodic
 state_sync_interval_seconds
-copy_paste_memory_path
 copy_paste_periodic
-state_sync_model
 copy_paste_interval_seconds
-triage_boilerplate_memory_path
 triage_boilerplate_periodic
 triage_boilerplate_interval_seconds
 config_sync_periodic
 config_sync_interval_seconds
-env_doc_sync_model
-env_doc_sync_memory_path
 env_doc_sync_periodic
 env_doc_sync_interval_seconds
 member_sync_interval_seconds
 meta_periodic
-security_posture_memory_path
 security_posture_periodic
 security_posture_interval_seconds
 run_health_periodic
@@ -142,32 +126,9 @@ db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
 orphaned_pr_check_periodic
-# board_manager_max_concurrent — dedicated board-manager Claude semaphore lane
-# (wired via handle_wrapper in lifespan.py once upstream robotsix-board-agent
-#  supports the kwarg; guarded by an inspect.signature check.)
-board_manager_max_concurrent
-scope_triage_request_limit
-already_done_request_limit
 langfuse_cleanup_periodic
 settings_customise_sources
 dotenv_settings
-retrospect_memory_file
-trace_inspector_memory_file
-audit_memory_file
-agent_check_memory_file
-health_memory_file
-test_gap_memory_file
-survey_memory_file
-config_sync_memory_file
-env_doc_sync_memory_file
-state_sync_memory_file
-bc_check_memory_file
-completeness_check_memory_file
-implement_memory_file
-refine_memory_file
-doc_memory_file
-ci_fix_memory_file
-rebase_memory_file
 ci_patterns_file
 get_field_value
 
@@ -351,3 +312,8 @@ input_state
 # and via RefineStage class inheritance; vulture (60% confidence) doesn't trace test calls.
 _review_spec_conciseness
 _short_circuit_for_internal_failure
+# *_memory_path fields consumed dynamically via Settings.memory_file_for()
+# (getattr(f"{name}_memory_path")) — invisible to vulture's static scan.
+implement_memory_path
+refine_memory_path
+retrospect_memory_path

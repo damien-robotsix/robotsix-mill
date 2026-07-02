@@ -37,7 +37,6 @@ This prevents the loop from stalling while still refusing to ship previously-rej
 | Knob | Env var | Default | Purpose |
 |------|---------|---------|---------|
 | `core.models.scope_triage` | `MILL_SCOPE_TRIAGE_MODEL` | `deepseek/deepseek-v4-flash` | Model selection for the classifier |
-| `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `8` | Per-call request cap (tokens) |
 | `gates.scope_triage_enabled` | `MILL_SCOPE_TRIAGE_ENABLED` | `true` | Enable/disable the scope-triage gate |
 
 When `scope_triage_enabled` is **false**, any out-of-scope files immediately block the ticket; the LLM classifier does not run.

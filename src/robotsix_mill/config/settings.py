@@ -19,8 +19,6 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from ._settings_board_agent import _BoardAgentSettings
-from ._settings_component_agent import _ComponentAgentSettings
 from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
@@ -36,9 +34,7 @@ class Settings(
     # order because pydantic collects fields in reverse-MRO order; listing
     # the mixins back-to-front here preserves the original
     # ``Settings.model_fields`` ordering (core → stages → periodic →
-    # observability → board-agent → component-agent).
-    _ComponentAgentSettings,
-    _BoardAgentSettings,
+    # observability).
     _ObservabilitySettings,
     _PeriodicSettings,
     _StagesSettings,
@@ -146,125 +142,6 @@ class Settings(
         )
 
     @property
-    def retrospect_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained retrospect memory ledger."""
-        if self.retrospect_memory_path is not None:
-            return self.retrospect_memory_path
-        return self.data_dir / "retrospect_memory.md"
-
-    @property
-    def trace_inspector_memory_file(self) -> Path:
-        """Resolved path to the trace inspector's memory ledger."""
-        if self.trace_inspector_memory_path is not None:
-            return self.trace_inspector_memory_path
-        return self.data_dir / "trace_inspector_memory.md"
-
-    @property
-    def audit_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained audit memory ledger."""
-        if self.audit_memory_path is not None:
-            return self.audit_memory_path
-        return self.data_dir / "audit_memory.md"
-
-    @property
-    def agent_check_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained agent-check memory ledger."""
-        if self.agent_check_memory_path is not None:
-            return self.agent_check_memory_path
-        return self.data_dir / "agent_check_memory.md"
-
-    @property
-    def health_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained health memory ledger."""
-        if self.health_memory_path is not None:
-            return self.health_memory_path
-        return self.data_dir / "health_memory.md"
-
-    @property
-    def test_gap_memory_file(self) -> Path:
-        """Resolved path to the test-gap agent's Markdown memory ledger."""
-        if self.test_gap_memory_path is not None:
-            return self.test_gap_memory_path
-        return self.data_dir / "test_gap_memory.md"
-
-    @property
-    def survey_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained survey memory ledger."""
-        if self.survey_memory_path is not None:
-            return self.survey_memory_path
-        return self.data_dir / "survey_memory.md"
-
-    @property
-    def config_sync_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained config-sync memory ledger."""
-        if self.config_sync_memory_path is not None:
-            return self.config_sync_memory_path
-        return self.data_dir / "config_sync_memory.md"
-
-    @property
-    def state_sync_memory_file(self) -> Path:
-        """Resolved path to the state-sync agent's Markdown memory ledger."""
-        if self.state_sync_memory_path is not None:
-            return self.state_sync_memory_path
-        return self.data_dir / "state_sync_memory.md"
-
-    @property
-    def env_doc_sync_memory_file(self) -> Path:
-        """Resolved path to the env-doc-sync agent's Markdown memory ledger."""
-        if self.env_doc_sync_memory_path is not None:
-            return self.env_doc_sync_memory_path
-        return self.data_dir / "env_doc_sync_memory.md"
-
-    @property
-    def bc_check_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained bc-check memory ledger."""
-        if self.bc_check_memory_path is not None:
-            return self.bc_check_memory_path
-        return self.data_dir / "bc_check_memory.md"
-
-    @property
-    def completeness_check_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained completeness-check memory ledger."""
-        if self.completeness_check_memory_path is not None:
-            return self.completeness_check_memory_path
-        return self.data_dir / "completeness_check_memory.md"
-
-    @property
-    def implement_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained implement memory ledger."""
-        if self.implement_memory_path is not None:
-            return self.implement_memory_path
-        return self.data_dir / "implement_memory.md"
-
-    @property
-    def refine_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained refine memory ledger."""
-        if self.refine_memory_path is not None:
-            return self.refine_memory_path
-        return self.data_dir / "refine_memory.md"
-
-    @property
-    def doc_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained document memory ledger."""
-        if self.doc_memory_path is not None:
-            return self.doc_memory_path
-        return self.data_dir / "doc_memory.md"
-
-    @property
-    def ci_fix_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained ci-fix memory ledger."""
-        if self.ci_fix_memory_path is not None:
-            return self.ci_fix_memory_path
-        return self.data_dir / "ci_fix_memory.md"
-
-    @property
-    def rebase_memory_file(self) -> Path:
-        """Resolved path to the agent-maintained rebase memory ledger."""
-        if self.rebase_memory_path is not None:
-            return self.rebase_memory_path
-        return self.data_dir / "rebase_memory.md"
-
-    @property
     def ci_patterns_file(self) -> Path:
         """Resolved path to the ci-fix agent's structured pattern memory."""
         if self.ci_patterns_path is not None:
@@ -329,19 +206,6 @@ class Settings(
             if not self.forge_remote_url:
                 raise ValueError(
                     f"forge_kind={self.forge_kind} requires forge_remote_url to be set"
-                )
-
-        # component_agent_enabled=True requires broker host + token
-        if self.component_agent_enabled:
-            if not self.component_agent_broker_host:
-                raise ValueError(
-                    "component_agent_enabled=True requires "
-                    "component_agent_broker_host to be set"
-                )
-            if not self.component_agent_broker_token:
-                raise ValueError(
-                    "component_agent_enabled=True requires "
-                    "component_agent_broker_token to be set"
                 )
 
         return self

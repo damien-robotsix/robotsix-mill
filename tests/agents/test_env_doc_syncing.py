@@ -80,31 +80,8 @@ def test_env_doc_sync_result_field_types():
 def test_env_doc_sync_config_defaults():
     """Env-doc-sync config has correct defaults."""
     s = Settings()
-    assert s.env_doc_sync_model == "deepseek/deepseek-v4-flash"
     assert s.env_doc_sync_periodic is True
     assert s.env_doc_sync_interval_seconds == 86400
-    assert s.env_doc_sync_memory_path is None
-
-
-def test_env_doc_sync_config_custom_model():
-    """Env-doc-sync model can be overridden via env."""
-    s = Settings(env_doc_sync_model="anthropic/claude-sonnet-4")
-    assert s.env_doc_sync_model == "anthropic/claude-sonnet-4"
-
-
-def test_env_doc_sync_memory_file_default(tmp_path):
-    """When env_doc_sync_memory_path is None, falls back to
-    data_dir/env_doc_sync_memory.md."""
-    s = _make_settings(tmp_path)
-    expected = s.data_dir / "env_doc_sync_memory.md"
-    assert s.env_doc_sync_memory_file == expected
-
-
-def test_env_doc_sync_memory_file_override(tmp_path):
-    """When env_doc_sync_memory_path is set, uses that path."""
-    custom_path = tmp_path / "custom_env_doc_sync.md"
-    s = _make_settings(tmp_path, env_doc_sync_memory_path=str(custom_path))
-    assert s.env_doc_sync_memory_file == custom_path
 
 
 def test_env_doc_sync_periodic_config():

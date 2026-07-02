@@ -380,7 +380,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `8` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `12` | Per-call request cap for the dedup check |
 | `core.limits.obsolescence_requests` | `MILL_OBSOLESCENCE_REQUEST_LIMIT` | `6` | Per-call request cap for the obsolescence gate |
-| `core.limits.scope_triage_requests` | `MILL_SCOPE_TRIAGE_REQUEST_LIMIT` | `8` | Per-call request cap for the scope-triage agent |
 | `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
 | `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
 | `core.limits.refine_requests_simple` | `MILL_REFINE_REQUEST_LIMIT_SIMPLE` | `40` | Per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off) |
@@ -394,8 +393,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `32` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | `core.limits.doc_classifier_diff_max_chars` | `MILL_DOC_CLASSIFIER_DIFF_MAX_CHARS` | `6000` | Caps the git diff (characters) fed to the doc-classifier gate; truncation is safe as the classifier is biased toward `user_facing=True`, and the full doc agent still receives the untruncated diff |
-| `core.limits.triage_requests` | `MILL_TRIAGE_REQUEST_LIMIT` | `8` | Per-call cap for the pre-refine triage agent (main call + tool calls). Distinct from `scope_triage_requests` (which caps the scope-triage agent) |
-| `core.limits.already_done_requests` | `MILL_ALREADY_DONE_REQUEST_LIMIT` | `8` | Per-call cap for the already-done verifier sub-agent (short-circuits when a prior no-change-needed memory entry matches the draft) |
+| `core.limits.triage_requests` | `MILL_TRIAGE_REQUEST_LIMIT` | `8` | Per-call cap for the pre-refine triage agent (main call + tool calls) |
 | `core.limits.dedup_max_candidates` | `MILL_DEDUP_MAX_CANDIDATES` | `8` | Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size |
 | `core.limits.coordinator_max_tool_calls` | `MILL_COORDINATOR_MAX_TOOL_CALLS` | `300` | Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget |
 | `core.limits.max_refine_explore_calls` | `MILL_MAX_REFINE_EXPLORE_CALLS` | `4` | Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely |
@@ -414,14 +412,9 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.stage_timeout_seconds` | `MILL_STAGE_TIMEOUT_SECONDS` | `2400` | Per-stage wall-clock timeout in seconds; stage that exceeds it is escalated to BLOCKED (≤ 0 disables) |
 | `core.limits.stage_timeout_overrides` | `MILL_STAGE_TIMEOUT_OVERRIDES` | `{"refine": 900}` | Per-stage overrides as a JSON dict (e.g. `{"merge":0,"deliver":0}`); keys are stage names, values are seconds; 0 disables timeout for that stage. The built-in default caps the **refine** stage at 900 seconds — add `"refine": 0` to disable this cap, or override it with a different value. |
 | `core.limits.max_global_concurrency` | `MILL_MAX_GLOBAL_CONCURRENCY` | `12` | Host-level cap on total concurrently-running stages across ALL boards, applied on top of each board's own `max_concurrency`. Default 12 provides a genuine backstop without throttling normal operation |
-| `core.limits.transient_retries` | `MILL_TRANSIENT_RETRIES` | `4` | Max retries for transient LLM-call failures (429, 5xx, timeouts) |
-| `core.limits.transient_backoff_base` | `MILL_TRANSIENT_BACKOFF_BASE` | `2.0` | Base seconds for exponential backoff at LLM-call level (jittered) |
-| `core.limits.transient_backoff_cap` | `MILL_TRANSIENT_BACKOFF_CAP` | `30.0` | Max seconds between LLM-call retries |
 | `core.limits.stage_retry_max_attempts` | `MILL_STAGE_RETRY_MAX_ATTEMPTS` | `5` | Max automatic retries for transient stage-level failures (git outage, provider 5xx, connection refused) |
 | `core.limits.stage_retry_base_delay` | `MILL_STAGE_RETRY_BASE_DELAY` | `2.0` | Base seconds for stage-level exponential backoff |
 | `core.limits.stage_retry_max_delay` | `MILL_STAGE_RETRY_MAX_DELAY` | `60.0` | Max seconds between stage-level retries |
-| `core.limits.rate_limit_backoff_base` | `MILL_RATE_LIMIT_BACKOFF_BASE` | `30.0` | Base seconds for rate-limit backoff (longer window) |
-| `core.limits.rate_limit_backoff_cap` | `MILL_RATE_LIMIT_BACKOFF_CAP` | `120.0` | Max seconds between rate-limit retries |
 | `core.low_credit_threshold_usd` | — | `5.0` | OpenRouter credit balance below this value triggers the board warning banner |
 | `core.low_credit_poll_enabled` | — | `true` | Enable the proactive OpenRouter credit-balance poll (hourly via `GET /api/v1/credits`) |
 | `core.low_credit_poll_interval_seconds` | — | `3600` | Seconds between proactive credit-balance checks |
@@ -438,8 +431,6 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | `core.memory.max_memory_chars` | `MILL_MAX_MEMORY_CHARS` | `8000` | Max characters loaded from any memory ledger per agent pass |
 | `core.memory.retrospect_log_max_chars` | `MILL_RETROSPECT_LOG_MAX_CHARS` | `12000` | Max characters of the retrospect stage's history + comments logs (keeps most-recent, drops oldest; `0` disables) |
-| `core.memory.reference_files_max_count` | `MILL_REFERENCE_FILES_MAX_COUNT` | `5` | Max files whose full content refine stores |
-| `core.memory.reference_files_max_total_lines` | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `3000` | Max total lines across selected reference files |
 | `pipeline.implement_memory_path` | `MILL_IMPLEMENT_MEMORY_PATH` | `None` | Override path for implement memory; defaults to `<data_dir>/implement_memory.md` |
 | `pipeline.refine_memory_path` | `MILL_REFINE_MEMORY_PATH` | `None` | Override path for refine memory; defaults to `<data_dir>/refine_memory.md` |
 | `pipeline.ci_fix_memory_path` | `MILL_CI_FIX_MEMORY_PATH` | `None` | Override path for CI-fix memory; defaults to `<data_dir>/ci_fix_memory.md` |
@@ -614,7 +605,6 @@ Each periodic agent shares this pattern:
 |-----------|---------|---------|-------------|
 | `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `true`¹ | Enable periodic passes |
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
-| `periodic.<name>.memory_path` | `MILL_<NAME>_MEMORY_PATH` | `None` | Override path for memory ledger ² ³ |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
@@ -624,18 +614,16 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
-> ² `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` do **not** have a
-> `memory_path` field — they write no per-agent memory ledger
-> (`member_sync` and `diagnostic` are deterministic passes with no LLM agent).
+> `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` write no
+> per-agent memory ledger (`member_sync` and `diagnostic` are deterministic
+> passes with no LLM agent).
 >
->
-> ³ In multi-repo mode, the default memory file path is
-> `<data_dir>/<repo_id>/<agent>_memory.md` — each repo gets its own
-> isolated memory ledger.  The `memory_path` override (when set) takes
-> precedence over this default, but is shared across repos (use with
-> caution in multi-repo deployments).  When no repos are registered
-> (single-repo or `--repo-id` mode), the path falls back to the
-> original `<data_dir>/<agent>_memory.md`.
+> Periodic agents' memory ledger paths are **fixed and not overridable**:
+> in multi-repo mode each repo gets its own isolated ledger at
+> `<data_dir>/<repo_id>/<agent>_memory.md`; when no repos are registered
+> (single-repo or `--repo-id` mode), the path falls back to
+> `<data_dir>/<agent>_memory.md`.  The only exception is `run_health`,
+> which keeps a `periodic.run_health.memory_path` override (see below).
 
 Additional fields:
 
@@ -650,7 +638,6 @@ Additional fields:
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
 | `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board. |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
-| `pipeline.trace_inspector_memory_path` | `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `None` | Override path for trace-inspector memory |
 
 #### trace_review
 
@@ -767,7 +754,6 @@ pattern control its tool-call and web-fetch budgets:
 |---------|---------|-------------|
 | `MILL_SURVEY_PERIODIC` | `true` | Enable periodic survey passes |
 | `MILL_SURVEY_INTERVAL_SECONDS` | `86400` | Seconds between survey passes |
-| `MILL_SURVEY_MEMORY_PATH` | `None` | Override path for survey memory; defaults to `<data_dir>/survey_memory.md` |
 | `MILL_SURVEY_REQUEST_LIMIT` | `40` | Per-call request cap for the survey agent |
 | `MILL_SURVEY_WEB_FETCH_MAX_CALLS` | `5` | Max real (cache-miss) web_fetch calls per survey run |
 | `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
@@ -784,7 +770,6 @@ controls its request budget:
 |---------|---------|-------------|
 | `MILL_AUDIT_PERIODIC` | `true` | Enable periodic audit passes |
 | `MILL_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between audit passes |
-| `MILL_AUDIT_MEMORY_PATH` | `None` | Override path for audit memory; defaults to `<data_dir>/audit_memory.md` |
 | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the audit agent |
 
 #### test_gap
@@ -798,7 +783,6 @@ budget and tool-call guardrails:
 |---------|---------|-------------|
 | `MILL_TEST_GAP_PERIODIC` | `true` | Enable periodic test-gap passes |
 | `MILL_TEST_GAP_INTERVAL_SECONDS` | `86400` | Seconds between test-gap passes |
-| `MILL_TEST_GAP_MEMORY_PATH` | `None` | Override path for test-gap memory; defaults to `<data_dir>/test_gap_memory.md` |
 | `MILL_TEST_GAP_REQUEST_LIMIT` | `80` | Per-call request cap for the test-gap agent |
 | `MILL_TEST_GAP_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per test-gap trace |
 | `MILL_TEST_GAP_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
@@ -809,7 +793,7 @@ The `orphaned_pr_check` periodic agent scans tickets for stale PRs whose
 branch has been deleted or whose associated ticket has been resolved, and
 either auto-closes the PR or files a tracking ticket. It defaults to `false`
 (opt-in) because closing PRs and filing tickets are destructive actions.
-It has no `memory_path` (it's a deterministic pass with no LLM agent).
+It is a deterministic pass with no LLM agent and writes no memory ledger.
 Configure via environment variables or YAML paths under
 `periodic.orphaned_pr_check.<field>`:
 
@@ -826,7 +810,7 @@ Configure via environment variables or YAML paths under
 
 #### Env-var-only periodic agents
 
-`bc_check` and `completeness_check` enabled, interval, and memory_path
+`bc_check` and `completeness_check` enabled and interval
 fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`)
 and as environment variables:
 
@@ -834,23 +818,17 @@ and as environment variables:
 |---------|---------|-------------|
 | `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
-| `MILL_BC_CHECK_MEMORY_PATH` | `None` | Override path for bc-check memory; defaults to `<data_dir>/bc_check_memory.md` |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
-| `MILL_COMPLETENESS_CHECK_MEMORY_PATH` | `None` | Override path for completeness-check memory; defaults to `<data_dir>/completeness_check_memory.md` |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
-| `MILL_STATE_SYNC_MODEL` | `deepseek/deepseek-v4-flash` | Model for the state-sync agent (cross-surface `State` enum consistency check) |
 | `MILL_STATE_SYNC_PERIODIC` | `true` | Enable periodic state-sync passes |
 | `MILL_STATE_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between state-sync passes |
-| `MILL_STATE_SYNC_MEMORY_PATH` | `None` | Override path for state-sync memory; defaults to `<data_dir>/state_sync_memory.md` |
-| `MILL_ENV_DOC_SYNC_MODEL` | `deepseek/deepseek-v4-flash` | Model for the env-doc-sync agent (env-var documentation consistency check) |
 | `MILL_ENV_DOC_SYNC_PERIODIC` | `true` | Enable periodic env-doc-sync passes |
 | `MILL_ENV_DOC_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-doc-sync passes |
-| `MILL_ENV_DOC_SYNC_MEMORY_PATH` | `None` | Override path for env-doc-sync memory; defaults to `<data_dir>/env_doc_sync_memory.md` |
 
 #### Stale branch cleanup, timeout escalation, dependabot ingest, module curator
 
-These four periodic agents each carry one or two extra fields beyond the generic periodic pattern (periodic, interval, memory path). The following env vars configure those agent-specific extras:
+These four periodic agents each carry one or two extra fields beyond the generic periodic pattern (periodic, interval). The following env vars configure those agent-specific extras:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
@@ -866,53 +844,6 @@ These four periodic agents each carry one or two extra fields beyond the generic
 |-----------|---------|---------|-------------|
 | `sandbox.skills_dir` | `MILL_SKILLS_DIR` | `skills` | Directory of skill docs injected into agent system prompts |
 | `core.language_instructions_dir` | `MILL_LANGUAGE_INSTRUCTIONS_DIR` | `agent_definitions/language_instructions` | Directory of per-language instruction Markdown snippets injected into the implement agent's system prompt |
-
-### 14. Board agent & board manager
-
-The board agent is an opt-in agent-comm service that connects the mill
-to its own board API, allowing agent-to-agent communication through a
-central broker. The board manager is a conversational, natural-language
-board management agent — a level-3 LLM agent that acts on the board
-(with a level-1 recall pass over its capped question→answer memory).
-Both are off by default.
-
-#### Board agent
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `board_agent.enabled` | `MILL_BOARD_AGENT_ENABLED` | `false` | Master switch for the board agent |
-| `board_agent.api_url` | `MILL_BOARD_AGENT_API_URL` | `http://127.0.0.1:8077` | Board REST API the agent calls (this mill) |
-| `board_agent.api_token` | `MILL_BOARD_AGENT_API_TOKEN` | `""` | Bearer token for the board API (`""` = none, e.g. loopback) |
-| `board_agent.repo_id` | `MILL_BOARD_AGENT_REPO_ID` | `""` | Board repo ID (`""` → the worker's lead repo) |
-| `board_agent.write_ops` | `MILL_BOARD_AGENT_WRITE_OPS` | `true` | Allow write ops (create_ticket, transition, …) |
-| `board_agent.broker_host` | `MILL_BOARD_AGENT_BROKER_HOST` | `""` | Agent-comm broker host (pull/mailbox mode — NAT-safe, outbound-only). When set the board agent runs as a BrokeredBoardResponder reachable from off-host clients (e.g. the cost-analyst); `broker_token` authenticates this agent to the broker. `""` → disabled |
-| `board_agent.broker_port` | `MILL_BOARD_AGENT_BROKER_PORT` | `443` | Broker port |
-| `board_agent.broker_scheme` | `MILL_BOARD_AGENT_BROKER_SCHEME` | `https` | Broker scheme (`http`/`https`) |
-| `board_agent.broker_token` | `MILL_BOARD_AGENT_BROKER_TOKEN` | `""` | This agent's bearer token for the broker |
-
-#### Board manager
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `board_manager.enabled` | `MILL_BOARD_MANAGER_ENABLED` | `false` | Master switch for the board manager |
-| `board_manager.broker_token` | `MILL_BOARD_MANAGER_BROKER_TOKEN` | `""` | The manager's bearer token for the broker |
-| `board_manager.model` | `MILL_BOARD_MANAGER_MODEL` | `""` | Level-3 model (`""` → tier default) |
-| `board_manager.recall_model` | `MILL_BOARD_MANAGER_RECALL_MODEL` | `""` | Level-1 recall model (`""` → tier default) |
-| `board_manager.max_concurrent` | `MILL_BOARD_MANAGER_MAX_CONCURRENT` | `1` | Max simultaneous BoardManager LLM requests. Requires robotsix-board-agent with asyncio.to_thread concurrent dispatch support. |
-| `board_manager.max_conversations` | `MILL_BOARD_MANAGER_MAX_CONVERSATIONS` | `200` | Cap on retained question→answer turns |
-
-#### Component agent
-
-The component agent is a generic monitor/config responder on the agent-comm broker. Off by default.
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `component_agent.enabled` | `MILL_COMPONENT_AGENT_ENABLED` | `false` | Master switch for the component agent |
-| `component_agent.agent_id` | `MILL_COMPONENT_AGENT_AGENT_ID` | `"component-robotsix-mill"` | Agent id registered on the broker |
-| `component_agent.broker_host` | `MILL_COMPONENT_AGENT_BROKER_HOST` | `""` | Broker host; empty string disables |
-| `component_agent.broker_port` | `MILL_COMPONENT_AGENT_BROKER_PORT` | `443` | Broker port |
-| `component_agent.broker_scheme` | `MILL_COMPONENT_AGENT_BROKER_SCHEME` | `"https"` | Broker scheme (http/https) |
-| `component_agent.broker_token` | `MILL_COMPONENT_AGENT_BROKER_TOKEN` | `""` | Bearer token for the broker |
 
 ---
 

@@ -178,11 +178,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_STAGE_TIMEOUT_SECONDS` | `core.limits.stage_timeout_seconds` | `1800` | seconds; `≤ 0` disables |
 | `MILL_STAGE_TIMEOUT_OVERRIDES` | `core.limits.stage_timeout_overrides` | `{}` | JSON dict; `"stage": 0` disables per-stage |
 | `MILL_MODEL_REQUEST_TIMEOUT` | `core.limits.model_request_timeout` | `900.0` | seconds |
-| `MILL_TRANSIENT_RETRIES` | `core.limits.transient_retries` | `4` | |
-| `MILL_TRANSIENT_BACKOFF_BASE` | `core.limits.transient_backoff_base` | `2.0` | seconds |
-| `MILL_TRANSIENT_BACKOFF_CAP` | `core.limits.transient_backoff_cap` | `30.0` | seconds |
-| `MILL_RATE_LIMIT_BACKOFF_BASE` | `core.limits.rate_limit_backoff_base` | `30.0` | seconds |
-| `MILL_RATE_LIMIT_BACKOFF_CAP` | `core.limits.rate_limit_backoff_cap` | `120.0` | seconds |
 | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `core.limits.rate_limit_fallback_retries` | `3` | |
 
 #### core.memory
@@ -190,8 +185,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | Env var | YAML key | Default | Note |
 |---|---|---|---|
 | `MILL_MAX_MEMORY_CHARS` | `core.memory.max_memory_chars` | `8000` | |
-| `MILL_REFERENCE_FILES_MAX_COUNT` | `core.memory.reference_files_max_count` | `5` | |
-| `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `core.memory.reference_files_max_total_lines` | `3000` | |
 | `MILL_DEDUP_LOOKBACK_DAYS` | `core.memory.dedup_lookback_days` | `30` | |
 
 #### forge
@@ -266,11 +259,9 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_REBASE_MAX_ATTEMPTS` | `pipeline.rebase_max_attempts` | `5` | |
 | `MILL_CI_FIX_MAX_ATTEMPTS` | `pipeline.ci_fix_max_attempts` | `2` | |
 | `MILL_RETROSPECT_SPAWN_DRAFTS` | `pipeline.retrospect_spawn_drafts` | `true` | |
-| `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `pipeline.retrospect_deep_analysis_frequency` | `10` | |
 | `MILL_PRUNE_CLONE_ON_CLOSE` | `pipeline.prune_clone_on_close` | `true` | |
 | `MILL_MAX_ARCHIVED_TICKETS` | `pipeline.max_archived_tickets` | `100` | |
 | `MILL_RETROSPECT_MEMORY_PATH` | `pipeline.retrospect_memory_path` | `null` | Override; defaults derived |
-| `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `pipeline.trace_inspector_memory_path` | `null` | Override |
 | `MILL_IMPLEMENT_MEMORY_PATH` | `pipeline.implement_memory_path` | `null` | Override |
 | `MILL_REFINE_MEMORY_PATH` | `pipeline.refine_memory_path` | `null` | Override |
 | `MILL_CI_FIX_MEMORY_PATH` | `pipeline.ci_fix_memory_path` | `null` | Override |
@@ -283,7 +274,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_AUDIT_MODEL` | `periodic.audit.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_AUDIT_PERIODIC` | `periodic.audit.enabled` | `false` | |
 | `MILL_AUDIT_INTERVAL_SECONDS` | `periodic.audit.interval_seconds` | `86400` | |
-| `MILL_AUDIT_MEMORY_PATH` | `periodic.audit.memory_path` | `null` | |
 
 #### periodic.trace_health
 
@@ -299,7 +289,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_HEALTH_MODEL` | `periodic.health.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_HEALTH_PERIODIC` | `periodic.health.enabled` | `false` | |
 | `MILL_HEALTH_INTERVAL_SECONDS` | `periodic.health.interval_seconds` | `86400` | |
-| `MILL_HEALTH_MEMORY_PATH` | `periodic.health.memory_path` | `null` | |
 
 #### periodic.test_gap
 
@@ -308,7 +297,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_TEST_GAP_MODEL` | `periodic.test_gap.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_TEST_GAP_PERIODIC` | `periodic.test_gap.enabled` | `false` | |
 | `MILL_TEST_GAP_INTERVAL_SECONDS` | `periodic.test_gap.interval_seconds` | `86400` | |
-| `MILL_TEST_GAP_MEMORY_PATH` | `periodic.test_gap.memory_path` | `null` | |
 
 #### periodic.agent_check
 
@@ -317,7 +305,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_AGENT_CHECK_MODEL` | `periodic.agent_check.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_AGENT_CHECK_PERIODIC` | `periodic.agent_check.enabled` | `false` | |
 | `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `periodic.agent_check.interval_seconds` | `86400` | min 60 enforced in worker |
-| `MILL_AGENT_CHECK_MEMORY_PATH` | `periodic.agent_check.memory_path` | `null` | |
 
 #### periodic.survey
 
@@ -326,7 +313,6 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_SURVEY_MODEL` | `periodic.survey.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_SURVEY_PERIODIC` | `periodic.survey.enabled` | `true` | On by default (unusual) |
 | `MILL_SURVEY_INTERVAL_SECONDS` | `periodic.survey.interval_seconds` | `86400` | min 60 enforced in worker |
-| `MILL_SURVEY_MEMORY_PATH` | `periodic.survey.memory_path` | `null` | |
 
 #### periodic.ci_monitor
 

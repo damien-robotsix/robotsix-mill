@@ -325,22 +325,6 @@ def test_completeness_check_config_defaults():
     s = Settings()
     assert s.completeness_check_periodic is True
     assert s.completeness_check_interval_seconds == 86400
-    assert s.completeness_check_memory_path is None
-
-
-def test_completeness_check_memory_file_default(tmp_path):
-    """When completeness_check_memory_path is None, falls back to
-    data_dir/completeness_check_memory.md."""
-    s = _make_settings(tmp_path)
-    expected = s.data_dir / "completeness_check_memory.md"
-    assert s.completeness_check_memory_file == expected
-
-
-def test_completeness_check_memory_file_override(tmp_path):
-    """When completeness_check_memory_path is set, uses that path."""
-    custom_path = tmp_path / "custom_completeness_check.md"
-    s = _make_settings(tmp_path, completeness_check_memory_path=str(custom_path))
-    assert s.completeness_check_memory_file == custom_path
 
 
 def test_completeness_check_periodic_config():

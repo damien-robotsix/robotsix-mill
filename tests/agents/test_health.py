@@ -385,22 +385,6 @@ def test_health_config_defaults():
     s = Settings()
     assert s.health_periodic is True
     assert s.health_interval_seconds == 86400
-    assert s.health_memory_path is None
-
-
-def test_health_memory_file_default(tmp_path):
-    """When health_memory_path is None, falls back to
-    data_dir/health_memory.md."""
-    s = _make_settings(tmp_path)
-    expected = s.data_dir / "health_memory.md"
-    assert s.health_memory_file == expected
-
-
-def test_health_memory_file_override(tmp_path):
-    """When health_memory_path is set, uses that path."""
-    custom_path = tmp_path / "custom_health.md"
-    s = _make_settings(tmp_path, health_memory_path=str(custom_path))
-    assert s.health_memory_file == custom_path
 
 
 def test_health_periodic_config():

@@ -10,7 +10,8 @@ existing pipeline.
 ## How it works
 
 1. **Reads memory:** The agent reads its Markdown memory ledger
-   (`MILL_AUDIT_MEMORY_PATH`, default `<MILL_DATA_DIR>/audit_memory.md`).
+   (fixed path, not overridable: `<MILL_DATA_DIR>/<repo_id>/audit_memory.md`
+   in multi-repo mode, `<MILL_DATA_DIR>/audit_memory.md` otherwise).
    Missing file → empty ledger, never fail.
 
 2. **Web research:** Uses `web_research` to identify current best
@@ -59,7 +60,10 @@ periodic:
 |---|---|---|
 | `MILL_AUDIT_PERIODIC` | `false` | Enable periodic audit passes |
 | `MILL_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between automatic audits |
-| `MILL_AUDIT_MEMORY_PATH` | (empty) | Override path for the audit memory ledger; falls back to `<data_dir>/audit_memory.md`. In multi-repo mode, per-repo memory lives at `<data_dir>/<repo_id>/audit_memory.md` |
+
+The audit memory ledger path is fixed (not overridable): in multi-repo
+mode, per-repo memory lives at `<data_dir>/<repo_id>/audit_memory.md`;
+otherwise `<data_dir>/audit_memory.md`.
 
 ## Important notes
 

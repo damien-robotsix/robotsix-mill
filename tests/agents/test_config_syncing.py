@@ -191,26 +191,6 @@ def test_config_sync_config_defaults():
     s = Settings()
     assert s.config_sync_periodic is True
     assert s.config_sync_interval_seconds == 86400
-    assert s.config_sync_memory_path is None
-
-
-def test_config_sync_memory_file_default(tmp_path):
-    """When config_sync_memory_path is None, falls back to
-    data_dir/config_sync_memory.md."""
-    from robotsix_mill.config import Settings
-
-    s = Settings(data_dir=str(tmp_path))
-    expected = s.data_dir / "config_sync_memory.md"
-    assert s.config_sync_memory_file == expected
-
-
-def test_config_sync_memory_file_override(tmp_path):
-    """When config_sync_memory_path is set, uses that path."""
-    from robotsix_mill.config import Settings
-
-    custom_path = tmp_path / "custom_config_sync.md"
-    s = Settings(data_dir=str(tmp_path), config_sync_memory_path=str(custom_path))
-    assert s.config_sync_memory_file == custom_path
 
 
 def test_config_sync_periodic_config():

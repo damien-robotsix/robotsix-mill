@@ -87,11 +87,6 @@ other code depends on.
 | `MILL_MAX_FIX_ITERATIONS` | `max_fix_iterations` | `8` | `int` | Settings | non-sensitive | default | §3 | `stages/implement.py` | |
 | `MILL_MODEL_REQUEST_TIMEOUT` | `model_request_timeout` | `900.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
 | `MILL_MAX_CONCURRENCY` | `max_concurrency` | `4` | `int` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | |
-| `MILL_TRANSIENT_RETRIES` | `transient_retries` | `4` | `int` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
-| `MILL_TRANSIENT_BACKOFF_BASE` | `transient_backoff_base` | `2.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
-| `MILL_TRANSIENT_BACKOFF_CAP` | `transient_backoff_cap` | `30.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
-| `MILL_RATE_LIMIT_BACKOFF_BASE` | `rate_limit_backoff_base` | `30.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
-| `MILL_RATE_LIMIT_BACKOFF_CAP` | `rate_limit_backoff_cap` | `120.0` | `float` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
 | `MILL_RATE_LIMIT_FALLBACK_RETRIES` | `rate_limit_fallback_retries` | `3` | `int` | Settings | non-sensitive | default | §4 | `runtime/model.py` | |
 | `MILL_EXPLORE_REQUEST_LIMIT` | `explore_request_limit` | `100` | `int` | Settings | non-sensitive | default | §2 | Explore sub-agent | |
 | `MILL_CONSULT_REQUEST_LIMIT` | `consult_request_limit` | `15` | `int` | Settings | non-sensitive | default | §2 | Domain-expert consultation sub-agent (`consult_expert`) | |
@@ -108,8 +103,6 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_MAX_MEMORY_CHARS` | `max_memory_chars` | `8000` | `int` | Settings | non-sensitive | default | §18 | All memory-ledger reads | |
-| `MILL_REFERENCE_FILES_MAX_COUNT` | `reference_files_max_count` | `5` | `int` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
-| `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `reference_files_max_total_lines` | `3000` | `int` | Settings | non-sensitive | default | **missing** | `stages/refine.py` | ⚠️ Undocumented |
 | `MILL_DEDUP_LOOKBACK_DAYS` | `dedup_lookback_days` | `30` | `int` | Settings | non-sensitive | default | §17 | `stages/refine.py` (dedup) | |
 
 ### 1.5  Management plane
@@ -178,9 +171,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_RETROSPECT_SPAWN_DRAFTS` | `retrospect_spawn_drafts` | `true` | `bool` | Settings | non-sensitive | default | §10 | `stages/retrospect.py` | |
-| `MILL_RETROSPECT_DEEP_ANALYSIS_FREQUENCY` | `retrospect_deep_analysis_frequency` | `10` | `int` | Settings | non-sensitive | default | §10 | `stages/retrospect.py` | |
 | `MILL_RETROSPECT_MEMORY_PATH` | `retrospect_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §10 | `stages/retrospect.py` | |
-| `MILL_TRACE_INSPECTOR_MEMORY_PATH` | `trace_inspector_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §10 | `stages/retrospect.py` (deep analysis) | |
 
 ### 1.12  Pipeline tail (merge stage)
 
@@ -206,7 +197,6 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_AUDIT_PERIODIC` | `audit_periodic` | `false` | `bool` | Settings | non-sensitive | default | §11 | `audit_runner.py`, `runtime/worker.py` | |
 | `MILL_AUDIT_INTERVAL_SECONDS` | `audit_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §11 | `runtime/worker.py` | Local YAML overrides to 1 week |
-| `MILL_AUDIT_MEMORY_PATH` | `audit_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §11 | `audit_runner.py` | |
 
 ### 1.15  Periodic agents — trace-health
 
@@ -221,7 +211,6 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_HEALTH_PERIODIC` | `health_periodic` | `false` | `bool` | Settings | non-sensitive | default | §13 | `health_runner.py`, `runtime/worker.py` | |
 | `MILL_HEALTH_INTERVAL_SECONDS` | `health_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §13 | `runtime/worker.py` | |
-| `MILL_HEALTH_MEMORY_PATH` | `health_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §13 | `health_runner.py` | |
 
 ### 1.17  Periodic agents — test-gap
 
@@ -229,7 +218,6 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_TEST_GAP_PERIODIC` | `test_gap_periodic` | `false` | `bool` | Settings | non-sensitive | default | §14 | `test_gap_runner.py`, `runtime/worker.py` | |
 | `MILL_TEST_GAP_INTERVAL_SECONDS` | `test_gap_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §14 | `runtime/worker.py` | |
-| `MILL_TEST_GAP_MEMORY_PATH` | `test_gap_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §14 | `test_gap_runner.py` | |
 
 ### 1.18  Periodic agents — agent-check
 
@@ -237,7 +225,6 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_AGENT_CHECK_PERIODIC` | `agent_check_periodic` | `false` | `bool` | Settings | non-sensitive | default | §15 | `agent_check_runner.py`, `runtime/worker.py` | |
 | `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `agent_check_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §15 | `runtime/worker.py` | |
-| `MILL_AGENT_CHECK_MEMORY_PATH` | `agent_check_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §15 | `agent_check_runner.py` | |
 
 ### 1.19  Periodic agents — survey
 
@@ -245,7 +232,6 @@ other code depends on.
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_SURVEY_PERIODIC` | `survey_periodic` | `true` | `bool` | Settings | non-sensitive | default | **missing** | `survey_runner.py`, `runtime/worker.py` | ⚠️ Undocumented; default `true` (on by default) |
 | `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §16 | `runtime/worker.py` | |
-| `MILL_SURVEY_MEMORY_PATH` | `survey_memory_path` | `None` | `Path\|None` | Settings | non-sensitive | default | §16 | `survey_runner.py` | |
 
 ### 1.20  Periodic agents — diagnostic
 
@@ -279,12 +265,6 @@ other code depends on.
 | `epic_workspaces_dir` | `data_dir / "epic_workspaces"` | `Path` | `sandbox.py` | Bind-mount target for epic workspace in sandbox containers |
 | `tracing_enabled` | `bool(get_secrets().langfuse_base_url and get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)` | `bool` | `runtime/tracing.py`, `runtime/api.py` | Gate: all 3 must be truthy; populated from `RepoConfig` at startup |
 | `retrospect_memory_file` | `retrospect_memory_path or data_dir / "retrospect_memory.md"` | `Path` | `stages/retrospect.py` | |
-| `trace_inspector_memory_file` | `trace_inspector_memory_path or data_dir / "trace_inspector_memory.md"` | `Path` | Trace inspector | |
-| `audit_memory_file` | `audit_memory_path or data_dir / "audit_memory.md"` | `Path` | `audit_runner.py` | |
-| `agent_check_memory_file` | `agent_check_memory_path or data_dir / "agent_check_memory.md"` | `Path` | `agent_check_runner.py` | |
-| `health_memory_file` | `health_memory_path or data_dir / "health_memory.md"` | `Path` | `health_runner.py` | |
-| `test_gap_memory_file` | `test_gap_memory_path or data_dir / "test_gap_memory.md"` | `Path` | `test_gap_runner.py` | |
-| `survey_memory_file` | `survey_memory_path or data_dir / "survey_memory.md"` | `Path` | `survey_runner.py` | |
 | `implement_memory_file` | `implement_memory_path or data_dir / "implement_memory.md"` | `Path` | `stages/implement.py` | |
 | `refine_memory_file` | `refine_memory_path or data_dir / "refine_memory.md"` | `Path` | `stages/refine.py` | |
 | `ci_fix_memory_file` | `ci_fix_memory_path or data_dir / "ci_fix_memory.md"` | `Path` | CI-fix agent | |
@@ -312,7 +292,7 @@ or genuinely non-Settings vars consumed only by tooling/CI (rows 1, 3, 4).
 
 ### 2.1  Vars present in `config.py` but missing from `docs/configuration.md`
 
-These 12 env vars are defined with `Field()` in `config.py` but have **no entry**
+These 10 env vars are defined with `Field()` in `config.py` but have **no entry**
 in `docs/configuration.md`:
 
 | # | Env var | Python field | Default | In YAML? |
@@ -327,12 +307,9 @@ in `docs/configuration.md`:
 | 8 | `MILL_REVIEW_MAX_ROUNDS` | `review_max_rounds` | `3` | default |
 | 9 | `MILL_SURVEY_PERIODIC` | `survey_periodic` | `true` | default |
 | 10 | `MILL_GITLAB_API_URL` | `gitlab_api_url` | `https://gitlab.com/api/v4` | default |
-| 11 | `MILL_REFERENCE_FILES_MAX_COUNT` | `reference_files_max_count` | `5` | default |
-| 12 | `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` | `reference_files_max_total_lines` | `3000` | default |
 
-> The spec's known list omitted `MILL_REFERENCE_FILES_MAX_COUNT` and
-> `MILL_REFERENCE_FILES_MAX_TOTAL_LINES` (both missing from docs) and
-> incorrectly included `MILL_SURVEY_INTERVAL_SECONDS` (which IS in §16).
+> The spec's known list incorrectly included `MILL_SURVEY_INTERVAL_SECONDS`
+> (which IS in §16).
 
 ### 2.2  Non-Settings vars
 

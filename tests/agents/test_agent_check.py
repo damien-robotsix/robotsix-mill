@@ -360,27 +360,6 @@ def test_run_agent_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 # --- Config tests ---
 
 
-def test_agent_check_memory_file_default(tmp_path):
-    """When agent_check_memory_path is None, falls back to
-    data_dir/agent_check_memory.md."""
-    s = _make_settings(tmp_path)
-    expected = s.data_dir / "agent_check_memory.md"
-    assert s.agent_check_memory_file == expected
-
-
-def test_agent_check_memory_file_override(tmp_path):
-    """When agent_check_memory_path is set, uses that path."""
-    custom_path = tmp_path / "custom_agent_check.md"
-    s = _make_settings(tmp_path, agent_check_memory_path=str(custom_path))
-    assert s.agent_check_memory_file == custom_path
-
-
-def test_agent_check_memory_path_config():
-    """Agent-check memory path can be set via env."""
-    s = Settings()
-    assert s.agent_check_memory_path is None
-
-
 # --- CLI tests ---
 
 
