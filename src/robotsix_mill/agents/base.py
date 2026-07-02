@@ -560,25 +560,36 @@ def build_agent(  # noqa: C901
         from .claude_concurrency import bound_claude_handle
 
         provider = get_provider_for_level(level)
-        handle = provider.build_agent(
-            level=level,
-            model=model,
-            system_prompt=composed_system,
-            tools=all_tools,
-            output_type=output_type,
-            name=name,
-            retries=retries,
-            # NOTE: max_tokens is intentionally NOT forwarded here. The llmio
-            # ClaudeSDKProvider.build_agent signature does not accept it (the
-            # Claude CLI manages its own output budget), and passing it raised
-            # TypeError, crashing every L3/claude_sdk agent build. The
-            # DeepSeek/OpenRouter path below still applies max_tokens via
-            # ModelSettings.
-            # Confine the SDK's built-in Write/Edit tools to the ticket's
-            # workspace clone. repo_dir is None for board-less agents → no
-            # confinement, unchanged behavior.
-            workspace_root=repo_dir,  # type: ignore[call-arg]  # ClaudeSDKProvider accepts this
-        )
+        try:
+            handle = provider.build_agent(
+                level=level,
+                model=model,
+                system_prompt=composed_system,
+                tools=all_tools,
+                output_type=output_type,
+                name=name,
+                retries=retries,
+                max_tokens=max_tokens,
+                # Confine the SDK's built-in Write/Edit tools to the ticket's
+                # workspace clone. repo_dir is None for board-less agents → no
+                # confinement, unchanged behavior.
+                workspace_root=repo_dir,  # type: ignore[call-arg]  # ClaudeSDKProvider accepts this
+            )
+        except TypeError:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning("max_tokens not supported by %s", type(provider).__name__)
+            handle = provider.build_agent(
+                level=level,
+                model=model,
+                system_prompt=composed_system,
+                tools=all_tools,
+                output_type=output_type,
+                name=name,
+                retries=retries,
+                workspace_root=repo_dir,  # type: ignore[call-arg]
+            )
         # Bound concurrent CLI-subprocess spawns process-wide so a worker
         # fanning out many runs at startup can't stall on spawn contention.
         return bound_claude_handle(handle, settings.claude_max_concurrency)
