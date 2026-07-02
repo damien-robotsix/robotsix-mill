@@ -310,22 +310,6 @@ def test_bc_check_config_defaults():
     s = Settings()
     assert s.bc_check_periodic is True
     assert s.bc_check_interval_seconds == 86400
-    assert s.bc_check_memory_path is None
-
-
-def test_bc_check_memory_file_default(tmp_path):
-    """When bc_check_memory_path is None, falls back to
-    data_dir/bc_check_memory.md."""
-    s = _make_settings(tmp_path)
-    expected = s.data_dir / "bc_check_memory.md"
-    assert s.bc_check_memory_file == expected
-
-
-def test_bc_check_memory_file_override(tmp_path):
-    """When bc_check_memory_path is set, uses that path."""
-    custom_path = tmp_path / "custom_bc_check.md"
-    s = _make_settings(tmp_path, bc_check_memory_path=str(custom_path))
-    assert s.bc_check_memory_file == custom_path
 
 
 def test_bc_check_periodic_config():

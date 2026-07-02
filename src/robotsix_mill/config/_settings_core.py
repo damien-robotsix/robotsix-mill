@@ -179,9 +179,6 @@ class _CoreSettings(BaseModel):
     # mill enables it via config/config.example.yaml (3.0s).
     board_list_cache_ttl_seconds: float = Field(default=0.0, ge=0.0)
 
-    transient_retries: int = Field(default=4, ge=0)
-    transient_backoff_base: float = Field(default=2.0, gt=0)
-    transient_backoff_cap: float = Field(default=30.0, gt=0)
     # Retry policy for stage-level transient errors (httpx.ConnectError,
     # etc.).  These control how many times a stage is re-attempted and
     # the exponential-backoff delay between attempts inside the worker
@@ -198,11 +195,6 @@ class _CoreSettings(BaseModel):
     # network_outage_retry_seconds until connectivity returns.
     network_probe_host: str = Field(default="github.com")
     network_outage_retry_seconds: int = Field(default=120, ge=1)
-    # Backoff for UsageLimitExceeded (pydantic-ai budget cap).  These
-    # are longer than transient backoff because OpenRouter/provider
-    # rate-limit windows are typically ~60s.
-    rate_limit_backoff_base: float = Field(default=30.0, gt=0)
-    rate_limit_backoff_cap: float = Field(default=120.0, gt=0)
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the
@@ -311,13 +303,6 @@ class _CoreSettings(BaseModel):
     # entries are always kept; resolved (validated/rejected) entries are
     # pruned oldest-first to honor this cap. 0 disables pruning.
     retrospect_candidates_max_entries: int = Field(default=100, ge=0)
-    # Maximum number of files whose full content the refine stage stores
-    # as reference_files.json for the implement coordinator to pre-load.
-    reference_files_max_count: int = Field(default=5)
-    # Maximum total lines across all selected reference files. When the
-    # cumulative line count would exceed this, files beyond the limit are
-    # dropped (top-N priority order preserved).
-    reference_files_max_total_lines: int = Field(default=3000)
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(default=7)

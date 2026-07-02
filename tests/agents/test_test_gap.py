@@ -330,22 +330,6 @@ def test_test_gap_config_defaults():
     s = Settings()
     assert s.test_gap_periodic is True
     assert s.test_gap_interval_seconds == 86400
-    assert s.test_gap_memory_path is None
-
-
-def test_test_gap_memory_file_default(tmp_path):
-    """When test_gap_memory_path is None, falls back to
-    data_dir/test_gap_memory.md."""
-    s = _make_settings(tmp_path)
-    expected = s.data_dir / "test_gap_memory.md"
-    assert s.test_gap_memory_file == expected
-
-
-def test_test_gap_memory_file_override(tmp_path):
-    """When test_gap_memory_path is set, uses that path."""
-    custom_path = tmp_path / "custom_test_gap.md"
-    s = _make_settings(tmp_path, test_gap_memory_path=str(custom_path))
-    assert s.test_gap_memory_file == custom_path
 
 
 def test_test_gap_periodic_config():

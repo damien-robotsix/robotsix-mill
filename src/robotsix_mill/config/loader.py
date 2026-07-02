@@ -299,10 +299,8 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.doc_classifier_diff_max_chars": "doc_classifier_diff_max_chars",
     "core.limits.review_requests": "review_request_limit",
     "core.limits.web_research_requests": "web_research_request_limit",
-    "core.limits.scope_triage_requests": "scope_triage_request_limit",
     "core.limits.scope_triage_max_files": "scope_triage_max_files",
     "core.limits.triage_requests": "triage_request_limit",
-    "core.limits.already_done_requests": "already_done_request_limit",
     "core.limits.max_fix_iterations": "max_fix_iterations",
     "core.limits.max_stuck_cycles": "max_stuck_cycles",
     "core.limits.max_spend_usd_per_ticket": "max_spend_usd_per_ticket",
@@ -310,11 +308,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.limits.max_openrouter_marginal_usd_per_ticket": "max_openrouter_marginal_usd_per_ticket",
     "core.limits.stage_timeout_seconds": "stage_timeout_seconds",
     "core.limits.stage_timeout_overrides": "stage_timeout_overrides",
-    "core.limits.transient_retries": "transient_retries",
-    "core.limits.transient_backoff_base": "transient_backoff_base",
-    "core.limits.transient_backoff_cap": "transient_backoff_cap",
-    "core.limits.rate_limit_backoff_base": "rate_limit_backoff_base",
-    "core.limits.rate_limit_backoff_cap": "rate_limit_backoff_cap",
     "core.limits.stage_retry_max_attempts": "stage_retry_max_attempts",
     "core.limits.stage_retry_base_delay": "stage_retry_base_delay",
     "core.limits.stage_retry_max_delay": "stage_retry_max_delay",
@@ -333,8 +326,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "core.memory.max_memory_chars": "max_memory_chars",
     "core.memory.retrospect_log_max_chars": "retrospect_log_max_chars",
     "core.memory.retrospect_candidates_max_entries": "retrospect_candidates_max_entries",
-    "core.memory.reference_files_max_count": "reference_files_max_count",
-    "core.memory.reference_files_max_total_lines": "reference_files_max_total_lines",
     "core.memory.dedup_lookback_days": "dedup_lookback_days",
     # -- stages.review --
     "stages.review.prior_context_max_chars": "review_prior_context_max_chars",
@@ -443,7 +434,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "pipeline.max_archived_tickets": "max_archived_tickets",
     "pipeline.max_comments_per_ticket": "max_comments_per_ticket",
     "pipeline.retrospect_memory_path": "retrospect_memory_path",
-    "pipeline.trace_inspector_memory_path": "trace_inspector_memory_path",
     "pipeline.trace_review_target_repo_id": "trace_review_target_repo_id",
     "pipeline.implement_memory_path": "implement_memory_path",
     "pipeline.refine_memory_path": "refine_memory_path",
@@ -459,7 +449,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- periodic.audit --
     "periodic.audit.enabled": "audit_periodic",
     "periodic.audit.interval_seconds": "audit_interval_seconds",
-    "periodic.audit.memory_path": "audit_memory_path",
     # -- periodic.trace_health --
     "periodic.trace_health.enabled": "trace_health_periodic",
     "periodic.trace_health.interval_seconds": "trace_health_interval_seconds",
@@ -499,7 +488,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- periodic.health --
     "periodic.health.enabled": "health_periodic",
     "periodic.health.interval_seconds": "health_interval_seconds",
-    "periodic.health.memory_path": "health_memory_path",
     # -- periodic.run_health --
     "periodic.run_health.enabled": "run_health_periodic",
     "periodic.run_health.interval_seconds": "run_health_interval_seconds",
@@ -509,35 +497,28 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- periodic.test_gap --
     "periodic.test_gap.enabled": "test_gap_periodic",
     "periodic.test_gap.interval_seconds": "test_gap_interval_seconds",
-    "periodic.test_gap.memory_path": "test_gap_memory_path",
     "periodic.test_gap.request_limit": "test_gap_request_limit",
     "periodic.test_gap.max_tool_calls": "test_gap_max_tool_calls",
     "periodic.test_gap.max_errors": "test_gap_max_errors",
     # -- periodic.agent_check --
     "periodic.agent_check.enabled": "agent_check_periodic",
     "periodic.agent_check.interval_seconds": "agent_check_interval_seconds",
-    "periodic.agent_check.memory_path": "agent_check_memory_path",
     # -- periodic.bc_check --
     "periodic.bc_check.enabled": "bc_check_periodic",
     "periodic.bc_check.interval_seconds": "bc_check_interval_seconds",
-    "periodic.bc_check.memory_path": "bc_check_memory_path",
     # -- periodic.completeness_check --
     "periodic.completeness_check.enabled": "completeness_check_periodic",
     "periodic.completeness_check.interval_seconds": "completeness_check_interval_seconds",
-    "periodic.completeness_check.memory_path": "completeness_check_memory_path",
     "periodic.completeness_check.request_limit": "completeness_check_request_limit",
     # -- periodic.copy_paste --
     "periodic.copy_paste.enabled": "copy_paste_periodic",
     "periodic.copy_paste.interval_seconds": "copy_paste_interval_seconds",
-    "periodic.copy_paste.memory_path": "copy_paste_memory_path",
     # -- periodic.forge_parity --
     "periodic.forge_parity.enabled": "forge_parity_periodic",
     "periodic.forge_parity.interval_seconds": "forge_parity_interval_seconds",
-    "periodic.forge_parity.memory_path": "forge_parity_memory_path",
     # -- periodic.survey --
     "periodic.survey.enabled": "survey_periodic",
     "periodic.survey.interval_seconds": "survey_interval_seconds",
-    "periodic.survey.memory_path": "survey_memory_path",
     "periodic.survey.request_limit": "survey_request_limit",
     "periodic.survey.web_fetch_max_calls": "survey_web_fetch_max_calls",
     "periodic.survey.web_fetch_max_total_bytes": "survey_web_fetch_max_total_bytes",
@@ -558,19 +539,14 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "periodic.dependabot_ingest.interval_seconds": "dependabot_ingest_interval_seconds",
     "periodic.dependabot_ingest.max_drafts_per_pass": "dependabot_ingest_max_drafts_per_pass",
     # -- periodic.state_sync --
-    "periodic.state_sync.model": "state_sync_model",
     "periodic.state_sync.enabled": "state_sync_periodic",
     "periodic.state_sync.interval_seconds": "state_sync_interval_seconds",
-    "periodic.state_sync.memory_path": "state_sync_memory_path",
     # -- periodic.env_doc_sync --
-    "periodic.env_doc_sync.model": "env_doc_sync_model",
     "periodic.env_doc_sync.enabled": "env_doc_sync_periodic",
     "periodic.env_doc_sync.interval_seconds": "env_doc_sync_interval_seconds",
-    "periodic.env_doc_sync.memory_path": "env_doc_sync_memory_path",
     # -- periodic.config_sync --
     "periodic.config_sync.enabled": "config_sync_periodic",
     "periodic.config_sync.interval_seconds": "config_sync_interval_seconds",
-    "periodic.config_sync.memory_path": "config_sync_memory_path",
     # -- periodic.member_sync (deterministic — no model, no memory_path) --
     "periodic.member_sync.enabled": "member_sync_periodic",
     "periodic.member_sync.interval_seconds": "member_sync_interval_seconds",
@@ -583,7 +559,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- periodic.triage_boilerplate --
     "periodic.triage_boilerplate.enabled": "triage_boilerplate_periodic",
     "periodic.triage_boilerplate.interval_seconds": "triage_boilerplate_interval_seconds",
-    "periodic.triage_boilerplate.memory_path": "triage_boilerplate_memory_path",
     # -- periodic.langfuse_cleanup --
     "periodic.langfuse_cleanup.enabled": "langfuse_cleanup_periodic",
     "periodic.langfuse_cleanup.interval_seconds": "langfuse_cleanup_interval_seconds",
@@ -591,7 +566,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     # -- periodic.module_curator --
     "periodic.module_curator.enabled": "module_curator_periodic",
     "periodic.module_curator.interval_seconds": "module_curator_interval_seconds",
-    "periodic.module_curator.memory_path": "module_curator_memory_path",
     "periodic.module_curator.request_limit": "module_curator_request_limit",
     # -- periodic.orphaned_pr_check (deterministic per-repo stale-PR cleanup) --
     "periodic.orphaned_pr_check.enabled": "orphaned_pr_check_periodic",

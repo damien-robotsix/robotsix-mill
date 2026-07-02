@@ -315,13 +315,6 @@ class _StagesSettings(BaseModel):
     # max_tokens. Set higher than the YAML max_tokens. 0 disables the
     # output-exhaustion retry (falls straight to NEEDS_DISCUSSION).
     review_output_token_budget: int = Field(default=65536, ge=0)
-    # How many model requests the scope-triage agent may make per
-    # invocation (main call + any tool calls). Default 8: the agent is
-    # tool-less, but structured-output retries (schema mismatch, output
-    # retry) consume requests too — at 4 a single bad generation run
-    # left zero headroom and the resulting "agent error" auto-escalated
-    # tickets to humans (live case: ticket ff7f).
-    scope_triage_request_limit: int = Field(default=8)
     # Maximum number of out-of-scope TEXT files fed into the scope-triage
     # prompt. When an implement pass leaves MORE than this many out-of-scope
     # text files (after binary-artifact auto-cleanup), treat it as a build-
@@ -333,12 +326,6 @@ class _StagesSettings(BaseModel):
     )
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(default=8)
-    # Per-call cap for the already-done verifier (main call + tool calls).
-    # This is a cheap level-1 agent that runs only as a candidate
-    # short-circuit when the deterministic Jaccard pre-filter matches a
-    # prior ``no_change_needed`` memory entry.  Default 8 — same tier as
-    # triage.  Configured via ``core.limits.already_done_requests``.
-    already_done_request_limit: int = Field(default=8)
 
     # --- retrospect stage (done -> reviewed) ---
     # When True, retrospect may file an improvement DRAFT. Until the
@@ -572,9 +559,6 @@ class _StagesSettings(BaseModel):
     # scope.  Mirrors ``trace_review_dedup_lookback_days`` but is independent
     # so the epic-decomposition policy can diverge.
     epic_dedup_lookback_days: int = Field(default=7)
-    # Memory ledger for the trace inspector.
-    # Unset (default) derives <data_dir>/trace_inspector_memory.md.
-    trace_inspector_memory_path: Path | None = Field(default=None)
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
     retrospect_memory_path: Path | None = Field(default=None)

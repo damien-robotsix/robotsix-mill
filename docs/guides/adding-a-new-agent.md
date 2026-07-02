@@ -243,15 +243,17 @@ Edit `config/config.example.yaml`.  You need two entries:
    health: deepseek/deepseek-v4-flash
    ```
 
-2. **Per-agent block** — add a dedicated section with enabled flag,
-   interval, and memory-path default.  Example (from `bc_check`):
+2. **Per-agent block** — add a dedicated section with enabled flag and
+   interval.  Example (from `bc_check`):
    ```yaml
    health:
      model: deepseek/deepseek-v4-flash
      enabled: true
      interval_seconds: 86400
-     memory_path: null            # defaults to <data_dir>/health_memory.md
    ```
+
+   The memory ledger path is not configurable — it is fixed to
+   `<data_dir>/<repo_id>/<name>_memory.md`.
 
    The `model` sub-key here is the agent-specific model override; the
    `core.models` entry is the default that the env-var reference

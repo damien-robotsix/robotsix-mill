@@ -118,8 +118,7 @@ class PeriodicPassConfig:
     """
 
     label: str
-    """Short name e.g. ``"audit"``, ``"health"``.
-    Drives ``settings.memory_file_for(label, ...)`` and logging."""
+    """Short name e.g. ``"audit"``, ``"health"``. Used for logging."""
 
     source_kind: SourceKind
     """``SourceKind`` enum value passed to ``run_agent_pass(source_label=...)``."""

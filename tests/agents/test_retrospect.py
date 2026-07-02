@@ -312,8 +312,8 @@ def test_unreadable_memory_file_still_closed(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         ctx.settings.__class__,
-        "retrospect_memory_file",
-        property(lambda self: _UnreadableFile()),
+        "memory_file_for",
+        lambda self, name, board_id: _UnreadableFile(),
     )
 
     captured_memory = []

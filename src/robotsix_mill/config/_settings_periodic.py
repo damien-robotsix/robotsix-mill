@@ -36,9 +36,6 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic audit passes (seconds). Only used when
     # MILL_AUDIT_PERIODIC=true.
     audit_interval_seconds: int = Field(default=86400)
-    # Path to the audit agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/audit_memory.md.
-    audit_memory_path: Path | None = Field(default=None)
 
     # --- trace-health check ---
     # When True, the worker runs periodic trace-health checks at the
@@ -88,19 +85,8 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic test-gap passes (seconds). Only used
     # when MILL_TEST_GAP_PERIODIC=true.
     test_gap_interval_seconds: int = Field(default=86400)
-    # Path to the test-gap agent's Markdown memory ledger. Override to
-    # pin a specific path; unset (default) derives
-    # <data_dir>/test_gap_memory.md.
-    test_gap_memory_path: Path | None = Field(default=None)
 
     # --- agent-check agent (agent-definition coherence) ---
-    # Model for the agent-check meta-agent. Defaults to the same cheap
-    # model as other read-only periodic agents. Override with
-    # MILL_AGENT_CHECK_MODEL.
-    # Path to the agent-check agent's Markdown memory ledger. Override
-    # to pin a specific path; unset (default) derives
-    # <data_dir>/agent_check_memory.md.
-    agent_check_memory_path: Path | None = Field(default=None)
     # Opt-in periodic agent-check pass. Defaults to False (off); flip
     # to true to schedule the pass every ``agent_check_interval_seconds``
     # in addition to the on-demand POST /agent-check and CLI.
@@ -119,9 +105,6 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic health passes (seconds). Only used when
     # MILL_HEALTH_PERIODIC=true.
     health_interval_seconds: int = Field(default=86400)
-    # Path to the health agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/health_memory.md.
-    health_memory_path: Path | None = Field(default=None)
 
     # --- survey agent (OSS project discovery) ---
     # Survey is a discovery + structured-output agent: read README,
@@ -150,9 +133,6 @@ class _PeriodicSettings(BaseModel):
     # below the historical $15 runaway and a reasonable price for
     # the guarantee that every run produces a draft.
     survey_request_limit: int = Field(default=40)
-    # Path to the survey agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/survey_memory.md.
-    survey_memory_path: Path | None = Field(default=None)
     # Per-survey-run web_fetch budget — a second tier of budget tracking
     # that spans the entire survey run (not reset between ask_web_knowledge
     # consults). Defaults to 5 calls / 500 KB total bytes, matching the
@@ -173,13 +153,6 @@ class _PeriodicSettings(BaseModel):
     survey_interval_seconds: int = Field(default=86400)
 
     # --- bc_check agent (backward-compatibility inspection) ---
-    # Model for the bc-check agent. Defaults to the same capable model
-    # as other read-only periodic agents. Override with
-    # MILL_BC_CHECK_MODEL.
-    # Path to the bc-check agent's Markdown memory ledger. Override to
-    # pin a specific path; unset (default) derives
-    # <data_dir>/bc_check_memory.md.
-    bc_check_memory_path: Path | None = Field(default=None)
     # Opt-in periodic bc-check pass. Defaults to False (off); flip to
     # true to schedule the pass every ``bc_check_interval_seconds`` in
     # addition to the on-demand CLI.
@@ -190,13 +163,6 @@ class _PeriodicSettings(BaseModel):
     bc_check_interval_seconds: int = Field(default=86400)
 
     # --- module_curator agent (module-taxonomy drift detection) ---
-    # Model for the module-curator agent. Defaults to the same capable
-    # model as other read-only periodic agents. Override with
-    # MILL_MODULE_CURATOR_MODEL.
-    # Path to the module-curator agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/module_curator_memory.md.
-    module_curator_memory_path: Path | None = Field(default=None)
     # Opt-in periodic module-curator pass. Defaults to True (opt-out);
     # set false to disable the daily module-taxonomy drift check on
     # this repo.
@@ -292,13 +258,6 @@ class _PeriodicSettings(BaseModel):
     dependabot_ingest_max_drafts_per_pass: int = Field(default=5, ge=0)
 
     # --- completeness_check agent (feature-wiring completeness) ---
-    # Model for the completeness-check agent. Defaults to the same
-    # capable model as other read-only periodic agents. Override with
-    # MILL_COMPLETENESS_CHECK_MODEL.
-    # Path to the completeness-check agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/completeness_check_memory.md.
-    completeness_check_memory_path: Path | None = Field(default=None)
     # Opt-in periodic completeness-check pass. Defaults to False (off);
     # flip to true to schedule the pass every
     # ``completeness_check_interval_seconds`` in addition to the
@@ -311,12 +270,6 @@ class _PeriodicSettings(BaseModel):
     completeness_check_request_limit: int = Field(default=80)
 
     # --- forge-parity agent (forge adapter drift detection) ---
-    # Model for the forge-parity agent. Defaults to the same capable model
-    # as audit/health. Override with MILL_FORGE_PARITY_MODEL.
-    # Path to the forge-parity agent's Markdown memory ledger. Override to
-    # pin a specific path; unset (default) derives
-    # <data_dir>/forge_parity_memory.md.
-    forge_parity_memory_path: Path | None = Field(default=None)
     # Opt-in periodic forge-parity pass. Defaults to True (opt-out);
     # set false to disable the weekly forge-adapter drift detection.
     forge_parity_periodic: bool = Field(default=True)
@@ -326,12 +279,6 @@ class _PeriodicSettings(BaseModel):
     forge_parity_interval_seconds: int = Field(default=604800)
 
     # --- copy-paste agent (deterministic clone detection and triage) ---
-    # Model for the copy-paste agent. Defaults to the same capable model
-    # as audit/health. Override with MILL_COPY_PASTE_MODEL.
-    # Path to the copy-paste agent's Markdown memory ledger. Override to
-    # pin a specific path; unset (default) derives
-    # <data_dir>/copy_paste_memory.md.
-    copy_paste_memory_path: Path | None = Field(default=None)
     # Opt-in periodic copy-paste pass. Defaults to True (opt-out);
     # set false to disable the weekly clone-detection sweep.
     copy_paste_periodic: bool = Field(default=True)
@@ -341,12 +288,6 @@ class _PeriodicSettings(BaseModel):
     copy_paste_interval_seconds: int = Field(default=604800)
 
     # --- state-sync agent (cross-surface State enum consistency) ---
-    # Model for the state-sync agent. Defaults to a cheap model (read-only
-    # file scan — no web research or code generation).
-    state_sync_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Path to the state-sync agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/state_sync_memory.md.
-    state_sync_memory_path: Path | None = Field(default=None)
     # Opt-in periodic state-sync pass. Defaults to True (opt-out);
     # set false to disable the daily State-enum consistency check.
     state_sync_periodic: bool = Field(default=True)
@@ -356,12 +297,6 @@ class _PeriodicSettings(BaseModel):
     state_sync_interval_seconds: int = Field(default=86400)
 
     # --- env-doc-sync agent (env-var documentation consistency) ---
-    # Model for the env-doc-sync agent. Defaults to a cheap model (read-only
-    # file scan — no web research or code generation).
-    env_doc_sync_model: str = Field(default="deepseek/deepseek-v4-flash")
-    # Path to the env-doc-sync agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/env_doc_sync_memory.md.
-    env_doc_sync_memory_path: Path | None = Field(default=None)
     # Opt-in periodic env-doc-sync pass. Defaults to True (opt-out);
     # set false to disable the daily env-var documentation consistency check.
     env_doc_sync_periodic: bool = Field(default=True)
@@ -371,12 +306,6 @@ class _PeriodicSettings(BaseModel):
     env_doc_sync_interval_seconds: int = Field(default=86400)
 
     # --- security-posture agent (continuous security-scanning coverage) ---
-    # Model for the security-posture agent. Defaults to the same capable
-    # model as audit/health.  Override with MILL_SECURITY_POSTURE_MODEL.
-    # Path to the security-posture agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/security_posture_memory.md.
-    security_posture_memory_path: Path | None = Field(default=None)
     # Opt-in periodic security-posture pass. Defaults to True (opt-out);
     # set false to disable the weekly security-scanning coverage audit.
     security_posture_periodic: bool = Field(default=True)
@@ -387,10 +316,6 @@ class _PeriodicSettings(BaseModel):
     security_posture_request_limit: int = Field(default=80)
 
     # --- triage-boilerplate agent (recurring triage pattern detection) ---
-    # Path to the triage-boilerplate agent's Markdown memory ledger.
-    # Override to pin a specific path; unset (default) derives
-    # <data_dir>/triage_boilerplate_memory.md.
-    triage_boilerplate_memory_path: Path | None = Field(default=None)
     # Opt-in periodic triage-boilerplate pass. Defaults to True (opt-out);
     # set false to disable the weekly triage-pattern scan.
     triage_boilerplate_periodic: bool = Field(default=True)
@@ -400,11 +325,6 @@ class _PeriodicSettings(BaseModel):
     triage_boilerplate_interval_seconds: int = Field(default=604800)
 
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
-    # Model for the config-sync agent. Defaults to a cheap model (read-only
-    # file parsing — no web research or code generation).
-    # Path to the config-sync agent's Markdown memory ledger. Override to pin
-    # a specific path; unset (default) derives <data_dir>/config_sync_memory.md.
-    config_sync_memory_path: Path | None = Field(default=None)
     # Opt-in periodic config-sync pass. Default false (agents default off
     # unless noted). Set true to enable automatic daily drift detection.
     config_sync_periodic: bool = Field(default=True)
