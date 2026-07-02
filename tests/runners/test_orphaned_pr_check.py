@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from robotsix_mill.config import RepoConfig, Settings
-from robotsix_mill.core.models import Ticket
+from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.states import State
 from robotsix_mill.runners.orphaned_pr_check import (
     OrphanClassification,
@@ -1282,3 +1282,99 @@ class TestForeignPrTracking:
         assert result.foreign_filed == 1
         title = svc.create.call_args.kwargs["title"]
         assert title == "Track external PR: test-owner/test-repo/feature/no-number"
+
+
+# ---------------------------------------------------------------------------
+# Reconcile closed-tracker-PR tests
+# ---------------------------------------------------------------------------
+
+
+class TestReconcileClosedTrackers:
+    def test_closes_stale_tracker_by_pr_number(self, monkeypatch):
+        """Tracker ticket whose PR number is absent from open_prs → close_tracker."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+
+        tracker = _ticket(
+            ticket_id="20250101T000000Z-tracker-a1b2",
+            title="Track external PR: test-owner/test-repo#42",
+            state=State.READY,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        # open_prs does NOT include PR #42
+        forge = _mock_forge(
+            open_prs=[
+                {
+                    "branch": "mill/some-other-pr",
+                    "author_login": "mill-bot[bot]",
+                    "number": 99,
+                }
+            ],
+            bot_login="mill-bot[bot]",
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+        svc.recent_proposals_for.return_value = [tracker]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        svc.close_tracker.assert_called_once_with(
+            tracker.id,
+            note="Tracked PR is no longer open — auto-closed by reconcile pass",
+        )
+        assert any("CLOSE_TRACKER" in a for a in result.actions)
+
+    def test_empty_open_prs_skips_reconcile(self, monkeypatch):
+        """When open_prs is empty, _reconcile_closed_tracker_prs is not called
+        and no tracker tickets are closed."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+
+        tracker = _ticket(
+            ticket_id="20250101T000000Z-tracker-a1b2",
+            title="Track external PR: test-owner/test-repo#42",
+            state=State.READY,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        forge = _mock_forge(open_prs=[])
+        _install_seams(monkeypatch, s, forge, svc)
+        svc.recent_proposals_for.return_value = [tracker]
+
+        run_orphaned_pr_check_pass(repo_config=repo)
+
+        svc.close_tracker.assert_not_called()
+
+    def test_cross_repo_title_not_closed(self, monkeypatch):
+        """A tracker ticket whose title references a different repo_id
+        is not matched and not closed."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+
+        # Title references "other-owner/other-repo", not "test-owner/test-repo"
+        other_tracker = _ticket(
+            ticket_id="20250101T000000Z-other-a1b2",
+            title="Track external PR: other-owner/other-repo#42",
+            state=State.READY,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        forge = _mock_forge(
+            open_prs=[
+                {
+                    "branch": "mill/some-pr",
+                    "author_login": "mill-bot[bot]",
+                    "number": 99,
+                }
+            ],
+            bot_login="mill-bot[bot]",
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+        svc.recent_proposals_for.return_value = [other_tracker]
+
+        run_orphaned_pr_check_pass(repo_config=repo)
+
+        svc.close_tracker.assert_not_called()
