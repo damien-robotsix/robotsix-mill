@@ -14,7 +14,13 @@ from robotsix_mill.forge.github import (
     _build_headers,
     _parse_owner_repo,
 )
-from robotsix_mill.forge.github_ci import _ANSI_RE
+from robotsix_mill.forge.github_ci import (
+    _ANSI_RE,
+    _extract_annotations,
+    _latest_definitive_runs,
+    _statuses_to_check_runs,
+)
+from robotsix_mill.forge.github_pr import _parse_iso_utc, _parse_pr_detail
 
 
 # ---------------------------------------------------------------------------
@@ -3400,3 +3406,732 @@ def test__pr_review_status_inline_comment_original_line_fallback(tmp_path, monke
     inline = [c for c in result["comments"] if c["path"] == "old.py"]
     assert len(inline) == 1
     assert inline[0]["line"] == 55
+
+
+# ---------------------------------------------------------------------------
+# _parse_iso_utc
+# ---------------------------------------------------------------------------
+
+
+def test_parse_iso_utc_z_suffix():
+    """ISO-8601 with trailing Z → UTC datetime."""
+
+    result = _parse_iso_utc("2024-01-01T00:00:00Z")
+    assert result.year == 2024
+    assert result.month == 1
+    assert result.day == 1
+    assert result.tzinfo is not None
+    assert result.utcoffset().total_seconds() == 0
+
+
+def test_parse_iso_utc_naive():
+    """Naive ISO-8601 (no tz) → assumed UTC."""
+
+    result = _parse_iso_utc("2024-01-01T00:00:00")
+    assert result.tzinfo is not None
+    assert result.utcoffset().total_seconds() == 0
+
+
+def test_parse_iso_utc_none():
+    """None / empty → Unix epoch (UTC)."""
+    from datetime import datetime, timezone
+
+    for val in (None, ""):
+        result = _parse_iso_utc(val)
+        assert result == datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+def test_parse_iso_utc_invalid():
+    """Unparseable string → Unix epoch (UTC)."""
+    from datetime import datetime, timezone
+
+    result = _parse_iso_utc("not-a-date")
+    assert result == datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# _parse_pr_detail
+# ---------------------------------------------------------------------------
+
+
+def test_parse_pr_detail_clean_mergeable():
+    """mergeable_state='clean', mergeable=True → mergeable=True."""
+    pr = {
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "mergeable_state": "clean",
+        "head": {"sha": "abc123"},
+        "number": 7,
+    }
+    result = _parse_pr_detail(pr)
+    assert result == {
+        "merged": False,
+        "state": "open",
+        "url": "http://pr/7",
+        "mergeable": True,
+        "mergeable_state": "clean",
+        "sha": "abc123",
+        "number": 7,
+    }
+
+
+def test_parse_pr_detail_unknown_mergeable_state():
+    """mergeable_state='unknown' → mergeable forced to None (stale value)."""
+    pr = {
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,  # stale — async computation hasn't finished
+        "mergeable_state": "unknown",
+        "head": {"sha": "abc123"},
+        "number": 7,
+    }
+    result = _parse_pr_detail(pr)
+    assert result["mergeable"] is None
+
+
+def test_parse_pr_detail_none_mergeable_state():
+    """mergeable_state=None → mergeable forced to None."""
+    pr = {
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "mergeable_state": None,
+        "head": {"sha": "abc123"},
+        "number": 7,
+    }
+    result = _parse_pr_detail(pr)
+    assert result["mergeable"] is None
+
+
+def test_parse_pr_detail_merged():
+    """Merged PR → merged=True, state=closed."""
+    pr = {
+        "merged": True,
+        "state": "closed",
+        "html_url": "http://pr/7",
+        "mergeable": None,
+        "mergeable_state": "unknown",
+        "head": {"sha": "abc123"},
+        "number": 7,
+    }
+    result = _parse_pr_detail(pr)
+    assert result["merged"] is True
+    assert result["state"] == "closed"
+
+
+# ---------------------------------------------------------------------------
+# _statuses_to_check_runs
+# ---------------------------------------------------------------------------
+
+
+def test_statuses_to_check_runs_empty():
+    """Empty statuses_data → empty list."""
+    assert _statuses_to_check_runs({}) == []
+    assert _statuses_to_check_runs({"statuses": []}) == []
+
+
+def test_statuses_to_check_runs_single_success():
+    """Single status with 'success' state → check-run dict with conclusion 'success'."""
+    data = {
+        "state": "success",
+        "statuses": [{"context": "ci/test"}],
+    }
+    runs = _statuses_to_check_runs(data)
+    assert len(runs) == 1
+    assert runs[0]["name"] == "ci/test"
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["conclusion"] == "success"
+    assert runs[0]["output"]["annotations"] == []
+
+
+def test_statuses_to_check_runs_single_pending():
+    """Single status with 'pending' state → check-run dict with conclusion None."""
+    data = {
+        "state": "pending",
+        "statuses": [{"context": "ci/test"}],
+    }
+    runs = _statuses_to_check_runs(data)
+    assert len(runs) == 1
+    assert runs[0]["status"] == "in_progress"
+    assert runs[0]["conclusion"] is None
+
+
+def test_statuses_to_check_runs_same_context_collapsed():
+    """Multiple statuses with the same context → collapsed to one entry."""
+    data = {
+        "state": "success",
+        "statuses": [
+            {"context": "ci/test", "description": "first"},
+            {"context": "ci/test", "description": "second"},
+            {"context": "ci/lint", "description": "lint"},
+        ],
+    }
+    runs = _statuses_to_check_runs(data)
+    # Two unique contexts: ci/test, ci/lint
+    assert len(runs) == 2
+    names = {r["name"] for r in runs}
+    assert names == {"ci/test", "ci/lint"}
+
+
+# ---------------------------------------------------------------------------
+# _latest_definitive_runs
+# ---------------------------------------------------------------------------
+
+
+def test_latest_definitive_runs_single():
+    """Single run → returned as-is."""
+    run = {
+        "name": "ci",
+        "started_at": "2024-01-01T00:00:00Z",
+        "status": "completed",
+        "conclusion": "success",
+    }
+    result = _latest_definitive_runs([run])
+    assert result == [run]
+
+
+def test_latest_definitive_runs_cancelled_and_success():
+    """Two runs same name: cancelled + success → only success returned."""
+    runs = [
+        {
+            "name": "ci",
+            "started_at": "2024-01-01T00:00:00Z",
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "name": "ci",
+            "started_at": "2024-01-01T01:00:00Z",
+            "status": "completed",
+            "conclusion": "success",
+        },
+    ]
+    result = _latest_definitive_runs(runs)
+    assert len(result) == 1
+    assert result[0]["conclusion"] == "success"
+
+
+def test_latest_definitive_runs_both_inconclusive():
+    """Two runs same name, both inconclusive → latest (by started_at) returned."""
+    runs = [
+        {
+            "name": "ci",
+            "started_at": "2024-01-01T00:00:00Z",
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "name": "ci",
+            "started_at": "2024-01-01T01:00:00Z",
+            "status": "in_progress",
+            "conclusion": None,
+        },
+    ]
+    result = _latest_definitive_runs(runs)
+    assert len(result) == 1
+    assert result[0]["started_at"] == "2024-01-01T01:00:00Z"
+
+
+def test_latest_definitive_runs_empty():
+    """Empty input → empty list."""
+    assert _latest_definitive_runs([]) == []
+
+
+# ---------------------------------------------------------------------------
+# _extract_annotations
+# ---------------------------------------------------------------------------
+
+
+def test_extract_annotations_success():
+    """Successful detail fetch with annotations → annotations extracted."""
+    detail_data = {
+        "output": {
+            "summary": "Build failed",
+            "text": "Lots of output",
+            "annotations": [
+                {
+                    "path": "src/app.py",
+                    "start_line": 42,
+                    "message": "syntax error",
+                    "annotation_level": "failure",
+                },
+            ],
+        },
+    }
+
+    class FakeDetailResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return detail_data
+
+    client = type(
+        "FakeClient", (), {"get": lambda self, url, headers=None: FakeDetailResponse()}
+    )()
+    cr = {"id": 123, "name": "ci/test"}
+    result = _extract_annotations(client, "https://api.github.com", "o", "r", {}, cr)
+    assert result["name"] == "ci/test"
+    assert result["summary"] == "Build failed"
+    assert len(result["annotations"]) == 1
+    assert result["annotations"][0]["path"] == "src/app.py"
+    assert result["annotations"][0]["start_line"] == 42
+
+
+def test_extract_annotations_http_error():
+    """HTTP error from detail fetch → empty result (best-effort, no exception)."""
+
+    class FakeErrorResponse:
+        status_code = 500
+
+        def raise_for_status(self):
+            raise real_httpx.HTTPStatusError(
+                "HTTP 500",
+                request=real_httpx.Request("GET", "http://x"),
+                response=self,
+            )
+
+    client = type(
+        "FakeClient", (), {"get": lambda self, url, headers=None: FakeErrorResponse()}
+    )()
+    cr = {"id": 123, "name": "ci/test"}
+    result = _extract_annotations(client, "https://api.github.com", "o", "r", {}, cr)
+    assert result == {
+        "name": "ci/test",
+        "summary": None,
+        "text": None,
+        "annotations": [],
+    }
+
+
+def test_extract_annotations_missing_output():
+    """Detail response missing 'output' key → graceful fallback."""
+    detail_data = {}  # no "output"
+
+    class FakeDetailResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return detail_data
+
+    client = type(
+        "FakeClient", (), {"get": lambda self, url, headers=None: FakeDetailResponse()}
+    )()
+    cr = {"id": 123, "name": "ci/test"}
+    result = _extract_annotations(client, "https://api.github.com", "o", "r", {}, cr)
+    assert result["name"] == "ci/test"
+    assert result["annotations"] == []
+
+
+def test_extract_annotations_long_summary_truncated():
+    """Summary > 2000 chars → truncated with ellipsis."""
+    long_summary = "x" * 2500
+    detail_data = {"output": {"summary": long_summary, "text": None, "annotations": []}}
+
+    class FakeDetailResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return detail_data
+
+    client = type(
+        "FakeClient", (), {"get": lambda self, url, headers=None: FakeDetailResponse()}
+    )()
+    cr = {"id": 123, "name": "ci/test"}
+    result = _extract_annotations(client, "https://api.github.com", "o", "r", {}, cr)
+    assert len(result["summary"]) == 2000  # 1999 + "…"
+    assert result["summary"].endswith("…")
+
+
+# ---------------------------------------------------------------------------
+# _retry_after_401
+# ---------------------------------------------------------------------------
+
+
+def test_retry_after_401_invalidates_token_and_sleeps(tmp_path, monkeypatch):
+    """_retry_after_401 calls invalidate_github_token() and sleeps 2s."""
+    import time
+
+    from robotsix_mill.forge import auth as forge_auth
+
+    forge = _forge(tmp_path)
+    invalidate_calls = []
+
+    def fake_invalidate(settings, repo_config):
+        invalidate_calls.append(1)
+
+    monkeypatch.setattr(forge_auth, "invalidate_github_token", fake_invalidate)
+    sleep_calls = []
+    monkeypatch.setattr(time, "sleep", lambda s: sleep_calls.append(s))
+
+    forge._retry_after_401()
+    assert len(invalidate_calls) == 1
+    assert sleep_calls == [2]
+
+
+# ---------------------------------------------------------------------------
+# update_branch
+# ---------------------------------------------------------------------------
+
+
+def test_update_branch_success_202(tmp_path, monkeypatch):
+    """PUT returns 202 → updated=True."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_get_pr", lambda **kw: {"number": 7, "sha": "abc"})
+
+    put_resp = _make_response(202, {}, "")
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def put(self, url, headers=None, **kwargs):
+            return put_resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {"updated": True, "reason": "update-branch accepted"}
+
+
+def test_update_branch_already_up_to_date_422(tmp_path, monkeypatch):
+    """PUT returns 422 → updated=False, already up to date."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_get_pr", lambda **kw: {"number": 7, "sha": "abc"})
+
+    put_resp = _make_response(422, {}, "already up to date")
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def put(self, url, headers=None, **kwargs):
+            return put_resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {"updated": False, "reason": "already up to date"}
+
+
+def test_update_branch_pr_not_found(tmp_path, monkeypatch):
+    """_get_pr returns None → updated=False, PR not found."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_get_pr", lambda **kw: None)
+
+    result = forge.update_branch(source_branch="feature/x")
+    assert result == {"updated": False, "reason": "PR not found"}
+
+
+def test_update_branch_http_error(tmp_path, monkeypatch):
+    """PUT returns non-202/422 → error message in reason."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge, "_get_pr", lambda **kw: {"number": 7, "sha": "abc"})
+
+    put_resp = _make_response(500, {}, "Internal Server Error")
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def put(self, url, headers=None, **kwargs):
+            return put_resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    result = forge.update_branch(source_branch="feature/x")
+    assert result["updated"] is False
+    assert "HTTP 500" in result["reason"]
+
+
+# ---------------------------------------------------------------------------
+# list_open_prs / _list_open_prs
+# ---------------------------------------------------------------------------
+
+
+def _pr_item(ref, author="alice", number=1):
+    return {
+        "head": {"ref": ref},
+        "user": {"login": author},
+        "number": number,
+        "html_url": f"http://pr/{number}",
+        "title": f"PR {number}",
+    }
+
+
+def test_list_open_prs_single_page(tmp_path, monkeypatch):
+    """Single page with 1 PR → list with 1 dict."""
+    prs = [_pr_item("feature/a")]
+    resp = _make_response(200, prs)
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    result = forge.list_open_prs()
+    assert len(result) == 1
+    assert result[0] == {
+        "branch": "feature/a",
+        "author_login": "alice",
+        "number": 1,
+        "url": "http://pr/1",
+        "title": "PR 1",
+    }
+
+
+def test_list_open_prs_empty(tmp_path, monkeypatch):
+    """Empty response → []."""
+    resp = _make_response(200, [])
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    assert forge.list_open_prs() == []
+
+
+def test_list_open_prs_multi_page(tmp_path, monkeypatch):
+    """Multi-page (>100 items) → concatenated results."""
+    page1 = [_pr_item(f"feature/{i}", number=i) for i in range(100)]
+    page2 = [_pr_item("feature/last", number=101)]
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            page = (params or {}).get("page", 1)
+            if page == 1:
+                return _make_response(200, page1)
+            return _make_response(200, page2)
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    result = forge.list_open_prs()
+    assert len(result) == 101
+    assert result[0]["branch"] == "feature/0"
+    assert result[-1]["branch"] == "feature/last"
+
+
+def test_list_open_prs_http_error(tmp_path, monkeypatch):
+    """HTTP error → [] (no exception)."""
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(500, {}, "boom")
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    assert forge.list_open_prs() == []
+
+
+def test_list_open_prs_skips_pr_without_ref(tmp_path, monkeypatch):
+    """PR with no head/ref → skipped (not included in results)."""
+    prs = [
+        {
+            "head": {},
+            "user": {"login": "alice"},
+            "number": 1,
+            "html_url": "http://pr/1",
+            "title": "no ref",
+        },
+        {
+            "head": {"ref": "feature/b"},
+            "user": {"login": "bob"},
+            "number": 2,
+            "html_url": "http://pr/2",
+            "title": "PR 2",
+        },
+    ]
+    resp = _make_response(200, prs)
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    result = forge.list_open_prs()
+    assert len(result) == 1
+    assert result[0]["branch"] == "feature/b"
+
+
+# ---------------------------------------------------------------------------
+# get_authenticated_user_login / _get_authenticated_user_login
+# ---------------------------------------------------------------------------
+
+
+def test_get_authenticated_user_login_success(tmp_path, monkeypatch):
+    """Successful GET /user → cached login string."""
+    resp = _make_response(200, {"login": "my-bot[bot]"})
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            return resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    login = forge.get_authenticated_user_login()
+    assert login == "my-bot[bot]"
+
+
+def test_get_authenticated_user_login_cache_hit(tmp_path, monkeypatch):
+    """Second call returns cached value without making another HTTP request."""
+    call_count = [0]
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            call_count[0] += 1
+            return _make_response(200, {"login": "cached-bot"})
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    login1 = forge.get_authenticated_user_login()
+    assert login1 == "cached-bot"
+    assert call_count[0] == 1
+
+    login2 = forge.get_authenticated_user_login()
+    assert login2 == "cached-bot"
+    assert call_count[0] == 1  # no second request
+
+
+def test_get_authenticated_user_login_http_error(tmp_path, monkeypatch):
+    """HTTP error → '' (no exception raised)."""
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            return _make_response(500, {}, "boom")
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    login = forge.get_authenticated_user_login()
+    assert login == ""
+
+
+def test_get_authenticated_user_login_exception(tmp_path, monkeypatch):
+    """Exception in _get_authenticated_user_login → cached as ''."""
+    # Force the _get_authenticated_user_login to raise.
+    monkeypatch.setattr(
+        GitHubForge,
+        "_get_authenticated_user_login",
+        lambda self: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    forge = _forge(tmp_path)
+    login = forge.get_authenticated_user_login()
+    assert login == ""
+
+    # Cache hit — should still be ''
+    login2 = forge.get_authenticated_user_login()
+    assert login2 == ""
