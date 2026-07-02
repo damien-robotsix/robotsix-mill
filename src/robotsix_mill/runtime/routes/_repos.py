@@ -28,6 +28,22 @@ router = APIRouter(tags=["Repos"])
 log = logging.getLogger(__name__)
 
 
+def _sanitize_log_value(value: str) -> str:
+    """Replace newlines to prevent log-forging attacks."""
+    return value.replace("\n", " ").replace("\r", " ")
+
+
+def _resolve_overlay_path(data_dir: str | Path) -> Path:
+    """Resolve ``registered_repos.yaml`` within *data_dir*, raising on escape."""
+    root = Path(os.path.realpath(data_dir))
+    resolved = Path(os.path.realpath(root / "registered_repos.yaml"))
+    if not resolved.is_relative_to(root):
+        raise ValueError(
+            f"Path escapes data directory: {resolved} is not within {root}"
+        )
+    return resolved
+
+
 class RepoRegistration(BaseModel):
     """Request body for POST /repos."""
 
@@ -100,12 +116,7 @@ def register_repo(
         )
 
     # Write the overlay YAML.
-    data_dir = Path(os.path.realpath(settings.data_dir))
-    overlay_path = Path(os.path.realpath(data_dir / "registered_repos.yaml"))
-    if not overlay_path.is_relative_to(data_dir):
-        raise ValueError(
-            f"Path escapes data directory: {overlay_path} is not within {data_dir}"
-        )
+    overlay_path = _resolve_overlay_path(settings.data_dir)
     if overlay_path.exists():
         with open(overlay_path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
@@ -168,8 +179,8 @@ def register_repo(
 
     log.info(
         "Registered repo %r (board %r) via runtime overlay",
-        body.repo_id,
-        effective_board_id,
+        _sanitize_log_value(body.repo_id),
+        _sanitize_log_value(effective_board_id),
     )
 
     return RepoRegistrationResult(
