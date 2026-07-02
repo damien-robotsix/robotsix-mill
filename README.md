@@ -10,6 +10,8 @@ immediately. The only time it touches GitHub/GitLab is the final
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+This repo follows the [robotsix stack standards](https://github.com/damien-robotsix/robotsix-standards).
+
 ## What is robotsix-mill?
 
 robotsix-mill is a **self-contained, LLM-driven ticket-to-merge-request
