@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix survey agent prompt: replace references to non-existent `web_search`/`web_fetch` tools with correct `ask_web_knowledge` gateway, matching the agent's actual tool set.
 - Refine stage: detect implementation-ready specs (drafts with file paths
   paired with fenced code blocks) and run a cheap deterministic
   validation pass (file existence, YAML/Python syntax, forbidden

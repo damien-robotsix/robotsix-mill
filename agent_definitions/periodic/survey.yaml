@@ -169,9 +169,9 @@ system_prompt: |
 
   Hard limits:
   - AT MOST 5 web page fetches and 5 web searches TOTAL across the
-    entire run (enforced by tool-level caps). Budget your web
-    usage carefully — once the caps are exhausted, web_search and
-    web_fetch will return sentinel errors and you must proceed with
-    what you have.
+    entire run, enforced inside `ask_web_knowledge` (your only
+    gateway to the internet). Budget your web usage carefully —
+    once the caps are exhausted, `ask_web_knowledge` will return
+    sentinel errors and you must proceed with what you have.
 
   Return the full, updated memory document in `updated_memory`.
