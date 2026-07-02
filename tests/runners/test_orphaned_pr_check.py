@@ -85,7 +85,8 @@ def _mock_forge(
         if pr_files is not None
         else [{"path": "a.py", "additions": 5, "deletions": 3}]
     )
-    forge.list_open_prs.return_value = open_prs if open_prs is not None else []
+    if open_prs is not None:
+        forge.list_open_prs.return_value = open_prs
     forge.get_authenticated_user_login.return_value = bot_login
     return forge
 
@@ -837,7 +838,14 @@ class TestIdempotentFileTicket:
         )
         # First call: no existing tickets → file
         # Second call: existing ticket → dedup
-        svc.recent_proposals_for.side_effect = [[], [], [existing], [existing]]
+        svc.recent_proposals_for.side_effect = [
+            [],
+            [],
+            [],
+            [existing],
+            [existing],
+            [existing],
+        ]
 
         # First pass
         result1 = run_orphaned_pr_check_pass(repo_config=repo)

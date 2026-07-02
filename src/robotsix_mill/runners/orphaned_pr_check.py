@@ -629,8 +629,10 @@ def _file_foreign_ticket(
 ) -> None:
     """File a tracking ticket for a foreign (non-board) open PR.
 
-    Uses a deterministic title so the mill's BoardManager deduplicates
-    against existing open tickets with the same title.
+    Dedup is handled by the caller (:func:`_process_foreign_prs`) before
+    this function is invoked — the caller checks ``all_orphan_titles``
+    against the deterministic title and skips creation when a match is
+    found.
     """
     number = pr.get("number")
     pr_label = f"#{number}" if number is not None else "(number unknown)"
