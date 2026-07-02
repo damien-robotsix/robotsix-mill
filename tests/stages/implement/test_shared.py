@@ -626,3 +626,35 @@ class TestIsSpecExactEdits:
         repo.mkdir()
         # Passing a non-string should not crash.
         assert _is_spec_exact_edits(None, repo) is False  # type: ignore[arg-type]
+
+    def test_path_traversal_blocked(self, tmp_path: Path) -> None:
+        """Paths containing ../ that resolve outside the repo are blocked."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "src").mkdir(parents=True)
+        (repo / "src" / "a.py").write_text("# a")
+
+        # Create a file outside the repo that would match if not guarded.
+        outside = tmp_path / "outside.py"
+        outside.write_text("# outside")
+
+        spec = """### `../outside.py`
+
+```python
+# malicious
+```
+"""
+        assert _is_spec_exact_edits(spec, repo) is False
+
+    def test_path_traversal_dot_dot_slash_blocked(self, tmp_path: Path) -> None:
+        """../../etc/passwd style paths are blocked."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        spec = """### `../../etc/passwd`
+
+```text
+malicious
+```
+"""
+        assert _is_spec_exact_edits(spec, repo) is False

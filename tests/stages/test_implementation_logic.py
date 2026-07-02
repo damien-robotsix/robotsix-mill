@@ -14,8 +14,10 @@ import pytest
 
 from robotsix_mill.agents.coding import AgentBudgetError, AgentRunError
 from robotsix_mill.core.states import State
+from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement._shared import (
     _ImplementContext,
+    _SinglePassResult,
 )
 from robotsix_mill.stages.implement.core import ImplementStage
 
@@ -39,7 +41,9 @@ def _ic(**overrides) -> _ImplementContext:
 
 
 def _simple_namespace(**kw):
-    return SimpleNamespace(**kw)
+    defaults = {"max_fix_iterations": 3}
+    defaults.update(kw)
+    return SimpleNamespace(**defaults)
 
 
 # The assembled ``ImplementStage`` class has all mixin methods resolved
@@ -201,6 +205,7 @@ class TestSelectAgentLevel:
 
 class FakeTicket:
     id = "test-ticket-1"
+    board_id = "test-board"
     implement_cycles = 0
 
 
@@ -773,3 +778,618 @@ class TestPersistPassArtifacts:
         assert summary_path.exists()
         assert summary_path.read_text() == "did the work"
         assert updated_prev_summary == "did the work"
+
+
+# ---------------------------------------------------------------------------
+# 7. _find_insertion_point
+# ---------------------------------------------------------------------------
+
+
+class TestFindInsertionPoint:
+    """Tests for ``_find_insertion_point`` — insertion-point hint parsing."""
+
+    @staticmethod
+    def _call(spec: str, code: str, file_lines: list[str]) -> int | None:
+        return _Stage._find_insertion_point(spec, code, file_lines)
+
+    # -- after imports ---------------------------------------------------
+
+    def test_after_imports(self):
+        """'after imports' → after last import line."""
+        spec = """After the imports, add:
+
+```python
+NEW_CONSTANT = 42
+```
+"""
+        code = "NEW_CONSTANT = 42\n"
+        file_lines = [
+            "import os\n",
+            "import sys\n",
+            "\n",
+            "x = 1\n",
+        ]
+        result = self._call(spec, code, file_lines)
+        assert result == 2  # after ``import sys``
+
+    def test_after_imports_no_imports_found(self):
+        """'after imports' but no imports in file → insert at top."""
+        spec = """After the imports, insert:
+
+```python
+#!/usr/bin/env python3
+```
+"""
+        code = "#!/usr/bin/env python3\n"
+        file_lines = ["x = 1\n", "y = 2\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 0
+
+    # -- after line N ----------------------------------------------------
+
+    def test_after_line_n(self):
+        spec = """After line 2, add a blank line.
+
+```python
+
+```
+"""
+        code = "\n"
+        file_lines = ["a\n", "b\n", "c\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 2
+
+    def test_after_line_n_clamped(self):
+        """'after line 100' clamps to file length."""
+        spec = """After line 100:
+
+```python
+# trailing
+```
+"""
+        code = "# trailing\n"
+        file_lines = ["a\n", "b\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 2
+
+    # -- before line N ---------------------------------------------------
+
+    def test_before_line_n(self):
+        spec = """Before line 3:
+
+```python
+# header
+```
+"""
+        code = "# header\n"
+        file_lines = ["a\n", "b\n", "c\n", "d\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 2  # 0-based index before line 3
+
+    def test_before_line_n_clamped(self):
+        """'before line 1' clamps to 0."""
+        spec = """Before line 1:
+
+```python
+# top
+```
+"""
+        code = "# top\n"
+        file_lines = ["a\n", "b\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 0
+
+    # -- end of file -----------------------------------------------------
+
+    def test_at_the_end(self):
+        spec = """At the end of the file:
+
+```python
+# footer
+```
+"""
+        code = "# footer\n"
+        file_lines = ["a\n", "b\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 2
+
+    def test_end_of_file(self):
+        spec = """Append this at the end of file:
+
+```python
+# END
+```
+"""
+        code = "# END\n"
+        file_lines = ["a\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 1
+
+    def test_append(self):
+        spec = """Append:
+
+```python
+# appended
+```
+"""
+        code = "# appended\n"
+        file_lines = ["a\n"]
+        result = self._call(spec, code, file_lines)
+        assert result == 1
+
+    # -- before class / def ----------------------------------------------
+
+    def test_before_class(self):
+        spec = """Before the class:
+
+```python
+@dataclass
+```
+"""
+        code = "@dataclass\n"
+        file_lines = [
+            "import os\n",
+            "\n",
+            "class Foo:\n",
+            "    pass\n",
+        ]
+        result = self._call(spec, code, file_lines)
+        assert result == 2  # index of ``class Foo:``
+
+    def test_before_class_not_found(self):
+        """'before class' with no class in file → None."""
+        spec = """Before the class:
+
+```python
+x = 1
+```
+"""
+        code = "x = 1\n"
+        file_lines = ["import os\n", "\n", "y = 2\n"]
+        result = self._call(spec, code, file_lines)
+        assert result is None
+
+    def test_before_def(self):
+        spec = """Before the function:
+
+```python
+@lru_cache
+```
+"""
+        code = "@lru_cache\n"
+        file_lines = [
+            "import os\n",
+            "\n",
+            "def foo():\n",
+            "    pass\n",
+        ]
+        result = self._call(spec, code, file_lines)
+        assert result == 2  # index of ``def foo():``
+
+    def test_before_def_not_found(self):
+        """'before def' with no def in file → None."""
+        spec = """Before the function:
+
+```python
+x = 1
+```
+"""
+        code = "x = 1\n"
+        file_lines = ["import os\n", "\n", "y = 2\n"]
+        result = self._call(spec, code, file_lines)
+        assert result is None
+
+    # -- no hint ---------------------------------------------------------
+
+    def test_no_hint_returns_none(self):
+        """No insertion hint in preceding context → None."""
+        spec = """Just some description.
+
+```python
+x = 1
+```
+"""
+        code = "x = 1\n"
+        file_lines = ["a\n", "b\n"]
+        result = self._call(spec, code, file_lines)
+        assert result is None
+
+    def test_code_not_found_in_spec(self):
+        """When the code block isn't found in the spec → None."""
+        spec = "No code block here at all."
+        code = "x = 1\n"
+        file_lines = ["a\n"]
+        result = self._call(spec, code, file_lines)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 8. _select_agent_level — retry-loop sentinel
+# ---------------------------------------------------------------------------
+
+
+class TestSelectAgentLevelRetrySentinel:
+    """Tests for the sentinel guard that prevents infinite retry loops."""
+
+    @staticmethod
+    def _call(ic, repo_dir=None):
+        if repo_dir is None:
+            repo_dir = Path("/fake/repo")
+        return _Stage._select_agent_level(ic, _simple_namespace(), repo_dir, "main")
+
+    def test_sentinel_returns_none(self, tmp_path):
+        """When previous attempt was a failed spec-exact bypass, return None."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        (repo_dir / "src" / "m.py").write_text("# real")
+
+        spec = """### `src/m.py`
+
+```python
+# code
+```
+"""
+        ic = _ic(
+            spec=spec,
+            previous_attempt_summary="spec-exact bypass: failed — 3 block(s) unapplied",
+        )
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result is None  # Falls through to LLM, not -1
+
+    def test_successful_spec_exact_still_returns_neg1(self, tmp_path):
+        """A successful spec-exact edit summary does NOT trigger the sentinel."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        (repo_dir / "src" / "m.py").write_text("# real")
+
+        spec = """### `src/m.py`
+
+```python
+# code
+```
+"""
+        ic = _ic(
+            spec=spec,
+            previous_attempt_summary="spec-exact edit: 3 file(s) changed — src/a.py, src/b.py, src/c.py",
+        )
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result == -1  # Still enters spec-exact path
+
+
+# ---------------------------------------------------------------------------
+# 9. _handle_spec_exact_edits — strategy application and failure paths
+# ---------------------------------------------------------------------------
+
+
+class TestHandleSpecExactEdits:
+    """Tests for ``_handle_spec_exact_edits`` covering all three strategies
+    plus the no-edit and guardrail-continue paths."""
+
+    @staticmethod
+    def _make_dummy_ctx():
+        """Return a minimal StageContext with a mock service."""
+        svc = SimpleNamespace()
+        ws = SimpleNamespace()
+        ws.artifacts_dir = Path("/tmp/artifacts")
+        svc.workspace = lambda ticket: ws
+        svc.add_step_event = lambda tid, msg: None
+        svc.set_implement_cycles = lambda tid, n: None
+        return SimpleNamespace(service=svc, repo_config=None)
+
+    @staticmethod
+    def _patch_persist(monkeypatch):
+        """Prevent ``_persist_pass_artifacts`` from touching the real fs."""
+        monkeypatch.setattr(
+            _Stage,
+            "_persist_pass_artifacts",
+            lambda ws, ticket, ic, summary, ref_files, updated_memory, settings, memory_board_id: (
+                ref_files,
+                summary,
+            ),
+        )
+
+    @staticmethod
+    def _patch_guardrail_proceed(monkeypatch):
+        """Make ``_run_scope_guardrail`` return action='skip_iteration'."""
+        from robotsix_mill.stages.implement._shared import _ScopeGuardrailResult
+
+        monkeypatch.setattr(
+            _Stage,
+            "_run_scope_guardrail",
+            lambda *a, **kw: _ScopeGuardrailResult(action="skip_iteration"),
+        )
+
+    @staticmethod
+    def _patch_evaluate(monkeypatch):
+        """Make ``_evaluate_test_results`` return a proceed result."""
+        monkeypatch.setattr(
+            _Stage,
+            "_evaluate_test_results",
+            lambda *a, **kw: _SinglePassResult(
+                next_action="proceed",
+                outcome=Outcome(State.CODE_REVIEW, "ok"),
+            ),
+        )
+
+    def test_unified_diff_strategy(self, tmp_path, monkeypatch):
+        """A spec code block that looks like a unified diff is applied via patch."""
+        import subprocess as sp
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        target = repo_dir / "src" / "f.py"
+        target.write_text("line1\nline2\nline3\n")
+
+        spec = """### `src/f.py`
+
+```diff
+--- src/f.py
++++ src/f.py
+@@ -1,3 +1,3 @@
+ line1
+-line2
++line2-changed
+ line3
+```
+"""
+        self._patch_persist(monkeypatch)
+        self._patch_guardrail_proceed(monkeypatch)
+        self._patch_evaluate(monkeypatch)
+
+        # Mock subprocess.run so ``patch`` (which may not be available
+        # in the test sandbox) returns the expected patched content.
+        original_run = sp.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if cmd[0] == "patch":
+                return sp.CompletedProcess(
+                    args=cmd,
+                    returncode=0,
+                    stdout="line1\nline2-changed\nline3\n",
+                )
+            return original_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(sp, "run", fake_run)
+
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "proceed"
+        content = target.read_text()
+        assert "line2-changed" in content
+
+    def test_context_aware_replacement(self, tmp_path, monkeypatch):
+        """A code block matching file content is replaced in-place."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        target = repo_dir / "src" / "f.py"
+        target.write_text("import os\n\ndef foo():\n    return 1\n")
+
+        spec = """### `src/f.py`
+
+```python
+import os
+
+def foo():
+    return 42
+```
+"""
+        self._patch_persist(monkeypatch)
+        self._patch_guardrail_proceed(monkeypatch)
+        self._patch_evaluate(monkeypatch)
+
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "proceed"
+        content = target.read_text()
+        assert "return 42" in content
+
+    def test_insertion_point_hints(self, tmp_path, monkeypatch):
+        """Insertion via 'after imports' hint."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        target = repo_dir / "src" / "f.py"
+        target.write_text("import os\nimport sys\n\nx = 1\n")
+
+        spec = """### `src/f.py`
+
+After the imports, insert:
+
+```python
+from pathlib import Path
+```
+"""
+        self._patch_persist(monkeypatch)
+        self._patch_guardrail_proceed(monkeypatch)
+        self._patch_evaluate(monkeypatch)
+
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "proceed"
+        content = target.read_text()
+        assert "from pathlib import Path" in content
+
+    def test_no_edits_fallthrough(self, tmp_path, monkeypatch):
+        """When no strategy applies, the retry result includes a sentinel ic."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        target = repo_dir / "src" / "f.py"
+        target.write_text("completely different content\n")
+
+        spec = """### `src/f.py`
+
+No hints, no diff, no matching context.
+
+```python
+x = 999
+```
+"""
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "retry"
+        assert result.ic is not None
+        assert result.ic.previous_attempt_summary is not None
+        assert result.ic.previous_attempt_summary.startswith(
+            "spec-exact bypass: failed"
+        )
+
+    def test_empty_blocks(self, tmp_path, monkeypatch):
+        """Zero code blocks → no edits applied, returns sentinel retry."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        spec = "No code blocks at all."
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "retry"
+        assert result.ic is not None
+        assert result.ic.previous_attempt_summary.startswith(
+            "spec-exact bypass: failed"
+        )
+
+    def test_partial_success(self, tmp_path, monkeypatch):
+        """One file succeeds, another fails → proceeds with summary noting skip."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        (repo_dir / "src" / "a.py").write_text("import os\n\nx = 1\n")
+        # src/b.py does NOT exist.
+
+        spec = """### `src/a.py`
+
+```python
+import os
+
+x = 42
+```
+
+### `src/b.py`
+
+```python
+# missing file
+```
+"""
+        self._patch_persist(monkeypatch)
+        self._patch_guardrail_proceed(monkeypatch)
+        self._patch_evaluate(monkeypatch)
+
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "proceed"
+
+    def test_guardrail_continue(self, tmp_path, monkeypatch):
+        """When the guardrail returns 'continue', we retry with updated ic."""
+        from robotsix_mill.stages.implement._shared import _ScopeGuardrailResult
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        target = repo_dir / "src" / "f.py"
+        target.write_text("import os\n\nx = 1\n")
+
+        spec = """### `src/f.py`
+
+```python
+import os
+
+x = 42
+```
+"""
+        self._patch_persist(monkeypatch)
+        # Guardrail returns "continue" → retry with feedback.
+        monkeypatch.setattr(
+            _Stage,
+            "_run_scope_guardrail",
+            lambda *a, **kw: _ScopeGuardrailResult(
+                action="continue",
+                feedback="scope guardrail: some files out of scope",
+            ),
+        )
+
+        ic = _ic(spec=spec)
+        ctx = self._make_dummy_ctx()
+
+        result = _Stage._handle_spec_exact_edits(
+            ctx,
+            FakeTicket(),
+            repo_dir,
+            "main",
+            _simple_namespace(),
+            ic,
+            "main",
+            None,
+        )
+        assert result.next_action == "retry"
+        assert result.ic is not None
+        assert result.ic.feedback == "scope guardrail: some files out of scope"

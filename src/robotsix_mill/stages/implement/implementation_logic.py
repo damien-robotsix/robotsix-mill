@@ -75,6 +75,13 @@ class ImplementationLogicMixin(_ImplementStageBase):
         if _is_rename_only_change(repo_dir, target_branch):
             return 0
         if _is_spec_exact_edits(ic.spec, repo_dir):
+            # Sentinel check: if a prior spec-exact attempt already
+            # failed (no edits applied), fall through to the LLM path
+            # instead of re-entering the same doomed deterministic path.
+            if ic.previous_attempt_summary and ic.previous_attempt_summary.startswith(
+                "spec-exact bypass: failed"
+            ):
+                return None
             return -1
         return None
 
@@ -890,9 +897,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
             # --- Strategy 3: insertion via context hints ------------------
             # Look for insertion-point hints in the lines preceding the
             # code block in the spec.
-            insertion_point = cls._find_insertion_point(
-                ic.spec, file_path, code, file_lines
-            )
+            insertion_point = cls._find_insertion_point(ic.spec, code, file_lines)
             if insertion_point is not None:
                 new_lines = (
                     file_lines[:insertion_point]
@@ -909,16 +914,34 @@ class ImplementationLogicMixin(_ImplementStageBase):
 
         if not applied:
             # Nothing was applied — fall through to LLM path via retry.
+            # Include a sentinel ``_ImplementContext`` so
+            # ``_select_agent_level`` detects the prior failed attempt
+            # and returns ``None`` (→ LLM path) instead of ``-1``,
+            # breaking what would otherwise be an infinite retry loop
+            # (spec is static, so ``_is_spec_exact_edits`` keeps
+            # returning ``True`` across retries).
             log.warning(
                 "Spec-exact bypass: no edits applied (%d block(s) failed: %s)",
                 len(failed),
                 ", ".join(failed[:5]),
+            )
+            fail_summary = (
+                f"spec-exact bypass: failed — {len(failed)} block(s) unapplied"
             )
             return _SinglePassResult(
                 next_action="retry",
                 feedback=(
                     "Spec-exact bypass: could not apply any edits. "
                     + f"Failed: {', '.join(failed[:3])}"
+                ),
+                ic=_ImplementContext(
+                    spec=ic.spec,
+                    memory_text=ic.memory_text,
+                    reference_files=ic.reference_files,
+                    file_map=ic.file_map,
+                    feedback=ic.feedback,
+                    previous_attempt_summary=fail_summary,
+                    open_thread_ids=ic.open_thread_ids,
                 ),
             )
 
@@ -1007,7 +1030,6 @@ class ImplementationLogicMixin(_ImplementStageBase):
     @staticmethod
     def _find_insertion_point(
         spec: str,
-        file_path: str,
         code: str,
         file_lines: list[str],
     ) -> int | None:

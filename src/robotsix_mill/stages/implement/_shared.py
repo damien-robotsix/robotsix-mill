@@ -432,12 +432,6 @@ def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
 # Group 2: code content
 _FENCED_CODE_BLOCK_RE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
 
-# Regex to extract a file path from a line — looks for patterns like
-# ``src/robotsix_mill/cli/__init__.py`` or ``path/to/file.py``.
-_FILE_PATH_RE = re.compile(
-    r"(?:(?:^|\s)[#/]{1,2}\s*File:\s*)?(\S+\.\w{1,10})(?:\s|$|\))"
-)
-
 # Common source/test file extensions we expect in code blocks.
 _SOURCE_EXTENSIONS = frozenset(
     {".py", ".js", ".ts", ".css", ".html", ".yaml", ".yml", ".toml", ".json", ".md"}
@@ -447,7 +441,7 @@ _SOURCE_EXTENSIONS = frozenset(
 def _parse_spec_code_blocks(spec: str) -> list[tuple[str, str, str]]:
     """Parse fenced code blocks from *spec* and return (file_path, info_string, code).
 
-    For each code block, looks at up to 3 lines of preceding context for
+    For each code block, looks at up to 5 lines of preceding context for
     a file path annotation (``# File:`` comment, a heading with a path,
     or a plain path-like string).  Returns only blocks where a file path
     could be determined.
@@ -521,7 +515,10 @@ def _is_spec_exact_edits(spec: str, repo_dir: Path) -> bool:
         return False
 
     for file_path, _info, _code in blocks:
-        if not (repo_dir / file_path).is_file():
+        resolved = (repo_dir / file_path).resolve()
+        if not resolved.is_relative_to(repo_dir.resolve()):
+            return False
+        if not resolved.is_file():
             return False
 
     return True
