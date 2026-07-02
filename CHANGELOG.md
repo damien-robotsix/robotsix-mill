@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Attempt to forward `max_tokens` to the Claude SDK agent build path, falling back gracefully with a warning when the provider doesn't accept it. This caps L3 (Claude) agent output at the per-agent `max_tokens` setting (e.g. 8192 for refine) instead of producing unbounded output.
+- Lower `refine_findings_downgrade_min_chars` from 200 to 150 to capture borderline traces where triage findings are terse but sufficient for sonnet-level refinement (~$0.03 vs ~$0.90 Opus call).
 - Remove dead backward-compat function ``build_resume_message_history`` and its re-exports; all callers now use ``build_compact_resume_message_history`` instead.
 - Fix Docker build: copy `agent_definitions/` and `expert_definitions/` into the builder stage so hatch can find them for `force-include`.
 - Fixed `is` → `==` comparison against `SourceKind.ORPHANED_PR_CHECK` in `_check_pr_baseline` (ci_poll.py). `Ticket.source` is a plain `str` from the DB, so identity comparison always evaluated to `False`, making the tracker-ticket fallback dead code.
