@@ -1,6 +1,10 @@
 ## 0.0.0 (unreleased)
 
 - Fix survey agent prompt: replace references to non-existent `web_search`/`web_fetch` tools with correct `ask_web_knowledge` gateway, matching the agent's actual tool set.
+- `parallel_explore` now pre-filters questions via `git grep` before
+  spawning the scout sub-agent, avoiding the ~5k-token system prompt
+  when a simple grep can answer. Batch size is capped at 5 questions
+  per call to bound worst-case input context.
 - Refine stage: detect implementation-ready specs (drafts with file paths
   paired with fenced code blocks) and run a cheap deterministic
   validation pass (file existence, YAML/Python syntax, forbidden

@@ -95,12 +95,12 @@ def test_parallel_explore_batches_into_single_call(tmp_path, monkeypatch):
 
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = explore.make_parallel_explore_tool(s, tmp_path)
-    asyncio.run(tool([f"q{i}" for i in range(6)]))
-    # Exactly one call for all six questions (batched).
+    asyncio.run(tool([f"q{i}" for i in range(5)]))
+    # Exactly one call for all five questions (batched).
     assert seen["calls"] == 1
     # The single call's prompt contains every question.
     prompt = seen["questions"][0]
-    for i in range(6):
+    for i in range(5):
         assert f"q{i}" in prompt
 
 
@@ -128,6 +128,121 @@ def test_parallel_explore_empty_questions(tmp_path):
     s = _settings(tmp_path)
     tool = explore.make_parallel_explore_tool(s, tmp_path)
     assert "no questions" in asyncio.run(tool([]))
+
+
+def test_parallel_explore_batch_cap_rejects_over_limit(tmp_path, monkeypatch):
+    """More than _PARALLEL_EXPLORE_BATCH_CAP questions returns an
+    error asking the caller to split the batch."""
+    s = _settings(tmp_path)
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        return "should-not-be-called"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+    cap = explore._PARALLEL_EXPLORE_BATCH_CAP
+    out = asyncio.run(tool([f"q{i}" for i in range(cap + 1)]))
+    assert "at most" in out
+    assert str(cap) in out
+    assert "Split into smaller batches" in out
+    assert "should-not-be-called" not in out
+
+
+def test_parallel_explore_grep_prefilter_short_circuits(tmp_path, monkeypatch):
+    """When git grep finds ≤ _GREP_PREFILTER_MAX_LINES matches for a
+    question, the answer is returned directly — no scout call."""
+    s = _settings(tmp_path)
+
+    # Create a real git repo with a file containing a known term.
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=str(tmp_path), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+    (tmp_path / "sample.py").write_text("def migrate_config(x):\n    return x + 1\n")
+    subprocess.run(
+        ["git", "add", "sample.py"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+
+    seen = {"calls": 0}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        seen["calls"] += 1
+        return "scout-answer"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+
+    # Question with a quoted term that grep can find.
+    out = asyncio.run(tool(["where is 'migrate_config' defined?"]))
+    assert "grep pre-filter" in out
+    assert "migrate_config" in out
+    # The scout was never called.
+    assert seen["calls"] == 0
+
+
+def test_parallel_explore_grep_prefilter_falls_through_on_no_match(
+    tmp_path,
+    monkeypatch,
+):
+    """When git grep finds nothing, the question falls through to the
+    full scout."""
+    s = _settings(tmp_path)
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=str(tmp_path), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+    # Create an empty commit so git grep works (needs a valid HEAD).
+    subprocess.run(
+        ["git", "commit", "-m", "init", "--allow-empty"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+
+    seen = {"calls": 0}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        seen["calls"] += 1
+        return "scout-answer"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+
+    out = asyncio.run(tool(["where is 'nonexistent_symbol' defined?"]))
+    assert "scout-answer" in out
+    assert "grep pre-filter" not in out
+    assert seen["calls"] == 1
 
 
 def test_system_prompt_forbids_whole_file_shell_dumps():
