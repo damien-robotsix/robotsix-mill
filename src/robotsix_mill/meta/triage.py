@@ -8,22 +8,17 @@ only those repos (see :mod:`robotsix_mill.meta.workspace`).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import yaml as _yaml
 from pydantic import BaseModel, Field
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings, get_repos_config
 from ..agents.prompt_blocks import section
 
 log = logging.getLogger("robotsix_mill.meta.triage")
 
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "agent_definitions"
-    / "pipeline"
-    / "meta_triage.yaml"
-)
+_SYSPROMPT_PATH = agent_definitions_dir() / "pipeline" / "meta_triage.yaml"
 # Re-exported for tests (loaded from YAML without env-var resolution).
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 

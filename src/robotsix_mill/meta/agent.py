@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 
 # ---------------------------------------------------------------------------
@@ -96,9 +97,7 @@ def _available_periodic_catalog() -> str:
     """
     from ..agents.periodic_loader import _BUILTIN_KINDS
 
-    defs_dir = (
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "periodic"
-    )
+    defs_dir = agent_definitions_dir() / "periodic"
     lines: list[str] = []
     for name, kind in _BUILTIN_KINDS.items():
         if kind not in _PER_REPO_PERIODIC_KINDS:

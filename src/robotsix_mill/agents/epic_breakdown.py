@@ -10,13 +10,13 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 import yaml as _yaml
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from .prerequisite import (  # cross-repo prerequisite parsing
     _IMPORT_RE,
@@ -31,11 +31,7 @@ log = logging.getLogger("robotsix_mill.agents.epic_breakdown")
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "agent_definitions"
-    / "epic_breakdown.yaml"
-)
+_SYSPROMPT_PATH = agent_definitions_dir() / "epic_breakdown.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 # A decomposition child is an *init-repo* action when it creates /

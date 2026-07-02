@@ -238,29 +238,6 @@ FROM base AS production
 # pyproject.toml.
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Agent-definition YAMLs (agent_definitions/) live at the REPO ROOT, not
-# inside the package. Every loader resolves them relative to the installed
-# module, e.g. refining.py does
-#   Path(__file__).parent.parent.parent.parent / "agent_definitions" / "refine.yaml"
-# For the non-editable site-packages install used here that resolves to
-# site-packages' PARENT — /usr/local/lib/python3.14/agent_definitions — so the
-# files must live there. The `dev` stage gets them for free via `COPY . /app`
-# plus an editable install (imports from /app/src → /app/agent_definitions);
-# production has neither. Without this copy the image crashes at import time:
-#   FileNotFoundError: .../agent_definitions/refine.yaml
-# (refining.py loads its system prompt at module import, so it fails on startup).
-COPY agent_definitions /usr/local/lib/python3.14/agent_definitions
-
-# Same repo-root-relative access pattern for other files read at runtime:
-#   - expert_definitions/ — expert_manager.py resolves it via parent×4 and
-#     fails fast at startup when expert routing is used.
-#   - pyproject.toml — runtime/api.py:create_app() reads it (parent×4) for the
-#     FastAPI title/version/description at serve time; missing it crash-loops
-#     the container with FileNotFoundError: .../pyproject.toml.
-# Both must live at the site-packages parent for the non-editable install.
-COPY expert_definitions /usr/local/lib/python3.14/expert_definitions
-COPY pyproject.toml /usr/local/lib/python3.14/pyproject.toml
-
 # central-deploy support: the mill now reads a SINGLE config file,
 # /app/config/config.yaml, which central-deploy writes into the
 # mill-config named volume (every non-secret knob plus a top-level

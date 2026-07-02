@@ -7,7 +7,7 @@ picks it up immediately and chains it through the pipeline.
 
 from __future__ import annotations
 
-import tomllib
+from importlib.metadata import metadata as _pkg_metadata
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -44,17 +44,14 @@ def create_app(
     setup_logging()
     settings = settings or Settings()
 
-    _pyproject = tomllib.loads(
-        (Path(__file__).parent.parent.parent.parent / "pyproject.toml").read_text()
-    )
-    _project = _pyproject["project"]
+    _m = _pkg_metadata("robotsix-mill")
 
     app = FastAPI(
         title="robotsix-mill",
-        version=_project["version"],
-        description=_project["description"],
+        version=_m["Version"],
+        description=_m["Summary"],
         contact={
-            "name": _project["authors"][0]["name"],
+            "name": _m["Author"] or "Damien Robotsix",
             "url": "https://github.com/damien-robotsix/robotsix-mill",
         },
         license_info={

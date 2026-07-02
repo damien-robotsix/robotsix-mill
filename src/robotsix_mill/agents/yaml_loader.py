@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.duration import parse_duration
+from .._resources import agent_definitions_dir
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -148,16 +149,8 @@ def load_periodic_agent_definition(
         override = Path(repo_dir) / ".robotsix-mill" / "agents" / f"{name}.yaml"
         if override.is_file():
             return load_agent_definition(override)
-    builtin = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{name}.yaml"
-    )
+    builtin = agent_definitions_dir() / "periodic" / f"{name}.yaml"
     return load_agent_definition(builtin)
-
-
-_ROOT = Path(__file__).parent.parent.parent.parent
 
 
 def load_and_run_agent(
@@ -209,7 +202,7 @@ def load_and_run_agent(
     from .retry import run_agent
 
     definition = load_agent_definition(
-        _ROOT / "agent_definitions" / f"{definition_name}.yaml"
+        agent_definitions_dir() / f"{definition_name}.yaml"
     )
     # Allow callers to format the definition's system_prompt template with
     # runtime values (e.g. repo_dir, branch, target) without loading the

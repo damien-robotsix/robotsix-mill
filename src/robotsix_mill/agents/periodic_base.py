@@ -15,6 +15,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 
 # Uniform verification gate appended to every periodic detector's prompt.
@@ -71,12 +72,7 @@ def load_periodic_system_prompt(name: str) -> str:
     """
     import yaml
 
-    path = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{name}.yaml"
-    )
+    path = agent_definitions_dir() / "periodic" / f"{name}.yaml"
     return yaml.safe_load(path.read_text())["system_prompt"]
 
 
@@ -257,12 +253,7 @@ def run_periodic_agent(
     else:
         from .yaml_loader import load_agent_definition
 
-        yaml_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "agent_definitions"
-            / "periodic"
-            / f"{definition_name}.yaml"
-        )
+        yaml_path = agent_definitions_dir() / "periodic" / f"{definition_name}.yaml"
         definition = load_agent_definition(yaml_path)
 
     # ------------------------------------------------------------------

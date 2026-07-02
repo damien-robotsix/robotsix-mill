@@ -35,6 +35,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..core.duration import parse_duration
 from .overlays import apply_overlay
 from .yaml_loader import AgentDefinition, load_agent_definition
@@ -252,12 +253,7 @@ _NON_MERGE_FIELDS = frozenset({"name", "prompt_overlay", "system_prompt", "inter
 
 def _builtin_definition(name: str) -> AgentDefinition:
     """Load the shipped ``agent_definitions/periodic/<name>.yaml``."""
-    builtin = (
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "periodic"
-        / f"{name}.yaml"
-    )
+    builtin = agent_definitions_dir() / "periodic" / f"{name}.yaml"
     return load_agent_definition(builtin)
 
 

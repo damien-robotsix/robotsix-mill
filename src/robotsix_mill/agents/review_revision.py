@@ -16,6 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings, get_secrets
 from .prompt_blocks import section
 
@@ -55,11 +56,7 @@ def run_review_revision_agent(
     from .base import build_agent_from_definition, _safe_close
     from .fs_tools import build_fs_tools
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "review_revision.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "review_revision.yaml")
 
     tools = build_fs_tools(Path(repo_dir), settings)
 

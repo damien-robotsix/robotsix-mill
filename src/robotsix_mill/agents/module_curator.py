@@ -15,8 +15,8 @@ to work with; draft lists are clipped to ``MAX_DRAFTS`` (20).
 
 from __future__ import annotations
 
-from pathlib import Path
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 from .prompt_blocks import section
@@ -72,10 +72,7 @@ def run_module_curator_agent(
         from .yaml_loader import load_agent_definition
 
         definition = load_agent_definition(
-            Path(__file__).parent.parent.parent.parent
-            / "agent_definitions"
-            / "periodic"
-            / "module_curator.yaml"
+            agent_definitions_dir() / "periodic" / "module_curator.yaml"
         )
 
     from ._repo_tools import _build_repo_tools
