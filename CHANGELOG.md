@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Enable `triage_boilerplate` periodic workflow for mill's own board via `.robotsix-mill/periodic/triage_boilerplate.yaml` presence file.
 - Add explicit path-traversal guard in ``Workspace.__init__`` to silence a CodeQL ``py/path-injection`` false positive. ``ticket_id`` is already sanitized by ``_slug()`` at creation; the guard is a defense-in-depth annotation.
 - Fix survey agent prompt: replace references to non-existent `web_search`/`web_fetch` tools with correct `ask_web_knowledge` gateway, matching the agent's actual tool set.
 - `parallel_explore` now pre-filters questions via `git grep` before
