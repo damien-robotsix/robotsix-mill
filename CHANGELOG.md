@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Correct `docs/reusable-workflow-callers.md`: the shared `python-ci.yml` and `python-docs.yml` workflows live in `damien-robotsix/robotsix-github-workflows`, not in `robotsix-mill`. Updated all references, the wrong-org callout, and the local-form note accordingly.
 - Attempt to forward `max_tokens` to the Claude SDK agent build path, falling back gracefully with a warning when the provider doesn't accept it. This caps L3 (Claude) agent output at the per-agent `max_tokens` setting (e.g. 8192 for refine) instead of producing unbounded output.
 - Lower `refine_findings_downgrade_min_chars` from 200 to 150 to capture borderline traces where triage findings are terse but sufficient for sonnet-level refinement (~$0.03 vs ~$0.90 Opus call).
 - Remove dead backward-compat function ``build_resume_message_history`` and its re-exports; all callers now use ``build_compact_resume_message_history`` instead.
