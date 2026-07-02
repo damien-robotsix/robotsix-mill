@@ -331,6 +331,7 @@ modules:
       - tests/stages/merge/test_core.py
       - tests/stages/merge/__init__.py
       - tests/stages/test_ci_fix.py
+      - tests/stages/test_stage_cache.py
       - tests/stages/merge/test_ci_poll.py
       - tests/stages/test_codeql_fp_triage.py
       - tests/stages/test_pause.py
