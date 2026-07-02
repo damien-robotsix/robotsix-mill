@@ -1275,3 +1275,49 @@ def test_duplicate_fragments_func_ignores_subdirectory_files(tmp_path, monkeypat
 
     result = shared_mod._duplicate_changelog_fragments(str(repo), "main")
     assert result == set()
+
+
+# ---------------------------------------------------------------------------
+# Tracker ticket PR-baseline guard
+# ---------------------------------------------------------------------------
+
+
+def test_tracker_ticket_merged_pr_blocks(tmp_path, monkeypatch):
+    """When pr_status returns None for a tracker ticket but the tracked PR
+    (extracted from the description) is merged, the outcome is BLOCKED."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = _gh(tmp_path)
+
+    t = ctx.service.create(
+        title="Track external PR: test-repo#42",
+        description="Tracked PR for testing.\n\n- URL: https://github.com/owner/repo/pull/42",
+        source=SourceKind.ORPHANED_PR_CHECK,
+    )
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    t = ctx.service.get(t.id)
+
+    # Write the description into the workspace so read_description() finds it.
+    ws = ctx.service.workspace(t)
+    ws.description_path.write_text(
+        "Tracked PR for testing.\n\n- URL: https://github.com/owner/repo/pull/42",
+        encoding="utf-8",
+    )
+
+    # No PR on the mill branch, but the tracked PR is merged.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: None,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status_by_url",
+        lambda self, *, url: {"merged": True, "state": "closed", "url": url},
+    )
+
+    outcome = MergeStage()._poll_implement_complete(t, ctx)
+    assert outcome.next_state is State.BLOCKED
+    assert "merged" in outcome.note.lower()
