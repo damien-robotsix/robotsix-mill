@@ -12,11 +12,12 @@ and does not touch the overlay file.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ...config import RepoConfig, ReposRegistry, Settings
 from ...config.repos import _reset_repos_config, load_repos_config
@@ -33,6 +34,20 @@ class RepoRegistration(BaseModel):
     repo_id: str
     forge_remote_url: str
     board_id: str | None = None  # defaults to repo_id
+
+    @field_validator("repo_id")
+    @classmethod
+    def _validate_repo_id(cls, v: str) -> str:
+        if any(c in v for c in "\n\r\0"):
+            raise ValueError("repo_id must not contain newlines or null bytes")
+        return v
+
+    @field_validator("board_id")
+    @classmethod
+    def _validate_board_id(cls, v: str | None) -> str | None:
+        if v is not None and any(c in v for c in "\n\r\0"):
+            raise ValueError("board_id must not contain newlines or null bytes")
+        return v
 
 
 class RepoRegistrationResult(BaseModel):
@@ -85,8 +100,8 @@ def register_repo(
         )
 
     # Write the overlay YAML.
-    data_dir = Path(settings.data_dir).resolve()
-    overlay_path = (data_dir / "registered_repos.yaml").resolve()
+    data_dir = Path(os.path.realpath(settings.data_dir))
+    overlay_path = Path(os.path.realpath(data_dir / "registered_repos.yaml"))
     if not overlay_path.is_relative_to(data_dir):
         raise ValueError(
             f"Path escapes data directory: {overlay_path} is not within {data_dir}"
@@ -151,12 +166,10 @@ def register_repo(
             new_repos.repos[rid] = rc
     request.app.state.repos = new_repos
 
-    _safe_repo_id = body.repo_id.replace("\n", "\\n").replace("\r", "\\r")
-    _safe_board_id = effective_board_id.replace("\n", "\\n").replace("\r", "\\r")
     log.info(
         "Registered repo %r (board %r) via runtime overlay",
-        _safe_repo_id,
-        _safe_board_id,
+        body.repo_id,
+        effective_board_id,
     )
 
     return RepoRegistrationResult(
