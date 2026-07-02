@@ -5,6 +5,10 @@
   spawning the scout sub-agent, avoiding the ~5k-token system prompt
   when a simple grep can answer. Batch size is capped at 5 questions
   per call to bound worst-case input context.
+- New `POST /repos` endpoint for runtime repo registration: writes to
+  `registered_repos.yaml` overlay, hot-reloads the in-process registry
+  without restart, and is idempotent (operator-configured repos are never
+  modified).
 - Refine stage: detect implementation-ready specs (drafts with file paths
   paired with fenced code blocks) and run a cheap deterministic
   validation pass (file existence, YAML/Python syntax, forbidden

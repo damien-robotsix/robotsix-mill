@@ -80,6 +80,10 @@ def create_app(
                 "name": "Board",
                 "description": "Board card management and workflow transitions",
             },
+            {
+                "name": "Repos",
+                "description": "Runtime repo registration",
+            },
         ],
         lifespan=create_lifespan(settings, repos, single_repo_id=single_repo_id),
     )
