@@ -178,6 +178,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Verify",
         "format": "verify",
     },
+    "meta": {
+        "module": "meta.runner",
+        "function": "run_meta_pass",
+        "label": "Meta pass",
+        "format": "memory_drafts",
+    },
 }
 
 
@@ -286,6 +292,17 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             else:
                 rc = repos.repos[repo_id]
             result = func(session_id=session_id, repo_config=rc)
+        elif cmd == "meta":
+            from ..runtime.tracing import make_session_id
+
+            session_id = make_session_id(cmd)
+            result = func(session_id=session_id)
+            # Combine the three draft lists for the memory_drafts format handler.
+            result.drafts_created = (
+                result.extraction_drafts_created
+                + result.alignment_drafts_created
+                + result.todo_drafts_created
+            )
         else:
             from ..runtime.tracing import make_session_id
 
@@ -828,6 +845,17 @@ def main(argv: list[str] | None = None) -> int:
         "module-curator", help="run a module taxonomy drift detection pass"
     )
     p_module_curator.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- meta command ---
+    _p_meta = sub.add_parser(
+        "meta",
+        help="Run the meta pass (extraction + alignment across all repos)",
+    )
+    _p_meta.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
