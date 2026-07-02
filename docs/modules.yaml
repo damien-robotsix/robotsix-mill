@@ -32,6 +32,7 @@ modules:
       - tests/config/test_cross_repo_target.py
       - tests/config/test_global_langfuse.py
       - tests/config/test_target_branch_for.py
+      - tests/config/test_repos_source.py
     dependencies: []
 
   - id: core

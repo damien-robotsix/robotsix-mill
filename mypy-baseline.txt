@@ -16,7 +16,6 @@ src/robotsix_mill/agents/freshness.py:0: error: Missing type arguments for gener
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/config/loader.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/log_tools.py:0: error: Function is missing a return type annotation  [no-untyped-def]
