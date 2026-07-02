@@ -91,7 +91,8 @@ jobs:
       security-events: write
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -106,7 +107,8 @@ jobs:
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox
       dockerfile: sandbox/Dockerfile
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-proxy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -124,7 +126,8 @@ jobs:
       # context is not exposed by the reusable; sandbox/proxy/Dockerfile
       # uses repo-root-relative COPY paths so context: . (the reusable
       # default) works correctly.
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   smoke-mill:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -148,9 +151,12 @@ jobs:
         # in the reusable generates:
         #   branch → `main` (type=ref,event=branch)
         #   tag    → `1.2.3` (type=semver,pattern={{version}}, v stripped)
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"
             echo "image=ghcr.io/damien-robotsix/robotsix-mill:${TAG#v}" >> "$GITHUB_OUTPUT"
           else
             echo "image=ghcr.io/damien-robotsix/robotsix-mill:main" >> "$GITHUB_OUTPUT"
@@ -192,9 +198,12 @@ jobs:
 
       - name: Resolve image ref
         id: ref
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"
             echo "image=ghcr.io/damien-robotsix/robotsix-mill-sandbox:${TAG#v}" >> "$GITHUB_OUTPUT"
           else
             echo "image=ghcr.io/damien-robotsix/robotsix-mill-sandbox:main" >> "$GITHUB_OUTPUT"
