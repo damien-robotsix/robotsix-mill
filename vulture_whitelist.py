@@ -135,6 +135,7 @@ get_field_value
 # -- core --------------------------------------------------------------------
 _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator
 DATA_DIR_GC
+LANGFUSE_CLEANUP
 impl
 cache_ok
 process_bind_param
