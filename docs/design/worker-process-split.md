@@ -7,7 +7,7 @@
 ## Overview
 
 The mill runs the FastAPI server (single uvicorn event loop), the worker
-pool, ~15 periodic agent poll loops, the board-manager agent, and the
+pool, ~15 periodic agent poll loops, and the
 board UI websocket **in one Python process on one event loop**. Under
 load the API becomes intermittently unresponsive. The epic proposes
 seven children; this ADR evaluates whether the deepest fix — running

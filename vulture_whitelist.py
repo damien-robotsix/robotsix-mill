@@ -30,7 +30,6 @@ run_agent_check_agent
 run_audit_agent
 run_bc_check_agent
 reset_for_tests
-reset_board_manager_for_tests
 run_completeness_check_agent
 run_config_sync_agent
 run_env_doc_sync_agent
@@ -142,10 +141,6 @@ db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
 orphaned_pr_check_periodic
-# board_manager_max_concurrent — dedicated board-manager Claude semaphore lane
-# (wired via handle_wrapper in lifespan.py once upstream robotsix-board-agent
-#  supports the kwarg; guarded by an inspect.signature check.)
-board_manager_max_concurrent
 scope_triage_request_limit
 already_done_request_limit
 langfuse_cleanup_periodic

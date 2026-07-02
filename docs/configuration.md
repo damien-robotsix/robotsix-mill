@@ -867,53 +867,6 @@ These four periodic agents each carry one or two extra fields beyond the generic
 | `sandbox.skills_dir` | `MILL_SKILLS_DIR` | `skills` | Directory of skill docs injected into agent system prompts |
 | `core.language_instructions_dir` | `MILL_LANGUAGE_INSTRUCTIONS_DIR` | `agent_definitions/language_instructions` | Directory of per-language instruction Markdown snippets injected into the implement agent's system prompt |
 
-### 14. Board agent & board manager
-
-The board agent is an opt-in agent-comm service that connects the mill
-to its own board API, allowing agent-to-agent communication through a
-central broker. The board manager is a conversational, natural-language
-board management agent — a level-3 LLM agent that acts on the board
-(with a level-1 recall pass over its capped question→answer memory).
-Both are off by default.
-
-#### Board agent
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `board_agent.enabled` | `MILL_BOARD_AGENT_ENABLED` | `false` | Master switch for the board agent |
-| `board_agent.api_url` | `MILL_BOARD_AGENT_API_URL` | `http://127.0.0.1:8077` | Board REST API the agent calls (this mill) |
-| `board_agent.api_token` | `MILL_BOARD_AGENT_API_TOKEN` | `""` | Bearer token for the board API (`""` = none, e.g. loopback) |
-| `board_agent.repo_id` | `MILL_BOARD_AGENT_REPO_ID` | `""` | Board repo ID (`""` → the worker's lead repo) |
-| `board_agent.write_ops` | `MILL_BOARD_AGENT_WRITE_OPS` | `true` | Allow write ops (create_ticket, transition, …) |
-| `board_agent.broker_host` | `MILL_BOARD_AGENT_BROKER_HOST` | `""` | Agent-comm broker host (pull/mailbox mode — NAT-safe, outbound-only). When set the board agent runs as a BrokeredBoardResponder reachable from off-host clients (e.g. the cost-analyst); `broker_token` authenticates this agent to the broker. `""` → disabled |
-| `board_agent.broker_port` | `MILL_BOARD_AGENT_BROKER_PORT` | `443` | Broker port |
-| `board_agent.broker_scheme` | `MILL_BOARD_AGENT_BROKER_SCHEME` | `https` | Broker scheme (`http`/`https`) |
-| `board_agent.broker_token` | `MILL_BOARD_AGENT_BROKER_TOKEN` | `""` | This agent's bearer token for the broker |
-
-#### Board manager
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `board_manager.enabled` | `MILL_BOARD_MANAGER_ENABLED` | `false` | Master switch for the board manager |
-| `board_manager.broker_token` | `MILL_BOARD_MANAGER_BROKER_TOKEN` | `""` | The manager's bearer token for the broker |
-| `board_manager.model` | `MILL_BOARD_MANAGER_MODEL` | `""` | Level-3 model (`""` → tier default) |
-| `board_manager.recall_model` | `MILL_BOARD_MANAGER_RECALL_MODEL` | `""` | Level-1 recall model (`""` → tier default) |
-| `board_manager.max_concurrent` | `MILL_BOARD_MANAGER_MAX_CONCURRENT` | `1` | Max simultaneous BoardManager LLM requests. Requires robotsix-board-agent with asyncio.to_thread concurrent dispatch support. |
-| `board_manager.max_conversations` | `MILL_BOARD_MANAGER_MAX_CONVERSATIONS` | `200` | Cap on retained question→answer turns |
-
-#### Component agent
-
-The component agent is a generic monitor/config responder on the agent-comm broker. Off by default.
-
-| YAML path | Env var | Default | Description |
-|-----------|---------|---------|-------------|
-| `component_agent.enabled` | `MILL_COMPONENT_AGENT_ENABLED` | `false` | Master switch for the component agent |
-| `component_agent.agent_id` | `MILL_COMPONENT_AGENT_AGENT_ID` | `"component-robotsix-mill"` | Agent id registered on the broker |
-| `component_agent.broker_host` | `MILL_COMPONENT_AGENT_BROKER_HOST` | `""` | Broker host; empty string disables |
-| `component_agent.broker_port` | `MILL_COMPONENT_AGENT_BROKER_PORT` | `443` | Broker port |
-| `component_agent.broker_scheme` | `MILL_COMPONENT_AGENT_BROKER_SCHEME` | `"https"` | Broker scheme (http/https) |
-| `component_agent.broker_token` | `MILL_COMPONENT_AGENT_BROKER_TOKEN` | `""` | Bearer token for the broker |
-
 ---
 
 ## Secrets reference

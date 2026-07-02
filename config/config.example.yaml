@@ -515,52 +515,6 @@ service:
   shutdown_grace_seconds: 1800              # max seconds to wait for in-flight periodic passes on shutdown
 
 # ---------------------------------------------------------------------------
-#  board_agent — expose this mill's board over the agent-comm broker so other
-#  agents (e.g. the cost-analyst) can drive it. Off by default; set broker_host
-#  + broker_token (in mill.local.yaml) to register as a pull/mailbox responder.
-# ---------------------------------------------------------------------------
-
-board_agent:
-  enabled: false                            # master switch for the board agent
-  api_url: http://127.0.0.1:8077            # board REST API the agent calls (this mill)
-  api_token: ""                             # bearer for the board API ("" = none, e.g. loopback)
-  repo_id: ""                               # board repo id ("" → the worker's lead repo)
-  write_ops: true                           # allow write ops (create_ticket, transition, …)
-  broker_host: ""                           # agent-comm broker host (e.g. ai-broker.robotsix.net); "" → disabled
-  broker_port: 443                          # broker port
-  broker_scheme: https                      # broker scheme (http/https)
-  broker_token: ""                          # this agent's bearer token for the broker
-
-# ---------------------------------------------------------------------------
-#  board_manager — conversational LLM board manager. A level-3 agent manages the
-#  board from natural-language instructions (with a level-1 recall pass over its
-#  capped question→answer memory). Reuses board_agent.* (board API + broker) and
-#  mill's OpenRouter key; only broker_token + the master switch are its own.
-# ---------------------------------------------------------------------------
-
-board_manager:
-  enabled: false                            # master switch for the board manager
-  broker_token: ""                          # the manager's bearer token for the broker
-  model: ""                                 # level-3 model ("" → llmio tier-3 default)
-  recall_model: ""                          # level-1 recall model ("" → tier-1 default)
-  max_conversations: 200                    # cap on retained question→answer turns
-  max_concurrent: 1                         # dedicated Claude lane, independent of claude_max_concurrency
-
-# ---------------------------------------------------------------------------
-#  component_agent — generic monitor/config responder on the agent-comm broker.
-#  Answers /health, /config, /metrics etc. Off by default; enable with
-#  component_agent.enabled=true, broker_host, and broker_token.
-# ---------------------------------------------------------------------------
-
-component_agent:
-  enabled: false                            # master switch for the component agent
-  agent_id: component-robotsix-mill         # agent id registered on the broker
-  broker_host: ""                           # broker host; "" → disabled
-  broker_port: 443                          # broker port
-  broker_scheme: https                      # broker scheme (http/https)
-  broker_token: ""                          # bearer token for the broker
-
-# ---------------------------------------------------------------------------
 #  secrets — credentials read by the separate `Secrets` model (NOT merged
 #  into Settings).  In config.yaml these hold REAL values; here every leaf
 #  is the literal sentinel `SECRET`, which the loader treats as "unset"

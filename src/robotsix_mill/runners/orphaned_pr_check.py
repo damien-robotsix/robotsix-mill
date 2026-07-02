@@ -740,7 +740,7 @@ def _file_orphan_ticket(
 ) -> None:
     """File a tracking ticket for an orphaned PR.
 
-    Uses a deterministic title so the mill's BoardManager deduplicates
+    Uses a deterministic title so the mill's dedup pass deduplicates
     against existing open tickets with the same title.
     """
     title = _orphan_ticket_title(repo_config, cpr.branch)

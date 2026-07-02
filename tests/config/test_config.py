@@ -485,63 +485,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("auto_fix_max_cycles", "MILL_AUTO_FIX_MAX_CYCLES", "4", 4),
     ("ping_pong_max_alternations", "MILL_PING_PONG_MAX_ALTERNATIONS", "2", 2),
     # --- rate-limit fallback ---
-    # --- board-agent env vars ---
-    ("board_agent_enabled", "MILL_BOARD_AGENT_ENABLED", "1", True),
-    (
-        "board_agent_api_url",
-        "MILL_BOARD_AGENT_API_URL",
-        "http://host.docker.internal:8077",
-        "http://host.docker.internal:8077",
-    ),
-    ("board_agent_api_token", "MILL_BOARD_AGENT_API_TOKEN", "mytoken", "mytoken"),
-    ("board_agent_repo_id", "MILL_BOARD_AGENT_REPO_ID", "my-repo", "my-repo"),
-    ("board_agent_write_ops", "MILL_BOARD_AGENT_WRITE_OPS", "0", False),
-    (
-        "board_agent_broker_host",
-        "MILL_BOARD_AGENT_BROKER_HOST",
-        "broker.example.com",
-        "broker.example.com",
-    ),
-    ("board_agent_broker_port", "MILL_BOARD_AGENT_BROKER_PORT", "8443", 8443),
-    ("board_agent_broker_scheme", "MILL_BOARD_AGENT_BROKER_SCHEME", "http", "http"),
-    (
-        "board_agent_broker_token",
-        "MILL_BOARD_AGENT_BROKER_TOKEN",
-        "brokertoken",
-        "brokertoken",
-    ),
-    # --- board-manager env vars ---
-    ("board_manager_enabled", "MILL_BOARD_MANAGER_ENABLED", "1", True),
-    (
-        "board_manager_broker_token",
-        "MILL_BOARD_MANAGER_BROKER_TOKEN",
-        "mgrtoken",
-        "mgrtoken",
-    ),
-    (
-        "board_manager_model",
-        "MILL_BOARD_MANAGER_MODEL",
-        "anthropic/claude-sonnet-4-20250514",
-        "anthropic/claude-sonnet-4-20250514",
-    ),
-    (
-        "board_manager_recall_model",
-        "MILL_BOARD_MANAGER_RECALL_MODEL",
-        "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini",
-    ),
-    (
-        "board_manager_max_conversations",
-        "MILL_BOARD_MANAGER_MAX_CONVERSATIONS",
-        "100",
-        100,
-    ),
-    (
-        "board_manager_max_concurrent",
-        "MILL_BOARD_MANAGER_MAX_CONCURRENT",
-        "3",
-        3,
-    ),
     # --- claude sdk vision ---
     ("claude_sdk_vision_enabled", "MILL_CLAUDE_SDK_VISION_ENABLED", "1", True),
     # --- review stage tuning ---

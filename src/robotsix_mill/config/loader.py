@@ -610,30 +610,6 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
     "service.api_port": "api_port",
     "service.api_url": "api_url",
     "service.shutdown_grace_seconds": "shutdown_grace_seconds",
-    # -- board_agent (agent-comm broker responder) --
-    "board_agent.enabled": "board_agent_enabled",
-    "board_agent.api_url": "board_agent_api_url",
-    "board_agent.api_token": "board_agent_api_token",
-    "board_agent.repo_id": "board_agent_repo_id",
-    "board_agent.write_ops": "board_agent_write_ops",
-    "board_agent.broker_host": "board_agent_broker_host",
-    "board_agent.broker_port": "board_agent_broker_port",
-    "board_agent.broker_scheme": "board_agent_broker_scheme",
-    "board_agent.broker_token": "board_agent_broker_token",
-    # -- board_manager (conversational LLM board manager) --
-    "board_manager.enabled": "board_manager_enabled",
-    "board_manager.broker_token": "board_manager_broker_token",
-    "board_manager.model": "board_manager_model",
-    "board_manager.recall_model": "board_manager_recall_model",
-    "board_manager.max_conversations": "board_manager_max_conversations",
-    "board_manager.max_concurrent": "board_manager_max_concurrent",
-    # -- component_agent (monitor/config responder on the broker) --
-    "component_agent.enabled": "component_agent_enabled",
-    "component_agent.agent_id": "component_agent_agent_id",
-    "component_agent.broker_host": "component_agent_broker_host",
-    "component_agent.broker_port": "component_agent_broker_port",
-    "component_agent.broker_scheme": "component_agent_broker_scheme",
-    "component_agent.broker_token": "component_agent_broker_token",
     # -- epic dedup lookback (top-level, mirrors core.memory.dedup_lookback_days) --
     "epic_dedup_lookback_days": "epic_dedup_lookback_days",
 }

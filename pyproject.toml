@@ -20,16 +20,6 @@ dependencies = [
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
     "robotsix-yaml-config",
-    # Agent-comm board agent: exposes the mill board's full ticket lifecycle
-    # over agent-comm structured ops, so other agents can drive a board
-    # programmatically (query, file, comment, transition, approve, merge,
-    # resume, migrate).
-    "robotsix-board-agent",
-    # robotsix-agent-comm is imported by board-agent's BrokeredBoardResponder
-    # (the board agent's pull/mailbox transport). Declared here as a direct
-    # dependency rather than via board-agent's [prod] extra so it's visible
-    # to audit tooling.
-    "robotsix-agent-comm",
     "prometheus-fastapi-instrumentator>=8",
     "pydantic-settings>=2",
     "pyyaml>=6",
@@ -75,8 +65,6 @@ default-groups = ["dev"]
 [tool.uv.sources]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "3da3c4317f4a37c634f6b6a4d549001f6e52be9d" }
 robotsix-yaml-config = { git = "https://github.com/damien-robotsix/robotsix-yaml-config.git", rev = "d302ee4ada88905efa48333894ed19519f9f7920" }
-robotsix-board-agent = { git = "https://github.com/damien-robotsix/robotsix-board-agent.git", rev = "a70038a618d81eb6128ba356b666dacd0d74b0e1" }
-robotsix-agent-comm = { git = "https://github.com/damien-robotsix/robotsix-agent-comm.git", rev = "e5e6d85ef51b4e68ad284e1180ced8d396310ce2" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 
@@ -289,9 +277,6 @@ DEP002 = [
     "mkdocstrings",
     "langfuse",
     "robotsix-modules",
-    # Declared so the board agent's BrokeredBoardResponder can import it, but
-    # mill itself never imports robotsix_agent_comm (only board-agent does).
-    "robotsix-agent-comm",
     # Declared in the tracing extra so robotsix_llmio can import them at
     # runtime (robotsix_mill itself only imports opentelemetry-api).
     "opentelemetry-sdk",
