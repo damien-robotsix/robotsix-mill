@@ -365,9 +365,16 @@ def run_retrospect_agent(
             "is already provided inline in this prompt; do not read_file it separately.\n"
         )
     from .retry import run_agent
+    from pydantic_ai.usage import UsageLimits
+
+    limits = UsageLimits(request_limit=100)
 
     try:
-        result = run_agent(agent, lambda h: h.run_sync(prompt), what="retrospect")
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt, usage_limits=limits),
+            what="retrospect",
+        )
         from .structured_output_guard import reprompt_if_unstructured
 
         result = reprompt_if_unstructured(
