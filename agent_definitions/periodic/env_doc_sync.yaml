@@ -18,6 +18,7 @@ tools:
   - explore
   - read_file
   - list_dir
+  - write_file
 
 report_issue: false
 reply_to_thread: false
@@ -62,6 +63,66 @@ system_prompt: |
     accompanying description, and compare against the canonical
     source above.
 
+  .ENV.EXAMPLE — CREATE AND MAINTAIN:
+
+  - ``.env.example`` (at the repo root) — this file does NOT
+    currently exist.  Your job is to CREATE it (if missing) and
+    REGENERATE it on every pass so it stays current with the
+    canonical Pydantic settings and secrets.
+  - Generate ``.env.example`` by reading every Pydantic Settings
+    mixin listed above plus ``secrets.py``, extracting every
+    ``MILL_``-prefixed env var, and writing a commented-out
+    key=value template.  Use the Pydantic ``Field(default=...)``
+    as the example value and include a brief comment noting the
+    setting's purpose (derived from the docstring or the field
+    description).  For secrets, use a placeholder like
+    ``ghp_xxxxxxxxxxxxxxxxxxxx`` or ``sk-xxxxxxxxxxxxxxxxxxxx``.
+  - If ``.env.example`` already exists, diff it against the
+    canonical set: add any missing vars, remove vars that no
+    longer have a corresponding ``Field`` in code, and update
+    default values that have changed.  Re-order entries to match
+    the order the fields appear in the source files.
+  - The file is a plain text file — NOT YAML, NOT JSON.  Every
+    line is either a comment (``# ...``) or a commented-out
+    assignment (``# MILL_FOO=bar``).  Group entries by the source
+    file they come from with a section comment.
+  - Use ``write_file`` to create or overwrite ``.env.example``
+    when changes are needed.  Do NOT file a draft ticket for
+    ``.env.example`` changes — the updated file IS the deliverable.
+
+  PYPROJECT.TOML — CROSS-REFERENCE CONFIGURATION SECTIONS:
+
+  - ``pyproject.toml`` — the project's build and tool
+    configuration.  Read the following sections that carry
+    runtime-affecting or operationally significant config, and
+    cross-reference each against ``docs/configuration.md``:
+    * ``[project.optional-dependencies]`` — the ``tracing`` extra
+      (opentelemetry, langfuse) and its env-var gating.
+    * ``[tool.uv.sources]`` — git source overrides for internal
+      libraries; a rev change alters installed code at runtime.
+    * ``[tool.hatch.build.targets.wheel]`` force-include entries
+      — ensures ``agent_definitions/``, ``expert_definitions/``,
+      and ``skills/`` are shipped in the wheel; missing them
+      breaks runtime loading.
+    * Any other ``[tool.*]`` section that a reader of
+      ``docs/configuration.md`` would need to understand to
+      operate, configure, or troubleshoot the project.
+  - For each section, check whether ``docs/configuration.md``:
+    (a) mentions the section at all, (b) accurately describes
+    its role and impact, and (c) explains how it interacts with
+    the env-var configuration layer.
+  - Classify any gap using the existing discrepancy types below
+    (``missing-from-docs`` when a section is entirely
+    undocumented, ``stale-in-docs`` when a documented section
+    no longer matches ``pyproject.toml``, ``default-mismatch``
+    when a described value differs from the live config).
+  - Only file a draft when there is a concrete, verifiable
+    mismatch — do NOT file for "this section exists but isn't
+    documented" if the section has NO operational impact (e.g.
+    purely CI/lint tooling like ``[tool.ruff]`` or
+    ``[tool.coverage]``).  Focus on sections that change what
+    code runs or what assets are available at runtime.
+
   CLASSIFY EVERY DISCREPANCY:
 
   For each discrepancy you find, classify it as:
@@ -93,6 +154,13 @@ system_prompt: |
      every secret name.
   7. ``docs/configuration.md`` —
      the documentation entry for every env var.
+  8. ``.env.example`` —
+     create if absent; regenerate from canonical sources if stale.
+  9. ``pyproject.toml`` —
+     the ``[project.optional-dependencies]``,
+     ``[tool.uv.sources]``,
+     ``[tool.hatch.build.targets.wheel]``, and any other
+     runtime-affecting ``[tool.*]`` sections.
 
   TOOL EFFICIENCY:
 
