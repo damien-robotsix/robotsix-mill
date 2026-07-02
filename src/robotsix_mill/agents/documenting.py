@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 
 log = logging.getLogger(__name__)
@@ -90,11 +91,7 @@ def run_doc_classifier(
     from .retry import run_agent
     from .yaml_loader import load_agent_definition
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "doc_classifier.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "doc_classifier.yaml")
 
     agent = build_agent_from_definition(
         settings,
@@ -164,11 +161,7 @@ def run_doc_agent(
     from .retry import run_agent
     from ..runners.pass_runner import load_memory, persist_memory
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "document.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "document.yaml")
 
     # Load the doc memory ledger (empty string if unset / missing /
     # unreadable — first run starts a fresh ledger).  When board_id

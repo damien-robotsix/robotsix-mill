@@ -19,6 +19,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 
 
@@ -186,11 +187,7 @@ def run_coordinator(
     from .retry import run_agent
     from .changelog_tool import make_insert_changelog_entry_tool
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "implement.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "implement.yaml")
 
     # Pre-seed fs_tools cache and build synthetic message_history when
     # reference files are provided (first invocation only, not a retry).

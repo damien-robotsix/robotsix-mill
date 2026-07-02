@@ -368,6 +368,7 @@ modules:
       retrospect.
     paths:
       - src/robotsix_mill/agents/*.py
+      - src/robotsix_mill/_resources.py
       - tests/agents/*.py
     dependencies: [config, core, sandbox, langfuse, forge, vcs, runners]
 

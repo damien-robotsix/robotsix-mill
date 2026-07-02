@@ -17,6 +17,7 @@ import re
 import tomllib
 from pathlib import Path, PurePath
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import RepoConfig, Settings, get_secrets
 from ..config.repo_settings import load_repo_smoke_command, load_repo_test_command
 
@@ -487,9 +488,7 @@ def _distill_failure(
 
     from pydantic_ai.usage import UsageLimits
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "tester.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "tester.yaml")
 
     all_fs = build_fs_tools(repo_dir, settings)
     ro_fs_tools = [

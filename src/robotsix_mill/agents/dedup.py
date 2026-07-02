@@ -17,6 +17,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from ..core.models import Ticket
 from .prompt_blocks import section
@@ -142,9 +143,7 @@ def run_dedup_check(
     from .yaml_loader import load_agent_definition
     from .retry import run_agent
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent / "agent_definitions" / "dedup.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "dedup.yaml")
 
     # Build filesystem tools when a repo_dir is available; the dedup
     # agent is read-only — only read_file and list_dir are exposed.

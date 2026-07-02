@@ -13,6 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from .prompt_blocks import section
 
@@ -275,11 +276,7 @@ def run_retrospect_agent(
     from .yaml_loader import load_agent_definition
     from .base import build_agent_from_definition, _safe_close
 
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "retrospect.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "retrospect.yaml")
 
     # Build read-only filesystem tools when a clone is available so
     # the agent can verify concrete gap claims before filing follow-ups.

@@ -130,6 +130,20 @@ jobs:
           IMAGE: ${{ steps.scan-ref.outputs.image }}
         run: docker run --rm --entrypoint gh "$IMAGE" --version
 
+      - name: Smoke — agent_definitions bundled in production image
+        env:
+          IMAGE: ${{ steps.scan-ref.outputs.image }}
+        run: |
+          docker run --rm --entrypoint python "$IMAGE" -c \
+            "from robotsix_mill._resources import agent_definitions_dir; p = agent_definitions_dir(); assert p.is_dir(), f'Missing: {p}'"
+
+      - name: Smoke — importlib.metadata version readable in production image
+        env:
+          IMAGE: ${{ steps.scan-ref.outputs.image }}
+        run: |
+          docker run --rm --entrypoint python "$IMAGE" -c \
+            "from importlib.metadata import metadata; m = metadata('robotsix-mill'); assert m['Version'], 'No version'"
+
       # Gate: only CRITICAL, fixable CVEs block the pipeline. Runs in
       # table format so the failing CVE row is visible in the CI log
       # (SARIF mode would silently swallow it — see below).

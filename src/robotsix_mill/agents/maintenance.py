@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, field_validator
 
+from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from ..core.models import Ticket
 from ..core.states import State
@@ -567,11 +568,7 @@ def run_maintenance_agent(  # noqa: C901 — clone-failure degrade branch + meta
     from .yaml_loader import load_agent_definition
 
     # 1. Load the YAML definition
-    definition = load_agent_definition(
-        Path(__file__).parent.parent.parent.parent
-        / "agent_definitions"
-        / "maintenance.yaml"
-    )
+    definition = load_agent_definition(agent_definitions_dir() / "maintenance.yaml")
 
     # 2. Read the ticket draft (needed for tool + prompt)
     ws = ctx.service.workspace(ticket)

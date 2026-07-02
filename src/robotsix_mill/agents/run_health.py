@@ -14,10 +14,11 @@ digest keeps the input small.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import yaml as _yaml
 from pydantic import BaseModel, Field
+
+from robotsix_mill._resources import agent_definitions_dir
 
 from ..config import Settings
 
@@ -25,12 +26,7 @@ from ..config import Settings
 # Load the static system prompt from the YAML definition
 # ---------------------------------------------------------------------------
 
-_SYSPROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "agent_definitions"
-    / "periodic"
-    / "run_health.yaml"
-)
+_SYSPROMPT_PATH = agent_definitions_dir() / "periodic" / "run_health.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 

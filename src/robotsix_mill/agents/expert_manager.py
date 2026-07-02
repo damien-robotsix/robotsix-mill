@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from robotsix_mill._resources import expert_definitions_dir
 from ..config import Settings
 from .expert_loader import ExpertDefinition
 
@@ -56,9 +57,7 @@ class ExpertManager:
         from .expert_loader import load_expert_definition
 
         if definitions_dir is None:
-            definitions_dir = (
-                Path(__file__).parent.parent.parent.parent / "expert_definitions"
-            )
+            definitions_dir = expert_definitions_dir()
 
         if not definitions_dir.is_dir():
             raise FileNotFoundError(
