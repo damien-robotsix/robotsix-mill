@@ -423,6 +423,10 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.board_list_cache_ttl_seconds` | `MILL_BOARD_LIST_CACHE_TTL_SECONDS` | `3.0` | Short-TTL cache for board-poll GET /tickets endpoint (seconds). Repeated polls within this window return a cached snapshot to avoid stalling the event loop under load. 0.0 disables the cache. |
 | `core.limits.network_probe_host` | `MILL_NETWORK_PROBE_HOST` | `"github.com"` | Host probed to detect global network outage; when unreachable, stage failures don't consume retry attempts |
 | `core.limits.network_outage_retry_seconds` | `MILL_NETWORK_OUTAGE_RETRY_SECONDS` | `120` | Seconds between re-polls during a detected network outage |
+| `core.limits.refine_dynamic_limit_multiplier` | `MILL_REFINE_DYNAMIC_LIMIT_MULTIPLIER` | `1.5` | Dynamic request_limit multiplier applied when draft exceeds `refine_dynamic_limit_spec_chars` chars; must be > 1.0 |
+| `core.limits.refine_dynamic_limit_min` | `MILL_REFINE_DYNAMIC_LIMIT_MIN` | `12` | Floor for dynamic request_limit (never lower than this even if base × multiplier is lower) |
+| `core.limits.refine_dynamic_limit_spec_chars` | `MILL_REFINE_DYNAMIC_LIMIT_SPEC_CHARS` | `3000` | Draft character threshold above which the dynamic limit fires |
+| `core.limits.refine_usage_warning_threshold` | `MILL_REFINE_USAGE_WARNING_THRESHOLD` | `0.8` | Log a warning when more than this fraction of request_limit is consumed during a refine pass |
 
 ### 4. Memory
 
