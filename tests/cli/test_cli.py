@@ -263,6 +263,33 @@ def test_forge_parity_cli_command(monkeypatch):
     assert main(["forge-parity"]) == 0
 
 
+def test_meta_registered_in_runners():
+    """The meta pass is wired into the generic _RUNNERS dispatch table."""
+    from robotsix_mill.cli import _RUNNERS
+
+    entry = _RUNNERS["meta"]
+    assert entry["module"] == "meta.runner"
+    assert entry["function"] == "run_meta_pass"
+    assert entry["format"] == "memory_drafts"
+
+
+def test_meta_cli_command(monkeypatch):
+    """`main(["meta"])` dispatches into the runner and exits 0."""
+    from robotsix_mill.meta.runner import MetaPassResult
+
+    def mock_run(session_id=None):
+        return MetaPassResult(
+            updated_memory="mem",
+            extraction_drafts_created=[],
+            alignment_drafts_created=[],
+            todo_drafts_created=[],
+        )
+
+    monkeypatch.setattr("robotsix_mill.meta.runner.run_meta_pass", mock_run)
+
+    assert main(["meta"]) == 0
+
+
 def test_serve_does_not_exit_on_zero_repos(monkeypatch):
     """An empty repos registry must NOT cause _serve() to return 2."""
     import argparse
