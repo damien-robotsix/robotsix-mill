@@ -256,6 +256,46 @@ class TestReadFile:
         assert isinstance(result, str)
         assert "error" in result.lower()
 
+    def test_read_absolute_path_inside_root(self, tmp_path, settings):
+        """An absolute path that is within root on the same filesystem
+        resolves directly via _safe — no fallback needed."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "tests/test_x.py", "pass\n")
+        tools = _build(root, settings)
+        # This absolute path is inside root (same filesystem), so
+        # _safe resolves it directly without triggering the fallback.
+        abs_path = str(root / "tests" / "test_x.py")
+        result = tools["read_file"](path=abs_path)
+        assert "pass\n" in result
+
+    def test_read_absolute_container_path_fallback(self, tmp_path, settings):
+        """An absolute path that does not exist on the host but whose
+        tail (stripped of leading /) lands inside root is accepted via
+        the read_file tool's fallback."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "workspace/tests/test_x.py", "pass\n")
+        tools = _build(root, settings)
+        # /workspace/tests/test_x.py does not exist on the host,
+        # but "workspace/tests/test_x.py" exists under root.
+        result = tools["read_file"](path="/workspace/tests/test_x.py")
+        assert "pass\n" in result
+
+    def test_read_absolute_path_fallback_still_rejects_etc(self, tmp_path, settings):
+        """An absolute path that exists on the host (/etc/passwd) is
+        still rejected — the fallback only applies when the literal
+        path escapes.  But in this test env /etc/passwd likely
+        exists, so _safe rejects it.  (The existence check is inside
+        _safe for the fallback, but here there is no fallback in
+        _safe — the fallback is in the tool closure.)"""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["read_file"](path="/etc/passwd")
+        assert isinstance(result, str)
+        assert "error" in result.lower()
+
 
 # ===================================================================
 # read_file offset/limit
