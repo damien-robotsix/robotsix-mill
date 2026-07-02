@@ -22,6 +22,10 @@
   already exists in the ticket history, skipping the LLM call
   and re-emitting the draft unchanged as the refine output.
 - Add robotsix stack standards link to README.md and AGENT.md.
+- Add spec-exact-code bypass in implement stage: tickets whose description
+  contains fenced code blocks annotated with file paths are applied
+  deterministically, bypassing the LLM coordinator entirely. Saves ~$0.03
+  and ~30min per completeness_check-originated ticket.
 - Refine agent: add prompt rule distinguishing checkout-local paths from spec-described paths to prevent false misrouting when a spec describes an external system's layout (e.g. `config/config.yaml` inside a container image)
 - Add actual `repos: {}` key (empty mapping) to `config/config.example.yaml` and fix stale fallback comment — repos are now read exclusively from this key plus the machine overlay `registered_repos.yaml`.
 - Refine agent mill-misroute gate: classify spec-mentioned paths as

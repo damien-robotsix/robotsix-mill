@@ -14,6 +14,8 @@ from robotsix_mill.stages.implement._shared import (
     CONFIG_ONLY_EXTENSIONS,
     _is_config_only_change,
     _is_rename_only_change,
+    _is_spec_exact_edits,
+    _parse_spec_code_blocks,
     _should_skip_test_gate,
 )
 
@@ -447,3 +449,212 @@ def test_config_only_extensions_includes_expected() -> None:
     assert ".conf" in CONFIG_ONLY_EXTENSIONS
     # Verify it's a tuple (usable with str.endswith).
     assert isinstance(CONFIG_ONLY_EXTENSIONS, tuple)
+
+
+# ---------------------------------------------------------------------------
+# _parse_spec_code_blocks
+# ---------------------------------------------------------------------------
+
+
+class TestParseSpecCodeBlocks:
+    """Tests for ``_parse_spec_code_blocks`` — extracting file→code mappings."""
+
+    def test_single_block_with_backtick_path(self):
+        spec = """## Changes
+
+Add import in `src/foo/bar.py`:
+
+```python
+import new_module
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert len(blocks) == 1
+        assert blocks[0][0] == "src/foo/bar.py"
+        assert blocks[0][1] == "python"
+        assert "import new_module" in blocks[0][2]
+
+    def test_file_comment_annotation(self):
+        spec = """# File: src/module.py
+```python
+x = 1
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert len(blocks) == 1
+        assert blocks[0][0] == "src/module.py"
+
+    def test_heading_with_backtick_path(self):
+        spec = """### `tests/test_foo.py`
+
+Add test:
+
+```python
+def test_x():
+    pass
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert len(blocks) == 1
+        assert blocks[0][0] == "tests/test_foo.py"
+
+    def test_plain_path_in_preceding_line(self):
+        spec = """src/robotsix_mill/cli/__init__.py
+
+```python
+runners.register(subparsers)
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert len(blocks) == 1
+        assert blocks[0][0] == "src/robotsix_mill/cli/__init__.py"
+
+    def test_multiple_blocks_different_files(self):
+        spec = """### `src/a.py`
+
+```python
+# a
+```
+
+### `src/b.py`
+
+```python
+# b
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert len(blocks) == 2
+        paths = {b[0] for b in blocks}
+        assert paths == {"src/a.py", "src/b.py"}
+
+    def test_no_code_blocks_returns_empty(self):
+        spec = "Just some text, no code blocks."
+        blocks = _parse_spec_code_blocks(spec)
+        assert blocks == []
+
+    def test_block_without_file_path_returns_empty(self):
+        spec = """```python
+print("no file reference")
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert blocks == []
+
+    def test_non_source_extension_ignored(self):
+        spec = """`data/output.csv`
+
+```csv
+a,b,c
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert blocks == []
+
+    def test_file_path_in_info_string_ignored(self):
+        """Info string (e.g. ```python filename=...) is not used for path detection."""
+        spec = """```python filename=src/x.py
+y = 1
+```
+"""
+        blocks = _parse_spec_code_blocks(spec)
+        assert blocks == []  # No path in preceding context
+
+
+# ---------------------------------------------------------------------------
+# _is_spec_exact_edits
+# ---------------------------------------------------------------------------
+
+
+class TestIsSpecExactEdits:
+    """Tests for ``_is_spec_exact_edits`` — gate before bypass routing."""
+
+    def test_all_files_exist(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "src").mkdir(parents=True)
+        (repo / "src" / "a.py").write_text("# a")
+        (repo / "src" / "b.py").write_text("# b")
+
+        spec = """### `src/a.py`
+
+```python
+# a new
+```
+
+### `src/b.py`
+
+```python
+# b new
+```
+"""
+        assert _is_spec_exact_edits(spec, repo) is True
+
+    def test_missing_file_returns_false(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "src").mkdir(parents=True)
+        (repo / "src" / "a.py").write_text("# a")
+        # src/b.py does NOT exist.
+
+        spec = """### `src/a.py`
+
+```python
+# a
+```
+
+### `src/b.py`
+
+```python
+# b
+```
+"""
+        assert _is_spec_exact_edits(spec, repo) is False
+
+    def test_no_blocks_returns_false(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        assert _is_spec_exact_edits("No code here.", repo) is False
+
+    def test_empty_spec_returns_false(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        assert _is_spec_exact_edits("", repo) is False
+
+    def test_parse_error_returns_false(self, tmp_path: Path) -> None:
+        """Fail-closed: any exception during parsing returns False."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        # Passing a non-string should not crash.
+        assert _is_spec_exact_edits(None, repo) is False  # type: ignore[arg-type]
+
+    def test_path_traversal_blocked(self, tmp_path: Path) -> None:
+        """Paths containing ../ that resolve outside the repo are blocked."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "src").mkdir(parents=True)
+        (repo / "src" / "a.py").write_text("# a")
+
+        # Create a file outside the repo that would match if not guarded.
+        outside = tmp_path / "outside.py"
+        outside.write_text("# outside")
+
+        spec = """### `../outside.py`
+
+```python
+# malicious
+```
+"""
+        assert _is_spec_exact_edits(spec, repo) is False
+
+    def test_path_traversal_dot_dot_slash_blocked(self, tmp_path: Path) -> None:
+        """../../etc/passwd style paths are blocked."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        spec = """### `../../etc/passwd`
+
+```text
+malicious
+```
+"""
+        assert _is_spec_exact_edits(spec, repo) is False

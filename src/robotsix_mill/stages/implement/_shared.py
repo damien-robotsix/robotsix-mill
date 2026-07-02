@@ -423,6 +423,107 @@ def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
     return all(p.lower().endswith(CONFIG_ONLY_EXTENSIONS) for p in changed)
 
 
+# ---------------------------------------------------------------------------
+# Spec-exact code-edit detection (deterministic implement bypass)
+# ---------------------------------------------------------------------------
+
+# Regex to find fenced code blocks in markdown.
+# Group 1: optional info string (language, etc.)
+# Group 2: code content
+_FENCED_CODE_BLOCK_RE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
+
+# Common source/test file extensions we expect in code blocks.
+_SOURCE_EXTENSIONS = frozenset(
+    {".py", ".js", ".ts", ".css", ".html", ".yaml", ".yml", ".toml", ".json", ".md"}
+)
+
+
+def _parse_spec_code_blocks(spec: str) -> list[tuple[str, str, str]]:
+    """Parse fenced code blocks from *spec* and return (file_path, info_string, code).
+
+    For each code block, looks at up to 5 lines of preceding context for
+    a file path annotation (``# File:`` comment, a heading with a path,
+    or a plain path-like string).  Returns only blocks where a file path
+    could be determined.
+    """
+    import re as _re
+
+    blocks: list[tuple[str, str, str]] = []
+
+    for m in _FENCED_CODE_BLOCK_RE.finditer(spec):
+        info = m.group(1).strip()
+        code = m.group(2)
+
+        # Find the fence opening position to locate preceding context.
+        fence_start = m.start()
+        before = spec[:fence_start]
+        context_lines = before.split("\n")
+        # Take up to 5 lines before the fence, reversed for priority.
+        preceding = context_lines[-5:] if len(context_lines) >= 5 else context_lines
+
+        file_path = ""
+        for line in reversed(preceding):
+            line = line.strip()
+            if not line:
+                continue
+            # Try ``# File: path`` or ``// File: path`` annotation.
+            fm = _re.match(r"[#/]{1,2}\s*File:\s*(\S+\.\w{1,10})", line)
+            if fm:
+                file_path = fm.group(1)
+                break
+            # Try a backtick-wrapped path in a heading or list item.
+            bm = _re.search(r"`([^`]+\.\w{1,10})`", line)
+            if bm:
+                candidate = bm.group(1)
+                if "/" in candidate and candidate.lower().endswith(
+                    tuple(_SOURCE_EXTENSIONS)
+                ):
+                    file_path = candidate
+                    break
+            # Try a plain path-like string (must contain /).
+            pm = _re.search(r"(\S+/\S+\.\w{1,10})", line)
+            if pm:
+                candidate = pm.group(1)
+                if candidate.lower().endswith(tuple(_SOURCE_EXTENSIONS)):
+                    file_path = candidate
+                    break
+
+        if file_path:
+            blocks.append((file_path, info, code))
+
+    return blocks
+
+
+def _is_spec_exact_edits(spec: str, repo_dir: Path) -> bool:
+    """True when *spec* contains fenced code blocks with file paths
+    that all reference files existing in *repo_dir*.
+
+    Returns ``True`` only when at least one code block maps to an
+    existing file AND every referenced file exists on disk.  A single
+    missing file fails the check — we fall through to the LLM path so
+    the agent can diagnose the discrepancy.
+
+    Fail-closed: returns ``False`` on any parse error or when no code
+    blocks are found.
+    """
+    try:
+        blocks = _parse_spec_code_blocks(spec)
+    except Exception:
+        return False
+
+    if not blocks:
+        return False
+
+    for file_path, _info, _code in blocks:
+        resolved = (repo_dir / file_path).resolve()
+        if not resolved.is_relative_to(repo_dir.resolve()):
+            return False
+        if not resolved.is_file():
+            return False
+
+    return True
+
+
 def _should_skip_test_gate(
     repo_dir: Path,
     target_branch: str,
