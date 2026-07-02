@@ -821,6 +821,24 @@ class RefineGatesMixin:
         if not absent:
             return None
 
+        # Confidence threshold: when the repo-local codebase clearly
+        # exists (has pyproject.toml, src/, or tests/), a single absent
+        # mill-prefixed path is more likely a false positive (a
+        # conceptual/spec-descriptive path, or a stray mention) than a
+        # signal to redirect the entire ticket.  Require ≥2 absent
+        # paths before redirecting.
+        if repo_dir is not None and len(absent) == 1:
+            _indicators = ("pyproject.toml", "src", "tests")
+            if any((repo_dir / p).exists() for p in _indicators):
+                log.info(
+                    "%s: only 1 absent mill path (%s) — below "
+                    "confidence threshold of 2 for a repo that clearly "
+                    "exists; proceeding with refine on current board",
+                    ticket.id,
+                    absent[0],
+                )
+                return None
+
         # Check whether the ticket has a primary deliverable on the
         # current checkout — if so, keep it here and best-effort file a
         # consumer follow-up on the mill board instead of redirecting

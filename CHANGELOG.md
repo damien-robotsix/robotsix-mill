@@ -5,6 +5,12 @@
   and re-emitting the draft unchanged as the refine output.
 - Refine agent: add prompt rule distinguishing checkout-local paths from spec-described paths to prevent false misrouting when a spec describes an external system's layout (e.g. `config/config.yaml` inside a container image)
 - Add actual `repos: {}` key (empty mapping) to `config/config.example.yaml` and fix stale fallback comment — repos are now read exclusively from this key plus the machine overlay `registered_repos.yaml`.
+- Refine agent mill-misroute gate: classify spec-mentioned paths as
+  source-tree vs conceptual before deciding routing. Add confidence
+  threshold requiring ≥2 absent source-tree paths when the repo
+  clearly exists. Exclude common conceptual patterns
+  (``config/config.yaml``, container paths, template files, compose
+  files) from triggering mill redirects.
 - Consolidate GitHub 401 retry boilerplate: add `invalidate_and_backoff()` to `forge/auth.py`, replace ~14 duplicated `invalidate_github_token()` + `time.sleep(2)` sites across `github.py`, `github_ci.py`, and `github_pr.py`, and delete the standalone `_retry_after_401()` method.
 - Extend `env_doc_sync` periodic agent to also create/maintain `.env.example` from canonical Pydantic settings + secrets, and cross-reference runtime-affecting `pyproject.toml` sections against `docs/configuration.md`.
 - Add missing `SourceKind.LANGFUSE_CLEANUP` enum member, `SOURCE_CLASS` JS map entry, and `.src-langfuse-cleanup` CSS rule for board card styling of langfuse-cleanup runs.
