@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -27,7 +27,6 @@ from ...core.service import TicketService
 from ...core.states import State
 from ..deps import (
     get_repos_registry,
-    get_service,
     get_settings,
     get_worker,
     maybe_enqueue,
@@ -58,8 +57,6 @@ class IngestResult(BaseModel):
 @router.post("/tickets/ingest")
 def ingest_ticket(
     body: TicketIngest,
-    request: Request,
-    svc: TicketService = Depends(get_service),
     worker: Worker = Depends(get_worker),
     settings: Settings = Depends(get_settings),
     repos: ReposRegistry = Depends(get_repos_registry),
