@@ -90,6 +90,7 @@ packages = ["src/robotsix_mill"]
 [tool.hatch.build.targets.wheel.force-include]
 "agent_definitions" = "robotsix_mill/agent_definitions"
 "expert_definitions" = "robotsix_mill/expert_definitions"
+"skills" = "robotsix_mill/skills"
 
 # Allow the direct git references in dependencies. Hatchling does not
 # process PEP 508 direct references by default, so keep this flag.
