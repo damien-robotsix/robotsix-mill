@@ -112,6 +112,19 @@ def invalidate_github_token(
     logger.debug("invalidate_github_token key=%s", ck)
 
 
+def invalidate_and_backoff(
+    settings: Settings, repo_config: RepoConfig | None = None
+) -> None:
+    """Invalidate the cached GitHub token and sleep 2 s before retrying.
+
+    Combines ``invalidate_github_token()`` with a 2-second backoff.
+    Use this in 401 retry loops inside ``_ApiClient.client()`` blocks
+    (the ``_do()`` path already applies its own sleep via ``_on_401``).
+    """
+    invalidate_github_token(settings, repo_config)
+    time.sleep(2)
+
+
 def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
     """Return a forge auth token: either a static FORGE_TOKEN from secrets or a short-lived GitHub App installation token."""
     if settings.forge_auth != "app":

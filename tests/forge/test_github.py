@@ -3761,7 +3761,7 @@ def test_extract_annotations_long_summary_truncated():
 
 
 def test_retry_after_401_invalidates_token_and_sleeps(tmp_path, monkeypatch):
-    """_retry_after_401 calls invalidate_github_token() and sleeps 2s."""
+    """invalidate_and_backoff() calls invalidate_github_token() and sleeps 2s."""
     import time
 
     from robotsix_mill.forge import auth as forge_auth
@@ -3776,7 +3776,7 @@ def test_retry_after_401_invalidates_token_and_sleeps(tmp_path, monkeypatch):
     sleep_calls = []
     monkeypatch.setattr(time, "sleep", lambda s: sleep_calls.append(s))
 
-    forge._retry_after_401()
+    forge_auth.invalidate_and_backoff(forge.settings, forge._repo_config)
     assert len(invalidate_calls) == 1
     assert sleep_calls == [2]
 

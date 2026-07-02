@@ -308,9 +308,7 @@ class GitHubForgeCIMixin:
     def _check_status(
         self, *, owner: str, repo: str, head: str, sha: str | None = None
     ) -> dict | None:
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
+        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
 
         if sha is None:
             pr = self._get_pr(owner=owner, repo=repo, head=head)  # type: ignore[attr-defined]
@@ -339,8 +337,7 @@ class GitHubForgeCIMixin:
                     params={"per_page": 100},
                 )
                 if cr_resp.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
                     continue
                 if cr_resp.status_code != 403:
                     cr_resp.raise_for_status()
@@ -357,8 +354,7 @@ class GitHubForgeCIMixin:
                     headers=headers,
                 )
                 if st_resp.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
                     continue
                 if st_resp.status_code != 403:
                     st_resp.raise_for_status()
@@ -423,9 +419,7 @@ class GitHubForgeCIMixin:
         run_id: int,
         full_log: bool = False,
     ) -> str:
-        import time
-
-        from .auth import invalidate_github_token  # lazy: avoid import cycle
+        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
 
         s = self.settings  # type: ignore[attr-defined]
 
@@ -443,8 +437,7 @@ class GitHubForgeCIMixin:
                     params={"status": "completed"},
                 )
                 if jobs_resp.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    time.sleep(2)
+                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
                     continue
                 jobs_resp.raise_for_status()
                 jobs = jobs_resp.json().get("jobs", [])
@@ -484,8 +477,7 @@ class GitHubForgeCIMixin:
                             follow_redirects=True,
                         )
                         if log_resp.status_code == 401 and log_retry == 0:
-                            invalidate_github_token(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            time.sleep(2)
+                            invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
                             headers = self._http.regenerate_headers()  # type: ignore[attr-defined]
                             continue
                         log_resp.raise_for_status()
