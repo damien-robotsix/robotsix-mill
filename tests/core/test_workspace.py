@@ -48,6 +48,21 @@ def test_constructor_permission_error_raises(tmp_path: Path, monkeypatch) -> Non
         Workspace(tmp_path, "T-perm")
 
 
+@pytest.mark.parametrize(
+    "unsafe_id",
+    [
+        "../escape",
+        "sub/dir",
+        "..",
+        ".",
+    ],
+)
+def test_constructor_rejects_path_traversal(tmp_path: Path, unsafe_id: str) -> None:
+    """A ticket_id containing path separators or '.'/'..' raises ValueError."""
+    with pytest.raises(ValueError, match="Unsafe ticket_id"):
+        Workspace(tmp_path, unsafe_id)
+
+
 # ---- paths ---------------------------------------------------------------
 
 
