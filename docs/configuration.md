@@ -37,10 +37,9 @@ treated as unset.
 
 ```
 config/
-  config.yaml              # gitignored: THE single config — all knobs + a secrets: block
+  config.yaml              # gitignored: THE single config — all knobs + repos: + a secrets: block
   config.example.yaml      # committed: template (safe defaults + SECRET sentinels)
-  repos.yaml               # gitignored: per-repo board & Langfuse config (create from example)
-  repos.example.yaml       # committed: template for repos.yaml
+  repos.example.yaml       # committed: example entries for the repos: key of config.yaml
 ```
 
 ### Getting started
@@ -904,13 +903,12 @@ repo entry (and thus which Langfuse project) is used for its traces.
 
 ### Set up
 
-```sh
-cp config/repos.example.yaml config/repos.yaml
-# Edit config/repos.yaml — add one entry per repository:
-```
+Add a `repos:` block to `config/config.yaml` — one entry per repository
+(example entries in `config/repos.example.yaml`; a standalone
+`config/repos.yaml` is no longer read):
 
 ```yaml
-# config/repos.yaml
+# config/config.yaml
 repos:
   my-repo:
     board_id: "my-board"
@@ -960,8 +958,9 @@ List the registered repos from the CLI:
 robotsix-mill repos list
 ```
 
-File path: `config/repos.yaml` (overridable via `MILL_REPOS_FILE` env var).
-Set `MILL_REPOS_FILE=""` to disable repos config entirely. Template:
+Source: the `repos:` key of `config/config.yaml` (overridable via the
+`MILL_REPOS_FILE` env var, which reads the given file directly). Set
+`MILL_REPOS_FILE=""` to disable repos config entirely. Example entries:
 `config/repos.example.yaml`.
 
 ### Field reference

@@ -162,15 +162,14 @@ def _load_repos_document(file_path: str | None = None) -> dict:
     """Read and parse the repos configuration document.
 
     Single config entry point: repos live under the ``repos:`` key of the
-    main ``config/config.yaml``.  When that key is present it is
-    authoritative; when it is absent the loader falls back to the legacy
-    standalone ``config/repos.yaml`` (deprecated).  Returns the raw
-    top-level mapping (``{"repos": {...}}`` or a flat legacy mapping), or
-    ``{}`` when nothing is configured — zero repos is valid.
+    main ``config/config.yaml`` — the sole on-disk source.  A standalone
+    ``config/repos.yaml`` is no longer read.  Returns the raw top-level
+    mapping (``{"repos": {...}}``), or ``{}`` when nothing is configured —
+    zero repos is valid.
 
     An explicit *file_path* arg or the ``MILL_REPOS_FILE`` env var overrides
-    both sources and reads that file directly (used by the test suite); an
-    explicit ``""`` means "no repos".
+    the config file and reads the given file directly (used by the test
+    suite); an explicit ``""`` means "no repos".
     """
     # Explicit override: arg > env var — reads the given file directly.
     if file_path is not None:
@@ -189,34 +188,26 @@ def _load_repos_document(file_path: str | None = None) -> dict:
             raise ConfigError(str(exc)) from exc
         return data if isinstance(data, dict) else {}
 
-    # Default source: the ``repos:`` section of the main config.yaml.
+    # Sole source: the ``repos:`` section of the main config.yaml.
     try:
         cfg = load_yaml_config()
     except ConfigError:
         cfg = {}
     if isinstance(cfg, dict) and "repos" in cfg:
         return {"repos": cfg.get("repos") or {}}
-
-    # Legacy fallback: the standalone config/repos.yaml.
-    legacy = _YAML_DIR / "repos.yaml"
-    if not legacy.exists():
-        return {}
-    try:
-        data = read_yaml_file(legacy)
-    except YamlConfigError as exc:
-        raise ConfigError(str(exc)) from exc
-    return data if isinstance(data, dict) else {}
+    return {}
 
 
 def load_repos_yaml(file_path: str | None = None) -> dict:
-    """Read ``config/repos.yaml`` (or ``MILL_REPOS_FILE`` if set).
+    """Read the repos config from ``config/config.yaml``'s ``repos:`` key
+    (or the file given by ``MILL_REPOS_FILE`` / *file_path* if set).
 
     Returns a dict keyed by repo ID with nested ``board_id`` and
     ``langfuse`` sub-dicts
     (e.g. ``{"my-repo": {"board_id": "...", "langfuse": {...}}, ...}``).
 
-    Missing file → returns an empty dict (not an error — repos config is
-    optional).
+    Missing key/file → returns an empty dict (not an error — repos config
+    is optional).
 
     Malformed YAML → raises ``ConfigError`` with the file path and
     parse error details.
@@ -229,12 +220,12 @@ def load_repos_yaml(file_path: str | None = None) -> dict:
         repos_data = data["repos"]
         if not isinstance(repos_data, dict):
             raise ConfigError(
-                f"Expected a mapping under 'repos' key in repos.yaml, "
+                f"Expected a mapping under the 'repos' key, "
                 f"got {type(repos_data).__name__}"
             )
         return dict(repos_data)
-    # Legacy flat format: the document IS the repo mapping. The sibling
-    # ``meta`` block is not a repo, so never surface it as one.
+    # Flat format (override files only): the document IS the repo mapping.
+    # The sibling ``meta`` block is not a repo, so never surface it as one.
     return {k: v for k, v in data.items() if k != "meta"}
 
 

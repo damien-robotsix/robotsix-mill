@@ -1,6 +1,7 @@
-# Repos registry — copy to config/repos.yaml and fill in your repo configs.
-#
-#   cp config/repos.example.yaml config/repos.yaml
+# Repos registry — example entries for the `repos:` key of the main
+# config/config.yaml (the single config entry point; a standalone
+# config/repos.yaml is NO LONGER read).  Copy the `repos:` block below
+# into config/config.yaml and fill in your repo configs.
 #
 # Each repo gets its own board ID and Langfuse project for observability
 # isolation.  This file is NOT merged into the main Settings object — it

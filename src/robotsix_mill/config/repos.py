@@ -207,7 +207,8 @@ def _validate_cross_repo_forge_compat(
 
 
 def load_repos_config(config_file: str | None = None) -> ReposRegistry:
-    """Load repos configuration from ``config/repos.yaml`` (or override).
+    """Load repos configuration from ``config/config.yaml``'s ``repos:``
+    key (or the ``MILL_REPOS_FILE`` / *config_file* override).
 
     Reads YAML via :func:`~robotsix_mill.config.loader.load_repos_yaml`,
     constructs a :class:`RepoConfig` for each entry, validates, and
