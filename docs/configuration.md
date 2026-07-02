@@ -821,6 +821,7 @@ Configure via environment variables or YAML paths under
 | `periodic.orphaned_pr_check.bot_logins` | `MILL_ORPHANED_PR_BOT_LOGINS` | `[]` | Bot author logins trusted for orphaned-PR actions. When non-empty, only PRs whose author is in this list are eligible. When empty, the runner resolves the bot login from the forge and uses that; if that also returns empty, the author guard is bypassed (fail-open). |
 | `periodic.orphaned_pr_check.max_closes_per_pass` | `MILL_ORPHANED_PR_MAX_CLOSES_PER_PASS` | `10` | Per-pass cap on PR close actions. Applied in addition to the combined `max_actions_per_pass` cap. |
 | `periodic.orphaned_pr_check.max_files_per_pass` | `MILL_ORPHANED_PR_MAX_FILES_PER_PASS` | `5` | Per-pass cap on tracking-ticket file actions. Applied in addition to the combined `max_actions_per_pass` cap. |
+| `periodic.orphaned_pr_check.track_foreign_prs` | `MILL_ORPHANED_PR_TRACK_FOREIGN_PRS` | `false` | Also file tracking tickets for non-mill PRs (dependabot/human); never closes them |
 
 #### Env-var-only periodic agents
 
