@@ -1,0 +1,7000 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../core/">
+      
+      
+        <link rel="next" href="../stages/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Runtime - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#runtime" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Runtime
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        api
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="api">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.api.create_app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_app
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        worker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.queue_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        queue_size
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.queue_join" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        queue_join
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.enqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        enqueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.requeue_with_current_priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        requeue_with_current_priority
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.requeue_unfinished" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        requeue_unfinished
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.process_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        process_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_service
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_worker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_broadcaster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_broadcaster
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_run_registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_run_registry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_repos_registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_repos_registry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.maybe_enqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        maybe_enqueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.with_cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        with_cost
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.enrich_ticket_read" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        enrich_ticket_read
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.lifespan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lifespan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="lifespan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.lifespan.setup_logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        setup_logging
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.lifespan.create_lifespan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_lifespan
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        board_adapter
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="board_adapter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MillBoardAdapter
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MillBoardAdapter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.columns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        columns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_id
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_title" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_title
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_badges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_badges
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_timestamps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_timestamps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.move_endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        move_endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.move_endpoint_template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        move_endpoint_template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.render_mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        render_mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        broadcaster
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="broadcaster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoardBroadcaster
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BoardBroadcaster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster.broadcast_sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        broadcast_sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster.subscribe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        subscribe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster.unsubscribe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unsubscribe
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._agents.list_enabled_agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_enabled_agents
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _board
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_board">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._board.board_cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        board_cards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._board.board_move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        board_move
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _candidates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_candidates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.CandidateRead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CandidateRead
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.list_candidates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_candidates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.validate_candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.reject_candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reject_candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _comments
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_comments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.add_comment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_comment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.list_comments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_comments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.close_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.reopen_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reopen_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _epics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_epics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics.create_epic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_epic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics.list_children" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_children
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics.generate_children" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_children
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _health
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_health">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.langfuse_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        langfuse_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.credit_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        credit_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.credit_status_clear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        credit_status_clear
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.worker_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        worker_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.langfuse_status_clear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        langfuse_status_clear
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.list_repos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_repos
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.ws_board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ws_board
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _passes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_passes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.trace_health_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_health_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.langfuse_cleanup_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        langfuse_cleanup_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.meta_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        meta_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.run_health_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_health_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._repo_helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _repo_helpers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _tickets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_tickets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.create_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.list_tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_tickets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.upload_screenshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        upload_screenshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_retrospect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_retrospect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.list_artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_artifact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_artifact
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.delete_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delete_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.convert_to_task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        convert_to_task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.transition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        transition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.migrate_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        migrate_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.set_unblocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        set_unblocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.approve_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        approve_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _traces
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_traces">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.list_runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_runs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.list_active" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_active
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.list_recent_traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_recent_traces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.get_trace_detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_trace_detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        api
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="api">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.api.create_app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_app
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        worker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.queue_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        queue_size
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.queue_join" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        queue_join
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.enqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        enqueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.requeue_with_current_priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        requeue_with_current_priority
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.Worker.requeue_unfinished" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        requeue_unfinished
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.worker.process_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        process_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_service
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_worker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_broadcaster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_broadcaster
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_run_registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_run_registry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.get_repos_registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_repos_registry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.maybe_enqueue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        maybe_enqueue
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.with_cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        with_cost
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.deps.enrich_ticket_read" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        enrich_ticket_read
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.lifespan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lifespan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="lifespan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.lifespan.setup_logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        setup_logging
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.lifespan.create_lifespan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_lifespan
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        board_adapter
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="board_adapter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MillBoardAdapter
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MillBoardAdapter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.columns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        columns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_id
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_title" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_title
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_badges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_badges
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_timestamps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        card_timestamps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.move_endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        move_endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.move_endpoint_template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        move_endpoint_template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.board_adapter.MillBoardAdapter.render_mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        render_mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        broadcaster
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="broadcaster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoardBroadcaster
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BoardBroadcaster">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster.broadcast_sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        broadcast_sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster.subscribe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        subscribe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.broadcaster.BoardBroadcaster.unsubscribe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unsubscribe
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._agents.list_enabled_agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_enabled_agents
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _board
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_board">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._board.board_cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        board_cards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._board.board_move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        board_move
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _candidates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_candidates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.CandidateRead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CandidateRead
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.list_candidates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_candidates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.validate_candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._candidates.reject_candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reject_candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _comments
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_comments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.add_comment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_comment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.list_comments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_comments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.close_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._comments.reopen_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reopen_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _epics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_epics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics.create_epic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_epic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics.list_children" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_children
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._epics.generate_children" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_children
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _health
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_health">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.langfuse_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        langfuse_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.credit_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        credit_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.credit_status_clear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        credit_status_clear
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.worker_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        worker_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.langfuse_status_clear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        langfuse_status_clear
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.list_repos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_repos
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._health.ws_board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ws_board
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _passes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_passes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.trace_health_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_health_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.langfuse_cleanup_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        langfuse_cleanup_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.meta_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        meta_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._passes.run_health_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_health_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._repo_helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _repo_helpers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _tickets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_tickets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.create_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.list_tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_tickets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.upload_screenshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        upload_screenshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_retrospect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_retrospect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.list_artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.get_artifact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_artifact
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.delete_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delete_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.convert_to_task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        convert_to_task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.transition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        transition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.migrate_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        migrate_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.set_unblocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        set_unblocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._tickets.approve_ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        approve_ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _traces
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_traces">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.list_runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_runs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.list_active" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_active
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.list_recent_traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_recent_traces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.runtime.routes._traces.get_trace_detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_trace_detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="runtime">Runtime</h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.api" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.api</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>FastAPI app = the management-plane service.</p>
+<p>It owns the DB, the in-process worker, and the HTTP surface the CLI (and
+a future web frontend) use. Emitting a ticket enqueues it; the worker
+picks it up immediately and chains it through the pipeline.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.api.create_app" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">create_app</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">create_app</span><span class="p">(</span><span class="n">repos</span><span class="p">,</span> <span class="n">settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">single_repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build and return a fully-wired FastAPI application.</p>
+<p><em>repos</em> is the :class:<code>ReposRegistry</code> holding all configured repos.
+<em>settings</em> may be <code>None</code>, in which case <code>Settings()</code> (from env)
+is used.  <em>single_repo_id</em> scopes the process to one repo (optional;
+when <code>None</code> the process serves all repos).  The returned app has
+all routes registered and the lifespan configured.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.worker" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.worker</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Event-driven worker. No scheduler.</p>
+<p>A ticket is enqueued the moment it is emitted (or transitions into an
+actionable state). A consumer pulls it and <strong>chains</strong> stages —
+<code>draft → … → done</code> — until it hits a terminal state, a stub, or an
+error. A bounded <strong>pool</strong> of consumers (<code>MILL_MAX_CONCURRENCY</code>) runs
+distinct tickets in parallel; a dedupe set guarantees one ticket is
+never processed by two consumers at once (one ticket's stages still
+run sequentially within its own consumer).</p>
+<p>This package was split from a single <code>worker.py</code> module into focused
+submodules organized by responsibility. This <code>__init__</code> re-exports the
+full public + internal symbol surface so existing import sites keep
+resolving unchanged.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.runtime.worker.Worker" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Worker</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="robotsix_mill.runtime.worker.periodic_passes.PeriodicPassesMixin">PeriodicPassesMixin</span></code>, <code><span title="robotsix_mill.runtime.worker.poll_loops.PollLoopsMixin">PollLoopsMixin</span></code></p>
+
+
+
+        <p>In-process queue + consumer task, owned by the API service.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.worker.Worker.queue_size" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">queue_size</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">queue_size</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Aggregate ticket count across all per-repo queues.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.worker.Worker.queue_join" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">queue_join</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">queue_join</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Wait for every per-repo queue to drain.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.worker.Worker.enqueue" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">enqueue</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">enqueue</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Enqueue <em>ticket_id</em> on its repo's queue with CURRENT priority
+AND stage rank.</p>
+<p>Queue items are <code>(priority_rank, stage_rank, seq, ticket_id)</code>.
+Sort order: priority tickets (rank 0) first; within priority
+class, later-pipeline tickets (lower stage_rank) first; FIFO
+within a (priority, stage) pair. The stage tie-break drains
+in-flight tickets through to terminal before starting fresh
+refines — keeps the board from piling up with intermediate
+states.</p>
+<p>Priority AND stage are captured at enqueue time and the
+<code>_pending</code> set de-duplicates concurrent enqueues. If the
+ticket's priority or stage changes after enqueue, the pop-time
+sanity check in :meth:<code>_run</code> re-enqueues at the correct rank.
+Operators can also call :meth:<code>requeue_with_current_priority</code>
+to force a refresh explicitly.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.worker.Worker.requeue_with_current_priority" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">requeue_with_current_priority</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">requeue_with_current_priority</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Force a re-enqueue that picks up the ticket's current
+priority from the DB.</p>
+<p>Use this from callers that mutate <code>Ticket.priority</code> after the
+initial enqueue (the <code>POST /tickets/{id}/priority</code> route, any
+future stage transition that changes priority). Without it the
+stale enqueue entry stays at the OLD priority rank in the heap.</p>
+<p>The OLD heap entry is NOT removed (Python's <code>PriorityQueue</code>
+doesn't support removal). When it eventually pops, the
+consumer's pop-time priority re-check (see <code>_run</code>) either
+accepts it at the current priority or re-enqueues it again —
+so duplicates are tolerated, not double-processed.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.worker.Worker.requeue_unfinished" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">requeue_unfinished</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">requeue_unfinished</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>On startup, re-enqueue any ticket left mid-pipeline so a
+restart resumes work (idempotent: stages are re-entrant).</p>
+<p>Spawns a background drip-feed task that enqueues matching
+tickets in batches (with a pause between batches) to avoid
+saturating the freshly-booted event loop.  Returns immediately
+so lifespan startup is not blocked.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.worker.process_ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">process_ticket</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">process_ticket</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">active_map</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Drive one ticket through as many stages as possible, in order,
+until it reaches a terminal/waiting state or a stub stops the chain.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.deps" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.deps</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>FastAPI <code>Depends</code> callables and standalone utilities for route handlers.</p>
+<p>Replaces the closure helpers (<code>_svc</code>, <code>_maybe_enqueue</code>, <code>_with_cost</code>)
+that were previously defined inside <code>create_app()</code>.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.get_service" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_service</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_service</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the <code>TicketService</code> stored on app state during lifespan startup.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.get_worker" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_worker</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_worker</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the <code>Worker</code> stored on app state during lifespan startup.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.get_settings" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_settings</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_settings</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the <code>Settings</code> stored on app state during lifespan startup.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.get_broadcaster" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_broadcaster</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_broadcaster</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the <code>BoardBroadcaster</code> stored on app state during lifespan startup.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.get_run_registry" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_run_registry</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_run_registry</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">repo_id</span><span class="o">=</span><span class="n"><span title="fastapi.Query">Query</span></span><span class="p">(</span><span class="kc">None</span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the per-repo <code>RunRegistry</code> (lifespan creates one per
+board). Routes that pass <code>?repo_id=X</code> get X's registry; routes
+without that query fall back to <code>app.state.run_registry</code> —
+today the lead repo's, so legacy callers still record somewhere.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.get_repos_registry" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_repos_registry</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_repos_registry</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the <code>ReposRegistry</code> stored on app state during lifespan startup.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.maybe_enqueue" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">maybe_enqueue</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">maybe_enqueue</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">worker</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Enqueue <em>ticket</em> on the worker if its state has a pipeline stage.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.with_cost" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">with_cost</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">with_cost</span><span class="p">(</span>
+    <span class="n">ticket</span><span class="p">,</span> <span class="n">settings</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">repo_config</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Populate <code>cost_usd</code> on <em>ticket</em> (in-place) from the Langfuse session.</p>
+<p>Cost is NOT persisted — it lives in Langfuse; this is read-time
+only.  Mutates and returns the same object.</p>
+<p>When <code>blocking=False</code> the lookup is cache-only — returns the
+cached value if present, else 0.0, and never hits the network. Use
+this for list endpoints like /tickets which the board polls every
+1s; otherwise N cold-cache tickets would issue N serial Langfuse
+HTTP calls and the response would take seconds.</p>
+<p>When <em>repo_config</em> is provided, its Langfuse credentials are used
+for the cost lookup (per-repo isolation).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.deps.enrich_ticket_read" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">enrich_ticket_read</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">enrich_ticket_read</span><span class="p">(</span>
+    <span class="n">ticket</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">,</span>
+    <span class="n">service</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">blocking_cost</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">fetch_pr_url</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">repo_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Convert a :class:<code>Ticket</code> into a :class:<code>TicketRead</code>, populating
+<code>cost_usd</code> from Langfuse, computing <code>origin_session_url</code>, and
+resolving unmet dependencies.</p>
+<p><code>blocking_cost=False</code> makes the cost lookup cache-only — used by
+the polled /tickets list endpoint to avoid N serial Langfuse calls
+on a cold cache stalling the response past the next poll tick.</p>
+<p><code>fetch_pr_url=False</code> skips the per-ticket forge <code>pr_status</code>
+call entirely. Same problem class: with N review-state tickets in
+the list, N serial GitHub API calls would stall the response. The
+drawer (per-ticket GET) keeps the full lookup so the PR link is
+authoritative when the user actually opens a ticket.</p>
+<p><em>repo_config</em> is passed through to Langfuse lookups and the
+origin-session URL builder so per-repo project data is used.
+When <code>None</code> the global <code>Secrets</code> singleton is consulted.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.lifespan" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.lifespan</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>FastAPI lifespan management for robotsix-mill.</p>
+<p>Provides <code>setup_logging()</code> (called once at import time) and
+<code>create_lifespan(settings)</code> which returns an async context manager
+suitable for <code>FastAPI(lifespan=...)</code>.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.lifespan.setup_logging" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">setup_logging</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">setup_logging</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Surface <code>robotsix_mill.*</code> logs on stdout.</p>
+<p>Without this, app logs (worker/audit/stages/notify) propagate to a
+root logger that uvicorn leaves handler-less, so they vanish from
+docker logs — masking failures (e.g. a silently-crashing /audit
+background thread).  Idempotent.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.lifespan.create_lifespan" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">create_lifespan</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">create_lifespan</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">repos</span><span class="p">,</span> <span class="n">single_repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build a FastAPI lifespan callable that performs the same startup
+and shutdown steps as the original inline <code>@asynccontextmanager</code>:</p>
+<ul>
+<li>Initialise the DB and tracing.</li>
+<li>Construct <code>TicketService</code>, <code>StageContext</code>, and <code>Worker</code>.</li>
+<li>Store them on <code>app.state</code> for route handlers.</li>
+<li>Start the worker and requeue unfinished tickets.</li>
+<li>On shutdown, gracefully stop the worker.</li>
+</ul>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.board_adapter" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.board_adapter</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>BoardAdapter implementation for robotsix-mill's Ticket model.</p>
+<p>Implements the <code>robotsix_board.BoardAdapter</code> Protocol so that
+robotsix-board's <code>render_board()</code> and <code>render_config_script()</code> can
+drive the mill kanban board.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">MillBoardAdapter</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>BoardAdapter for mill's <code>TicketRead</code> objects.</p>
+<p>Implements the <code>robotsix_board.BoardAdapter</code> Protocol.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.columns" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">columns</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">columns</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the ordered <code>(status_key, label)</code> pairs for the board.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_id" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">card_id</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">card_id</span><span class="p">(</span><span class="n">card</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the ticket id.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_title" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">card_title</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">card_title</span><span class="p">(</span><span class="n">card</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the ticket title.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_badges" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">card_badges</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">card_badges</span><span class="p">(</span><span class="n">card</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return badge labels: priority, kind, source, and blocked status.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.card_timestamps" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">card_timestamps</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">card_timestamps</span><span class="p">(</span><span class="n">card</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return created / updated timestamps.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.move_endpoint" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">move_endpoint</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">move_endpoint</span><span class="p">(</span><span class="n">card</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the <code>(url, http_method)</code> to move a card between columns.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.move_endpoint_template" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">move_endpoint_template</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">move_endpoint_template</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the URL template for the board config.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.board_adapter.MillBoardAdapter.render_mode" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">render_mode</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">render_mode</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Mill uses JSON_HYDRATION (FastAPI + board.js).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.broadcaster" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.broadcaster</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>BoardBroadcaster — pushes ticket state changes to connected WebSocket
+clients so the board UI can update in real time without polling.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.runtime.broadcaster.BoardBroadcaster" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">BoardBroadcaster</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Manages connected WebSocket clients and broadcasts ticket updates.</p>
+<p>Each connected client gets an <code>asyncio.Queue</code>.  The synchronous
+<code>broadcast_sync</code> method is safe to call from any thread — it
+schedules the async broadcast on the event loop.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.broadcaster.BoardBroadcaster.broadcast_sync" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">broadcast_sync</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">broadcast_sync</span><span class="p">(</span><span class="n">ticket</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Schedule a broadcast of <em>ticket</em> to all connected clients.</p>
+<p>Thread-safe: may be called from the worker threadpool as well
+as the main event-loop thread.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.broadcaster.BoardBroadcaster.subscribe" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">subscribe</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">subscribe</span><span class="p">(</span><span class="n">initial_tickets</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Register a new WebSocket client.</p>
+<p>Returns an <code>asyncio.Queue</code> that the client can iterate to
+receive broadcast messages.  <em>initial_tickets</em> is sent as the
+first message (a <code>ticket_list</code> event) so the client doesn't
+need a separate HTTP fetch on connect.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.runtime.broadcaster.BoardBroadcaster.unsubscribe" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">unsubscribe</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">unsubscribe</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Remove a client queue (called on disconnect).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="routes">Routes</h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._agents" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._agents</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>GET /agents — per-repo enabled on-demand agent names.</p>
+<p>The board's "🤖 Agents ▾" dropdown lists the periodic agents a human
+can run on demand. On a repo-specific board the menu must show only the
+agents actually enabled for that repo, which mirrors the worker's
+<code>_periodic_supervisor</code> resolution: a periodic workflow runs for a repo
+iff the repo ships <code>.robotsix-mill/periodic/&lt;name&gt;.yaml</code> (presence =
+enabled, unless the YAML sets <code>enabled: false</code>) AND the fleet-wide
+<code>Settings.&lt;name&gt;_periodic</code> kill-switch is not <code>False</code>.</p>
+<p>This route is read-only and side-effect free — it never starts an agent.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._agents.list_enabled_agents" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_enabled_agents</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_enabled_agents</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="n"><span title="fastapi.Query">Query</span></span><span class="p">(</span><span class="kc">None</span><span class="p">),</span>
+    <span class="n">repos</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_repos_registry (robotsix_mill.runtime.deps.get_repos_registry)" href="#robotsix_mill.runtime.deps.get_repos_registry">get_repos_registry</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the periodic-agent names enabled for <em>repo_id</em>.</p>
+<p>When <em>repo_id</em> is missing, <code>"all"</code>, or unknown, an empty list is
+returned — the per-repo agent run endpoints each target a single
+repo, so the aggregate board has nothing meaningful to offer (the
+frontend hides the dropdown there anyway).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._board" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._board</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Board-specific HTTP endpoints for the robotsix-board integration.</p>
+<p>Provides <code>/board/cards</code> (card list for JSON hydration) and
+<code>/board/move/{card_id}/{target_status}</code> (column move action).</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._board.board_cards" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">board_cards</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">board_cards</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+    <span class="n">include_closed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return all tickets as card objects for the board JS hydration.</p>
+<p>Mirrors <code>GET /tickets</code> but returns the flat card shape expected
+by robotsix-board's <code>board.js</code> instead of the full <code>TicketRead</code>
+model.</p>
+<p><code>include_closed</code> <strong>defaults to False</strong> — terminal states
+(CLOSED, EPIC_CLOSED, ANSWERED) are excluded.  Pass
+<code>include_closed=true</code> to retrieve them.</p>
+<p>Closed and epic-closed cards are sorted by <code>updated_at</code>
+descending (most recent first); all other cards remain sorted by
+<code>created_at</code> ascending.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._board.board_move" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">board_move</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">board_move</span><span class="p">(</span>
+    <span class="n">card_id</span><span class="p">,</span>
+    <span class="n">target_status</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Move a card to a new column (robotsix-board move action).</p>
+<p>Receives the <code>POST</code> from robotsix-board's <code>board-card-move</code>
+form (JSON_HYDRATION mode).  Translates to a ticket state
+transition.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._candidates" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._candidates</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>AGENT.md candidate routes — list, validate, reject.</p>
+<p>These endpoints expose the per-board <code>AGENT_CANDIDATES.md</code> file
+(written by the retrospect stage) to the board UI. Validating an entry
+files an audited-repo draft ticket whose body proposes the AGENT.md
+edit, then stamps the candidate's Status line so it's not surfaced
+again.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.runtime.routes._candidates.CandidateRead" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CandidateRead</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>JSON shape returned to the board UI.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._candidates.list_candidates" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_candidates</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_candidates</span><span class="p">(</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">include_acted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>List AGENT.md candidates for a repo.</p>
+<p>By default returns only pending entries — validated and rejected
+candidates are kept in the file as an audit trail but the UI
+shouldn't re-surface them. Pass <code>include_acted=true</code> to fetch
+everything.</p>
+<p>When <code>repo_id</code> is <code>"all"</code> (or empty) the candidates from every
+repo are aggregated into a single flat list, each tagged with its
+owning <code>repo_id</code> so the UI can target validate/reject at the
+correct per-board file. The synthetic <code>"meta"</code> board is skipped —
+it has no candidates file.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._candidates.validate_candidate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">validate_candidate</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">validate_candidate</span><span class="p">(</span>
+    <span class="n">candidate_id</span><span class="p">,</span>
+    <span class="n">repo_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>File the audited-repo draft ticket and stamp the candidate.</p>
+<p>The ticket lands on the repo whose board owns the candidates file
+— same repo that retrospect was reviewing when it proposed the
+rule — so refine + implement clone the right tree and edit the
+right AGENT.md.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._candidates.reject_candidate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">reject_candidate</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">reject_candidate</span><span class="p">(</span>
+    <span class="n">candidate_id</span><span class="p">,</span>
+    <span class="n">repo_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Mark the candidate rejected — no ticket is filed. The entry
+stays in the file as audit trail but the UI hides it on the next
+refresh.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._comments" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._comments</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Comment CRUD + thread management routes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._comments.add_comment" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">add_comment</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">add_comment</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">body</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Add a comment to a ticket (any state).</p>
+<p>Set <em>parent_id</em> to reply to an existing comment, forming a
+threaded discussion.  Omit it (or pass <code>null</code>) to start a new
+top-level thread.</p>
+<p>For epic tickets, the comment triggers a background re-processing:
+the epic is re-broken-down by the breakdown agent with the full
+comment history as operator direction, and net-new children are
+created.  Non-epic tickets are unaffected — the comment is simply
+persisted.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._comments.list_comments" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_comments</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_comments</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>List all comments for a ticket, ordered oldest-first.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._comments.close_thread" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">close_thread</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">close_thread</span><span class="p">(</span>
+    <span class="n">comment_id</span><span class="p">,</span> <span class="n">ticket_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Close a top-level comment thread to mark it as resolved.</p>
+<p>Pass <code>ticket_id</code> so the service resolves the correct per-board
+DB — Comment.id is per-board (not globally unique), so a bare
+<code>comment_id</code> lookup is ambiguous across repos.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._comments.reopen_thread" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">reopen_thread</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">reopen_thread</span><span class="p">(</span>
+    <span class="n">comment_id</span><span class="p">,</span> <span class="n">ticket_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Reopen a previously-closed comment thread.</p>
+<p>Pass <code>ticket_id</code> so the service resolves the correct per-board
+DB — Comment.id is per-board (not globally unique).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._epics" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._epics</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Epic creation and child-generation routes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._epics.create_epic" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">create_epic</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">create_epic</span><span class="p">(</span>
+    <span class="n">body</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Create a new epic — accepts <code>{"title": str, "description": str}</code>.</p>
+<p>An optional <code>repo_id</code> field scopes the epic to a specific repo's
+board.  When omitted in single-repo mode the sole repo is used;
+in multi-repo mode <code>repo_id</code> is required and a 400 is returned
+if it is missing.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._epics.list_children" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_children</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_children</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return all tickets whose <code>parent_id</code> equals <em>ticket_id</em>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._epics.generate_children" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">generate_children</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">generate_children</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+    <span class="n">registry</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_run_registry (robotsix_mill.runtime.deps.get_run_registry)" href="#robotsix_mill.runtime.deps.get_run_registry">get_run_registry</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Generate child tickets from an epic description using the LLM
+epic-breakdown agent.  Returns <code>202 Accepted</code> immediately — the
+agent runs in a background thread.</p>
+<p>Returns <code>400</code> if the ticket is not an epic.  Returns <code>404</code> if
+the ticket does not exist.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._health" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._health</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Health, Langfuse status, repos, gates, board UI routes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.langfuse_status" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">langfuse_status</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">langfuse_status</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return recent Langfuse export failures so the UI can surface
+"tracing broken" without the operator having to grep worker logs.</p>
+<p>Empty <code>failures</code> list means everything is shipping fine.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.credit_status" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">credit_status</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">credit_status</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the current low-OpenRouter-credit warning state.</p>
+<p>Polled by the board UI's <code>fetchCreditStatus()</code> every refresh
+cycle.  <code>low</code> is <code>true</code> when the balance is below the
+configured threshold OR a 402 insufficient-credit error was seen.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.credit_status_clear" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">credit_status_clear</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">credit_status_clear</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Dismiss the low-credit warning after the operator acknowledges it.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.worker_status" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">worker_status</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">worker_status</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Live worker introspection for diagnosing stuck tickets.</p>
+<p>Reports per-board queue depth, the in-flight <code>_pending</code> set, and
+consumer-task health (incl. the exception of any task that died — a
+dead per-board consumer is why a <code>ready</code> ticket on that board would
+never be popped). Read-only.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.langfuse_status_clear" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">langfuse_status_clear</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">langfuse_status_clear</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Drop the failure log after the operator acknowledges.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.list_repos" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_repos</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_repos</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">repos</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_repos_registry (robotsix_mill.runtime.deps.get_repos_registry)" href="#robotsix_mill.runtime.deps.get_repos_registry">get_repos_registry</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the registered repos for the UI repo selector.</p>
+<p>No secrets (Langfuse keys) are included — only <code>repo_id</code> and
+<code>board_id</code>.  In single-repo mode (<code>--repo-id</code> passed) only
+that repo is returned.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.gates" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">gates</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">gates</span><span class="p">(</span><span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the four pipeline gate flags from the live configuration.</p>
+<p>Same open access model as <code>/health</code> — no auth.  The board polls
+these every refresh cycle and renders them as header pills so the
+operator always sees which behavioural gates are active.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._health.ws_board" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">ws_board</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">ws_board</span><span class="p">(</span><span class="n">websocket</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>WebSocket endpoint for real-time board updates (live auto-refresh).</p>
+<p>On connect, sends the full ticket list as the first message; subsequent
+messages are <code>ticket_update</code> events pushed by the broadcaster on each
+ticket transition.</p>
+<p>Deps are read straight off <code>websocket.app.state</code> rather than via
+<code>Depends(...)</code>: FastAPI cannot resolve HTTP <code>Request</code>-based
+dependencies for a WebSocket scope, so declaring them made the handshake
+fail with <strong>403 before <code>accept()</code></strong>. (This route also previously lived
+only in the unincluded legacy <code>_misc.py</code>, so it was never registered —
+which silently disabled the board's live auto-refresh.)</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._passes" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._passes</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Background agent pass routes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._passes.trace_health_check" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">trace_health_check</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">trace_health_check</span><span class="p">(</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">registry</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_run_registry (robotsix_mill.runtime.deps.get_run_registry)" href="#robotsix_mill.runtime.deps.get_run_registry">get_run_registry</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Kick off a trace-health check in the BACKGROUND and return at
+once.  The check fetches Langfuse traces from the last 24h,
+detects unsessioned traces, and files a draft ticket if needed.
+No LLM — deterministic and fast.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._passes.langfuse_cleanup_pass" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">langfuse_cleanup_pass</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">langfuse_cleanup_pass</span><span class="p">(</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">registry</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_run_registry (robotsix_mill.runtime.deps.get_run_registry)" href="#robotsix_mill.runtime.deps.get_run_registry">get_run_registry</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Kick off a Langfuse trace cleanup in the BACKGROUND and return at
+once.  The cleanup deletes the oldest traces until the project is
+at most <code>max_traces</code> rows.  Pure HTTP, no LLM.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._passes.meta_pass" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">meta_pass</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">meta_pass</span><span class="p">(</span><span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">registry</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_run_registry (robotsix_mill.runtime.deps.get_run_registry)" href="#robotsix_mill.runtime.deps.get_run_registry">get_run_registry</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Kick off a META pass in the BACKGROUND and return at once.</p>
+<p>The meta-agent surveys ALL registered repo clones, identifies
+extraction and alignment opportunities, and files drafts to the
+meta board and per-repo boards respectively.  This is a global
+pass — it does not fan out per-repo.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._passes.run_health_pass" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_health_pass</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_health_pass</span><span class="p">(</span>
+    <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">registry</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_run_registry (robotsix_mill.runtime.deps.get_run_registry)" href="#robotsix_mill.runtime.deps.get_run_registry">get_run_registry</a></span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Kick off a RUN-HEALTH pass in the BACKGROUND and return at once.</p>
+<p>The run-health agent reads every board's run registry over the window,
+flags failed/degraded runs deterministically, runs one LLM pass to
+separate real failures from legitimate empties, and files
+high-confidence draft tickets to the mill board. Global — it does not
+fan out per-repo.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._repo_helpers" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._repo_helpers</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Shared helpers for repo_id → board_id resolution.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._tickets" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._tickets</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Core ticket lifecycle routes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.create_ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">create_ticket</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">create_ticket</span><span class="p">(</span>
+    <span class="n">body</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Create a new ticket (<code>POST /tickets</code>).</p>
+<p>Resolves the board from <em>body.repo_id</em>, creates the ticket row
+plus workspace, enqueues it for the pipeline, and returns the
+enriched <code>TicketRead</code>.  Returns 400 when the board cannot be
+resolved or the ticket data is invalid.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.list_tickets" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_tickets</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_tickets</span><span class="p">(</span>
+    <span class="n">background</span><span class="p">,</span>
+    <span class="n">state</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">include_closed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>List tickets (<code>GET /tickets</code>).</p>
+<p>Returns the active tickets, optionally filtered by <em>state</em> and
+<em>repo_id</em>.  <code>include_closed</code> <strong>defaults to False</strong> — terminal
+states (CLOSED, EPIC_CLOSED, ANSWERED) are hidden; DONE stays
+visible (the transient retrospect window).  Closed/terminal
+tickets are the overwhelming majority of rows (&gt;90 % on a mature
+board) and are not useful for board operation, so loading +
+enriching them on every poll is the dominant cost behind an
+unresponsive board; callers that genuinely need them must opt in
+with <code>include_closed=true</code>.  Enrichment is downgraded for
+performance — cost is cache-only and PR URLs are skipped —
+because the board polls this every few seconds.  A background
+cost-warming task refreshes the rows on each poll so subsequent
+requests show real values.</p>
+<p>An explicit <em>state</em> filter (e.g. <code>state=closed</code>) takes
+precedence over the default exclusion — the terminal state is
+removed from the exclusion set so the explicit filter works as
+expected.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.get_ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_ticket</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_ticket</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a single ticket (<code>GET /tickets/{ticket_id}</code>).</p>
+<p>Returns the fully enriched <code>TicketRead</code> (with cost and PR link).
+Raises 404 when the ticket does not exist.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.get_history" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_history</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_history</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return event history for a ticket (<code>GET /tickets/{ticket_id}/history</code>).</p>
+<p>Returns the ordered list of <code>TicketEvent</code> rows.  Raises 404 when
+the ticket does not exist.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.get_description" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_description</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_description</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the current description for a ticket (<code>GET /tickets/{ticket_id}/description</code>).</p>
+<p>Reads the description from the ticket's workspace on disk.
+Returns <code>{"description": "..."}</code>.  Raises 404 when the ticket
+does not exist.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.upload_screenshot" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">upload_screenshot</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">upload_screenshot</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n"><span title="fastapi.File">File</span></span><span class="p">(</span><span class="o">...</span><span class="p">),</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Attach an image screenshot to a ticket for the refine agent to view.</p>
+<p>Stores the bytes under the ticket's <code>screenshots/</code> directory (a
+sibling of <code>artifacts/</code> so a refine reset does not wipe user
+input). Rejects non-image uploads with 400 and unknown tickets with
+404. The filename is reduced to its basename to prevent traversal.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.get_retrospect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_retrospect</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_retrospect</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the retrospect.md artifact for a ticket, or empty if
+retrospect has not run yet (or the artifact was lost). Lets the
+board surface what retrospect actually wrote — without this the
+DONE -&gt; CLOSED transition looks like it happened with no
+reflection, even when retrospect did run and write real analysis.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.list_artifacts" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_artifacts</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_artifacts</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>List artifact files in this ticket's workspace.</p>
+<p>Returns <code>{"artifacts": [{"name": str, "size": int, "mtime": str},
+...]}</code> sorted by mtime ascending. Used by the board UI's drawer
+to surface each agent's output — pre-v1 the implement / refine /
+retrospect markdowns only existed on disk.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.get_artifact" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_artifact</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_artifact</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the text content of a single artifact file.</p>
+<p>Refuses path-traversal (<code>..</code>, <code>/</code>) so the route only serves
+files directly under the ticket's <code>artifacts_dir</code>. Binary files
+return decoded-with-replace text since the drawer renders
+markdown / JSON; a hex viewer can be added later if needed.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.delete_ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">delete_ticket</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">delete_ticket</span><span class="p">(</span><span class="n">ticket_id</span><span class="p">,</span> <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Hard-delete a ticket (row + history + workspace). Irreversible.
+404 if it doesn't exist.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.convert_to_task" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">convert_to_task</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">convert_to_task</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">body</span><span class="o">=</span><span class="n"><span title="fastapi.Body">Body</span></span><span class="p">({}),</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Draft a new task ticket from an answered inquiry (the ask).</p>
+<p>Feeds the inquiry's question + answer and an optional operator
+<code>comment</code> to an LLM helper agent, then creates a new <code>kind="task"</code>
+ticket from the agent's drafted title/description on the same board.
+A backlink comment is posted on the source inquiry for traceability.</p>
+<p>404 when the ticket is unknown, 409 when it is not an inquiry, and
+503 when no LLM key is configured.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.transition" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">transition</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">transition</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">body</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Transition a ticket to a new state (<code>POST /tickets/{ticket_id}/transition</code>).</p>
+<p>Body: <code>{"state": "&lt;state&gt;", "note": "&lt;optional note&gt;"}</code>.
+Enqueues the ticket after transition so the pipeline picks it up.
+Returns the enriched <code>TicketRead</code>.  Raises 404 when the ticket
+does not exist.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.migrate_ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">migrate_ticket</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">migrate_ticket</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">body</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Move a ticket to another board (row, history, comments, workspace).</p>
+<p>For tickets filed on the wrong board (the fix belongs to a
+different repo). The migrated ticket lands in DRAFT on the target
+board so its refine stage re-triages it there.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.set_unblocks" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">set_unblocks</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">set_unblocks</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">body</span><span class="o">=</span><span class="n"><span title="fastapi.Body">Body</span></span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
+    <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Set the list of ticket IDs that <em>ticket_id</em> auto-unblocks when it
+completes (DONE/CLOSED/EPIC_CLOSED). Body: <code>{"ticket_ids": [...]}</code>.</p>
+<p>Each listed ticket that is BLOCKED at that point is transitioned
+BLOCKED -&gt; DRAFT. Cross-board safe. Returns the updated solver ticket.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._tickets.approve_ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">approve_ticket</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">approve_ticket</span><span class="p">(</span>
+    <span class="n">ticket_id</span><span class="p">,</span>
+    <span class="n">request</span><span class="p">,</span>
+    <span class="n">svc</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_service (robotsix_mill.runtime.deps.get_service)" href="#robotsix_mill.runtime.deps.get_service">get_service</a></span><span class="p">),</span>
+    <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">),</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Human approval for a ticket (<code>POST /tickets/{ticket_id}/approve</code>).</p>
+<p>Transitions the ticket to READY and enqueues it so implement picks
+it up.  If the ticket has an epic parent and a proposed epic body
+artifact exists (<code>epic-body-proposed.md</code>), that body is applied
+to the epic as a best-effort side effect.  Returns 404 when the
+ticket does not exist.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.runtime.routes._traces" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.runtime.routes._traces</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Operational monitoring + traces routes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._traces.list_runs" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_runs</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_runs</span><span class="p">(</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">registry</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_run_registry (robotsix_mill.runtime.deps.get_run_registry)" href="#robotsix_mill.runtime.deps.get_run_registry">get_run_registry</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return recent background-run entries (newest first).</p>
+<p><code>?repo_id=X</code> returns X's runs. Without it (or <code>?repo_id=all</code>) the
+aggregate view UNIONS every per-repo registry. Periodic runs (audit,
+bc_check, health, …) are recorded into the per-repo registry, not the
+lead repo's, so reading only the default registry would hide them on
+the all-repos board even though they show on the per-repo board.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._traces.list_active" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_active</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_active</span><span class="p">(</span>
+    <span class="n">repo_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">worker</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_worker (robotsix_mill.runtime.deps.get_worker)" href="#robotsix_mill.runtime.deps.get_worker">get_worker</a></span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return tickets currently being processed by a pipeline stage.</p>
+<p><code>?repo_id=X</code> filters to active tickets belonging to that repo.
+When omitted, returns all (current behaviour preserved).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._traces.list_recent_traces" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_recent_traces</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_recent_traces</span><span class="p">(</span>
+    <span class="n">limit</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">min_cost</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">max_cost</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return recent Langfuse traces, filtered by cost and limited in
+count.  <em>limit</em> is clamped to 1–50; <em>min_cost</em> and <em>max_cost</em> are
+inclusive USD filters on <code>totalCost</code>.</p>
+<p>Each trace now includes an <code>observationSummary</code> with per-trace
+token counts, model, tool-call list, and error/warning counts so
+fleet-level cost analysis can attribute spend without fetching every
+trace individually.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.runtime.routes._traces.get_trace_detail" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_trace_detail</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_trace_detail</span><span class="p">(</span><span class="n">trace_id</span><span class="p">,</span> <span class="n">settings</span><span class="o">=</span><span class="n"><span title="fastapi.Depends">Depends</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="get_settings (robotsix_mill.runtime.deps.get_settings)" href="#robotsix_mill.runtime.deps.get_settings">get_settings</a></span><span class="p">))</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return full Langfuse trace detail including all observations.</p>
+<p>Callers that need the complete prompt/completion bodies, per-
+observation token usage, or raw cost-details should use this
+endpoint (one call per trace) rather than <code>/traces/recent</code>,
+which only returns aggregated summaries.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2578 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../forge-architecture/">
+      
+      
+        <link rel="next" href="../../guides/adding-a-new-agent/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Worker Process Split (ADR) - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-worker-process-split" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Worker Process Split (ADR)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Current architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-process-single-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single process, single event loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-already-runs-off-the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What already runs off the event loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gil-release-in-blocking-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIL release in blocking paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-still-blocks-the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What still blocks the event loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-process-split-would-require" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a process split would require
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What a process split would require">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shared-state-that-must-cross-the-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared state that must cross the boundary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ipc-design-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IPC design options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deployment-complexity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployment complexity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommendation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recommendation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rationale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rationale
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conditions-that-would-trigger-re-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conditions that would trigger re-evaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#future-split-design-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Future split design (reference)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acceptance criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Current architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-process-single-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single process, single event loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-already-runs-off-the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What already runs off the event loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gil-release-in-blocking-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIL release in blocking paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-still-blocks-the-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What still blocks the event loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-process-split-would-require" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a process split would require
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What a process split would require">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shared-state-that-must-cross-the-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared state that must cross the boundary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ipc-design-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IPC design options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deployment-complexity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployment complexity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommendation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recommendation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rationale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rationale
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conditions-that-would-trigger-re-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conditions that would trigger re-evaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#future-split-design-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Future split design (reference)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acceptance criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="adr-worker-process-split">ADR: Worker Process Split</h1>
+<blockquote>
+<p><strong>Status:</strong> draft<br />
+<strong>Epic:</strong> api-responsiveness<br />
+<strong>Scope:</strong> design only — no code changes in this ticket  </p>
+</blockquote>
+<h2 id="overview">Overview</h2>
+<p>The mill runs the FastAPI server (single uvicorn event loop), the worker
+pool, ~15 periodic agent poll loops, and the
+board UI websocket <strong>in one Python process on one event loop</strong>. Under
+load the API becomes intermittently unresponsive. The epic proposes
+seven children; this ADR evaluates whether the deepest fix — running
+the worker + periodic engine in a separate process — is warranted, or
+whether children 1-4 (non-blocking endpoints, offloaded periodic passes,
+global concurrency cap, staggered startup) suffice.</p>
+<h2 id="current-architecture">Current architecture</h2>
+<h3 id="single-process-single-event-loop">Single process, single event loop</h3>
+<p>Uvicorn is started with <strong>no <code>--workers</code> flag</strong> (<code>cli/serve.py:24-60</code>).
+The lifespan (<code>runtime/lifespan.py:100-128</code>) wires everything onto
+<code>app.state</code> and starts the worker's consumer tasks and periodic loops as
+<code>asyncio.create_task</code> coroutines on the same event loop.</p>
+<h3 id="what-already-runs-off-the-event-loop">What already runs off the event loop</h3>
+<p>All potentially blocking work is offloaded to threads via
+<code>asyncio.to_thread</code> (default <code>ThreadPoolExecutor</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Location</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stage execution (LLM agent runs)</td>
+<td><code>worker/processing.py:310</code></td>
+<td><code>asyncio.to_thread(stage.run, ...)</code></td>
+</tr>
+<tr>
+<td>Periodic LLM passes (audit, survey, test-gap, etc.)</td>
+<td><code>worker/periodic_passes.py:197</code></td>
+<td><code>_tracked_to_thread</code> → <code>asyncio.to_thread</code></td>
+</tr>
+<tr>
+<td>CI monitor checks</td>
+<td><code>worker/poll_loops.py:241,414,448</code></td>
+<td><code>asyncio.to_thread</code></td>
+</tr>
+<tr>
+<td>DB maintenance</td>
+<td><code>worker/poll_loops.py:848</code></td>
+<td><code>asyncio.to_thread</code></td>
+</tr>
+<tr>
+<td>Sandbox reaper</td>
+<td><code>worker/periodic_passes.py:537</code></td>
+<td><code>asyncio.to_thread</code></td>
+</tr>
+<tr>
+<td>Trace health check</td>
+<td><code>worker/periodic_passes.py:591</code></td>
+<td><code>asyncio.to_thread</code></td>
+</tr>
+</tbody>
+</table>
+<p>The event loop itself is never directly blocked by stage work, periodic
+passes, or git operations — they all run in threads.</p>
+<h3 id="gil-release-in-blocking-paths">GIL release in blocking paths</h3>
+<p>The GIL is not the primary bottleneck here because every heavy path
+releases it:</p>
+<ul>
+<li><strong>SQLite</strong> — CPython's <code>sqlite3</code> module releases the GIL during C-level
+  query execution.</li>
+<li><strong>Subprocess calls</strong> (<code>git</code>, <code>docker</code>) — <code>subprocess.run</code> /
+  <code>subprocess.Popen</code> release the GIL while waiting on the child process.</li>
+<li><strong>HTTP calls</strong> (<code>httpx</code>, Langfuse API) — I/O operations release the GIL.</li>
+<li><strong>Filesystem I/O</strong> (<code>RunRegistry</code> JSON reads/writes) — kernel I/O
+  releases the GIL.</li>
+</ul>
+<p>The CPU-bound work that <em>holds</em> the GIL (prompt construction, response
+parsing, JSON serialization, DB result processing) is brief relative to
+the I/O-dominated work.</p>
+<h3 id="what-still-blocks-the-event-loop">What still blocks the event loop</h3>
+<p>Two things cause the observed latency:</p>
+<ol>
+<li>
+<p><strong>Synchronous enrichment in GET <code>/tickets</code> and <code>/board/cards</code>.</strong>
+   <code>runtime/routes/_tickets.py:233</code> runs <code>enrich_ticket_read</code> in a
+   synchronous list comprehension inside the route handler. Even though
+   <code>blocking_cost=False</code> avoids Langfuse HTTP calls, it still runs
+   per-ticket SQLite queries synchronously on the event loop thread.</p>
+</li>
+<li>
+<p><strong>Scheduling pressure.</strong> ~15 periodic async tasks + per-repo consumer
+   tasks + poll loops all compete for the same event loop. Post-restart,
+   all periodic passes fire their first tick simultaneously (thundering
+   herd), amplifying the pressure.</p>
+</li>
+</ol>
+<p>Children 1 and 4 directly target these: child 1 offloads <code>/tickets</code>
+enrichment to a thread, child 4 staggers startup.</p>
+<h2 id="what-a-process-split-would-require">What a process split would require</h2>
+<h3 id="shared-state-that-must-cross-the-boundary">Shared state that must cross the boundary</h3>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Current form</th>
+<th>Split impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TicketService</code></td>
+<td>Single in-process instance; called by worker to transition tickets, add comments, query DB.</td>
+<td>Worker process would access the same SQLite files directly (WAL mode supports concurrent readers, but writes must be serialized). The per-board consumer-task serialization already exists.</td>
+</tr>
+<tr>
+<td><code>BoardBroadcaster</code></td>
+<td>In-process <code>asyncio.Queue</code> per WebSocket client; <code>broadcast_sync</code> uses <code>call_soon_threadsafe</code>.</td>
+<td>Needs a cross-process notification channel. Options: Redis pub/sub, a Unix socket, or a dedicated HTTP endpoint on the API process that the worker calls on ticket transitions.</td>
+</tr>
+<tr>
+<td><code>service._on_transition</code> callback</td>
+<td>Wired in <code>lifespan.py:116</code>: <code>service._on_transition = broadcaster.broadcast_sync</code>.</td>
+<td>The worker's <code>TicketService</code> would need to POST to the API process's internal broadcast endpoint on every state change.</td>
+</tr>
+<tr>
+<td><code>RunRegistry</code></td>
+<td>Thread-safe, file-backed JSON at <code>&lt;data_dir&gt;/&lt;board_id&gt;/runs.json</code>.</td>
+<td>Already file-backed; both processes can read/write the same files with per-file <code>threading.Lock</code> (or an <code>fcntl</code> lock in a multiprocess world). Minor adaptation needed.</td>
+</tr>
+<tr>
+<td><code>Settings</code> / <code>ReposRegistry</code></td>
+<td>Configuration loaded at startup.</td>
+<td>Both processes would independently load the same config. Trivial.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ipc-design-options">IPC design options</h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Complexity</th>
+<th>Latency</th>
+<th>Operational weight</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Redis pub/sub</strong></td>
+<td>Medium — new dependency, new connection management</td>
+<td>&lt;1ms on loopback</td>
+<td>New always-on service in docker-compose</td>
+</tr>
+<tr>
+<td><strong>Internal HTTP endpoint</strong></td>
+<td>Low — worker POSTs to API on transition</td>
+<td>~1ms on loopback</td>
+<td>No new dependencies; API already serves HTTP</td>
+</tr>
+<tr>
+<td><strong>Unix datagram socket</strong></td>
+<td>Medium-High — custom framing, reconnection logic</td>
+<td>&lt;0.1ms</td>
+<td>No new dependencies; OS-level</td>
+</tr>
+<tr>
+<td><strong>Shared SQLite + polling</strong></td>
+<td>Low — worker writes to a <code>broadcast_queue</code> table, API polls it</td>
+<td>Poll interval latency (100ms+)</td>
+<td>No new dependencies; simplest but laggy</td>
+</tr>
+</tbody>
+</table>
+<p>The internal HTTP endpoint is the pragmatic choice: the worker calls
+<code>POST http://localhost:{api_port}/_internal/broadcast</code> with the ticket
+JSON. The API already serves HTTP; the endpoint is unauthenticated
+localhost-only (matching the existing management-API posture).</p>
+<h3 id="deployment-complexity">Deployment complexity</h3>
+<ul>
+<li><strong>One container, two processes:</strong> The entrypoint would start both
+  <code>robotsix-mill serve</code> (API) and <code>robotsix-mill worker</code> (new command)
+  via a process supervisor (e.g. <code>s6-overlay</code>, <code>supervisord</code>, or a
+  simple shell script with <code>wait</code>). Health checks would need to cover
+  both.</li>
+<li><strong>Two containers:</strong> The worker and API run in separate Compose
+  services, sharing the data volume. Cleaner isolation but more YAML
+  and two images (or one image with two commands).</li>
+</ul>
+<p>Either approach doubles the number of things that can fail and must be
+monitored.</p>
+<h2 id="recommendation">Recommendation</h2>
+<p><strong>Do not split now. Implement children 1-4 and re-evaluate.</strong></p>
+<h3 id="rationale">Rationale</h3>
+<ol>
+<li><strong>Children 1-4 address the known blocking paths directly.</strong></li>
+<li>Child 1: offload <code>/tickets</code> and <code>/board/cards</code> enrichment to a
+     thread so the route handler returns immediately.</li>
+<li>Child 2: periodic passes are already offloaded; the remaining
+     work is verifying no synchronous path was missed.</li>
+<li>Child 3: a global concurrency cap prevents the thread pool from
+     being exhausted by too many simultaneous agent runs.</li>
+<li>
+<p>Child 4: staggered startup (jittered initial delays per periodic
+     pass, rate-limited requeue) eliminates the post-restart thundering
+     herd.</p>
+</li>
+<li>
+<p><strong>The GIL is not the bottleneck.</strong> Every heavy path (SQLite, git,
+   HTTP, subprocess) releases the GIL. The event-loop blocking comes
+   from synchronous enrichment in route handlers and scheduling
+   pressure, not from CPU-bound work holding the GIL.</p>
+</li>
+<li>
+<p><strong>The process split adds real complexity.</strong> IPC for
+   <code>BoardBroadcaster</code>, coordination of <code>TicketService</code> DB access across
+   processes, deployment topology changes, health-check coverage for two
+   processes — all for a problem whose root causes have simpler fixes.</p>
+</li>
+<li>
+<p><strong>The split remains a valid escape hatch.</strong> If children 1-4 land and
+   latency issues persist, the split design documented above provides a
+   clear path: add an internal <code>POST /_internal/broadcast</code> endpoint,
+   extract the worker into a <code>robotsix-mill worker</code> subcommand, and run
+   both under a supervisor. The decision is reversible — nothing in
+   children 1-4 makes a future split harder.</p>
+</li>
+</ol>
+<h3 id="conditions-that-would-trigger-re-evaluation">Conditions that would trigger re-evaluation</h3>
+<ul>
+<li><code>/health/live</code> latency (p99) remains above 1s after children 1-4 land.</li>
+<li>Profiling shows CPU-bound work (not I/O) consuming &gt;100ms per tick on
+  the event loop thread.</li>
+<li>The thread pool (<code>default_executor</code>) is not saturated but the API
+  still sees intermittent 5s+ response times.</li>
+</ul>
+<h2 id="future-split-design-reference">Future split design (reference)</h2>
+<p>If the split is pursued later, the minimal design is:</p>
+<ol>
+<li>
+<p><strong>New CLI subcommand:</strong> <code>robotsix-mill worker</code> that constructs
+   <code>TicketService</code>, <code>StageContext</code>, <code>Worker</code> and calls <code>worker.start()</code>
+   without starting an HTTP server.</p>
+</li>
+<li>
+<p><strong>Internal broadcast endpoint:</strong> <code>POST /_internal/broadcast</code> on the
+   API process (localhost-only, no auth). The worker's
+   <code>_on_transition</code> callback POSTs ticket JSON to this endpoint instead
+   of calling <code>broadcaster.broadcast_sync</code> directly.</p>
+</li>
+<li>
+<p><strong>Shared SQLite:</strong> Both processes open the same per-repo <code>.db</code> files
+   with <code>check_same_thread=False</code> and WAL journal mode. The worker's
+   existing per-board consumer-task serialization prevents concurrent
+   writes to the same board's DB.</p>
+</li>
+<li>
+<p><strong>Process supervisor:</strong> The entrypoint starts both processes with a
+   lightweight supervisor. If either exits, the container exits (matching
+   the current single-process failure mode).</p>
+</li>
+</ol>
+<h2 id="acceptance-criteria">Acceptance criteria</h2>
+<ul>
+<li>[x] Document committed at <code>docs/design/worker-process-split.md</code>.</li>
+<li>[x] Investigates shared in-process state: <code>TicketService</code>,
+      <code>BoardBroadcaster</code>, <code>RunRegistry</code>, <code>app.state</code> wiring.</li>
+<li>[x] Describes IPC / shared-DB model for the split scenario.</li>
+<li>[x] Explains how board broadcasts would cross the process boundary.</li>
+<li>[x] Clear recommendation: do not split now; implement children 1-4
+      first and re-evaluate with latency data.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,5109 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../config-audit/">
+      
+      
+        <link rel="next" href="../agents/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>RFC: config v2 - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#rfc-configuration-system-v2" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              RFC: config v2
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-motivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Motivation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Design principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-file-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. File layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-configuration-schema-logical-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Configuration schema (logical groups)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Configuration schema (logical groups)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-group-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Group overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-complete-field-to-group-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Complete field-to-group mapping
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.2 Complete field-to-group mapping">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#coremodels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core.models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corelimits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core.limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corememory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core.memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        forge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sandbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#web" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        web
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicaudit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodictrace_health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.trace_health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodichealth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodictest_gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.test_gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicagent_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.agent_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicsurvey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.survey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicci_monitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.ci_monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        service
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets-separate-file-separate-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        secrets (separate file → separate model)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-secrets-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Secrets handling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Secrets handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-separate-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Separate model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-access-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Access rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-migration-from-secretsenv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Migration from secrets.env
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-resolving-the-tracing-dual-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 Resolving the tracing dual-source
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-load-order-and-precedence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Load order and precedence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Load order and precedence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-how-env-vars-override-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 How env vars override YAML
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-the-mill_config_file-and-mill_secrets_file-env-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 The MILL_CONFIG_FILE and MILL_SECRETS_FILE env vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Validation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-example-validators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Example validators
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-validation-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Validation scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-environment-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Environment strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Environment strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-dev-local-workstation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 Dev (local workstation)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-ci-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 CI (GitHub Actions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-docker-production" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 Docker / Production
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#84-docker_gid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.4 DOCKER_GID
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-migration-path-from-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Migration path from .env
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Migration path from .env">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-ship-the-new-loader-alongside-old" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: Ship the new loader (alongside old)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-run-migration-commit-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: Run migration, commit defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-refactor-consumers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: Refactor consumers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-retire-old-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4: Retire old path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migration-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration script
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-documentation-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Documentation strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Documentation strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#101-rfc-implementation-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 RFC → implementation handoff
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102-generated-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 Generated reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#103-ci-enforcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.3 CI enforcement
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-open-questions-trade-offs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Open questions / trade-offs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. Open questions / trade-offs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111-yaml-anchors-for-shared-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.1 YAML anchors for shared defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-secrets-singleton-vs-explicit-passing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 Secrets: singleton vs. explicit passing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-duplicate-fields-across-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 Duplicate fields across groups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#114-file-watching-hot-reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.4 File watching / hot reload
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#115-environment-variable-naming-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.5 Environment variable naming convention
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#116-pydantic-model-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.6 Pydantic model structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-field-count-by-group" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Field count by group
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-comparison-with-current-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Comparison with current state
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-motivation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Motivation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Design principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-file-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. File layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-configuration-schema-logical-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Configuration schema (logical groups)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Configuration schema (logical groups)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-group-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Group overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-complete-field-to-group-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Complete field-to-group mapping
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.2 Complete field-to-group mapping">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#coremodels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core.models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corelimits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core.limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corememory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core.memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        forge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sandbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#web" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        web
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicaudit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodictrace_health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.trace_health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodichealth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodictest_gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.test_gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicagent_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.agent_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicsurvey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.survey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#periodicci_monitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        periodic.ci_monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        service
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets-separate-file-separate-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        secrets (separate file → separate model)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-secrets-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Secrets handling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Secrets handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-separate-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Separate model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-access-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Access rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-migration-from-secretsenv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Migration from secrets.env
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-resolving-the-tracing-dual-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 Resolving the tracing dual-source
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-load-order-and-precedence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Load order and precedence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Load order and precedence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-how-env-vars-override-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 How env vars override YAML
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-the-mill_config_file-and-mill_secrets_file-env-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 The MILL_CONFIG_FILE and MILL_SECRETS_FILE env vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Validation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-example-validators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Example validators
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-validation-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Validation scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-environment-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Environment strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Environment strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-dev-local-workstation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 Dev (local workstation)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-ci-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 CI (GitHub Actions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-docker-production" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 Docker / Production
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#84-docker_gid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.4 DOCKER_GID
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-migration-path-from-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Migration path from .env
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Migration path from .env">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-ship-the-new-loader-alongside-old" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: Ship the new loader (alongside old)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-run-migration-commit-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: Run migration, commit defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-refactor-consumers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: Refactor consumers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-retire-old-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4: Retire old path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migration-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration script
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-documentation-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Documentation strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Documentation strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#101-rfc-implementation-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 RFC → implementation handoff
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102-generated-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 Generated reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#103-ci-enforcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.3 CI enforcement
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-open-questions-trade-offs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Open questions / trade-offs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. Open questions / trade-offs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111-yaml-anchors-for-shared-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.1 YAML anchors for shared defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-secrets-singleton-vs-explicit-passing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 Secrets: singleton vs. explicit passing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-duplicate-fields-across-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 Duplicate fields across groups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#114-file-watching-hot-reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.4 File watching / hot reload
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#115-environment-variable-naming-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.5 Environment variable naming convention
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#116-pydantic-model-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.6 Pydantic model structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-field-count-by-group" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Field count by group
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-comparison-with-current-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Comparison with current state
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="rfc-configuration-system-v2">RFC: Configuration System v2</h1>
+<blockquote>
+<p><strong>SUPERSEDED (historical).</strong> This RFC describes the multi-file YAML
+design (<code>mill.defaults.yaml</code> + <code>mill.local.yaml</code> + <code>mill.production.yaml</code>
++ <code>secrets.yaml</code>). The mill has since consolidated to a SINGLE file —
+<code>config/config.yaml</code> (else the committed <code>config/config.example.yaml</code>),
+with secrets under a top-level <code>secrets:</code> block. See
+<code>docs/configuration.md</code> for the current model. Kept for historical
+rationale only.</p>
+<p><strong>Status:</strong> Draft — peer review pending
+<strong>Date:</strong> 2026-05-23
+<strong>Supersedes:</strong> <code>docs/config-audit.md</code> (analysis phase)
+<strong>PoC template:</strong> <code>config/config.example.yaml</code></p>
+</blockquote>
+<hr />
+<h2 id="1-motivation">1. Motivation</h2>
+<p>The current configuration system (<code>src/robotsix_mill/config.py</code>) uses a flat
+<code>Settings(BaseSettings)</code> class with 115 env-var aliases loaded from <code>.env</code> +
+<code>secrets.env</code>.  A full-repo audit (<code>docs/config-audit.md</code>) identified seven
+concrete problems:</p>
+<ol>
+<li>
+<p><strong>Flat namespace</strong> — 115 keys with no grouping beyond human comments in
+   <code>.env</code>.  Every model name, timeout, memory path, and feature flag lives in
+   the same <code>MILL_*</code> namespace, making it hard to find related values and
+   impossible to reason about them as coherent groups.</p>
+</li>
+<li>
+<p><strong>Secrets intermingled</strong> — 11 secret/token fields (<code>OPENROUTER_API_KEY</code>,
+   <code>FORGE_TOKEN</code>, <code>LANGFUSE_*</code>, <code>NTFY_*</code>, GitHub App credentials) sit in the
+   same <code>Settings</code> object as non-sensitive tuning knobs.  Any module that
+   imports <code>Settings</code> can read every secret via plain attribute access — no
+   access control, no audit trail.</p>
+</li>
+<li>
+<p><strong>No semantic validation</strong> — pydantic-settings provides type coercion only.
+   <code>MILL_MAX_CONCURRENCY=0</code> or <code>=-1</code> passes silently.  <code>FORGE_AUTH=app</code> with
+   <code>GITHUB_APP_ID=None</code> fails deep in <code>forge/auth.py</code> at runtime, not at
+   startup.  No range checks, no cross-field consistency, no format
+   validation.</p>
+</li>
+<li>
+<p><strong>Inconsistent environment story</strong> — dev uses <code>.env</code> (committed, causes
+   <code>git diff</code> noise when developers tune locally).  CI blocks <code>env_file</code>
+   entirely (<code>tests/conftest.py::_no_dotenv</code>).  Docker overrides are split
+   across <code>Dockerfile</code> <code>ENV</code> (3 vars), <code>docker-compose.yml</code> <code>environment:</code>
+   (3 vars), and compose <code>env_file:</code> (everything else).  No per-environment
+   overlay file exists.</p>
+</li>
+<li>
+<p><strong>Documentation drift</strong> — 12 fields defined in <code>config.py</code> have no entry
+   in <code>docs/configuration.md</code>.  Documentation is manually maintained with no
+   mechanical cross-check.  One default value (<code>MILL_EXPLORE_MODEL</code>) is wrong
+   in both <code>.env</code> comments and docs — the code default is <code>-flash</code> but both
+   say <code>-pro</code>.</p>
+</li>
+<li>
+<p><strong>Dual-source problem</strong> — <code>runtime/tracing.py</code> reads <code>LANGFUSE_PUBLIC_KEY</code>,
+   <code>LANGFUSE_SECRET_KEY</code>, and <code>LANGFUSE_BASE_URL</code> directly from <code>os.environ</code>,
+   bypassing <code>Settings</code> entirely.  If someone constructs
+   <code>Settings(LANGFUSE_PUBLIC_KEY=...)</code> without exporting to <code>os.environ</code>,
+   <code>tracing_enabled</code> is <code>True</code> but the OTel exporter fails to find
+   credentials.</p>
+</li>
+<li>
+<p><strong>Orchestration pollution</strong> — <code>DOCKER_GID</code> lives in <code>.env</code> and is loaded
+   by <code>Settings.model_config</code> (silently ignored via <code>extra="ignore"</code>), but it
+   is a Docker orchestration concern (socket group ownership), not an
+   application config value.</p>
+</li>
+</ol>
+<p>This RFC proposes a YAML-based layered configuration system that addresses
+all seven problems while preserving pydantic-settings compatibility and
+providing a lossless migration path from the existing <code>.env</code> files.</p>
+<hr />
+<h2 id="2-design-principles">2. Design principles</h2>
+<table>
+<thead>
+<tr>
+<th>Principle</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Keep <code>pydantic-settings</code></strong></td>
+<td>46 files import <code>Settings</code>; replacing the framework would cascade across the entire codebase.  The new system wraps <code>pydantic-settings</code> — loading YAML into Pydantic models, then exposing those models through the existing <code>Settings</code> interface during the migration window.</td>
+</tr>
+<tr>
+<td><strong>YAML for structured config</strong></td>
+<td>The repo already uses YAML for <code>agent_definitions/refine.yaml</code> and CI workflows.  YAML supports nesting (groups), comments, anchors/aliases (DRY for repeated model names), and is trivial to diff and review.</td>
+</tr>
+<tr>
+<td><strong>One source of truth per value</strong></td>
+<td>No consumer reads <code>os.environ</code> directly.  The config loader is the single entry point.  <code>tracing.py</code>'s dual-source problem is resolved by wiring <code>Secrets</code> explicitly rather than reaching into the environment.</td>
+</tr>
+<tr>
+<td><strong>Secrets are opaque</strong></td>
+<td>A secret is never accessible as a plain attribute on a general-purpose config object.  Secrets live in a separate <code>Secrets</code> model, loaded from a separate file, accessed only by code that explicitly imports <code>Secrets</code>.  Every access is logged at DEBUG level.</td>
+</tr>
+<tr>
+<td><strong>Backward-compatible migration</strong></td>
+<td>Existing <code>.env</code> values are mechanically translatable to the new format via a migration script.  During the migration window, the loader reads both old (<code>.env</code>) and new (YAML) sources, with YAML taking precedence.  After all consumers are updated, the <code>.env</code> path is retired.</td>
+</tr>
+<tr>
+<td><strong>Committed defaults, local overrides</strong></td>
+<td><code>config/mill.defaults.yaml</code> is committed — it is the canonical source of truth for "what is configurable" and what the safe defaults are.  Per-developer and per-deployment overrides are gitignored.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-file-layout">3. File layout</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Committed?</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config/mill.defaults.yaml</code></td>
+<td><strong>Yes</strong></td>
+<td>Canonical defaults for every knob.  The single source of truth for "what is configurable."  All 115 fields with their code-default values and documentation comments.</td>
+</tr>
+<tr>
+<td><code>config/mill.local.yaml</code></td>
+<td><strong>No</strong> (gitignored)</td>
+<td>Per-developer overrides.  Merged on top of defaults.  Developers who need different models, limits, or feature flags for local work put them here instead of editing the tracked <code>.env</code>.</td>
+</tr>
+<tr>
+<td><code>config/mill.production.yaml</code></td>
+<td><strong>No</strong> (gitignored, host-mounted)</td>
+<td>Production overrides.  Bind-mounted into the Docker container at a path specified by <code>MILL_CONFIG_FILE</code>.  Contains deployment-specific values (forge URLs, sandbox image pins, feature flags).</td>
+</tr>
+<tr>
+<td><code>config/secrets.yaml</code></td>
+<td><strong>No</strong> (gitignored)</td>
+<td>Secrets only — never committed.  Loaded separately from the main config into a dedicated <code>Secrets</code> Pydantic model.  File permissions should be <code>0600</code>.</td>
+</tr>
+<tr>
+<td><code>config/secrets.example.yaml</code></td>
+<td><strong>Yes</strong></td>
+<td>Template for <code>config/secrets.yaml</code> with all keys listed but values empty — the moral equivalent of <code>secrets.env.example</code> today.  Safe to commit and review.</td>
+</tr>
+</tbody>
+</table>
+<p>All files use <strong>YAML</strong> (<code>.yaml</code>).  Justification:</p>
+<ul>
+<li>The repo already uses YAML for agent definitions, CI workflows, and
+  <code>docker-compose.yml</code>.  No new parser dependency is needed — <code>pyyaml</code> is
+  already a transitive dependency of the stack.</li>
+<li>YAML supports nested structure (groups), comments, and anchors/aliases —
+  all three are needed to address the flat-namespace and DRY problems.</li>
+<li>YAML is human-readable and diff-friendly; 2-space indent convention
+  matches the repo's existing YAML style.</li>
+<li>TOML was considered (Python-native, typed) but lacks anchors/aliases and
+  the repo has no existing TOML files.  JSON lacks comments entirely.</li>
+</ul>
+<hr />
+<h2 id="4-configuration-schema-logical-groups">4. Configuration schema (logical groups)</h2>
+<h3 id="41-group-overview">4.1 Group overview</h3>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Field count</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.models</code></td>
+<td>19</td>
+<td>Per-agent model selection</td>
+</tr>
+<tr>
+<td><code>core.limits</code></td>
+<td>16</td>
+<td>Request caps, concurrency, timeouts, retry knobs</td>
+</tr>
+<tr>
+<td><code>core.memory</code></td>
+<td>5</td>
+<td>Memory ledger paths, max chars, reference file limits</td>
+</tr>
+<tr>
+<td><code>forge</code></td>
+<td>6</td>
+<td>Forge platform, remote URL, target branch, auth mode, API URLs</td>
+</tr>
+<tr>
+<td><code>sandbox</code></td>
+<td>9</td>
+<td>Docker images, resource limits, data mounts, command timeout, skills</td>
+</tr>
+<tr>
+<td><code>web</code></td>
+<td>6</td>
+<td>Web-search toggle, model, request limit, fetch container + limits</td>
+</tr>
+<tr>
+<td><code>gates</code></td>
+<td>9</td>
+<td>Approval, review, auto-merge, triage, spec-review feature flags + models</td>
+</tr>
+<tr>
+<td><code>pipeline</code></td>
+<td>11</td>
+<td>Merge poll, rebase, ci-fix, retrospect, prune, archive, dedup lookback</td>
+</tr>
+<tr>
+<td><code>periodic.audit</code></td>
+<td>4</td>
+<td>Audit agent: model, enabled, interval, memory path</td>
+</tr>
+<tr>
+<td><code>periodic.trace_health</code></td>
+<td>2</td>
+<td>Trace-health check: enabled, interval</td>
+</tr>
+<tr>
+<td><code>periodic.health</code></td>
+<td>4</td>
+<td>Health agent: model, enabled, interval, memory path</td>
+</tr>
+<tr>
+<td><code>periodic.test_gap</code></td>
+<td>4</td>
+<td>Test-gap agent: model, enabled, interval, memory path</td>
+</tr>
+<tr>
+<td><code>periodic.agent_check</code></td>
+<td>4</td>
+<td>Agent-check agent: model, enabled, interval, memory path</td>
+</tr>
+<tr>
+<td><code>periodic.survey</code></td>
+<td>4</td>
+<td>Survey agent: model, enabled, interval, memory path</td>
+</tr>
+<tr>
+<td><code>periodic.ci_monitor</code></td>
+<td>3</td>
+<td>CI monitor: enabled, interval, log max bytes</td>
+</tr>
+<tr>
+<td><code>service</code></td>
+<td>4</td>
+<td>API host/port/URL, data directory</td>
+</tr>
+<tr>
+<td><code>secrets</code></td>
+<td>10</td>
+<td>API keys, tokens, tracing credentials (separate file + model)</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>115</strong></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-complete-field-to-group-mapping">4.2 Complete field-to-group mapping</h3>
+<p>Every field from <code>config.py</code>, keyed by its current env-var alias.  Fields
+marked <code>→ secrets</code> are loaded from <code>config/secrets.yaml</code> into a separate
+<code>Secrets</code> model, not from the main config files.</p>
+<h4 id="coremodels">core.models</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_MODEL</code></td>
+<td><code>core.models.coordinator</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_EXPLORE_MODEL</code></td>
+<td><code>core.models.explore</code></td>
+<td><code>deepseek/deepseek-v4-flash</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TEST_MODEL</code></td>
+<td><code>core.models.test</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REFINE_MODEL</code></td>
+<td><code>core.models.refine</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_ANSWER_MODEL</code></td>
+<td><code>core.models.answer</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RETROSPECT_MODEL</code></td>
+<td><code>core.models.retrospect</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_MODEL</code></td>
+<td><code>core.models.audit</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DEDUP_MODEL</code></td>
+<td><code>core.models.dedup</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_RESEARCH_MODEL</code></td>
+<td><code>core.models.web_research</code></td>
+<td><code>deepseek/deepseek-v4-flash</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_MODEL</code></td>
+<td><code>core.models.review</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TRACE_INSPECTOR_MODEL</code></td>
+<td><code>core.models.trace_inspector</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_MODEL</code></td>
+<td><code>core.models.test_gap</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AGENT_CHECK_MODEL</code></td>
+<td><code>core.models.agent_check</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_HEALTH_MODEL</code></td>
+<td><code>core.models.health</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_MODEL</code></td>
+<td><code>core.models.survey</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RATE_LIMIT_FALLBACK_MODEL</code></td>
+<td><code>core.models.rate_limit_fallback</code></td>
+<td><code>""</code> (empty = disabled)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TRIAGE_MODEL</code></td>
+<td><code>core.models.triage</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DOC_MODEL</code></td>
+<td><code>core.models.doc</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_APPROVE_MODEL</code></td>
+<td><code>core.models.auto_approve</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="corelimits">core.limits</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_PER_PASS_REQUEST_BUDGET</code></td>
+<td><code>core.limits.coordinator_requests</code></td>
+<td><code>500</code></td>
+<td>Hard upper bound 5000</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_REQUEST_LIMIT</code></td>
+<td><code>core.limits.test_requests</code></td>
+<td><code>8</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_EXPLORE_REQUEST_LIMIT</code></td>
+<td><code>core.limits.explore_requests</code></td>
+<td><code>20</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DEDUP_REQUEST_LIMIT</code></td>
+<td><code>core.limits.dedup_requests</code></td>
+<td><code>4</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_RESEARCH_REQUEST_LIMIT</code></td>
+<td><code>core.limits.web_research_requests</code></td>
+<td><code>8</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_CONCURRENCY</code></td>
+<td><code>core.limits.max_concurrency</code></td>
+<td><code>4</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_FIX_ITERATIONS</code></td>
+<td><code>core.limits.max_fix_iterations</code></td>
+<td><code>8</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_STUCK_CYCLES</code></td>
+<td><code>core.limits.max_stuck_cycles</code></td>
+<td><code>3</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_SPEND_USD_PER_TICKET</code></td>
+<td><code>core.limits.max_spend_usd_per_ticket</code></td>
+<td><code>0.0</code></td>
+<td><code>0.0</code> = disabled</td>
+</tr>
+<tr>
+<td><code>MILL_STAGE_TIMEOUT_SECONDS</code></td>
+<td><code>core.limits.stage_timeout_seconds</code></td>
+<td><code>1800</code></td>
+<td>seconds; <code>≤ 0</code> disables</td>
+</tr>
+<tr>
+<td><code>MILL_STAGE_TIMEOUT_OVERRIDES</code></td>
+<td><code>core.limits.stage_timeout_overrides</code></td>
+<td><code>{}</code></td>
+<td>JSON dict; <code>"stage": 0</code> disables per-stage</td>
+</tr>
+<tr>
+<td><code>MILL_MODEL_REQUEST_TIMEOUT</code></td>
+<td><code>core.limits.model_request_timeout</code></td>
+<td><code>900.0</code></td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>MILL_RATE_LIMIT_FALLBACK_RETRIES</code></td>
+<td><code>core.limits.rate_limit_fallback_retries</code></td>
+<td><code>3</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="corememory">core.memory</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_MAX_MEMORY_CHARS</code></td>
+<td><code>core.memory.max_memory_chars</code></td>
+<td><code>8000</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DEDUP_LOOKBACK_DAYS</code></td>
+<td><code>core.memory.dedup_lookback_days</code></td>
+<td><code>30</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="forge">forge</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FORGE_KIND</code></td>
+<td><code>forge.kind</code></td>
+<td><code>none</code></td>
+<td><code>github</code>, <code>gitlab</code>, or <code>none</code></td>
+</tr>
+<tr>
+<td><code>FORGE_REMOTE_URL</code></td>
+<td><code>forge.remote_url</code></td>
+<td><code>null</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FORGE_TARGET_BRANCH</code></td>
+<td><code>forge.target_branch</code></td>
+<td><code>main</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FORGE_AUTH</code></td>
+<td><code>forge.auth_mode</code></td>
+<td><code>token</code></td>
+<td><code>token</code> or <code>app</code></td>
+</tr>
+<tr>
+<td><code>MILL_GITHUB_API_URL</code></td>
+<td><code>forge.github_api_url</code></td>
+<td><code>https://api.github.com</code></td>
+<td>GitHub Enterprise override</td>
+</tr>
+<tr>
+<td><code>MILL_GITLAB_API_URL</code></td>
+<td><code>forge.gitlab_api_url</code></td>
+<td><code>https://gitlab.com/api/v4</code></td>
+<td>Self-hosted GitLab override</td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_PRIVATE_KEY_PATH</code></td>
+<td><code>forge.github_app_private_key_path</code></td>
+<td><code>null</code></td>
+<td>Path (not secret); host-mounted <code>.pem</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="sandbox">sandbox</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SANDBOX_IMAGE</code></td>
+<td><code>sandbox.image</code></td>
+<td><code>python:3.14-slim</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_MEMORY</code></td>
+<td><code>sandbox.memory</code></td>
+<td><code>2g</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_PIDS_LIMIT</code></td>
+<td><code>sandbox.pids_limit</code></td>
+<td><code>512</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_READONLY</code></td>
+<td><code>sandbox.readonly</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DATA_VOLUME</code></td>
+<td><code>sandbox.data_volume</code></td>
+<td><code>mill_data</code></td>
+<td>Named volume name</td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_DATA_MOUNT</code></td>
+<td><code>sandbox.data_mount</code></td>
+<td><code>null</code></td>
+<td>Host path for bind mount</td>
+</tr>
+<tr>
+<td><code>MILL_COMMAND_TIMEOUT</code></td>
+<td><code>sandbox.command_timeout</code></td>
+<td><code>900</code></td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_COMMAND</code></td>
+<td><code>sandbox.test_command</code></td>
+<td><code>pytest -q</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SKILLS_DIR</code></td>
+<td><code>sandbox.skills_dir</code></td>
+<td><code>skills</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="web">web</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_WEB_SEARCH</code></td>
+<td><code>web.search_enabled</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_RESEARCH_MODEL</code></td>
+<td><code>web.research_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_RESEARCH_REQUEST_LIMIT</code></td>
+<td><code>web.research_request_limit</code></td>
+<td><code>8</code></td>
+<td>Also in <code>core.limits</code></td>
+</tr>
+<tr>
+<td><code>MILL_FETCH_IMAGE</code></td>
+<td><code>web.fetch_image</code></td>
+<td><code>curlimages/curl:8.17.0</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_FETCH_MAX_BYTES</code></td>
+<td><code>web.fetch_max_bytes</code></td>
+<td><code>2000000</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_FETCH_TIMEOUT</code></td>
+<td><code>web.fetch_timeout</code></td>
+<td><code>30</code></td>
+<td>seconds</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Note on deduplication:</strong> <code>web.research_model</code> and
+<code>web.research_request_limit</code> duplicate <code>core.models.web_research</code> and
+<code>core.limits.web_research_requests</code> respectively.  The loader resolves
+these to the same underlying value; the YAML uses YAML anchors to keep
+them in sync (see §11).</p>
+</blockquote>
+<h4 id="gates">gates</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_REQUIRE_APPROVAL</code></td>
+<td><code>gates.require_approval</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_APPROVE_ENABLED</code></td>
+<td><code>gates.auto_approve_enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_APPROVE_MODEL</code></td>
+<td><code>gates.auto_approve_model</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_ENABLED</code></td>
+<td><code>gates.review_enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_MODEL</code></td>
+<td><code>gates.review_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_MAX_ROUNDS</code></td>
+<td><code>gates.review_max_rounds</code></td>
+<td><code>3</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_MERGE_ENABLED</code></td>
+<td><code>gates.auto_merge_enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REFINE_TRIAGE_ENABLED</code></td>
+<td><code>gates.refine_triage_enabled</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SPEC_REVIEW_ENABLED</code></td>
+<td><code>gates.spec_review_enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>gates.auto_approve_model</code> and <code>gates.review_model</code> duplicate model
+fields in <code>core.models</code>.  The YAML uses anchors, and the loader resolves
+to a single value.  This is intentional: the model <em>defaults</em> are
+declared in <code>core.models</code>, while <code>gates</code> references them and can override
+independently if needed.</p>
+</blockquote>
+<h4 id="pipeline">pipeline</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_BRANCH_PREFIX</code></td>
+<td><code>pipeline.branch_prefix</code></td>
+<td><code>mill/</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MERGE_POLL_SECONDS</code></td>
+<td><code>pipeline.merge_poll_seconds</code></td>
+<td><code>120</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REBASE_MAX_ATTEMPTS</code></td>
+<td><code>pipeline.rebase_max_attempts</code></td>
+<td><code>5</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_CI_FIX_MAX_ATTEMPTS</code></td>
+<td><code>pipeline.ci_fix_max_attempts</code></td>
+<td><code>2</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RETROSPECT_SPAWN_DRAFTS</code></td>
+<td><code>pipeline.retrospect_spawn_drafts</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_PRUNE_CLONE_ON_CLOSE</code></td>
+<td><code>pipeline.prune_clone_on_close</code></td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_ARCHIVED_TICKETS</code></td>
+<td><code>pipeline.max_archived_tickets</code></td>
+<td><code>100</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RETROSPECT_MEMORY_PATH</code></td>
+<td><code>pipeline.retrospect_memory_path</code></td>
+<td><code>null</code></td>
+<td>Override; defaults derived</td>
+</tr>
+<tr>
+<td><code>MILL_IMPLEMENT_MEMORY_PATH</code></td>
+<td><code>pipeline.implement_memory_path</code></td>
+<td><code>null</code></td>
+<td>Override</td>
+</tr>
+<tr>
+<td><code>MILL_REFINE_MEMORY_PATH</code></td>
+<td><code>pipeline.refine_memory_path</code></td>
+<td><code>null</code></td>
+<td>Override</td>
+</tr>
+<tr>
+<td><code>MILL_CI_FIX_MEMORY_PATH</code></td>
+<td><code>pipeline.ci_fix_memory_path</code></td>
+<td><code>null</code></td>
+<td>Override</td>
+</tr>
+<tr>
+<td><code>MILL_REBASE_MEMORY_PATH</code></td>
+<td><code>pipeline.rebase_memory_path</code></td>
+<td><code>null</code></td>
+<td>Override</td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodicaudit">periodic.audit</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_AUDIT_MODEL</code></td>
+<td><code>periodic.audit.model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_PERIODIC</code></td>
+<td><code>periodic.audit.enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_INTERVAL_SECONDS</code></td>
+<td><code>periodic.audit.interval_seconds</code></td>
+<td><code>86400</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodictrace_health">periodic.trace_health</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_TRACE_HEALTH_PERIODIC</code></td>
+<td><code>periodic.trace_health.enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TRACE_HEALTH_INTERVAL_SECONDS</code></td>
+<td><code>periodic.trace_health.interval_seconds</code></td>
+<td><code>86400</code></td>
+<td>min 3600 enforced in worker</td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodichealth">periodic.health</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_HEALTH_MODEL</code></td>
+<td><code>periodic.health.model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_HEALTH_PERIODIC</code></td>
+<td><code>periodic.health.enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_HEALTH_INTERVAL_SECONDS</code></td>
+<td><code>periodic.health.interval_seconds</code></td>
+<td><code>86400</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodictest_gap">periodic.test_gap</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_TEST_GAP_MODEL</code></td>
+<td><code>periodic.test_gap.model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_PERIODIC</code></td>
+<td><code>periodic.test_gap.enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_INTERVAL_SECONDS</code></td>
+<td><code>periodic.test_gap.interval_seconds</code></td>
+<td><code>86400</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodicagent_check">periodic.agent_check</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_AGENT_CHECK_MODEL</code></td>
+<td><code>periodic.agent_check.model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_AGENT_CHECK_PERIODIC</code></td>
+<td><code>periodic.agent_check.enabled</code></td>
+<td><code>false</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AGENT_CHECK_INTERVAL_SECONDS</code></td>
+<td><code>periodic.agent_check.interval_seconds</code></td>
+<td><code>86400</code></td>
+<td>min 60 enforced in worker</td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodicsurvey">periodic.survey</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SURVEY_MODEL</code></td>
+<td><code>periodic.survey.model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>Also in <code>core.models</code></td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_PERIODIC</code></td>
+<td><code>periodic.survey.enabled</code></td>
+<td><code>true</code></td>
+<td>On by default (unusual)</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_INTERVAL_SECONDS</code></td>
+<td><code>periodic.survey.interval_seconds</code></td>
+<td><code>86400</code></td>
+<td>min 60 enforced in worker</td>
+</tr>
+</tbody>
+</table>
+<h4 id="periodicci_monitor">periodic.ci_monitor</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_CI_LOG_MAX_BYTES</code></td>
+<td><code>periodic.ci_monitor.log_max_bytes</code></td>
+<td><code>65536</code></td>
+<td>global operational cap</td>
+</tr>
+<tr>
+<td>—</td>
+<td>(per-repo in <code>repos.yaml</code>)</td>
+<td><code>True</code> / <code>900</code></td>
+<td><code>ci_monitor.enabled</code> and <code>ci_monitor.interval_seconds</code> are RepoConfig fields</td>
+</tr>
+</tbody>
+</table>
+<h4 id="service">service</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_DATA_DIR</code></td>
+<td><code>service.data_dir</code></td>
+<td><code>.mill-data</code></td>
+<td>Container overrides to <code>/data</code></td>
+</tr>
+<tr>
+<td><code>MILL_API_HOST</code></td>
+<td><code>service.api_host</code></td>
+<td><code>127.0.0.1</code></td>
+<td>Container overrides to <code>0.0.0.0</code></td>
+</tr>
+<tr>
+<td><code>MILL_API_PORT</code></td>
+<td><code>service.api_port</code></td>
+<td><code>8077</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_API_URL</code></td>
+<td><code>service.api_url</code></td>
+<td><code>http://127.0.0.1:8077</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="secrets-separate-file-separate-model">secrets (separate file → separate model)</h4>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>YAML key</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OPENROUTER_API_KEY</code></td>
+<td><code>secrets.openrouter_api_key</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>FORGE_TOKEN</code></td>
+<td><code>secrets.forge_token</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_ID</code></td>
+<td><code>secrets.github_app_id</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_PRIVATE_KEY</code></td>
+<td><code>secrets.github_app_private_key</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong> (inline PEM)</td>
+</tr>
+<tr>
+<td><code>LANGFUSE_PUBLIC_KEY</code></td>
+<td><code>secrets.langfuse_public_key</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>LANGFUSE_SECRET_KEY</code></td>
+<td><code>secrets.langfuse_secret_key</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>LANGFUSE_BASE_URL</code></td>
+<td><code>secrets.langfuse_base_url</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>LANGFUSE_PROJECT_ID</code></td>
+<td><code>secrets.langfuse_project_id</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>NTFY_URL</code></td>
+<td><code>secrets.ntfy_url</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+<tr>
+<td><code>NTFY_TOKEN</code></td>
+<td><code>secrets.ntfy_token</code></td>
+<td><code>null</code></td>
+<td><strong>→ secrets.yaml</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>GITHUB_APP_PRIVATE_KEY_PATH</code> (a <em>path</em>, not a secret) lives in <code>forge</code>
+above.  <code>GITHUB_APP_PRIVATE_KEY</code> (the inline PEM) lives in <code>secrets</code>.
+These are two separate values; the forge auth module already handles both.</p>
+</blockquote>
+<hr />
+<h2 id="5-secrets-handling">5. Secrets handling</h2>
+<h3 id="51-separate-model">5.1 Separate model</h3>
+<p>Secrets live in <code>config/secrets.yaml</code> and are loaded into a <strong>separate
+<code>Secrets</code> Pydantic model</strong>, not merged into <code>Settings</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># src/robotsix_mill/config.py (post-migration)</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Secrets</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Secrets loaded from config/secrets.yaml.  Never merged into Settings.&quot;&quot;&quot;</span>
+    <span class="n">openrouter_api_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">forge_token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">github_app_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">github_app_private_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">langfuse_public_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">langfuse_secret_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">langfuse_base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">langfuse_project_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">ntfy_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">ntfy_token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+<h3 id="52-access-rules">5.2 Access rules</h3>
+<ul>
+<li><code>Settings</code> <strong>never</strong> holds a secret attribute.  <code>settings.openrouter_api_key</code>
+  does not exist.</li>
+<li>Code that needs a secret imports <code>Secrets</code> explicitly and receives it via
+  dependency injection (function parameter, not global).</li>
+<li>The <code>Secrets</code> model logs every attribute access at <code>DEBUG</code> level via a
+  custom <code>__getattribute__</code> or Pydantic validator, providing an audit trail
+  of which module accessed which secret.</li>
+<li>Secrets are never serialized in logs, traces, or error messages.  The
+  <code>Secrets</code> model's <code>__repr__</code> and <code>model_dump</code> redact all values.</li>
+</ul>
+<h3 id="53-migration-from-secretsenv">5.3 Migration from secrets.env</h3>
+<p><code>config/secrets.example.yaml</code> mirrors <code>secrets.env.example</code> — every key
+with an empty/null value.  The migration script (§9) reads <code>secrets.env</code>
+and emits <code>config/secrets.yaml</code> via key-for-key translation:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># secrets.env                          # config/secrets.yaml</span>
+<span class="nv">OPENROUTER_API_KEY</span><span class="o">=</span>sk-or-...<span class="w">    </span>→<span class="w">      </span>openrouter_api_key:<span class="w"> </span><span class="s2">&quot;sk-or-...&quot;</span>
+<span class="nv">FORGE_TOKEN</span><span class="o">=</span>ghp_...<span class="w">             </span>→<span class="w">      </span>forge_token:<span class="w"> </span><span class="s2">&quot;ghp_...&quot;</span>
+</code></pre></div>
+<h3 id="54-resolving-the-tracing-dual-source">5.4 Resolving the tracing dual-source</h3>
+<p>Currently <code>runtime/tracing.py</code> reads <code>LANGFUSE_*</code> from <code>os.environ</code> directly
+(not from <code>Settings</code>).  The new design routes all tracing config through
+<code>Secrets</code>:</p>
+<ol>
+<li>The <code>tracing</code> module exports an <code>init_tracing(secrets: Secrets)</code> function
+   that receives the <code>Secrets</code> object explicitly.</li>
+<li>The caller (FastAPI lifespan or worker startup) constructs <code>Secrets</code> from
+   <code>config/secrets.yaml</code>, then calls <code>init_tracing(secrets)</code>.</li>
+<li><code>tracing.py</code> no longer reads <code>os.environ</code> for any config value.</li>
+<li>The <code>_tracing_enabled()</code> check becomes <code>bool(secrets.langfuse_public_key
+   and secrets.langfuse_secret_key and secrets.langfuse_base_url)</code>.</li>
+</ol>
+<hr />
+<h2 id="6-load-order-and-precedence">6. Load order and precedence</h2>
+<p>At startup, the config loader merges sources in this order (first = lowest
+priority, last = highest):</p>
+<div class="highlight"><pre><span></span><code>1. config/mill.defaults.yaml     ← committed canonical defaults
+2. config/mill.local.yaml        ← if present (dev only, gitignored)
+3. config/mill.production.yaml   ← if MILL_CONFIG_FILE points to it
+4. Environment variables          ← MILL_*, FORGE_*, etc.
+5. config/secrets.yaml           ← loaded into SEPARATE Secrets object
+</code></pre></div>
+<h3 id="61-how-env-vars-override-yaml">6.1 How env vars override YAML</h3>
+<p>pydantic-settings reads <code>os.environ</code> natively — if an env var matching a
+field alias is set, it takes precedence over whatever the YAML layers
+provided.  This preserves the Docker/compose workflow where
+<code>docker-compose.yml</code> <code>environment:</code> sets overrides.</p>
+<p>The loader works as follows:</p>
+<ol>
+<li>Parse YAML files in order (1→3), deep-merging each into a single dict.</li>
+<li>Pass the merged dict as <strong>field defaults</strong> to a pydantic-settings
+   <code>BaseSettings</code> subclass.</li>
+<li>pydantic-settings then overlays <code>os.environ</code> on top — env vars win when
+   set.</li>
+</ol>
+<p>This means <code>docker-compose.yml</code> can still use <code>environment:</code> to override any
+value without touching the YAML files.</p>
+<h3 id="62-the-mill_config_file-and-mill_secrets_file-env-vars">6.2 The MILL_CONFIG_FILE and MILL_SECRETS_FILE env vars</h3>
+<p>Two new env vars control which override files are loaded:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Purpose</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_CONFIG_FILE</code></td>
+<td>Path to a production override YAML file</td>
+<td>unset → no production overlay</td>
+</tr>
+<tr>
+<td><code>MILL_SECRETS_FILE</code></td>
+<td>Path to a secrets YAML file</td>
+<td><code>config/secrets.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p>In Docker, <code>docker-compose.yml</code> sets:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">environment</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MILL_CONFIG_FILE=/etc/mill/config.yaml</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MILL_SECRETS_FILE=/run/secrets/mill_secrets.yaml</span>
+</code></pre></div>
+<p>The production config and secrets files are bind-mounted from the host with
+restricted permissions (<code>0600</code> for secrets).</p>
+<hr />
+<h2 id="7-validation">7. Validation</h2>
+<p>The new system adds Pydantic validators for semantic checks beyond type
+coercion.  These run at <code>Settings</code> / <code>Secrets</code> construction time, failing
+fast at startup rather than deep in agent logic.</p>
+<h3 id="71-example-validators">7.1 Example validators</h3>
+<p><strong>Range checks:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;max_concurrency&quot;</span><span class="p">)</span>
+<span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">max_concurrency_positive</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;max_concurrency must be ≥ 1&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">v</span>
+
+<span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;model_request_timeout&quot;</span><span class="p">)</span>
+<span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">timeout_positive</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model_request_timeout must be &gt; 0&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">v</span>
+</code></pre></div>
+<p><strong>Cross-field checks:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">forge_auth_requires_credentials</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Settings&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">forge_auth</span> <span class="o">==</span> <span class="s2">&quot;app&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">forge_github_app_id</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">forge_github_app_private_key_path</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;FORGE_AUTH=app requires GITHUB_APP_ID and &quot;</span>
+                <span class="s2">&quot;GITHUB_APP_PRIVATE_KEY_PATH (or _PRIVATE_KEY in secrets)&quot;</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="bp">self</span>
+
+<span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">forge_remote_required</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Settings&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">forge_kind</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;github&quot;</span><span class="p">,</span> <span class="s2">&quot;gitlab&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">forge_remote_url</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;FORGE_KIND=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">forge_kind</span><span class="si">}</span><span class="s2"> requires FORGE_REMOTE_URL&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="bp">self</span>
+</code></pre></div>
+<p><strong>Format checks:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;api_url&quot;</span><span class="p">)</span>
+<span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">api_url_valid</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">v</span><span class="o">.</span><span class="n">startswith</span><span class="p">((</span><span class="s2">&quot;http://&quot;</span><span class="p">,</span> <span class="s2">&quot;https://&quot;</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;api_url must be an HTTP(S) URL, got </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">v</span>
+</code></pre></div>
+<p><strong>Interval minimums:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;trace_health_interval_seconds&quot;</span><span class="p">)</span>
+<span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">trace_health_interval_min</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="mi">3600</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;trace_health_interval_seconds must be ≥ 3600 (1 hour) &quot;</span>
+            <span class="s2">&quot;to avoid hammering Langfuse&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">v</span>
+</code></pre></div>
+<p><strong>Rate-limit fallback consistency:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fallback_model_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Settings&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rate_limit_fallback_model</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">rate_limit_fallback_retries</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;rate_limit_fallback_retries must be ≥ 1 when &quot;</span>
+            <span class="s2">&quot;rate_limit_fallback_model is set&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="bp">self</span>
+</code></pre></div>
+<h3 id="72-validation-scope">7.2 Validation scope</h3>
+<p>Validation covers:
+- <strong>All <code>int</code> fields that have a meaningful range</strong> (concurrency, retries,
+  timeouts, intervals, limits).
+- <strong>All cross-field dependencies</strong> (forge auth mode → credentials, forge kind
+  → remote URL, rate-limit fallback model → retry count).
+- <strong>All URL-format fields</strong> (<code>api_url</code>, <code>github_api_url</code>, <code>gitlab_api_url</code>,
+  <code>langfuse_base_url</code>, <code>ntfy_url</code>).
+- <strong>File/directory existence</strong> for paths that must exist at startup
+  (<code>skills_dir</code>; <code>data_dir</code> is created if missing, not validated).</p>
+<p>Fields that intentionally accept "zero means disabled" (<code>max_spend_usd_per_ticket</code>,
+<code>rate_limit_fallback_model</code>) are exempt from positive-value checks.</p>
+<hr />
+<h2 id="8-environment-strategy">8. Environment strategy</h2>
+<h3 id="81-dev-local-workstation">8.1 Dev (local workstation)</h3>
+<p><strong>Files loaded:</strong>
+- <code>config/mill.defaults.yaml</code> (committed)
+- <code>config/mill.local.yaml</code> (gitignored, optional)
+- <code>config/secrets.yaml</code> (gitignored, required for LLM calls)</p>
+<p><strong>No <code>.env</code> file needed.</strong>  A developer who needs different models or limits
+creates <code>config/mill.local.yaml</code> with only the overrides they need:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># config/mill.local.yaml — example</span>
+<span class="nt">core</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">models</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">coordinator</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai/gpt-4o</span><span class="w">  </span><span class="c1"># cheaper for local dev</span>
+</code></pre></div>
+<p>The <code>.env</code> file is <strong>retired</strong> after migration.  During the migration window,
+both sources are loaded (see §9) to avoid breaking existing setups.</p>
+<h3 id="82-ci-github-actions">8.2 CI (GitHub Actions)</h3>
+<p><strong>Files loaded:</strong>
+- <code>config/mill.defaults.yaml</code> only</p>
+<p>Secrets are never needed — tests mock the model/HTTP seams via the existing
+<code>_no_real_http</code> and <code>fake_sandbox</code> fixtures.  The <code>_no_dotenv</code> fixture in
+<code>tests/conftest.py</code> is updated to:
+1. Block the new YAML config files from loading (monkeypatch
+   <code>MILL_CONFIG_FILE</code> and <code>MILL_SECRETS_FILE</code> to empty).
+2. Continue clearing ambient credential env vars (same list as today).</p>
+<p>CI never touches <code>config/secrets.yaml</code>, <code>config/mill.local.yaml</code>, or any
+environment-specific overlay.</p>
+<h3 id="83-docker-production">8.3 Docker / Production</h3>
+<p><strong>Files loaded:</strong>
+- <code>config/mill.defaults.yaml</code> (baked into the Docker image at build time)
+- <code>config/mill.production.yaml</code> (bind-mounted from host, path set via
+  <code>MILL_CONFIG_FILE</code> env var in <code>docker-compose.yml</code>)
+- <code>config/secrets.yaml</code> (bind-mounted from host with <code>0600</code> permissions,
+  path set via <code>MILL_SECRETS_FILE</code> env var)</p>
+<p><strong>Changes from current state:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>v2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Dockerfile</code> sets <code>ENV MILL_DATA_DIR=/data</code></td>
+<td><code>config/mill.production.yaml</code> sets <code>service.data_dir: /data</code></td>
+</tr>
+<tr>
+<td><code>Dockerfile</code> sets <code>ENV MILL_API_HOST=0.0.0.0</code></td>
+<td><code>config/mill.production.yaml</code> sets <code>service.api_host: "0.0.0.0"</code></td>
+</tr>
+<tr>
+<td><code>docker-compose.yml</code> sets <code>MILL_SANDBOX_DATA_MOUNT=${PWD}/.data</code></td>
+<td><code>config/mill.production.yaml</code> sets <code>sandbox.data_mount: /data</code> (container path)</td>
+</tr>
+<tr>
+<td>CI monitor enabled in compose via env vars</td>
+<td>per-repo <code>ci_monitor.enabled</code> / <code>ci_monitor.interval_seconds</code> in <code>config/repos.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>Dockerfile</code> no longer contains any <code>ENV</code> directives for application
+config.  The only <code>ENV</code> directives are for system-level concerns (PATH,
+Python unbuffered, etc.).</p>
+<h3 id="84-docker_gid">8.4 DOCKER_GID</h3>
+<p><code>DOCKER_GID</code> is <strong>removed from <code>.env</code></strong> and never appears in any YAML config
+file.  It remains in <code>docker-compose.yml</code> as a compose variable substitution:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">group_add</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;${DOCKER_GID:-999}&quot;</span>
+</code></pre></div>
+<p>The <code>dev/mill-autoupdate.sh</code> script continues to <code>export DOCKER_GID</code> before
+invoking compose — that is an orchestration concern, not application config.</p>
+<hr />
+<h2 id="9-migration-path-from-env">9. Migration path from <code>.env</code></h2>
+<p>The migration is designed to be incremental and lossless, executed across
+multiple PRs without a flag-day cutover.</p>
+<h3 id="phase-1-ship-the-new-loader-alongside-old">Phase 1: Ship the new loader (alongside old)</h3>
+<ol>
+<li>Add <code>config/mill.defaults.yaml</code> and <code>config/secrets.example.yaml</code> (this
+   ticket's PoC deliverables).</li>
+<li>Add the YAML config loader (<code>src/robotsix_mill/config_loader.py</code>) that
+   reads YAML files and produces a dict.</li>
+<li>Modify <code>Settings.model_config</code> to load YAML layers <strong>in addition to</strong>
+   <code>.env</code>/<code>secrets.env</code>.  The YAML layers populate Pydantic field defaults;
+   <code>.env</code> still works as before.</li>
+<li>Add the <code>Secrets</code> model and load it from <code>config/secrets.yaml</code> (if
+   present) <strong>alongside</strong> the existing <code>secrets.env</code> path.  If both exist,
+   YAML wins.</li>
+<li>Ship <code>dev/migrate-env-to-yaml.py</code> (see Phase 2).  CI gains a
+   <code>scripts/validate-config-docs</code> check (see §10).</li>
+</ol>
+<p><strong>At this point:</strong> existing <code>.env</code> files work unchanged.  Developers can opt
+in to YAML by creating <code>config/mill.local.yaml</code>.  Production can test the
+<code>config/mill.production.yaml</code> path without disrupting the <code>.env</code> flow.</p>
+<h3 id="phase-2-run-migration-commit-defaults">Phase 2: Run migration, commit defaults</h3>
+<ol>
+<li>Run <code>dev/migrate-env-to-yaml.py</code> — it reads <code>.env</code> + <code>secrets.env</code> and emits
+   <code>config/mill.local.yaml</code> + <code>config/secrets.yaml</code> with only the values
+   that differ from the committed defaults.</li>
+<li>Review the generated production config for correctness.</li>
+<li>Rename <code>.env</code> → <code>.env.deprecated</code> (kept for reference, not loaded).</li>
+<li>Commit <code>config/mill.defaults.yaml</code> (already done in Phase 1).</li>
+</ol>
+<h3 id="phase-3-refactor-consumers">Phase 3: Refactor consumers</h3>
+<ol>
+<li>Update <code>forge/auth.py</code> to read from <code>Secrets</code> instead of <code>Settings</code>.</li>
+<li>Update <code>runtime/tracing.py</code> to accept <code>Secrets</code> parameter.</li>
+<li>Update all 46 consumer files that import <code>Settings</code> — most are
+   transparent (they access the same attribute names).  Only files that
+   accessed secrets through <code>Settings</code> need changes.</li>
+<li>Update <code>tests/conftest.py::_no_dotenv</code> to block YAML config files instead
+   of <code>.env</code>.</li>
+</ol>
+<h3 id="phase-4-retire-old-path">Phase 4: Retire old path</h3>
+<ol>
+<li>Remove <code>.env</code> and <code>secrets.env</code> loading from <code>Settings.model_config</code>.</li>
+<li>Delete <code>.env.deprecated</code> and <code>secrets.env.example</code>.</li>
+<li>Update <code>docs/configuration.md</code> to reflect the YAML schema (or replace it
+   with a generated reference — see §10).</li>
+</ol>
+<h3 id="migration-script">Migration script</h3>
+<p><code>dev/migrate-env-to-yaml.py</code> performs a lossless translation:</p>
+<div class="highlight"><pre><span></span><code>Input:  .env + secrets.env (optional)
+Output: config/mill.local.yaml + config/secrets.yaml
+</code></pre></div>
+<p>It reads every active (uncommented, non-empty) line from <code>.env</code> and
+<code>secrets.env</code>, maps each <code>MILL_*</code> / <code>FORGE_*</code> / non-prefixed var to its
+YAML dotted path using <code>_YAML_PATH_TO_ALIAS</code>, and writes the
+corresponding nested YAML.  Vars that match the committed default in
+<code>config/mill.defaults.yaml</code> are omitted from the local overlay (the
+defaults file already covers them).  Secrets always go to
+<code>config/secrets.yaml</code> with keys lowercased to match the <code>Secrets</code> model
+field names.</p>
+<p>The script is idempotent — running it twice produces the same output.
+It is non-destructive (original <code>.env</code> and <code>secrets.env</code> are left
+untouched).</p>
+<hr />
+<h2 id="10-documentation-strategy">10. Documentation strategy</h2>
+<h3 id="101-rfc-implementation-handoff">10.1 RFC → implementation handoff</h3>
+<ul>
+<li><code>docs/rfc-config-v2.md</code> is the design RFC (this document).  It is stable
+  after peer review approval.</li>
+<li>The implementation ticket references this RFC for architecture decisions.
+  Deviations are documented as amendments to the RFC.</li>
+</ul>
+<h3 id="102-generated-reference">10.2 Generated reference</h3>
+<p>Once implemented, <code>docs/configuration.md</code> is replaced by (or supplemented
+with) a generated reference.  Two options:</p>
+<ol>
+<li>
+<p><strong>Script-driven</strong>: a <code>scripts/validate-config-docs</code> script that parses
+   <code>config/mill.defaults.yaml</code> and <code>docs/configuration.md</code>, comparing every
+   field.  Fails CI if they drift.  This is the lightweight option — the
+   Markdown doc is still manually maintained but mechanically verified.</p>
+</li>
+<li>
+<p><strong>Fully generated</strong>: a script that reads <code>config/mill.defaults.yaml</code> and
+   the Pydantic model field metadata (descriptions, types, constraints) and
+   emits a complete <code>docs/configuration.md</code>.  This eliminates drift entirely
+   but requires the generated Markdown to match the repo's documentation
+   conventions.</p>
+</li>
+</ol>
+<p><strong>Recommendation:</strong> Start with option 1 (validation script) and graduate to
+option 2 once the schema stabilizes.  The validation script is trivial to
+implement and provides immediate drift protection.</p>
+<h3 id="103-ci-enforcement">10.3 CI enforcement</h3>
+<p>The <code>scripts/validate-config-docs</code> check runs in CI on every PR.  If a
+field is added to <code>config/mill.defaults.yaml</code> without a corresponding entry
+in <code>docs/configuration.md</code> (or vice versa), CI fails with a diff showing
+exactly what's missing.</p>
+<p>This check replaces the current manual documentation maintenance, which has
+already drifted by 12 fields (§2.1 of the audit).</p>
+<hr />
+<h2 id="11-open-questions-trade-offs">11. Open questions / trade-offs</h2>
+<h3 id="111-yaml-anchors-for-shared-defaults">11.1 YAML anchors for shared defaults</h3>
+<p>The PoC template (<code>config/mill.defaults.yaml</code>) uses YAML anchors to DRY the
+repeated <code>deepseek/deepseek-v4-pro</code> default:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">core</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">models</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">coordinator</span><span class="p">:</span><span class="w"> </span><span class="nl">&amp;default_model</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deepseek/deepseek-v4-pro</span>
+<span class="w">    </span><span class="nt">explore</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deepseek/deepseek-v4-flash</span>
+<span class="w">    </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="nv">*default_model</span>
+<span class="w">    </span><span class="nt">refine</span><span class="p">:</span><span class="w"> </span><span class="nv">*default_model</span>
+<span class="w">    </span><span class="c1"># ...</span>
+</code></pre></div>
+<p><strong>Trade-off:</strong> pydantic-settings does not resolve YAML anchors natively —
+the YAML parser resolves them during <code>yaml.safe_load()</code>, producing a plain
+dict.  So anchors work transparently as long as the loader uses a YAML
+parser that supports them (which <code>pyyaml</code> does).  The trade-off is that
+anchor resolution happens once at parse time — if a consumer needs to know
+"this field used the default model alias," that information is lost.</p>
+<p><strong>Decision:</strong> Use anchors.  The benefits (DRY, single point of change for
+the default model) outweigh the lost metadata.  If a consumer needs to
+distinguish "explicitly set" from "inherited default," that's a different
+feature (explicit vs. default tracking) and not a YAML concern.</p>
+<h3 id="112-secrets-singleton-vs-explicit-passing">11.2 Secrets: singleton vs. explicit passing</h3>
+<p><strong>Option A:</strong> <code>Secrets</code> is a module-level singleton, initialized once at
+startup.  Consumers import it: <code>from robotsix_mill.config import secrets</code>.</p>
+<p><strong>Option B:</strong> <code>Secrets</code> is passed explicitly as a parameter to every
+function that needs it.</p>
+<p><strong>Recommendation:</strong> Option B (explicit passing).  This is already the
+pattern in the codebase — <code>build_agent(settings, ...)</code> takes a <code>Settings</code>
+parameter.  Explicit passing makes dependencies visible, aids testing (no
+global state to reset), and is consistent with the existing architecture.
+The <code>Secrets</code> object is constructed once at startup and threaded through
+the call stack.</p>
+<h3 id="113-duplicate-fields-across-groups">11.3 Duplicate fields across groups</h3>
+<p>Several fields appear in multiple groups:
+- Model names: <code>core.models.web_research</code> ≈ <code>web.research_model</code>
+- Model names: <code>core.models.audit</code> ≈ <code>periodic.audit.model</code>
+- Request limits: <code>core.limits.web_research_requests</code> ≈ <code>web.research_request_limit</code></p>
+<p>The PoC YAML uses anchors to keep these in sync — the value is defined once
+and referenced everywhere it appears.  The loader resolves aliases during
+parse, so there is exactly one value.  If a user overrides one occurrence
+in their local/production YAML, the override applies only to that key path
+(deep-merge semantics) — they are not magically linked.</p>
+<p><strong>Recommendation:</strong> Accept the duplication as intentional.  The groups
+represent different <em>concerns</em> (model selection vs. web config, model
+selection vs. periodic agent config), and the fact that they share defaults
+today is an implementation detail.  A future change might give the audit
+agent a different model than the default without touching <code>core.models</code>.</p>
+<h3 id="114-file-watching-hot-reload">11.4 File watching / hot reload</h3>
+<p>Not in scope for v2.  The current system has no hot reload — config is read
+once at startup.  The proposed system preserves this: YAML files are loaded
+once when the <code>Settings</code> and <code>Secrets</code> objects are constructed.  Hot reload
+(add a file watcher, re-construct models, propagate changes) is a separate
+feature and not addressed here.</p>
+<h3 id="115-environment-variable-naming-convention">11.5 Environment variable naming convention</h3>
+<p>The current <code>MILL_</code> / <code>FORGE_</code> / unprefixed split is preserved for
+backward compatibility.  The YAML keys use dot-notation paths that mirror
+the group structure (e.g., <code>core.models.coordinator</code>), but the pydantic
+field aliases still map to the old env var names.  New code uses the
+structured accessors; old env vars continue to work for overrides.</p>
+<h3 id="116-pydantic-model-structure">11.6 Pydantic model structure</h3>
+<p>This RFC intentionally does not prescribe exact Pydantic model field
+definitions.  The implementation ticket will decide:
+- Whether to use nested Pydantic models (e.g., <code>CoreModels</code>, <code>CoreLimits</code>)
+  for type-safe group access, or a flat <code>Settings</code> with dotted aliases.
+- Whether <code>Settings</code> fields use <code>alias=</code> to map YAML paths to Python
+  attribute names.
+- How <code>model_validator(mode="before")</code> transforms the nested YAML dict into
+  a flat structure pydantic-settings can overlay with env vars.</p>
+<p>These are implementation details that don't affect the architecture
+decisions in this RFC.</p>
+<hr />
+<h2 id="appendix-a-field-count-by-group">Appendix A: Field count by group</h2>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Env vars</th>
+<th>YAML keys</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.models</code></td>
+<td>19</td>
+<td>19</td>
+<td>15 share <code>*default_model</code> anchor</td>
+</tr>
+<tr>
+<td><code>core.limits</code></td>
+<td>16</td>
+<td>16</td>
+<td></td>
+</tr>
+<tr>
+<td><code>core.memory</code></td>
+<td>5</td>
+<td>5</td>
+<td></td>
+</tr>
+<tr>
+<td><code>forge</code></td>
+<td>7</td>
+<td>7</td>
+<td>Includes <code>GITHUB_APP_PRIVATE_KEY_PATH</code></td>
+</tr>
+<tr>
+<td><code>sandbox</code></td>
+<td>9</td>
+<td>9</td>
+<td></td>
+</tr>
+<tr>
+<td><code>web</code></td>
+<td>6</td>
+<td>6</td>
+<td>2 duplicates of <code>core.*</code> via anchors</td>
+</tr>
+<tr>
+<td><code>gates</code></td>
+<td>9</td>
+<td>9</td>
+<td>2 model duplicates via anchors</td>
+</tr>
+<tr>
+<td><code>pipeline</code></td>
+<td>14</td>
+<td>14</td>
+<td>Includes all memory-path overrides</td>
+</tr>
+<tr>
+<td><code>periodic.audit</code></td>
+<td>4</td>
+<td>4</td>
+<td>1 model duplicate via anchor</td>
+</tr>
+<tr>
+<td><code>periodic.trace_health</code></td>
+<td>2</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>periodic.health</code></td>
+<td>4</td>
+<td>4</td>
+<td>1 model duplicate via anchor</td>
+</tr>
+<tr>
+<td><code>periodic.test_gap</code></td>
+<td>4</td>
+<td>4</td>
+<td>1 model duplicate via anchor</td>
+</tr>
+<tr>
+<td><code>periodic.agent_check</code></td>
+<td>4</td>
+<td>4</td>
+<td>1 model duplicate via anchor</td>
+</tr>
+<tr>
+<td><code>periodic.survey</code></td>
+<td>4</td>
+<td>4</td>
+<td>1 model duplicate via anchor</td>
+</tr>
+<tr>
+<td><code>periodic.ci_monitor</code></td>
+<td>3</td>
+<td>3</td>
+<td></td>
+</tr>
+<tr>
+<td><code>service</code></td>
+<td>4</td>
+<td>4</td>
+<td></td>
+</tr>
+<tr>
+<td><code>secrets</code></td>
+<td>10</td>
+<td>10</td>
+<td>Separate file + model</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>124</strong></td>
+<td><strong>124</strong></td>
+<td>9 duplicates across groups = 115 unique values</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>The 124 YAML keys include 9 intentional duplicates (model names and
+request limits referenced in multiple groups via anchors).  The
+underlying field count is 115 unique values.</p>
+</blockquote>
+<hr />
+<h2 id="appendix-b-comparison-with-current-state">Appendix B: Comparison with current state</h2>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Today</th>
+<th>v2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Structure</td>
+<td>Flat 115-key namespace</td>
+<td>17 logical groups, nested YAML</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>Mixed into <code>Settings</code> attributes</td>
+<td>Separate <code>Secrets</code> model + file</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>Type coercion only</td>
+<td>Range, cross-field, format validators</td>
+</tr>
+<tr>
+<td>Dev overrides</td>
+<td>Edit committed <code>.env</code></td>
+<td><code>config/mill.local.yaml</code> (gitignored)</td>
+</tr>
+<tr>
+<td>CI config</td>
+<td>Block <code>.env</code>, use <code>Settings()</code> defaults</td>
+<td><code>config/mill.defaults.yaml</code> only</td>
+</tr>
+<tr>
+<td>Docker overrides</td>
+<td>3 <code>Dockerfile</code> ENV + 3 compose <code>environment:</code></td>
+<td><code>config/mill.production.yaml</code> (single file)</td>
+</tr>
+<tr>
+<td>Docs sync</td>
+<td>Manual, 12 fields missing</td>
+<td>Mechanical cross-check in CI</td>
+</tr>
+<tr>
+<td>Tracing config</td>
+<td><code>os.environ</code> bypass</td>
+<td><code>Secrets</code> parameter</td>
+</tr>
+<tr>
+<td><code>DOCKER_GID</code></td>
+<td>Pollutes <code>.env</code></td>
+<td>Compose-only variable substitution</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

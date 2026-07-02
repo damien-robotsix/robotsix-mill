@@ -1,0 +1,5191 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../dependencies/">
+      
+      
+        <link rel="next" href="../rfc-config-v2/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Config audit - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#configuration-audit" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Config audit
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-complete-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Complete Inventory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Complete Inventory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#legend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#11-core-api-keys-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Core — API keys &amp; secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-core-model-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 Core — model selection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-core-request-limits-safety-nets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 Core — request limits &amp; safety nets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-core-memory-reference-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 Core — memory &amp; reference files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-management-plane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 Management plane
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#16-forge-delivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.6 Forge delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#17-implement-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.7 Implement stage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#18-command-sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.8 Command sandbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#19-web-research-fetch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.9 Web research &amp; fetch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#110-approval-review-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.10 Approval &amp; review gates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-pipeline-tail-merge-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.12 Pipeline tail (merge stage)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-ci-monitor-log-cap-only-enabledinterval-are-per-repo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.13 CI monitor (log cap only; enabled/interval are per-repo)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#114-periodic-agents-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.14 Periodic agents — audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#115-periodic-agents-trace-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.15 Periodic agents — trace-health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#116-periodic-agents-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.16 Periodic agents — health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#117-periodic-agents-test-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.17 Periodic agents — test-gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#118-periodic-agents-agent-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.18 Periodic agents — agent-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#119-periodic-agents-survey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.19 Periodic agents — survey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#120-periodic-agents-diagnostic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.20 Periodic agents — diagnostic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#121-action-agent-memory-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.21 Action-agent memory paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.22 Notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123-computed-properties-derived-from-the-above" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.23 Computed properties (derived from the above)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#124-composeci-overrides-and-non-settings-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.24 Compose/CI overrides and non-Settings vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-cross-reference-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Cross-Reference Checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Cross-Reference Checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-vars-present-in-configpy-but-missing-from-docsconfigurationmd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Vars present in config.py but missing from docs/configuration.md
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-non-settings-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Non-Settings vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-vars-read-via-raw-osenviron-bypassing-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Vars read via raw os.environ bypassing Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-dual-source-vars-read-from-both-settings-and-raw-osenviron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Dual-source vars (read from both Settings AND raw os.environ)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-vars-hardcoded-in-dockerfile-vs-their-yamldefault-equivalents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 Vars hardcoded in Dockerfile vs. their YAML/default equivalents
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-vars-set-only-in-docker-composeyml-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 Vars set only in docker-compose.yml environment:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-vars-consumed-by-docker-composeyml-variable-substitution-not-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.7 Vars consumed by docker-compose.yml variable substitution (not environment:)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-requirements-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Requirements Summary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Requirements Summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-desired-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Desired structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-type-safety-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Type safety gaps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-secrets-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Secrets management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-environment-story" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Environment story
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-documentation-sync-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 Documentation sync gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-raw-osenviron-bypass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6 Raw os.environ bypass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-methodology" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Methodology
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-complete-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Complete Inventory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Complete Inventory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#legend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#11-core-api-keys-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Core — API keys &amp; secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-core-model-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 Core — model selection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-core-request-limits-safety-nets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 Core — request limits &amp; safety nets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-core-memory-reference-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 Core — memory &amp; reference files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-management-plane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 Management plane
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#16-forge-delivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.6 Forge delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#17-implement-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.7 Implement stage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#18-command-sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.8 Command sandbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#19-web-research-fetch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.9 Web research &amp; fetch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#110-approval-review-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.10 Approval &amp; review gates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-pipeline-tail-merge-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.12 Pipeline tail (merge stage)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-ci-monitor-log-cap-only-enabledinterval-are-per-repo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.13 CI monitor (log cap only; enabled/interval are per-repo)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#114-periodic-agents-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.14 Periodic agents — audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#115-periodic-agents-trace-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.15 Periodic agents — trace-health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#116-periodic-agents-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.16 Periodic agents — health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#117-periodic-agents-test-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.17 Periodic agents — test-gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#118-periodic-agents-agent-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.18 Periodic agents — agent-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#119-periodic-agents-survey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.19 Periodic agents — survey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#120-periodic-agents-diagnostic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.20 Periodic agents — diagnostic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#121-action-agent-memory-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.21 Action-agent memory paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.22 Notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123-computed-properties-derived-from-the-above" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.23 Computed properties (derived from the above)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#124-composeci-overrides-and-non-settings-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.24 Compose/CI overrides and non-Settings vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-cross-reference-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Cross-Reference Checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Cross-Reference Checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-vars-present-in-configpy-but-missing-from-docsconfigurationmd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Vars present in config.py but missing from docs/configuration.md
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-non-settings-vars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Non-Settings vars
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-vars-read-via-raw-osenviron-bypassing-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Vars read via raw os.environ bypassing Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-dual-source-vars-read-from-both-settings-and-raw-osenviron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Dual-source vars (read from both Settings AND raw os.environ)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-vars-hardcoded-in-dockerfile-vs-their-yamldefault-equivalents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 Vars hardcoded in Dockerfile vs. their YAML/default equivalents
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-vars-set-only-in-docker-composeyml-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 Vars set only in docker-compose.yml environment:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-vars-consumed-by-docker-composeyml-variable-substitution-not-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.7 Vars consumed by docker-compose.yml variable substitution (not environment:)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-requirements-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Requirements Summary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Requirements Summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-desired-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Desired structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-type-safety-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Type safety gaps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-secrets-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Secrets management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-environment-story" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Environment story
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-documentation-sync-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 Documentation sync gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-raw-osenviron-bypass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6 Raw os.environ bypass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-methodology" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Methodology
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="configuration-audit">Configuration Audit</h1>
+<blockquote>
+<p><strong>SUPERSEDED (historical).</strong> This audit predates the single-file config
+migration. The mill now reads ONE file — <code>config/config.yaml</code> (else the
+committed <code>config/config.example.yaml</code>), with secrets under a top-level
+<code>secrets:</code> block. The multi-file layout described below
+(<code>mill.defaults.yaml</code> / <code>mill.local.yaml</code> / <code>mill.production.yaml</code> /
+<code>secrets.yaml</code>) no longer exists. See <code>docs/configuration.md</code> for the
+current model; this doc is kept for historical analysis only.</p>
+<p>Generated from a full-repo survey of <code>config.py</code>, <code>config/config.example.yaml</code>,
+<code>docs/configuration.md</code>, <code>Dockerfile</code>,
+<code>docker-compose.yml</code>, CI workflows, shell scripts, and all source files
+that read config values.</p>
+<p><strong>Date</strong>: 2026-05-23</p>
+</blockquote>
+<hr />
+<h2 id="1-complete-inventory">1. Complete Inventory</h2>
+<p>Every configuration value consumed anywhere in the repo.  <strong>114</strong> env-var
+aliases are defined on <code>Settings</code> (<code>config.py</code>); the table below includes
+every one plus the Docker‑/compose‑only vars and computed properties that
+other code depends on.</p>
+<h3 id="legend">Legend</h3>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Env var</strong></td>
+<td>Wire name (<code>alias=</code> on <code>Field</code>) or <code>—</code> for computed-only</td>
+</tr>
+<tr>
+<td><strong>Field</strong></td>
+<td>Python attribute on <code>Settings</code> (computed <code>@property</code> in <em>italics</em>)</td>
+</tr>
+<tr>
+<td><strong>Default</strong></td>
+<td><code>Field(default=…)</code> unless overridden by Dockerfile/compose/CI</td>
+</tr>
+<tr>
+<td><strong>Type</strong></td>
+<td>Pydantic type annotation</td>
+</tr>
+<tr>
+<td><strong>Source</strong></td>
+<td><code>Settings</code> (Field), <code>os.environ</code> (raw <code>os.environ.get</code>), <code>Dockerfile</code>, <code>compose</code>, <code>CI</code>, <code>compose-subst</code> (variable substitution in docker-compose.yml)</td>
+</tr>
+<tr>
+<td><strong>Sensitivity</strong></td>
+<td><code>secret</code> · <code>identifying</code> · <code>non-sensitive</code></td>
+</tr>
+<tr>
+<td><strong>YAML</strong></td>
+<td><code>default</code> (in <code>mill.defaults.yaml</code>) / <code>secret</code> (in <code>secrets.yaml</code>) / <code>absent</code></td>
+</tr>
+<tr>
+<td><strong>Docs</strong></td>
+<td><code>§N</code> reference in <code>configuration.md</code> or <code>missing</code></td>
+</tr>
+<tr>
+<td><strong>Consumers</strong></td>
+<td>Files that read this value</td>
+</tr>
+<tr>
+<td><strong>Notes</strong></td>
+<td>Any cross-reference caveat</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="11-core-api-keys-secrets">1.1  Core — API keys &amp; secrets</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OPENROUTER_API_KEY</code></td>
+<td><code>openrouter_api_key</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td><strong>secret</strong></td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>config.py</code>, all agents via <code>Settings()</code></td>
+<td>Set only in <code>secrets.env</code>; absent in <code>.env</code></td>
+</tr>
+<tr>
+<td><code>FORGE_TOKEN</code></td>
+<td><code>forge_token</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td><strong>secret</strong></td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>forge/auth.py</code>, <code>forge/base.py</code></td>
+<td>PAT alternative to GitHub App; set in <code>secrets.env</code></td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_ID</code></td>
+<td><code>github_app_id</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td><strong>secret</strong></td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>forge/auth.py</code></td>
+<td>Set in <code>secrets.env</code></td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_PRIVATE_KEY</code></td>
+<td><code>github_app_private_key</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td><strong>secret</strong></td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>forge/auth.py</code></td>
+<td>Inline PEM; alternative to <code>*_PATH</code></td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_PRIVATE_KEY_PATH</code></td>
+<td><code>github_app_private_key_path</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td><strong>secret</strong></td>
+<td>active</td>
+<td>Non-prefixed</td>
+<td><code>forge/auth.py</code>, <code>docker-compose.yml</code></td>
+<td>Host path; bind-mounted into container</td>
+</tr>
+<tr>
+<td><code>NTFY_TOKEN</code></td>
+<td><code>ntfy_token</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td><strong>secret</strong></td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>notify.py</code></td>
+<td>Set in <code>secrets.env</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-core-model-selection">1.2  Core — model selection</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_MODEL</code></td>
+<td><code>model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td>All agent files via <code>Settings()</code></td>
+<td>Coordinator</td>
+</tr>
+<tr>
+<td><code>MILL_EXPLORE_MODEL</code></td>
+<td><code>explore_model</code></td>
+<td><code>deepseek/deepseek-v4-flash</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td><code>stages/implement.py</code>, explore sub-agent</td>
+<td>⚠️ <code>docs/configuration.md</code> §1 states the wrong default (<code>deepseek/deepseek-v4-pro</code>); the code default is <code>-flash</code>.</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_MODEL</code></td>
+<td><code>test_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td>Test distillation sub-agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REFINE_MODEL</code></td>
+<td><code>refine_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td><code>stages/refine.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_ANSWER_MODEL</code></td>
+<td><code>answer_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td><code>stages/answer.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RETROSPECT_MODEL</code></td>
+<td><code>retrospect_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §10</td>
+<td><code>stages/retrospect.py</code></td>
+<td>Mentioned in both §1 and §10</td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_MODEL</code></td>
+<td><code>audit_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §11</td>
+<td><code>audit_runner.py</code></td>
+<td>Mentioned in both §1 and §11</td>
+</tr>
+<tr>
+<td><code>MILL_DEDUP_MODEL</code></td>
+<td><code>dedup_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §17</td>
+<td><code>stages/refine.py</code> (pre-refine dedup)</td>
+<td>Mentioned in both §1 and §17</td>
+</tr>
+<tr>
+<td><code>MILL_WEB_RESEARCH_MODEL</code></td>
+<td><code>web_research_model</code></td>
+<td><code>deepseek/deepseek-v4-flash</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §8</td>
+<td>Web-research sub-agent</td>
+<td>Mentioned in both §1 and §8</td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_MODEL</code></td>
+<td><code>review_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §6</td>
+<td><code>stages/review.py</code></td>
+<td>Mentioned in both §1 and §6</td>
+</tr>
+<tr>
+<td><code>MILL_TRACE_INSPECTOR_MODEL</code></td>
+<td><code>trace_inspector_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §10</td>
+<td>Trace-inspector sub-agent</td>
+<td>Mentioned in both §1 and §10</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_MODEL</code></td>
+<td><code>test_gap_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §14</td>
+<td><code>test_gap_runner.py</code></td>
+<td>Mentioned in both §1 and §14</td>
+</tr>
+<tr>
+<td><code>MILL_AGENT_CHECK_MODEL</code></td>
+<td><code>agent_check_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §15</td>
+<td><code>agent_check_runner.py</code></td>
+<td>Mentioned in both §1 and §15</td>
+</tr>
+<tr>
+<td><code>MILL_HEALTH_MODEL</code></td>
+<td><code>health_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §13</td>
+<td><code>health_runner.py</code></td>
+<td>Mentioned in both §1 and §13</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_MODEL</code></td>
+<td><code>survey_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §16</td>
+<td><code>survey_runner.py</code></td>
+<td>Mentioned in both §1 and §16</td>
+</tr>
+<tr>
+<td><code>MILL_RATE_LIMIT_FALLBACK_MODEL</code></td>
+<td><code>rate_limit_fallback_model</code></td>
+<td><code>""</code> (empty = disabled)</td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1, §4</td>
+<td><code>runtime/model.py</code> (retry logic)</td>
+<td>Mentioned in both §1 and §4</td>
+</tr>
+<tr>
+<td><code>MILL_TRIAGE_MODEL</code></td>
+<td><code>triage_model</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>stages/refine.py</code> (pre-refine triage)</td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_DOC_MODEL</code></td>
+<td><code>doc_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>stages/documenting.py</code></td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_DOC_CLASSIFIER_MODEL</code></td>
+<td><code>doc_classifier_model</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td><code>stages/document.py</code>, doc-classifier gate</td>
+<td>Cheap classifier gate — inspects diff + spec to decide whether the change is user-facing</td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_APPROVE_MODEL</code></td>
+<td><code>auto_approve_model</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§6</td>
+<td><code>stages/refine.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SCOPE_TRIAGE_MODEL</code></td>
+<td><code>scope_triage_model</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§1</td>
+<td><code>stages/implement.py</code>, <code>agents/scope_triage.py</code></td>
+<td>Cheap classifier for out-of-scope file changes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-core-request-limits-safety-nets">1.3  Core — request limits &amp; safety nets</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_PER_PASS_REQUEST_BUDGET</code></td>
+<td><code>coordinator_request_limit</code></td>
+<td><code>500</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2</td>
+<td><code>stages/implement.py</code></td>
+<td>Hard upper bound 5000</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_REQUEST_LIMIT</code></td>
+<td><code>test_request_limit</code></td>
+<td><code>8</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2</td>
+<td>Test sub-agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_FIX_ITERATIONS</code></td>
+<td><code>max_fix_iterations</code></td>
+<td><code>8</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§3</td>
+<td><code>stages/implement.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MODEL_REQUEST_TIMEOUT</code></td>
+<td><code>model_request_timeout</code></td>
+<td><code>900.0</code></td>
+<td><code>float</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§4</td>
+<td><code>runtime/model.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_CONCURRENCY</code></td>
+<td><code>max_concurrency</code></td>
+<td><code>4</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§3</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RATE_LIMIT_FALLBACK_RETRIES</code></td>
+<td><code>rate_limit_fallback_retries</code></td>
+<td><code>3</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§4</td>
+<td><code>runtime/model.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_EXPLORE_REQUEST_LIMIT</code></td>
+<td><code>explore_request_limit</code></td>
+<td><code>100</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2</td>
+<td>Explore sub-agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_CONSULT_REQUEST_LIMIT</code></td>
+<td><code>consult_request_limit</code></td>
+<td><code>15</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2</td>
+<td>Domain-expert consultation sub-agent (<code>consult_expert</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DEDUP_REQUEST_LIMIT</code></td>
+<td><code>dedup_request_limit</code></td>
+<td><code>4</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2, §17</td>
+<td>Pre-refine dedup check</td>
+<td>Mentioned in both §2 and §17</td>
+</tr>
+<tr>
+<td><code>MILL_DOC_CLASSIFIER_REQUEST_LIMIT</code></td>
+<td><code>doc_classifier_request_limit</code></td>
+<td><code>3</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2</td>
+<td><code>stages/document.py</code>, doc-classifier gate</td>
+<td>Per-call cap for the cheap doc-classifier agent</td>
+</tr>
+<tr>
+<td><code>MILL_MAX_STUCK_CYCLES</code></td>
+<td><code>max_stuck_cycles</code></td>
+<td><code>3</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§3</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_MAX_SPEND_USD_PER_TICKET</code></td>
+<td><code>max_spend_usd_per_ticket</code></td>
+<td><code>0.0</code></td>
+<td><code>float</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§3</td>
+<td><code>runtime/worker.py</code></td>
+<td><code>0.0</code> = disabled</td>
+</tr>
+<tr>
+<td><code>MILL_STAGE_TIMEOUT_SECONDS</code></td>
+<td><code>stage_timeout_seconds</code></td>
+<td><code>1800</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§3</td>
+<td><code>runtime/worker.py</code></td>
+<td><code>≤ 0</code> disables</td>
+</tr>
+<tr>
+<td><code>MILL_STAGE_TIMEOUT_OVERRIDES</code></td>
+<td><code>stage_timeout_overrides</code></td>
+<td><code>{}</code></td>
+<td><code>dict</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§3</td>
+<td><code>runtime/worker.py</code></td>
+<td>JSON dict; <code>"stage": 0</code> disables per-stage</td>
+</tr>
+<tr>
+<td><code>MILL_WEB_RESEARCH_REQUEST_LIMIT</code></td>
+<td><code>web_research_request_limit</code></td>
+<td><code>8</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§2, §8</td>
+<td>Web-research sub-agent</td>
+<td>Mentioned in both §2 and §8</td>
+</tr>
+</tbody>
+</table>
+<h3 id="14-core-memory-reference-files">1.4  Core — memory &amp; reference files</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_MAX_MEMORY_CHARS</code></td>
+<td><code>max_memory_chars</code></td>
+<td><code>8000</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§18</td>
+<td>All memory-ledger reads</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DEDUP_LOOKBACK_DAYS</code></td>
+<td><code>dedup_lookback_days</code></td>
+<td><code>30</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§17</td>
+<td><code>stages/refine.py</code> (dedup)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="15-management-plane">1.5  Management plane</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_DATA_DIR</code></td>
+<td><code>data_dir</code></td>
+<td><code>.mill-data</code></td>
+<td><code>Path</code></td>
+<td>Settings + Dockerfile</td>
+<td>identifying</td>
+<td>commented-out</td>
+<td>§5</td>
+<td><code>core/db.py</code>, <code>runtime/api.py</code>, all <code>*_runner.py</code>, <code>cli.py</code></td>
+<td>Dockerfile overrides to <code>/data</code></td>
+</tr>
+<tr>
+<td><code>MILL_DEFAULT_REPO_ID</code></td>
+<td><code>default_repo_id</code></td>
+<td><code>""</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§6</td>
+<td><code>core/service.py</code> (legacy ticket resolution)</td>
+<td>Backward-compat: auto-assigned board_id for pre-migration tickets</td>
+</tr>
+<tr>
+<td><code>MILL_API_HOST</code></td>
+<td><code>api_host</code></td>
+<td><code>127.0.0.1</code></td>
+<td><code>str</code></td>
+<td>Settings + Dockerfile</td>
+<td>non-sensitive</td>
+<td>commented-out</td>
+<td>§5</td>
+<td><code>runtime/api.py</code></td>
+<td>Dockerfile overrides to <code>0.0.0.0</code></td>
+</tr>
+<tr>
+<td><code>MILL_API_PORT</code></td>
+<td><code>api_port</code></td>
+<td><code>8077</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>active (<code>8077</code>)</td>
+<td>§5</td>
+<td><code>runtime/api.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_API_URL</code></td>
+<td><code>api_url</code></td>
+<td><code>http://127.0.0.1:8077</code></td>
+<td><code>str</code></td>
+<td>Settings + Dockerfile</td>
+<td>identifying</td>
+<td>active</td>
+<td>§5</td>
+<td><code>cli.py</code></td>
+<td>Dockerfile sets same value</td>
+</tr>
+</tbody>
+</table>
+<h3 id="16-forge-delivery">1.6  Forge delivery</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FORGE_KIND</code></td>
+<td><code>forge_kind</code></td>
+<td><code>none</code></td>
+<td><code>Literal["github","gitlab","auto","none"]</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>Non-prefixed</td>
+<td><code>forge/base.py</code>, all <code>forge/*.py</code></td>
+<td><code>auto</code> detects forge kind from remote URL hostname</td>
+</tr>
+<tr>
+<td><code>FORGE_REMOTE_URL</code></td>
+<td><code>forge_remote_url</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td>identifying</td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>forge/base.py</code>, all <code>forge/*.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FORGE_TARGET_BRANCH</code></td>
+<td><code>forge_target_branch</code></td>
+<td><code>main</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>Non-prefixed</td>
+<td><code>forge/base.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FORGE_AUTH</code></td>
+<td><code>forge_auth</code></td>
+<td><code>token</code></td>
+<td><code>Literal["token","app"]</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>Non-prefixed</td>
+<td><code>forge/auth.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_GITHUB_API_URL</code></td>
+<td><code>github_api_url</code></td>
+<td><code>https://api.github.com</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>identifying</td>
+<td>default</td>
+<td>§19</td>
+<td><code>forge/github.py</code></td>
+<td>For GitHub Enterprise</td>
+</tr>
+<tr>
+<td><code>MILL_GITLAB_API_URL</code></td>
+<td><code>gitlab_api_url</code></td>
+<td><code>https://gitlab.com/api/v4</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>identifying</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>forge/gitlab.py</code></td>
+<td>⚠️ Undocumented</td>
+</tr>
+</tbody>
+</table>
+<h3 id="17-implement-stage">1.7  Implement stage</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_TEST_COMMAND</code></td>
+<td><code>test_command</code></td>
+<td><code>pytest -q</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§19</td>
+<td><code>stages/implement.py</code>, <code>agents/testing.py</code></td>
+<td>Global fallback only. Precedence: per-repo <code>.robotsix-mill/config.yaml</code> <code>test_command</code> (read by <code>repo_settings.load_repo_test_command</code>) &gt; <code>repos.yaml</code> per-repo <code>test_command</code> &gt; this.</td>
+</tr>
+<tr>
+<td><code>MILL_BRANCH_PREFIX</code></td>
+<td><code>branch_prefix</code></td>
+<td><code>mill/</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§19</td>
+<td><code>forge/*.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_COMMAND_TIMEOUT</code></td>
+<td><code>command_timeout</code></td>
+<td><code>1800</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td>Listed in §7 (sandbox), not §19</td>
+</tr>
+<tr>
+<td><code>MILL_SKILLS_DIR</code></td>
+<td><code>skills_dir</code></td>
+<td><code>skills</code></td>
+<td><code>Path</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§21</td>
+<td><code>stages/refine.py</code>, <code>stages/implement.py</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="18-command-sandbox">1.8  Command sandbox</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SANDBOX_IMAGE</code></td>
+<td><code>sandbox_image</code></td>
+<td><code>python:3.14-slim</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_MEMORY</code></td>
+<td><code>sandbox_memory</code></td>
+<td><code>2g</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_PIDS_LIMIT</code></td>
+<td><code>sandbox_pids_limit</code></td>
+<td><code>512</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_READONLY</code></td>
+<td><code>sandbox_readonly</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DATA_VOLUME</code></td>
+<td><code>data_volume</code></td>
+<td><code>mill_data</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td>Fallback when <code>*_MOUNT</code> is unset</td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_DATA_MOUNT</code></td>
+<td><code>sandbox_data_mount</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings + compose</td>
+<td>identifying</td>
+<td>absent</td>
+<td>§7</td>
+<td><code>sandbox.py</code></td>
+<td>Overrides <code>*_VOLUME</code>; set by docker-compose to <code>${PWD}/.data</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="19-web-research-fetch">1.9  Web research &amp; fetch</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_WEB_SEARCH</code></td>
+<td><code>web_search</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§8</td>
+<td><code>stages/refine.py</code>, <code>stages/implement.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_FETCH_IMAGE</code></td>
+<td><code>fetch_image</code></td>
+<td><code>curlimages/curl:8.17.0</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§8</td>
+<td><code>sandbox.py</code> (fetch container)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_FETCH_MAX_BYTES</code></td>
+<td><code>web_fetch_max_bytes</code></td>
+<td><code>2000000</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§8</td>
+<td><code>sandbox.py</code> (fetch)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_WEB_FETCH_TIMEOUT</code></td>
+<td><code>web_fetch_timeout</code></td>
+<td><code>30</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§8</td>
+<td><code>sandbox.py</code> (fetch)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="110-approval-review-gates">1.10  Approval &amp; review gates</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_REQUIRE_APPROVAL</code></td>
+<td><code>require_approval</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§6</td>
+<td><code>stages/refine.py</code>, <code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_APPROVE_ENABLED</code></td>
+<td><code>auto_approve_enabled</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§6</td>
+<td><code>stages/refine.py</code></td>
+<td>Local YAML overrides default <code>false</code> → <code>true</code></td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_ENABLED</code></td>
+<td><code>review_enabled</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§6</td>
+<td><code>runtime/worker.py</code></td>
+<td>Local YAML overrides default <code>false</code> → <code>true</code></td>
+</tr>
+<tr>
+<td><code>MILL_AUTO_MERGE_ENABLED</code></td>
+<td><code>auto_merge_enabled</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>stages/merge/</code></td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_REFINE_TRIAGE_ENABLED</code></td>
+<td><code>refine_triage_enabled</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>stages/refine.py</code></td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_SPEC_REVIEW_ENABLED</code></td>
+<td><code>spec_review_enabled</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>stages/refine.py</code></td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_REVIEW_MAX_ROUNDS</code></td>
+<td><code>review_max_rounds</code></td>
+<td><code>3</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>stages/review.py</code></td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td>### 1.11  Retrospect stage</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_RETROSPECT_SPAWN_DRAFTS</code></td>
+<td><code>retrospect_spawn_drafts</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§10</td>
+<td><code>stages/retrospect.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_RETROSPECT_MEMORY_PATH</code></td>
+<td><code>retrospect_memory_path</code></td>
+<td><code>None</code></td>
+<td><code>Path\|None</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§10</td>
+<td><code>stages/retrospect.py</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="112-pipeline-tail-merge-stage">1.12  Pipeline tail (merge stage)</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_MERGE_POLL_SECONDS</code></td>
+<td><code>merge_poll_seconds</code></td>
+<td><code>120</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§9</td>
+<td><code>stages/merge/</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_PRUNE_CLONE_ON_CLOSE</code></td>
+<td><code>prune_clone_on_close</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>core/service.py</code> (ticket close)</td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_MAX_ARCHIVED_TICKETS</code></td>
+<td><code>max_archived_tickets</code></td>
+<td><code>100</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>core/service.py</code> (ticket purge)</td>
+<td>⚠️ Undocumented</td>
+</tr>
+<tr>
+<td><code>MILL_REBASE_MAX_ATTEMPTS</code></td>
+<td><code>rebase_max_attempts</code></td>
+<td><code>5</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§9</td>
+<td><code>stages/merge/</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_CI_FIX_MAX_ATTEMPTS</code></td>
+<td><code>ci_fix_max_attempts</code></td>
+<td><code>2</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§9</td>
+<td><code>stages/merge/</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="113-ci-monitor-log-cap-only-enabledinterval-are-per-repo">1.13  CI monitor (log cap only; enabled/interval are per-repo)</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_CI_LOG_MAX_BYTES</code></td>
+<td><code>ci_log_max_bytes</code></td>
+<td><code>65536</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§20</td>
+<td>CI monitor / CI-fix agent</td>
+<td>global operational cap</td>
+</tr>
+<tr>
+<td><code>—</code></td>
+<td><em>ci_monitor_enabled</em></td>
+<td><code>True</code></td>
+<td><code>bool</code></td>
+<td>RepoConfig</td>
+<td>non-sensitive</td>
+<td>repos.yaml</td>
+<td>—</td>
+<td><code>runtime/worker.py</code></td>
+<td>per-repo field in <code>config/repos.yaml</code></td>
+</tr>
+<tr>
+<td><code>—</code></td>
+<td><em>ci_monitor_interval_seconds</em></td>
+<td><code>900</code></td>
+<td><code>int</code></td>
+<td>RepoConfig</td>
+<td>non-sensitive</td>
+<td>repos.yaml</td>
+<td>—</td>
+<td><code>runtime/worker.py</code></td>
+<td>per-repo field in <code>config/repos.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="114-periodic-agents-audit">1.14  Periodic agents — audit</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_AUDIT_PERIODIC</code></td>
+<td><code>audit_periodic</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§11</td>
+<td><code>audit_runner.py</code>, <code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_INTERVAL_SECONDS</code></td>
+<td><code>audit_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§11</td>
+<td><code>runtime/worker.py</code></td>
+<td>Local YAML overrides to 1 week</td>
+</tr>
+</tbody>
+</table>
+<h3 id="115-periodic-agents-trace-health">1.15  Periodic agents — trace-health</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_TRACE_HEALTH_PERIODIC</code></td>
+<td><code>trace_health_periodic</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§12</td>
+<td><code>trace_health_runner.py</code>, <code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TRACE_HEALTH_INTERVAL_SECONDS</code></td>
+<td><code>trace_health_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§12</td>
+<td><code>runtime/worker.py</code></td>
+<td>Local YAML overrides to 1 week</td>
+</tr>
+</tbody>
+</table>
+<h3 id="116-periodic-agents-health">1.16  Periodic agents — health</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_HEALTH_PERIODIC</code></td>
+<td><code>health_periodic</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§13</td>
+<td><code>health_runner.py</code>, <code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_HEALTH_INTERVAL_SECONDS</code></td>
+<td><code>health_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§13</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="117-periodic-agents-test-gap">1.17  Periodic agents — test-gap</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_TEST_GAP_PERIODIC</code></td>
+<td><code>test_gap_periodic</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§14</td>
+<td><code>test_gap_runner.py</code>, <code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_INTERVAL_SECONDS</code></td>
+<td><code>test_gap_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§14</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="118-periodic-agents-agent-check">1.18  Periodic agents — agent-check</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_AGENT_CHECK_PERIODIC</code></td>
+<td><code>agent_check_periodic</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§15</td>
+<td><code>agent_check_runner.py</code>, <code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_AGENT_CHECK_INTERVAL_SECONDS</code></td>
+<td><code>agent_check_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§15</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="119-periodic-agents-survey">1.19  Periodic agents — survey</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SURVEY_PERIODIC</code></td>
+<td><code>survey_periodic</code></td>
+<td><code>true</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td><strong>missing</strong></td>
+<td><code>survey_runner.py</code>, <code>runtime/worker.py</code></td>
+<td>⚠️ Undocumented; default <code>true</code> (on by default)</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_INTERVAL_SECONDS</code></td>
+<td><code>survey_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§16</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="120-periodic-agents-diagnostic">1.20  Periodic agents — diagnostic</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_DIAGNOSTIC_PERIODIC</code></td>
+<td><code>diagnostic_periodic</code></td>
+<td><code>false</code></td>
+<td><code>bool</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td><code>periodic.diagnostic.enabled</code></td>
+<td>§12</td>
+<td><code>diagnostic_runner.py</code>, <code>runtime/worker.py</code></td>
+<td>Deterministic pass (no LLM)</td>
+</tr>
+<tr>
+<td><code>MILL_DIAGNOSTIC_INTERVAL_SECONDS</code></td>
+<td><code>diagnostic_interval_seconds</code></td>
+<td><code>86400</code></td>
+<td><code>int</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td><code>periodic.diagnostic.interval_seconds</code></td>
+<td>§12</td>
+<td><code>runtime/worker.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_DIAGNOSTIC_TARGET_REPO_ID</code></td>
+<td><code>diagnostic_target_repo_id</code></td>
+<td><code>robotsix-mill</code></td>
+<td><code>str</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td><code>periodic.diagnostic.target_repo_id</code></td>
+<td>§12</td>
+<td><code>diagnostic_runner.py</code></td>
+<td>Single-repo fallback when monitored list is empty</td>
+</tr>
+<tr>
+<td><code>MILL_DIAGNOSTIC_MONITORED_REPO_IDS</code></td>
+<td><code>diagnostic_monitored_repo_ids</code></td>
+<td><code>[]</code></td>
+<td><code>list[str]</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td><code>periodic.diagnostic.monitored_repo_ids</code></td>
+<td>§12</td>
+<td><code>diagnostic_runner.py</code></td>
+<td>Repos monitored each pass; empty -&gt; falls back to <code>target_repo_id</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="121-action-agent-memory-paths">1.21  Action-agent memory paths</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_IMPLEMENT_MEMORY_PATH</code></td>
+<td><code>implement_memory_path</code></td>
+<td><code>None</code></td>
+<td><code>Path\|None</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§18</td>
+<td><code>stages/implement.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REFINE_MEMORY_PATH</code></td>
+<td><code>refine_memory_path</code></td>
+<td><code>None</code></td>
+<td><code>Path\|None</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§18</td>
+<td><code>stages/refine.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_CI_FIX_MEMORY_PATH</code></td>
+<td><code>ci_fix_memory_path</code></td>
+<td><code>None</code></td>
+<td><code>Path\|None</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§18</td>
+<td>CI-fix agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_REBASE_MEMORY_PATH</code></td>
+<td><code>rebase_memory_path</code></td>
+<td><code>None</code></td>
+<td><code>Path\|None</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§18</td>
+<td>Rebase agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>MILL_CI_PATTERNS_PATH</code></td>
+<td><code>ci_patterns_path</code></td>
+<td><code>None</code></td>
+<td><code>Path\|None</code></td>
+<td>Settings</td>
+<td>non-sensitive</td>
+<td>default</td>
+<td>§18</td>
+<td>CI-fix agent (pattern memory)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="122-notifications">1.22  Notifications</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Field</th>
+<th>Default</th>
+<th>Type</th>
+<th>Source</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Docs</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NTFY_URL</code></td>
+<td><code>ntfy_url</code></td>
+<td><code>None</code></td>
+<td><code>str\|None</code></td>
+<td>Settings</td>
+<td>identifying</td>
+<td>absent</td>
+<td>Non-prefixed</td>
+<td><code>notify.py</code></td>
+<td>Empty string disables</td>
+</tr>
+</tbody>
+</table>
+<h3 id="123-computed-properties-derived-from-the-above">1.23  Computed properties (derived from the above)</h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Derivation</th>
+<th>Type</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>epic_workspaces_dir</code></td>
+<td><code>data_dir / "epic_workspaces"</code></td>
+<td><code>Path</code></td>
+<td><code>sandbox.py</code></td>
+<td>Bind-mount target for epic workspace in sandbox containers</td>
+</tr>
+<tr>
+<td><code>tracing_enabled</code></td>
+<td><code>bool(get_secrets().langfuse_base_url and get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)</code></td>
+<td><code>bool</code></td>
+<td><code>runtime/tracing.py</code>, <code>runtime/api.py</code></td>
+<td>Gate: all 3 must be truthy; populated from <code>RepoConfig</code> at startup</td>
+</tr>
+<tr>
+<td><code>retrospect_memory_file</code></td>
+<td><code>retrospect_memory_path or data_dir / "retrospect_memory.md"</code></td>
+<td><code>Path</code></td>
+<td><code>stages/retrospect.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>implement_memory_file</code></td>
+<td><code>implement_memory_path or data_dir / "implement_memory.md"</code></td>
+<td><code>Path</code></td>
+<td><code>stages/implement.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>refine_memory_file</code></td>
+<td><code>refine_memory_path or data_dir / "refine_memory.md"</code></td>
+<td><code>Path</code></td>
+<td><code>stages/refine.py</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci_fix_memory_file</code></td>
+<td><code>ci_fix_memory_path or data_dir / "ci_fix_memory.md"</code></td>
+<td><code>Path</code></td>
+<td>CI-fix agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rebase_memory_file</code></td>
+<td><code>rebase_memory_path or data_dir / "rebase_memory.md"</code></td>
+<td><code>Path</code></td>
+<td>Rebase agent</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci_patterns_file</code></td>
+<td><code>ci_patterns_path or data_dir / "ci_patterns.json"</code></td>
+<td><code>Path</code></td>
+<td>CI-fix agent (pattern memory)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="124-composeci-overrides-and-non-settings-vars">1.24  Compose/CI overrides and non-Settings vars</h3>
+<p>This table covers vars that appear outside <code>config.py</code> — either as
+compose <code>environment:</code> overrides of Settings fields (rows 5–7), a
+Settings field also consumed by compose variable substitution (row 2),
+or genuinely non-Settings vars consumed only by tooling/CI (rows 1, 3, 4).</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Source</th>
+<th>Default</th>
+<th>Where set</th>
+<th>Sensitivity</th>
+<th>YAML</th>
+<th>Consumers</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DOCKER_GID</code></td>
+<td>compose-subst + <code>dev/mill-autoupdate.sh</code></td>
+<td><code>999</code></td>
+<td>Shell env or <code>.env</code> (compose-subst only), <code>dev/mill-autoupdate.sh</code> (exports from <code>getent group docker</code>)</td>
+<td>non-sensitive</td>
+<td>absent</td>
+<td><code>docker-compose.yml</code> (<code>group_add</code>), <code>dev/mill-autoupdate.sh</code></td>
+<td>NOT a <code>Settings</code> field; ignored by pydantic-settings (<code>extra="ignore"</code>). Docker orchestration, not app config.</td>
+</tr>
+<tr>
+<td><code>GITHUB_APP_PRIVATE_KEY_PATH</code> (compose use)</td>
+<td>compose-subst</td>
+<td><code>/dev/null</code></td>
+<td><code>docker-compose.yml</code> volumes: <code>${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}</code></td>
+<td>identifying</td>
+<td>secret</td>
+<td><code>docker-compose.yml</code> (volume bind-mount)</td>
+<td>Same env var as the Settings field; compose reads it independently for the bind-mount path. Set via shell environment or <code>config/secrets.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>GIT_BASE_REF</code></td>
+<td>CI</td>
+<td>(none)</td>
+<td><code>.github/workflows/ci.yml</code> env block</td>
+<td>non-sensitive</td>
+<td>absent</td>
+<td><code>tests/test_migration_guard.py</code> via <code>os.environ.get("GIT_BASE_REF", "origin/main")</code></td>
+<td>Workflow-internal only; never in <code>Settings</code>.</td>
+</tr>
+<tr>
+<td><code>SKIP_MIGRATION_GUARD</code></td>
+<td>CI / developer shell</td>
+<td>(none)</td>
+<td>Manually exported by developers</td>
+<td>non-sensitive</td>
+<td>absent</td>
+<td><code>tests/test_migration_guard.py</code> via <code>os.environ.get("SKIP_MIGRATION_GUARD")</code></td>
+<td>Escape hatch; not in <code>Settings</code>.</td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_DATA_MOUNT</code> (compose)</td>
+<td>compose</td>
+<td><code>${PWD}/.data</code></td>
+<td><code>docker-compose.yml</code> environment:</td>
+<td>identifying</td>
+<td>default (compose override)</td>
+<td><code>sandbox.py</code> via <code>Settings()</code></td>
+<td>Compose expands <code>$PWD</code> on the host; listed in §1.8.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-cross-reference-checks">2. Cross-Reference Checks</h2>
+<h3 id="21-vars-present-in-configpy-but-missing-from-docsconfigurationmd">2.1  Vars present in <code>config.py</code> but missing from <code>docs/configuration.md</code></h3>
+<p>These 10 env vars are defined with <code>Field()</code> in <code>config.py</code> but have <strong>no entry</strong>
+in <code>docs/configuration.md</code>:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Env var</th>
+<th>Python field</th>
+<th>Default</th>
+<th>In YAML?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>MILL_TRIAGE_MODEL</code></td>
+<td><code>triage_model</code></td>
+<td><code>openai/gpt-4o-mini</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>MILL_DOC_MODEL</code></td>
+<td><code>doc_model</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>MILL_PRUNE_CLONE_ON_CLOSE</code></td>
+<td><code>prune_clone_on_close</code></td>
+<td><code>true</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>MILL_MAX_ARCHIVED_TICKETS</code></td>
+<td><code>max_archived_tickets</code></td>
+<td><code>100</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>MILL_AUTO_MERGE_ENABLED</code></td>
+<td><code>auto_merge_enabled</code></td>
+<td><code>false</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>MILL_REFINE_TRIAGE_ENABLED</code></td>
+<td><code>refine_triage_enabled</code></td>
+<td><code>true</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>MILL_SPEC_REVIEW_ENABLED</code></td>
+<td><code>spec_review_enabled</code></td>
+<td><code>false</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>MILL_REVIEW_MAX_ROUNDS</code></td>
+<td><code>review_max_rounds</code></td>
+<td><code>3</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>MILL_SURVEY_PERIODIC</code></td>
+<td><code>survey_periodic</code></td>
+<td><code>true</code></td>
+<td>default</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>MILL_GITLAB_API_URL</code></td>
+<td><code>gitlab_api_url</code></td>
+<td><code>https://gitlab.com/api/v4</code></td>
+<td>default</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>The spec's known list incorrectly included <code>MILL_SURVEY_INTERVAL_SECONDS</code>
+(which IS in §16).</p>
+</blockquote>
+<h3 id="22-non-settings-vars">2.2  Non-Settings vars</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Value</th>
+<th>Where consumed</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DOCKER_GID</code></td>
+<td><code>999</code></td>
+<td><code>docker-compose.yml</code> (<code>group_add: ["${DOCKER_GID:-999}"]</code>), <code>dev/mill-autoupdate.sh</code> (<code>export DOCKER_GID</code>)</td>
+<td><strong>Not an app config var.</strong> Docker socket group ownership for the non-root container user. pydantic-settings ignores it (<code>extra="ignore"</code>). Set via shell environment (docker-compose variable substitution only).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-vars-read-via-raw-osenviron-bypassing-settings">2.3  Vars read via raw <code>os.environ</code> bypassing <code>Settings</code></h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>File</th>
+<th>Line(s)</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SKIP_MIGRATION_GUARD</code></td>
+<td><code>tests/test_migration_guard.py</code></td>
+<td>L48 (<code>os.environ.get</code>)</td>
+<td>Escape hatch for CI migration guard</td>
+</tr>
+<tr>
+<td><code>GIT_BASE_REF</code></td>
+<td><code>tests/test_migration_guard.py</code></td>
+<td>L54 (<code>os.environ.get</code>)</td>
+<td>Base ref for git diff in CI</td>
+</tr>
+<tr>
+<td><code>PYTHONPATH</code></td>
+<td><code>tests/runtime/test_tracing.py</code></td>
+<td>L140</td>
+<td>Subprocess environment; test-only. Standard Python runtime variable, not an app-config concern.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-dual-source-vars-read-from-both-settings-and-raw-osenviron">2.4  Dual-source vars (read from both <code>Settings</code> AND raw <code>os.environ</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Settings access</th>
+<th>Raw <code>os.environ</code> access</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LANGFUSE_PUBLIC_KEY</code></td>
+<td><code>Settings.langfuse_public_key</code> → <code>tracing_enabled</code> property</td>
+<td><code>tracing.py:_tracing_enabled()</code> L58, <code>_ensure_tracing()</code> L90</td>
+<td><code>tracing.py</code> <strong>never calls <code>Settings()</code></strong> — it checks env vars directly at module-load time to decide whether to import heavy OTel packages. So <code>LANGFUSE_*</code> values set via <code>Settings()</code> constructor args (not <code>os.environ</code>) would be invisible to <code>tracing.py</code>. In practice this works because compose exports them into the real environment.</td>
+</tr>
+<tr>
+<td><code>LANGFUSE_SECRET_KEY</code></td>
+<td><code>Settings.langfuse_secret_key</code> → <code>tracing_enabled</code> property</td>
+<td><code>tracing.py:_tracing_enabled()</code> L59, <code>_ensure_tracing()</code> L91</td>
+<td>Same as above.</td>
+</tr>
+<tr>
+<td><code>LANGFUSE_BASE_URL</code></td>
+<td><code>Settings.langfuse_base_url</code> → <code>tracing_enabled</code> property</td>
+<td><code>tracing.py:_ensure_tracing()</code> L83</td>
+<td>Same as above; <code>tracing.py</code> defaults to <code>https://cloud.langfuse.com</code> when unset.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-vars-hardcoded-in-dockerfile-vs-their-yamldefault-equivalents">2.5  Vars hardcoded in <code>Dockerfile</code> vs. their YAML/default equivalents</h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th><code>Dockerfile</code> value</th>
+<th><code>config.py</code> default</th>
+<th>YAML default / override</th>
+<th>Discrepancy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_DATA_DIR</code></td>
+<td><code>/data</code></td>
+<td><code>.mill-data</code></td>
+<td>default (<code>.mill-data</code>)</td>
+<td>Intentional: container always uses <code>/data</code> (a volume mount). Dev mode uses the repo-local default.</td>
+</tr>
+<tr>
+<td><code>MILL_API_HOST</code></td>
+<td><code>0.0.0.0</code></td>
+<td><code>127.0.0.1</code></td>
+<td>default (<code>127.0.0.1</code>)</td>
+<td>Intentional: container binds on all interfaces so published ports work.</td>
+</tr>
+<tr>
+<td><code>MILL_API_URL</code></td>
+<td><code>http://127.0.0.1:8077</code></td>
+<td><code>http://127.0.0.1:8077</code></td>
+<td>default (<code>http://127.0.0.1:8077</code>)</td>
+<td>No discrepancy — all three match.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-vars-set-only-in-docker-composeyml-environment">2.6  Vars set only in <code>docker-compose.yml environment:</code></h3>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Compose value</th>
+<th><code>config.py</code> default</th>
+<th>YAML</th>
+<th>Override effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SANDBOX_DATA_MOUNT</code></td>
+<td><code>${PWD}/.data</code></td>
+<td><code>None</code></td>
+<td>absent</td>
+<td>Forces bind-mount path; overrides <code>MILL_DATA_VOLUME</code></td>
+</tr>
+</tbody>
+</table>
+<p>CI monitor enabling/interval were previously set here but are now per-repo
+fields in <code>config/repos.yaml</code> (<code>RepoConfig.ci_monitor_enabled</code> /
+<code>RepoConfig.ci_monitor_interval_seconds</code>).</p>
+<p>This is the <strong>only</strong> var that compose sets directly in the <code>environment:</code> block. Everything else flows through the YAML config pipeline (<code>mill.defaults.yaml</code> → <code>mill.local.yaml</code> → <code>os.environ</code>).</p>
+<h3 id="27-vars-consumed-by-docker-composeyml-variable-substitution-not-environment">2.7  Vars consumed by <code>docker-compose.yml</code> variable substitution (not <code>environment:</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Usage</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>${DOCKER_GID:-999}</code></td>
+<td><code>group_add:</code> list</td>
+<td>Shell environment or <code>.env</code> (docker-compose substitution only, not read by the app)</td>
+</tr>
+<tr>
+<td><code>${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}</code></td>
+<td><code>volumes:</code> bind-mount source + target</td>
+<td>Shell environment or <code>config/secrets.yaml</code></td>
+</tr>
+<tr>
+<td><code>${PWD}/.data</code></td>
+<td><code>MILL_SANDBOX_DATA_MOUNT</code> value in <code>environment:</code></td>
+<td>Host shell (compose resolves <code>$PWD</code>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-requirements-summary">3. Requirements Summary</h2>
+<h3 id="31-desired-structure">3.1  Desired structure</h3>
+<p>The current configuration namespace is a <strong>flat 115-key list</strong> under a single
+<code>Settings</code> class. Every value — from model names to memory paths to Docker
+image tags — lives in the same namespace with a <code>MILL_</code> prefix convention that
+is purely advisory (no enforcement). The YAML config pipeline (<code>config/mill.defaults.yaml</code> → <code>config/mill.local.yaml</code> → <code>config/mill.production.yaml</code>) provides logical grouping through nested YAML keys, with environment-variable overrides for operational flexibility.</p>
+<p>A replacement config architecture should provide:
+- <strong>Grouping</strong>: core (models, limits, timeouts), secrets (keys, tokens),
+  forge (delivery auth + target), sandbox (Docker images, limits),
+  periodic-agents (one group per agent), paths (data dir, memory ledgers).
+- <strong>Per-environment overrides</strong>: dev (<code>config/mill.local.yaml</code>), CI (inert — only
+  <code>GIT_BASE_REF</code>), staging/prod (<code>docker-compose.yml</code> <code>environment:</code> +
+  mounted secrets file). Each environment selects its own overlay, not a
+  single monolith.
+- <strong>Separation of orchestration vars</strong>: <code>DOCKER_GID</code> should not pollute the
+  app config namespace at all.</p>
+<h3 id="32-type-safety-gaps">3.2  Type safety gaps</h3>
+<p>pydantic-settings provides type coercion (<code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>,
+<code>Path</code>, <code>Literal</code>) but <strong>no semantic validation</strong>:</p>
+<ul>
+<li><strong>No range checks</strong>: <code>MILL_MAX_CONCURRENCY=0</code> or <code>=-1</code> is accepted.
+  <code>MILL_MODEL_REQUEST_TIMEOUT=0</code> disables timeouts silently.</li>
+<li><strong>No cross-field consistency</strong>: <code>FORGE_AUTH=app</code> but <code>GITHUB_APP_ID</code> unset
+  → runtime error in <code>forge/auth.py</code>, not a startup validation failure.
+  <code>FORGE_KIND=github</code> but <code>FORGE_REMOTE_URL</code> unset → same.</li>
+<li><strong>No required-if logic</strong>: Many <code>str|None</code> fields are effectively required
+  in certain modes (e.g. <code>FORGE_TOKEN</code> must be set when
+  <code>FORGE_AUTH=token</code>), but the schema treats them as always-optional.</li>
+<li><strong>No URL/format validation</strong>: <code>MILL_API_URL</code> accepts any string. <code>NTFY_URL</code>
+  accepts any string (empty = disabled is convention, not enforced).</li>
+<li><strong>Path existence not checked</strong>: <code>MILL_SKILLS_DIR</code>, <code>GITHUB_APP_PRIVATE_KEY_PATH</code>,
+  <code>MILL_DATA_DIR</code> — none are validated for existence at startup.</li>
+</ul>
+<h3 id="33-secrets-management">3.3  Secrets management</h3>
+<p>Secrets currently live in <code>os.environ</code> after pydantic-settings loads
+<code>config/secrets.yaml</code>. This means:</p>
+<ul>
+<li><strong>Any library import</strong> can read <code>OPENROUTER_API_KEY</code> via <code>os.environ</code>
+  (and <code>tracing.py</code> already does for <code>LANGFUSE_*</code>).</li>
+<li><strong>No access control</strong>: there's no distinction between a module that
+  legitimately needs a secret (e.g. <code>forge/auth.py</code> needs <code>FORGE_TOKEN</code>)
+  and one that shouldn't see it.</li>
+<li><strong>Secrets are plaintext in <code>os.environ</code></strong>: visible to any subprocess
+  (sandbox containers, <code>subprocess.run</code>, debuggers). The sandbox containers
+  are <code>--network none</code> but if a future change adds env passthrough, secrets
+  would leak.</li>
+<li><strong>11 secrets in total</strong>: <code>OPENROUTER_API_KEY</code>, <code>FORGE_TOKEN</code>,
+  <code>GITHUB_APP_ID</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, <code>GITHUB_APP_PRIVATE_KEY_PATH</code>,
+  <code>LANGFUSE_PUBLIC_KEY</code>, <code>LANGFUSE_SECRET_KEY</code>, <code>LANGFUSE_BASE_URL</code>,
+  <code>NTFY_TOKEN</code>, <code>LANGFUSE_PROJECT_ID</code>, <code>NTFY_URL</code> (the last two are
+  identifying rather than secret but still sensitive).</li>
+</ul>
+<p>A dedicated secrets path (e.g. a <code>Secrets</code> class separate from <code>Settings</code>,
+or a <code>get_secret()</code> accessor that logs access) would provide auditability
+and prevent accidental exposure.</p>
+<h3 id="34-environment-story">3.4  Environment story</h3>
+<blockquote>
+<p><strong>Update (2026-05):</strong> The YAML config pipeline has been implemented.
+See <a href="../configuration/"><code>configuration.md</code></a> for the current environment story:
+- <strong>Dev</strong>: <code>config/mill.local.yaml</code> (gitignored per-developer overrides).
+- <strong>CI</strong>: no config file needed (tests use <code>Settings(k=v)</code> kwargs and temp YAML).
+- <strong>Prod</strong>: <code>config/mill.production.yaml</code> + <code>config/secrets.yaml</code> (bind-mounted into container).</p>
+</blockquote>
+<h3 id="35-documentation-sync-gap">3.5  Documentation sync gap</h3>
+<ul>
+<li><strong>12 fields</strong> defined in <code>config.py</code> are <strong>completely absent</strong> from
+  <code>docs/configuration.md</code> (see §2.1).</li>
+<li><strong>4 fields</strong> are in <code>config.py</code> but intentionally absent from
+  <code>config/mill.defaults.yaml</code> (all are secrets):
+  <code>OPENROUTER_API_KEY</code>, <code>LANGFUSE_PUBLIC_KEY</code>, <code>LANGFUSE_SECRET_KEY</code>,
+  <code>LANGFUSE_PROJECT_ID</code>.</li>
+<li><strong>Documentation is manually maintained</strong> — no mechanical cross-check
+  between <code>config.py</code> and <code>docs/configuration.md</code> exists. A script or test that
+  diffs the two would prevent drift.</li>
+</ul>
+<h3 id="36-raw-osenviron-bypass">3.6  Raw <code>os.environ</code> bypass</h3>
+<p><code>src/robotsix_mill/runtime/tracing.py</code> reads <code>LANGFUSE_PUBLIC_KEY</code>,
+<code>LANGFUSE_SECRET_KEY</code>, and <code>LANGFUSE_BASE_URL</code> directly from <code>os.environ</code>
+<strong>without instantiating <code>Settings</code></strong> (the import at L26 exists only for
+<code>init()</code>'s type annotation; <code>_tracing_enabled()</code> and <code>_ensure_tracing()</code>
+both reach directly into <code>os.environ</code>). This is a deliberate performance
+choice (the file avoids importing heavy OTel packages unless tracing is
+enabled, and checking <code>os.environ</code> is faster than constructing a <code>Settings</code>
+object). However, it creates a <strong>dual-source problem</strong>:</p>
+<ul>
+<li><code>Settings.tracing_enabled</code> depends on <code>self.langfuse_public_key</code> etc.
+  (from the <code>Settings</code> model, populated by pydantic-settings).</li>
+<li><code>tracing._tracing_enabled()</code> reads <code>os.environ</code> directly.</li>
+<li>If someone instantiates <code>Settings(LANGFUSE_PUBLIC_KEY="pk-...")</code> without
+  exporting to <code>os.environ</code>, <code>tracing_enabled</code> would be <code>True</code> but
+  <code>_ensure_tracing()</code> would fail because <code>os.environ</code> has no such key.</li>
+</ul>
+<p>In practice this doesn't break because docker-compose and local dev both set
+these in the real environment. But a config redesign should route tracing
+through a single accessor — either <code>Settings</code> or a dedicated "tracing config"
+singleton — so the two code paths can't diverge.</p>
+<hr />
+<h2 id="4-methodology">4. Methodology</h2>
+<p>This audit was produced by:</p>
+<ol>
+<li>Extracting every <code>Field()</code> definition from <code>config.py</code> (115 env-var
+   aliases + computed <code>@property</code> entries).</li>
+<li>Reading <code>config/mill.defaults.yaml</code> for all committed default values.</li>
+<li>Reading <code>config/secrets.example.yaml</code> for the credentials template.</li>
+<li>Cross-referencing every <code>Field</code> against <code>docs/configuration.md</code>'s 21
+   sections and non-prefixed table.</li>
+<li>Scanning <code>Dockerfile</code> for <code>ENV</code> directives, <code>docker-compose.yml</code> for
+   <code>environment:</code> and variable substitution, <code>.github/workflows/ci.yml</code> for
+   <code>env:</code> blocks, and <code>dev/mill-autoupdate.sh</code> for <code>export</code> statements.</li>
+<li>Searching the entire repo for <code>os.environ.get</code>, <code>os.environ[...]</code>, and
+   <code>Settings()</code> / <code>load_settings()</code> to build the consumers column.</li>
+<li>Classifying every value by sensitivity (<code>secret</code>, <code>identifying</code>,
+   <code>non-sensitive</code>) based on whether it is a token/key/password, a
+   URL/username/hostname, or a tuning knob/feature flag.</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

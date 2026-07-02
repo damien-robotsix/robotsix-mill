@@ -1,0 +1,2761 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../design/worker-process-split/">
+      
+      
+        <link rel="next" href="../../reference/agents/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Adding a New Agent - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adding-a-new-agent" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Adding a New Agent
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-yaml-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — YAML definition
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 1 — YAML definition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schema-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-python-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — Python module
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 2 — Python module">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#signature-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signature contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-register-the-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3 — Register the pass
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3 — Register the pass">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-a-thin-runner-stub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create a thin runner stub
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-add-config-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4 — Add config defaults
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-wire-the-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5 — Wire the worker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 5 — Wire the worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#5a-declare-the-task-attribute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5a — Declare the task attribute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5b-wire-the-poll-loop-periodic-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5b — Wire the poll loop (periodic agents)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5c-cancel-on-shutdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5c — Cancel on shutdown
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative-http-triggered-background-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative: HTTP-triggered background pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-cli-and-api-route-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6 — CLI and API route (optional)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-7-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 7 — Testing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-yaml-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — YAML definition
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 1 — YAML definition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schema-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-python-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — Python module
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 2 — Python module">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#signature-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signature contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-register-the-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3 — Register the pass
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 3 — Register the pass">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-a-thin-runner-stub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create a thin runner stub
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-add-config-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4 — Add config defaults
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-wire-the-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5 — Wire the worker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 5 — Wire the worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#5a-declare-the-task-attribute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5a — Declare the task attribute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5b-wire-the-poll-loop-periodic-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5b — Wire the poll loop (periodic agents)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5c-cancel-on-shutdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5c — Cancel on shutdown
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative-http-triggered-background-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative: HTTP-triggered background pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-6-cli-and-api-route-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6 — CLI and API route (optional)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-7-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 7 — Testing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="adding-a-new-agent">Adding a New Agent</h1>
+<p>This guide walks through the end-to-end process of adding a new
+periodic agent to robotsix/mill, using the <code>health</code> agent as a worked
+example.  By the end you will understand every touch-point — from the
+YAML definition through to the test suite.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>
+<p><strong>Naming convention.</strong>  Use <code>snake_case</code> for the agent name, its
+  YAML file, its Python module, and all derivative identifiers
+  (tasks, config keys).  The convention is already followed by every
+  existing agent (<code>bc_check</code>, <code>health</code>, <code>agent_check</code>, …).</p>
+</li>
+<li>
+<p><strong>SourceKind registration.</strong>  Every periodic agent needs a member
+  in the <code>SourceKind</code> enum (<code>src/robotsix_mill/core/models.py</code>).  The
+  member value is the ticket-source label stamped on draft tickets
+  the agent files.  For <code>health</code> it is <code>HEALTH = "health"</code>; add yours
+  in the same enum block (sorted roughly alphabetically).</p>
+</li>
+<li>
+<p><strong>Module taxonomy.</strong>  If your agent introduces a new Python module,
+  add it to <code>docs/modules.yaml</code> in the same commit (see
+  <a href="../../AGENT.md#adding-a-tracked-file">AGENT.md</a>).</p>
+</li>
+</ul>
+<hr />
+<h2 id="step-1-yaml-definition">Step 1 — YAML definition</h2>
+<p>Create <code>agent_definitions/periodic/&lt;name&gt;.yaml</code>.  This is the
+declarative contract that the loader, the periodic runner, and the
+worker all read.  A minimal example (see
+<code>agent_definitions/periodic/health.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">health</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<span class="w">  </span><span class="no">Periodic codebase-health inspection across six dimensions</span>
+<span class="w">  </span><span class="no">(module size, function length, doc coverage, test gaps,</span>
+<span class="w">  </span><span class="no">complexity hotspots, dead code).</span>
+
+<span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">periodic</span>
+
+<span class="nt">interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1d</span>
+<span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${MILL_HEALTH_MODEL}</span>
+
+<span class="nt">tools</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">explore</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read_file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">list_dir</span>
+
+<span class="nt">web</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">report_issue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">close_thread</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">list_threads</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">read_ticket</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">output_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HealthResult</span>
+<span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+
+<span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">health</span>
+
+<span class="nt">skills</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">board-read</span><span class="p p-Indicator">]</span>
+
+<span class="nt">system_prompt</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">  </span><span class="no">You are a codebase-health inspection agent …</span>
+</code></pre></div>
+<h3 id="schema-reference">Schema reference</h3>
+<p>The complete field reference lives at <a href="../../agent-yaml-schema/">Agent YAML Schema</a>.
+Key points for a periodic agent:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>Unique; matches the YAML filename stem.</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>Must be <code>"periodic"</code> for periodic agents.</td>
+</tr>
+<tr>
+<td><code>interval</code></td>
+<td>Human-readable (<code>1d</code>, <code>2h30m</code>, <code>1w</code>).</td>
+</tr>
+<tr>
+<td><code>enabled</code></td>
+<td><code>true</code> or <code>false</code>; can be overridden per-repo.</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>Literal (<code>openai/gpt-4o-mini</code>) or env-var (<code>${MILL_HEALTH_MODEL}</code>).</td>
+</tr>
+<tr>
+<td><code>output_type</code></td>
+<td>The Pydantic model class name from your Python module.</td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>The Python module under <code>src/robotsix_mill/agents/</code>.</td>
+</tr>
+<tr>
+<td><code>tools</code></td>
+<td>Usually <code>explore</code>, <code>read_file</code>, <code>list_dir</code> for read-only agents.</td>
+</tr>
+<tr>
+<td><code>web</code></td>
+<td><code>false</code> for agents that only inspect the local repo.</td>
+</tr>
+<tr>
+<td><code>report_issue</code></td>
+<td><code>false</code> when the agent emits structured draft tickets.</td>
+</tr>
+<tr>
+<td><code>read_ticket</code></td>
+<td><code>true</code> so the agent can cross-reference past proposals.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="step-2-python-module">Step 2 — Python module</h2>
+<p>Create <code>src/robotsix_mill/agents/&lt;name&gt;.py</code>.  The module must:</p>
+<ol>
+<li><strong>Load the system prompt</strong> from the YAML via
+   <code>load_periodic_system_prompt</code>.</li>
+<li><strong>Alias the result type</strong> (usually <code>PeriodicAgentResult</code>).</li>
+<li><strong>Define the entry function</strong> that delegates to
+   <code>run_periodic_agent</code>.</li>
+</ol>
+<p>Here is <code>health.py</code> in full:</p>
+<div class="highlight"><pre><span></span><code><span class="sd">&quot;&quot;&quot;The health agent: codebase-health inspection …&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.periodic_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeriodicAgentResult</span><span class="p">,</span> <span class="n">load_periodic_system_prompt</span>
+
+<span class="n">SYSTEM_PROMPT</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">load_periodic_system_prompt</span><span class="p">(</span><span class="s2">&quot;health&quot;</span><span class="p">)</span>
+
+<span class="n">MAX_GAPS</span> <span class="o">=</span> <span class="mi">8</span>
+
+<span class="n">HealthResult</span> <span class="o">=</span> <span class="n">PeriodicAgentResult</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_health_agent</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">:</span> <span class="n">Settings</span><span class="p">,</span>
+    <span class="n">memory</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">recent_proposals</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">verified_proposals</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">repo_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">definition_override</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HealthResult</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.periodic_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_periodic_agent</span>
+
+    <span class="k">return</span> <span class="n">run_periodic_agent</span><span class="p">(</span>
+        <span class="n">settings</span><span class="o">=</span><span class="n">settings</span><span class="p">,</span>
+        <span class="n">definition_name</span><span class="o">=</span><span class="s2">&quot;health&quot;</span><span class="p">,</span>
+        <span class="n">definition_override</span><span class="o">=</span><span class="n">definition_override</span><span class="p">,</span>
+        <span class="n">model_setting</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">health_model</span><span class="p">,</span>
+        <span class="n">max_gaps</span><span class="o">=</span><span class="n">MAX_GAPS</span><span class="p">,</span>
+        <span class="n">repo_dir</span><span class="o">=</span><span class="n">repo_dir</span><span class="p">,</span>
+        <span class="n">memory</span><span class="o">=</span><span class="n">memory</span><span class="p">,</span>
+        <span class="n">recent_proposals</span><span class="o">=</span><span class="n">recent_proposals</span><span class="p">,</span>
+        <span class="n">verified_proposals</span><span class="o">=</span><span class="n">verified_proposals</span><span class="p">,</span>
+        <span class="n">prompt_tail</span><span class="o">=</span><span class="s2">&quot;Perform the health inspection and return your result.&quot;</span><span class="p">,</span>
+        <span class="n">include_forge_url</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div>
+<h3 id="signature-contract">Signature contract</h3>
+<p>The entry function must accept these keyword-only parameters:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>settings</code></td>
+<td><code>Settings</code></td>
+<td>Application configuration (models, paths, tokens).</td>
+</tr>
+<tr>
+<td><code>memory</code></td>
+<td><code>str</code></td>
+<td>The agent's persistent memory ledger (Markdown).</td>
+</tr>
+<tr>
+<td><code>recent_proposals</code></td>
+<td><code>str</code></td>
+<td>Summaries of the agent's existing board tickets.</td>
+</tr>
+<tr>
+<td><code>verified_proposals</code></td>
+<td><code>str</code></td>
+<td>Summaries of recently verified proposals.</td>
+</tr>
+<tr>
+<td><code>repo_dir</code></td>
+<td><code>str \| None</code></td>
+<td>Path to the local repository clone.</td>
+</tr>
+<tr>
+<td><code>definition_override</code></td>
+<td><code>dict \| None</code></td>
+<td>Per-repo YAML overrides.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>model_setting</code> parameter of <code>run_periodic_agent</code> is the
+<code>Settings</code> attribute that holds the model name (e.g.
+<code>settings.health_model</code>).  It must match the config key defined in
+Step 4.</p>
+<hr />
+<h2 id="step-3-register-the-pass">Step 3 — Register the pass</h2>
+<p>Open <code>src/robotsix_mill/runners/periodic_runner.py</code> and add an entry
+to <code>PERIODIC_PASS_CONFIGS</code> (a <code>dict[str, PeriodicPassConfig]</code>).</p>
+<p>For <code>health</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">HealthPassResult</span> <span class="o">=</span> <span class="n">PeriodicPassResult</span>  <span class="c1"># at module top-level</span>
+
+<span class="n">PERIODIC_PASS_CONFIGS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">PeriodicPassConfig</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="err">…</span>
+    <span class="s2">&quot;health&quot;</span><span class="p">:</span> <span class="n">PeriodicPassConfig</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;health&quot;</span><span class="p">,</span>
+        <span class="n">source_kind</span><span class="o">=</span><span class="n">SourceKind</span><span class="o">.</span><span class="n">HEALTH</span><span class="p">,</span>
+        <span class="n">agent_module_attr</span><span class="o">=</span><span class="s2">&quot;health&quot;</span><span class="p">,</span>
+        <span class="n">agent_fn_name</span><span class="o">=</span><span class="s2">&quot;run_health_agent&quot;</span><span class="p">,</span>
+        <span class="n">memory_filename</span><span class="o">=</span><span class="s2">&quot;health_memory.md&quot;</span><span class="p">,</span>
+        <span class="n">workspace_subdir</span><span class="o">=</span><span class="s2">&quot;health_workspace&quot;</span><span class="p">,</span>
+        <span class="n">result_dataclass</span><span class="o">=</span><span class="n">HealthPassResult</span><span class="p">,</span>
+        <span class="n">clone_token_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="err">…</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Also define a <code>HealthPassResult</code> alias at module top-level (like
+<code>BcCheckPassResult</code> at line 38).  The simplest form is:</p>
+<div class="highlight"><pre><span></span><code><span class="n">HealthPassResult</span> <span class="o">=</span> <span class="n">PeriodicPassResult</span>
+</code></pre></div>
+<p>or create a dedicated <code>@dataclass</code> if you need extra fields.</p>
+<h3 id="create-a-thin-runner-stub">Create a thin runner stub</h3>
+<p>Create <code>src/robotsix_mill/runners/&lt;name&gt;_runner.py</code>.  It is a
+backward-compatibility shim that lets the HTTP route layer (Step 6)
+call into the generic <code>run_periodic_pass</code>.  Example (<code>health_runner.py</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="sd">&quot;&quot;&quot;Health runner — backward-compat stub. See periodic_runner.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">RepoConfig</span><span class="p">,</span> <span class="n">Settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.periodic_runner</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">HealthPassResult</span><span class="p">,</span>
+    <span class="n">PERIODIC_PASS_CONFIGS</span><span class="p">,</span>
+    <span class="n">run_periodic_pass</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_health_pass</span><span class="p">(</span>
+    <span class="n">session_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">repo_config</span><span class="p">:</span> <span class="n">RepoConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HealthPassResult</span><span class="p">:</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">run_periodic_pass</span><span class="p">(</span>
+        <span class="n">session_id</span><span class="p">,</span>
+        <span class="n">repo_config</span><span class="p">,</span>
+        <span class="n">config</span><span class="o">=</span><span class="n">PERIODIC_PASS_CONFIGS</span><span class="p">[</span><span class="s2">&quot;health&quot;</span><span class="p">],</span>
+        <span class="n">settings</span><span class="o">=</span><span class="n">settings</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div>
+<p>The <code>Settings</code> import is kept (even if unused directly) as a
+monkeypatch seam for tests.</p>
+<hr />
+<h2 id="step-4-add-config-defaults">Step 4 — Add config defaults</h2>
+<p>Edit <code>config/config.example.yaml</code>.  You need two entries:</p>
+<ol>
+<li>
+<p><strong>Model default</strong> — in the <code>core.models</code> block, add the model
+   identifier that the <code>${MILL_&lt;NAME&gt;_MODEL}</code> env-var reference
+   resolves to:
+   <div class="highlight"><pre><span></span><code><span class="nt">health</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deepseek/deepseek-v4-flash</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Per-agent block</strong> — add a dedicated section with enabled flag and
+   interval.  Example (from <code>bc_check</code>):
+   <div class="highlight"><pre><span></span><code><span class="nt">health</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deepseek/deepseek-v4-flash</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">interval_seconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">86400</span>
+</code></pre></div></p>
+</li>
+</ol>
+<p>The memory ledger path is not configurable — it is fixed to
+   <code>&lt;data_dir&gt;/&lt;repo_id&gt;/&lt;name&gt;_memory.md</code>.</p>
+<p>The <code>model</code> sub-key here is the agent-specific model override; the
+   <code>core.models</code> entry is the default that the env-var reference
+   resolves to when no override is set.</p>
+<hr />
+<h2 id="step-5-wire-the-worker">Step 5 — Wire the worker</h2>
+<p>Open <code>src/robotsix_mill/runtime/worker/core.py</code>.</p>
+<h3 id="5a-declare-the-task-attribute">5a — Declare the task attribute</h3>
+<p>Add a task attribute in the <code>__init__</code> block (alphabetically among
+the existing ~15 declarations):</p>
+<div class="highlight"><pre><span></span><code><span class="bp">self</span><span class="o">.</span><span class="n">_health_task</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+<h3 id="5b-wire-the-poll-loop-periodic-agents">5b — Wire the poll loop (periodic agents)</h3>
+<p>If your agent runs on a timer, add a <code>_start_poll_loop_pass</code> call in
+the <code>start()</code> method:</p>
+<div class="highlight"><pre><span></span><code><span class="bp">self</span><span class="o">.</span><span class="n">_start_poll_loop_pass</span><span class="p">(</span>
+    <span class="s2">&quot;health&quot;</span><span class="p">,</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_health_poll_loop</span><span class="p">,</span>
+    <span class="s2">&quot;_health_task&quot;</span><span class="p">,</span>
+    <span class="n">log_msg</span><span class="o">=</span><span class="s2">&quot;Periodic health enabled: interval </span><span class="si">%d</span><span class="s2">s&quot;</span><span class="p">,</span>
+    <span class="n">log_args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ctx</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">health_interval_seconds</span><span class="p">,),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The poll-loop method itself lives in <code>poll_loops.py</code>; wire it there
+following the existing patterns (e.g. <code>_trace_health_poll_loop</code>).</p>
+<h3 id="5c-cancel-on-shutdown">5c — Cancel on shutdown</h3>
+<p>Add <code>"_health_task"</code> to the shutdown task-cancellation list in
+<code>stop()</code>.</p>
+<h3 id="alternative-http-triggered-background-pass">Alternative: HTTP-triggered background pass</h3>
+<p>Some periodic agents (like <code>bc_check</code>) run <strong>only</strong> on HTTP trigger
+(POST), not on a timer.  For those, skip 5b and instead wire a route
+in Step 6.  You still need the task attribute (5a) for lifecycle
+tracking and the cancellation entry (5c).</p>
+<hr />
+<h2 id="step-6-cli-and-api-route-optional">Step 6 — CLI and API route (optional)</h2>
+<p>If the agent should be invocable on-demand via the management API:</p>
+<ol>
+<li>
+<p>Open <code>src/robotsix_mill/runtime/routes/_passes.py</code>.</p>
+</li>
+<li>
+<p>Add a <code>_make_background_pass</code> call and register it with the router:</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="n">health_check_pass</span> <span class="o">=</span> <span class="n">_make_background_pass</span><span class="p">(</span>
+    <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;health&quot;</span><span class="p">,</span>
+    <span class="n">runner_module</span><span class="o">=</span><span class="s2">&quot;robotsix_mill.runners.health_runner&quot;</span><span class="p">,</span>
+    <span class="n">runner_func</span><span class="o">=</span><span class="s2">&quot;run_health_pass&quot;</span><span class="p">,</span>
+    <span class="n">docstring</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;Kick off a codebase-health pass in the</span>
+<span class="s2">    BACKGROUND and return at once. …&quot;&quot;&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/health-check&quot;</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="mi">202</span><span class="p">)(</span><span class="n">health_check_pass</span><span class="p">)</span>
+</code></pre></div>
+<ol>
+<li>If you also want a CLI entry-point, add it to the management CLI
+   under <code>src/robotsix_mill/cli/</code> following the existing pattern.</li>
+</ol>
+<hr />
+<h2 id="step-7-testing">Step 7 — Testing</h2>
+<p>Create <code>tests/agents/test_&lt;name&gt;.py</code>.  The canonical pattern
+monkeypatches <code>run_&lt;name&gt;_agent</code> so the test never calls a real LLM.
+Example from <code>tests/agents/test_health.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest.mock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mock</span><span class="p">,</span> <span class="n">call</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">robotsix_mill.agents</span><span class="w"> </span><span class="kn">import</span> <span class="n">health</span> <span class="k">as</span> <span class="n">health_agent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">robotsix_mill.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">robotsix_mill.runners.health_runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_health_pass</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_mock_health</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Replace the real agent with a no-op mock.&quot;&quot;&quot;</span>
+    <span class="n">mock</span> <span class="o">=</span> <span class="n">Mock</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">health_agent</span><span class="o">.</span><span class="n">run_health_agent</span><span class="p">)</span>
+    <span class="n">mock</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="n">health_agent</span><span class="o">.</span><span class="n">HealthResult</span><span class="p">(</span>
+        <span class="n">summary</span><span class="o">=</span><span class="s2">&quot;All clear.&quot;</span><span class="p">,</span>
+        <span class="n">updated_memory</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">draft_titles</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">draft_bodies</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">gap_ids</span><span class="o">=</span><span class="p">[],</span>
+    <span class="p">)</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="n">health_agent</span><span class="p">,</span> <span class="s2">&quot;run_health_agent&quot;</span><span class="p">,</span> <span class="n">mock</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mock</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_run_health_pass</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">_mock_health</span><span class="p">):</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">(</span><span class="n">data_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">)</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span>
+        <span class="s2">&quot;robotsix_mill.runners.health_runner.Settings&quot;</span><span class="p">,</span>
+        <span class="k">lambda</span><span class="p">:</span> <span class="n">settings</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">run_health_pass</span><span class="p">(</span>
+        <span class="n">session_id</span><span class="o">=</span><span class="s2">&quot;test-sid&quot;</span><span class="p">,</span>
+        <span class="n">repo_config</span><span class="o">=</span><span class="n">_test_repo_config</span><span class="p">(),</span>
+    <span class="p">)</span>
+    <span class="n">_mock_health</span><span class="o">.</span><span class="n">assert_called_once</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">pass_summary</span> <span class="o">==</span> <span class="s2">&quot;All clear.&quot;</span>
+</code></pre></div>
+<p>Key points:</p>
+<ul>
+<li>Monkeypatch <strong>at the agent module level</strong> (<code>health_agent.run_health_agent</code>),
+  not at the runner level — the runner imports the agent function and
+  calls it directly.</li>
+<li>Monkeypatch <code>Settings</code> in the <strong>runner module</strong> so the runner stub
+  picks up your test settings (especially <code>data_dir</code>).</li>
+<li>Assert that the mock was called and inspect its return value.</li>
+<li>The test must <strong>never</strong> reach a real model call — if it does, the
+  hermetic test gate will fail.</li>
+</ul>
+<hr />
+<h2 id="checklist">Checklist</h2>
+<ul>
+<li>[ ] <code>SourceKind</code> member added in <code>src/robotsix_mill/core/models.py</code></li>
+<li>[ ] YAML definition at <code>agent_definitions/periodic/&lt;name&gt;.yaml</code></li>
+<li>[ ] Python module at <code>src/robotsix_mill/agents/&lt;name&gt;.py</code></li>
+<li>[ ] <code>PERIODIC_PASS_CONFIGS</code> entry in <code>src/robotsix_mill/runners/periodic_runner.py</code></li>
+<li>[ ] Result dataclass alias (e.g. <code>HealthPassResult</code>) in <code>periodic_runner.py</code></li>
+<li>[ ] Thin runner stub at <code>src/robotsix_mill/runners/&lt;name&gt;_runner.py</code></li>
+<li>[ ] Config defaults in <code>config/config.example.yaml</code> (model + per-agent block)</li>
+<li>[ ] Task attribute in <code>src/robotsix_mill/runtime/worker/core.py</code></li>
+<li>[ ] Poll-loop wiring (periodic) <strong>or</strong> HTTP route (<code>_passes.py</code>)</li>
+<li>[ ] Shutdown cancellation entry in <code>core.py</code></li>
+<li>[ ] Test file at <code>tests/agents/test_&lt;name&gt;.py</code></li>
+<li>[ ] <code>docs/modules.yaml</code> updated if new files introduce a new module</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

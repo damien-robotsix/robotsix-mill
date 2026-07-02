@@ -1,0 +1,6582 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../runtime/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Stages - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#stages" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Stages
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        refine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="refine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.RefineStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RefineStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RefineStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.RefineStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.load_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.persist_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        persist_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        base
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="base">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.StageContext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StageContext
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StageContext">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.StageContext.memory_board_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        memory_board_id
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outcome
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Stage.preflight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        preflight
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Stage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        implement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="implement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.ImplementStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ImplementStage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.run_smoke_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_smoke_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.run_test_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_test_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.load_repo_smoke_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_repo_smoke_paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.ci_fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ci_fix
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ci_fix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.ci_fix.CIFixStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CIFixStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CIFixStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.ci_fix.CIFixStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.MergeStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MergeStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MergeStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.MergeStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.run_ci_fix_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_ci_fix_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.run_rebase_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_rebase_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.run_review_revision_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_review_revision_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.github_token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        github_token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.load_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.persist_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        persist_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deliver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deliver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver--multi-repo-delivery-meta-board-tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-repo delivery (meta-board tickets)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver.DeliverStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeliverStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DeliverStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver.DeliverStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver.generate_pr_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_pr_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.retrospect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        retrospect
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="retrospect">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.retrospect.RetrospectStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RetrospectStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RetrospectStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.retrospect.RetrospectStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.answer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        answer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="answer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.answer.AnswerStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnswerStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AnswerStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.answer.AnswerStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.dependency_fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dependency_fix
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dependency_fix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.dependency_fix.spawn_dependency_fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        spawn_dependency_fix
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.document" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        document
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="document">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.document.DocumentStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DocumentStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DocumentStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.document.DocumentStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        maintenance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="maintenance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.maintenance.MaintenanceStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MaintenanceStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MaintenanceStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.maintenance.MaintenanceStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pause
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pause">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.check_for_pause" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_for_pause
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.save_conversation_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        save_conversation_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.load_conversation_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_conversation_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.clear_conversation_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        clear_conversation_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.build_compact_resume_message_history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_compact_resume_message_history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.acknowledge_unanswered_threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        acknowledge_unanswered_threads
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="review">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.review.ReviewStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReviewStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ReviewStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.review.ReviewStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        short_circuit_verify
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="short_circuit_verify">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.run_invoked_edit_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_invoked_edit_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.run_claimed_edited_rawpaths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_claimed_edited_rawpaths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.run_claimed_edited_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_claimed_edited_paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.detect_missing_claimed_files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detect_missing_claimed_files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.extract_replayable_edits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_replayable_edits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.analyze_pass_progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analyze_pass_progress
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.detect_edit_claim_contradiction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detect_edit_claim_contradiction
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.registry.get_stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_stage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        refine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="refine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.RefineStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RefineStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RefineStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.RefineStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.load_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.refine.persist_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        persist_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        base
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="base">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.StageContext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StageContext
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StageContext">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.StageContext.memory_board_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        memory_board_id
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outcome
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Stage.preflight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        preflight
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.base.Stage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        implement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="implement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.ImplementStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ImplementStage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.run_smoke_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_smoke_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.run_test_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_test_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.implement.load_repo_smoke_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_repo_smoke_paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.ci_fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ci_fix
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ci_fix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.ci_fix.CIFixStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CIFixStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CIFixStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.ci_fix.CIFixStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="merge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.MergeStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MergeStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MergeStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.MergeStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.run_ci_fix_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_ci_fix_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.run_rebase_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_rebase_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.run_review_revision_agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_review_revision_agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.github_token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        github_token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.load_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.merge.persist_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        persist_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deliver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deliver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver--multi-repo-delivery-meta-board-tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-repo delivery (meta-board tickets)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver.DeliverStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeliverStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DeliverStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver.DeliverStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.deliver.generate_pr_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_pr_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.retrospect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        retrospect
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="retrospect">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.retrospect.RetrospectStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RetrospectStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RetrospectStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.retrospect.RetrospectStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.answer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        answer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="answer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.answer.AnswerStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnswerStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AnswerStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.answer.AnswerStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.dependency_fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dependency_fix
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dependency_fix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.dependency_fix.spawn_dependency_fix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        spawn_dependency_fix
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.document" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        document
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="document">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.document.DocumentStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DocumentStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DocumentStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.document.DocumentStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        maintenance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="maintenance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.maintenance.MaintenanceStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MaintenanceStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MaintenanceStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.maintenance.MaintenanceStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pause
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pause">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.check_for_pause" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_for_pause
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.save_conversation_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        save_conversation_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.load_conversation_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_conversation_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.clear_conversation_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        clear_conversation_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.build_compact_resume_message_history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_compact_resume_message_history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.pause.acknowledge_unanswered_threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        acknowledge_unanswered_threads
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        review
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="review">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.review.ReviewStage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReviewStage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ReviewStage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.review.ReviewStage.run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        short_circuit_verify
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="short_circuit_verify">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.run_invoked_edit_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_invoked_edit_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.run_claimed_edited_rawpaths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_claimed_edited_rawpaths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.run_claimed_edited_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_claimed_edited_paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.detect_missing_claimed_files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detect_missing_claimed_files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.extract_replayable_edits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_replayable_edits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.analyze_pass_progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analyze_pass_progress
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.short_circuit_verify.detect_edit_claim_contradiction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detect_edit_claim_contradiction
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.stages.registry.get_stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_stage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="stages">Stages</h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.refine" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.refine</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Refine stage: raw DRAFT -&gt; actionable READY ticket.</p>
+<p>Rewrites the file-canonical <code>description.md</code> into a precise spec the
+implement agent can act on unattended; the original draft is kept as an
+artifact for traceability. Empty draft or missing OpenRouter key -&gt;
+BLOCKED with a clear note (not a crash).</p>
+<p>When <code>require_approval</code> is true (the default), the refined ticket
+enters <code>human_issue_approval</code> instead of <code>ready</code> — a human must approve
+before the implement stage picks it up.</p>
+<p>Before the expensive refine agent runs, a cheap <strong>dedup / already-done
+check</strong> inspects the draft against existing tickets. If the draft is a
+clear duplicate or the change is already covered by a recently-closed
+ticket, the ticket is short-circuited to <code>CLOSED</code> — no refiner, no
+human approval gate, no wasted cost.</p>
+<p>This module is a thin façade (Pattern A) over the <code>refine</code> package:</p>
+<ul>
+<li><code>helpers</code> — module-level constants/regexes and pure functions</li>
+<li><code>gates</code> — :class:<code>RefineGatesMixin</code> (pre-refine guard phases)</li>
+<li><code>orchestration</code> — :class:<code>RefineAgentMixin</code> (refine-agent pipeline)</li>
+<li><code>core</code> — :class:<code>RefineStage</code> (the assembled <code>Stage</code> subclass)</li>
+</ul>
+<p>The agent submodules are bound as package attributes (<code>dedup</code>,
+<code>freshness</code>, <code>obsolescence</code>, <code>refining</code>) so the dotted-string
+monkeypatch targets used by the tests (e.g.
+<code>robotsix_mill.stages.refine.dedup.run_dedup_check</code>) resolve to the same
+module objects the gate/orchestration code calls through.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.refine.RefineStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RefineStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="robotsix_mill.stages.refine.gates.RefineGatesMixin">RefineGatesMixin</span></code>, <code><span title="robotsix_mill.stages.refine.orchestration.RefineAgentMixin">RefineAgentMixin</span></code>, <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Refine a draft ticket into a detailed, self-contained engineering specification.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.refine.RefineStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Process a DRAFT ticket: gate on dependencies, refine the draft into a self-contained engineering spec (or split into children / promote to epic) via the refining agent.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.refine.load_memory" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_memory</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_memory</span><span class="p">(</span><span class="n">memory_file</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read a memory ledger file; returns <code>""</code> if missing/unreadable.</p>
+<p>When <em>max_chars</em> is set and the file exceeds that limit, the oldest
+entries are dropped — only the last <em>max_chars</em> characters (most
+recent) are kept, adjusted to a newline boundary so entries aren't
+split mid-line.  A <code>[... memory truncated: N chars omitted]</code> note
+is prepended and a warning is logged.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.refine.persist_memory" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">persist_memory</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">persist_memory</span><span class="p">(</span><span class="n">memory_file</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Write <em>text</em> to <em>memory_file</em>, creating parent dirs as needed.</p>
+<p>Strips the ephemeral <code>## Prior proposals — verified state</code> table an
+agent may have copied back into its memory output — that block is
+injected fresh each run from the DB and must never accrete in the
+cross-run ledger.</p>
+<p>When <em>max_chars</em> is set and <code>len(text) &gt; max_chars</code>, the text is
+tail-truncated via :func:<code>tail_keep</code> before writing — the same
+primitive and label already used by :func:<code>load_memory</code>.  Ephemeral
+sections are stripped BEFORE the cap check so the budget isn't
+wasted on content that would be stripped anyway.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.base" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.base</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Stage contract.</p>
+<p>A Stage consumes tickets in exactly one <code>input_state</code>, does its work
+(reading/writing the ticket's filesystem workspace), and returns an
+:class:<code>Outcome</code> naming the next state. The worker applies the
+transition — a stage never writes the DB directly.</p>
+<p><code>Stage.run</code> is synchronous (LLM/tool calls). The worker runs it in a
+threadpool so the API event loop stays responsive.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.base.StageContext" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">StageContext</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Dependency-injection context passed to every :meth:<code>Stage.run</code>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="robotsix_mill.stages.base.StageContext.settings">settings</span></code></td>
+            <td>
+                  <code><span title="robotsix_mill.config.Settings">Settings</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mill runtime configuration (models, paths, limits).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="robotsix_mill.stages.base.StageContext.service">service</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="TicketService (robotsix_mill.core.service.TicketService)" href="../core/#robotsix_mill.core.service.TicketService">TicketService</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>:class:<code>TicketService</code> for reading ticket state and
+workspace.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="robotsix_mill.stages.base.StageContext.repo_config">repo_config</span></code></td>
+            <td>
+                  <code><span title="robotsix_mill.config.RepoConfig">RepoConfig</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-repository configuration resolved from the
+<code>--repo-id</code> CLI argument (board identity, Langfuse
+credentials for the repository).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.base.StageContext.memory_board_id" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">memory_board_id</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">memory_board_id</span><span class="p">(</span><span class="n">ticket</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Resolve the board_id for <code>settings.memory_file_for(...)</code>.</p>
+<p><code>repo_config</code> is <code>None</code> for the synthetic meta board (not a
+registered repo), so the old <code>repo_config.board_id if repo_config
+else ""</code> crashed meta tickets with "memory_file_for: board_id is
+required" once the board-less memory fallback was removed. Fall back
+to the bound service board, then the ticket's own board (both are
+<code>"meta"</code> for a meta ticket).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.base.Outcome" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Outcome</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Result of processing one ticket.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.base.Stage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Stage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>One step in the ticket pipeline.</p>
+<p>Implementors must set <code>name</code> and <code>input_state</code>, and implement
+:meth:<code>run</code>. Set <code>traced = False</code> for poll-driven, no-LLM stages
+(e.g. merge, deliver) to avoid spamming empty Langfuse traces.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.base.Stage.preflight" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">preflight</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">preflight</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Lightweight pre-trace gate — run BEFORE any Langfuse trace is opened.</p>
+<p>Return an :class:<code>Outcome</code> to short-circuit the stage dispatch
+without opening a trace or incrementing the dispatch counter.
+Return <code>None</code> to proceed normally (trace opens, :meth:<code>run</code> called).</p>
+<p>The default implementation returns <code>None</code> (always proceed).
+Stages that have cheap early-exit conditions should override.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.base.Stage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Process one ticket. Raise to fail the ticket (worker -&gt; FAILED);
+raise NotImplementedError for a stub (worker logs, stops the
+chain, leaves the ticket).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.implement" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.implement</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Implement stage: READY -&gt; DELIVERABLE (or BLOCKED, resumable).</p>
+<p>First run: clone the target repo into the ticket workspace, branch,
+then run a deterministic, stage-owned fix loop: invoke the implement
+agent for one edit pass, run the test gate, and — on failure — re-invoke
+the agent with a distilled diagnosis. The routing (proceed / retry /
+escalate) is decided in Python (see
+:class:<code>~..agents.coordinating.ValidationResult</code>), bounded by
+<code>settings.max_fix_iterations</code>. Pass -&gt; DELIVERABLE.</p>
+<p>Resume: if the ticket workspace already has the clone + its branch (a
+prior BLOCKED run), do NOT re-clone — check the branch out and continue
+from the committed WIP.</p>
+<p>This module is a thin façade (Pattern A) over the <code>implement</code> package:</p>
+<ul>
+<li><code>_shared</code> — module-level constants/regexes, stateless helpers, the
+  internal dataclasses, and the package <code>log</code> (the pure leaf).</li>
+<li><code>phase_coordinator</code> — :class:<code>PhaseCoordinatorMixin</code> (run / loop /
+  context load / finalize / pause).</li>
+<li><code>validation</code> — :class:<code>ValidationMixin</code> (prerequisite gate, baseline
+  check, scope guardrail).</li>
+<li><code>implementation_logic</code> — :class:<code>ImplementationLogicMixin</code> (agent
+  invocation, single pass, test/result evaluation).</li>
+<li><code>file_operations</code> — :class:<code>FileOperationsMixin</code> (clone/branch,
+  repo-change and gitignore checks).</li>
+<li><code>core</code> — :class:<code>ImplementStage</code> (the assembled <code>Stage</code> subclass).</li>
+</ul>
+<p>The patchable seams <code>run_test_agent</code> / <code>run_smoke_agent</code> /
+<code>load_repo_smoke_paths</code> are bound as package attributes so the
+existing test monkeypatches (<code>robotsix_mill.stages.implement.run_test_agent</code>
+and <code>setattr(impl_mod, "run_smoke_agent"/"load_repo_smoke_paths", ...)</code>)
+intercept the real call sites, which reach them through a
+<code>from robotsix_mill.stages import implement as _facade</code> indirection.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.implement.ImplementStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ImplementStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="robotsix_mill.stages.implement.phase_coordinator.PhaseCoordinatorMixin">PhaseCoordinatorMixin</span></code>, <code><span title="robotsix_mill.stages.implement.validation.ValidationMixin">ValidationMixin</span></code>, <code><span title="robotsix_mill.stages.implement.implementation_logic.ImplementationLogicMixin">ImplementationLogicMixin</span></code>, <code><span title="robotsix_mill.stages.implement.file_operations.FileOperationsMixin">FileOperationsMixin</span></code>, <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Clone the repo, create a feature branch, and run the implementation agent loop to produce code changes.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.implement.run_smoke_agent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_smoke_agent</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_smoke_agent</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">,</span>
+    <span class="n">repo_dir</span><span class="p">,</span>
+    <span class="n">repo_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">retry_on_failure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">file_map</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run the smoke command in the sandbox. Return <code>(passed,
+feedback)</code>. Closely mirrors :func:<code>run_test_agent</code>: on pass the
+feedback is a short confirmation; on fail it is a cheap-model
+distilled, actionable diagnosis (NOT the raw log). Sandbox infra
+failure -&gt; <code>(False, "&lt;reason&gt;")</code> so the coordinator can react.</p>
+<p>Smoke command resolution (highest precedence first): the per-repo
+<code>.robotsix-mill/config.yaml</code> <code>smoke_command</code> committed in the
+clone wins when set, else <code>settings.smoke_command</code> (the fleet-wide
+global fallback). When both are empty the gate short-circuits to
+PASS — the smoke gate is strictly opt-in, so a repo without a smoke
+command no-ops.</p>
+<p><code>retry_on_failure</code>: re-run the smoke command ONCE before distilling
+a failure (mirrors the test-gate flake guard).</p>
+<p><code>file_map</code>: mirrors :func:<code>run_test_agent</code> — auto-discovered from
+the sibling <code>artifacts/file_map.json</code> when <code>None</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.implement.run_test_agent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_test_agent</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_test_agent</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">,</span>
+    <span class="n">repo_dir</span><span class="p">,</span>
+    <span class="n">repo_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">retry_on_failure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">file_map</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run the test command in the sandbox. Return <code>(passed,
+feedback)</code>. On pass, feedback is a short confirmation; on fail it
+is a cheap-model distilled, actionable diagnosis (NOT the raw log).
+Sandbox infra failure -&gt; <code>(False, "&lt;reason&gt;")</code> so the coordinator
+can react.</p>
+<p><code>retry_on_failure</code>: re-run the suite ONCE before distilling a
+failure; a green re-run is reported as passing (flaky first run).
+The baseline gate sets this — one flaky test on main otherwise
+fabricates "pre-existing test failures on main", blocks the ticket
+AND spawns a bogus dependency-fix ticket (live case: a74b blocked on
+a test that passed when the distill agent re-ran it minutes later).
+The implement fix loop leaves it off: there the suite re-runs next
+iteration anyway, and doubling every red gate run would be pure
+cost.</p>
+<p><code>file_map</code>: an optional list of file paths the implement agent is
+permitted to change. When <code>None</code>, auto-discovered from
+<code>repo_dir.parent / "artifacts" / "file_map.json"</code> (the sibling
+convention of :class:<code>~robotsix_mill.core.workspace.Workspace</code>).
+Injected into the distill sub-agent's user message as a soft scope
+hint so the cheap model prefers fixes within declared scope —
+avoiding wasted implement iterations that the scope guardrail would
+REJECT. No effect when the test passes or when the failure is an
+ENV-ERROR (handled deterministically without the distill LLM).</p>
+<p>Test command resolution (highest precedence first): the per-repo
+<code>.robotsix-mill/config.yaml</code> <code>test_command</code> committed in the
+clone wins when set (a managed repo owns its command), else
+<code>settings.test_command</code> (the fleet-wide global fallback). When both
+are empty the gate short-circuits to PASS — repos without a test
+suite (doc-only, etc.) need no opt-out flag. (<code>repo_config</code> no
+longer carries a per-repo <code>test_command</code>; it moved to the repo's
+own <code>.robotsix-mill/config.yaml</code>.)</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.implement.load_repo_smoke_paths" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_repo_smoke_paths</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_repo_smoke_paths</span><span class="p">(</span><span class="n">repo_dir</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the per-repo <code>smoke_paths</code> glob list from
+<code>&lt;repo_dir&gt;/.robotsix-mill/config.yaml</code>, or <code>[]</code>.</p>
+<p>Accepts <code>smoke_paths: [src/runtime/**, src/x/*.css]</code> (a list of
+glob strings). Strips whitespace from each entry and filters out
+empty/whitespace-only strings. Non-string items are coerced via
+<code>str(x).strip()</code> (matching :func:<code>load_repo_languages</code>). Never
+raises — a malformed value or missing file yields <code>[]</code>.</p>
+<p>The globs scope the path-scoped smoke gate: an empty/absent list
+means the smoke command runs unconditionally (when set), otherwise
+the gate runs only when a ticket's introduced files match a glob.</p>
+<p><strong>Important:</strong> <code>smoke_paths</code> is a smoke-test gating mechanism
+ONLY — it does NOT restrict which paths agent-stage filesystem
+tools (read_file, list_dir, run_command) can access.  The agent
+sandbox always mounts the full repo checkout; the globs here only
+decide whether the post-implement smoke command fires.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.ci_fix" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.ci_fix</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>CI-fix stage: FIXING_CI -&gt; IMPLEMENT_COMPLETE (fix succeeded) | BLOCKED.</p>
+<p>When the merge stage detects a mergeable PR with failing remote CI
+checks, it transitions the ticket to FIXING_CI.  This stage invokes
+the ci-fix agent to auto-resolve the failures, commits locally, and
+force-pushes only the ticket branch.  On success the ticket goes back
+to IMPLEMENT_COMPLETE so the merge stage re-verifies both gates before
+promoting to HUMAN_MR_APPROVAL.</p>
+<p>Failure after max attempts escalates to BLOCKED (resumable).</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.ci_fix.CIFixStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CIFixStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Check forge CI status and run automated fix logic to resolve CI failures on the ticket branch.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.ci_fix.CIFixStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.merge" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.merge</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+
+
+<details class="merge-stage" open>
+  <summary>IMPLEMENT_COMPLETE -&gt; HUMAN_MR_APPROVAL (gates passed)</summary>
+  <p>-&gt; DONE (merged) | BLOCKED (closed unmerged)
+-&gt; FIXING_CI (failing CI, deferred)
+-&gt; REBASING (conflicting, deferred)</p>
+</details>        <p>HUMAN_MR_APPROVAL -&gt; DONE (merged) | BLOCKED (closed unmerged)
+              -&gt; IMPLEMENT_COMPLETE (gate degradation — silent fallback)
+              -&gt; WAITING_AUTO_MERGE (eligible, CI pending)</p>
+<p>REBASING -&gt; IMPLEMENT_COMPLETE (rebase succeeded, re-verify gates)</p>
+<p>FIXING_CI -&gt; IMPLEMENT_COMPLETE (fix succeeded, re-verify gates)</p>
+<p>The PR is the review. This stage is re-run by the worker's lightweight
+poll while the ticket sits in IMPLEMENT_COMPLETE, HUMAN_MR_APPROVAL,
+REBASING, FIXING_CI, or WAITING_AUTO_MERGE; it checks the forge:</p>
+<p>IMPLEMENT_COMPLETE (gate-check):
+- merged            -&gt; DONE
+- closed, unmerged  -&gt; BLOCKED (resumable)
+- open, mergeable   -&gt; check CI status:
+    - failing CI    -&gt; FIXING_CI (auto-fix agent)
+    - green CI      -&gt; HUMAN_MR_APPROVAL (gates passed! notify human)
+    - pending CI    -&gt; IMPLEMENT_COMPLETE (no-op; re-poll)
+- open, conflicting -&gt; REBASING (defer rebase agent)</p>
+<p>HUMAN_MR_APPROVAL:
+- merged            -&gt; DONE
+- closed, unmerged  -&gt; BLOCKED (resumable)
+- open, mergeable   -&gt; check CI status:
+    - failing CI    -&gt; IMPLEMENT_COMPLETE (silent fallback)
+    - green CI      -&gt; HUMAN_MR_APPROVAL (no-op; re-poll)
+    - pending CI    -&gt; HUMAN_MR_APPROVAL (no-op; re-poll)
+- open, conflicting -&gt; IMPLEMENT_COMPLETE (silent fallback)</p>
+<p>Returning the <em>same</em> state is the worker's "leave it, re-poll" signal —
+no history spam, no busy loop.</p>
+<p>This module is a thin façade (Pattern A) over the <code>merge</code> package:</p>
+<ul>
+<li><code>_shared</code> — module-level helpers, constants, and the package <code>log</code></li>
+<li><code>core</code> — :class:<code>MergeStage</code> (run dispatch + shared class-level helpers)</li>
+<li><code>ci_fix_mixin</code> — :class:<code>MultiRepoCiFixMixin</code> (inline CI-fix recovery)</li>
+<li><code>multi_repo</code> — :class:<code>MultiRepoMixin</code></li>
+<li><code>ci_poll</code> — :class:<code>CIPollMixin</code></li>
+<li><code>rebase</code> — :class:<code>RebaseMixin</code></li>
+<li><code>review_revision</code> — :class:<code>ReviewRevisionMixin</code></li>
+</ul>
+<p>The patchable seams (<code>git_ops</code>, <code>tracing</code>, <code>run_rebase_agent</code>,
+<code>run_ci_fix_agent</code>, <code>run_review_revision_agent</code>) are bound as
+package attributes so the existing test monkeypatches
+(<code>robotsix_mill.stages.merge.git_ops</code>, <code>merge_mod.run_rebase_agent</code>,
+etc.) intercept the real call sites.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.merge.MergeStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">MergeStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="robotsix_mill.stages.merge.ci_fix_mixin.MultiRepoCiFixMixin">MultiRepoCiFixMixin</span></code>, <code><span title="robotsix_mill.stages.merge.multi_repo.MultiRepoMixin">MultiRepoMixin</span></code>, <code><span title="robotsix_mill.stages.merge.ci_poll.CIPollMixin">CIPollMixin</span></code>, <code><span title="robotsix_mill.stages.merge.rebase.RebaseMixin">RebaseMixin</span></code>, <code><span title="robotsix_mill.stages.merge.review_revision.ReviewRevisionMixin">ReviewRevisionMixin</span></code>, <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Orchestrate the merge pipeline: poll CI, rebase, address review feedback, and auto-merge when green.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.merge.MergeStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Drive a ticket through the merge pipeline: poll CI / mergeability, dispatch to rebase or review-revision handlers based on the current state, and auto-merge when all gates are green.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.merge.run_ci_fix_agent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_ci_fix_agent</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_ci_fix_agent</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">,</span>
+    <span class="n">repo_dir</span><span class="p">,</span>
+    <span class="n">branch</span><span class="p">,</span>
+    <span class="n">failing_summary</span><span class="p">,</span>
+    <span class="n">memory</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">ticket_id</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">board_id</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">target</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+    <span class="n">remote_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">token</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">ci_status_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">ci_log_fetch_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run the CI-fix agent, which OWNS the fix→push→verify loop.</p>
+<p>Uses the LLM (pydantic-ai agent) with sandboxed file + shell tools
+scoped to <em>repo_dir</em>, plus bridged git tools that execute host-side
+with <em>remote_url</em> and <em>token</em> so the agent can drive fetch + push.</p>
+<p>When <em>ci_status_fn</em> is provided, the agent also gets the <code>wait_for_ci</code>
+tool: after pushing a fix it blocks on that tool until the latest CI run
+finishes, then either reports DONE (green) or fixes the fresh failure and
+re-checks — up to <code>settings.ci_fix_max_iterations</code> waits. This replaces
+the old one-shot-per-cycle model. <em>ci_status_fn</em> is the host-side forge
+probe returning <code>(conclusion, failing_summary)</code>.</p>
+<p>When <em>ci_log_fetch_fn</em> is provided, the agent also gets the
+<code>fetch_ci_logs</code> tool: it can fetch the logs for any workflow run by
+run id or URL, with an option for full (uncapped) logs.  <em>ci_log_fetch_fn</em>
+is the host-side forge probe returning log text for a given run id and
+<em>full_log</em> flag.</p>
+<p>Returns a <code>CiFixResult</code> with status, summary, and updated memory.</p>
+<p>This is the mockable seam — tests monkeypatch it to avoid real LLM
+and Docker calls.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.merge.run_rebase_agent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_rebase_agent</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_rebase_agent</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">,</span>
+    <span class="n">repo_dir</span><span class="p">,</span>
+    <span class="n">branch</span><span class="p">,</span>
+    <span class="n">target</span><span class="p">,</span>
+    <span class="n">memory</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">remote_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">token</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run one rebase attempt of <em>branch</em> onto <code>origin/&lt;target&gt;</code>.</p>
+<p>Uses the LLM (pydantic-ai agent) with sandboxed file + shell tools
+scoped to <em>repo_dir</em>, plus bridged git tools that execute host-side
+with <em>remote_url</em> and <em>token</em> so the agent can drive fetch + push.</p>
+<p>The agent loops internally to resolve every conflict the rebase
+encounters; it returns a <code>RebaseResult</code> with status, summary,
+and updated memory.</p>
+<p>This is the mockable seam — tests monkeypatch it to avoid real LLM
+and Docker calls.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.merge.run_review_revision_agent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_review_revision_agent</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_review_revision_agent</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">settings</span><span class="p">,</span>
+    <span class="n">repo_dir</span><span class="p">,</span>
+    <span class="n">branch</span><span class="p">,</span>
+    <span class="n">review_comments</span><span class="p">,</span>
+    <span class="n">pr_files</span><span class="p">,</span>
+    <span class="n">memory</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run one review-revision attempt.</p>
+<p>Uses the LLM (pydantic-ai agent) with sandboxed file + shell tools
+scoped to <em>repo_dir</em>.  The agent reads the review comments, inspects
+the relevant files, makes minimal edits to address the reviewer's
+feedback, runs local tests, and commits.  Returns a
+<code>ReviewRevisionResult</code> with status, summary, and updated memory.</p>
+<p>This is the mockable seam — tests monkeypatch it to avoid real LLM
+and Docker calls.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.merge.github_token" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">github_token</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">github_token</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">repo_config</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a forge auth token: either a static FORGE_TOKEN from secrets or a short-lived GitHub App installation token.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.merge.load_memory" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_memory</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_memory</span><span class="p">(</span><span class="n">memory_file</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read a memory ledger file; returns <code>""</code> if missing/unreadable.</p>
+<p>When <em>max_chars</em> is set and the file exceeds that limit, the oldest
+entries are dropped — only the last <em>max_chars</em> characters (most
+recent) are kept, adjusted to a newline boundary so entries aren't
+split mid-line.  A <code>[... memory truncated: N chars omitted]</code> note
+is prepended and a warning is logged.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.merge.persist_memory" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">persist_memory</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">persist_memory</span><span class="p">(</span><span class="n">memory_file</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Write <em>text</em> to <em>memory_file</em>, creating parent dirs as needed.</p>
+<p>Strips the ephemeral <code>## Prior proposals — verified state</code> table an
+agent may have copied back into its memory output — that block is
+injected fresh each run from the DB and must never accrete in the
+cross-run ledger.</p>
+<p>When <em>max_chars</em> is set and <code>len(text) &gt; max_chars</code>, the text is
+tail-truncated via :func:<code>tail_keep</code> before writing — the same
+primitive and label already used by :func:<code>load_memory</code>.  Ephemeral
+sections are stripped BEFORE the cap check so the budget isn't
+wasted on content that would be stripped anyway.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.deliver" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.deliver</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Deliver stage: DELIVERABLE -&gt; IMPLEMENT_COMPLETE.</p>
+<p>Push the ticket's branch to the configured forge and open a PR/MR
+against <code>FORGE_TARGET_BRANCH</code>. The forge adapter only does the API
+call; this stage owns the git push (it has the workspace clone).</p>
+<p>When <code>MILL_PR_SUMMARY_ENABLED</code> is true, the stage generates a
+structured PR body (Summary / Changes / Test Plan) from the
+implementation diff via a cheap one-shot LLM call, falling back to
+the raw spec on error.  Otherwise the raw spec is used as-is.</p>
+<p>Anything that isn't success is BLOCKED-resumable (move back to
+DELIVERABLE to retry) — never terminal FAILED, so a transient forge/
+network problem doesn't lose the implemented branch. The PR URL is
+recorded in history + an artifact.</p>
+<h4 id="robotsix_mill.stages.deliver--multi-repo-delivery-meta-board-tickets">Multi-repo delivery (meta-board tickets)</h4>
+<p>When the implement stage produced a multi-repo workspace, it writes a
+<code>touched_repos.json</code> manifest into <code>artifacts/</code> listing every
+repo that received a commit::</p>
+<div class="highlight"><pre><span></span><code>[
+  {&quot;repo_id&quot;: str, &quot;branch&quot;: str, &quot;repo_path&quot;: str},
+  ...
+]
+</code></pre></div>
+<p>The deliver stage detects that manifest and iterates it, pushing each
+repo's branch and opening one PR per repo via that repo's
+<code>RepoConfig</code>.  The resulting PR URLs are written to a second
+artifact, <code>pr_urls.json</code>, with the schema::</p>
+<div class="highlight"><pre><span></span><code>[
+  {&quot;repo_id&quot;: str, &quot;branch&quot;: str, &quot;url&quot;: str},
+  ...
+]
+</code></pre></div>
+<p><code>pr_urls.json</code> is the seam downstream stages (merge polling,
+<code>_pr_url</code> enrichment) will consume to find all PRs opened for a
+single meta ticket.  It is written ONLY in the multi-repo branch and
+ONLY after at least one PR succeeds; its presence is the multi-repo
+discriminator for downstream stages.  The file is rewritten atomically
+(<code>.json.tmp</code> → <code>os.replace</code>) after every successful PR so a
+mid-loop BLOCKED leaves a consistent partial manifest the resume run
+can read.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.deliver.DeliverStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">DeliverStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Push the implemented branch to the remote forge for review.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.deliver.DeliverStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Push the implemented branch to the remote forge and open (or update) a pull/merge request, transitioning the ticket toward review.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.deliver.generate_pr_description" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">generate_pr_description</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">generate_pr_description</span><span class="p">(</span><span class="n">diff</span><span class="p">,</span> <span class="n">spec</span><span class="p">,</span> <span class="n">settings</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Generate a structured PR body from the implementation diff.</p>
+<p>Falls back to <em>spec</em> when PR summary is disabled or the LLM call fails.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.retrospect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.retrospect</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Retrospect stage: DONE -&gt; CLOSED.</p>
+<p>Post-delivery audit. Analyses the finished ticket's workflow (state
+history + notes) and its Langfuse session (cost/latency/retries/errors,
+workflow-only if Langfuse is unconfigured), records findings, and —
+when MILL_RETROSPECT_SPAWN_DRAFTS is on and the agent proposes one —
+files an improvement DRAFT linked back via parent_id. Then -&gt; CLOSED.</p>
+<p>Agent/analysis failure is BLOCKED-resumable, never terminal.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.retrospect.RetrospectStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RetrospectStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Run a deep-analysis retrospective on completed tickets and optionally spawn follow-up draft tickets.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.retrospect.RetrospectStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run a retrospective over a DONE ticket's history, comments, and description; emit findings and optionally spawn follow-up draft tickets.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.answer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.answer</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Answer stage: picks up an ASKED inquiry, grounds the answering agent
+in the real repo (best-effort clone), runs the agent, writes the answer
+into <code>description.md</code>, preserves the original question as an artifact,
+and transitions to ANSWERED (or BLOCKED on failure).</p>
+<p>Inquiries are read-only — no branches, no PRs, no forge side effects.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.answer.AnswerStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">AnswerStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Answer a user question by cloning the repo for context and invoking an answering agent against the ticket description.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.answer.AnswerStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Answer an ASKED inquiry: clone the repo for grounding, run the answering agent against the question, write the answer into description.md, and transition to ANSWERED (or BLOCKED on failure).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.dependency_fix" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.dependency_fix</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Shared spawn-or-reuse + wire-dependency + park-BLOCKED helper.</p>
+<p>Extracted from :class:<code>~.ci_fix.CIFixStage._handle_out_of_scope</code> so that
+other stages (implement baseline check, verify, review, merge) can
+reuse the same idempotent pattern instead of dead-ending on <code>BLOCKED</code>
+without queuing a fix.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.dependency_fix.spawn_dependency_fix" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">spawn_dependency_fix</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">spawn_dependency_fix</span><span class="p">(</span>
+    <span class="n">ticket</span><span class="p">,</span>
+    <span class="n">ctx</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">,</span>
+    <span class="n">source_kind</span><span class="p">,</span>
+    <span class="n">block_reason_prefix</span><span class="p">,</span>
+    <span class="n">priority</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">dedup_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Spawn (or reuse) a dependency fix ticket, wire both ways, park BLOCKED.</p>
+<p>The caller provides a <strong>deterministic</strong> <em>title</em> so the spawn is
+idempotent across retries — the helper de-duplicates against
+still-open tickets from <em>source_kind</em> with the same title.</p>
+<p>When <em>dedup_labels</em> is a non-empty list, a label-based dedup
+search runs first (across all non-terminal tickets on the same
+board, regardless of source kind).  On a label match the existing
+ticket is reused; otherwise a fresh ticket is created and the
+fingerprint labels are stored on it via <code>set_labels</code>.  The
+existing title-based dedup still runs as a fallback when
+<em>dedup_labels</em> is empty or no label match is found.</p>
+<p>Returns a <code>BLOCKED</code> :class:<code>Outcome</code> whose note includes the fix
+ticket id and the auto-resume guarantee.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.document" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.document</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Document stage: DOCUMENTING -&gt; CODE_REVIEW | DELIVERABLE.</p>
+<p>Inspects the implementation diff and, when the change is user-facing,
+updates the relevant documentation files. For internal-only changes
+(pure refactors, bug fixes with no doc impact) this stage is a no-op
+and passes straight through.</p>
+<p>The doc agent runs with warn-and-pass semantics: if it raises an
+exception the ticket still progresses — losing a finished
+implementation over a doc-update hiccup is the wrong trade.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.document.DocumentStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">DocumentStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Generate or update project documentation from the implemented code changes in the cloned repo.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.document.DocumentStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run the documentation agent against the post-implement clone to update project docs reflecting the code changes on the ticket branch.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.maintenance" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.maintenance</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Maintenance stage: MAINTENANCE -&gt; DONE (or BLOCKED, resumable).</p>
+<p>Runs the maintenance agent to perform operational actions (create repo,
+fork repo, cross-repo investigation) directly, skipping the
+code-implement stage.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.maintenance.MaintenanceStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">MaintenanceStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Run the maintenance agent to perform operational actions (create
+repo, fork repo, cross-repo investigation) and transition directly
+to DONE.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.maintenance.MaintenanceStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Instantiate and run the maintenance agent.</p>
+<p>On success returns <code>Outcome(State.DONE)</code>.
+On escalation returns <code>Outcome(State.BLOCKED, note=...)</code>.
+Unhandled exceptions are caught by the worker and route to
+<code>ERRORED</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.pause" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.pause</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Shared pause-detection helpers for refine and implement stage runners.</p>
+<p>These detect <code>ask_user</code> invocations in the agent's message history,
+persist/load the conversation state for cheap resume, and reconstruct
+the message history with the operator's reply appended so the agent can
+continue from exactly where it paused.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.pause.check_for_pause" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">check_for_pause</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">check_for_pause</span><span class="p">(</span><span class="n">new_messages</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>True</code> when <em>new_messages</em> contains an <code>ask_user</code>
+tool-return carrying the pause sentinel.</p>
+<p><em>new_messages</em> MUST be <code>result.new_messages_json()</code> — the bytes
+pydantic-ai produces for messages added during the current run
+only. Passing the full <code>all_messages_json()</code> re-triggers on the
+prior turn's <code>ask_user</code> after a resume (the saved transcript
+keeps the old sentinel forever) and was the source of the
+"ticket re-pauses without a new question" bug fixed in 61a9709.</p>
+<p>Scanning <em>every</em> tool-return in the new messages — not just the
+last — is necessary because <code>ask_user</code> does NOT actually halt
+the agent: pydantic-ai treats the sentinel as a normal tool
+return and the model keeps running, often producing a structured
+output before stopping. The final message is the model's
+response, not the sentinel; only an earlier tool-return carries
+the marker we look for.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>new_messages</code>
+            </td>
+            <td>
+                  <code><span title="bytes">bytes</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw JSON bytes from
+:meth:<code>pydantic_ai.agent.AgentRunResult.new_messages_json</code>,
+or <code>None</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.pause.save_conversation_state" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">save_conversation_state</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">save_conversation_state</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">conversation_state</span><span class="p">,</span> <span class="n">stage_name</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Persist the full agent conversation to
+<code>artifacts/{stage_name}_conversation_state.json</code>.</p>
+<p><em>stage_name</em> (<code>"refine"</code> / <code>"implement"</code>) namespaces the file so
+a refine pause never gets loaded as an implement resume context — a
+cross-stage contamination that masqueraded as "implement BLOCKED
+with no changes produced" before 6f7f-2026-05-29.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.pause.load_conversation_state" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_conversation_state</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_conversation_state</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">stage_name</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read and return <code>{stage_name}_conversation_state.json</code> if it
+exists; return <code>None</code> otherwise.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.pause.clear_conversation_state" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">clear_conversation_state</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">clear_conversation_state</span><span class="p">(</span><span class="n">ws</span><span class="p">,</span> <span class="n">stage_name</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Remove the saved state file for <em>stage_name</em> if present.</p>
+<p>Called when a stage exits the AWAITING_USER_REPLY loop in a way that
+won't lead to a resume — e.g. when the operator's reply has been
+consumed and the run completed normally, so the next stage shouldn't
+pick up the stale file.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.pause.build_compact_resume_message_history" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">build_compact_resume_message_history</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">build_compact_resume_message_history</span><span class="p">(</span>
+    <span class="n">saved_state</span><span class="p">,</span> <span class="n">reply_text</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">git_stat</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build a compact 3-message resume history from the prior session.</p>
+<p>Unlike the former <code>build_resume_message_history</code> — which replayed
+the entire prior transcript — this helper extracts only the last
+assistant text summary and constructs a fresh synthetic
+<code>message_history</code> that is small and safe to re-upload.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>saved_state</code>
+            </td>
+            <td>
+                  <code><span title="bytes">bytes</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw JSON bytes from a prior
+<code>all_messages_json()</code> call.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>reply_text</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The operator's answer text.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>git_stat</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional <code>git diff --stat HEAD</code> output from the
+workspace repo, injected into the synthetic assistant
+acknowledgment.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A <code>list[ModelMessage]</code> of exactly 3 messages.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.pause.acknowledge_unanswered_threads" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">acknowledge_unanswered_threads</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">acknowledge_unanswered_threads</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">ticket</span><span class="p">,</span> <span class="n">thread_ids</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Post-agent verification: ensure every reviewer comment thread is
+either replied to or closed.</p>
+<p>This is a deterministic safety net — the refine/implement agent
+system prompts instruct them to reply-to and close threads, but if
+the LLM forgets, this function catches it so no comment thread
+remains open indefinitely.</p>
+<p>For each <em>thread_id</em>:</p>
+<ul>
+<li>Already closed → no-op.</li>
+<li>Open with child replies → <code>close_thread</code> (agent replied but
+  forgot to close).</li>
+<li>Open with no child replies → <code>add_comment("Addressed.", parent_id=...)</code>
+  then <code>close_thread</code> (agent neither replied nor closed).</li>
+</ul>
+<p>Only threads in <em>thread_ids</em> are touched — threads already closed
+before the agent ran or created by the agent during its run are
+never auto-closed.</p>
+<p>If <code>list_comments</code> raises, logs a warning and returns (defensive
+fallback — never block the pipeline).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.review" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.review</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Review stage: CODE_REVIEW -&gt; DOCUMENTING | READY | AWAITING_USER_REPLY.</p>
+<p>Runs a blind dual-model review of the implementation diff. The review
+agent sees ONLY the git diff and ticket spec — no implementation
+context.  APPROVE → DOCUMENTING; REQUEST_CHANGES → READY (with review
+comments stored); NEEDS_DISCUSSION → AWAITING_USER_REPLY (posts the
+verdict as an [ASK_USER] thread; operator's reply auto-resumes review).</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.stages.review.ReviewStage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ReviewStage</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code></p>
+
+
+
+        <p>Check out the target branch and perform automated code review on the ticket's implemented changes.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.stages.review.ReviewStage.run" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run</span><span class="p">(</span><span class="n">ticket</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Process a CODE_REVIEW ticket: refresh the clone, check out the ticket branch, and run the automated reviewer agent against the diff.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.short_circuit_verify" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.short_circuit_verify</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Guards for the empty-diff → DONE short-circuit.</p>
+<p>A ticket whose implement run produces an empty working-tree diff is normally
+closed as <em>no change needed</em>: the agent judged the spec already satisfied, so
+there is nothing to ship. But an empty diff can ALSO mean the run <em>attempted</em>
+edits that never persisted — the agent called file-mutating tools (and claimed
+success in its summary) yet the working tree still matches the target branch
+because the edits were reverted, the workspace was reset mid-run, or the writes
+landed outside the clone. Routing that case to DONE silently loses the work and
+falsely completes the ticket.</p>
+<p>This is not hypothetical: ticket 904a — whose entire purpose was to add this
+guard — was itself closed this way. Its implement summary described new files
+and "341 tests pass", but the committed branch matched main exactly, so the
+empty-diff→DONE path fired and the work vanished.</p>
+<p>:func:<code>detect_edit_claim_contradiction</code> distinguishes the two readings of an
+empty diff by scanning the run's <em>new</em> messages for invocations of file-mutating
+tools. Pure command-runner tools (<code>run_command</code> / <code>Bash</code>) are deliberately
+excluded: a genuine no-change run routinely runs tests or greps without editing,
+and counting those as an edit claim would block legitimate no-change closes.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.run_invoked_edit_tools" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_invoked_edit_tools</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_invoked_edit_tools</span><span class="p">(</span><span class="n">new_messages</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the names of file-mutating tools invoked in <em>new_messages</em>.</p>
+<p><em>new_messages</em> MUST be the <code>new_messages_json()</code> payload from the agent
+run — the messages added during THIS run only. Passing the full
+<code>all_messages_json()</code> would re-count a prior run's edit calls after a
+resume and manufacture a false contradiction (the same trap documented in
+:func:<code>robotsix_mill.stages.pause.check_for_pause</code>).</p>
+<p>Malformed or empty input yields <code>[]</code> (fail-open: never invent a
+contradiction from a parse error — that would wrongly BLOCK good runs).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.run_claimed_edited_rawpaths" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_claimed_edited_rawpaths</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_claimed_edited_rawpaths</span><span class="p">(</span><span class="n">new_messages</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the de-duplicated VERBATIM paths edit tool-calls targeted.</p>
+<p>Same scan as :func:<code>run_claimed_edited_paths</code> but keeps the full path
+exactly as the tool-call carried it (repo-relative for mill fs tools,
+absolute for the Claude SDK editors) instead of reducing to a basename.
+Used by the gitignored-edit detector, which needs the real location to
+ask <code>git check-ignore</code>. Fail-open on malformed input, like every
+scanner here.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.run_claimed_edited_paths" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">run_claimed_edited_paths</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">run_claimed_edited_paths</span><span class="p">(</span><span class="n">new_messages</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the de-duplicated basenames of files an edit tool-call targeted.</p>
+<p>Reuses the same message-scanning skeleton as
+:func:<code>run_invoked_edit_tools</code>, but instead of the tool <em>names</em> it
+extracts the target file <em>path</em> from each edit tool-call's <code>args</code> and
+returns the path <em>basenames</em> (e.g. <code>board.js</code>). The path is read from
+<code>args["path"]</code> (mill fs tools <code>write_file</code> / <code>edit_file</code> /
+<code>delete_file</code> — see <code>agents/fs_tools.py</code>) when present, else from
+<code>args["file_path"]</code> (Claude SDK <code>Write</code> / <code>Edit</code> / <code>MultiEdit</code> /
+<code>NotebookEdit</code>).</p>
+<p>Basename-level matching is the deterministic v1 anchor: it is robust to
+the absolute (Claude SDK) vs repo-relative (mill) path mismatch without
+needing the repo root, at the accepted cost of confusing two like-named
+files in different directories.</p>
+<p>Malformed or empty input — invalid JSON, non-list payload, missing
+<code>args</code>, or missing/non-string path keys — fails open exactly like
+:func:<code>run_invoked_edit_tools</code>: the offending entry is skipped (or <code>[]</code>
+is returned). A parse error must never manufacture a contradiction.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.detect_missing_claimed_files" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">detect_missing_claimed_files</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">detect_missing_claimed_files</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span> <span class="n">changed_files</span><span class="p">,</span> <span class="n">new_messages</span><span class="p">,</span> <span class="n">summary</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Basenames the run <em>claims</em> it edited but that are absent from the diff.</p>
+<p>This is the per-file generalization of
+:func:<code>detect_edit_claim_contradiction</code>: instead of firing only when the
+<em>whole</em> net diff is empty, it catches the non-empty-diff case where the
+bulk of the work landed but a few specifically-named sub-fixes never
+reached disk (the implement summary / thread-reply asserts edits the diff
+does not contain). Anchored deterministically on file paths only — no NL
+parsing of symbol- or line-level claims.</p>
+<p>A basename is reported as <em>missing</em> only when ALL of:</p>
+<ol>
+<li>it was targeted by an <code>_EDIT_TOOL_NAMES</code> tool-call this run
+   (per :func:<code>run_claimed_edited_paths</code>), AND</li>
+<li>it appears as a substring of <em>summary</em> (case-sensitive), AND</li>
+<li>it is NOT among the net-diff <code>changed_files</code> basenames.</li>
+</ol>
+<p>The <em>summary</em> gate is a required false-positive guard: a file the agent
+edited and then reverted (a legitimate net-zero, e.g. via <code>git
+checkout</code>) is targeted by an edit tool-call but is NOT named as a landed
+fix in the summary, so it must not be flagged. Requiring presence in
+<em>summary</em> filters that edit-then-revert case while staying deterministic.
+When <em>summary</em> is falsy nothing is claimed → <code>[]</code>.</p>
+<p>Returns the sorted basenames that are claimed-but-missing. An empty result
+means the run is consistent (safe to proceed). Fail-open: any parse error
+upstream yields <code>[]</code> (never invents a contradiction from bad input).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.extract_replayable_edits" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">extract_replayable_edits</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">extract_replayable_edits</span><span class="p">(</span><span class="n">new_messages</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the run's edit tool-calls as replayable ops, or <code>None</code>.</p>
+<p>Each op is a dict <code>{"kind", "path", ...}</code> where <em>kind</em> is one of
+<code>"edit"</code> (<code>old</code> + <code>new</code> text), <code>"write"</code> (full <code>content</code>), or
+<code>"delete"</code>. <em>path</em> is the verbatim tool-call path (repo-relative for
+mill fs tools, absolute for the Claude SDK editors).</p>
+<p>Returns <code>None</code> (a <em>can't-replay-safely</em> signal the caller MUST treat as
+BLOCK) when the run invoked an edit tool that cannot be faithfully
+replayed — an un-replayable kind (<code>MultiEdit</code> / <code>NotebookEdit</code>) or a
+call missing the args needed to reproduce it. This keeps the work-loss
+guard fully intact whenever the formatter-revert check is inapplicable.</p>
+<p>Returns <code>[]</code> when no edit tool was invoked at all (no contradiction to
+resolve). Fail-closed: malformed top-level JSON yields <code>None</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.analyze_pass_progress" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">analyze_pass_progress</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">analyze_pass_progress</span><span class="p">(</span><span class="n">new_messages</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">same_tool_window</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Analyze <em>new_messages</em> for stuck-loop signals.</p>
+<p>Returns a dict with:
+- <code>total</code>: total tool-call count in this pass
+- <code>edit_calls</code>: number of file-mutating tool calls
+- <code>progress_calls</code>: number of progress-signal tool calls
+- <code>stuck_same_tool</code>: name of the tool that was called <em>same_tool_window</em>
+  consecutive times as the most recent non-progress calls, or <code>None</code>
+- <code>last_non_progress_run</code>: length of the trailing run of consecutive
+  non-progress tool calls</p>
+<p>Malformed / empty input returns zeros / None.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.short_circuit_verify.detect_edit_claim_contradiction" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">detect_edit_claim_contradiction</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">detect_edit_claim_contradiction</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span> <span class="n">has_changes</span><span class="p">,</span> <span class="n">new_messages</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Names of edit tools the run invoked despite producing no diff.</p>
+<p>A non-empty result is an <em>edit-claim contradiction</em>: the run mutated files
+(per its own tool calls) but the working tree matches the target branch, so
+the work did not persist. The empty-diff→DONE short-circuit MUST be skipped
+in that case — the caller should BLOCK for inspection instead.</p>
+<p>An empty result means the empty diff is consistent with a genuine no-change
+run (the agent only read / ran commands, or made no tool calls at all), and
+the short-circuit is safe to take.</p>
+<p>When <em>has_changes</em> is True there is a real diff, so no short-circuit is
+happening and there is nothing to verify — returns <code>[]</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.stages.registry" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.stages.registry</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Stage registry: name -&gt; Stage instance.</p>
+<p>Adding a stage = importing its class here. :data:<code>STAGES</code> is the single
+source of truth; it must cover every value in
+:data:<code>robotsix_mill.core.states.STAGE_FOR_STATE</code>.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.stages.registry.get_stage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_stage</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_stage</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Retrieve a stage instance by name from the registry.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The stage name (e.g., 'refine', 'implement', 'deliver').</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Stage (robotsix_mill.stages.base.Stage)" href="#robotsix_mill.stages.base.Stage">Stage</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The Stage instance for the given name.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="KeyError">KeyError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the stage name is unknown.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

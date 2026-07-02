@@ -1,0 +1,2418 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../rfc-config-v2/">
+      
+      
+        <link rel="next" href="../approval-gate/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Agent catalog - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#agent-catalog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Agent catalog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../publishing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App / PAT
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#periodic-on-demand-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Periodic / on-demand agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sub-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sub-agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent infrastructure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inquiry-to-task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inquiry to task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../board-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/forge-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/stages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#periodic-on-demand-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Periodic / on-demand agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sub-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sub-agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent infrastructure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="agent-catalog">Agent catalog</h1>
+<p><strong>Agent definitions live in <code>agent_definitions/*.yaml</code>.</strong> The Python
+modules under <code>src/robotsix_mill/agents/</code> contain the runtime logic
+(output models, entry functions, tool implementations) but not the
+prompts, tool lists, or model bindings. See
+<a href="../agent-yaml-schema/">Agent YAML schema</a> for the field reference.</p>
+<hr />
+<h2 id="pipeline-agents">Pipeline agents</h2>
+<p>Run as stages on each ticket in the order: refine → approve → implement → deliver → merge → retrospect.</p>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Definition</th>
+<th>Module</th>
+<th>Model var</th>
+<th>Trigger</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Refine</td>
+<td><code>agent_definitions/refine.yaml</code></td>
+<td><code>agents/refining.py</code></td>
+<td><code>MILL_REFINE_MODEL</code></td>
+<td><code>refine</code> stage (DRAFT state)</td>
+<td>Turns rough draft into precise engineering spec grounded in the repo</td>
+</tr>
+<tr>
+<td>Implement (coordinator)</td>
+<td><code>agent_definitions/implement.yaml</code></td>
+<td><code>agents/coordinating.py</code></td>
+<td><code>MILL_MODEL</code></td>
+<td><code>implement</code> stage (READY state)</td>
+<td>Explores, reads, and edits the repo to satisfy the ticket spec</td>
+</tr>
+<tr>
+<td>Test</td>
+<td>(no YAML — <code>agents/testing.py</code> constructs directly)</td>
+<td><code>agents/testing.py</code></td>
+<td><code>MILL_TEST_MODEL</code></td>
+<td>Called by implement agent as <code>run_tests</code> tool</td>
+<td>Runs test suite in sandbox; distills failures into actionable diagnosis</td>
+</tr>
+<tr>
+<td>Deliver</td>
+<td>(no agent — <code>stages/deliver.py</code> uses forge adapter directly)</td>
+<td>—</td>
+<td>—</td>
+<td><code>deliver</code> stage (DELIVERABLE state)</td>
+<td>Pushes branch and opens PR/MR via forge adapter</td>
+</tr>
+<tr>
+<td>Review</td>
+<td><code>agent_definitions/review.yaml</code></td>
+<td><code>agents/reviewing.py</code></td>
+<td><code>MILL_REVIEW_MODEL</code></td>
+<td><code>review</code> stage (CODE_REVIEW state, opt-in via <code>MILL_REVIEW_ENABLED</code>)</td>
+<td>Blind dual-model audit of git diff against ticket spec</td>
+</tr>
+<tr>
+<td>Merge (rebase)</td>
+<td>(no YAML — <code>agents/rebasing.py</code> constructs directly)</td>
+<td><code>agents/rebasing.py</code></td>
+<td><code>MILL_MODEL</code></td>
+<td><code>merge</code> stage when PR is conflicting (<code>IMPLEMENT_COMPLETE</code> or <code>REBASING</code> state)</td>
+<td>Resolves git merge conflicts on stale branch; returns to <code>IMPLEMENT_COMPLETE</code> for gate re-verification</td>
+</tr>
+<tr>
+<td>Merge (CI-fix)</td>
+<td>(no YAML — <code>agents/ci_fixing.py</code> constructs directly)</td>
+<td><code>agents/ci_fixing.py</code></td>
+<td><code>MILL_MODEL</code></td>
+<td><code>merge</code> stage when PR has failing CI (<code>IMPLEMENT_COMPLETE</code> or <code>FIXING_CI</code> state)</td>
+<td>Auto-fixes failing remote CI checks on a PR branch; returns to <code>IMPLEMENT_COMPLETE</code> for gate re-verification</td>
+</tr>
+<tr>
+<td>Merge (review-revision)</td>
+<td><code>agent_definitions/review_revision.yaml</code></td>
+<td><code>agents/review_revision.py</code></td>
+<td><code>MILL_REVIEW_REVISION_MODEL</code></td>
+<td><code>merge</code> stage when PR has "changes requested" review (<code>ADDRESSING_REVIEW</code> state, opt-in via <code>MILL_REVIEW_FEEDBACK_ENABLED</code>)</td>
+<td>Autonomously implements changes requested by human reviewers on a PR branch; returns to <code>HUMAN_MR_APPROVAL</code> for re-review</td>
+</tr>
+<tr>
+<td>Retrospect</td>
+<td><code>agent_definitions/retrospect.yaml</code></td>
+<td><code>agents/retrospecting.py</code></td>
+<td><code>MILL_RETROSPECT_MODEL</code></td>
+<td><code>retrospect</code> stage (DONE state)</td>
+<td>Analyses finished ticket workflow + Langfuse traces; proposes pipeline improvements</td>
+</tr>
+<tr>
+<td>Doc classifier</td>
+<td><code>agent_definitions/doc_classifier.yaml</code></td>
+<td><code>agents/documenting.py</code></td>
+<td><code>MILL_DOC_CLASSIFIER_MODEL</code></td>
+<td><code>document</code> stage (pre-check gate)</td>
+<td>Cheap classifier gate — inspects diff + spec to decide if the change is user-facing; skips the full doc agent for internal-only changes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="periodic-on-demand-agents">Periodic / on-demand agents</h2>
+<p>Opt-in agents that run independently of the ticket pipeline.</p>
+<blockquote>
+<p><strong>Startup stagger:</strong> After a process restart, periodic agents do <strong>not</strong>
+all fire simultaneously — each agent kind receives a deterministic
+per-kind offset (derived from a hash of its name) plus up to 60 s of
+random jitter. This prevents a thundering-herd of concurrent agent runs
+that could overwhelm model rate limits or the host. The maximum stagger
+is capped at <code>min(interval / 12, 1 hour)</code> with a 1-minute floor, so
+agents with short intervals still space out meaningfully.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Definition</th>
+<th>Module</th>
+<th>Model var</th>
+<th>Trigger</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Audit</td>
+<td><code>agent_definitions/audit.yaml</code></td>
+<td><code>agents/auditing.py</code></td>
+<td><code>MILL_AUDIT_MODEL</code></td>
+<td>CLI (<code>audit</code>), API (<code>POST /audit</code>), board button, or periodic (<code>MILL_AUDIT_PERIODIC</code>)</td>
+<td>Meta-audit: identifies gaps in repo quality/security tooling coverage; emits improvement drafts</td>
+</tr>
+<tr>
+<td>Trace-health</td>
+<td>(no agent — deterministic check in <code>trace_health_runner.py</code>)</td>
+<td>—</td>
+<td>—</td>
+<td>CLI (<code>trace-health</code>), API (<code>POST /trace-health</code>), board button, or periodic (<code>MILL_TRACE_HEALTH_PERIODIC</code>)</td>
+<td>Scans Langfuse for unsessioned traces; files alert draft</td>
+</tr>
+<tr>
+<td>Health</td>
+<td><code>agent_definitions/health.yaml</code></td>
+<td><code>agents/health.py</code></td>
+<td><code>MILL_HEALTH_MODEL</code></td>
+<td>CLI, API (<code>POST /health-check</code>), or periodic (<code>MILL_HEALTH_PERIODIC</code>)</td>
+<td>Codebase-health inspection across 6 dimensions (size, length, docs, tests, complexity, dead code)</td>
+</tr>
+<tr>
+<td>Test-gap</td>
+<td><code>agent_definitions/test_gap.yaml</code></td>
+<td><code>agents/test_gap.py</code></td>
+<td><code>MILL_TEST_GAP_MODEL</code></td>
+<td>CLI, API (<code>POST /test-gap</code>), or periodic (<code>MILL_TEST_GAP_PERIODIC</code>)</td>
+<td>Identifies modules with zero dedicated unit-test coverage</td>
+</tr>
+<tr>
+<td>Agent-check</td>
+<td><code>agent_definitions/agent_check.yaml</code></td>
+<td><code>agents/agent_check.py</code></td>
+<td><code>MILL_AGENT_CHECK_MODEL</code></td>
+<td>CLI, API (<code>POST /agent-check</code>), or periodic (<code>MILL_AGENT_CHECK_PERIODIC</code>)</td>
+<td>Meta-agent: inspects all agent definitions for tool–prompt mismatch, skill drift, metadata correctness, registration completeness, prompt self-consistency, and memory ledger coherence</td>
+</tr>
+<tr>
+<td>Survey</td>
+<td><code>agent_definitions/survey.yaml</code></td>
+<td><code>agents/surveying.py</code></td>
+<td><code>MILL_SURVEY_MODEL</code></td>
+<td>CLI, API (<code>POST /survey</code>)</td>
+<td>Discovers similar OSS projects via web research; proposes concrete improvements</td>
+</tr>
+<tr>
+<td>BC-check</td>
+<td><code>agent_definitions/bc_check.yaml</code></td>
+<td><code>agents/bc_check.py</code></td>
+<td><code>MILL_BC_CHECK_MODEL</code></td>
+<td>CLI, API (<code>POST /bc-check</code>), or periodic (<code>MILL_BC_CHECK_PERIODIC</code>)</td>
+<td>Backward-compatibility scanner: examines git history for changed signatures and flags breakage</td>
+</tr>
+<tr>
+<td>Completeness-check</td>
+<td><code>agent_definitions/completeness_check.yaml</code></td>
+<td><code>agents/completeness_check.py</code></td>
+<td><code>MILL_COMPLETENESS_CHECK_MODEL</code></td>
+<td>CLI, API (<code>POST /completeness-check</code>), or periodic (<code>MILL_COMPLETENESS_CHECK_PERIODIC</code>)</td>
+<td>Scans the repo for incomplete feature wiring (missing YAML mappings/defaults, routes without buttons, runners without CLI, agent files without callers)</td>
+</tr>
+<tr>
+<td>Config-sync</td>
+<td>(no agent — deterministic orchestrator in <code>config_sync_runner.py</code>)</td>
+<td><code>agents/config_syncing.py</code></td>
+<td><code>MILL_CONFIG_SYNC_MODEL</code></td>
+<td>CLI (<code>config-sync</code>), API (<code>POST /config-sync</code>), board button, or periodic (<code>MILL_CONFIG_SYNC_PERIODIC</code>)</td>
+<td>Scans for config ↔ .env ↔ docs drift; emits draft tickets for gaps</td>
+</tr>
+<tr>
+<td>Answer</td>
+<td><code>agent_definitions/answer.yaml</code></td>
+<td><code>agents/answering.py</code></td>
+<td><code>MILL_ANSWER_MODEL</code></td>
+<td><code>answer</code> stage (ASKED state — ticket type <code>inquiry</code>)</td>
+<td>Investigative analyst: answers questions using repo exploration + web research + Langfuse data</td>
+</tr>
+</tbody>
+</table>
+<p>All on-demand <code>POST</code> routes accept an optional <strong><code>?repo_id=&lt;id&gt;</code></strong> query
+parameter.  In single-repo mode (one repo configured) the parameter is
+ignored and the runner uses global defaults — backward compatible.
+In multi-repo mode:</p>
+<ul>
+<li><strong><code>?repo_id=my-repo</code></strong> — runs the agent against that repo only
+  (scoped memory, board, and clone directory).</li>
+<li><strong><code>?repo_id=all</code></strong> — fans the agent out across every registered repo.</li>
+<li><strong>Omitting <code>?repo_id</code></strong> — also fans out across every repo (equivalent
+  to <code>?repo_id=all</code>).  The <code>/trace-health</code> route uses the same
+  convention but has no <code>session_id</code> parameter.</li>
+<li><strong>Unknown <code>repo_id</code></strong> → HTTP 400 with a list of known repo IDs.</li>
+</ul>
+<h2 id="sub-agents">Sub-agents</h2>
+<p>Used as tools by primary agents.</p>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Definition</th>
+<th>Module</th>
+<th>Model var</th>
+<th>Called by</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Explore</td>
+<td>(no YAML — built by <code>make_explore_tool()</code>)</td>
+<td><code>agents/explore.py</code></td>
+<td><code>MILL_EXPLORE_MODEL</code></td>
+<td>Refine, Implement, Review, Retrospect, Audit, Health, Survey, Answer, Agent-check, Test-gap</td>
+<td>Read-only scout: returns concise paths/symbols/line-ranges, never whole files</td>
+</tr>
+<tr>
+<td>Consult-expert</td>
+<td>(no YAML — built by <code>make_consult_expert_tool()</code>)</td>
+<td><code>agents/consult_expert.py</code></td>
+<td><code>MILL_MODEL</code> (uses expert's <code>model</code> override if set)</td>
+<td>Implement (coordinator)</td>
+<td>Read-only domain expert sub-agent: answers focused questions about a domain's conventions, architecture, and gotchas; the coordinator remains the sole author of every change</td>
+</tr>
+<tr>
+<td>Web-research</td>
+<td>(no YAML — <code>build_agent</code> called directly)</td>
+<td><code>agents/web_research.py</code></td>
+<td><code>MILL_WEB_RESEARCH_MODEL</code></td>
+<td>Refine, Audit, Survey, Answer, Health, Agent-check</td>
+<td>Searches the web; returns one concise factual conclusion</td>
+</tr>
+<tr>
+<td>Dedup</td>
+<td>(no YAML — <code>build_agent</code> called directly)</td>
+<td><code>agents/dedup.py</code></td>
+<td><code>MILL_DEDUP_MODEL</code></td>
+<td>Refine stage (pre-refine guard)</td>
+<td>Checks whether draft is duplicate or already implemented; short-circuits to CLOSED</td>
+</tr>
+<tr>
+<td>Scope-triage</td>
+<td><code>agent_definitions/scope_triage.yaml</code></td>
+<td><code>agents/scope_triage.py</code></td>
+<td><code>MILL_SCOPE_TRIAGE_MODEL</code></td>
+<td>Implement stage (scope-violation guard)</td>
+<td>Cheap classifier: EXPAND (legitimate out-of-scope change), REJECT (scope creep), or ESCALATE (uncertain)</td>
+</tr>
+<tr>
+<td>Trace-inspector</td>
+<td>(no YAML — <code>build_agent</code> called directly)</td>
+<td><code>agents/trace_inspector.py</code></td>
+<td><code>MILL_TRACE_INSPECTOR_MODEL</code></td>
+<td>Retrospect</td>
+<td>Inspects full Langfuse trace observation tree</td>
+</tr>
+</tbody>
+</table>
+<h2 id="agent-infrastructure">Agent infrastructure</h2>
+<p>Shared modules used to build and equip agents.</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>File</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Agent factory</td>
+<td><code>agents/base.py</code></td>
+<td><code>build_agent()</code> / <code>build_agent_from_definition()</code> — pydantic-ai Agent factory over OpenRouter; injects tools, <code>web_research</code>, <code>report_issue</code>, skills</td>
+</tr>
+<tr>
+<td>YAML loader</td>
+<td><code>agents/yaml_loader.py</code></td>
+<td><code>load_agent_definition()</code> — parses and validates <code>agent_definitions/*.yaml</code> files</td>
+</tr>
+<tr>
+<td>File-system tools</td>
+<td><code>agents/fs_tools.py</code></td>
+<td>Sandboxed file-system tools (<code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>delete_file</code>, <code>list_dir</code>, <code>run_command</code>)</td>
+</tr>
+<tr>
+<td>Web tools</td>
+<td><code>agents/web_tools.py</code></td>
+<td><code>web_fetch</code> tool (HTTP GET via isolated network container)</td>
+</tr>
+<tr>
+<td>Report issue</td>
+<td><code>agents/report_issue.py</code></td>
+<td><code>report_issue</code> tool (dedup-guarded, injected into every agent)</td>
+</tr>
+<tr>
+<td>Read ticket</td>
+<td><code>agents/read_ticket.py</code></td>
+<td><code>read_ticket</code> tool (read-only counterpart to <code>report_issue</code>; injected into periodic agents)</td>
+</tr>
+<tr>
+<td>Reply to thread</td>
+<td><code>agents/reply_thread.py</code></td>
+<td><code>reply_to_thread</code> tool (replies to a comment thread on the current ticket; injected into implement agent)</td>
+</tr>
+<tr>
+<td>Close thread</td>
+<td><code>agents/close_thread.py</code></td>
+<td><code>close_thread</code> tool (closes a resolved comment thread on the current ticket; injected into implement agent)</td>
+</tr>
+<tr>
+<td>Retry</td>
+<td><code>agents/retry.py</code></td>
+<td>Bounded retry with exponential backoff for transient network failures</td>
+</tr>
+<tr>
+<td>Tool registry</td>
+<td><code>agents/tool_registry.py</code></td>
+<td>System-wide catalog of tool capabilities for prompt injection (not an agent registry)</td>
+</tr>
+<tr>
+<td>Expert YAML loader</td>
+<td><code>agents/expert_loader.py</code></td>
+<td><code>load_expert_definition()</code> — parses and validates <code>expert_definitions/*.yaml</code> files</td>
+</tr>
+<tr>
+<td>Expert manager</td>
+<td><code>agents/expert_manager.py</code></td>
+<td><code>ExpertManager</code> — single lifecycle owner for expert agent instances (load definitions, create/cache/retrieve/close agents)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../">index.md</a> — documentation home</li>
+<li><a href="../agent-yaml-schema/">agent-yaml-schema.md</a> — Field reference for <code>agent_definitions/*.yaml</code> files</li>
+<li><a href="../expert-yaml-schema/">expert-yaml-schema.md</a> — Field reference for <code>expert_definitions/*.yaml</code> files</li>
+<li><a href="../configuration/">docs/configuration.md</a> — full env-var reference (maps every model var to its agent)</li>
+<li><a href="../audit-agent/">docs/audit-agent.md</a> — audit agent deep dive</li>
+<li><a href="../trace-health/">docs/trace-health.md</a> — trace-health check deep dive</li>
+<li><a href="../retrospect-memory/">docs/retrospect-memory.md</a> — retrospect memory ledger</li>
+<li><a href="../merge-stage/">docs/merge-stage.md</a> — merge stage (rebase + CI-fix)</li>
+<li><a href="../scope-triage/">docs/scope-triage.md</a> — scope-triage classifier (EXPAND / REJECT / ESCALATE verdicts and cleanup behavior)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
