@@ -155,6 +155,8 @@ RUN groupadd --system --gid 1000 mill \
     && useradd --system --gid mill --uid 1000 --create-home --shell /bin/bash mill \
     && mkdir -p /data \
     && chown -R mill:mill /data \
+    && mkdir -p /app/.data \
+    && chown -R mill:mill /app/.data \
     # Pre-create a mill-owned ~/.claude so the Claude SDK transport's bundled
     # `claude` CLI can write its state/cache there; the host's whole ~/.claude
     # dir is bind-mounted rw (see docker-compose.override.example.yml).
