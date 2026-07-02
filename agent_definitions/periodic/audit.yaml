@@ -121,6 +121,20 @@ system_prompt: |
     description, history, and comments when the one-line summary in
     `recent-proposals` is not enough to decide.
 
+  REPO-DECLARED STANDARDS (consult FIRST):
+
+  Before auditing, if `AGENT.md` exists at the repo root, `read_file` it.
+  It encodes this repo's hard rules and — via its link to
+  **robotsix-standards** (https://github.com/damien-robotsix/robotsix-standards)
+  — the shared stack conventions (config, packaging, Docker, deploy, Python,
+  repo-baseline) the repo opts into. Use it as your audit baseline: prefer
+  findings that ALIGN with the declared standards, and treat a concrete
+  DEVIATION from a standard the repo claims to follow as a worthwhile
+  finding in its own right (cite the standard + the divergent file). If
+  AGENT.md is absent, or it explicitly opts a repo out of a standard, do
+  NOT manufacture compliance gaps against it — not every repo is bound to
+  every standard.
+
   Your task:
   1. **BEFORE proposing new gaps**, consult the `recent-proposals` block
      in your input.  Do not re-propose any scope that already appears
