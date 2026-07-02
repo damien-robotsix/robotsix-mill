@@ -178,8 +178,6 @@ class GitHubForge(
         private: bool | None = None,
         description: str,
     ) -> RepoInfo:
-        import time
-
         if private is None:
             private = self.settings.repo_visibility_default == "private"
 
@@ -187,7 +185,7 @@ class GitHubForge(
 
         from .auth import (
             github_token,
-            invalidate_github_token,
+            invalidate_and_backoff,
         )  # lazy: avoid import cycle
 
         s = self.settings
@@ -229,8 +227,7 @@ class GitHubForge(
             with self._http.client() as (c, api, _headers):
                 r, is_401 = _create_attempt(c, api)
                 if is_401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)
-                    time.sleep(2)
+                    invalidate_and_backoff(self.settings, self._repo_config)
                     token = get_secrets().forge_repo_create_token or github_token(
                         s, repo_config=self._repo_config
                     )
@@ -312,13 +309,11 @@ class GitHubForge(
         source_repo: str,
         target_namespace: str | None = None,
     ) -> RepoInfo:
-        import time
-
         from ..config import get_secrets
 
         from .auth import (
             github_token,
-            invalidate_github_token,
+            invalidate_and_backoff,
         )  # lazy: avoid import cycle
 
         s = self.settings
@@ -335,8 +330,7 @@ class GitHubForge(
             with self._http.client() as (c, api, _headers):
                 r = c.post(f"{api}{url}", headers=custom_headers, json=payload)
                 if r.status_code == 401 and retry == 0:
-                    invalidate_github_token(self.settings, self._repo_config)
-                    time.sleep(2)
+                    invalidate_and_backoff(self.settings, self._repo_config)
                     token = get_secrets().forge_repo_create_token or github_token(
                         s, repo_config=self._repo_config
                     )
