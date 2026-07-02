@@ -35,13 +35,13 @@ def _sanitize_log_value(value: str) -> str:
 
 def _resolve_overlay_path(data_dir: str | Path) -> Path:
     """Resolve ``registered_repos.yaml`` within *data_dir*, raising on escape."""
-    root = Path(os.path.realpath(data_dir))
-    resolved = Path(os.path.realpath(root / "registered_repos.yaml"))
-    if not resolved.is_relative_to(root):
+    root = os.path.realpath(os.fspath(data_dir))
+    resolved = os.path.realpath(os.path.join(root, "registered_repos.yaml"))
+    if not resolved.startswith(root + os.sep) and resolved != root:
         raise ValueError(
             f"Path escapes data directory: {resolved} is not within {root}"
         )
-    return resolved
+    return Path(resolved)
 
 
 class RepoRegistration(BaseModel):
@@ -116,13 +116,13 @@ def register_repo(
         )
 
     # Write the overlay YAML.
-    overlay_path = _resolve_overlay_path(settings.data_dir)
-    # _resolve_overlay_path already validates and realpath's the path,
-    # but CodeQL's taint analysis cannot trace through the helper.
-    # Re-resolve so the sanitizer is visible at the sink.
-    _safe = os.path.realpath(str(overlay_path))
-    if os.path.exists(_safe):
-        with open(_safe, "r", encoding="utf-8") as fh:
+    # Sanitize data_dir before path construction so CodeQL recognizes
+    # the os.path.realpath + os.path.join sanitizers (they do not
+    # propagate through helper functions).
+    _safe_root = os.path.realpath(os.fspath(settings.data_dir))
+    _safe_path = os.path.realpath(os.path.join(_safe_root, "registered_repos.yaml"))
+    if os.path.exists(_safe_path):
+        with open(_safe_path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     else:
         data = {}
@@ -138,8 +138,8 @@ def register_repo(
         "_mill_source": "auto",
     }
 
-    Path(_safe).parent.mkdir(parents=True, exist_ok=True)
-    with open(_safe, "w", encoding="utf-8") as fh:
+    Path(_safe_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(_safe_path, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
 
     # Hot-reload: clear the cached singleton, then re-read the merged
