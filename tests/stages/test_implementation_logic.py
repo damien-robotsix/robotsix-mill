@@ -154,6 +154,45 @@ class TestSelectAgentLevel:
         result = self._call(ic, repo_dir=repo_dir)
         assert result == 1
 
+    def test_spec_exact_edits_returns_neg1(self, tmp_path):
+        """A spec with fenced code blocks referencing real files returns -1."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "src").mkdir(parents=True)
+        (repo_dir / "src" / "module.py").write_text("# existing")
+
+        spec = """### `src/module.py`
+
+```python
+# new code
+```
+"""
+        ic = _ic(spec=spec)
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result == -1
+
+    def test_spec_exact_edits_missing_file_returns_none(self, tmp_path):
+        """When a referenced file doesn't exist, fall through to level-2 (None)."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        # src/missing.py does NOT exist.
+
+        spec = """### `src/missing.py`
+
+```python
+# code
+```
+"""
+        ic = _ic(spec=spec)
+        result = self._call(ic, repo_dir=repo_dir)
+        assert result is None
+
+    def test_spec_exact_no_code_blocks_returns_none(self):
+        """A spec without code blocks returns None."""
+        ic = _ic(spec="Just prose, no code blocks.")
+        result = self._call(ic)
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # 2. _invoke_implement_agent

@@ -28,6 +28,8 @@ from ._shared import (
     _SinglePassResult,
     _is_config_only_change,
     _is_rename_only_change,
+    _is_spec_exact_edits,
+    _parse_spec_code_blocks,
     _should_skip_test_gate,
     log,
 )
@@ -45,11 +47,16 @@ class ImplementationLogicMixin(_ImplementStageBase):
         target_branch: str,
     ) -> int | None:
         """Pick the cheaper level-1 model for simple tickets, or bypass LLM
-        entirely for rename-only changes.
+        entirely for rename-only and spec-exact-code tickets.
 
         Returns ``0`` for:
         * a rename-only change (every non-rename change is a config/doc
           stub or zero-delta file) — bypass the LLM coordinator entirely.
+
+        Returns ``-1`` for:
+        * a spec-exact-code ticket — the description contains fenced code
+          blocks with file paths referencing existing files, so edits can
+          be applied deterministically without an LLM.
 
         Returns ``1`` for:
         * a no-change-needed re-check (the previous attempt already
@@ -67,6 +74,8 @@ class ImplementationLogicMixin(_ImplementStageBase):
             return 1
         if _is_rename_only_change(repo_dir, target_branch):
             return 0
+        if _is_spec_exact_edits(ic.spec, repo_dir):
+            return -1
         return None
 
     @classmethod
@@ -788,6 +797,291 @@ class ImplementationLogicMixin(_ImplementStageBase):
         )
 
     @classmethod
+    def _handle_spec_exact_edits(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings: Settings,
+        ic: _ImplementContext,
+        target: str,
+        extra_roots: list[Path] | None,
+    ) -> _SinglePassResult:
+        """Handle a spec-exact-code ticket deterministically — no LLM invocation.
+
+        Parses fenced code blocks annotated with file paths from the
+        ticket description, applies them as edits (unified-diff or
+        context-aware replacement), then runs the scope guardrail and
+        routes to test evaluation.
+        """
+        import difflib
+        import subprocess as sp
+
+        blocks = _parse_spec_code_blocks(ic.spec)
+
+        applied: list[str] = []
+        failed: list[str] = []
+        changed_files: set[str] = set()
+
+        for file_path, _info, code in blocks:
+            target_file = repo_dir / file_path
+            if not target_file.is_file():
+                failed.append(f"{file_path}: file not found")
+                continue
+
+            original = target_file.read_text()
+
+            # --- Strategy 1: unified diff ---------------------------------
+            if (
+                code.startswith("--- ")
+                or code.startswith("+++ ")
+                or code.startswith("@@")
+            ):
+                try:
+                    result = sp.run(
+                        ["patch", "--batch", "-p0", "-o", "-", str(target_file)],
+                        input=code,
+                        capture_output=True,
+                        text=True,
+                        cwd=str(repo_dir),
+                        timeout=10,
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        target_file.write_text(result.stdout)
+                        applied.append(file_path)
+                        changed_files.add(file_path)
+                        continue
+                except Exception as exc:
+                    log.debug(
+                        "Spec-exact: unified diff failed for %s: %s", file_path, exc
+                    )
+
+            # --- Strategy 2: context-aware replacement --------------------
+            # Split both into lines and find the longest matching region.
+            file_lines = original.splitlines(keepends=True)
+            code_lines = code.splitlines(keepends=True)
+            code_stripped = [line.rstrip("\n\r") for line in code_lines]
+
+            sm = difflib.SequenceMatcher(
+                None,
+                [line.rstrip("\n\r") for line in file_lines],
+                code_stripped,
+            )
+            match = sm.find_longest_match(0, len(file_lines), 0, len(code_stripped))
+
+            # Require at least 2 matching lines (or 1 if the code block
+            # is only 1 line) to consider it a context match.
+            min_match = min(2, len(code_stripped))
+            if match.size >= min_match:
+                # Replace the matched region with the full code block.
+                new_lines = (
+                    file_lines[: match.a]
+                    + code_lines
+                    + file_lines[match.a + match.size :]
+                )
+                new_content = "".join(new_lines)
+                if new_content != original:
+                    target_file.write_text(new_content)
+                    applied.append(file_path)
+                    changed_files.add(file_path)
+                    continue
+
+            # --- Strategy 3: insertion via context hints ------------------
+            # Look for insertion-point hints in the lines preceding the
+            # code block in the spec.
+            insertion_point = cls._find_insertion_point(
+                ic.spec, file_path, code, file_lines
+            )
+            if insertion_point is not None:
+                new_lines = (
+                    file_lines[:insertion_point]
+                    + code_lines
+                    + file_lines[insertion_point:]
+                )
+                new_content = "".join(new_lines)
+                target_file.write_text(new_content)
+                applied.append(file_path)
+                changed_files.add(file_path)
+                continue
+
+            failed.append(f"{file_path}: could not determine edit location")
+
+        if not applied:
+            # Nothing was applied — fall through to LLM path via retry.
+            log.warning(
+                "Spec-exact bypass: no edits applied (%d block(s) failed: %s)",
+                len(failed),
+                ", ".join(failed[:5]),
+            )
+            return _SinglePassResult(
+                next_action="retry",
+                feedback=(
+                    "Spec-exact bypass: could not apply any edits. "
+                    + f"Failed: {', '.join(failed[:3])}"
+                ),
+            )
+
+        # Build a deterministic summary.
+        applied_preview = ", ".join(applied[:5])
+        if len(applied) > 5:
+            applied_preview += f" (+{len(applied) - 5} more)"
+        summary = f"spec-exact edit: {len(applied)} file(s) changed — {applied_preview}"
+
+        if failed:
+            summary += f" ({len(failed)} block(s) skipped)"
+
+        ws = ctx.service.workspace(ticket)
+        memory_board_id = cls._memory_board_id(ctx, ticket)
+
+        ref_files = sorted(changed_files)
+
+        # Persist artifacts (no memory update — no agent ran).
+        cls._persist_pass_artifacts(
+            ws,
+            ticket,
+            ic,
+            summary,
+            ref_files,
+            "",
+            settings,
+            memory_board_id,
+        )
+
+        # Run scope guardrail.
+        guardrail = cls._run_scope_guardrail(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ref_files,
+            ic.file_map,
+            settings,
+            ic.spec,
+            ic.feedback,
+        )
+        if guardrail.action == "return":
+            return _SinglePassResult(next_action="return", outcome=guardrail.outcome)
+
+        new_file_map = (
+            guardrail.file_map if guardrail.file_map is not None else ic.file_map
+        )
+        new_feedback = (
+            guardrail.feedback
+            if guardrail.action in ("continue", "skip_iteration")
+            else ic.feedback
+        )
+        new_ic = _ImplementContext(
+            spec=ic.spec,
+            memory_text=ic.memory_text,
+            reference_files=[{"path": p} for p in ref_files],
+            file_map=new_file_map,
+            feedback=new_feedback,
+            previous_attempt_summary=summary,
+            open_thread_ids=ic.open_thread_ids,
+        )
+        if guardrail.action == "continue":
+            return _SinglePassResult(next_action="retry", feedback=None, ic=new_ic)
+
+        # Route to test evaluation.
+        return cls._evaluate_test_results(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            new_ic,
+            summary,
+            ref_files,
+            None,  # new_msgs
+            False,  # no_change_needed
+            "",  # no_change_rationale
+            False,  # resuming
+            1,  # attempt
+            max(1, settings.max_fix_iterations),  # max_iters
+            extra_roots,
+        )
+
+    @staticmethod
+    def _find_insertion_point(
+        spec: str,
+        file_path: str,
+        code: str,
+        file_lines: list[str],
+    ) -> int | None:
+        """Try to determine where in *file_lines* to insert *code* from *spec* context.
+
+        Looks at the text preceding the code block in *spec* for hints:
+        - "after the imports" / "after imports" → after last import line
+        - "after line N" → after line N
+        - "before line N" → before line N
+        - "at the end" / "end of file" → at end
+        - "before class"/"before def" → before first class/def
+
+        Returns a 0-based line index or ``None`` if no hint was found.
+        """
+        import re as _re
+
+        # Find the code block in the spec to get its preceding context.
+        escaped = _re.escape(code[:80])
+        pattern = _re.compile(r"(.*?)```\w*\n" + escaped, _re.DOTALL)
+        m = pattern.search(spec)
+        if not m:
+            return None
+
+        before = m.group(1)
+        # Take the last 10 lines of preceding context.
+        context_lines = before.split("\n")[-10:]
+        context = "\n".join(context_lines)
+
+        # "after the imports" / "after imports"
+        if _re.search(r"after\s+(the\s+)?imports?", context, _re.IGNORECASE):
+            for i in range(len(file_lines) - 1, -1, -1):
+                stripped = file_lines[i].lstrip()
+                if stripped.startswith(("import ", "from ")):
+                    return i + 1
+            # No imports found — insert at top.
+            return 0
+
+        # "after line N"
+        lm = _re.search(r"after\s+line\s+(\d+)", context, _re.IGNORECASE)
+        if lm:
+            n = int(lm.group(1))
+            return min(n, len(file_lines))
+
+        # "before line N"
+        lm = _re.search(r"before\s+line\s+(\d+)", context, _re.IGNORECASE)
+        if lm:
+            n = int(lm.group(1))
+            return max(0, n - 1)
+
+        # "at the end" / "end of file" / "append"
+        if _re.search(
+            r"(at\s+the\s+end|end\s+of\s+file|append|bottom)",
+            context,
+            _re.IGNORECASE,
+        ):
+            return len(file_lines)
+
+        # "before class X" / "before the class"
+        if _re.search(r"before\s+(the\s+)?class\b", context, _re.IGNORECASE):
+            for i, line in enumerate(file_lines):
+                if line.lstrip().startswith("class "):
+                    return i
+            return None
+
+        # "before def X" / "before the function"
+        if _re.search(r"before\s+(the\s+)?(def|function)\b", context, _re.IGNORECASE):
+            for i, line in enumerate(file_lines):
+                if line.lstrip().startswith("def "):
+                    return i
+            return None
+
+        return None
+
+    @classmethod
     def _run_single_implement_pass(
         cls,
         ctx: StageContext,
@@ -817,6 +1111,19 @@ class ImplementationLogicMixin(_ImplementStageBase):
         # Rename-only changes bypass the LLM coordinator entirely.
         if agent_level == 0:
             return cls._handle_rename_only_change(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                ic,
+                target,
+                extra_roots,
+            )
+
+        # Spec-exact-code tickets bypass the LLM coordinator entirely.
+        if agent_level == -1:
+            return cls._handle_spec_exact_edits(
                 ctx,
                 ticket,
                 repo_dir,
