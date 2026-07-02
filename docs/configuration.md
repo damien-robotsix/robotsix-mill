@@ -612,7 +612,7 @@ Each periodic agent shares this pattern:
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
-`copy_paste`, `timeout_escalation`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
+`copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
@@ -789,6 +789,17 @@ budget and tool-call guardrails:
 | `MILL_TEST_GAP_REQUEST_LIMIT` | `80` | Per-call request cap for the test-gap agent |
 | `MILL_TEST_GAP_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per test-gap trace |
 | `MILL_TEST_GAP_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
+
+#### triage_boilerplate
+
+The `triage_boilerplate` periodic agent determines boilerplate for new-ticket
+triage, scanning the board for recurring triage patterns.  It uses only the
+standard two periodic-agent fields:
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.triage_boilerplate.enabled` | `MILL_TRIAGE_BOILERPLATE_PERIODIC` | `true` | Enable periodic triage-boilerplate passes |
+| `periodic.triage_boilerplate.interval_seconds` | `MILL_TRIAGE_BOILERPLATE_INTERVAL_SECONDS` | `604800` | Seconds between triage-boilerplate passes (1 week) |
 
 #### orphaned_pr_check
 

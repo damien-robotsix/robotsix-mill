@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Document `periodic.triage_boilerplate` in `docs/configuration.md` Section 12 (Periodic agents).
 - Document `core.limits.refine_dynamic_limit_*` and `core.limits.refine_usage_warning_threshold` fields in the Request limits section of `docs/configuration.md`
 - Remove the deprecated standalone `config/repos.yaml` fallback: repos are now read exclusively from the `repos:` key of `config/config.yaml` (the `MILL_REPOS_FILE` override used by the test suite is unchanged). Operators still using the standalone file must move its `repos:` block into `config/config.yaml`.
 - Fix Docker build failure: add missing `COPY skills/ ./skills/` in builder stage so hatchling's `force-include` for `skills/` resolves at wheel-build time.
