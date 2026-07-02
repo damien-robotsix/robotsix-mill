@@ -75,6 +75,10 @@ _DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset(
         # settings — the whole dict is mapped via
         # ``core.limits.stage_timeout_overrides``.
         "core.limits.stage_timeout_overrides.refine",
+        # ``repos`` is consumed directly from the YAML by
+        # ``_load_repos_document()`` — not routed through the
+        # YAML→alias flatten flow.
+        "repos",
     }
 )
 

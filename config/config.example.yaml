@@ -28,12 +28,12 @@
 # ---------------------------------------------------------------------------
 #  repos — the boards this mill manages (single config entry point)
 # ---------------------------------------------------------------------------
-#  Repos live here under `repos:`, keyed by repo_id.  When this key is present
-#  it is authoritative; when it is absent the loader falls back to the legacy
-#  standalone `config/repos.yaml` (deprecated).  Zero repos is valid — the
-#  board serves empty and repos can be added later.  Uncomment and fill in:
+#  Repos live here under `repos:`, keyed by repo_id.  Repos are read
+#  exclusively from this key (plus the machine overlay `registered_repos.yaml`
+#  in the data dir).  Zero repos is valid — the board serves empty and repos
+#  can be added later.  Add entries under the `repos:` key:
 #
-#  repos:
+repos: {}
 #    my-repo:
 #      board_id: my-repo
 #      forge_remote_url: https://github.com/owner/my-repo
