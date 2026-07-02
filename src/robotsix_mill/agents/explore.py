@@ -13,6 +13,8 @@ network), like the other agent seams.
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 
 from ..config import Settings, get_secrets
@@ -477,18 +479,103 @@ def make_repo_scoped_explore_tool(settings: Settings, repo_clones: dict[str, Pat
     return explore
 
 
-def make_parallel_explore_tool(
+# --------------------------------------------------------------------------
+# parallel_explore batch cap — at most 5 questions per call (reduces risk
+# of massive input contexts when the scout reads large contiguous file
+# sections instead of grep-pinpointing).
+# --------------------------------------------------------------------------
+_PARALLEL_EXPLORE_BATCH_CAP: int = 5
+
+# Max grep output lines before we fall through to the full scout
+# (too many matches need semantic filtering the grep can't do).
+_GREP_PREFILTER_MAX_LINES: int = 20
+
+
+def _extract_search_terms(question: str) -> list[str]:
+    """Extract likely search terms from a question string.
+
+    Looks for quoted strings, backtick-quoted tokens, CamelCase and
+    snake_case identifiers — any of which make plausible grep targets.
+    """
+    terms: list[str] = []
+    # Double-quoted strings
+    for m in re.finditer(r'"([^"]+)"', question):
+        terms.append(m.group(1))
+    # Single-quoted strings
+    for m in re.finditer(r"'([^']+)'", question):
+        terms.append(m.group(1))
+    # Backtick-quoted tokens
+    for m in re.finditer(r"`([^`]+)`", question):
+        terms.append(m.group(1))
+    # CamelCase identifiers (at least two humps)
+    for m in re.finditer(r"\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b", question):
+        terms.append(m.group(1))
+    # snake_case identifiers
+    for m in re.finditer(r"\b([a-z]+(?:_[a-z]+)+)\b", question):
+        terms.append(m.group(1))
+    return terms
+
+
+def _try_grep_prefilter(question: str, repo_dir: Path) -> str | None:
+    """Attempt to answer *question* via ``git grep``, avoiding the full scout.
+
+    Returns a formatted answer string when ``git grep`` finds a small
+    number of matching lines (≤ ``_GREP_PREFILTER_MAX_LINES``), or
+    ``None`` when the question needs the full scout — no usable search
+    terms, too many matches, or ``git`` unavailable.
+    """
+    terms = _extract_search_terms(question)
+    if not terms:
+        return None
+
+    # Try each extracted term until one yields a manageable result.
+    for term in terms:
+        if len(term) < 3:
+            continue  # too short to be distinctive
+        try:
+            result = subprocess.run(  # noqa: S603 — term is re.escape'd
+                ["git", "grep", "-n", "-E", re.escape(term)],  # noqa: S607 — git is on PATH
+                capture_output=True,
+                text=True,
+                cwd=str(repo_dir),
+                timeout=5,
+            )
+        except subprocess.TimeoutExpired, FileNotFoundError, OSError:
+            return None
+
+        if result.returncode != 0:
+            continue  # no matches — try next term
+
+        lines = [line for line in result.stdout.strip().split("\n") if line]
+        if len(lines) > _GREP_PREFILTER_MAX_LINES:
+            continue  # too many matches — try next term
+
+        header = f"### [{term!r}] grep pre-filter (no scout needed)\n"
+        return header + result.stdout.strip()
+
+    return None
+
+
+def make_parallel_explore_tool(  # noqa: C901 — prefilter + scout batching is inherently multi-path
     settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
 ):
     """Return a ``parallel_explore(questions)`` closure that batches
     questions into a single scout call.
 
+    Before delegating to the full scout, each question is tested against
+    a lightweight ``git grep`` pre-filter — if grep finds a small set of
+    matching lines the result is returned directly, avoiding the scout's
+    system-prompt token cost entirely.
+
     Instead of spawning one independent :func:`run_explore` scout per
-    question (each re-sending the ~68k-char system prompt), all questions
-    are batched into a single explore call so the system prompt is sent
-    only once.  The scout answers every question in one response, labeled
-    by number.  This cuts the input-token cost by a factor of N for N
-    questions.
+    question (each re-sending the ~68k-char system prompt), all remaining
+    questions are batched into a single explore call so the system prompt
+    is sent only once.  The scout answers every question in one response,
+    labeled by number.  This cuts the input-token cost by a factor of N
+    for N questions.
+
+    At most ``_PARALLEL_EXPLORE_BATCH_CAP`` questions are accepted per
+    call (default 5) to bound the worst-case input context.
     """
 
     async def parallel_explore(questions: list[str]) -> str:
@@ -500,51 +587,89 @@ def make_parallel_explore_tool(
         pass them all at once.  All questions are sent in one prompt so the
         system context is loaded only once.  Returns every answer labeled by
         its question.  Keep each question self-contained; the scout answers
-        them sequentially within the same call."""
+        them sequentially within the same call.
+
+        At most {cap} questions per call — split larger batches across
+        multiple calls.""".format(cap=_PARALLEL_EXPLORE_BATCH_CAP)
         if not questions:
             return "parallel_explore: no questions provided"
 
-        if len(questions) == 1:
-            # Single question — no batching benefit; delegate directly.
-            with trace_stage("parallel_explore"):
-                ans = await run_explore(
-                    settings=settings,
-                    repo_dir=repo_dir,
-                    question=questions[0],
-                    extra_roots=extra_roots,
+        if len(questions) > _PARALLEL_EXPLORE_BATCH_CAP:
+            return (
+                f"parallel_explore: at most {_PARALLEL_EXPLORE_BATCH_CAP} "
+                f"questions per call (received {len(questions)}). "
+                "Split into smaller batches."
+            )
+
+        # -- grep pre-filter: try to answer each question via git grep --
+        #   before spending tokens on the full scout.  Each question that
+        #   grep resolves is answered immediately; the rest are batched
+        #   and sent to run_explore() as before.
+        prefiltered: dict[int, str] = {}  # original-index → answer
+        scout_questions: list[tuple[int, str]] = []  # (original-index, question)
+
+        for i, q in enumerate(questions):
+            grep_answer = _try_grep_prefilter(q, repo_dir)
+            if grep_answer is not None:
+                prefiltered[i] = grep_answer
+            else:
+                scout_questions.append((i, q))
+
+        # Build the output in original order — prefiltered answers plus
+        # the scout batch (if any).
+        parts: list[str] = []
+
+        if prefiltered:
+            for i in sorted(prefiltered):
+                q = questions[i]
+                parts.append(f"### [{i + 1}] {q}\n{prefiltered[i]}")
+
+        if scout_questions:
+            if len(scout_questions) == 1:
+                # Single remaining question — delegate directly.
+                idx, q = scout_questions[0]
+                with trace_stage("parallel_explore"):
+                    ans = await run_explore(
+                        settings=settings,
+                        repo_dir=repo_dir,
+                        question=q,
+                        extra_roots=extra_roots,
+                    )
+                parts.append(f"### [{idx + 1}] {q}\n{ans}")
+            else:
+                # Compose a batched prompt so the system prompt is sent
+                # only once for the remaining questions.
+                numbered = "\n\n".join(
+                    f"### Question {idx + 1}: {q}" for idx, q in scout_questions
                 )
-            return f"### [1] {questions[0]}\n{ans}"
-
-        # Compose a batched prompt so the system prompt is sent only once.
-        numbered = "\n\n".join(
-            f"### Question {i + 1}: {q}" for i, q in enumerate(questions)
-        )
-        batch_prompt = (
-            "Answer ALL of the following independent questions. "
-            "For each question, start your answer with exactly "
-            '"### [N]" on its own line where N is the question number, '
-            "then provide your tight, concise answer following your "
-            "normal discipline. Do NOT combine answers — keep each "
-            "question's response separate.\n\n"
-            f"{numbered}"
-        )
-
-        with trace_stage("parallel_explore"):
-            try:
-                result = await run_explore(
-                    settings=settings,
-                    repo_dir=repo_dir,
-                    question=batch_prompt,
-                    extra_roots=extra_roots,
+                batch_prompt = (
+                    "Answer ALL of the following independent questions. "
+                    "For each question, start your answer with exactly "
+                    '"### [N]" on its own line where N is the question '
+                    "number, then provide your tight, concise answer "
+                    "following your normal discipline. Do NOT combine "
+                    "answers — keep each question's response separate.\n\n"
+                    f"{numbered}"
                 )
-            except Exception as e:  # noqa: BLE001 — degrade, don't break
-                result = f"(explore failed: {e})"
 
-        # Prepend question labels so the caller always sees which
-        # question each answer block belongs to — even when the scout
-        # omits or mis-formats the "### [N]" markers.
-        prefix = "\n\n".join(f"### [{i + 1}] {q}" for i, q in enumerate(questions))
-        return f"{prefix}\n\n{result}"
+                with trace_stage("parallel_explore"):
+                    try:
+                        result = await run_explore(
+                            settings=settings,
+                            repo_dir=repo_dir,
+                            question=batch_prompt,
+                            extra_roots=extra_roots,
+                        )
+                    except Exception as e:  # noqa: BLE001 — degrade
+                        result = f"(explore failed: {e})"
+
+                # Prepend question labels for the batched answers.
+                prefix = "\n\n".join(
+                    f"### [{idx + 1}] {q}" for idx, q in scout_questions
+                )
+                parts.append(f"{prefix}\n\n{result}")
+
+        return "\n\n".join(parts)
 
     from .tool_registry import ToolInfo, ToolRegistry
 
