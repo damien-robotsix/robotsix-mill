@@ -20,6 +20,9 @@ class Workspace:
 
     def __init__(self, root: Path, ticket_id: str) -> None:
         """Create the workspace directory for *ticket_id* under *root*, creating parents as needed."""
+        # Defend against path-injection: ticket_id must be a simple leaf name.
+        if ticket_id != Path(ticket_id).name or ticket_id in (".", ".."):
+            raise ValueError(f"Unsafe ticket_id: {ticket_id!r}")
         self.dir = Path(root) / ticket_id
         self.dir.mkdir(parents=True, exist_ok=True)
 
