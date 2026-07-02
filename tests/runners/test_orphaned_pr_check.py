@@ -1178,7 +1178,7 @@ class TestForeignPrTracking:
             title="Track external PR: test-owner/test-repo#404",
             state=State.READY,
         )
-        svc.recent_proposals_for.side_effect = [[], [existing]]
+        svc.recent_proposals_for.side_effect = [[], [], [existing], [existing]]
 
         result1 = run_orphaned_pr_check_pass(repo_config=repo)
         result2 = run_orphaned_pr_check_pass(repo_config=repo)
