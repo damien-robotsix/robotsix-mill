@@ -65,6 +65,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 COPY agent_definitions/ ./agent_definitions/
 COPY expert_definitions/ ./expert_definitions/
+COPY skills/ ./skills/
 # DO NOT switch this to `uv sync` / `UV_PROJECT_ENVIRONMENT=system`. That
 # env var is a venv PATH, not a mode: uv builds a venv at /build/system and
 # puts the `robotsix-mill` console script at /build/system/bin, so the base
