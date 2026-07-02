@@ -16,8 +16,6 @@ src/robotsix_mill/agents/freshness.py:0: error: Missing type arguments for gener
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/config/loader.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/log_tools.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/core/datetime_utils.py:0: error: Missing type arguments for generic type "TypeDecorator"  [type-arg]
 src/robotsix_mill/core/datetime_utils.py:0: error: Function is missing a return type annotation  [no-untyped-def]
