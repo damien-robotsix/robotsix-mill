@@ -196,6 +196,7 @@ gates:
   pr_summary_enabled: false               # generate structured PR body from diff via cheap LLM (opt-in)
   refine_triage_enabled: true              # cheap triage before full refine (skip if precise)
   refine_prescriptive_spec_code_lines_threshold: 50  # code-block lines that trigger a deterministic refine skip; 0 = disabled
+  refine_skip_llm_on_impl_ready_spec: true  # validate implementation-ready specs and bypass LLM refine; set false to always run full refine
   max_re_refine_cycles_before_cheap: 2     # force cheap model after this many "changes requested" send-backs; 0 = never
   max_refine_passes_per_ticket: 3        # per-ticket ceiling on total refine passes before escalating to BLOCKED; 0 = disabled
   refine_trivial_routing_enabled: true     # route trivial-scope tickets to cheap model instead of Opus
