@@ -168,6 +168,7 @@ modules:
       - tests/runtime/test_stage_retry.py
       - tests/runtime/test_tracing.py
       - tests/runtime/test_transient_errors.py
+      - tests/runtime/test_repos_endpoint.py
       - tests/runtime/routes/**/*.py
       - tests/runtime/routes/**/*.mjs
       - tests/runtime/worker/**/*.py

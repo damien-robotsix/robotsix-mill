@@ -20,6 +20,7 @@ from . import _traces
 from . import _candidates
 from . import _agents
 from . import _board
+from . import _repos
 
 router = APIRouter()
 
@@ -34,3 +35,4 @@ router.include_router(_traces.router)
 router.include_router(_candidates.router)
 router.include_router(_agents.router)
 router.include_router(_board.router)
+router.include_router(_repos.router)
