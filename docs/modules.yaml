@@ -166,6 +166,7 @@ modules:
       - tests/runtime/test_recent_traces.py
       - tests/runtime/test_run_registry.py
       - tests/runtime/test_stage_retry.py
+      - tests/runtime/test_tickets_ingest.py
       - tests/runtime/test_tracing.py
       - tests/runtime/test_transient_errors.py
       - tests/runtime/test_repos_endpoint.py

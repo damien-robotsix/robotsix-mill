@@ -21,6 +21,7 @@ from . import _candidates
 from . import _agents
 from . import _board
 from . import _repos
+from . import _tickets_ingest
 
 router = APIRouter()
 
@@ -36,3 +37,4 @@ router.include_router(_candidates.router)
 router.include_router(_agents.router)
 router.include_router(_board.router)
 router.include_router(_repos.router)
+router.include_router(_tickets_ingest.router)

@@ -15,6 +15,7 @@
   validation pass (file existence, YAML/Python syntax, forbidden
   patterns) instead of the expensive LLM refine agent. Gated behind
   ``gates.refine_skip_llm_on_impl_ready_spec`` (default true).
+- New `POST /tickets/ingest` endpoint for machine callers with creation-time dedup via the existing `run_dedup_check` agent, with fail-open semantics (LLM failure → create ticket anyway). Returns 200 + `deduped=true` when the report matches an existing ticket, 201 + `deduped=false` for new tickets, and 404 for unknown `repo_id`.
 - Short-circuit refine triage when a prior triage SKIP verdict
   already exists in the ticket history, skipping the LLM call
   and re-emitting the draft unchanged as the refine output.
