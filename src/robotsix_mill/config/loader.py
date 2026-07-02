@@ -158,20 +158,20 @@ def load_secrets_yaml(secrets_file: str | None = None) -> dict:
     }
 
 
-def _load_repos_document(file_path: str | None = None) -> dict:
+def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
     """Read and parse the repos configuration document.
 
-    Single config entry point: repos live under the ``repos:`` key of the
-    main ``config/config.yaml`` — the sole on-disk source.  A standalone
-    ``config/repos.yaml`` is no longer read.  Returns the raw top-level
-    mapping (``{"repos": {...}}``), or ``{}`` when nothing is configured —
+    Merges operator repos from ``config.yaml`` (``repos:`` key) with
+    machine-owned overlay entries from ``<data_dir>/registered_repos.yaml``.
+    The operator entry wins on repo-id conflict. Returns the merged
+    ``{"repos": {...}}`` mapping, or ``{}`` when nothing is configured —
     zero repos is valid.
 
     An explicit *file_path* arg or the ``MILL_REPOS_FILE`` env var overrides
     the config file and reads the given file directly (used by the test
     suite); an explicit ``""`` means "no repos".
     """
-    # Explicit override: arg > env var — reads the given file directly.
+    # 1. Explicit override: arg > env var — reads the given file directly.
     if file_path is not None:
         path_str: str | None = file_path
     else:
@@ -188,19 +188,57 @@ def _load_repos_document(file_path: str | None = None) -> dict:
             raise ConfigError(str(exc)) from exc
         return data if isinstance(data, dict) else {}
 
-    # Sole source: the ``repos:`` section of the main config.yaml.
+    # 2. Operator repos from config.yaml (``repos:`` key).
     try:
         cfg = load_yaml_config()
     except ConfigError:
         cfg = {}
-    if isinstance(cfg, dict) and "repos" in cfg:
-        return {"repos": cfg.get("repos") or {}}
+    has_operator_key = isinstance(cfg, dict) and "repos" in cfg
+    operator_repos: dict[str, object] = (
+        (cfg.get("repos") or {}) if has_operator_key else {}
+    )
+    if not isinstance(operator_repos, dict):
+        operator_repos = {}
+
+    # 3. Machine-owned overlay: <data_dir>/registered_repos.yaml.
+    #    data_dir is read from the same loaded config (service.data_dir)
+    #    to stay consistent with Settings without a circular import.
+    data_dir_str: str = (
+        (cfg.get("service") or {}).get("data_dir", ".data")
+        if isinstance(cfg, dict)
+        else ".data"
+    )
+    overlay_path = Path(data_dir_str) / "registered_repos.yaml"
+    overlay_repos: dict[str, object] = {}
+    if overlay_path.exists():
+        try:
+            overlay_data = read_yaml_file(overlay_path)
+            raw_overlay = (
+                (overlay_data.get("repos") or {})
+                if isinstance(overlay_data, dict)
+                else {}
+            )
+            if isinstance(raw_overlay, dict):
+                overlay_repos = raw_overlay
+        except YamlConfigError:
+            pass  # corrupt overlay is tolerated; treat as empty
+
+    # 4. Inject source marker so load_repos_config can set RepoConfig.source.
+    for entry in overlay_repos.values():
+        if isinstance(entry, dict):
+            entry.setdefault("_mill_source", "auto")
+
+    # 5. Merge: operator wins on repo-id conflict.
+    if has_operator_key or overlay_repos:
+        merged = {**overlay_repos, **operator_repos}  # operator overwrites overlay
+        return {"repos": merged}
+
     return {}
 
 
-def load_repos_yaml(file_path: str | None = None) -> dict:
-    """Read the repos config from ``config/config.yaml``'s ``repos:`` key
-    (or the file given by ``MILL_REPOS_FILE`` / *file_path* if set).
+def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
+    """Read the merged repos configuration (``config/config.yaml`` +
+    ``<data_dir>/registered_repos.yaml``).
 
     Returns a dict keyed by repo ID with nested ``board_id`` and
     ``langfuse`` sub-dicts
@@ -580,7 +618,7 @@ _YAML_PATH_TO_ALIAS: dict[str, str] = {
 }
 
 
-def flatten_yaml_config(yaml_config: dict) -> dict[str, object]:
+def flatten_yaml_config(yaml_config: dict[str, object]) -> dict[str, object]:
     """Flatten a nested YAML config dict into kwargs for ``Settings()``.
 
     Walks the nested dict, maps each ``dotted.path`` key through

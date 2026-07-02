@@ -8,9 +8,9 @@ module turns those into registry entries: for each member it derives a
 manifest ``url``, a ``working_branch`` from the manifest ``version`` and a
 ``cross_repo_target`` from the master's per-member policy, inheriting the
 master's Langfuse project (the inheritance mechanism is refined in Ticket
-4). Entries are upserted into ``config/repos.yaml`` and the registry
-singleton is hot-reloaded via :func:`_reset_repos_config`, exactly like the
-repo-scaffold workflow does for brand-new repos.
+4). Entries are upserted into ``<data_dir>/registered_repos.yaml`` and the
+registry singleton is hot-reloaded via :func:`_reset_repos_config`, exactly
+like the repo-scaffold workflow does for brand-new repos.
 
 Each *newly* registered member also gets a build-out ticket filed on its
 own board (which the ticket service materialises on first write), so the
@@ -76,7 +76,7 @@ def sync_workspace_members(
     repos_yaml_path: Path | None = None,
     file_tickets: bool = True,
 ) -> MemberSyncResult:
-    """Register *members* of *master_repo_id* into ``config/repos.yaml``.
+    """Register *members* of *master_repo_id* into the repos overlay.
 
     Parameters:
         settings: Mill :class:`~robotsix_mill.config.Settings`.
@@ -85,7 +85,7 @@ def sync_workspace_members(
             the ``member_of`` provenance marker both come from it.
         members: detected workspace members (see
             :func:`~robotsix_mill.config.workspace_members.detect_workspace_members`).
-        repos_yaml_path: override for the ``config/repos.yaml`` location;
+        repos_yaml_path: override for the auto-registration overlay path;
             defaults to :func:`repo_scaffold._repos_yaml_path` (honours
             ``MILL_REPOS_FILE``).
         file_tickets: when True (default) file a build-out ticket on each
@@ -96,7 +96,9 @@ def sync_workspace_members(
         (``MILL_REPOS_FILE`` empty) returns an empty result.
     """
     members = list(members)
-    path = repos_yaml_path if repos_yaml_path is not None else _repos_yaml_path()
+    path = (
+        repos_yaml_path if repos_yaml_path is not None else _repos_yaml_path(settings)
+    )
     result = MemberSyncResult()
     if path is None:
         log.info("MILL_REPOS_FILE is empty — skipping workspace member sync")
@@ -220,7 +222,7 @@ def _is_member_of(entry: dict[str, Any], master_repo_id: str) -> bool:
 def _member_entry(
     member: DetectedMember, repo_id: str, master_repo_id: str
 ) -> dict[str, Any]:
-    """Build the ``config/repos.yaml`` stanza for a detected member."""
+    """Build the repos overlay stanza for a detected member."""
     entry: dict[str, Any] = {
         "board_id": repo_id,
         # Langfuse is configured globally (top-level ``langfuse`` block);
@@ -238,7 +240,7 @@ def _member_entry(
 
 
 def _load_repos_document(path: Path) -> dict[str, Any]:
-    """Load ``config/repos.yaml`` into a normalised ``{"repos": {...}}`` dict."""
+    """Load the repos overlay file into a normalised ``{"repos": {...}}`` dict."""
     if path.exists():
         with open(path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
@@ -253,7 +255,7 @@ def _load_repos_document(path: Path) -> dict[str, Any]:
 
 
 def _write_repos_document(path: Path, data: dict[str, Any]) -> None:
-    """Write *data* back to ``config/repos.yaml`` preserving key order."""
+    """Write *data* back to the repos overlay file preserving key order."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
@@ -280,7 +282,8 @@ def _file_member_buildout(
     )
     body = (
         f"The workspace member **{repo_id}** was auto-detected from the "
-        f"master repo's vcs2l manifest and registered in `config/repos.yaml` "
+        f"master repo's vcs2l manifest and registered in "
+        f"`<data_dir>/registered_repos.yaml` "
         f"(`forge_remote_url`: `{entry.get('forge_remote_url')}`).\n\n"
         f"## Scope\n\n"
         f"Onboard {repo_id} so the mill pipeline can run against it: add its "

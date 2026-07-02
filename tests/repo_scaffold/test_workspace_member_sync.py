@@ -329,3 +329,23 @@ def test_mill_repos_file_empty_is_noop(tmp_path, monkeypatch):
     result = sync_workspace_members(settings, "ros2-workspace", members)
     assert result.added == []
     assert result.filed_tickets == {}
+
+
+def test_writes_to_data_dir_overlay(tmp_path, monkeypatch):
+    """When MILL_REPOS_FILE is unset and no repos_yaml_path is passed,
+    sync_workspace_members writes to <data_dir>/registered_repos.yaml."""
+    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+    settings = _make_settings(tmp_path)
+    _register_master(monkeypatch, _master_cfg())
+
+    members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
+    result = sync_workspace_members(
+        settings, "ros2-workspace", members, file_tickets=False
+    )
+
+    assert result.added == ["src-alpha-pkg"]
+    overlay = tmp_path / "data" / "registered_repos.yaml"
+    assert overlay.exists()
+    repos = _read(overlay)["repos"]
+    assert "src-alpha-pkg" in repos
+    _reset_repos_config()

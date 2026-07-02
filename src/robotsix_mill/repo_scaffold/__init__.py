@@ -3,7 +3,7 @@ maintenance agent's ``create_repo`` tool.
 
 The maintenance agent calls :func:`run_repo_scaffold` with the creation
 params and the raw ticket description.  This module scaffolds an initial
-commit, appends a ``RepoConfig`` entry to ``config/repos.yaml``, and
+commit, appends a ``RepoConfig`` entry to the machine-owned overlay, and
 files a build-out ticket on the new repo's board.
 """
 
@@ -87,8 +87,8 @@ def run_repo_scaffold(
     try:
         _append_repo_config(repo_info, params, settings)
     except Exception:
-        log.exception("config/repos.yaml append failed for %s", repo_info.name)
-        return Outcome(State.ERRORED, note="config/repos.yaml append failed")
+        log.exception("repos overlay append failed for %s", repo_info.name)
+        return Outcome(State.ERRORED, note="repos overlay append failed")
 
     # The scaffold only creates an EMPTY repo. File a build-out ticket on the
     # new repo's own board so the normal pipeline (refine → epic-breakdown →
@@ -137,7 +137,7 @@ def _file_implementation_followup(
 
     body = (
         f"The repository **{name}** was just scaffolded (empty: README, "
-        f"LICENSE, language skeleton) and registered in `config/repos.yaml`. "
+        f"LICENSE, language skeleton) and registered in the repos overlay. "
         f"It now needs its actual implementation.\n\n"
         f"## Purpose\n\n{purpose}\n\n"
         f"## Scope\n\n"
@@ -406,9 +406,8 @@ def _sanitize_repo_id(name: str) -> str:
     return "".join(sanitized).strip("-") or name.lower()
 
 
-def _repos_yaml_path() -> Path | None:
-    """Resolve the ``config/repos.yaml`` path using the same logic as
-    :func:`~robotsix_mill.config.loader.load_repos_yaml`.
+def _repos_yaml_path(settings: "Settings | None" = None) -> Path | None:
+    """Resolve the machine-owned overlay path for auto-registered repos.
 
     Returns ``None`` when ``MILL_REPOS_FILE`` is explicitly empty
     (disabled by test suite).
@@ -418,7 +417,9 @@ def _repos_yaml_path() -> Path | None:
         if path_str == "":
             return None
         return Path(path_str)
-    return Path("config/repos.yaml")
+    # Machine-owned overlay in the writable data volume.
+    data_dir = settings.data_dir if settings is not None else Path(".data")
+    return Path(data_dir) / "registered_repos.yaml"
 
 
 # Periodic agents the scaffold enables on a brand-new repo, written as
@@ -432,9 +433,9 @@ _DEFAULT_PERIODIC_NAMES = ("audit", "health")
 def _append_repo_config(
     repo_info: RepoInfo, params: dict[str, Any], settings: Settings
 ) -> None:
-    """Append a :class:`RepoConfig` stanza to ``config/repos.yaml`` for
-    the newly created repository."""
-    path = _repos_yaml_path()
+    """Append a :class:`RepoConfig` stanza to the machine-owned overlay
+    for the newly created repository."""
+    path = _repos_yaml_path(settings)
     if path is None:
         log.info("MILL_REPOS_FILE is empty — skipping repos.yaml append")
         return
@@ -468,6 +469,7 @@ def _append_repo_config(
 
     data["repos"][repo_id] = new_entry
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
 

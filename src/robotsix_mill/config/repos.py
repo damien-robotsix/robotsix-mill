@@ -11,6 +11,7 @@ here (which read the package attribute at call time).
 
 from __future__ import annotations
 
+from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -114,6 +115,9 @@ class RepoConfig(BaseModel):
     # Merge-pipeline tickets are always processed.  HUMAN_MR_APPROVAL, BLOCKED,
     # and AWAITING_USER_REPLY do NOT count.  Set to 0 to disable (current behavior).
     max_inflight_prs: int = 3
+    # Source discriminator: ``"config"`` for operator-configured entries,
+    # ``"auto"`` for machine-registered overlay entries.
+    source: Literal["config", "auto"] = "config"
     # NOTE: per-repo ``test_command`` and ``language`` were REMOVED from
     # repos.yaml. A managed repo now owns both in its own source tree via
     # ``.robotsix-mill/config.yaml`` (``test_command`` + ``languages``); the
@@ -230,6 +234,11 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(cross_repo_raw, dict)
             else None
         )
+        source_tag = (
+            repo_data.get("_mill_source", "config")
+            if isinstance(repo_data, dict)
+            else "config"
+        )
         # Langfuse is configured GLOBALLY (top-level ``langfuse`` block —
         # see _apply_global_langfuse), never per repo. Each repo starts
         # with empty langfuse fields and is populated from the global block.
@@ -270,6 +279,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             max_inflight_prs=repo_data.get("max_inflight_prs", 3)
             if isinstance(repo_data, dict)
             else 3,
+            source="auto" if source_tag == "auto" else "config",
         )
 
     # Reject a cross_repo_target on any repo when the global forge kind is
