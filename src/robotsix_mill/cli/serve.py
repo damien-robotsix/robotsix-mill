@@ -49,12 +49,6 @@ def _serve(args: argparse.Namespace, settings: Settings) -> int:
         except ConfigError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
-        if not repos.repos:
-            print(
-                "Error: no repos defined in config/repos.yaml",
-                file=sys.stderr,
-            )
-            return 2
         single_repo_id = None
 
     uvicorn.run(
