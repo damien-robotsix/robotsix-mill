@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Remove the deprecated standalone `config/repos.yaml` fallback: repos are now read exclusively from the `repos:` key of `config/config.yaml` (the `MILL_REPOS_FILE` override used by the test suite is unchanged). Operators still using the standalone file must move its `repos:` block into `config/config.yaml`.
+- Machine-owned repos overlay: auto-registrations (repo-scaffold and workspace member-sync) now write to ``<service.data_dir>/registered_repos.yaml`` instead of ``config/repos.yaml``. The overlay is merged with the operator ``repos:`` block at load time; operator entries win on repo-id conflict. ``RepoConfig.source`` discriminates ``"config"`` (operator) from ``"auto"`` (overlay) entries. ``MILL_REPOS_FILE`` overrides both read and write; the legacy ``config/repos.yaml`` fallback (when neither ``repos:`` nor overlay exist) is unchanged.
 - Fix Docker build failure: add missing `COPY skills/ ./skills/` in builder stage so hatchling's `force-include` for `skills/` resolves at wheel-build time.
 - Ship `skills/` directory in the production wheel via `[tool.hatch.build.targets.wheel.force-include]` and add `skills_dir()` to `_resources.py`, so `Settings.skills_dir` resolves correctly in both editable and installed modes.
 - Fix duplicate foreign-PR tracking tickets: include terminal-state (DONE/CLOSED) tickets in the foreign-PR dedup set so a resolved tracking ticket suppresses re-creation on subsequent passes.

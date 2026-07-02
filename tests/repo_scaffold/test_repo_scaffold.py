@@ -266,6 +266,58 @@ class TestAppendRepoConfig:
         _append_repo_config(repo_info, params, settings)
 
 
+class TestAppendRepoConfigOverlay:
+    def test_writes_to_data_dir_overlay(self, tmp_path, monkeypatch):
+        """When MILL_REPOS_FILE is unset, _append_repo_config writes to
+        <data_dir>/registered_repos.yaml."""
+        monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="meta")
+
+        repo_info = RepoInfo(
+            id=1,
+            name="my-new-repo",
+            clone_url="https://github.com/my-org/my-new-repo.git",
+            html_url="https://github.com/my-org/my-new-repo",
+        )
+        params = _make_params()
+
+        _append_repo_config(repo_info, params, settings)
+
+        overlay = tmp_path / "data" / "registered_repos.yaml"
+        assert overlay.exists()
+        with open(overlay, "r") as fh:
+            data = yaml.safe_load(fh)
+        assert "my-new-repo" in data["repos"]
+        assert data["repos"]["my-new-repo"]["board_id"] == "my-new-repo"
+
+        _reset_repos_config()
+
+    def test_data_dir_created_if_missing(self, tmp_path, monkeypatch):
+        """When the data_dir subdirectory does not exist, _append_repo_config
+        creates it before writing the overlay."""
+        monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+        data_dir = tmp_path / "nested" / "data"
+        settings = _make_settings(tmp_path, data_dir=str(data_dir))
+
+        repo_info = RepoInfo(
+            id=1,
+            name="x",
+            clone_url="https://example.com/x.git",
+            html_url="https://example.com/x",
+        )
+        params = _make_params(name="x")
+
+        assert not data_dir.exists()
+        _append_repo_config(repo_info, params, settings)
+
+        overlay = data_dir / "registered_repos.yaml"
+        assert overlay.exists()
+
+        _reset_repos_config()
+
+
 # ---------------------------------------------------------------------------
 # run_repo_scaffold
 # ---------------------------------------------------------------------------
