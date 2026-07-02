@@ -70,6 +70,11 @@ _CONFIG_EXAMPLE_YAML = _REPO_ROOT / "config" / "config.example.yaml"
 # flatten flow.
 _DEFAULTS_KEYS_NOT_IN_ALIAS: frozenset[str] = frozenset(
     {
+        # ``repos`` is a top-level key consumed directly by
+        # ``_load_repos_document()`` in loader.py, not by the
+        # YAML→Settings flatten flow.  ``repos: {}`` in the example
+        # file is the empty-repos template — zero repos is valid.
+        "repos",
         # ``stage_timeout_overrides`` is a dict; its children that
         # ship built-in defaults are not individual top-level
         # settings — the whole dict is mapped via

@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Add `repos` to the `_DEFAULTS_KEYS_NOT_IN_ALIAS` exception set in `scripts/check_config_sync.py` so the config-sync drift checker accepts the new uncommented `repos: {}` key in `config/config.example.yaml`. (Fixes `test_real_repo_has_no_config_drift` failure introduced by the example-template change.)
+- Add uncommented `repos: {}` key to `config/config.example.yaml` so the
+  central-deploy schema exposes the repos section; example entry kept in
+  comments with a pointer to `config/repos.example.yaml`.
 - Fix Docker build failure: add missing `COPY skills/ ./skills/` in builder stage so hatchling's `force-include` for `skills/` resolves at wheel-build time.
 - Ship `skills/` directory in the production wheel via `[tool.hatch.build.targets.wheel.force-include]` and add `skills_dir()` to `_resources.py`, so `Settings.skills_dir` resolves correctly in both editable and installed modes.
 - Fix duplicate foreign-PR tracking tickets: include terminal-state (DONE/CLOSED) tickets in the foreign-PR dedup set so a resolved tracking ticket suppresses re-creation on subsequent passes.

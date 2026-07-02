@@ -31,14 +31,19 @@
 #  Repos live here under `repos:`, keyed by repo_id.  When this key is present
 #  it is authoritative; when it is absent the loader falls back to the legacy
 #  standalone `config/repos.yaml` (deprecated).  Zero repos is valid — the
-#  board serves empty and repos can be added later.  Uncomment and fill in:
+#  board serves empty and repos can be added later.
+#
+#  See config/repos.example.yaml for full per-repo field documentation.
+#  Example entry (do NOT leave uncommented in production without editing):
 #
 #  repos:
 #    my-repo:
 #      board_id: my-repo
 #      forge_remote_url: https://github.com/owner/my-repo
 #      # working_branch: main            # optional per-repo target branch
-#      # langfuse: { project_id: ..., public_key: ..., secret_key: ... }
+#      # langfuse: { project_name: ..., public_key: ..., secret_key: ... }
+
+repos: {}
 
 # ---------------------------------------------------------------------------
 #  core — models, limits, memory, and other engine-tuning knobs
