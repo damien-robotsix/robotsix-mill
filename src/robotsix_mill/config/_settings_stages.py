@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from robotsix_mill._resources import skills_dir as _resources_skills_dir
+
 
 class _StagesSettings(BaseModel):
     # --- agent web access (refine + implement) ---
@@ -92,7 +94,7 @@ class _StagesSettings(BaseModel):
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
     # the container, repo root locally).
-    skills_dir: Path = Field(default=Path("skills"))
+    skills_dir: Path = Field(default_factory=_resources_skills_dir)
     # Directory of per-language instruction Markdown snippets
     # (agent_definitions/language_instructions/<language>.md) injected
     # into the implement agent's system prompt. Relative to CWD (/app

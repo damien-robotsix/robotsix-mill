@@ -27,3 +27,8 @@ def agent_definitions_dir() -> Path:
 def expert_definitions_dir() -> Path:
     """Return the path to the expert_definitions directory."""
     return _resource_dir("expert_definitions")
+
+
+def skills_dir() -> Path:
+    """Return the path to the skills directory."""
+    return _resource_dir("skills")

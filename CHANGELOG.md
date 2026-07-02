@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Ship `skills/` directory in the production wheel via `[tool.hatch.build.targets.wheel.force-include]` and add `skills_dir()` to `_resources.py`, so `Settings.skills_dir` resolves correctly in both editable and installed modes.
 - Correct `docs/reusable-workflow-callers.md`: the shared `python-ci.yml` and `python-docs.yml` workflows live in `damien-robotsix/robotsix-github-workflows`, not in `robotsix-mill`. Updated all references, the wrong-org callout, and the local-form note accordingly.
 - Pass `usage_limits=UsageLimits(request_limit=100)` to `Agent.run_sync()` in the retrospect and review-revision agents to prevent `UsageLimitExceeded` errors on complex tasks.
 - Attempt to forward `max_tokens` to the Claude SDK agent build path, falling back gracefully with a warning when the provider doesn't accept it. This caps L3 (Claude) agent output at the per-agent `max_tokens` setting (e.g. 8192 for refine) instead of producing unbounded output.
