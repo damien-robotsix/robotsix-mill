@@ -154,6 +154,15 @@ class _StagesSettings(BaseModel):
     # LLM entirely and routes directly to implement.  Set to 0 to
     # disable the deterministic shortcut.  Default 50.
     refine_prescriptive_spec_code_lines_threshold: int = Field(default=50)
+    # When True (default), the refine stage detects specs whose
+    # implementation section already contains complete file-path +
+    # fenced-code-block changes.  For these "implementation-ready"
+    # specs, it runs a cheap deterministic validation pass (file
+    # existence, YAML/Python syntax, forbidden patterns) and bypasses
+    # the expensive LLM refine agent entirely — saving cost and latency.
+    # When the validation finds a problem, it falls back to the normal
+    # LLM path.  Set False to always run the full refine agent.
+    refine_skip_llm_on_impl_ready_spec: bool = Field(default=True)
     # When True (default), a pre-Opus guard checks whether the reviewer's
     # feedback on a sendback ticket already agrees with the draft's
     # no-change-needed conclusion.  When the reviewer confirms, the

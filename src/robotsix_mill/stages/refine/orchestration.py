@@ -390,6 +390,53 @@ class RefineAgentMixin:
                     log_path,
                 )
 
+        # --- implementation-ready spec fast-path ---
+        # When the draft already contains complete file-path + fenced
+        # code-block changes, validate them deterministically and bypass
+        # the expensive LLM refine agent.  Falls back to the normal LLM
+        # path if validation finds any issue.
+        _has_sendback = bool(reviewer_comments)
+        if (
+            s.refine_skip_llm_on_impl_ready_spec
+            and not _has_sendback  # human sendback always needs LLM attention
+            and not resume_history  # don't skip on a resume
+        ):
+            from ._impl_ready import (
+                _build_synthetic_refine_result,
+                _is_implementation_ready,
+                _validate_implementation_ready_spec,
+            )
+
+            if _is_implementation_ready(draft):
+                log.info(
+                    "%s: implementation-ready spec detected — running validation pass",
+                    ticket.id,
+                )
+                validation_error = _validate_implementation_ready_spec(draft, repo_dir)
+                if validation_error is None:
+                    log.info(
+                        "%s: implementation-ready spec validation passed — "
+                        "bypassing LLM refine agent",
+                        ticket.id,
+                    )
+                    set_current_span_attribute("refine.impl_ready_skip", True)
+                    return None, _build_synthetic_refine_result(draft)
+                else:
+                    log.info(
+                        "%s: implementation-ready spec validation FAILED: %s — "
+                        "falling back to LLM refine agent",
+                        ticket.id,
+                        validation_error,
+                    )
+                    set_current_span_attribute(
+                        "refine.impl_ready_validation_failed", True
+                    )
+            else:
+                log.debug(
+                    "%s: not implementation-ready — proceeding to LLM refine",
+                    ticket.id,
+                )
+
         try:
             triage_complexity = _reconcile.read_triage_complexity(ws)
             _explore_simple = triage_complexity == "simple"

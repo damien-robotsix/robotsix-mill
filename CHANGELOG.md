@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Refine stage: detect implementation-ready specs (drafts with file paths
+  paired with fenced code blocks) and run a cheap deterministic
+  validation pass (file existence, YAML/Python syntax, forbidden
+  patterns) instead of the expensive LLM refine agent. Gated behind
+  ``gates.refine_skip_llm_on_impl_ready_spec`` (default true).
 - Short-circuit refine triage when a prior triage SKIP verdict
   already exists in the ticket history, skipping the LLM call
   and re-emitting the draft unchanged as the refine output.
