@@ -1,5 +1,7 @@
 # AGENT.md — instructions for any agent (human or AI) working in this repo
 
+This repo follows the [robotsix stack standards](https://github.com/damien-robotsix/robotsix-standards).
+
 This is **robotsix/mill**, a personal project built solo with an AI
 assistant. Optimize for a small, sharp, honest codebase — not
 enterprise process. These are hard rules, learned the hard way.
