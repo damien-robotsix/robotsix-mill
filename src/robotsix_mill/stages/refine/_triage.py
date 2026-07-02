@@ -321,6 +321,33 @@ def triage_skip(
     if not (s.refine_triage_enabled and not reviewer_comments):
         return None
 
+    # Deterministic pre-check: when a prior refine pass already
+    # issued a SKIP verdict for this ticket (recorded in the state
+    # transition history), re-issue the SKIP outcome without
+    # spending any LLM budget on re-triaging.  The ticket was
+    # already classified as implementation-ready; re-running the
+    # triage classifier adds no value.
+    ticket_history = ctx.service.history(ticket.id)
+    for ev in ticket_history:  # type: ignore[attr-defined]
+        if ev.note and ev.note.startswith("triage SKIP:"):
+            prior_reason = ev.note[len("triage SKIP: ") :]
+            log.info(
+                "%s: prior triage SKIP found in history — "
+                "short-circuiting triage (reason: %s)",
+                ticket.id,
+                prior_reason,
+            )
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
+                f"triage SKIP (prior verdict): {prior_reason}",
+                source=ticket.source,
+                triage_note=prior_reason,
+                extract_paths_from_draft=True,
+            )
+
     # Deterministic pre-check: when the draft contains a large number of
     # code-block lines (prescriptive spec — the author already wrote the
     # implementation in fenced code blocks), skip the triage LLM call and
