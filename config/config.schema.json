@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "secrets": {
-      "description": "Secrets loaded from the ``secrets:`` block of the single mill\nconfig file (``config/config.yaml``, else ``config/config.example.yaml``).\n\nNever merged into ``Settings`` \u2014 secrets are kept in a separate\nmodel with redacted ``repr`` / ``model_dump`` and debug-logged\nattribute access.  A value equal to the literal ``SECRET`` sentinel\n(used throughout ``config.example.yaml``) is treated as unset, so the\nfield falls back to its ``None`` default.",
+      "description": "Secrets loaded from the ``secrets:`` block of the single mill\nconfig file (``config/config.json``, else ``config/config.example.json``).\n\nNever merged into ``Settings`` \u2014 secrets are kept in a separate\nmodel with redacted ``repr`` / ``model_dump`` and debug-logged\nattribute access.  A value equal to the literal ``SECRET`` sentinel\n(used throughout ``config.example.json``) is treated as unset, so the\nfield falls back to its ``None`` default.",
       "properties": {
         "forge_repo_create_token": {
           "anyOf": [

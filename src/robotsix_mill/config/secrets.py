@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 class Secrets(BaseModel):
     """Secrets loaded from the ``secrets:`` block of the single mill
-    config file (``config/config.yaml``, else ``config/config.example.yaml``).
+    config file (``config/config.json``, else ``config/config.example.json``).
 
     Never merged into ``Settings`` — secrets are kept in a separate
     model with redacted ``repr`` / ``model_dump`` and debug-logged
     attribute access.  A value equal to the literal ``SECRET`` sentinel
-    (used throughout ``config.example.yaml``) is treated as unset, so the
+    (used throughout ``config.example.json``) is treated as unset, so the
     field falls back to its ``None`` default.
     """
 
@@ -52,13 +52,13 @@ class Secrets(BaseModel):
     def __init__(self, _secrets_file: str | None = None, **data: Any) -> None:
         """Construct a ``Secrets`` instance.
 
-        If ``_secrets_file`` is provided it is used as the YAML source;
+        If ``_secrets_file`` is provided it is used as the JSON source;
         otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
-        single mill config file (``config/config.yaml``, else
-        ``config/config.example.yaml``).  Its ``secrets:`` block is passed
+        single mill config file (``config/config.json``, else
+        ``config/config.example.json``).  Its ``secrets:`` block is passed
         as field defaults, which explicit ``**data`` kwargs can override.
         """
-        from .loader import load_secrets_yaml
+        from .loader import load_secrets as _load_secrets
 
         file_path: str | None = _secrets_file
         if file_path is None:
@@ -66,8 +66,8 @@ class Secrets(BaseModel):
 
             file_path = os.environ.get("MILL_SECRETS_FILE")
 
-        yaml_data = load_secrets_yaml(file_path)
-        merged = {**yaml_data, **data}
+        secrets_data = _load_secrets(file_path)
+        merged = {**secrets_data, **data}
         super().__init__(**merged)
 
     def __repr__(self) -> str:
@@ -117,12 +117,12 @@ class Secrets(BaseModel):
 
 
 def load_secrets(secrets_file: str | None = None) -> Secrets:
-    """Load and return a :class:`Secrets` instance from YAML.
+    """Load and return a :class:`Secrets` instance from JSON.
 
-    If *secrets_file* is provided it is used as the YAML source;
+    If *secrets_file* is provided it is used as the JSON source;
     otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
-    single mill config file (``config/config.yaml``, else
-    ``config/config.example.yaml``).
+    single mill config file (``config/config.json``, else
+    ``config/config.example.json``).
     """
     return Secrets(_secrets_file=secrets_file)
 

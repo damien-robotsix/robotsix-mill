@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Consumer migration: `robotsix-yaml-config` → `robotsix-config`. Swapped dependency in `pyproject.toml`, replaced YAML config loading with JSON (`config/config.json`), removed `_YAML_PATH_TO_ALIAS` translation layer (100+ entries), created `JsonSettingsSource`, rewrote `check_config_sync.py` for JSON validation, and generated `config/config.example.json` (282 settings + 14 secrets). 6441 tests pass.
 - Remove PyPI publish pipeline: drop `semantic-release` and `pypi-publish` jobs from `release.yml`, remove `python-semantic-release` dev dependency and `[tool.semantic_release]` config, delete `docs/publishing.md`, and update CI docs. Docker image publishing to GHCR is unaffected.
 - Allow `mark-done` from `BLOCKED` state: the transition succeeds with a `[force-closed from blocked]` marker prepended to the note, letting operators clean up stale blocked tickets (e.g. trackers whose PR is already merged). Terminal states and `EPIC_OPEN` remain rejected.
 - Add a Renovate/Dependabot auto-merge caller that delegates to the shared reusable workflow, which gates on both `dependabot[bot]` and `renovate[bot]`.

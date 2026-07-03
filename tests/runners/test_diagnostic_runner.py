@@ -1,6 +1,6 @@
 """Tests for the daily diagnostic agent skeleton.
 
-Covers Settings exposure + YAML aliases, the empty-registry pass, the
+Covers Settings exposure, the empty-registry pass, the
 pluggable check registry seam (registering a check without editing the
 runner), graceful per-check failure isolation, the RunRegistry kind, and
 the worker poll-loop gating flag.
@@ -14,7 +14,6 @@ import typing
 from types import SimpleNamespace
 
 from robotsix_mill.config import Settings
-from robotsix_mill.config.loader import _YAML_PATH_TO_ALIAS
 from robotsix_mill.runners import diagnostic_checks as dc
 from robotsix_mill.runners import diagnostic_runner as dr
 from robotsix_mill.runtime.run_registry import RunEntry
@@ -53,7 +52,7 @@ def _patch_repos(monkeypatch, *repo_ids):
     )
 
 
-# --- Settings + YAML alias -------------------------------------------------
+# --- Settings fields -------------------------------------------------------
 
 
 def test_settings_expose_diagnostic_fields():
@@ -64,20 +63,19 @@ def test_settings_expose_diagnostic_fields():
     assert s.diagnostic_monitored_repo_ids == []
 
 
-def test_yaml_aliases_present():
-    assert _YAML_PATH_TO_ALIAS["periodic.diagnostic.enabled"] == "diagnostic_periodic"
-    assert (
-        _YAML_PATH_TO_ALIAS["periodic.diagnostic.interval_seconds"]
-        == "diagnostic_interval_seconds"
-    )
-    assert (
-        _YAML_PATH_TO_ALIAS["periodic.diagnostic.target_repo_id"]
-        == "diagnostic_target_repo_id"
-    )
-    assert (
-        _YAML_PATH_TO_ALIAS["periodic.diagnostic.monitored_repo_ids"]
-        == "diagnostic_monitored_repo_ids"
-    )
+def test_diagnostic_field_names_and_defaults():
+    """Verify the Settings model defines diagnostic fields with correct defaults."""
+    # Settings is a pydantic-settings model; check field presence + defaults.
+    fields = Settings.model_fields
+    assert "diagnostic_periodic" in fields
+    assert fields["diagnostic_periodic"].default is False
+    assert "diagnostic_interval_seconds" in fields
+    assert fields["diagnostic_interval_seconds"].default == 86400
+    assert "diagnostic_target_repo_id" in fields
+    assert fields["diagnostic_target_repo_id"].default == "robotsix-mill"
+    assert "diagnostic_monitored_repo_ids" in fields
+    # default_factory=list — the field uses a factory, not a static default
+    assert fields["diagnostic_monitored_repo_ids"].default_factory is not None
 
 
 # --- empty-registry pass ---------------------------------------------------

@@ -1,4 +1,4 @@
-"""Pydantic-settings YAML source for :class:`Settings`.
+"""Pydantic-settings JSON source for :class:`Settings`.
 
 Split out of the former monolithic ``config.py`` module; see
 ``config/__init__.py`` for the package layout rationale.
@@ -11,9 +11,9 @@ from typing import Any
 from pydantic_settings import PydanticBaseSettingsSource
 
 
-class YamlSettingsSource(PydanticBaseSettingsSource):
-    """Pydantic-settings source that loads YAML config via the existing
-    ``load_yaml_config()`` + ``flatten_yaml_config()`` pipeline.
+class JsonSettingsSource(PydanticBaseSettingsSource):
+    """Pydantic-settings source that loads JSON config via the existing
+    ``load_config()`` pipeline.
 
     Called at ``Settings()`` construction time (not import time), so
     test monkeypatching of ``_CONFIG_FILE`` / ``_EXAMPLE_FILE`` /
@@ -24,20 +24,19 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
     ``EnvSettingsSource`` / ``DotEnvSettingsSource`` in
     pydantic-settings, so ``populate_by_name`` is not required.
 
-    Only fields whose env-var alias appears in the flattened YAML output
+    Only fields whose env-var alias appears in the JSON config output
     are included — all others fall through to subsequent (lower-priority)
     sources or Field defaults.
     """
 
-    def get_field_value(self, field, field_name):
+    def get_field_value(self, field: Any, field_name: str) -> Any:
         # Not used — __call__ is overridden directly.
         raise NotImplementedError
 
     def __call__(self) -> dict[str, Any]:
-        from .loader import flatten_yaml_config, load_yaml_config
+        from .loader import load_config
 
-        yaml_config = load_yaml_config()
-        flat: dict[str, object] = flatten_yaml_config(yaml_config)  # alias → value
+        flat = load_config()
         result: dict[str, Any] = {}
         for field_name, field_info in self.settings_cls.model_fields.items():
             alias: str | None = field_info.alias

@@ -76,9 +76,8 @@ jobs:
           import subprocess, sys
           from pathlib import Path
           from robotsix_modules.validation.registration import check_registration
-          from robotsix_yaml_config import read_yaml_file
-
-          taxonomy = read_yaml_file(Path('docs/modules.yaml'))
+          import yaml
+          taxonomy = yaml.safe_load(Path('docs/modules.yaml').read_text())
           result = subprocess.run(['git', 'ls-files', '-s'],
                                   capture_output=True, text=True)
           if result.returncode != 0:

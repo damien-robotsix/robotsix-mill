@@ -22,6 +22,7 @@ modules:
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/config.schema.json
+      - config/config.example.json
       - config/config.example.yaml
       - config/repos.example.yaml
       - .robotsix-mill/config.yaml

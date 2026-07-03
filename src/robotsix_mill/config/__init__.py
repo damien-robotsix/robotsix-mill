@@ -9,8 +9,8 @@ by responsibility, while preserving the exact public API via the
 re-exports below — every ``from robotsix_mill.config import ...`` site
 keeps working unchanged. Submodules:
 
-- ``yaml_source`` — :class:`YamlSettingsSource`, the pydantic-settings
-  YAML source.
+- ``json_source`` — :class:`JsonSettingsSource`, the pydantic-settings
+  JSON source.
 - ``settings`` — the :class:`Settings` model (assembled from the
   ``_settings_*`` field mixins) and :func:`load_settings`.
 - ``secrets`` — the :class:`Secrets` model and its cached accessors.
@@ -45,7 +45,7 @@ from .secrets import (
     logger,
 )
 from .settings import Settings, load_settings
-from .yaml_source import YamlSettingsSource
+from .json_source import JsonSettingsSource
 
 # Cached singletons live here so test fixtures poking
 # ``robotsix_mill.config._secrets`` / ``._repos_config`` are visible to
@@ -55,7 +55,7 @@ _repos_config: ReposRegistry | None = None
 
 __all__ = [
     "ConfigError",
-    "YamlSettingsSource",
+    "JsonSettingsSource",
     "Settings",
     "load_settings",
     "Secrets",

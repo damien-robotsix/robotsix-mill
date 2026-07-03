@@ -96,7 +96,7 @@ class _CoreSettings(BaseModel):
     # prevents runaway cost from a misconfigured value; the budget
     # resets each pass so resumed tickets get a fresh allocation.
     # Set via MILL_PER_PASS_REQUEST_BUDGET env var or
-    # core.limits.coordinator_requests in YAML config.
+    # core.limits.coordinator_requests in JSON config.
     coordinator_request_limit: int = Field(
         default=500,
         ge=1,
@@ -115,7 +115,7 @@ class _CoreSettings(BaseModel):
     # 600 s (10 min) is generous for a normal implement run but caps
     # the worst-case stuck-loop burn.  Set via
     # MILL_COORDINATOR_TIMEOUT_SECONDS env var or
-    # core.limits.coordinator_timeout_seconds in YAML config.
+    # core.limits.coordinator_timeout_seconds in JSON config.
     coordinator_timeout_seconds: int = Field(
         default=600,
         ge=60,
@@ -136,10 +136,10 @@ class _CoreSettings(BaseModel):
     # sources, and name the failing test; 16 was observed to run out
     # before producing a usable diagnosis on multi-test failures.
     # Cost-bounded by the ticket-level cap. Aligned with
-    # config/config.example.yaml's core.limits.test_requests (30). The
-    # yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this just stops
+    # config/config.example.json's core.limits.test_requests (30). The
+    # JSON config value wins at runtime; this just stops
     # the dry-Settings() default from contradicting it on machines without
-    # a yaml override.
+    # a JSON config override.
     test_request_limit: int = Field(default=30, ge=1)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
@@ -188,7 +188,7 @@ class _CoreSettings(BaseModel):
     # snapshot (≤ this many seconds stale). 0.0 disables the cache.
     # Field default is 0.0 (disabled) so unit tests that construct Settings()
     # directly see immediate list consistency (create-then-list); the live
-    # mill enables it via config/config.example.yaml (3.0s).
+    # mill enables it via config/config.example.json (3.0s).
     board_list_cache_ttl_seconds: float = Field(default=0.0, ge=0.0)
 
     # Retry policy for stage-level transient errors (httpx.ConnectError,
@@ -344,13 +344,13 @@ class _CoreSettings(BaseModel):
     # parallel_explore) are scoped to this directory.  When None, the
     # agent falls back to the ticket's own workspace repo_dir.
     # Configurable via MILL_INVESTIGATION_WORKSPACE env var or
-    # config/config.yaml.
+    # config/config.json.
     investigation_workspace: Path | None = Field(
         default=None, alias="MILL_INVESTIGATION_WORKSPACE"
     )
 
     # Default repo ID for legacy tickets that lack a board_id.
-    # Set in config/config.yaml.  When empty (default), accessing
+    # Set in config/config.json.  When empty (default), accessing
     # a legacy ticket without a board_id raises an error telling the
     # operator to configure this.
     default_repo_id: str = Field(default="")
@@ -442,7 +442,7 @@ class _CoreSettings(BaseModel):
     # legitimate refine run on model_level 3 (Claude SDK / Opus)
     # clocked 736 s (~12 min); 900 s leaves headroom while still
     # catching multi-hour runaway refine traces.  Operators can
-    # override or disable (value 0) via the env var / YAML key.
+    # override or disable (value 0) via the env var / JSON key.
     # Supplying your own dict REPLACES the built-in — re-include
     # a "refine" entry if you still want a cap.
     stage_timeout_overrides: dict[str, int] = Field(

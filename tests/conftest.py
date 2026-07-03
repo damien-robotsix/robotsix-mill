@@ -15,27 +15,27 @@ def _isolate_default_data_dir(tmp_path_factory):
     internally — get the session sandbox instead of the project's
     real ``.data/`` directory.
 
-    Mechanics: monkey-patch ``YamlSettingsSource.__call__`` so its
+    Mechanics: monkey-patch ``JsonSettingsSource.__call__`` so its
     returned dict carries ``data_dir = <session sandbox>``. Anything
     higher-priority (kwargs, env vars) still overrides.
-    ``load_yaml_config()`` itself is NOT patched, so tests that
-    inspect raw YAML defaults continue to see ``.data``.
+    ``load_config()`` itself is NOT patched, so tests that
+    inspect raw JSON defaults continue to see ``.data``.
     """
     sandbox = tmp_path_factory.mktemp("mill-default-data")
     from robotsix_mill import config as _cfg
 
-    real_call = _cfg.YamlSettingsSource.__call__
+    real_call = _cfg.JsonSettingsSource.__call__
 
     def patched(self):
         result = real_call(self)
         result["data_dir"] = str(sandbox)
         return result
 
-    _cfg.YamlSettingsSource.__call__ = patched
+    _cfg.JsonSettingsSource.__call__ = patched
     try:
         yield sandbox
     finally:
-        _cfg.YamlSettingsSource.__call__ = real_call
+        _cfg.JsonSettingsSource.__call__ = real_call
 
 
 @pytest.fixture(autouse=True)
@@ -77,8 +77,8 @@ def _no_dotenv(monkeypatch):
     every ticket. The suite must be identical green on a clean machine
     and inside the container.
 
-    Pins the config loader to the committed ``config/config.example.yaml``
-    template (never the gitignored, host-specific ``config/config.yaml``)
+    Pins the config loader to the committed ``config/config.example.json``
+    template (never the gitignored, host-specific ``config/config.json``)
     by setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty —
     the loader treats ``""`` as "use the committed example", whose
     secrets are all the ``SECRET`` sentinel (i.e. unset)."""
@@ -87,8 +87,8 @@ def _no_dotenv(monkeypatch):
     monkeypatch.setenv("MILL_REPOS_FILE", "")
     # Disable the board-poll list cache by default in tests so GET /tickets
     # is always immediately consistent (create-then-list). The committed
-    # config.example.yaml enables it (3.0s) in real deployments; env beats
-    # YAML, so this override is inert in production. Tests that exercise the
+    # config.example.json enables it (3.0s) in real deployments; env beats
+    # JSON, so this override is inert in production. Tests that exercise the
     # cache opt in explicitly via Settings(board_list_cache_ttl_seconds=…)
     # (a kwarg, which beats env). Also clear the module-global cache so no
     # entry leaks across tests.
