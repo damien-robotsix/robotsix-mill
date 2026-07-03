@@ -187,11 +187,11 @@ EXPOSE 8077
 
 # Health check uses Python stdlib (no curl needed).
 # timeout is generous (25s, not 5s): under legitimate heavy load the single
-# event loop can briefly delay even /health/live, and a 5s timeout flipped the
+# event loop can briefly delay even /health, and a 5s timeout flipped the
 # container to `unhealthy` during normal busy periods. retries=3 still catches
 # a genuine hang.
 HEALTHCHECK --interval=30s --timeout=25s --start-period=10s --retries=3 \
-    CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8077/health/live')" || exit 1
+    CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8077/health')" || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 

@@ -5,6 +5,7 @@
   `ask_to_ticket` agent).  Inquiries can still be created via the CLI
   (`inquire`) and answered by the answer stage; only the unused UI
   button and its conversion machinery are removed.
+- Rename `/health/live` to `/health` (round-4 standard): liveness endpoint now returns `{"status": "alive"}` at `/health`, old route removed. Updated Docker HEALTHCHECK, deploy-compose healthcheck override, smoke script, vulture whitelist, and design doc.
 - Fix CSS class name mismatch for `data_dir_gc` source: rename `.src-data-dir-audit` to `.src-data-dir-gc` and add missing `AGENT_COLORS` entry.
 - Extract `_collect_candidate_boards()` to `_ServiceBase`, deduplicating the cross-board discovery algorithm that was copy-pasted across `_get_anywhere()`, `list_children_across_boards()`, and `_board_for_comment()`.
 - Update "Add a new setting" and "Config drift prevention" sections of `docs/configuration.md` to describe the current JSON-based config mechanism instead of the removed `_YAML_PATH_TO_ALIAS` / YAML-path mapping (the config file is `config/config.example.json`, and `JsonSettingsSource` matches alias keys automatically).
