@@ -455,6 +455,8 @@ class TestActuator:
         )
 
         mock_forge = MagicMock()
+        mock_forge.pr_status.return_value = None
+        mock_forge.list_open_pr_branches.return_value = set()
         mock_forge.open_merge_request.return_value = (
             "https://github.com/damien-robotsix/a/pull/1"
         )

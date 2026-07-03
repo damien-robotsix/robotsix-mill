@@ -110,11 +110,15 @@ The runner (`src/robotsix_mill/runners/pin_bump_runner.py`) performs a
      via the forge API.
    Pins already at the latest SHA are skipped (idempotent).
 
-All expected failures (missing remote URL, missing forge token, clone
-failure, cyclic dependency graph, `ls-remote` failure, coherence-check
-conflict, push failure, PR-creation failure, duplicate PR, in-flight
-cap) are caught and logged at `WARNING` level — the pass never raises
-out of the scheduler loop.
+Expected failures are caught and logged — the pass never raises out of
+the scheduler loop:
+
+* Duplicate-PR detection and in-flight cap throttling are logged at
+  ``INFO`` level (normal operational conditions).
+* All other recoverable failures (missing remote URL, missing forge
+  token, clone failure, cyclic dependency graph, ``ls-remote`` failure,
+  coherence-check conflict, push failure, PR-creation failure) are
+  logged at ``WARNING`` level.
 
 ---
 
