@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Board UI: show each ticket's short id (trailing hex suffix, e.g. `f77f`) as a click-selectable badge on its card, so tickets can be identified without opening the detail view.
 - In `trace_inspector.py`, `_shrink_trace_data` now sends a summarised
   observation tree when the trace has more than 200 observations.
   Input/output/metadata fields are stripped and only structural fields
