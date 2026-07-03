@@ -155,14 +155,10 @@ def check_secrets_example(
     """Invariants 3+4: secrets-block keys == Secrets fields."""
     drift: list[str] = []
     for key in sorted(example_keys - secrets_fields):
-        drift.append(
-            "config.example.json secrets key is not a Secrets field: "
-            f"{key}"
-        )
+        drift.append(f"config.example.json secrets key is not a Secrets field: {key}")
     for field in sorted(secrets_fields - example_keys):
         drift.append(
-            f"Secrets field missing from config.example.json secrets block: "
-            f"{field}"
+            f"Secrets field missing from config.example.json secrets block: {field}"
         )
     return drift
 

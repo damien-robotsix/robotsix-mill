@@ -85,9 +85,7 @@ def test_invariant2_respects_exceptions() -> None:
         orphan: int = 0
 
     json_keys = {"known"}
-    drift = check_model_fields_in_json(
-        M, json_keys, exceptions=frozenset({"orphan"})
-    )
+    drift = check_model_fields_in_json(M, json_keys, exceptions=frozenset({"orphan"}))
     assert drift == []
 
 

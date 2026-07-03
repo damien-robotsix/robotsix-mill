@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Swap `robotsix-yaml-config` dependency for `robotsix-config`; switch operator config format from nested YAML to flat-alias JSON (`config/config.json` / `config/config.example.json`).
 - Remove PyPI publish pipeline: drop `semantic-release` and `pypi-publish` jobs from `release.yml`, remove `python-semantic-release` dev dependency and `[tool.semantic_release]` config, delete `docs/publishing.md`, and update CI docs. Docker image publishing to GHCR is unaffected.
 - Add a Renovate/Dependabot auto-merge caller that delegates to the shared reusable workflow, which gates on both `dependabot[bot]` and `renovate[bot]`.
 - Added per-file justification boilerplate templates and a structured justification format to the scope-triage agent's system prompt, standardizing how the agent documents EXPAND verdicts for common out-of-scope file patterns (CHANGELOG.md, pyproject.toml/uv.lock, tests/conftest.py, __init__.py). (mill: Boilerplate: scope-triage EXPAND — justifying additional files in implement (20260702T214750Z-boilerplate-scope-triage-expand-justifyi-b3cd))

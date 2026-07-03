@@ -29,7 +29,7 @@ class JsonSettingsSource(PydanticBaseSettingsSource):
     sources or Field defaults.
     """
 
-    def get_field_value(self, field, field_name):
+    def get_field_value(self, field: Any, field_name: str) -> Any:
         # Not used — __call__ is overridden directly.
         raise NotImplementedError
 

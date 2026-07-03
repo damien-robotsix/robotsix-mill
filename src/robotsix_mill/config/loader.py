@@ -105,7 +105,8 @@ def load_config(config_file: str | None = None, skip_local: bool = False) -> dic
         raise ConfigError(str(exc)) from exc
     if not isinstance(data, dict):
         return {}
-    return data.get("settings", {})
+    settings: object = data.get("settings", {})
+    return settings if isinstance(settings, dict) else {}
 
 
 def load_secrets(secrets_file: str | None = None) -> dict:
@@ -198,21 +199,21 @@ def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
         if config_path.exists():
             full_data = json.loads(config_path.read_text())
             if isinstance(full_data, dict):
-                cfg = full_data.get("settings", {})
+                settings_raw = full_data.get("settings", {})
+                cfg = settings_raw if isinstance(settings_raw, dict) else {}
                 raw_repos = full_data.get("repos", {})
                 if isinstance(raw_repos, dict):
                     operator_repos = raw_repos
-    except (ConfigError, json.JSONDecodeError, OSError):
+    except ConfigError, json.JSONDecodeError, OSError:
         pass
 
     # 3. Machine-owned overlay: <data_dir>/registered_repos.yaml.
     #    data_dir is read from the same loaded config (settings.data_dir)
     #    to stay consistent with Settings without a circular import.
-    data_dir_str: str = (
-        (cfg.get("data_dir", ".data"))
-        if isinstance(cfg, dict)
-        else ".data"
+    data_dir_raw: object = (
+        (cfg.get("data_dir", ".data")) if isinstance(cfg, dict) else ".data"
     )
+    data_dir_str: str = data_dir_raw if isinstance(data_dir_raw, str) else ".data"
     overlay_path = Path(data_dir_str) / "registered_repos.yaml"
     overlay_repos: dict[str, object] = {}
     if overlay_path.exists():

@@ -30,7 +30,12 @@ def test_repos_read_from_main_config_json(tmp_path, monkeypatch):
     _write_json_config(
         cfg,
         settings={"data_dir": str(tmp_path / "data")},
-        repos={"demo": {"board_id": "demo", "forge_remote_url": "https://github.com/o/demo"}},
+        repos={
+            "demo": {
+                "board_id": "demo",
+                "forge_remote_url": "https://github.com/o/demo",
+            }
+        },
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
@@ -95,7 +100,12 @@ def test_overlay_entries_appear_in_merged_repos(tmp_path, monkeypatch):
     _write_json_config(
         cfg,
         settings={"data_dir": str(data_dir)},
-        repos={"repo_a": {"board_id": "board-a", "forge_remote_url": "https://github.com/o/repo_a"}},
+        repos={
+            "repo_a": {
+                "board_id": "board-a",
+                "forge_remote_url": "https://github.com/o/repo_a",
+            }
+        },
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
@@ -123,7 +133,12 @@ def test_operator_wins_on_repo_id_conflict(tmp_path, monkeypatch):
     _write_json_config(
         cfg,
         settings={"data_dir": str(data_dir)},
-        repos={"repo_a": {"board_id": "operator-board", "forge_remote_url": "https://github.com/o/operator"}},
+        repos={
+            "repo_a": {
+                "board_id": "operator-board",
+                "forge_remote_url": "https://github.com/o/operator",
+            }
+        },
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 

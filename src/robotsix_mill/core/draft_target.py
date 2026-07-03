@@ -249,8 +249,12 @@ def _is_spec_descriptive_path(token: str) -> bool:
         return False
 
     # Exact-match deployment/onboarding concept paths.
-    if token_lower in ("config/config.json", "config/config.example.json",
-                       "config/config.yaml", "config/config.example.yaml"):
+    if token_lower in (
+        "config/config.json",
+        "config/config.example.json",
+        "config/config.yaml",
+        "config/config.example.yaml",
+    ):
         return True
 
     # Absolute filesystem or container paths.
