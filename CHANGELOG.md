@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Remove the "+ Ask" button from the board UI and the inquiry-to-task
+  conversion pipeline (`convertToTicket` JS, `/convert-to-task` route,
+  `ask_to_ticket` agent).  Inquiries can still be created via the CLI
+  (`inquire`) and answered by the answer stage; only the unused UI
+  button and its conversion machinery are removed.
 - Fix CSS class name mismatch for `data_dir_gc` source: rename `.src-data-dir-audit` to `.src-data-dir-gc` and add missing `AGENT_COLORS` entry.
 - Update "Add a new setting" and "Config drift prevention" sections of `docs/configuration.md` to describe the current JSON-based config mechanism instead of the removed `_YAML_PATH_TO_ALIAS` / YAML-path mapping (the config file is `config/config.example.json`, and `JsonSettingsSource` matches alias keys automatically).
 - Update `docs/configuration.md` to correctly describe the JSON config format

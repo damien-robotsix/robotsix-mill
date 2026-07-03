@@ -20,9 +20,8 @@ from fastapi import (
     UploadFile,
 )
 
-from ...agents.ask_to_ticket import run_ask_to_ticket_agent
+
 from ...core.models import (
-    SourceKind,
     TicketCreate,
     TicketEvent,
     TicketKind,
@@ -479,75 +478,6 @@ def delete_ticket(
     404 if it doesn't exist."""
     if not svc.delete(ticket_id):
         raise HTTPException(404, "ticket not found")
-
-
-@router.post("/tickets/{ticket_id}/convert-to-task", status_code=201)
-def convert_to_task(
-    ticket_id: str,
-    request: Request,
-    body: dict = Body({}),
-    svc=Depends(get_service),
-    worker=Depends(get_worker),
-    settings=Depends(get_settings),
-) -> TicketRead:
-    """Draft a new task ticket from an answered inquiry (the ask).
-
-    Feeds the inquiry's question + answer and an optional operator
-    ``comment`` to an LLM helper agent, then creates a new ``kind="task"``
-    ticket from the agent's drafted title/description on the same board.
-    A backlink comment is posted on the source inquiry for traceability.
-
-    404 when the ticket is unknown, 409 when it is not an inquiry, and
-    503 when no LLM key is configured.
-    """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
-    if ticket.kind != TicketKind.INQUIRY:
-        raise HTTPException(409, "only inquiry tickets can be converted to tasks")
-
-    comment = str(body.get("comment", "") or "")
-
-    ws = svc.workspace(ticket)
-    # The answer overwrites description.md; the question is preserved as
-    # an artifact. Fall back to the title when the artifact is absent
-    # (e.g. inquiry not yet answered).
-    answer = ws.read_description()
-    question_path = ws.artifacts_dir / "question-original.md"
-    if question_path.exists():
-        question = question_path.read_text(encoding="utf-8")
-    else:
-        question = ticket.title
-
-    try:
-        result = run_ask_to_ticket_agent(
-            settings=settings,
-            question=question,
-            answer=answer,
-            comment=comment,
-        )
-    except RuntimeError as e:
-        raise HTTPException(503, f"ask-to-ticket agent unavailable: {e}") from None
-
-    new_ticket = svc.create(
-        result.title,
-        result.description,
-        source=SourceKind.USER,
-        kind=TicketKind.TASK,
-        board_id=ticket.board_id or None,
-    )
-    maybe_enqueue(new_ticket, worker)
-
-    # Backlink on the source inquiry for traceability (best-effort).
-    try:
-        svc.add_comment(
-            ticket_id, f"Converted to task {new_ticket.id}", author="system"
-        )
-    except Exception:
-        log.exception("convert_to_task: failed to post backlink comment")
-
-    repo_config = _repo_config_for_ticket(new_ticket, request.app.state.repos)
-    return enrich_ticket_read(new_ticket, settings, svc, repo_config=repo_config)
 
 
 @router.post("/tickets/{ticket_id}/transition", response_model=TicketRead)

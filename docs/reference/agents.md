@@ -46,7 +46,6 @@
 
 ::: robotsix_mill.agents.answering
 
-::: robotsix_mill.agents.ask_to_ticket
 
 ::: robotsix_mill.agents.ask_user
 

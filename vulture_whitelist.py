@@ -307,7 +307,7 @@ get_retrospect
 list_artifacts
 get_artifact
 delete_ticket
-convert_to_task
+
 migrate_ticket
 approve_ticket
 merge_now

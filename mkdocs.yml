@@ -28,7 +28,6 @@ nav:
       - Dedup guard: dedup-guard.md
       - Merge stage: merge-stage.md
       - Epic dedup: epic-dedup.md
-      - Inquiry to task: inquiry-to-task.md
       - "AGENT.md candidates": agent-md-candidates.md
       - Scope triage: scope-triage.md
   - Agents & Internals:

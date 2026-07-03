@@ -124,7 +124,7 @@ are:
   (e.g. `ci_fix.yaml`, `rebase.yaml`, `review_revision.yaml`).
 
 - **`interactive`** — prompt-to-ticket or Q&A agents triggered by user
-  interaction (e.g. `ask_to_ticket.yaml`, `answer.yaml`).
+  interaction (e.g. `answer.yaml`).
 
 - **`sub_agent`** — utility agents called by other agents as a tool
   (e.g. `explore`, `web_research`, `trace_inspector`). These live in

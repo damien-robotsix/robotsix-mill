@@ -125,12 +125,6 @@ background:#2a1a3b;color:#c598fb;border:1px solid #3a2a4b;border-radius:4px;curs
 margin-left:4px" title="AGENT.md candidates from retrospect">
   📋 AGENT.md<span id="agentmd-badge" style="display:none;margin-left:5px;padding:0 5px;border-radius:8px;background:#dc2626;color:#fff;font-size:10px;font-weight:bold"></span>
 </button>
-<span style="border-left:1px solid #2a2e37;align-self:stretch;margin-left:8px"></span>
-<button onclick="newInquiry()" style="font-size:11px;padding:3px 10px;
-background:#0891b2;color:#fff;border:none;border-radius:4px;cursor:pointer;
-margin-left:4px">
-  + Ask
-</button>
 <button onclick="newEpic()" style="font-size:11px;padding:3px 10px;
 background:#9333ea;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
