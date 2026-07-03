@@ -85,6 +85,13 @@ def _no_dotenv(monkeypatch):
     the loader treats ``""`` as "use the committed example", whose
     secrets are all the ``SECRET`` sentinel (i.e. unset).
     """
+    # Pin to the committed example template (never the gitignored
+    # host-specific config/config.json).  The loader treats empty-string
+    # ``""`` as "use the committed example", whose secrets are all the
+    # ``SECRET`` sentinel (i.e. unset).
+    monkeypatch.setenv("MILL_CONFIG_FILE", "")
+    monkeypatch.setenv("MILL_SECRETS_FILE", "")
+    monkeypatch.setenv("MILL_REPOS_FILE", "")
     monkeypatch.setenv("MILL_BOARD_LIST_CACHE_TTL_SECONDS", "0")
     from robotsix_mill.runtime.routes import _tickets as _tickets_routes
 

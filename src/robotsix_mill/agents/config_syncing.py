@@ -7,7 +7,7 @@ plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
 This agent cross-references the template against
 ``src/robotsix_mill/config.py`` (the Pydantic model that consumes it)
 and ``docs/configuration.md`` (when present) to catch drift: settings
-declared in code but missing from the YAML template, YAML keys with no
+declared in code but missing from the JSON template, JSON keys with no
 matching field, documented defaults that disagree with the model
 defaults, etc.
 
@@ -40,7 +40,7 @@ AUTHORITATIVE FILES (read these, in order):
   default); its ``secrets:`` block is the schema template for the
   ``Secrets`` class (every secret field should appear as a key with the
   ``SECRET`` sentinel value).
-- ``config/repos.example.json`` — schema template for per-repo
+- ``config/repos.example.yaml`` — schema template for per-repo
   config (``RepoConfig`` fields).
 - ``docs/configuration.md`` — operator-facing documentation. When
   present, every documented option's default should match the
@@ -52,7 +52,7 @@ NOT AUTHORITATIVE (do NOT flag these as drift sources):
   host-specific overrides; never inspect.
 - ``config/repos.yaml`` — gitignored per-deployment repo registry.
 - ``.env`` — legacy fallback. Settings still accept ``MILL_*`` env
-  vars, but YAML is the documented surface. Don't file "missing
+  vars, but JSON is the documented surface. Don't file "missing
   from .env" drafts.
 
 CLASSIFY FINDINGS:
