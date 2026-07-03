@@ -137,7 +137,7 @@ RUN apt-get update \
 # and a version skew between it and the bundled binary only caused confusion).
 # nodejs/npm above stay for `npx jscpd@4` (copy-paste detection), not Claude.
 # Subscription auth comes from a mounted ~/.claude dir (see
-# docker-compose.override.example.yml); the worker runs as the non-root `mill`
+# docker-compose.override.example.yml); the worker runs as the non-root `app`
 # user so the SDK's `--dangerously-skip-permissions` is accepted.
 
 # Copy only the artifacts built in the builder stage — no source tree.
@@ -154,17 +154,19 @@ COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 # Non-root user.  UID 1000 matches the typical first-host-user UID so the
 # named volume lines up without extra chown when bind-mounted.
-RUN groupadd --system --gid 1000 mill \
-    && useradd --system --gid mill --uid 1000 --create-home --shell /bin/bash mill \
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd --system --gid ${APP_GID} app \
+    && useradd --system --gid app --uid ${APP_UID} --create-home --shell /bin/bash app \
     && mkdir -p /data \
-    && chown -R mill:mill /data \
+    && chown -R app:app /data \
     && mkdir -p /app/.data \
-    && chown -R mill:mill /app/.data \
-    # Pre-create a mill-owned ~/.claude so the Claude SDK transport's bundled
+    && chown -R app:app /app/.data \
+    # Pre-create an app-owned ~/.claude so the Claude SDK transport's bundled
     # `claude` CLI can write its state/cache there; the host's whole ~/.claude
     # dir is bind-mounted rw (see docker-compose.override.example.yml).
-    && mkdir -p /home/mill/.claude \
-    && chown -R mill:mill /home/mill/.claude
+    && mkdir -p /home/app/.claude \
+    && chown -R app:app /home/app/.claude
 
 WORKDIR /app
 
@@ -225,10 +227,10 @@ RUN uv export --frozen --no-emit-project --extra tracing --group dev \
     && uv pip install --system --no-cache -r /tmp/dev-requirements.txt \
     && uv pip install --system --no-cache --no-deps -e . \
     && rm -f /tmp/dev-requirements.txt \
-    && chown -R mill:mill /app
+    && chown -R app:app /app
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
-# drops to mill via runuser. (No USER mill here — the privilege drop is
+# drops to app via runuser. (No USER app here — the privilege drop is
 # in entrypoint.sh.)
 
 # =============================================================================
@@ -249,4 +251,4 @@ COPY entrypoint.sh /app/entrypoint.sh
 # deploy/docker-compose.yml and config/config.example.yaml.
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
-# drops to mill via runuser. (No USER mill here.)
+# drops to app via runuser. (No USER app here.)

@@ -40,7 +40,7 @@ services:
       #  2. A single-file mount pins the inode at container-create; when the
       #     host CLI refreshes the token (atomic rename → new inode) the
       #     container keeps seeing the STALE file until a force-recreate.
-      # The host uid (typically 1000) must match the container's `mill` user
+      # The host uid (typically 1000) must match the container's `app` user
       # (uid 1000) for the rw writes to work.
       #
       # NOTE: the container's bundled `claude` CLI version (from the
@@ -49,4 +49,4 @@ services:
       # the image if the host CLI has moved ahead. Heads-up: this is
       # a LIVE rw share with your own ~/.claude, so the container's CLI and
       # any interactive `claude` session on the host write the same files.
-      - ${HOME}/.claude:/home/mill/.claude
+      - ${HOME}/.claude:/home/app/.claude

@@ -48,10 +48,10 @@
 #      of the mill-data volume.  In deploy mode the mill now discovers this
 #      at startup by inspecting its own container's mounts
 #      (sandbox.resolve_data_volume), so no host-specific config is required.
-#   4. claude-mount targets /root/.claude, but the mill runs as uid 1000
-#      with HOME=/home/mill.  The default LLM path (OpenRouter via
-#      openrouter_api_key) is unaffected; the subscription-auth Claude SDK
-#      transport would need HOME/symlink wiring.
+#   4. claude-mount — ADDRESSED.  central-deploy now binds host ~/.claude to
+#      /home/app/.claude (central-deploy #229/#231), and the container runs
+#      as app (uid 1000, HOME=/home/app), so the Claude SDK transport's
+#      bundled `claude` CLI can read/write the mounted credentials directly.
 
 services:
   mill:

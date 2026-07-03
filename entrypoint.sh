@@ -5,12 +5,12 @@ set -euo pipefail
 
 # When started as root with the host docker socket mounted, inherit the
 # host's docker group GID (whatever it happens to be — 959, 999, 1000…)
-# and add the mill user to a matching in-container group. Then drop
-# privileges and exec as mill. This removes the need for an externally-
+# and add the app user to a matching in-container group. Then drop
+# privileges and exec as app. This removes the need for an externally-
 # supplied DOCKER_GID (env var / .env), which was both error-prone and
 # host-specific.
 #
-# When NOT root (legacy image with USER mill baked in), assume the
+# When NOT root (legacy image with USER app baked in), assume the
 # group_add path in docker-compose still applies and just exec.
 if [[ "$(id -u)" == "0" ]]; then
   if [[ -n "${DOCKER_HOST:-}" ]]; then
@@ -28,8 +28,8 @@ if [[ "$(id -u)" == "0" ]]; then
     if [[ -f /app/config/config.yaml ]]; then
       chmod 600 /app/config/config.yaml 2>/dev/null || true
     fi
-    chown -R mill:mill /app/config 2>/dev/null || true
-    chown mill:mill /data 2>/dev/null || true
+    chown -R app:app /app/config 2>/dev/null || true
+    chown app:app /data 2>/dev/null || true
   elif [[ -S /var/run/docker.sock ]]; then
     SOCK_GID="$(stat -c '%g' /var/run/docker.sock)"
     if [[ "$SOCK_GID" =~ ^[0-9]+$ ]] && [[ "$SOCK_GID" -gt 0 ]]; then
@@ -37,7 +37,7 @@ if [[ "$(id -u)" == "0" ]]; then
         groupadd --gid "$SOCK_GID" docker_host
       fi
       SOCK_GROUP_NAME="$(getent group "$SOCK_GID" | cut -d: -f1)"
-      usermod -aG "$SOCK_GROUP_NAME" mill
+      usermod -aG "$SOCK_GROUP_NAME" app
     fi
   fi
   # Raise the soft file-descriptor limit. Docker's `ulimits.nofile` in
@@ -47,7 +47,7 @@ if [[ "$(id -u)" == "0" ]]; then
   # cascading workers to 0). runuser preserves limits inherited from
   # the parent shell, so raise the soft limit here before the exec.
   ulimit -n 65536 || true
-  exec runuser -u mill -- robotsix-mill serve
+  exec runuser -u app -- robotsix-mill serve
 fi
 
 ulimit -n 65536 || true
