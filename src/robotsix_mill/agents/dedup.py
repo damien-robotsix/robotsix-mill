@@ -15,7 +15,7 @@ import logging
 import re
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
@@ -25,6 +25,8 @@ from .prompt_blocks import section
 
 class DedupResult(BaseModel):
     """Structured output from the dedup check agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     duplicate_of: str | None = None
     already_done: str | None = None
