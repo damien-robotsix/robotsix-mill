@@ -53,6 +53,9 @@ StateSyncResult
 SurveyResult
 TestGapResult
 SecurityPostureResult
+# RepoDescriptionSyncResult — referenced only by string in agent YAML;
+# vulture (60% confidence) cannot trace it.
+RepoDescriptionSyncResult
 model_config
 chunk_size
 max_chunks
@@ -126,6 +129,9 @@ db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
 orphaned_pr_check_periodic
+orphaned_pr_check_interval_seconds
+repo_description_sync_periodic
+repo_description_sync_interval_seconds
 pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
@@ -143,6 +149,7 @@ load_secrets_yaml
 _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator
 DATA_DIR_GC
 LANGFUSE_CLEANUP
+REPO_DESCRIPTION_SYNC
 impl
 cache_ok
 process_bind_param
@@ -265,6 +272,7 @@ run_trace_review_pass
 run_verify_pass
 run_changelog_autofill_pass
 run_pin_bump_pass
+run_repo_description_sync_pass
 
 # -- vcs ---------------------------------------------------------------------
 # Tested git utility with no current production caller: ci_fix's proactive

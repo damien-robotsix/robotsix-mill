@@ -422,7 +422,35 @@ class GitHubForge(
             )
         return self._update_repo(owner=owner, repo=repo, description=description)
 
+    def get_repo_description(self, *, owner: str, repo: str) -> str:
+        """Return the current description of *owner/repo* or ``""`` on failure.
+
+        Uses the same token resolution as ``_update_repo`` but performs a
+        GET instead of a PATCH. Must NEVER raise.
+        """
+        return self._get_repo_description(owner=owner, repo=repo)
+
     # --- HTTP seam (monkeypatched in tests) ---
+    def _get_repo_description(self, *, owner: str, repo: str) -> str:
+        from ..config import get_secrets
+
+        from .auth import github_token
+
+        s = self.settings
+        token = get_secrets().forge_repo_create_token or github_token(
+            s, repo_config=self._repo_config
+        )
+        custom_headers = _build_headers(token)
+
+        with self._http.client() as (c, api, _headers):
+            r = c.get(
+                f"{api}/repos/{owner}/{repo}",
+                headers=custom_headers,
+            )
+        if r.status_code == 200:
+            return (r.json().get("description") or "").strip()
+        return ""
+
     def _update_repo(self, *, owner: str, repo: str, description: str) -> bool:
         from ..config import get_secrets
 

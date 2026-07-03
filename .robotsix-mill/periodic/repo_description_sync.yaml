@@ -1,0 +1,6 @@
+# Per-repo periodic workflow: presence enables repo_description_sync for this repo.
+# Reads the README, compares against the forge (GitHub/GitLab) description,
+# and updates it when empty, a placeholder, or materially inaccurate.
+# Name-only -> inherits the built-in repo_description_sync definition
+# (robotsix-mill: agent_definitions/periodic/repo_description_sync.yaml).
+name: repo_description_sync

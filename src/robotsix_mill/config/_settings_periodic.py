@@ -707,3 +707,18 @@ class _PeriodicSettings(BaseModel):
         default=False,
         description="When true, also file tracking tickets for foreign (non-mill) open PRs.",
     )
+
+    # --- repo-description-sync (keeps forge description in sync with README) ---
+    # When True, the worker runs periodic repo-description-sync passes at the
+    # configured interval. Default True (opt-out). Reads the repo's README,
+    # compares against the forge description, and updates it when empty/stale.
+    repo_description_sync_periodic: bool = Field(
+        default=True,
+        description="When true, run periodic repo-description-sync passes.",
+    )
+    # Interval between repo-description-sync passes (seconds). Default 86400
+    # (daily). Enforced minimum 3600s (1 hour) in the worker.
+    repo_description_sync_interval_seconds: int = Field(
+        default=86400,
+        description="Seconds between repo-description-sync passes.",
+    )

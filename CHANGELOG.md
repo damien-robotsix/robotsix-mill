@@ -13,6 +13,7 @@
   `run_periodic_agent` / `_build_periodic_tools` so that the
   `env_doc_sync` periodic agent can receive the `write_file` tool
   (fixing a mismatch between its system prompt and available tools).
+- New periodic agent `repo_description_sync`: keeps each repo's forge (GitHub/GitLab) description in sync with its README. Runs daily, applies a conservative update policy (only when description is empty, a placeholder, or materially inaccurate). Includes GitHub `get_repo_description` read path and GitLab `_update_project` implementation.
 - Remove the "+ Ask" button from the board UI and the inquiry-to-task
   conversion pipeline (`convertToTicket` JS, `/convert-to-task` route,
   `ask_to_ticket` agent).  Inquiries can still be created via the CLI

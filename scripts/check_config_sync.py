@@ -96,6 +96,9 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         "security_posture_periodic",
         "security_posture_interval_seconds",
         "security_posture_request_limit",
+        # -- Periodic agent settings (presence-file driven; no JSON entry) --
+        "repo_description_sync_periodic",
+        "repo_description_sync_interval_seconds",
     }
 )
 

@@ -321,8 +321,20 @@ class GitLabForge(
         return self._update_project(owner=owner, repo=repo, description=description)
 
     def _update_project(self, *, owner: str, repo: str, description: str) -> bool:
-        # GitLab project description updates not yet implemented.
-        return False
+        from urllib.parse import quote
+
+        token = gitlab_token()
+        headers = _build_headers(token)
+        # GitLab's project slug is just the repo name; use the remote URL
+        # to derive the full project path (namespace/repo).
+        project_path = f"{owner}/{repo}"
+        encoded = quote(project_path, safe="")
+        r = self._http.put(
+            f"/projects/{encoded}",
+            headers=headers,
+            json={"description": description[:2000]},
+        )
+        return r.status_code == 200
 
     def delete_branch(self, *, branch: str) -> bool:
         project_path = _parse_gitlab_project_path(self._remote_url)

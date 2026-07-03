@@ -264,6 +264,18 @@ class Forge(ABC):
         disabled by configuration (e.g. a feature flag).
         """
 
+    def get_repo_description(self, *, owner: str, repo: str) -> str:
+        """Return the repository's current description, or ``""`` on failure.
+
+        Concrete (not abstract) with an ``""`` default — implements the
+        forge API call to read back the description set via
+        :meth:`update_repo`. Non-GitHub forges inherit the no-op until
+        they implement the read path.
+
+        Must NEVER raise — catch all API-level failures and return ``""``.
+        """
+        return ""
+
     def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
         """List OPEN code-scanning (e.g. CodeQL) alerts on *source_branch*.
 

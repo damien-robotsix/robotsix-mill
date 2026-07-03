@@ -1879,6 +1879,18 @@
           "title": "Refine Web Search Max Calls",
           "type": "integer"
         },
+        "repo_description_sync_interval_seconds": {
+          "default": 86400,
+          "description": "Seconds between repo-description-sync passes.",
+          "title": "Repo Description Sync Interval Seconds",
+          "type": "integer"
+        },
+        "repo_description_sync_periodic": {
+          "default": true,
+          "description": "When true, run periodic repo-description-sync passes.",
+          "title": "Repo Description Sync Periodic",
+          "type": "boolean"
+        },
         "requeue_batch_pause_seconds": {
           "default": 2.0,
           "description": "Pause (seconds) between batches in the startup re-queue drip feed.",

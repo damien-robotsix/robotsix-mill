@@ -229,6 +229,7 @@ modules:
       - src/robotsix_mill/runners/orphaned_pr_check.py
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/pin_bump_runner.py
+      - src/robotsix_mill/runners/repo_description_sync_runner.py
       - src/robotsix_mill/runners/credit_balance_runner.py
       - src/robotsix_mill/runners/verify_runner.py
       - tests/runners/test_pass_runner.py
@@ -250,6 +251,7 @@ modules:
       - tests/runners/test_credit_balance_runner.py
       - tests/runners/test_verify_runner.py
       - tests/runners/test_copy_paste_runner.py
+      - tests/runners/test_repo_description_sync_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
 
   # -------------------------------------------------------------------
