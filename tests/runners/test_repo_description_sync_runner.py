@@ -98,9 +98,7 @@ def test_extract_h1_with_leading_whitespace() -> None:
 
 
 def test_extract_blank_lines_before_paragraph() -> None:
-    h1, para = _extract_h1_and_first_paragraph(
-        "# H1\n\n\n\n\nFinally a paragraph.\n"
-    )
+    h1, para = _extract_h1_and_first_paragraph("# H1\n\n\n\n\nFinally a paragraph.\n")
     assert h1 == "H1"
     assert para == "Finally a paragraph."
 

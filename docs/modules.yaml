@@ -251,6 +251,7 @@ modules:
       - tests/runners/test_credit_balance_runner.py
       - tests/runners/test_verify_runner.py
       - tests/runners/test_copy_paste_runner.py
+      - tests/runners/test_repo_description_sync_runner.py
     dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
 
   # -------------------------------------------------------------------
