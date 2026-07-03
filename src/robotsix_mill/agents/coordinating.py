@@ -191,6 +191,7 @@ def run_coordinator(
     language_instructions: str = "",
     extra_roots: list[Path] | None = None,
     sandbox_image: str | None = None,
+    stage_name: str = "implement",
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -457,7 +458,9 @@ def run_coordinator(
                 ),
                 what="implement",
             ),
-            timeout_seconds=settings.coordinator_timeout_seconds,
+            timeout_seconds=settings.coordinator_timeout_overrides.get(
+                stage_name, settings.coordinator_timeout_seconds
+            ),
             what="implement agent",
         )
         result = reprompt_if_unstructured(

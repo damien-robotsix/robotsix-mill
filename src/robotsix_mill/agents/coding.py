@@ -71,6 +71,7 @@ def run_implement_agent(
     extra_roots: list[Path] | None = None,
     level: int | None = None,
     sandbox_image: str | None = None,
+    stage_name: str = "implement",
 ) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
@@ -120,6 +121,7 @@ def run_implement_agent(
             language_instructions=language_instructions,
             extra_roots=extra_roots,
             sandbox_image=sandbox_image,
+            stage_name=stage_name,
         )
 
     try:
@@ -170,6 +172,7 @@ def run_implement_agent(
                 language_instructions=language_instructions,
                 extra_roots=extra_roots,
                 sandbox_image=sandbox_image,
+                stage_name=stage_name,
             )
         except Exception as fallback_e:
             raise AgentRunError(

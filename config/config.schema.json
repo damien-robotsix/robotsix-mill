@@ -993,6 +993,14 @@
           "title": "Coordinator Max Tool Calls",
           "type": "integer"
         },
+        "coordinator_timeout_overrides": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Per-stage coordinator timeout overrides (dict). Keys are stage names, values are seconds.",
+          "title": "Coordinator Timeout Overrides",
+          "type": "object"
+        },
         "copy_paste_interval_seconds": {
           "default": 604800,
           "description": "Seconds between periodic copy-paste passes.",

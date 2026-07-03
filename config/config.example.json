@@ -49,6 +49,7 @@
     "config_sync_periodic": true,
     "consult_request_limit": 15,
     "coordinator_max_tool_calls": 300,
+    "coordinator_timeout_overrides": {},
     "coordinator_timeout_seconds": 600,
     "copy_paste_interval_seconds": 604800,
     "copy_paste_periodic": true,
