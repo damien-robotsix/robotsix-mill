@@ -165,6 +165,13 @@ post_pr_comment
 # update_repo — abstract Forge method + implementations called polymorphically
 # via Forge interface; Vulture (60% confidence) cannot trace the call site.
 update_repo
+# regenerate_headers — _ApiClient public method; only called from tests/
+# (vulture only scans src/, not tests/).  Vulture flags it at 60% confidence.
+regenerate_headers
+# invalidate_and_backoff — utility function for 401 retry loops; only called
+# from tests/ (vulture only scans src/, not tests/).  Vulture flags it at
+# 60% confidence.
+invalidate_and_backoff
 
 # -- deps --------------------------------------------------------------------
 # internal_repo_ids — parameter of parse_internal_git_pins(); documented in
