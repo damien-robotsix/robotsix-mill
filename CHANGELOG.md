@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy image publishing.
 - Review stage now verifies PR/commit claims in "already addressed" gap dismissals via `verify_claim`, preventing false approvals when a cited artifact does not actually touch the target files.
 - Add "+ Repo" button to the board header that opens a modal form to register a new repo via POST /repos, refreshing the repo selector on success.
 - Add `verify_claim()` helper to verify that PR/commit references in
