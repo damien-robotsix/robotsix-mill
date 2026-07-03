@@ -7,6 +7,10 @@ defaults).  The file holds every non-secret knob plus a top-level
 ``secrets:`` block; :func:`load_config` returns the non-secret part
 (for the ``Settings`` model) and :func:`load_secrets_json` returns the
 ``secrets:`` sub-map (for the ``Secrets`` model).
+
+The JSON ``settings`` keys are flat Pydantic field aliases (e.g.
+``"MILL_MAX_GLOBAL_CONCURRENCY"``) — no nested-YAML-to-alias translation
+layer is needed.
 """
 
 from __future__ import annotations
@@ -234,7 +238,7 @@ def _load_repos_document(file_path: str | None = None) -> dict[str, object]:  # 
             )
             if isinstance(raw_overlay, dict):
                 overlay_repos = raw_overlay
-        except yaml.YAMLError, OSError:
+        except (yaml.YAMLError, OSError):
             pass  # corrupt overlay is tolerated; treat as empty
 
     # 4. Inject source marker so load_repos_config can set RepoConfig.source.
@@ -243,7 +247,7 @@ def _load_repos_document(file_path: str | None = None) -> dict[str, object]:  # 
             entry.setdefault("_mill_source", "auto")
 
     # 5. Merge: operator wins on repo-id conflict.
-    if has_operator_key or overlay_repos:
+    if operator_repos or overlay_repos:
         merged = {**overlay_repos, **operator_repos}  # operator overwrites overlay
         return {"repos": merged}
 
