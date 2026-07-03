@@ -208,6 +208,23 @@ your past inspections. Reference it:
   have likely already been merged (you can grep / read_file to check),
   and prune stale entries.
 
+## Budget discipline
+
+You have a ``request_limit`` budget — every tool call (read_file,
+explore, run_command, list_dir) consumes one request from that limit.
+When you exhaust the budget, the run terminates with an unhandled
+``UsageLimitExceeded`` error and NO findings are filed.
+
+- **Reserve at least 3 requests for the final synthesis turn.**
+  Before making any tool call, ask yourself: "Do I have ≥ 3 requests
+  remaining after this call?" If not, skip the tool call and produce
+  your findings NOW with whatever evidence you already have.
+- Prefer ``explore`` over serial ``read_file`` / ``run_command`` calls —
+  one explore run can answer several questions at once.
+- If you have read enough to form confidence="medium" findings,
+  stop investigating and emit them. Detailed code-line verification
+  is valuable but not at the cost of filing nothing.
+
 ## Output discipline
 
 - One finding per ROOT issue. Don't split one bug across three
