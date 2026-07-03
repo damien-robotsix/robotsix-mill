@@ -696,6 +696,7 @@ class TestDynamicRequestBudget:
         repo_dir=True,
         extra_settings: dict | None = None,
         request_limit_override: int | None = None,
+        classifier_flags: list[str] | None = None,
     ):
         """Run trace_inspector with a fake trace of *obs_count* observations
         and capture the UsageLimits + tool list passed to run_sync."""
@@ -743,6 +744,8 @@ class TestDynamicRequestBudget:
         }
         if request_limit_override is not None:
             kwargs["request_limit_override"] = request_limit_override
+        if classifier_flags is not None:
+            kwargs["classifier_flags"] = classifier_flags
         trace_inspector_mod.run_trace_inspector(**kwargs)
         return captured
 
@@ -852,6 +855,49 @@ class TestDynamicRequestBudget:
         # Tool-less should still be the toolless default (3)
         assert limits.request_limit == 3
         assert limits.tool_calls_limit is None
+
+    def test_observation_storm_boosts_tools_on_request_limit(self, monkeypatch):
+        """observation_storm flag → request_limit floored at 40 on tools-on path."""
+        # 10 obs (would normally get floor 20) with observation_storm → 40
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            10,
+            extra_settings={"trace_review_inspector_max_obs_for_tools": 300},
+            classifier_flags=[
+                "observation_storm (1364 obs vs threshold 70 = 3.0× median 24)"
+            ],
+        )
+        limits = captured["limits"]
+        # Normal: max(20, min(80, int(10 * 0.1))) = 20.  Storm boost → max(20, 40) = 40.
+        assert limits.request_limit == 40
+
+    def test_observation_storm_boosts_tool_less_request_limit(self, monkeypatch):
+        """observation_storm flag → request_limit floored at 10 on tool-less path."""
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            250,
+            repo_dir=True,
+            classifier_flags=[
+                "observation_storm (1364 obs vs threshold 70 = 3.0× median 24)"
+            ],
+        )
+        limits = captured["limits"]
+        # Tool-less: toolless_requests = 3.  Storm boost → max(3, 10) = 10.
+        assert limits.request_limit == 10
+        assert limits.tool_calls_limit is None
+
+    def test_observation_storm_does_not_lower_already_high_budget(self, monkeypatch):
+        """observation_storm only raises the floor — a higher dynamic budget is preserved."""
+        # 600 obs with max_obs_for_tools=1000 → dynamic = min(80, 60) = 60.
+        # Storm boost → max(60, 40) = 60 (unchanged).
+        captured = self._capture_limits_and_tools(
+            monkeypatch,
+            600,
+            extra_settings={"trace_review_inspector_max_obs_for_tools": 1000},
+            classifier_flags=["observation_storm (600 obs vs threshold 70)"],
+        )
+        limits = captured["limits"]
+        assert limits.request_limit == 60
 
 
 # ---------------------------------------------------------------------------
