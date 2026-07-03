@@ -30,6 +30,24 @@ logger = logging.getLogger(__name__)
 _cache: dict[str, tuple[str, float]] = {}
 
 
+class GitHubAppNotInstalledError(RuntimeError):
+    """Raised when the GitHub App is not installed on a repository.
+
+    The ``/repos/{owner}/{repo}/installation`` endpoint returned 404 —
+    the App must be installed on the target repo before it can mint
+    installation tokens.
+    """
+
+    def __init__(self, owner: str, repo: str) -> None:
+        self.owner = owner
+        self.repo = repo
+        super().__init__(
+            f"GitHub App not installed on {owner}/{repo} — "
+            f"install the App on the repository or remove it from the "
+            f"registered repos"
+        )
+
+
 def _private_key() -> str:
     if get_secrets().github_app_private_key_path:
         with open(get_secrets().github_app_private_key_path, encoding="utf-8") as f:
@@ -77,7 +95,8 @@ def _mint_installation_token(
     }
     with httpx.Client(timeout=30) as c:
         inst = c.get(f"{api}/repos/{owner}/{repo}/installation", headers=h)
-        inst.raise_for_status()
+        if not inst.is_success:
+            raise GitHubAppNotInstalledError(owner, repo)
         iid = inst.json()["id"]
         tok = c.post(f"{api}/app/installations/{iid}/access_tokens", headers=h)
         tok.raise_for_status()

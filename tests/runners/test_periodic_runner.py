@@ -86,6 +86,47 @@ def test_clone_token_returns_none_on_runtime_error(monkeypatch):
     assert result is None
 
 
+def test_clone_token_returns_none_on_http_error(monkeypatch):
+    """_clone_token returns None when github_token raises httpx.HTTPStatusError
+    (e.g. 404 from GET /repos/{owner}/{repo}/installation — GitHub App
+    not installed on the repo)."""
+
+    import httpx
+
+    def fake_github_token(settings, repo_config=None):
+        raise httpx.HTTPStatusError(
+            "404 Not Found",
+            request=httpx.Request(
+                "GET", "https://api.github.com/repos/owner/repo/installation"
+            ),
+            response=httpx.Response(404),
+        )
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
+
+    result = _clone_token(Settings(), _test_repo_config())
+    assert result is None
+
+
+def test_clone_token_logs_warning_on_app_not_installed(monkeypatch, caplog):
+    """_clone_token logs a warning when the GitHub App is not installed,
+    then returns None (instead of raising)."""
+    from robotsix_mill.forge.auth import GitHubAppNotInstalledError
+
+    def fake_github_token(settings, repo_config=None):
+        raise GitHubAppNotInstalledError("owner", "repo")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runners.periodic_runner.github_token", fake_github_token
+    )
+
+    result = _clone_token(Settings(), _test_repo_config())
+    assert result is None
+    assert "GitHub App not installed" in caplog.text
+
+
 def _gitlab_repo_config():
     """RepoConfig whose remote is on gitlab.com."""
     from robotsix_mill.config import RepoConfig

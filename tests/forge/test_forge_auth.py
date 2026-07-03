@@ -81,6 +81,38 @@ def test_private_key_from_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# GitHubAppNotInstalledError
+# ---------------------------------------------------------------------------
+
+
+def test_mint_installation_token_raises_on_404(tmp_path, monkeypatch):
+    """_mint_installation_token raises GitHubAppNotInstalledError when
+    the /installation endpoint returns 404 (App not installed)."""
+    import httpx
+    import jwt as jwt_module
+
+    def fake_get(self, url, **kwargs):
+        return httpx.Response(404, json={"message": "Not Found"})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    monkeypatch.setattr(auth, "_private_key", lambda: "fake-key")
+    # Bypass JWT encode — we only care about the HTTP response handling.
+    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
+    # _parse_owner_repo needs a valid remote
+    s = S(
+        tmp_path,
+        FORGE_AUTH="app",
+        GITHUB_APP_ID="123",
+        GITHUB_APP_PRIVATE_KEY="KEY",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+    )
+    with pytest.raises(auth.GitHubAppNotInstalledError) as exc:
+        auth._mint_installation_token(s)
+    assert exc.value.owner == "o"
+    assert exc.value.repo == "r"
+
+
+# ---------------------------------------------------------------------------
 # invalidate_github_token
 # ---------------------------------------------------------------------------
 

@@ -10,12 +10,19 @@
   now calls this before accepting an `already_done` verdict, preventing
   false dismissals where a cited PR or commit does not touch any file
   named in the draft.
+- `_mint_installation_token`: catch all non-success responses from the GitHub App installation endpoint (not just 404), preventing `HTTPStatusError` from escaping and causing periodic-pass runs to be recorded as errors when the App is not installed on a board's repo (mill: audit errors on robotsix-yaml-config: GitHub API 404 for App installation endpoint (2×) (20260703T011001Z-audit-errors-on-robotsix-yaml-config-git-9d4d) [WIP])
+- Handle GitHub App 404 on `/installation` gracefully: raise a
+  specific `GitHubAppNotInstalledError` instead of a generic
+  `HTTPStatusError` so callers can distinguish "app not installed"
+  from other HTTP failures.  `_clone_token` now logs a warning
+  and returns `None` rather than silently swallowing the error. (mill: audit errors on robotsix-yaml-config: GitHub API 404 for App installation endpoint (2×) (20260703T011001Z-audit-errors-on-robotsix-yaml-config-git-9d4d) [WIP])
 - Add ``coherent_resolver`` module in ``robotsix_mill.deps`` — resolves cross-repo
   git-rev consistency for shared transitive dependencies by computing a single agreed
   commit per shared dep.  Includes a ``uv lock``-based coherence check that empirically
   discovers ``Requirements contain conflicting URLs`` failures.
 - Pin-bump: register scheduled runner harness (`run_pin_bump_pass`) in `_SCHEDULE_ONLY_RUNNERS` dispatch dict so the periodic supervisor no longer drops `pin_bump` presence files. The runner performs detection only — computes and logs the internal-dependency topological order + current pin SHAs — with no PR creation (PR actuator is tracked separately). (mill: Wire the schedule-only pin_bump periodic runner into mill's scheduler (20260703T013022Z-register-a-scheduled-schedule-only-pin-b-c72c))
 - Suppress redundant consolidation rollup tickets from the `security_posture` periodic agent: before filing a rollup that bundles multiple stale-GitHub-Action updates, the agent now checks whether its own per-action tickets (from the same scan) have already been merged or closed, and skips or narrows the rollup accordingly.
+- Fix periodic pass crash when `github_token()` raises `httpx.HTTPStatusError` (e.g. 404 from `/repos/{owner}/{repo}/installation` when the GitHub App is not installed on a repo). Broaden `_clone_token`'s exception handler from `RuntimeError` to `Exception` so any token-minting failure returns `None` and the downstream clone failure is handled gracefully.
 - Add budget-discipline section to the trace inspector system prompt to prevent ``UsageLimitExceeded`` errors when the agent exhausts its request budget before filing findings
 - Dedup agent: add explicit output-format instruction to system prompt and enable `strict`/`extra='forbid'` on `DedupResult` model to prevent pre-JSON narration that caused structured-output parse failures.
 - Fix implement↔review convergence backstop to respect `cross_repo_target.base_branch` instead of always comparing against `origin/main`; extract `effective_target_branch()` helper to keep DRY between `_clone_and_branch` and the backstop gate.
