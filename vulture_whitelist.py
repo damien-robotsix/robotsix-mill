@@ -266,6 +266,7 @@ validate_candidate
 reject_candidate
 cost_breakdown
 create_epic
+abandon_epic
 generate_children
 credit_status
 credit_status_clear
