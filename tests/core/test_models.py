@@ -84,6 +84,7 @@ def test_sourcekind_member_count():
         "CI_FIX_DEPENDENCY",
         "IMPLEMENT_BASELINE_DEPENDENCY",
         "ORPHANED_PR_CHECK",
+        "REPO_DESCRIPTION_SYNC",
     }
     assert set(SourceKind.__members__) == expected
 
