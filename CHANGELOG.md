@@ -4,6 +4,7 @@
   git-rev consistency for shared transitive dependencies by computing a single agreed
   commit per shared dep.  Includes a ``uv lock``-based coherence check that empirically
   discovers ``Requirements contain conflicting URLs`` failures.
+- Pin-bump: register scheduled runner harness (`run_pin_bump_pass`) in `_SCHEDULE_ONLY_RUNNERS` dispatch dict so the periodic supervisor no longer drops `pin_bump` presence files. The runner performs detection only — computes and logs the internal-dependency topological order + current pin SHAs — with no PR creation (PR actuator is tracked separately). (mill: Wire the schedule-only pin_bump periodic runner into mill's scheduler (20260703T013022Z-register-a-scheduled-schedule-only-pin-b-c72c))
 - Add budget-discipline section to the trace inspector system prompt to prevent ``UsageLimitExceeded`` errors when the agent exhausts its request budget before filing findings
 - Dedup agent: add explicit output-format instruction to system prompt and enable `strict`/`extra='forbid'` on `DedupResult` model to prevent pre-JSON narration that caused structured-output parse failures.
 - Fix implement↔review convergence backstop to respect `cross_repo_target.base_branch` instead of always comparing against `origin/main`; extract `effective_target_branch()` helper to keep DRY between `_clone_and_branch` and the backstop gate.
