@@ -1,4 +1,6 @@
-"""Additive SQLite column migrations — shared helpers.
+"""Additive SQLite column migration utilities.
+
+"""Additive SQLite column migration utilities.
 
 .. deprecated::
     This module is **deprecated** as of the Alembic migration
@@ -7,6 +9,11 @@
     changes via versioned migration files.  This file is kept
     temporarily for reference; it will be removed once all
     deployments have transitioned to Alembic-tracked databases.
+
+Works with both :class:`sqlite3.Connection` and SQLAlchemy
+:class:`~sqlalchemy.engine.Connection` — routes raw SQL through
+``exec_driver_sql`` for SA connections (which reject bare strings in
+``.execute()``) and through ``.execute()`` for raw sqlite3 connections.
 
 Historical context (kept for archaeology)
 -----------------------------------------
@@ -22,76 +29,50 @@ drop-in replacement as of llmio pin ``3da3c4317f4a``:
   SQLAlchemy ≥2.0 ``Connection``.  Mill passed a SA connection from
   ``engine.begin()``, so llmio's version could not be used as-is.
 """
+"""
 
 from __future__ import annotations
 
-import sqlite3
-from typing import Protocol
-
-from sqlalchemy import exc as sa_exc
+from collections.abc import Sequence
+from typing import Any
 
 
-class _ExecutesSQL(Protocol):
-    """Structural protocol matching both ``sqlite3.Connection`` and
-    SQLAlchemy ``Connection`` — anything that can execute raw SQL."""
+def _exec(conn: Any, sql: str) -> Any:
+    """Execute raw *sql* against *conn*.
 
-    def execute(self, sql: str) -> object: ...
-
-    def exec_driver_sql(self, sql: str) -> object: ...
-
-
-def _execute_sql(conn: _ExecutesSQL, sql: str) -> None:
-    """Execute raw SQL on *conn*, using ``exec_driver_sql`` (SQLAlchemy)
-    or ``execute`` (raw sqlite3) as appropriate."""
+    Routes through ``exec_driver_sql`` when available (SQLAlchemy
+    Connection), otherwise falls back to ``.execute()`` (raw sqlite3).
+    """
     runner = getattr(conn, "exec_driver_sql", None)
     if runner is None:
         runner = conn.execute
-    runner(sql)
+    return runner(sql)
 
 
-def add_column_if_missing(conn: _ExecutesSQL, table: str, column_def: str) -> bool:
-    """Add a column to a SQLite table if it does not already exist.
+def add_column_if_missing(conn: Any, table: str, column_ddl: str) -> bool:
+    """Add *column_ddl* to *table* when the column is not already present.
 
-    Args:
-        conn: A ``sqlite3.Connection`` or SQLAlchemy ``Connection``.
-        table: The table name.
-        column_def: The full column definition clause, e.g.
-            ``"board_id TEXT NOT NULL DEFAULT ''"``.
-
-    Returns:
-        ``True`` if the column was newly added, ``False`` if it already
-        existed (the ``ALTER TABLE`` raised ``sqlite3.OperationalError``,
-        which typically means "duplicate column name").
+    Returns ``True`` when the column was newly created, ``False`` when it
+    already existed.
     """
-    sql = f"ALTER TABLE {table} ADD COLUMN {column_def}"
-    try:
-        _execute_sql(conn, sql)
-        return True
-    except sqlite3.OperationalError as exc:
-        if "duplicate column" in str(exc):
-            return False
-        raise
-    except sa_exc.OperationalError as exc:
-        if "duplicate column" in str(exc.orig if exc.orig else exc):
-            return False
-        raise
+    column_name = column_ddl.strip().split(maxsplit=1)[0].strip('"').strip()
+    rows = _exec(conn, f"PRAGMA table_info({table})").fetchall()
+    existing = {row[1] for row in rows}
+    if column_name in existing:
+        return False
+    _exec(conn, f"ALTER TABLE {table} ADD COLUMN {column_ddl}")
+    conn.commit()
+    return True
 
 
 def run_additive_migrations(
-    conn: _ExecutesSQL,
-    migrations: list[tuple[str, str]],
+    conn: Any,
+    table: str,
+    column_ddls: Sequence[str],
 ) -> list[bool]:
-    """Run a batch of additive column migrations on *conn*.
+    """Apply every DDL in *column_ddls* to *table*.
 
-    Args:
-        conn: A ``sqlite3.Connection`` or SQLAlchemy ``Connection``.
-        migrations: A list of ``(table, column_def)`` tuples.
-
-    Returns:
-        A list of ``bool`` values — one per migration — where ``True``
-        means the column was newly added and ``False`` means it already
-        existed.
+    Returns a ``list[bool]`` parallel to *column_ddls*: ``True`` when the
+    column was newly added, ``False`` when it already existed.
     """
-    return [
-        add_column_if_missing(conn, table, col_def) for table, col_def in migrations
-    ]
+    return [add_column_if_missing(conn, table, ddl) for ddl in column_ddls]
