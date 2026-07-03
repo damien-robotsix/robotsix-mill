@@ -1,6 +1,9 @@
 ## 0.0.0 (unreleased)
 
 - Fix implement↔review convergence backstop to respect `cross_repo_target.base_branch` instead of always comparing against `origin/main`; extract `effective_target_branch()` helper to keep DRY between `_clone_and_branch` and the backstop gate.
+- Skip the ~12KB module taxonomy map in the refine agent's system prompt
+  when triage classifies the ticket as "simple" (`include_explore=False`).
+  Saves ~3K input tokens per turn for simple-ticket refine runs.
 - Board UI: show each ticket's short id (trailing hex suffix, e.g. `f77f`) as a click-selectable badge on its card, so tickets can be identified without opening the detail view.
 - In `trace_inspector.py`, `_shrink_trace_data` now sends a summarised
   observation tree when the trace has more than 200 observations.
