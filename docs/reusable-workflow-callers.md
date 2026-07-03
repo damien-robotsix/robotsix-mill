@@ -47,6 +47,25 @@ jobs:
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@main
 ```
 
+## `.github/workflows/dependabot-auto-merge.yml`
+
+```yaml
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+
+jobs:
+  auto-merge:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependabot-auto-merge.yml@9ea2955d
+```
+
+The caller delegates to the shared reusable workflow, which gates on
+`github.actor` matching `dependabot[bot]` or `renovate[bot]`.
+
 ## `.github/workflows/docs.yml`
 
 ```yaml
