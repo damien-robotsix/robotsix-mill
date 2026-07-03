@@ -286,6 +286,63 @@ def test_valid_target_unrefined_draft_is_false(ctx_factory):
     assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is False
 
 
+def test_valid_target_sibling_same_parent_is_true(ctx_factory, monkeypatch):
+    """When current ticket and candidate share the same parent_id, the
+    sibling bypass returns True even if the candidate's branch is unmerged."""
+    ctx = ctx_factory()
+    parent = _ticket(ctx, title="Parent epic", body="Parent work")
+    t = _ticket(ctx, title="Consumer migration for: Foo", parent_id=parent.id)
+    cand = _ticket(ctx, title="Consumer migration for: Foo", parent_id=parent.id)
+    ctx.service.set_branch(cand.id, "feature/work")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+
+    # Even with an unmerged branch, the sibling bypass applies.
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: False
+    )
+
+    assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is True
+
+
+def test_valid_target_sibling_different_parent_no_bypass(ctx_factory, monkeypatch):
+    """When current ticket and candidate have different parent_ids, the
+    sibling bypass does NOT apply and normal branch-merged checks still run."""
+    ctx = ctx_factory()
+    parent_a = _ticket(ctx, title="Parent A", body="Parent A work")
+    parent_b = _ticket(ctx, title="Parent B", body="Parent B work")
+    t = _ticket(ctx, title="Consumer migration for: Foo", parent_id=parent_a.id)
+    cand = _ticket(ctx, title="Consumer migration for: Foo", parent_id=parent_b.id)
+    ctx.service.set_branch(cand.id, "feature/work")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+
+    # Different parents — bypass does NOT apply; unmerged branch blocks.
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: False
+    )
+
+    assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is False
+
+
+def test_valid_target_no_parent_no_bypass(ctx_factory, monkeypatch):
+    """When the current ticket has no parent_id, the sibling bypass does
+    NOT apply even if the candidate also has no parent."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Other ticket")
+    ctx.service.set_branch(cand.id, "feature/work")
+    ctx.service.transition(cand.id, State.DONE, note="implemented the thing")
+    cand = ctx.service.get(cand.id)
+
+    monkeypatch.setattr(
+        refine_module, "_verify_branch_merged", lambda repo_dir, ticket: False
+    )
+
+    # No parent on either ticket — bypass not active; unmerged branch blocks.
+    assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is False
+
+
 def test_valid_target_closed_never_done_is_false(ctx_factory):
     ctx = ctx_factory()
     t = _ticket(ctx)

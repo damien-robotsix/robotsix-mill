@@ -358,6 +358,15 @@ class RefineGatesMixin:
                 )
                 return False
 
+            # Sibling-with-same-parent bypass: if the candidate shares the
+            # same parent as the current ticket, it's the same piece of work
+            # regardless of branch status — allow the dedup.  This handles
+            # the parallel-consumer-migration case where two sibling tickets
+            # describe identical work under the same parent epic but one
+            # hasn't had its branch merged yet.
+            if ticket.parent_id is not None and cand.parent_id == ticket.parent_id:
+                return True
+
             # Declined-as-noise / split parent: CLOSED but never DONE.
             if cand.state == State.CLOSED and not any(
                 ev.state == State.DONE for ev in history
