@@ -93,7 +93,7 @@ def _clone_token(settings, repo_config) -> str | None:
 
     try:
         return github_token(settings, repo_config=repo_config)
-    except RuntimeError:
+    except Exception:
         return None
 
 
