@@ -274,11 +274,7 @@ Where `<type>` is one of: `feat`, `fix`, `docs`, `style`, `refactor`,
 signaled by appending `!` after the type/scope (e.g. `feat!: drop
 Python 3.13 support`) or by including `BREAKING CHANGE:` in the footer.
 
-Commit messages drive automated versioning and changelog generation via
-[`python-semantic-release`](https://python-semantic-release.readthedocs.io/):
-- `fix:` commits trigger a **patch** bump (0.0.x).
-- `feat:` commits trigger a **minor** bump (0.x.0).
-- `feat!:` or `BREAKING CHANGE:` footers trigger a **major** bump (x.0.0).
+Commit messages keep the history readable and reviewable for contributors.
 
 ## PR checklist
 
@@ -305,7 +301,7 @@ check.
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → **dependency audit** (CVE scan via `uv audit --frozen --preview` / `pip-audit` fallback — **hard gate**) → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
 | [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
 | [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/dependencies.md) |
-| [`release.yml`](.github/workflows/release.yml) | Push to `main` | `uv run semantic-release publish` — parses conventional-commit history since the last tag, computes the next semver version, updates `pyproject.toml` and `__version__` variables, auto-generates `CHANGELOG.md`, creates a Git tag + GitHub Release with release notes, builds distributions, and publishes to PyPI via OIDC trusted publishing. Exits silently when no new version is needed. See [docs/publishing.md](docs/publishing.md). |
+| [`release.yml`](.github/workflows/release.yml) | Push to `main` | hadolint lint on all three Dockerfiles → build and publish Docker images to GHCR (`robotsix-mill`, `robotsix-mill-sandbox`, `robotsix-mill-sandbox-proxy`) via the shared reusable `docker-release.yml` workflow → smoke-test each published image (entrypoint reachable, agent definitions bundled, version readable). |
 
 **Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
 `failure-threshold: warning` on every push to `main`. Warnings are

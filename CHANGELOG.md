@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove PyPI publish pipeline: drop `semantic-release` and `pypi-publish` jobs from `release.yml`, remove `python-semantic-release` dev dependency and `[tool.semantic_release]` config, delete `docs/publishing.md`, and update CI docs. Docker image publishing to GHCR is unaffected.
 - Add a Renovate/Dependabot auto-merge caller that delegates to the shared reusable workflow, which gates on both `dependabot[bot]` and `renovate[bot]`.
 - Audit agent now reads the repo's `AGENT.md` first (and the `robotsix-standards` it links) as the audit baseline, flagging concrete deviations from standards a repo declares it follows — while not manufacturing gaps for repos that opt out.
 - Enable `triage_boilerplate` periodic workflow for mill's own board via `.robotsix-mill/periodic/triage_boilerplate.yaml` presence file.

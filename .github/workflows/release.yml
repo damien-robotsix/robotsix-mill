@@ -3,9 +3,6 @@ name: Release
 on:
   push:
     branches: [main]
-    tags: ['v*']
-  release:
-    types: [published]
   workflow_dispatch:
 
 concurrency:
@@ -16,42 +13,6 @@ permissions:
   contents: read
 
 jobs:
-  # ── Existing: semantic-release + PyPI publish ───────────────────────────
-
-  semantic-release:
-    if: github.event_name == 'push' && github.ref_type == 'branch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: "3.14"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
-        with:
-          version: "0.8.15"
-          enable-cache: false
-      - name: Python Semantic Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          uv run semantic-release publish
-
-  pypi-publish:
-    if: github.event_name == 'release' && github.event.action == 'published'
-    permissions:
-      id-token: write
-      contents: read
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-release.yml@eeced1217f95cc04e514102571282a2ff2d1e3f1
-    with:
-      python-version: "3.14"
-      uv-version: "0.8.15"
-      github-release: false
-
   # ── Docker image publishing (GHCR via shared reusable) ─────────────────
 
   lint:

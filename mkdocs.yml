@@ -14,7 +14,6 @@ nav:
       - Configuration reference: configuration.md
       - Observability: observability.md
       - Continuous deployment: deployment.md
-      - Publishing to PyPI: publishing.md
       - Reusable-workflow callers: reusable-workflow-callers.md
       - Docker architecture: docker-architecture.md
       - GitHub App / PAT: github-app.md
