@@ -156,6 +156,16 @@ list_review_comments
 close_pr
 post_pr_comment
 
+# -- deps --------------------------------------------------------------------
+# internal_repo_ids — parameter of parse_internal_git_pins(); documented in
+# the docstring as intentionally not used for filtering (entries whose
+# normalised name is NOT in internal_repo_ids are still returned). Vulture
+# flags it at 100% confidence.
+internal_repo_ids
+# build_internal_dep_graph — only called from tests/ (which vulture does not
+# scan); Vulture flags it at 60% confidence.
+build_internal_dep_graph
+
 # -- langfuse ----------------------------------------------------------------
 
 # -- runtime routes (FastAPI decorator-registered handlers) ------------------
