@@ -129,6 +129,7 @@ orphaned_pr_check_periodic
 pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
+ci_debt_recheck_periodic
 settings_customise_sources
 dotenv_settings
 ci_patterns_file
@@ -327,6 +328,7 @@ _orphaned_pr_check_task
 _db_maintenance_task
 _sandbox_reaper_task
 _dependabot_ingest_task
+_ci_debt_recheck_task
 _requeue_task
 queue_size
 queue_join
