@@ -2,16 +2,25 @@
 
 The pin-bump agent is a scheduled periodic workflow that detects
 outdated dependency pins across managed repositories and opens PRs to
-bump them. **The scheduled runner (detection + PR actuator) is now
+bump them. **The scheduled runner (detection + PR actuator) is fully
 delivered:** every registered repo with a `.robotsix-mill/periodic/pin_bump.yaml`
 presence file triggers a pass that:
 
 1. Computes the internal-dependency graph and logs current pin SHAs.
 2. For every stale pin (SHA ≠ latest on the dependency's default
    branch), clones the consuming repo, edits `pyproject.toml`,
-   regenerates `uv.lock`, pushes a branch, and opens a cross-repo PR
-   via the forge API.  Pins that are already at the latest SHA are
-   skipped (idempotent).
+   runs a coherence check via `uv lock`, pushes a branch, and opens a
+   cross-repo PR via the forge API.  Pins that are already at the
+   latest SHA are skipped (idempotent).
+3. Before opening a PR, the actuator checks for an existing open
+   bump PR on the same branch — if one exists, the bump is skipped
+   to avoid duplicates.
+4. Repos are processed in topological order (dependencies first).
+   A repo whose ``uv lock`` coherence check reports conflicts is
+   skipped with a ``WARNING`` and no PR; other repos still proceed.
+5. The per-repo ``max_inflight_prs`` setting caps the number of
+   concurrently open pin-bump PRs. When the cap is reached, further
+   bumps for that repo are skipped with an ``INFO`` log.
 
 This document covers the configuration wiring, presence-file trigger,
 dispatch, and network egress requirements.
@@ -86,15 +95,26 @@ The runner (`src/robotsix_mill/runners/pin_bump_runner.py`) performs a
 4. Logs the topological order and each pin's current SHA at `INFO`.
 5. Runs the **PR actuator** (`run_pin_bump_pr_actuator`): for every
    stale pin (where `git ls-remote HEAD` on the dependency returns a
-   different SHA), clones the consuming repo, updates the `rev` in
-   `pyproject.toml`, runs `uv lock`, commits, pushes a
-   `mill/pin-bump/<dep>` branch, and opens a PR via the forge API.
+   different SHA):
+   - Checks for an existing open bump PR on the same branch
+     (`forge.pr_status`) and skips if one is already open.
+   - Respects `repo_config.max_inflight_prs` (default 3) — skips the
+     bump when the number of open `mill/pin-bump/*` PRs for that repo
+     has reached the cap.
+   - Clones the consuming repo, updates the `rev` in
+     `pyproject.toml`, runs a coherence check via `uv lock`
+     (`run_coherence_check` from `deps/coherent_resolver.py`). If the
+     check reports conflicting URLs, the repo is skipped with a
+     `WARNING` — no PR is opened.
+   - Commits, pushes a `mill/pin-bump/<dep>` branch, and opens a PR
+     via the forge API.
    Pins already at the latest SHA are skipped (idempotent).
 
 All expected failures (missing remote URL, missing forge token, clone
-failure, cyclic dependency graph, `ls-remote` failure, `uv lock`
-failure, push failure, PR-creation failure) are caught and logged at
-`WARNING` level — the pass never raises out of the scheduler loop.
+failure, cyclic dependency graph, `ls-remote` failure, coherence-check
+conflict, push failure, PR-creation failure, duplicate PR, in-flight
+cap) are caught and logged at `WARNING` level — the pass never raises
+out of the scheduler loop.
 
 ---
 
