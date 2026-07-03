@@ -205,7 +205,7 @@ def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
                 if isinstance(raw_repos, dict):
                     operator_repos = raw_repos
     except ConfigError, json.JSONDecodeError, OSError:
-        pass
+        pass  # Config file missing/malformed — proceed with defaults.
 
     # 3. Machine-owned overlay: <data_dir>/registered_repos.yaml.
     #    data_dir is read from the same loaded config (settings.data_dir)

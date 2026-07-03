@@ -478,4 +478,3 @@ class _CoreSettings(BaseModel):
     # sandbox_data_mount (host path) overrides it for bind-mounted ./.data.
     data_volume: str = Field(default="mill_data")
     sandbox_data_mount: str | None = Field(default=None)
-
