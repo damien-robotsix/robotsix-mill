@@ -25,4 +25,5 @@ run_env_doc_sync_agent = make_agent_runner(
     prompt_tail="Perform the env-doc-sync consistency inspection and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,
+    include_write_file=True,
 )
