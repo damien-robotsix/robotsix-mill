@@ -28,6 +28,7 @@ from ..vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 from .implement._shared import _is_config_only_change
+from .refine.helpers import verify_claim
 
 log = logging.getLogger("robotsix_mill.stages.review")
 
@@ -916,6 +917,33 @@ class ReviewStage(Stage):
                     out_of_scope,
                     modified_paths,
                 )
+
+            # Verify any PR/commit claims in the "already addressed" asks.
+            # A review agent may claim that a gap was fixed in a cited PR
+            # or commit — confirm the referenced artifact actually touches
+            # the target files before accepting the dismissal.
+            if already_addressed:
+                truly_addressed: list[ReviewAsk] = []
+                for ask in already_addressed:
+                    if (
+                        ask.files_touched
+                        and ask.description
+                        and not verify_claim(
+                            ask.description, ask.files_touched, repo_dir
+                        )
+                    ):
+                        log.info(
+                            "%s: review ask claim unverified — "
+                            "cited refs in '%s' do not touch %s; "
+                            "treating as still out-of-scope",
+                            ticket.id,
+                            ask.description[:120],
+                            ", ".join(ask.files_touched[:5]),
+                        )
+                        still_out_of_scope.append(ask)
+                    else:
+                        truly_addressed.append(ask)
+                already_addressed = truly_addressed
 
             if already_addressed:
                 lines = [

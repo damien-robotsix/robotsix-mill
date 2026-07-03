@@ -61,6 +61,7 @@ from .helpers import (
     _tail_file,
     _verify_branch_merged,
     _verify_cited_fix_at_head,
+    verify_claim,
 )
 
 __all__ = [
@@ -97,4 +98,5 @@ __all__ = [
     "_verify_branch_merged",
     "_resolve_next_state",
     "_build_candidates_block",
+    "verify_claim",
 ]

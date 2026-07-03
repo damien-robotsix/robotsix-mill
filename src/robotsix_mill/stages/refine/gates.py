@@ -43,6 +43,7 @@ from .helpers import (
     _rationale_claims_external_fix,
     _strip_advisory_block,
     log,
+    verify_claim,
 )
 
 
@@ -232,20 +233,40 @@ class RefineGatesMixin:
             )
         done_id = verdict.get("already_done")
         if done_id:
-            if RefineGatesMixin._is_valid_dedup_target(
+            # Verify the already_done claim against the draft's target
+            # files before accepting the verdict.  A claim that cites a
+            # PR/commit that does NOT touch any file named in the draft
+            # is a provably false dismissal — proceed with refine instead.
+            reason_text = verdict.get("reason", "")
+            draft_paths = _extract_paths(draft)
+            if (
+                draft_paths
+                and reason_text
+                and not verify_claim(reason_text, draft_paths, repo_dir)
+            ):
+                log.info(
+                    "%s: dedup already_done claim (%s) could not be "
+                    "verified against target files (%s) — "
+                    "proceeding with refine instead of short-circuiting",
+                    ticket.id,
+                    reason_text[:120],
+                    ", ".join(draft_paths[:5]),
+                )
+            elif RefineGatesMixin._is_valid_dedup_target(
                 ctx, ticket, done_id, repo_dir, draft=draft
             ):
                 return Outcome(
                     State.DONE,
                     f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
                 )
-            log.info(
-                "%s: dedup verdict named already_done=%s but it is not a "
-                "valid dedup target (terminal/declined/circular/unmerged) — "
-                "proceeding with refine",
-                ticket.id,
-                done_id,
-            )
+            else:
+                log.info(
+                    "%s: dedup verdict named already_done=%s but it is not a "
+                    "valid dedup target (terminal/declined/circular/unmerged) — "
+                    "proceeding with refine",
+                    ticket.id,
+                    done_id,
+                )
         return None
 
     @staticmethod
@@ -628,13 +649,30 @@ class RefineGatesMixin:
 
             # Check already_done verdict.
             done_id = verdict.get("already_done")
-            if done_id and RefineGatesMixin._is_valid_dedup_target(
-                ctx, ticket, done_id, repo_dir, draft=_strip_advisory_block(draft)
-            ):
-                return Outcome(
-                    State.DONE,
-                    f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
-                )
+            if done_id:
+                reason_text = verdict.get("reason", "")
+                cleaned_draft = _strip_advisory_block(draft)
+                draft_paths = _extract_paths(cleaned_draft)
+                if (
+                    draft_paths
+                    and reason_text
+                    and not verify_claim(reason_text, draft_paths, repo_dir)
+                ):
+                    log.info(
+                        "%s: advisory already_done claim (%s) could not "
+                        "be verified against target files (%s) — "
+                        "proceeding with refine",
+                        ticket.id,
+                        reason_text[:120],
+                        ", ".join(draft_paths[:5]),
+                    )
+                elif RefineGatesMixin._is_valid_dedup_target(
+                    ctx, ticket, done_id, repo_dir, draft=cleaned_draft
+                ):
+                    return Outcome(
+                        State.DONE,
+                        f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {verdict.get('reason', 'no reason')}",
+                    )
 
             # Not a valid duplicate — clear the advisory so refine doesn't
             # re-litigate the dedup question.

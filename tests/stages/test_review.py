@@ -1007,6 +1007,59 @@ def test_gaps_already_addressed_empty_files_touched_still_pending():
     assert pending[0] is ask
 
 
+def test_gaps_already_addressed_verify_claim_false_moves_to_pending(
+    ctx_factory,
+    monkeypatch,
+):
+    """When verify_claim returns False for an "already addressed" ask,
+    the ask is moved to still_out_of_scope instead of being silently
+    approved — the cited PR/commit does not actually touch the target
+    files."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
+
+    # The implementer touched .gitignore — this makes it "already addressed"
+    # by the file-path heuristic.  But we monkeypatch verify_claim to return
+    # False, simulating a cited PR that doesn't actually touch .gitignore.
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / ".gitignore").write_text("__pycache__/\n")
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "add gitignore")
+
+    def _fake_review(**_kw):
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="add .gitignore for __pycache__ (already fixed in PR #999)",
+            request_changes=[
+                ReviewAsk(
+                    description="Add a .gitignore for __pycache__ "
+                    "(already fixed in PR #999)",
+                    files_touched=[".gitignore"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.verify_claim",
+        lambda claim_text, target_files, repo_dir: False,
+    )
+
+    out = ReviewStage().run(t, ctx)
+    # verify_claim returned False → ask moved to still_out_of_scope.
+    # With no in-scope asks, the out-of-scope ask spawns a follow-up
+    # and the ticket is approved (DOCUMENTING) — but NOT because it was
+    # "already addressed".
+    assert out.next_state is State.DOCUMENTING
+    assert "out-of-scope" in out.note
+    assert "already addressed" not in out.note
+
+    # A follow-up ticket was spawned.
+    children = _spawned_children(ctx, t.id)
+    assert len(children) == 1
+
+
 # --- board screenshot plumbing -----------------------------------------
 
 

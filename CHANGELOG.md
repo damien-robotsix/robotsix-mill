@@ -1,6 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- Review stage now verifies PR/commit claims in "already addressed" gap dismissals via `verify_claim`, preventing false approvals when a cited artifact does not actually touch the target files.
 - Add "+ Repo" button to the board header that opens a modal form to register a new repo via POST /repos, refreshing the repo selector on success.
+- Add `verify_claim()` helper to verify that PR/commit references in
+  "already done" claims actually touch the target files. The dedup guard
+  now calls this before accepting an `already_done` verdict, preventing
+  false dismissals where a cited PR or commit does not touch any file
+  named in the draft.
 - Add ``coherent_resolver`` module in ``robotsix_mill.deps`` — resolves cross-repo
   git-rev consistency for shared transitive dependencies by computing a single agreed
   commit per shared dep.  Includes a ``uv lock``-based coherence check that empirically
