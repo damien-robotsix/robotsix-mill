@@ -1,24 +1,9 @@
 # JavaScript / Node.js language conventions
 
-(Used by the implement and refine agents, and by the review-type agents
-that read/critique code — retrospect, review.)
-
-## Manifest & lockfile workflow
-
-- `package.json` is committed to version control.
-- `package-lock.json` is **committed** to version control and is the
-  source of truth for reproducible installs.
-- **Never** hand-edit `package-lock.json` — it is generated from
-  `package.json` by `npm install`.
-- **When `package.json` dependency lines change** (in `dependencies`,
-  `devDependencies`, or `peerDependencies`), run `npm install` (or
-  `npm install --package-lock-only`) to regenerate `package-lock.json`,
-  and include the lockfile diff in the same commit.
-- Purely structural or metadata-only `package.json` edits (e.g. a
-  `scripts` entry, a config section, `name`, `version`) do **NOT**
-  require lockfile regeneration.
-- CI uses `npm ci`, which fails if the lockfile is stale relative to
-  `package.json` — this is intentional.
+The authoritative JavaScript language conventions live at the
+[robotsix-standards JavaScript page](
+  https://damien-robotsix.github.io/robotsix-standards/javascript/
+).  This file covers only mill-specific operational content.
 
 ## Sandbox constraints (critical)
 
@@ -38,15 +23,3 @@ sandbox. In that case:
 - Do **not** `ask_user` or file a ticket for the inability to fetch
   packages — the operator expects the agent to note the required
   human step instead.
-
-## Test invocation
-
-```bash
-npm test
-```
-
-## Linter / formatter
-
-```bash
-npx eslint . && npx prettier --check .
-```

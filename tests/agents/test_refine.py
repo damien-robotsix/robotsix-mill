@@ -6982,4 +6982,4 @@ def test_language_gating_python_repo_includes_markers(tmp_path):
 
     assert lang_block, "Expected non-empty language block for Python repo"
     # At least one Python marker should be present.
-    assert "pytest" in lang_block, "Python repo must include pytest marker"
+    assert "uv" in lang_block, "Python repo must include 'uv' marker"

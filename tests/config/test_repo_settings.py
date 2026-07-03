@@ -171,7 +171,7 @@ def test_resolve_javascript_from_builtin(tmp_path):
 
 def test_real_javascript_md_mentions_key_terms():
     """Sanity-check: the committed javascript.md must mention key
-    lockfile concepts so the convention can't silently regress to an
+    JS-tooling terms so the convention can't silently regress to an
     empty/placeholder file."""
     path = (
         __import__("pathlib").Path(__file__).resolve().parents[2]
@@ -180,7 +180,7 @@ def test_real_javascript_md_mentions_key_terms():
         / "javascript.md"
     )
     text = path.read_text(encoding="utf-8")
-    for term in ("package-lock.json", "npm install", "package.json"):
+    for term in ("npm install", "package.json", "npm"):
         assert term in text, f"real javascript.md must mention '{term}'"
 
 
