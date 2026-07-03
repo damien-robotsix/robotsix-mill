@@ -55,6 +55,22 @@ _NETWORK_DOWN_RE = re.compile(
     r"|Network is unreachable)"
 )
 
+# Message-string fallback patterns for transient errors not caught by
+# exception-type checks.  These match against ``str(exc)`` anywhere in
+# the cause chain when no type-based classifier fires.
+_TRANSIENT_MESSAGE_RE = [
+    re.compile(r"[Ii]nvalid response from openrouter"),
+    re.compile(r"[Ee]xceeded max(imum)? output retries"),
+]
+
+
+def _is_transient_message(exc: BaseException) -> bool:
+    """Return True when *exc*'s string representation matches a
+    known transient-error pattern not covered by type checks."""
+    msg = str(exc)
+    return any(pattern.search(msg) for pattern in _TRANSIENT_MESSAGE_RE)
+
+
 _MAX_CHAIN_WALK = 10
 
 
@@ -325,6 +341,8 @@ def classify_stage_error(exc: BaseException) -> str:
         if _is_transient_called_process_error(current):
             return "transient"
         if _is_claude_sdk_degenerate_result(current):
+            return "transient"
+        if _is_transient_message(current):
             return "transient"
         # NOTE: the DeepSeek thinking-mode reasoning round-trip 400 detector
         # was removed — OpenRouter no longer raises that 400 when reasoning is

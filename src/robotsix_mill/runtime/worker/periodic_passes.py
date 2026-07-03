@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import random  # noqa: S311 — only used for startup jitter, not security-critical
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,109 @@ def _save_repos_yaml_hash(settings: Settings, repo_id: str, value: str) -> None:
     p = _member_sync_hash_path(settings, repo_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(value, encoding="utf-8")
+
+
+_CI_DEBT_NOTE_RE = re.compile(
+    r"CI blocked by pre-existing target-branch debt:\s+workflow\(s\)\s+"
+    r"(.+?)\s+are failing on the merge target too"
+)
+
+
+def _ci_debt_recheck_pass(
+    settings: Settings,
+    repo_config: RepoConfig,
+) -> None:
+    """Check one repo for CI-debt-blocked tickets whose target-branch
+    workflows have since turned green, and auto-resume them.
+
+    Query all BLOCKED tickets whose block note cites pre-existing
+    target-branch CI debt.  For each, parse the workflow names from the
+    note, check their latest run conclusion on the target branch, and
+    transition back to IMPLEMENT_COMPLETE when all are now green.
+    """
+    from ...core import db as core_db
+    from ...core.models import TicketEvent
+    from ...core.service import TicketService
+    from ...core.states import State
+    from ...forge import get_forge
+    from sqlmodel import col, select
+
+    svc = TicketService(settings, board_id=repo_config.board_id)
+    target = target_branch_for(settings, repo_config)
+
+    blocked = svc.list(state=State.BLOCKED)
+    for ticket in blocked:
+        # Fetch the most recent event note for this BLOCKED ticket.
+        with core_db.session(settings, repo_config.board_id) as s:
+            last_event = s.exec(
+                select(TicketEvent.note)
+                .where(TicketEvent.ticket_id == ticket.id)
+                .order_by(col(TicketEvent.id).desc())
+            ).first()
+        note = (last_event or "").strip()
+        if not note:
+            continue
+        m = _CI_DEBT_NOTE_RE.search(note)
+        if not m:
+            continue
+        names_raw = m.group(1).strip()
+        if not names_raw:
+            continue
+        names = [n.strip() for n in names_raw.split(",") if n.strip()]
+        if not names:
+            continue
+
+        forge = get_forge(settings, repo_config=repo_config)
+        try:
+            runs = forge.list_workflow_runs(branch=target)
+        except Exception:
+            log.warning(
+                "ci-debt-recheck: list_workflow_runs failed for repo %s, "
+                "ticket %s — skipping",
+                repo_config.repo_id,
+                ticket.id,
+                exc_info=True,
+            )
+            continue
+
+        # Index latest run per workflow name.
+        latest: dict[str, dict[str, object]] = {}
+        for r in runs:
+            name = str(r.get("name", ""))
+            if name and name not in latest:
+                latest[name] = r
+
+        all_green = True
+        for name in names:
+            run = latest.get(name)
+            if run is None:
+                # No recent run for this workflow — still blocked.
+                all_green = False
+                break
+            conclusion = str(run.get("conclusion", "")).lower()
+            if conclusion not in {"success", "neutral", "skipped"}:
+                all_green = False
+                break
+
+        if all_green:
+            log.info(
+                "ci-debt-recheck: auto-resuming %s — "
+                "all CI-debt workflows green on %s: %s",
+                ticket.id,
+                target,
+                ", ".join(names),
+            )
+            try:
+                svc.transition(
+                    ticket.id,
+                    State.IMPLEMENT_COMPLETE,
+                    note="[auto-resumed] target-branch CI debt cleared",
+                )
+            except Exception:
+                log.exception(
+                    "ci-debt-recheck: transition failed for %s",
+                    ticket.id,
+                )
 
 
 class PeriodicPassesMixin(_WorkerBase):
@@ -675,6 +779,34 @@ class PeriodicPassesMixin(_WorkerBase):
                     )
                     if self.run_registry and run_id:
                         self.run_registry.finish_error(run_id, str(e))
+            await asyncio.sleep(interval)
+
+    # --- CI-debt auto-resume pass -------------------------------------------
+
+    async def _ci_debt_recheck_loop(self) -> None:
+        """Periodic CI-debt recheck loop — per-repo.
+
+        Scans BLOCKED tickets whose block note cites pre-existing
+        target-branch CI debt.  When all the named workflows have
+        turned green on the target branch, the ticket is auto-resumed
+        back to IMPLEMENT_COMPLETE.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.ci_debt_recheck_interval_seconds)
+        initial = self._initial_delay("ci-debt-recheck", interval)
+        await asyncio.sleep(initial)
+        while True:
+            repos = get_repos_config()
+            for repo_config in list(repos.repos.values()):
+                try:
+                    _ci_debt_recheck_pass(settings, repo_config)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception(
+                        "ci-debt-recheck: error on repo %s",
+                        repo_config.repo_id,
+                    )
             await asyncio.sleep(interval)
 
     async def _periodic_supervisor(self, repo_config: RepoConfig) -> None:

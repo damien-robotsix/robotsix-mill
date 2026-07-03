@@ -3158,6 +3158,95 @@ def test_maintenance_triage_set_labels_failure_still_transitions(
     assert "maintenance triage" in out.note
 
 
+# -- Phase 0 guard: CI-source and empty-draft tickets skip keyword triage --
+
+
+def test_maintenance_triage_ci_source_skipped(ctx_factory, monkeypatch):
+    """Phase 0: a CI-source ticket with a maintenance-keyword title is NOT
+    routed to MAINTENANCE via keyword triage. The LLM-triage path
+    already guards SourceKind.CI at _triage.py L390; the keyword-triage
+    path now does the same."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = ctx.service.create(
+        "Create repo for project foo",
+        "We need a new repository",
+        source=SourceKind.CI,
+    )
+
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="REFINE", reason="normal refine"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        _mock_refine_ok(spec_markdown="## Problem\nDone"),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # Keyword triage skipped → ticket proceeds to full refine, NOT MAINTENANCE.
+    assert out.next_state is not State.MAINTENANCE
+
+
+def test_maintenance_triage_empty_draft_skipped(ctx_factory, monkeypatch):
+    """Phase 0: an empty-draft ticket is NOT routed to MAINTENANCE via
+    keyword triage (no text to match against)."""
+    ctx = ctx_factory(require_approval="false", maintenance_triage_enabled="true")
+    t = _ticket(
+        ctx,
+        title="Create repo for project foo",
+        body="",  # empty draft
+    )
+
+    monkeypatch.setattr(
+        dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+    )
+    monkeypatch.setattr(
+        refine_module, "load_memory", lambda memory_file, max_chars=None: ""
+    )
+    monkeypatch.setattr(refine_module, "persist_memory", lambda memory_file, text: None)
+    monkeypatch.setattr(
+        refine_module,
+        "_resolve_remote_url",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        _mock_triage_refine(decision="REFINE", reason="normal refine"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        _mock_refine_ok(spec_markdown="## Problem\nDone"),
+    )
+
+    out = RefineStage().run(t, ctx)
+
+    # Empty draft skips keyword triage → NOT routed to MAINTENANCE.
+    assert out.next_state is not State.MAINTENANCE
+
+
 # -- Phase 1: LLM triage tests --
 
 

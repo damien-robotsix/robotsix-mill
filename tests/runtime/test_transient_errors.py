@@ -374,6 +374,45 @@ def test_classify_claude_sdk_degenerate_success_in_cause_chain():
 
 
 # ---------------------------------------------------------------------------
+# _is_transient_message — message-string fallback for transient patterns
+# not caught by exception-type checks (e.g. pydantic-ai's
+# UnexpectedModelBehavior wrapping openrouter errors).
+# ---------------------------------------------------------------------------
+
+
+def test_classify_transient_invalid_response_from_openrouter():
+    """'Invalid response from openrouter' in str(exc) → transient."""
+    exc = Exception("Invalid response from openrouter chat completions endpoint")
+    assert classify_stage_error(exc) == "transient"
+
+
+def test_classify_transient_invalid_response_from_openrouter_lowercase():
+    """Case-insensitive match for the openrouter invalid-response pattern."""
+    exc = Exception("invalid response from openrouter: expected JSON data")
+    assert classify_stage_error(exc) == "transient"
+
+
+def test_classify_transient_invalid_response_in_cause_chain():
+    """The openrouter pattern is transient even when nested in a cause chain."""
+    inner = Exception("Invalid response from openrouter chat completions endpoint")
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = inner
+    assert classify_stage_error(outer) == "transient"
+
+
+def test_classify_transient_exceeded_max_output_retries():
+    """'Exceeded max output retries' in str(exc) → transient."""
+    exc = Exception("Exceeded maximum output retries (5)")
+    assert classify_stage_error(exc) == "transient"
+
+
+def test_classify_transient_exceeded_max_output_retries_lowercase():
+    """Case-insensitive match for the output-retries pattern."""
+    exc = Exception("exceeded max output retries (3)")
+    assert classify_stage_error(exc) == "transient"
+
+
+# ---------------------------------------------------------------------------
 # reraise_if_transient — LLM stages (review/refine/retrospect) call this so a
 # transient model error gets the worker's stage-retry instead of a hard BLOCK.
 # ---------------------------------------------------------------------------
