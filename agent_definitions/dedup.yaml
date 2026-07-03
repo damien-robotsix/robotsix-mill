@@ -85,6 +85,12 @@ system_prompt: |
      detection; their bodies help confirm that two open tickets ask for
      the identical change.
 
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
   ## Tool-use discipline
 
   - ⚠️ **Budget warning:** Your `request_limit` budget (6) is consumed
