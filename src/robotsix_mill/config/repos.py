@@ -264,19 +264,57 @@ def _validate_cross_repo_forge_compat(
             )
 
 
+def _split_registry_shape(
+    raw: dict[str, object],
+) -> tuple[dict[str, object], object]:
+    """Normalise the raw ``repos`` mapping into ``(repos_mapping, meta_raw)``.
+
+    ``load_repos_yaml`` can hand back either shape:
+
+    * the *nested* :class:`ReposRegistry` form that the deploy JSON schema
+      models and the central-deploy onboard writes —
+      ``{"meta": <RepoConfig|null>, "repos": {repo_id: cfg}}`` — or
+    * the *legacy flat* form used by hand-maintained desktop configs —
+      ``{repo_id: cfg, ...}``.
+
+    Detection: a mapping is the nested registry form when its keys are a
+    subset of ``{"repos", "meta"}`` and it either carries a ``"repos"``
+    mapping or a ``"meta"`` key. Requiring the key set to be a subset of
+    the two reserved names keeps a flat mapping that merely *contains* a
+    repo literally named ``"repos"`` alongside others on the flat branch.
+    An empty ``{}`` is deliberately NOT a registry — it falls through to
+    the flat branch and iterates nothing (i.e. "no repos"). Everything
+    else is the legacy flat mapping.
+
+    Returns the inner ``{repo_id: cfg}`` mapping and the raw ``meta``
+    value (``None`` when absent).
+    """
+    if isinstance(raw, dict) and raw:
+        keys = set(raw)
+        if keys <= {"repos", "meta"} and (
+            isinstance(raw.get("repos"), dict) or "meta" in raw
+        ):
+            inner = raw.get("repos")
+            repos_mapping = inner if isinstance(inner, dict) else {}
+            return repos_mapping, raw.get("meta")
+    return (raw if isinstance(raw, dict) else {}), None
+
+
 def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     """Load repos configuration from ``config/config.json``'s ``repos:``
     key (or the ``MILL_REPOS_FILE`` / *config_file* override).
 
     Reads YAML via :func:`~robotsix_mill.config.loader.load_repos_yaml`,
-    constructs a :class:`RepoConfig` for each entry, validates, and
-    returns a :class:`ReposRegistry`.
+    normalises the nested-``ReposRegistry`` and legacy-flat shapes via
+    :func:`_split_registry_shape`, constructs a :class:`RepoConfig` for
+    each entry, validates, and returns a :class:`ReposRegistry`.
     """
     from .loader import load_repos_yaml
 
     raw = load_repos_yaml(config_file)
+    repos_mapping, meta_raw = _split_registry_shape(raw)
     repos: dict[str, RepoConfig] = {}
-    for repo_id, repo_data in raw.items():
+    for repo_id, repo_data in repos_mapping.items():
         ci_monitor = (
             repo_data.get("ci_monitor", {}) if isinstance(repo_data, dict) else {}
         )
@@ -347,6 +385,22 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     # per-repo Langfuse config (sessions stay per-repo legible via the
     # repo-qualified session id — see runtime.tracing.qualify_session).
     meta_config = _apply_global_langfuse(repos)
+
+    # An explicit meta-board entry may arrive in the nested registry form
+    # (``repos["meta"]``). Langfuse credentials are always sourced centrally
+    # (_apply_global_langfuse), so layer only the non-langfuse overrides from
+    # the supplied meta over the global-derived defaults. When observability
+    # is off (meta_config is None) there are no valid langfuse creds to build
+    # a RepoConfig from, so the supplied meta is left unapplied (meta stays
+    # None). The onboard sends ``meta: null`` (a no-op here).
+    if isinstance(meta_raw, dict) and meta_raw and meta_config is not None:
+        overrides = {
+            key: value
+            for key, value in meta_raw.items()
+            if key in RepoConfig.model_fields and not key.startswith("langfuse_")
+        }
+        if overrides:
+            meta_config = meta_config.model_copy(update=overrides)
 
     return ReposRegistry(repos=repos, meta=meta_config)
 
