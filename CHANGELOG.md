@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Extract the 401-auth-retry pattern from ~10 inline `for retry in range(2)` loops across `github.py`, `github_ci.py`, and `github_pr.py` into a shared `_ApiClient.retrying_client()` generator. The generator yields `(retry_index, client, api_base, headers)` per attempt, handles token invalidation + 2 s backoff automatically, and lets callers `continue` on 401 / `break` on success. Added optional `headers_factory` parameter so callers with custom headers (e.g. repo-creation PAT) can use the same retry helper.
 - Enable `changelog_autofill` periodic workflow for this repo.
 - Add `agent_references/pre-commit-ci.md` documenting standard
   boilerplate fixes for the four most common pre-commit CI failures

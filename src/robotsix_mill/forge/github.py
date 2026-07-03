@@ -183,20 +183,23 @@ class GitHubForge(
 
         from ..config import get_secrets
 
-        from .auth import (
-            github_token,
-            invalidate_and_backoff,
-        )  # lazy: avoid import cycle
+        from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
         # Repo creation needs a token that can create repos. GitHub App
         # installation tokens cannot create repositories under a personal
         # account, so prefer a dedicated repo-creation PAT when configured;
         # fall back to the normal (App or token) auth otherwise.
-        token = get_secrets().forge_repo_create_token or github_token(
-            s, repo_config=self._repo_config
-        )
-        custom_headers = _build_headers(token)
+        token: str = ""
+        custom_headers: dict[str, str] = {}
+
+        def _mk_headers() -> dict[str, str]:
+            nonlocal token, custom_headers
+            token = get_secrets().forge_repo_create_token or github_token(
+                s, repo_config=self._repo_config
+            )
+            custom_headers = _build_headers(token)
+            return custom_headers
 
         def _create_attempt(c, api):
             # Primary: create under org
@@ -223,17 +226,13 @@ class GitHubForge(
             "auto_init": False,
         }
 
-        for retry in range(2):
-            with self._http.client() as (c, api, _headers):
-                r, is_401 = _create_attempt(c, api)
-                if is_401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)
-                    token = get_secrets().forge_repo_create_token or github_token(
-                        s, repo_config=self._repo_config
-                    )
-                    custom_headers = _build_headers(token)
-                    continue
-            break  # success or final attempt
+        for _retry, c, api, _headers in self._http.retrying_client(
+            headers_factory=_mk_headers,
+        ):
+            r, is_401 = _create_attempt(c, api)
+            if is_401:
+                continue
+            break
 
         # Post-request error handling (original logic preserved).
         if r.status_code == 201:
@@ -311,32 +310,27 @@ class GitHubForge(
     ) -> RepoInfo:
         from ..config import get_secrets
 
-        from .auth import (
-            github_token,
-            invalidate_and_backoff,
-        )  # lazy: avoid import cycle
+        from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
-        token = get_secrets().forge_repo_create_token or github_token(
-            s, repo_config=self._repo_config
-        )
-        custom_headers = _build_headers(token)
         url = f"/repos/{source_owner}/{source_repo}/forks"
         payload: dict = {}
         if target_namespace is not None:
             payload["organization"] = target_namespace
 
-        for retry in range(2):
-            with self._http.client() as (c, api, _headers):
-                r = c.post(f"{api}{url}", headers=custom_headers, json=payload)
-                if r.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)
-                    token = get_secrets().forge_repo_create_token or github_token(
-                        s, repo_config=self._repo_config
-                    )
-                    custom_headers = _build_headers(token)
-                    continue
-            break  # success or final attempt
+        def _mk_headers() -> dict[str, str]:
+            token = get_secrets().forge_repo_create_token or github_token(
+                s, repo_config=self._repo_config
+            )
+            return _build_headers(token)
+
+        for _retry, c, api, headers in self._http.retrying_client(
+            headers_factory=_mk_headers,
+        ):
+            r = c.post(f"{api}{url}", headers=headers, json=payload)
+            if r.status_code == 401:
+                continue
+            break
 
         if r.status_code in (200, 201, 202):
             return _parse_repo_info(r.json())

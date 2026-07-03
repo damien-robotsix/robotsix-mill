@@ -134,3 +134,37 @@ class _ApiClient:
         headers = self._headers_factory(self._settings, self._repo_config)
         with httpx.Client(timeout=30) as c:
             yield c, api_base, headers
+
+    def retrying_client(
+        self,
+        max_retries: int = 2,
+        on_retry: Callable[[], None] | None = None,
+        headers_factory: Callable[[], dict[str, str]] | None = None,
+    ) -> Iterator[tuple[int, httpx.Client, str, dict[str, str]]]:
+        """Generator that yields ``(retry_index, httpx.Client, api_base_url,
+        headers_dict)`` for each attempt, with automatic 401 retry.
+
+        Iterate with ``for``; ``continue`` on a 401 response to advance to
+        the next attempt (the generator invalidates the cached token, sleeps
+        2 s, and opens a fresh client with regenerated headers).  ``break``
+        or ``return`` on success.
+
+        *on_retry* is an optional callback invoked at the start of each
+        iteration — use it to clear accumulated output in pagination loops.
+
+        *headers_factory* overrides the default header generation — use it
+        when callers need custom headers (e.g. a repo-creation PAT instead
+        of the standard App installation token).
+        """
+        for retry_idx in range(max_retries):
+            if on_retry is not None:
+                on_retry()
+            with self.client() as (c, api, _headers):
+                headers = headers_factory() if headers_factory is not None else _headers
+                yield retry_idx, c, api, headers
+            # If we reach here the caller did *not* break — they
+            # continued (signalling a 401) or the body fell through.
+            if retry_idx < max_retries - 1:
+                if self._on_401 is not None:
+                    self._on_401()
+                time.sleep(2)

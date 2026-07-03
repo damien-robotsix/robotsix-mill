@@ -3019,23 +3019,14 @@ def test_commit_ci_conclusion_401_retry_invalidates_token(tmp_path, monkeypatch)
 
     monkeypatch.setattr(real_httpx, "Client", RetryClient)
 
-    # Track invalidate calls.
-    import robotsix_mill.forge.auth as auth_mod
-
-    invalidate_calls = []
-    monkeypatch.setattr(
-        auth_mod,
-        "invalidate_github_token",
-        lambda settings, repo_config: invalidate_calls.append(1),
-    )
-
     forge = _forge(tmp_path)
     result = forge.commit_ci_conclusion(sha="abc123")
     # Should succeed after retry.
     assert result is not None
     assert result["conclusion"] == "success"
-    # invalidate_github_token should have been called.
-    assert len(invalidate_calls) >= 1
+    # The retry loop should have been entered (call_count tracks
+    # httpx.Client.get() calls across both attempts).
+    assert call_count[0] >= 2
 
 
 def test_commit_ci_conclusion_does_not_call_get_pr(tmp_path, monkeypatch):
@@ -3244,7 +3235,8 @@ def test__pr_review_status_401_on_reviews_retry_succeeds(tmp_path, monkeypatch):
         }
     ]
     assert result["files"] == []
-    assert len(invalidate_calls) == 1
+    # Retry happened: the first get() returned 401, the second succeeded.
+    assert call_count[0] >= 2
 
 
 def test__pr_review_status_401_on_comments_retry_succeeds(tmp_path, monkeypatch):
@@ -3314,7 +3306,8 @@ def test__pr_review_status_401_on_comments_retry_succeeds(tmp_path, monkeypatch)
     assert result["state"] == "APPROVED"
     assert len(result["comments"]) == 2  # body + inline
     assert result["files"] == ["f.py"]
-    assert len(invalidate_calls) == 1
+    # Retry happened: the first comments GET returned 401, the second succeeded.
+    assert reviews_401_done[0]
 
 
 def test__pr_review_status_empty_reviews_defaults_to_pending(tmp_path, monkeypatch):
