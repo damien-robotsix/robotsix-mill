@@ -1075,13 +1075,31 @@ def test_mark_done_from_draft(service):
 
 
 def test_mark_done_from_blocked(service):
-    """mark_done rejects a BLOCKED ticket — blocked state must be
-    cleared (resumed) before the ticket can be closed."""
+    """mark_done transitions a BLOCKED ticket to DONE with a force‑close
+    marker in the note."""
     t = service.create("blocked mark done")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck")
-    with pytest.raises(TransitionError, match="not eligible"):
-        service.mark_done(t.id)
+    comment, ticket = service.mark_done(t.id)
+    assert comment is not None
+    assert "[force-closed from blocked] operator mark-done" in comment.body
+    assert ticket.state is State.DONE
+    hist = service.history(t.id)
+    assert "[force-closed from blocked]" in hist[-1].note
+
+
+def test_mark_done_from_blocked_with_caller_note(service):
+    """When a caller supplies a note on a BLOCKED ticket the force‑close
+    marker is prepended and the caller text is preserved."""
+    t = service.create("blocked with reason")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck")
+    comment, ticket = service.mark_done(t.id, note="PR #123 already merged")
+    assert comment is not None
+    assert comment.body == "[force-closed from blocked] PR #123 already merged"
+    assert ticket.state is State.DONE
+    hist = service.history(t.id)
+    assert "[force-closed from blocked] PR #123 already merged" in hist[-1].note
 
 
 def test_mark_done_with_note_creates_comment(service):
