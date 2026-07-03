@@ -22,7 +22,6 @@ src/robotsix_mill/core/datetime_utils.py:0: error: Function is missing a return 
 src/robotsix_mill/core/datetime_utils.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/core/datetime_utils.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/core/datetime_utils.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/config/yaml_source.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/robotsix_mill/config/settings.py:0: error: Returning Any from function declared to return "Path"  [no-any-return]
 src/robotsix_mill/core/models.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runners/langfuse_cleanup_runner.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
