@@ -473,6 +473,13 @@ periodic:
     interval_seconds: 86400         # seconds between sweeps
     max_traces: 5000                # per-project cap; oldest are deleted
 
+  # -- pin-bump — scheduled dependency pin-bump PR actuator -----------------
+  # The PR actuator is tracked separately; this block wires the config
+  # defaults and the per-repo presence-file trigger.
+  pin_bump:
+    enabled: false                  # opt-in — enable periodic pin-bump passes
+    interval_seconds: 86400         # seconds between passes (86400 = 1 day)
+
   # -- triage-boilerplate -- determines boilerplate for new ticket triage ---
   triage_boilerplate:
     enabled: true                   # enable periodic triage-boilerplate passes

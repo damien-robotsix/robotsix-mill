@@ -126,6 +126,8 @@ db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
 orphaned_pr_check_periodic
+pin_bump_periodic
+pin_bump_interval_seconds
 langfuse_cleanup_periodic
 settings_customise_sources
 dotenv_settings

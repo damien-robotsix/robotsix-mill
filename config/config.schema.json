@@ -1213,6 +1213,16 @@
           "title": "Orphaned Pr Track Foreign Prs",
           "type": "boolean"
         },
+        "pin_bump_interval_seconds": {
+          "default": 86400,
+          "title": "Pin Bump Interval Seconds",
+          "type": "integer"
+        },
+        "pin_bump_periodic": {
+          "default": false,
+          "title": "Pin Bump Periodic",
+          "type": "boolean"
+        },
         "ping_pong_max_alternations": {
           "default": 3,
           "minimum": 0,

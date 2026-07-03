@@ -47,6 +47,7 @@ nav:
       - Ticket provenance: ticket-provenance.md
       - Workspace cleanup: workspace-cleanup.md
       - Orphaned-PR check: orphaned-pr-check.md
+      - Pin bump: pin-bump.md
       - Attaching screenshots: screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
