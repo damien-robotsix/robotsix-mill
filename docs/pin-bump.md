@@ -84,17 +84,32 @@ The runner (`src/robotsix_mill/runners/pin_bump_runner.py`) performs a
    - `InternalDepGraph.topo_order` — topological sort (leaves first).
    - `InternalDepGraph.pins` — current `{repo_id: {dep: GitPin(git_url, rev)}}`.
 4. Logs the topological order and each pin's current SHA at `INFO`.
-5. Runs the **PR actuator** (`run_pin_bump_pr_actuator`): for every
-   stale pin (where `git ls-remote HEAD` on the dependency returns a
-   different SHA), clones the consuming repo, updates the `rev` in
-   `pyproject.toml`, runs `uv lock`, commits, pushes a
-   `mill/pin-bump/<dep>` branch, and opens a PR via the forge API.
-   Pins already at the latest SHA are skipped (idempotent).
+5. Resolves the **latest upstream SHA** for every internal dep via
+   `git ls-remote` (no clone needed), using each dep's registered
+   `RepoConfig` to determine the git URL, target branch, and forge
+   token.  Deps whose latest SHA cannot be resolved (no registry entry,
+   no remote URL, missing token, `ls-remote` failure) are skipped with
+   a `WARNING`.
+6. Calls `plan_pin_bumps(graph, latest_shas)` from
+   `deps/bump_planner.py`, which feeds the existing coherent resolver
+   (`resolve_coherent_set` — shared deps agree on ONE target SHA) and
+   emits a `BumpPlan` with `BumpAction`s ordered by `graph.topo_order`
+   (upstream repos first).  Pins already at the coherent target produce
+   no action.
+7. Logs the bump plan at `INFO` (one line per action: ``repo dep from
+   -> to``; a single *"all pins current"* line when every pin matches
+   the coherent target).
+8. Returns `None`. **Zero PRs are created.**
 
 All expected failures (missing remote URL, missing forge token, clone
-failure, cyclic dependency graph, `ls-remote` failure, `uv lock`
-failure, push failure, PR-creation failure) are caught and logged at
-`WARNING` level — the pass never raises out of the scheduler loop.
+failure, unresolvable latest SHA, cyclic dependency graph) are caught
+and logged at `WARNING` level — the pass never raises out of the
+scheduler loop.
+
+The PR actuator (`pyproject.toml` rewriting, `uv lock` regeneration,
+cross-repo PR creation) is a **separately tracked** deliverable and is
+explicitly out of scope for the current harness. The
+`pin_bump_periodic` default remains `False` (opt-in).
 
 ---
 

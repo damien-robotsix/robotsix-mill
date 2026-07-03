@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Pin-bump plan computation: the scheduled ``pin_bump`` runner now
+  resolves latest upstream SHAs for every internal dep via
+  ``git ls-remote``, feeds the coherent resolver, and logs an
+  ordered, cycle-safe ``BumpPlan``.  Still dry-run — zero PRs
+  (actuator is a separate deliverable).
 - Slimmed `agent_definitions/language_instructions/python.md` and `javascript.md` to mill-specific sandbox constraints only; generic conventions now live at robotsix-standards.
 - Deliver the pin-bump PR actuator: `run_pin_bump_pr_actuator` resolves
   latest SHAs via `git ls-remote`, edits `pyproject.toml` `rev` values,

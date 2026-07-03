@@ -132,7 +132,8 @@ class TestRunPinBumpPass:
 
     def test_detection_and_log_path(self, tmp_path, caplog):
         """With a small fake registry + pyproject_map, the runner
-        computes and logs the topological order and current pins."""
+        computes and logs the topological order, current pins, and
+        bump plan."""
         import logging
 
         from robotsix_mill.config.repos import load_repos_config
@@ -164,7 +165,12 @@ class TestRunPinBumpPass:
             patch.object(runner_mod, "target_branch_for", return_value="main"),
             patch.object(runner_mod, "get_forge"),
             patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone),
-            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="sha_b"),
+            # Stub latest-SHA resolution: "b" has advanced to "new-sha".
+            patch.object(
+                runner_mod,
+                "resolve_latest_shas",
+                return_value={"b": "new-sha"},
+            ),
             caplog.at_level(
                 logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
             ),
@@ -179,8 +185,63 @@ class TestRunPinBumpPass:
             f"Expected topo order log, got: {log_text}"
         )
         assert "sha_b" in log_text, f"Expected pin SHA 'sha_b' in logs, got: {log_text}"
-        # Actuator was called and checked the pin; it is already at latest
-        # (sha_b == sha_b), so the pin was skipped (no PR created).
+        # The plan should show a bump from sha_b to new-sha.
+        assert "sha_b -> new-sha" in log_text, (
+            f"Expected bump plan 'sha_b -> new-sha' in logs, got: {log_text}"
+        )
+
+    def test_all_pins_current_log(self, tmp_path, caplog):
+        """When every pin matches latest SHAs the runner logs
+        'all pins current'."""
+        import logging
+
+        from robotsix_mill.config.repos import load_repos_config
+        from robotsix_mill.runners.pin_bump_runner import run_pin_bump_pass
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+
+        registry = load_repos_config(str(repos_yaml_path))
+
+        def _fake_clone(remote_url, dest, branch, token=None):
+            dest_path = Path(str(dest))
+            dest_path.mkdir(parents=True, exist_ok=True)
+            url_str = str(remote_url)
+            if url_str.rstrip("/").endswith("/a"):
+                content = _pyproject({"b": _internal_pin("b", "sha_b")})
+            elif url_str.rstrip("/").endswith("/b"):
+                content = _pyproject()
+            else:
+                content = _pyproject()
+            (dest_path / "pyproject.toml").write_text(content, encoding="utf-8")
+
+        import robotsix_mill.runners.pin_bump_runner as runner_mod
+
+        with (
+            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "get_repos_config", return_value=registry),
+            patch.object(runner_mod, "github_token", return_value="fake-token"),
+            patch.object(runner_mod, "target_branch_for", return_value="main"),
+            patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone),
+            # Latest SHA matches current pin → all pins current.
+            patch.object(
+                runner_mod,
+                "resolve_latest_shas",
+                return_value={"b": "sha_b"},
+            ),
+            caplog.at_level(
+                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
+            ),
+        ):
+            run_pin_bump_pass(
+                session_id="s1",
+                repo_config=registry.repos["a"],
+            )
+
+        log_text = caplog.text
+        assert "all pins current" in log_text, (
+            f"Expected 'all pins current' in logs, got: {log_text}"
+        )
 
     def test_pr_actuator_is_noop_when_no_pins(self, tmp_path, caplog):
         """When repos have no internal pins, the actuator runs but
