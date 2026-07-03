@@ -146,6 +146,8 @@
     "orphaned_pr_max_files_per_pass": 5,
     "orphaned_pr_min_age_hours": 4,
     "orphaned_pr_track_foreign_prs": false,
+    "pin_bump_interval_seconds": 86400,
+    "pin_bump_periodic": false,
     "ping_pong_max_alternations": 3,
     "prerequisite_gate_enabled": true,
     "prune_clone_on_close": true,

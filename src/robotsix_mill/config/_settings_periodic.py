@@ -315,6 +315,16 @@ class _PeriodicSettings(BaseModel):
     security_posture_interval_seconds: int = Field(default=604800)
     security_posture_request_limit: int = Field(default=80)
 
+    # --- pin-bump agent (scheduled dependency pin-bump PR actuator) ---
+    # Opt-in periodic pin-bump pass. Defaults to False (off) — the PR
+    # actuator is tracked separately; this block wires the config defaults
+    # and the per-repo presence-file trigger.
+    pin_bump_periodic: bool = Field(default=False)
+    # Seconds between periodic pin-bump passes when
+    # MILL_PIN_BUMP_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60s in the worker loop.
+    pin_bump_interval_seconds: int = Field(default=86400)
+
     # --- triage-boilerplate agent (recurring triage pattern detection) ---
     # Opt-in periodic triage-boilerplate pass. Defaults to True (opt-out);
     # set false to disable the weekly triage-pattern scan.
