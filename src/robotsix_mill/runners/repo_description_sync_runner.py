@@ -15,6 +15,7 @@ draft-ticket framework). It:
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -125,8 +126,6 @@ def run_repo_description_sync_pass(
     # ------------------------------------------------------------------
     repo_data_dir = settings.data_dir / repo_config.repo_id
     clone_dir = repo_data_dir / "repo_description_sync_workspace" / "repo"
-    import shutil
-
     if clone_dir.exists():
         shutil.rmtree(clone_dir, ignore_errors=True)
     try:
@@ -274,15 +273,21 @@ def _parse_owner_repo(url: str) -> tuple[str, str]:
 
     Supports HTTPS (https://<host>/owner/repo.git) and
     SSH (git@<host>:owner/repo.git) formats.
+
+    This is intentionally forge-agnostic (unlike the GitHub-specific
+    ``_parse_owner_repo`` in ``forge/github.py``). The runner may be
+    called against GitHub, GitLab, or self-hosted instances, so it
+    must parse any valid forge URL.
     """
     import re
 
-    # HTTPS: https://<host>/owner/repo.git
-    m = re.match(r"https?://[^/]+/([^/]+)/([^/]+?)(?:\.git)?$", url)
+    # HTTPS: https://<host>/{owner...}/repo.git
+    # The owner is everything between the host and the final path segment.
+    m = re.match(r"https?://[^/]+/(.+)/([^/]+?)(?:\.git)?$", url)
     if m:
         return m.group(1), m.group(2)
-    # SSH: git@<host>:owner/repo.git
-    m = re.match(r"git@[^:]+:([^/]+)/([^/]+?)(?:\.git)?$", url)
+    # SSH: git@<host>:{owner...}/repo.git
+    m = re.match(r"git@[^:]+:(.+)/([^/]+?)(?:\.git)?$", url)
     if m:
         return m.group(1), m.group(2)
     raise ValueError(f"cannot parse owner/repo from URL: {url!r}")
