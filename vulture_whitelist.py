@@ -172,6 +172,10 @@ internal_repo_ids
 # build_internal_dep_graph — only called from tests/ (which vulture does not
 # scan); Vulture flags it at 60% confidence.
 build_internal_dep_graph
+# resolve_coherent_set, run_coherence_check — only called from tests/;
+# Vulture flags them at 60% confidence.
+resolve_coherent_set
+run_coherence_check
 
 # -- langfuse ----------------------------------------------------------------
 
