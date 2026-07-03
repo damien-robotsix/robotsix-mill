@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Security posture agent: add explicit `git ls-remote` SHA-resolution and
+  validation instructions to the system prompt so the agent no longer
+  fabricates or guesses commit SHAs when filing mutable-ref pinning drafts.
 - Remove the "+ Ask" button from the board UI and the inquiry-to-task
   conversion pipeline (`convertToTicket` JS, `/convert-to-task` route,
   `ask_to_ticket` agent).  Inquiries can still be created via the CLI
