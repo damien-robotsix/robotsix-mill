@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Fix mill Docker image build: `COPY contrib/` into the builder stage so the `contrib/completions` wheel force-include resolves (was failing the image build with `Forced include not found`, blocking image publishing).
+- Fix release Docker build: add missing `COPY contrib/ ./contrib/` to the builder stage so hatchling can find the `contrib/completions` force-include path.
 - Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy image publishing.
 - Review stage now verifies PR/commit claims in "already addressed" gap dismissals via `verify_claim`, preventing false approvals when a cited artifact does not actually touch the target files.
 - Add "+ Repo" button to the board header that opens a modal form to register a new repo via POST /repos, refreshing the repo selector on success.
