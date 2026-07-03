@@ -96,7 +96,9 @@ class _StagesSettings(BaseModel):
     # once at the start of each refine trace (see ``run_refine_agent``).
     # Max real (cache-miss) fetches across one refine trace.
     refine_web_fetch_max_calls: int = Field(
-        description="Maximum real web_fetch calls across one refine trace.", default=5, ge=1
+        description="Maximum real web_fetch calls across one refine trace.",
+        default=5,
+        ge=1,
     )
     # Max fetch bytes across one refine trace; ``0`` disables the ceiling.
     refine_web_fetch_max_total_bytes: int = Field(
@@ -371,13 +373,15 @@ class _StagesSettings(BaseModel):
     # and deletes old, unprotected, no-open-PR branches (per prefix/age guards).
     # Default False — destructive, opt-in.
     stale_branch_cleanup_periodic: bool = Field(
-        description="When true, run periodic stale-branch cleanup passes.", default=False
+        description="When true, run periodic stale-branch cleanup passes.",
+        default=False,
     )
     # Seconds between automatic stale-branch cleanup passes. Only used when
     # MILL_STALE_BRANCH_CLEANUP_PERIODIC=true. Enforced minimum 3600s (1h)
     # in the worker to avoid hammering the forge API.
     stale_branch_cleanup_interval_seconds: int = Field(
-        description="Seconds between automatic stale-branch cleanup passes.", default=86400
+        description="Seconds between automatic stale-branch cleanup passes.",
+        default=86400,
     )
     # A branch is eligible for cleanup only if its last commit is older than
     # this many days. Default 30 days.
@@ -389,7 +393,8 @@ class _StagesSettings(BaseModel):
     # (the "old mill" branches). When False, also reap any other stale branch
     # ("stale dev").
     stale_branch_cleanup_prefix_only: bool = Field(
-        description="When true, only delete branches matching branch_prefix.", default=True
+        description="When true, only delete branches matching branch_prefix.",
+        default=True,
     )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
@@ -499,7 +504,8 @@ class _StagesSettings(BaseModel):
     # human-gate-after-refine exists, that draft auto-flows to done and
     # is retrospected again — set False to analyse without spawning.
     retrospect_spawn_drafts: bool = Field(
-        description="When true, retrospect may file improvement draft tickets.", default=True
+        description="When true, retrospect may file improvement draft tickets.",
+        default=True,
     )
     # When True, retrospect files a draft ticket per AGENT.md
     # proposal on the originating repo's board.
@@ -1039,7 +1045,8 @@ class _StagesSettings(BaseModel):
     # (see config/repos.yaml).  ci_log_max_bytes stays global — it is an
     # operational cap, not a per-repo policy decision.
     ci_log_max_bytes: int = Field(
-        description="Maximum bytes of CI log output to capture per check run.", default=65536
+        description="Maximum bytes of CI log output to capture per check run.",
+        default=65536,
     )
 
     # --- langfuse cleanup (caps trace count for the shared workspace project) ---
