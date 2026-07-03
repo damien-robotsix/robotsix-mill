@@ -162,6 +162,9 @@ list_pr_reviews
 list_review_comments
 close_pr
 post_pr_comment
+# update_repo — abstract Forge method + implementations called polymorphically
+# via Forge interface; Vulture (60% confidence) cannot trace the call site.
+update_repo
 
 # -- deps --------------------------------------------------------------------
 # internal_repo_ids — parameter of parse_internal_git_pins(); documented in
