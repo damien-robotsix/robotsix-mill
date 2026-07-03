@@ -24,7 +24,7 @@ from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
 from .secrets import get_secrets
-from .yaml_source import YamlSettingsSource
+from .json_source import JsonSettingsSource
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class Settings(
             init_settings,
             env_settings,
             file_secret_settings,
-            YamlSettingsSource(settings_cls),
+            JsonSettingsSource(settings_cls),
         )
 
     def workspaces_dir_for(self, board_id: str) -> Path:

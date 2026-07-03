@@ -82,9 +82,9 @@ MILL_SIGNAL_TERMS: frozenset[str] = frozenset(
         "TicketService",
         "RepoConfig",
         "TicketEvent",
-        "config/config.example.yaml",
-        "config/config.yaml",
-        "config.example.yaml",
+        "config/config.example.json",
+        "config/config.json",
+        "config.example.json",
     }
 )
 
@@ -114,7 +114,7 @@ MILL_PATH_PREFIXES: frozenset[str] = frozenset(
         "src/robotsix_mill/",
         "agent_definitions/",
         "agent_definitions/language_instructions/",
-        "config/config.example.yaml",
+        "config/config.example.json",
         "config/config.",
     }
 )
@@ -232,7 +232,7 @@ def _is_spec_descriptive_path(token: str) -> bool:
 
     Heuristics for conceptual paths (any match → ``True``):
 
-    - **Exact match:** ``config/config.yaml``, ``config/config.example.yaml``
+    - **Exact match:** ``config/config.json``, ``config/config.example.json``
       (bare config paths are common deployment/onboarding concepts).
     - **Starts with** ``/``, ``~``, ``./``, ``../`` — absolute filesystem
       or relative container paths.
@@ -249,7 +249,8 @@ def _is_spec_descriptive_path(token: str) -> bool:
         return False
 
     # Exact-match deployment/onboarding concept paths.
-    if token_lower in ("config/config.yaml", "config/config.example.yaml"):
+    if token_lower in ("config/config.json", "config/config.example.json",
+                       "config/config.yaml", "config/config.example.yaml"):
         return True
 
     # Absolute filesystem or container paths.
@@ -312,7 +313,7 @@ def referenced_mill_paths_absent(
     is ``False``.
 
     Gitignored paths (detected via ``git check-ignore``) are excluded
-    from the result — e.g. ``config/config.yaml``, created from the
+    from the result — e.g. ``config/config.json``, created from the
     committed example at deploy time and gitignored by design, is a
     mill-prefixed path that will always be absent on a checkout but
     should NOT trigger a consumer-migration ticket.  If ``git
@@ -341,7 +342,7 @@ def referenced_mill_paths_absent(
         return absent
 
     # Exclude gitignored paths — an operator-local file like
-    # config/config.yaml is always absent from a checkout because
+    # config/config.json is always absent from a checkout because
     # it is never committed, but it is NOT a missing consumer path.
     try:
         ignored = git_ops.ignored_paths(repo_dir, absent)

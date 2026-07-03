@@ -19,7 +19,7 @@ dependencies = [
     "robotsix-llmio[openrouter,claude-sdk]",
     # Shared YAML config-cascade library, consumed via git like robotsix-llmio.
     # Imported by config_loader.py in the follow-on integration ticket.
-    "robotsix-yaml-config",
+    "robotsix-config",
     "prometheus-fastapi-instrumentator>=8",
     "pydantic-settings>=2",
     "pyyaml>=6",

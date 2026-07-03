@@ -19,11 +19,11 @@ def test_config_sync_system_prompt_covers_key_dimensions():
     p = config_syncing.SYSTEM_PROMPT.lower()
     for kw in (
         "config.py",
-        "config.example.yaml",
+        "config.example.json",
         "repos.example.yaml",
         "docs/configuration.md",
-        "missing-from-yaml",
-        "stale-yaml-key",
+        "missing-from-json",
+        "stale-json-key",
         "default-mismatch",
         "memory",
     ):

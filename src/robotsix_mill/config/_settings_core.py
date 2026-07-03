@@ -137,7 +137,7 @@ class _CoreSettings(BaseModel):
     # before producing a usable diagnosis on multi-test failures.
     # Cost-bounded by the ticket-level cap. Aligned with
     # config/config.example.yaml's core.limits.test_requests (30). The
-    # yaml value wins at runtime via _YAML_PATH_TO_ALIAS; this just stops
+    # JSON config value wins at runtime; this just stops
     # the dry-Settings() default from contradicting it on machines without
     # a yaml override.
     test_request_limit: int = Field(default=30, ge=1)

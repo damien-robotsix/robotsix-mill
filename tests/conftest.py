@@ -15,27 +15,27 @@ def _isolate_default_data_dir(tmp_path_factory):
     internally — get the session sandbox instead of the project's
     real ``.data/`` directory.
 
-    Mechanics: monkey-patch ``YamlSettingsSource.__call__`` so its
+    Mechanics: monkey-patch ``JsonSettingsSource.__call__`` so its
     returned dict carries ``data_dir = <session sandbox>``. Anything
     higher-priority (kwargs, env vars) still overrides.
-    ``load_yaml_config()`` itself is NOT patched, so tests that
-    inspect raw YAML defaults continue to see ``.data``.
+    ``load_config()`` itself is NOT patched, so tests that
+    inspect raw JSON defaults continue to see ``.data``.
     """
     sandbox = tmp_path_factory.mktemp("mill-default-data")
     from robotsix_mill import config as _cfg
 
-    real_call = _cfg.YamlSettingsSource.__call__
+    real_call = _cfg.JsonSettingsSource.__call__
 
     def patched(self):
         result = real_call(self)
         result["data_dir"] = str(sandbox)
         return result
 
-    _cfg.YamlSettingsSource.__call__ = patched
+    _cfg.JsonSettingsSource.__call__ = patched
     try:
         yield sandbox
     finally:
-        _cfg.YamlSettingsSource.__call__ = real_call
+        _cfg.JsonSettingsSource.__call__ = real_call
 
 
 @pytest.fixture(autouse=True)

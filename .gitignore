@@ -13,7 +13,7 @@ htmlcov/
 .venv/
 venv/
 .env
-config/config.yaml
+config/config.json
 config/repos.yaml
 .mill-data/
 .data/
