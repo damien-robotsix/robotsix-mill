@@ -13,7 +13,7 @@
 # points the CLI at that proxy.
 #
 # Secrets (decision): central-deploy writes the single config file
-# (config.yaml — see config/config.example.yaml for its structure) into the
+# (config.json — see config/config.example.json for its structure) into the
 # mill-config volume at the config-target path.  The mill reads that one
 # file directly (every non-secret knob plus a top-level `secrets:` block);
 # entrypoint.sh (deploy mode, keyed off DOCKER_HOST) just chmod 600's it
@@ -59,7 +59,7 @@ services:
     labels:
       robotsix.deploy.primary: "true"
       robotsix.deploy.claude-mount: "true"
-      robotsix.deploy.config-target: "/app/config/config.yaml"
+      robotsix.deploy.config-target: "/app/config/config.json"
     environment:
       # Reach the Docker daemon through the hardened socket-proxy sibling
       # rather than a mounted socket.  The Docker CLI (which the sandbox
