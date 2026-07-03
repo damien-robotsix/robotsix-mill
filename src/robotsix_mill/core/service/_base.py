@@ -12,6 +12,7 @@ class via the MRO at runtime (the method declarations below live under
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,8 @@ from ...config import Settings
 from ..models import Comment, Ticket, TicketEvent
 from ..states import State
 from ..workspace import Workspace
+
+log = logging.getLogger("robotsix_mill.service")
 
 
 class _ServiceBase:
@@ -77,3 +80,46 @@ class _ServiceBase:
 
         def delete(self, ticket_id: str) -> bool:
             pass
+
+    # --- board discovery ---
+
+    def _collect_candidate_boards(
+        self,
+        caller_name: str,
+        *,
+        prepend_self: bool = False,
+    ) -> list[str]:
+        """Collect every known board id from the repos registry and a
+        disk scan of ``data_dir``, deduplicated in registry-first order.
+
+        *caller_name* is used in log messages so each call-site produces a
+        distinct warning when the registry is unreachable.
+        When *prepend_self* is ``True`` and ``self.board_id`` is truthy,
+        the service's own ``board_id`` is prepended to the candidate list
+        before the registry scan.
+        """
+        from ...config import get_repos_config
+
+        candidates: list[str] = []
+        if prepend_self and self.board_id:
+            candidates.append(self.board_id)
+        try:
+            for rc in get_repos_config().repos.values():
+                if rc.board_id and rc.board_id not in candidates:
+                    candidates.append(rc.board_id)
+        except Exception as exc:
+            log.warning(
+                "Failed to load repos config for %s: %s(%r)",
+                caller_name,
+                type(exc).__name__,
+                exc,
+            )
+        # Disk-scan fallback for boards not in the registry.
+        try:
+            for sub in self.settings.data_dir.iterdir():
+                if sub.is_dir() and (sub / "mill.db").exists():
+                    if sub.name not in candidates:
+                        candidates.append(sub.name)
+        except OSError:
+            pass
+        return candidates

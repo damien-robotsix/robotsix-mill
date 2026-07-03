@@ -89,27 +89,9 @@ class _CommentMixin(_ServiceBase):
         if ticket_id is not None:
             return self._board_for(ticket_id)
 
-        from ...config import get_repos_config
-
-        candidates: list[str] = [self.board_id] if self.board_id else []
-
-        try:
-            for rc in get_repos_config().repos.values():
-                if rc.board_id and rc.board_id not in candidates:
-                    candidates.append(rc.board_id)
-        except Exception as exc:
-            log.warning(
-                "Failed to load repos config for _board_for_comment: %s(%r)",
-                type(exc).__name__,
-                exc,
-            )
-        try:
-            for sub in self.settings.data_dir.iterdir():
-                if sub.is_dir() and (sub / "mill.db").exists():
-                    if sub.name not in candidates:
-                        candidates.append(sub.name)
-        except OSError:
-            pass
+        candidates = self._collect_candidate_boards(
+            caller_name="_board_for_comment", prepend_self=True
+        )
         matches: list[str] = []
         for board_id in candidates:
             with db.session(self.settings, board_id) as s:
