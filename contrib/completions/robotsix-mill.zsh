@@ -61,7 +61,7 @@ _shtab_robotsix_mill_ticket_commands() {
 
 _shtab_robotsix_mill_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
-  "(- : *)--print-completion[print shell completion script for the specified shell]:print_completion:(bash zsh tcsh)"
+  "--print-completion[print shell completion script for the specified shell]:print_completion:(bash zsh tcsh)"
 )
 
 # guard to ensure default positional specs are added only once per session

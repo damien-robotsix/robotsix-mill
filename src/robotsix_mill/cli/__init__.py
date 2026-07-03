@@ -915,7 +915,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(shtab.complete(parser, shell=args.print_completion))
+        print(shtab.complete(parser, shell=args.print_completion))  # nosec B604 -- shell= is a shell name, not shell=True
         return 0
 
     settings = Settings()
