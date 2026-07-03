@@ -1101,16 +1101,27 @@ def test_mechanical_draft_fast_path_skips_refine_agent(
     assert {"file": "src/foo/bar.py", "note": "from draft"} in file_map
 
 
-def test_mechanical_draft_fast_path_not_triggered_for_user_tickets(
+def test_mechanical_draft_fast_path_triggered_for_user_tickets(
     ctx_factory, monkeypatch, tmp_path
 ):
-    """Human-written tickets never take the mechanical fast-path, even
-    when the draft is mechanical and auto-approve is enabled."""
+    """Human-written tickets with mechanical drafts now take the
+    mechanical fast-path when auto-approve confirms no design
+    decisions — the expensive refine agent is skipped."""
     ctx = ctx_factory(auto_approve_enabled=True)
     t = _ticket(ctx, source="user")
     calls = _spy_refine(
         monkeypatch,
         triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="APPROVE",
+            reason="Mechanical rename — no design decisions",
+        ),
     )
 
     out = _run_agent(
@@ -1120,9 +1131,10 @@ def test_mechanical_draft_fast_path_not_triggered_for_user_tickets(
         draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
     )
 
-    # Should NOT hit the fast-path; should run the full refine agent.
-    assert not out.note.startswith("mechanical draft fast-path")
-    assert len(calls) == 1  # full refine agent WAS invoked
+    # Should hit the fast-path; full refine agent should NOT be invoked.
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "APPROVE" in out.note
+    assert calls == []  # full refine agent never invoked
 
 
 def test_mechanical_draft_fast_path_not_triggered_for_ci_tickets(
@@ -3183,15 +3195,18 @@ def test_ci_source_incomplete_draft_falls_through_to_refine(
     assert out.note.startswith("refined")
 
 
-def test_user_source_excluded_regardless_of_draft(ctx_factory, monkeypatch, tmp_path):
-    """A source="user" ticket is always excluded from the mechanical
-    fast-path, even when the draft is a complete spec."""
+def test_user_source_with_complete_spec_admitted_to_fast_path(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A source="user" ticket with a complete spec is now admitted to
+    the mechanical fast-path; the full refine agent is skipped."""
     ctx = ctx_factory(auto_approve_enabled=True)
     t = _ticket(ctx, source="user")
     calls = _spy_refine(monkeypatch)
 
-    # _resolve_next_state will also call triage_auto_approve after the
-    # full refine agent runs — mock it to prevent a real LLM call.
+    # The fast-path calls triage_auto_approve on the draft itself
+    # (skipping refine).  _resolve_next_state also calls it on the
+    # outcome spec — mock both to prevent real LLM calls.
     monkeypatch.setattr(
         refining,
         "triage_auto_approve",
@@ -3208,9 +3223,9 @@ def test_user_source_excluded_regardless_of_draft(ctx_factory, monkeypatch, tmp_
 
     out = _run_agent(ctx, t, tmp_path, draft=draft)
 
-    # Full refine agent was invoked — user always runs refine.
-    assert len(calls) == 1
-    assert out.note.startswith("refined")
+    # Full refine agent was NOT invoked — mechanical fast-path skipped it.
+    assert len(calls) == 0
+    assert "mechanical draft fast-path" in out.note.lower()
 
 
 # ===========================================================================

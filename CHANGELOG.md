@@ -9,6 +9,7 @@
 - `mark_done()` (force-close) now auto-closes open `[ASK_USER]` threads
   and records the closure in the note, preventing operator force-closes
   from bypassing unanswered agent questions.
+- Extended the skip-refine mechanical fast-path to cover user-source (draft pipeline) tickets. User-created tickets with mechanical drafts now bypass the expensive refine agent when the auto-approve triage confirms no design decisions are needed — matching the existing behaviour for classify, audit-gap, and CI→draft pipelines.
 - Fix mill Docker image build: `COPY contrib/` into the builder stage so the `contrib/completions` wheel force-include resolves (was failing the image build with `Forced include not found`, blocking image publishing).
 - Fix release Docker build: add missing `COPY contrib/ ./contrib/` to the builder stage so hatchling can find the `contrib/completions` force-include path.
 - Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy image publishing.

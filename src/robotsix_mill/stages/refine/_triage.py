@@ -519,7 +519,7 @@ def triage_skip(
 
         # --- mechanical draft fast-path ---
         if s.auto_approve_enabled and (
-            ticket.source not in ("user", "ci")
+            ticket.source != "ci"
             or (ticket.source == "ci" and _draft_has_complete_spec(draft))
         ):
             try:
