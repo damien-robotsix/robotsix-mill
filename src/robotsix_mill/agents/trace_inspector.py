@@ -303,6 +303,43 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
 
     obs = trace.get("observations") or []
     obs_count = len(obs)
+
+    if obs_count > 200:
+        # For traces with observation storms (>200 observations), the
+        # trimmed tree alone still blows the context window.  Strip
+        # input/output/metadata entirely and keep only the structural
+        # fields the inspector reasons about — id, type, level,
+        # statusMessage, name, model, calculatedTotalCost, latency,
+        # usageDetails, startTime, endTime.
+        _KEEP_FIELDS = frozenset(
+            {
+                "id",
+                "type",
+                "level",
+                "statusMessage",
+                "name",
+                "model",
+                "calculatedTotalCost",
+                "latency",
+                "usageDetails",
+                "startTime",
+                "endTime",
+            }
+        )
+        trace["observations"] = [
+            {k: v for k, v in o.items() if k in _KEEP_FIELDS and v is not None}
+            for o in obs
+        ]
+        shrunk = _json.dumps(trace, default=str)
+        if len(shrunk) <= max_chars:
+            return shrunk, obs_count
+        return (
+            shrunk[: max_chars // 2]
+            + f"\n…[trimmed {len(shrunk) - max_chars} chars]…\n"
+            + shrunk[-max_chars // 2 :],
+            obs_count,
+        )
+
     for o in obs:
         for k in ("input", "output", "metadata"):
             if k in o and o[k] is not None:

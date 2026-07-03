@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- In `trace_inspector.py`, `_shrink_trace_data` now sends a summarised
+  observation tree when the trace has more than 200 observations.
+  Input/output/metadata fields are stripped and only structural fields
+  (id, type, level, statusMessage, name, model, calculatedTotalCost,
+  latency, usageDetails, startTime, endTime) are kept, reducing the
+  trace payload from ~78K to ~10K–15K tokens for observation-storm
+  traces.
 - Boost trace-inspector request budget when the trace carries an `observation_storm` classifier flag — tools-on path floors at 40 requests (up from 20) and the tool-less fallback floors at 10 (up from 3), preventing `UsageLimitExceeded` mid-analysis on noisy traces.
 - Add shell completion support (bash, zsh) via shtab. The CLI now accepts
   ``--print-completion <shell>`` to generate on-the-fly completions, and
