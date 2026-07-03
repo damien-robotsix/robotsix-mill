@@ -308,8 +308,6 @@ class GitHubForgeCIMixin:
     def _check_status(
         self, *, owner: str, repo: str, head: str, sha: str | None = None
     ) -> dict | None:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         if sha is None:
             pr = self._get_pr(owner=owner, repo=repo, head=head)  # type: ignore[attr-defined]
             if pr is None:
@@ -319,60 +317,55 @@ class GitHubForgeCIMixin:
             if not sha:
                 return None
 
-        for retry in range(2):
-            with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                # 1. Fetch check runs (any status — completed, in_progress,
-                # queued — so a brand-new SHA with a workflow that's been
-                # queued but not started is correctly classified "pending"
-                # rather than "no CI configured" below.
-                #
-                # A 403 here means the App installation lacks ``checks: read``
-                # for this repo. That's a config gap, not a transient error
-                # — treat it as "no check_runs visible" and fall through to
-                # statuses + no-CI handling.
-                check_runs: list[dict] = []
-                cr_resp = c.get(
-                    f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
-                    headers=headers,
-                    params={"per_page": 100},
-                )
-                if cr_resp.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                if cr_resp.status_code != 403:
-                    cr_resp.raise_for_status()
-                    check_runs = cr_resp.json().get("check_runs", [])
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            # 1. Fetch check runs (any status — completed, in_progress,
+            # queued — so a brand-new SHA with a workflow that's been
+            # queued but not started is correctly classified "pending"
+            # rather than "no CI configured" below.
+            #
+            # A 403 here means the App installation lacks ``checks: read``
+            # for this repo. That's a config gap, not a transient error
+            # — treat it as "no check_runs visible" and fall through to
+            # statuses + no-CI handling.
+            check_runs: list[dict] = []
+            cr_resp = c.get(
+                f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
+                headers=headers,
+                params={"per_page": 100},
+            )
+            if cr_resp.status_code == 401:
+                continue
+            if cr_resp.status_code != 403:
+                cr_resp.raise_for_status()
+                check_runs = cr_resp.json().get("check_runs", [])
 
-                # 2. Always probe combined statuses too. A repo without
-                # any CI returns empty check_runs AND empty
-                # statuses_data["statuses"] — we use that to distinguish
-                # "no CI configured" (pass-through) from "CI pending"
-                # (wait). 403 on statuses follows the same logic.
-                status_runs: list[dict] = []
-                st_resp = c.get(
-                    f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
-                    headers=headers,
-                )
-                if st_resp.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                if st_resp.status_code != 403:
-                    st_resp.raise_for_status()
-                    statuses_data = st_resp.json()
-                    status_runs = _statuses_to_check_runs(statuses_data)
-                if not check_runs:
-                    check_runs = status_runs
+            # 2. Always probe combined statuses too. A repo without
+            # any CI returns empty check_runs AND empty
+            # statuses_data["statuses"] — we use that to distinguish
+            # "no CI configured" (pass-through) from "CI pending"
+            # (wait). 403 on statuses follows the same logic.
+            status_runs: list[dict] = []
+            st_resp = c.get(
+                f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
+                headers=headers,
+            )
+            if st_resp.status_code == 401:
+                continue
+            if st_resp.status_code != 403:
+                st_resp.raise_for_status()
+                statuses_data = st_resp.json()
+                status_runs = _statuses_to_check_runs(statuses_data)
+            if not check_runs:
+                check_runs = status_runs
 
-                # No checks AND no statuses (either truly empty or the
-                # App lacks read permission for both endpoints) → there
-                # is nothing meaningful to gate on. Treat as success so
-                # the merge stage doesn't loop forever.
-                if not check_runs and not status_runs:
-                    return {"conclusion": "success", "failing": [], "pending": []}
+            # No checks AND no statuses (either truly empty or the
+            # App lacks read permission for both endpoints) → there
+            # is nothing meaningful to gate on. Treat as success so
+            # the merge stage doesn't loop forever.
+            if not check_runs and not status_runs:
+                return {"conclusion": "success", "failing": [], "pending": []}
 
-                return _derive_check_conclusion(
-                    c, api, owner, repo, headers, check_runs
-                )
+            return _derive_check_conclusion(c, api, owner, repo, headers, check_runs)
         return None
 
     def _list_workflow_runs(
@@ -424,23 +417,17 @@ class GitHubForgeCIMixin:
         s = self.settings  # type: ignore[attr-defined]
 
         # 1. List jobs for the run (with 401 retry).
-        # Defensive init: the loop sets `jobs` on every non-exception path,
-        # but CodeQL's py/uninitialized-local-variable can't prove it through
-        # the retry/continue/break flow — initialise so the analysis is clean
-        # without changing behaviour (a double-401 still raises before use).
         jobs: list[Any] = []
-        for retry in range(2):
-            with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                jobs_resp = c.get(
-                    f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
-                    headers=headers,
-                    params={"status": "completed"},
-                )
-                if jobs_resp.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                jobs_resp.raise_for_status()
-                jobs = jobs_resp.json().get("jobs", [])
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            jobs_resp = c.get(
+                f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+                headers=headers,
+                params={"status": "completed"},
+            )
+            if jobs_resp.status_code == 401:
+                continue
+            jobs_resp.raise_for_status()
+            jobs = jobs_resp.json().get("jobs", [])
             break
 
         # 2. Filter to failed-like jobs.

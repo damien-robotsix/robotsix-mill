@@ -434,33 +434,28 @@ class GitHubForgePRMixin:
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         # For cross-repo targets the head branch lives on the fork,
         # so the head filter must use the fork owner (not the upstream
         # owner passed in *owner*).  _head_owner resolves accordingly.
         head_owner = self._head_owner  # type: ignore[attr-defined]
-        for retry in range(2):
-            with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                lst = c.get(
-                    f"{api}/repos/{owner}/{repo}/pulls",
-                    headers=headers,
-                    params={"head": f"{head_owner}:{head}", "state": "all"},
-                )
-                if lst.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                lst.raise_for_status()
-                items = lst.json()
-                if not items:
-                    return None
-                num = items[0]["number"]
-                d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
-                if d.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                d.raise_for_status()
-                pr = d.json()
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            lst = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls",
+                headers=headers,
+                params={"head": f"{head_owner}:{head}", "state": "all"},
+            )
+            if lst.status_code == 401:
+                continue
+            lst.raise_for_status()
+            items = lst.json()
+            if not items:
+                return None
+            num = items[0]["number"]
+            d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
+            if d.status_code == 401:
+                continue
+            d.raise_for_status()
+            pr = d.json()
             return _parse_pr_detail(pr)
         return None
 
@@ -618,96 +613,78 @@ class GitHubForgePRMixin:
             return False
 
     def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         out: list[BranchInfo] = []
-        for retry in range(2):
-            hit_401 = False
-            try:
-                with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                    url = f"{api}/repos/{owner}/{repo}/branches"
-                    page = 1
-                    while True:
-                        r = c.get(
-                            url,
-                            headers=headers,
-                            params={"per_page": 100, "page": page},
-                        )
-                        if r.status_code == 401 and retry == 0:
-                            invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            hit_401 = True
-                            break
-                        r.raise_for_status()
-                        items = r.json()
-                        for b in items:
-                            date = (
-                                ((b.get("commit") or {}).get("commit") or {}).get(
-                                    "committer"
-                                )
-                                or {}
-                            ).get("date")
-                            out.append(
-                                BranchInfo(
-                                    name=b["name"],
-                                    last_commit_at=_parse_iso_utc(date),
-                                    is_protected=bool(b.get("protected")),
-                                )
+        try:
+            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
+                on_retry=out.clear
+            ):
+                url = f"{api}/repos/{owner}/{repo}/branches"
+                page = 1
+                while True:
+                    r = c.get(
+                        url,
+                        headers=headers,
+                        params={"per_page": 100, "page": page},
+                    )
+                    if r.status_code == 401:
+                        continue
+                    r.raise_for_status()
+                    items = r.json()
+                    for b in items:
+                        date = (
+                            ((b.get("commit") or {}).get("commit") or {}).get(
+                                "committer"
                             )
-                        if len(items) < 100:
-                            break
-                        page += 1
-                if hit_401:
-                    out.clear()
-                    continue
-                break  # success
-            except Exception:
-                return []
+                            or {}
+                        ).get("date")
+                        out.append(
+                            BranchInfo(
+                                name=b["name"],
+                                last_commit_at=_parse_iso_utc(date),
+                                is_protected=bool(b.get("protected")),
+                            )
+                        )
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return []
         return out
 
     def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         out: set[str] = set()
-        for retry in range(2):
-            hit_401 = False
-            try:
-                with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                    url = f"{api}/repos/{owner}/{repo}/pulls"
-                    page = 1
-                    while True:
-                        r = c.get(
-                            url,
-                            headers=headers,
-                            params={
-                                "state": "open",
-                                "per_page": 100,
-                                "page": page,
-                            },
-                        )
-                        if r.status_code == 401 and retry == 0:
-                            invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            hit_401 = True
-                            break
-                        r.raise_for_status()
-                        items = r.json()
-                        for pr in items:
-                            ref = (pr.get("head") or {}).get("ref")
-                            if ref:
-                                out.add(ref)
-                        if len(items) < 100:
-                            break
-                        page += 1
-                if hit_401:
-                    out.clear()
-                    continue
-                break  # success
-            except Exception:
-                return set()
+        try:
+            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
+                on_retry=out.clear
+            ):
+                url = f"{api}/repos/{owner}/{repo}/pulls"
+                page = 1
+                while True:
+                    r = c.get(
+                        url,
+                        headers=headers,
+                        params={
+                            "state": "open",
+                            "per_page": 100,
+                            "page": page,
+                        },
+                    )
+                    if r.status_code == 401:
+                        continue
+                    r.raise_for_status()
+                    items = r.json()
+                    for pr in items:
+                        ref = (pr.get("head") or {}).get("ref")
+                        if ref:
+                            out.add(ref)
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return set()
         return out
 
     def _list_open_prs(self, *, owner: str, repo: str) -> list[dict]:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         """Return per-PR metadata dicts for all open PRs.
 
         Each dict carries: ``branch`` (head ref), ``author_login``,
@@ -717,50 +694,44 @@ class GitHubForgePRMixin:
         Returns [] on any failure (MUST NOT raise).
         """
         out: list[dict] = []
-        for retry in range(2):
-            hit_401 = False
-            try:
-                with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                    url = f"{api}/repos/{owner}/{repo}/pulls"
-                    page = 1
-                    while True:
-                        r = c.get(
-                            url,
-                            headers=headers,
-                            params={
-                                "state": "open",
-                                "per_page": 100,
-                                "page": page,
-                            },
-                        )
-                        if r.status_code == 401 and retry == 0:
-                            invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            hit_401 = True
-                            break
-                        r.raise_for_status()
-                        items = r.json()
-                        for pr in items:
-                            ref = (pr.get("head") or {}).get("ref")
-                            author = (pr.get("user") or {}).get("login", "")
-                            if ref:
-                                out.append(
-                                    {
-                                        "branch": ref,
-                                        "author_login": author,
-                                        "number": pr.get("number"),
-                                        "url": pr.get("html_url", ""),
-                                        "title": pr.get("title", ""),
-                                    }
-                                )
-                        if len(items) < 100:
-                            break
-                        page += 1
-                if hit_401:
-                    out.clear()
-                    continue
-                break  # success
-            except Exception:
-                return []
+        try:
+            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
+                on_retry=out.clear
+            ):
+                url = f"{api}/repos/{owner}/{repo}/pulls"
+                page = 1
+                while True:
+                    r = c.get(
+                        url,
+                        headers=headers,
+                        params={
+                            "state": "open",
+                            "per_page": 100,
+                            "page": page,
+                        },
+                    )
+                    if r.status_code == 401:
+                        continue
+                    r.raise_for_status()
+                    items = r.json()
+                    for pr in items:
+                        ref = (pr.get("head") or {}).get("ref")
+                        author = (pr.get("user") or {}).get("login", "")
+                        if ref:
+                            out.append(
+                                {
+                                    "branch": ref,
+                                    "author_login": author,
+                                    "number": pr.get("number"),
+                                    "url": pr.get("html_url", ""),
+                                    "title": pr.get("title", ""),
+                                }
+                            )
+                    if len(items) < 100:
+                        break
+                    page += 1
+        except Exception:
+            return []
         return out
 
     def _get_authenticated_user_login(self) -> str:
@@ -826,50 +797,42 @@ class GitHubForgePRMixin:
         repo: str,
         pull_number: int,
     ) -> dict:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
-        # Defensive init: the loop sets these on every non-exception path, but
-        # CodeQL's py/uninitialized-local-variable can't prove it through the
-        # retry/continue/break flow — initialise so the analysis is clean
-        # without changing behaviour (a double-401 still raises before use).
+        # Defensive init: the context-manager body sets these on every
+        # non-exception path, but a double-401 (exhausting all retries)
+        # exits the block without assigning them — initialise so the
+        # analysis is clean without changing behaviour.
         reviews_raw: list[Any] = []
         comments_raw: list[Any] = []
         files: list[Any] = []
-        for retry in range(2):
-            with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-                # 1. Fetch reviews (includes state field that list_pr_reviews drops).
-                r = c.get(
-                    f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-                    headers=headers,
-                    params={"per_page": 100},
-                )
-                if r.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                r.raise_for_status()
-                reviews_raw = r.json()
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            # 1. Fetch reviews (includes state field that list_pr_reviews drops).
+            r = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+                headers=headers,
+                params={"per_page": 100},
+            )
+            if r.status_code == 401:
+                continue
+            r.raise_for_status()
+            reviews_raw = r.json()
 
-                # 2. Fetch inline review comments.
-                r2 = c.get(
-                    f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
-                    headers=headers,
-                    params={"per_page": 100},
-                )
-                if r2.status_code == 401 and retry == 0:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    continue
-                r2.raise_for_status()
-                comments_raw = r2.json()
+            # 2. Fetch inline review comments.
+            r2 = c.get(
+                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+                headers=headers,
+                params={"per_page": 100},
+            )
+            if r2.status_code == 401:
+                continue
+            r2.raise_for_status()
+            comments_raw = r2.json()
 
-                # 3. Fetch changed files.
-                files = self._pr_files(
-                    owner=owner,
-                    repo=repo,
-                    pull_number=pull_number,
-                )
-
-            # If we get here the client block succeeded.
-            break
+            # 3. Fetch changed files.
+            files = self._pr_files(
+                owner=owner,
+                repo=repo,
+                pull_number=pull_number,
+            )
 
         # Determine aggregate review state from the latest non-dismissed
         # review.  GitHub returns reviews oldest-first; iterate reversed.
