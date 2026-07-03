@@ -5,6 +5,11 @@ on:
 
 jobs:
   auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependabot-auto-merge.yml@<sha>  # <tag-or-main>
     permissions:
       contents: write
       pull-requests: write
