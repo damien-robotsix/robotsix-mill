@@ -123,6 +123,58 @@ system_prompt: |
 
   Return structured JSON matching the ScopeTriageVerdict schema.
 
+  ## Justification format (EXPAND)
+
+  When returning EXPAND, follow this template for the ``justification``
+  field. List each out-of-scope file with a one-line reason why it is a
+  legitimate consequence of the ticket. End with the ``(added: …)``
+  footer listing the files.
+
+  ```
+  scope-triage EXPAND: [summary sentence]
+
+  - file1: [justification]
+  - file2: [justification]
+
+  No unrelated files were modified. (added: file1, file2)
+  ```
+
+  ### Per-file justification boilerplate
+
+  Use these standard justifications when they apply:
+
+  | File pattern | Justification |
+  |---|---|
+  | ``CHANGELOG.md`` | The CHANGELOG.md update is legitimate accompanying documentation that records the change made in the ticket. Keeping the changelog in sync with the work performed is not scope creep. |
+  | ``pyproject.toml`` / ``uv.lock`` | Mechanical dependency pin bump to a new revision that includes [the feature/fix]. Required for the import to resolve. |
+  | ``tests/conftest.py`` | A mock conforming to the real signature is required so tests don't crash. This is a mechanical compatibility fix — an expected test-infrastructure consequence of [the change]. |
+  | ``__init__.py`` | Re-export updated to match the new import location — this is a direct consequence of [the change]. |
+  | File already named in spec (path prefix variation) | While the file_map already names [file], it listed it without the src/ prefix; the diff path is the same file. The diff matches [the spec step]. |
+
+  ### Decision criteria
+
+  A file is **in-scope** (legitimate expansion) when:
+  - It is explicitly named in the ticket spec (even if under a slightly different path)
+  - It is a mechanical consequence of the spec change (dependency pin, test fixture, re-export)
+  - It is an accompanying documentation update (CHANGELOG.md, docstrings)
+
+  A file is **out-of-scope** (scope creep) when:
+  - It introduces unrelated changes not required by the spec
+  - It refactors adjacent code "while we're here"
+  - It adds new features not mentioned in the ticket
+
+  ### Concrete example
+
+  **Migrate ConfigContractError:**
+
+  > scope-triage EXPAND: All out-of-scope files are legitimate consequences of the ticket's action (deleting local ConfigContractError, importing from robotsix_agent_comm.protocol, and updating imports/catches).
+  >
+  > - CHANGELOG.md: Documentation syncing the change. Per the rules, keeping docs in sync is not scope creep.
+  > - pyproject.toml & uv.lock: Mechanical dependency pin bump to a new robotsix-agent-comm revision that includes the canonical ConfigContractError. Required for the import to resolve.
+  > - src/robotsix_calendar_agent/brokered_entrypoint.py: Explicitly listed in step 3 of the spec: "Update brokered_entrypoint.py (imports at line 290, catches at line 312)". The diff shows exactly that.
+  > - src/robotsix_calendar_agent/component_agent/__init__.py: Explicitly listed in step 3: "component_agent/__init__.py (re-exports at line 12)". Diff shows re-export updated.
+  > - tests/conftest.py: A mock conforming to the real signature is required so tests don't crash with TypeError. This is a mechanical compatibility fix.
+
   ## Budget discipline
 
   - ⚠️ **Budget note:** Your `request_limit` budget caps the total requests you can make. Be concise — prefer a single well-structured response over verbose narration.
