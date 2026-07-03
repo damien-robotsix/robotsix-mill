@@ -53,6 +53,9 @@ StateSyncResult
 SurveyResult
 TestGapResult
 SecurityPostureResult
+# RepoDescriptionSyncResult — referenced only by string in agent YAML;
+# vulture (60% confidence) cannot trace it.
+RepoDescriptionSyncResult
 model_config
 chunk_size
 max_chunks
@@ -146,6 +149,7 @@ load_secrets_yaml
 _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator
 DATA_DIR_GC
 LANGFUSE_CLEANUP
+REPO_DESCRIPTION_SYNC
 impl
 cache_ok
 process_bind_param
