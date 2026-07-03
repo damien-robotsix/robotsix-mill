@@ -142,12 +142,12 @@ class _CoreSettings(BaseModel):
     # Wall-clock timeout (seconds) for a single implement agent pass.
     # When the agent exceeds this duration the pass is terminated and
     # the stage can retry (with a fresh budget) or escalate.  Default
-    # 600 s (10 min) is generous for a normal implement run but caps
+    # 900 s (15 min) is generous for a normal implement run but caps
     # the worst-case stuck-loop burn.  Set via
     # MILL_COORDINATOR_TIMEOUT_SECONDS env var or
     # core.limits.coordinator_timeout_seconds in JSON config.
     coordinator_timeout_seconds: int = Field(
-        default=600,
+        default=900,
         ge=60,
         alias="MILL_COORDINATOR_TIMEOUT_SECONDS",
         description="Wall-clock timeout (seconds) for a single implement agent pass.",
