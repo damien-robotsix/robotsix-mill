@@ -52,8 +52,6 @@ jobs:
       security-events: write
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -68,8 +66,6 @@ jobs:
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox
       dockerfile: sandbox/Dockerfile
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-proxy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -87,8 +83,6 @@ jobs:
       # context is not exposed by the reusable; sandbox/proxy/Dockerfile
       # uses repo-root-relative COPY paths so context: . (the reusable
       # default) works correctly.
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   smoke-mill:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
