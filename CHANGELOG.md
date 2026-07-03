@@ -1,6 +1,11 @@
 ## 0.0.0 (unreleased)
 
 - Update "Add a new setting" and "Config drift prevention" sections of `docs/configuration.md` to describe the current JSON-based config mechanism instead of the removed `_YAML_PATH_TO_ALIAS` / YAML-path mapping (the config file is `config/config.example.json`, and `JsonSettingsSource` matches alias keys automatically).
+- Update `docs/configuration.md` to correctly describe the JSON config format
+  (not YAML): fix file extensions, convert code examples to JSON with flat
+  alias keys, add a note explaining that "YAML path" column entries are
+  conceptual dotted paths while actual JSON keys are flat aliases, and
+  remove references to the removed `_YAML_PATH_TO_ALIAS` mapping.
 - Add `coordinator_timeout_overrides` settings field (dict[str, int]) for per-stage coordinator timeout overrides, analogous to `stage_timeout_overrides`. The `run_coordinator` and `run_implement_agent` functions now accept a `stage_name` parameter (default `"implement"`) used to look up the override.
 - Slimmed `agent_definitions/language_instructions/python.md` and `javascript.md` to mill-specific sandbox constraints only; generic conventions now live at robotsix-standards.
 - Deliver the pin-bump PR actuator: `run_pin_bump_pr_actuator` resolves
