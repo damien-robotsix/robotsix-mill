@@ -318,6 +318,25 @@ def reraise_if_transient(exc: BaseException) -> None:
         raise exc
 
 
+def _check_one_transient(exc: BaseException) -> bool:
+    """Return True when *exc* matches any known transient-error classifier."""
+    from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
+
+    if _is_transient_httpx(exc):
+        return True
+    if _is_transient_openai(exc):
+        return True
+    if _is_transient_called_process_error(exc):
+        return True
+    if _is_claude_sdk_degenerate_result(exc):
+        return True
+    if isinstance(exc, TimeoutError):
+        return True
+    if _is_transient_message(exc):
+        return True
+    return False
+
+
 def classify_stage_error(exc: BaseException) -> str:
     """Return ``"transient"`` or ``"fatal"`` for a stage exception.
 
@@ -325,8 +344,6 @@ def classify_stage_error(exc: BaseException) -> str:
     levels.  Any matching transient pattern anywhere in the chain
     makes the whole error transient.
     """
-    from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
-
     seen: set[int] = set()
     current: BaseException | None = exc
     for _ in range(_MAX_CHAIN_WALK):
@@ -334,15 +351,7 @@ def classify_stage_error(exc: BaseException) -> str:
             break
         seen.add(id(current))
 
-        if _is_transient_httpx(current):
-            return "transient"
-        if _is_transient_openai(current):
-            return "transient"
-        if _is_transient_called_process_error(current):
-            return "transient"
-        if _is_claude_sdk_degenerate_result(current):
-            return "transient"
-        if _is_transient_message(current):
+        if _check_one_transient(current):
             return "transient"
         # NOTE: the DeepSeek thinking-mode reasoning round-trip 400 detector
         # was removed — OpenRouter no longer raises that 400 when reasoning is

@@ -602,7 +602,7 @@
           "type": "integer"
         },
         "MILL_COORDINATOR_TIMEOUT_SECONDS": {
-          "default": 600,
+          "default": 900,
           "description": "Wall-clock timeout (seconds) for a single implement agent pass.",
           "minimum": 60,
           "title": "Mill Coordinator Timeout Seconds",
