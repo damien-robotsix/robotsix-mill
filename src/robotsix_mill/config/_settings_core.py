@@ -344,13 +344,13 @@ class _CoreSettings(BaseModel):
     # parallel_explore) are scoped to this directory.  When None, the
     # agent falls back to the ticket's own workspace repo_dir.
     # Configurable via MILL_INVESTIGATION_WORKSPACE env var or
-    # config/config.yaml.
+    # config/config.json.
     investigation_workspace: Path | None = Field(
         default=None, alias="MILL_INVESTIGATION_WORKSPACE"
     )
 
     # Default repo ID for legacy tickets that lack a board_id.
-    # Set in config/config.yaml.  When empty (default), accessing
+    # Set in config/config.json.  When empty (default), accessing
     # a legacy ticket without a board_id raises an error telling the
     # operator to configure this.
     default_repo_id: str = Field(default="")
@@ -390,18 +390,18 @@ class _CoreSettings(BaseModel):
     # Command run to verify the implementation; empty string skips the
     # test gate. Failures feed back into the bounded fix loop.
     # Global fallback for the test gate command. Empty by default —
-    # per-repo `test_command` in repos.yaml is the authoritative source.
+    # per-repo `test_command` in repos config is the authoritative source.
     # When both are empty, the test gate short-circuits to PASS
     # ("no test gate configured"). MILL_TEST_COMMAND can override for
     # single-repo / legacy setups.
     test_command: str = Field(default="")
     # Global fallback for the path-scoped smoke gate command (run after
     # unit tests pass). Empty by default — the per-repo
-    # `.robotsix-mill/config.yaml` `smoke_command` wins when set, this is
+    # `.robotsix-mill/config.json` `smoke_command` wins when set, this is
     # the fleet-wide fallback, and empty everywhere means no smoke gate
     # (short-circuits to PASS). MILL_SMOKE_COMMAND can override.
     # Path-scoping (`smoke_paths`) is inherently per-repo and lives only
-    # in `.robotsix-mill/config.yaml`; there is no global counterpart.
+    # in `.robotsix-mill/config.json`; there is no global counterpart.
     smoke_command: str = Field(default="")
     branch_prefix: str = Field(default="mill/")
     # Wall-clock cap (seconds) for the agent's shell tool and the test
@@ -442,7 +442,7 @@ class _CoreSettings(BaseModel):
     # legitimate refine run on model_level 3 (Claude SDK / Opus)
     # clocked 736 s (~12 min); 900 s leaves headroom while still
     # catching multi-hour runaway refine traces.  Operators can
-    # override or disable (value 0) via the env var / YAML key.
+    # override or disable (value 0) via the env var / JSON key.
     # Supplying your own dict REPLACES the built-in — re-include
     # a "refine" entry if you still want a cap.
     stage_timeout_overrides: dict[str, int] = Field(

@@ -29,7 +29,7 @@ def _clean_env() -> Generator[None, None, None]:
     The single-file config pins (``MILL_CONFIG_FILE`` / ``MILL_SECRETS_FILE``
     / ``MILL_REPOS_FILE``, set to ``""`` by the conftest ``_no_dotenv``
     fixture) are preserved — clearing them would let the loader fall back to
-    a developer's gitignored ``config/config.yaml`` and break hermeticity.
+    a developer's gitignored ``config/config.json`` and break hermeticity.
     """
     _pins = {"MILL_CONFIG_FILE", "MILL_SECRETS_FILE", "MILL_REPOS_FILE"}
     to_clear = [k for k in os.environ if k.startswith("MILL_") and k not in _pins]

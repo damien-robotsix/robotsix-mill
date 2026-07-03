@@ -238,7 +238,7 @@ def _load_repos_document(file_path: str | None = None) -> dict[str, object]:  # 
             )
             if isinstance(raw_overlay, dict):
                 overlay_repos = raw_overlay
-        except (yaml.YAMLError, OSError):
+        except yaml.YAMLError, OSError:
             pass  # corrupt overlay is tolerated; treat as empty
 
     # 4. Inject source marker so load_repos_config can set RepoConfig.source.

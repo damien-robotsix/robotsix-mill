@@ -43,8 +43,9 @@ class Settings(
 ):
     """Central Pydantic configuration model for robotsix-mill.
 
-    All fields are sourced from ``os.environ`` and layered
-    ``config/*.yaml`` files.  Conventional keys like
+    All fields are sourced from ``os.environ`` and a single JSON config
+    file (``config/config.json`` or the committed
+    ``config/config.example.json`` template).  Conventional keys like
     ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
     compatible with the reference projects.  Mill-specific settings use
     the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit

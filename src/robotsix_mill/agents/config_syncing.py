@@ -3,7 +3,7 @@
 The authoritative config source is the single committed template
 ``config/config.example.json`` (every non-secret knob with its default,
 plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
-``config/config.yaml`` (gitignored) is its real-valued counterpart.
+``config/config.json`` (gitignored) is its real-valued counterpart.
 This agent cross-references the template against
 ``src/robotsix_mill/config.py`` (the Pydantic model that consumes it)
 and ``docs/configuration.md`` (when present) to catch drift: settings
@@ -32,7 +32,7 @@ AUTHORITATIVE FILES (read these, in order):
 
 - ``src/robotsix_mill/config.py`` — the Pydantic ``Settings`` and
   ``Secrets`` classes are the source of truth for what knobs exist.
-  Extract every field: name, type, default, and YAML key path (the
+  Extract every field: name, type, default, and JSON key path (the
   JSON→env mapping is in ``src/robotsix_mill/config/loader.py``).
 - ``config/config.example.json`` — the committed single-file config
   template. Its non-secret leaves are the canonical defaults (every
@@ -48,7 +48,7 @@ AUTHORITATIVE FILES (read these, in order):
 
 NOT AUTHORITATIVE (do NOT flag these as drift sources):
 
-- ``config/config.yaml`` — gitignored live config with real secrets +
+- ``config/config.json`` — gitignored live config with real secrets +
   host-specific overrides; never inspect.
 - ``config/repos.yaml`` — gitignored per-deployment repo registry.
 - ``.env`` — legacy fallback. Settings still accept ``MILL_*`` env
@@ -78,8 +78,8 @@ DRAFT FORMAT:
   ``<key>`` in config.example.json``, ``config drift: <field> default
   mismatch (model=X, json=Y)``, or ``config drift: docs default
   mismatch for <field>``.
-- **Body**: field name + YAML key path + model default + observed
-  YAML/doc value + concrete suggested fix (which file to edit,
+- **Body**: field name + JSON key path + model default + observed
+  JSON/doc value + concrete suggested fix (which file to edit,
   what to change).
 
 MEMORY LEDGER:
