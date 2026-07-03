@@ -78,6 +78,17 @@ modules:
       - tests/core/test_tool_wrappers.py
     dependencies: [config]
 
+  - id: deps
+    description: >-
+      Read-only internal dependency graph model.  Parses
+      ``[tool.uv.sources]`` git ``rev`` pins from ``pyproject.toml``
+      files and builds a directed, topologically sorted dependency graph
+      of robotsix repos.
+    paths:
+      - src/robotsix_mill/deps/*.py
+      - tests/deps/*.py
+    dependencies: [config]
+
   # -------------------------------------------------------------------
   # Forge & VCS
   # -------------------------------------------------------------------
