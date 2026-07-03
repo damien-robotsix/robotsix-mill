@@ -264,6 +264,9 @@ run_pin_bump_pass
 # rebase (its only caller) was removed so branch-own CI failures go straight
 # to the fix agent (c14c). Kept as a reusable, unit-tested helper.
 branch_is_behind_main
+# ls_remote_sha — called from pin_bump_runner.py; vulture (60% confidence)
+# cannot trace the call site through the runner module.
+ls_remote_sha
 
 # -- runtime -----------------------------------------------------------------
 Instrumentator
