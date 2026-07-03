@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Literal, TypeVar
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 
 class ImplementResult(BaseModel):
     """Structured output from the implement (coordinator) agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     summary: str
     updated_memory: str = ""

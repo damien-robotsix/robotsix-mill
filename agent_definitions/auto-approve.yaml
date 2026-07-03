@@ -62,6 +62,13 @@ system_prompt: |
     the five NEEDS_APPROVAL gates above.
 
   **Tie-breaker**: when unsure, return APPROVE.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Reason
 

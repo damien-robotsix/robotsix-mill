@@ -21,7 +21,7 @@ from typing import Any, Literal, cast
 
 import yaml as _yaml
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import RepoConfig, Settings
@@ -175,6 +175,8 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
+    model_config = ConfigDict(strict=True, extra="forbid")
+
     decision: Literal["REFINE", "SKIP", "MAINTENANCE", "NO_CHANGE", "MIGRATE"]
     reason: str
     target_board: str | None = Field(
@@ -250,6 +252,8 @@ class AutoApproveResult(BaseModel):
       it requires no design review.
     """
 
+    model_config = ConfigDict(strict=True, extra="forbid")
+
     decision: Literal["APPROVE", "NEEDS_APPROVAL"]
     reason: str = Field(
         description=(
@@ -271,6 +275,8 @@ class SpecReviewResult(BaseModel):
 
     Produces a clean, concise spec without exploratory narration.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     concise_spec: str
     stripped_summary: str
@@ -298,12 +304,16 @@ class ReviewerAgreementResult(BaseModel):
     When DISAGREE, the full refine agent runs as normal.
     """
 
+    model_config = ConfigDict(strict=True, extra="forbid")
+
     decision: Literal["AGREE", "DISAGREE"]
     reason: str
 
 
 class RefineResult(BaseModel):
     """Refine agent output."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     split: bool = False
     spec_markdown: str | None = None

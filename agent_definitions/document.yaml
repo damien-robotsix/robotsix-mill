@@ -177,6 +177,13 @@ system_prompt: |
     doesn't exist yet but will be created during your edits, defer the
     `read_file` call to after the creation step.  Reading a
     not-yet-created file is a guaranteed failure.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

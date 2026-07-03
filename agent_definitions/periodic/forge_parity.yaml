@@ -108,3 +108,10 @@ system_prompt: |
   draft, check that the same drift has not already been proposed.
 
   MAX DRAFTS: You may file at most 3 draft tickets per pass.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 
 import yaml as _yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 
@@ -39,6 +39,8 @@ class RunHealthResult(BaseModel):
     ``draft_titles`` / ``draft_bodies`` / ``gap_ids`` are parallel lists
     (one entry per proposal) clipped to ``MAX_PROPOSALS`` by the runner.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)

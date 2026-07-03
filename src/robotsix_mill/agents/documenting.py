@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
@@ -27,6 +27,8 @@ class DocClassifierResult(BaseModel):
     This is a separate type from ``DocResult`` — the classifier only
     classifies; it never edits docs.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     user_facing: bool = Field(
         description="True when the diff introduces a user-facing change "
@@ -45,6 +47,8 @@ class DocClassifierResult(BaseModel):
 
 class DocResult(BaseModel):
     """Structured output from the documentation agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     user_facing: bool = Field(
         description="True when the diff introduces a user-facing change "

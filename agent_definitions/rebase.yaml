@@ -114,6 +114,13 @@ system_prompt: |
 
   After the rebase completes (or you determine it cannot), set status to
   DONE or FAILED and provide a brief summary.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

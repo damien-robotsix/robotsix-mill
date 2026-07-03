@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
@@ -83,6 +83,8 @@ class RetrospectResult(BaseModel):
     ``memory_delta`` — in that precedence order. ``agented_md_proposals``
     carries any proposed ``AGENT.md`` changes.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     findings: str
     conclusion: str

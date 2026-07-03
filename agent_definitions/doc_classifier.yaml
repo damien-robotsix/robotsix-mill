@@ -55,6 +55,13 @@ system_prompt: |
   - `classification`: a one-line human-readable summary, e.g.
     "internal-only — model field rename" or
     "user-facing — new CLI flag".
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Budget discipline
 

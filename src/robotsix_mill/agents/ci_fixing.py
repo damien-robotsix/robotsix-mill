@@ -20,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..config import Settings, get_secrets
 from .prompt_blocks import section
@@ -28,6 +28,8 @@ from .prompt_blocks import section
 
 class CiFixResult(BaseModel):
     """Structured output from the CI-fix agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     status: Literal["DONE", "FAILED", "OUT_OF_SCOPE"]
     summary: str

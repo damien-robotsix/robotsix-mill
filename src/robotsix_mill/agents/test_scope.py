@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -30,6 +30,8 @@ class TestScopeVerdict(BaseModel):
     that no code path reads at runtime).  ``rationale`` is the
     human-readable justification.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     needs_full_suite: bool
     rationale: str

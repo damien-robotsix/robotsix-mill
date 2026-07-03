@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..config import Settings
 from .prompt_blocks import section
@@ -27,6 +27,8 @@ class ScopeTriageVerdict(BaseModel):
     the rationale, and ``expand_files`` lists the out-of-scope paths
     approved when ``action`` is ``EXPAND``.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     action: Literal["EXPAND", "REJECT", "ESCALATE"]
     justification: str

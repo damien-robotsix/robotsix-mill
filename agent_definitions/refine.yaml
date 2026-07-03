@@ -230,6 +230,10 @@ system_prompt: |
 
   ## Output format
 
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
   You MUST return a structured result. There are FOUR output modes —
   pick the one that fits the draft's actual scope:
 

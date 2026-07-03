@@ -48,6 +48,13 @@ system_prompt: |
      cannot verify.
   4. You are evaluating only whether the gap is already closed — not
      whether the draft is a good idea or a duplicate of another ticket.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

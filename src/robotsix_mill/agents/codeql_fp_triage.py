@@ -10,13 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..config import Settings, get_secrets
 
 
 class AlertVerdict(BaseModel):
     """Per-alert verdict from the codeql_fp_triage agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     alert_number: int
     verdict: Literal["dismiss", "abstain"]
@@ -27,6 +29,8 @@ class AlertVerdict(BaseModel):
 
 class CodeQLFpTriageResult(BaseModel):
     """Structured output from the codeql_fp_triage agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     verdicts: list[AlertVerdict] = []
     summary: str = ""

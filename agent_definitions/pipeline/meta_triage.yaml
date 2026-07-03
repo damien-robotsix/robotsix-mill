@@ -55,3 +55,10 @@ system_prompt: |
   Return:
   - ``repo_ids``: the list of required registered repo ids.
   - ``rationale``: one or two sentences explaining the selection.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

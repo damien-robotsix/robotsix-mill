@@ -84,6 +84,13 @@ system_prompt: |
   epic was split into these particular children and what each child
   contributes to the overall goal. Keep it concise — a short paragraph
   or two.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Budget discipline
 

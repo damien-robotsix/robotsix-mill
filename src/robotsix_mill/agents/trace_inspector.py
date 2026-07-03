@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..config import RepoConfig, Settings, get_secrets
 from .prompt_blocks import section
@@ -269,6 +269,8 @@ class TraceInspectResult(BaseModel):
     failed (e.g. the trace was too large for the model context) — which
     distinguishes a genuine no-findings run from one that never ran.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     findings: list[TraceFinding] = Field(default_factory=list)
     updated_memory: str = ""

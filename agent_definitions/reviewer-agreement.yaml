@@ -77,6 +77,13 @@ system_prompt: |
   transition note.  Be concise and specific:
   - AGREE: "Reviewer confirmed the draft's finding — [specific finding]."
   - DISAGREE: "Reviewer requested [specific change] — full refine needed."
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Budget discipline
 

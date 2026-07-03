@@ -242,6 +242,13 @@ system_prompt: |
   - ``pattern_approach``: one-line description of what you tried
     (e.g. "used edit_file to wrap line").
   Leave these empty if nothing meaningful can be recorded.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

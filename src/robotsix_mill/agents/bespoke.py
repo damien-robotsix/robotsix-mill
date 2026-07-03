@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..config import Settings
 from .bespoke_loader import BespokeAgentDefinition
@@ -40,6 +40,8 @@ class BespokeResult(BaseModel):
     persist + draft-ticket creation + dedup) accepts it without
     branching.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)

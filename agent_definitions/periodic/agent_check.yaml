@@ -179,6 +179,13 @@ system_prompt: |
   sections, or empty/truncated ledgers suggesting the agent isn't
   maintaining memory. Only inspect this if the repo's agents actually use
   memory ledgers (skip otherwise).
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Output
 

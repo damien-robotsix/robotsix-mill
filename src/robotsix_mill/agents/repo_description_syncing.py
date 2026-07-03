@@ -11,7 +11,7 @@ The runner acts on that judgment directly.
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 from .periodic_base import PeriodicAgentResult
 
@@ -25,6 +25,8 @@ class RepoDescriptionSyncResult(PeriodicAgentResult):
 
     Adds two fields that the runner reads after the agent completes:
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     should_update: bool = Field(
         default=False,

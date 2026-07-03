@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
@@ -70,6 +70,8 @@ class MetaAgentResult(BaseModel):
     ``target_repo_id`` to the repo the marker lives in (routed to that
     repo's board, exactly like ``alignment_drafts``).
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     updated_memory: str = ""
     extraction_drafts: list[DraftProposal] = Field(default_factory=list)

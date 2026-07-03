@@ -12,7 +12,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Any, Literal
 
 from robotsix_mill._resources import agent_definitions_dir
@@ -78,6 +78,8 @@ class ReviewAsk(BaseModel):
 
 class ReviewVerdict(BaseModel):
     """Structured output from the blind review agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     verdict: Literal["APPROVE", "REQUEST_CHANGES", "NEEDS_DISCUSSION"]
     comments: str = Field(

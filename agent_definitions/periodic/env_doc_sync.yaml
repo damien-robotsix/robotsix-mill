@@ -257,3 +257,10 @@ system_prompt: |
   Do NOT end the run with raw thinking, prose findings, or an empty
   response. The pipeline reads ONLY the structured ``EnvDocSyncResult``;
   anything else is discarded.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

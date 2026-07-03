@@ -133,3 +133,10 @@ system_prompt: |
   6. Return the fully reconciled ledger in ``updated_memory``.
 
   Work thoroughly — scan .py, .js, .yaml, and .md files. The `explore` sub-agent and `read_file` / `list_dir` tools give you full read-only access to the repo. Use them.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

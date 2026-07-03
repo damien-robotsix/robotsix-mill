@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings, get_secrets
@@ -23,6 +23,8 @@ from .prompt_blocks import section
 
 class ReviewRevisionResult(BaseModel):
     """Structured output from the review-revision agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     status: Literal["DONE", "FAILED"]
     summary: str

@@ -89,3 +89,10 @@ system_prompt: |
   - Return the full, updated ledger in ``updated_memory``.
 
   MAX DRAFTS: You may file at most 8 draft tickets per pass.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

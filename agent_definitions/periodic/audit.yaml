@@ -92,6 +92,13 @@ system_prompt: |
   it to read this project's own files. When a local clone is available,
   inspect the ACTUAL repository using the tools in the guidance below.
   (With no clone, reason from the forge_remote_url + memory.)
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-selection checklist
 

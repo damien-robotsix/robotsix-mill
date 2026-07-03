@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
@@ -157,6 +157,8 @@ def _validate_command(command: str) -> str | None:
 
 class MaintenanceResult(BaseModel):
     """Structured output from the maintenance agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     success: bool
     note: str | None = None

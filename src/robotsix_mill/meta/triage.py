@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 import yaml as _yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings, get_repos_config
@@ -25,6 +25,8 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 
 class RequiredReposResult(BaseModel):
     """Triage output: the registered repos a meta proposal requires."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     repo_ids: list[str] = Field(default_factory=list)
     rationale: str = ""

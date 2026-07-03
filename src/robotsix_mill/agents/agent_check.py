@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import ConfigDict
+
 from ..config import Settings
 from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 
@@ -27,6 +29,8 @@ class AgentCheckResult(PeriodicAgentResult):
     a ``findings`` field holding the human-readable narrative of the
     coherence issues the agent surfaced.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     findings: str = ""
 

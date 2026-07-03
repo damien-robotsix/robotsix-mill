@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..config import Settings
 from .prompt_blocks import section
@@ -34,6 +34,8 @@ class EpicStatusResult(BaseModel):
     worker — but such entries carry no covering sibling and are refused
     by the delivery-evidence gate.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     decision: Literal["close", "keep_open", "update_description", "update_deps"]
     note: str = ""

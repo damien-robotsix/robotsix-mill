@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..config import Settings
 from .prompt_blocks import section
@@ -27,6 +27,8 @@ from .prompt_blocks import section
 
 class ObsolescenceResult(BaseModel):
     """Structured output from the obsolescence check agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     obsolete: bool = False
     reason: str = ""

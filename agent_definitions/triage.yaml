@@ -257,6 +257,13 @@ system_prompt: |
   When ANY criterion is not clearly met, set `trivial_scope: false`.
   The only real risk is a wrong `true` routing a subtle change to a
   weak model.  When unsure, `false`.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Exploration findings forwarding
 

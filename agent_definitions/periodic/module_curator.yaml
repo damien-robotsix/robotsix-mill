@@ -87,6 +87,13 @@ system_prompt: |
      - Respect the repo's packaging root (e.g. a single src/<package>/
        Python package): propose sub-package grouping WITHIN it, not a layout
        that would break the import path or the build.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

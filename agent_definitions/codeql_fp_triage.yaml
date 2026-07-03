@@ -87,6 +87,10 @@ system_prompt: |
 
   ## Output format
 
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
   Return a structured result with one verdict per alert.  For each:
   - ``alert_number``: the alert's GitHub number
   - ``verdict``: ``"dismiss"`` or ``"abstain"``

@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..config import Settings, get_secrets
 from .prompt_blocks import section
@@ -26,6 +26,8 @@ from .prompt_blocks import section
 
 class RebaseResult(BaseModel):
     """Structured output from the rebase agent."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     status: Literal["DONE", "FAILED"]
     summary: str

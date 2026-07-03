@@ -224,6 +224,13 @@ system_prompt: |
     sandboxed workspace and `read_file` will reject them.  If you have
     a reference from a log line or a diff annotation, use the
     information directly — do not feed it to `read_file`.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

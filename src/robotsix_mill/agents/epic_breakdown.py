@@ -426,7 +426,7 @@ class EpicBreakdownResult(BaseModel):
     working (tests, internal callers).
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(strict=True, extra="forbid", populate_by_name=True)
 
     child_titles: list[str] = Field(
         default_factory=list,

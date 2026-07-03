@@ -201,3 +201,10 @@ system_prompt: |
   whole pass is wasted. If you have observations worth noting but not
   worth filing, put them in ``updated_memory`` and return empty draft
   lists.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

@@ -175,3 +175,10 @@ system_prompt: |
     sentinel errors and you must proceed with what you have.
 
   Return the full, updated memory document in `updated_memory`.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

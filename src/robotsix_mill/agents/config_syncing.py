@@ -17,7 +17,7 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..config import Settings
 from .prompt_blocks import section
@@ -159,6 +159,8 @@ class ConfigSyncResult(BaseModel):
     draft tickets: ``draft_titles``, ``draft_bodies``, and the
     ``gap_ids`` used for dedup against the memory ledger.
     """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)

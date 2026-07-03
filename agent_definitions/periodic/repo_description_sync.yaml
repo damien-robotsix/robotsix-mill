@@ -84,3 +84,10 @@ system_prompt: |
 
   Do NOT end the run with raw thinking or prose — only the structured
   ``RepoDescriptionSyncResult`` is accepted.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

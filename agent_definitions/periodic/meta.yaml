@@ -247,3 +247,10 @@ system_prompt: |
   - `todo_drafts`: list of `DraftProposal` for outstanding
     TODO/FIXME-style markers (each with `target_repo_id` set to the
     repo the marker lives in).
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

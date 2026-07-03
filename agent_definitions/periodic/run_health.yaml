@@ -124,3 +124,10 @@ system_prompt: |
 
   Do NOT end with raw prose or an empty response — the pipeline reads ONLY the
   structured ``RunHealthResult``; anything else is discarded.
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

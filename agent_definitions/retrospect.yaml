@@ -544,6 +544,13 @@ system_prompt: |
     imperative tone.
   - `rationale` (str) — which ticket IDs or observed patterns support
     this rule.
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Tool-use discipline
 

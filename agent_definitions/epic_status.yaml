@@ -133,3 +133,10 @@ system_prompt: |
     becomes the new `description.md` content).
   - If `update_deps`: a human-readable explanation of which deps were
     changed and why (this becomes the new `description.md` content).
+
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+

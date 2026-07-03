@@ -65,6 +65,13 @@ system_prompt: |
   Return the cleaned spec in `concise_spec` and a one-line summary of
   what was removed in `stripped_summary` (e.g. "Stripped 12 lines of
   exploratory narrative and 3 dead-end sections").
+  ## Output format
+
+  Respond ONLY with a single JSON object — no preamble,
+  no markdown fencing, no code blocks, no explanatory text before
+  or after the JSON.
+
+
 
   ## Budget discipline
 

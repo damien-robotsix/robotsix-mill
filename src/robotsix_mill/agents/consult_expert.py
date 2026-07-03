@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..config import Settings, get_secrets
 
@@ -35,6 +35,8 @@ class ExpertConsultResult(BaseModel):
     ``updated_memory`` is the expert's revised memory ledger; the
     runner persists it verbatim when non-empty so future consultations
     of the same domain see the expert's accumulated knowledge."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     answer: str = Field(
         description="Concise, focused answer to the coordinator's "
