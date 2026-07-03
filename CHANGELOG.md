@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add a Renovate/Dependabot auto-merge caller that delegates to the shared reusable workflow, which gates on both `dependabot[bot]` and `renovate[bot]`.
+- Added per-file justification boilerplate templates and a structured justification format to the scope-triage agent's system prompt, standardizing how the agent documents EXPAND verdicts for common out-of-scope file patterns (CHANGELOG.md, pyproject.toml/uv.lock, tests/conftest.py, __init__.py). (mill: Boilerplate: scope-triage EXPAND — justifying additional files in implement (20260702T214750Z-boilerplate-scope-triage-expand-justifyi-b3cd))
 - Audit agent now reads the repo's `AGENT.md` first (and the `robotsix-standards` it links) as the audit baseline, flagging concrete deviations from standards a repo declares it follows — while not manufacturing gaps for repos that opt out.
 - Enable `triage_boilerplate` periodic workflow for mill's own board via `.robotsix-mill/periodic/triage_boilerplate.yaml` presence file.
 - Add explicit path-traversal guard in ``Workspace.__init__`` to silence a CodeQL ``py/path-injection`` false positive. ``ticket_id`` is already sanitized by ``_slug()`` at creation; the guard is a defense-in-depth annotation.
