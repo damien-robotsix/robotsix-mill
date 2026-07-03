@@ -415,9 +415,19 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return Outcome(State.BLOCKED, msg)
 
         s = ctx.settings
-        remote_url = _facade._resolve_remote_url(s, repo_config)
-        if not remote_url:
-            return None
+
+        # When cross_repo_target is set, clone the fork/target repo so
+        # that file-existence checks and config analysis during refine
+        # target the correct repository — not the managed repo.
+        cross = repo_config.cross_repo_target if repo_config is not None else None
+        if cross:
+            remote_url = cross.fork_remote_url
+            target = cross.base_branch
+        else:
+            remote_url = _facade._resolve_remote_url(s, repo_config)
+            if not remote_url:
+                return None
+            target = target_branch_for(s, repo_config)
 
         # Derive clone target from the authoritative (re-resolved) board_id,
         # never from the pre-computed ``ws`` parameter (which may be stale
@@ -443,7 +453,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         git_ops.clone(
             remote_url,
             cand,
-            target_branch_for(s, repo_config),
+            target,
             token,
         )
         return cand

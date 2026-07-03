@@ -3686,6 +3686,70 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
     _db.reset_engine()
 
 
+def test_clone_or_resume_cross_repo_target_uses_fork_url_and_base_branch(
+    monkeypatch, tmp_path
+):
+    """When repo_config.cross_repo_target is set, _clone_or_resume clones
+    the fork (cross.fork_remote_url) targeting cross.base_branch instead
+    of the managed repo's remote/branch.
+    """
+    from robotsix_mill.config import (
+        CrossRepoTarget,
+        RepoConfig,
+        ReposRegistry,
+        Settings,
+    )
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.refine.core import RefineStage
+
+    cross = CrossRepoTarget(
+        upstream_remote_url="https://github.com/upstream/target.git",
+        fork_remote_url="https://github.com/myfork/target.git",
+        base_branch="develop",
+    )
+    repo = RepoConfig(
+        repo_id="cross-repo",
+        board_id="board-cross",
+        langfuse_project_name="proj-cross",
+        langfuse_public_key="pk-cross",
+        langfuse_secret_key="sk-cross",
+        forge_remote_url="https://github.com/managed/repo.git",
+        cross_repo_target=cross,
+    )
+    registry = ReposRegistry(repos={"cross-repo": repo})
+    monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: registry)
+
+    s = Settings(data_dir=str(tmp_path / "data"), FORGE_REMOTE_URL="")
+    _db.init_db(s, board_id="board-cross")
+    svc = TicketService(s, board_id="board-cross")
+    ctx = StageContext(
+        settings=s,
+        service=svc,
+        repo_config=repo,
+    )
+    t = svc.create("Cross-repo ticket", "Add a file to the target repo")
+    ws = svc.workspace(t)
+
+    clone_args: dict = {}
+
+    def _capture(remote_url, dest, branch, token):
+        clone_args["remote_url"] = remote_url
+        clone_args["dest"] = str(dest)
+        clone_args["branch"] = branch
+
+    monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _capture)
+
+    result = RefineStage._clone_or_resume(ctx, t, ws)
+
+    assert clone_args["remote_url"] == cross.fork_remote_url
+    assert clone_args["branch"] == cross.base_branch
+    assert "board-cross" in str(result)
+
+    _db.reset_engine()
+
+
 # ---------------------------------------------------------------------------
 # stage cache: unchanged input short-circuits re-refine
 # ---------------------------------------------------------------------------
