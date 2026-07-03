@@ -485,9 +485,9 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- pin-bump agent (scheduled dependency pin-bump PR actuator) ---
-    # Opt-in periodic pin-bump pass. Defaults to False (off) — the PR
-    # actuator is tracked separately; this block wires the config defaults
-    # and the per-repo presence-file trigger.
+    # Opt-in periodic pin-bump pass. Defaults to False (off).
+    # The PR actuator (SHA-latest resolution → pyproject.toml edit →
+    # uv lock → cross-repo PR) is now delivered.
     pin_bump_periodic: bool = Field(
         default=False,
         description="When true, run scheduled dependency pin-bump PR actuator passes.",
