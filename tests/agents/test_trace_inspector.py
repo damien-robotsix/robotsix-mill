@@ -945,3 +945,82 @@ class TestShrinkTraceData:
         parsed = json.loads(shrunk)
         assert parsed["observations"][0]["id"] == "obs-1"
         assert parsed["observations"][0]["input"] == "hello"
+
+    def test_large_trace_strips_input_output(self):
+        """When obs_count > 200, input/output/metadata are stripped."""
+        obs = [
+            {
+                "id": f"obs-{i}",
+                "type": "GENERATION",
+                "level": "DEFAULT",
+                "name": "test",
+                "input": f"big input {i}",
+                "output": f"big output {i}",
+                "metadata": {"key": "value"},
+                "startTime": "2025-01-01T00:00:00Z",
+            }
+            for i in range(201)
+        ]
+        trace = {"id": "t-large", "observations": obs}
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 201
+        parsed = json.loads(shrunk)
+        for o in parsed["observations"]:
+            assert "input" not in o
+            assert "output" not in o
+            assert "metadata" not in o
+            assert "id" in o
+            assert "name" in o
+
+    def test_large_trace_keeps_structural_fields(self):
+        """Large-trace path preserves id, type, level, statusMessage, name,
+        model, calculatedTotalCost, latency, usageDetails, startTime, endTime."""
+        obs = [
+            {
+                "id": "obs-200",
+                "type": "GENERATION",
+                "level": "ERROR",
+                "statusMessage": "failed",
+                "name": "gpt-4",
+                "model": "openai/gpt-4",
+                "calculatedTotalCost": 0.5,
+                "latency": 1.2,
+                "usageDetails": {"input": 1000},
+                "startTime": "2025-01-01T00:00:00Z",
+                "endTime": "2025-01-01T00:00:01Z",
+                "input": "should be stripped",
+                "output": "should be stripped",
+                "extraField": "should be stripped",
+            }
+            for _ in range(201)
+        ]
+        trace = {"id": "t-keep", "observations": obs}
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 201
+        parsed = json.loads(shrunk)
+        o = parsed["observations"][0]
+        assert o == {
+            "id": "obs-200",
+            "type": "GENERATION",
+            "level": "ERROR",
+            "statusMessage": "failed",
+            "name": "gpt-4",
+            "model": "openai/gpt-4",
+            "calculatedTotalCost": 0.5,
+            "latency": 1.2,
+            "usageDetails": {"input": 1000},
+            "startTime": "2025-01-01T00:00:00Z",
+            "endTime": "2025-01-01T00:00:01Z",
+        }
+
+    def test_small_trace_keeps_input_output(self):
+        """When obs_count <= 200, input/output are preserved (trimmed if long)."""
+        trace = {
+            "id": "t-small",
+            "observations": [{"id": "obs-1", "input": "hello", "output": "world"}],
+        }
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 1
+        parsed = json.loads(shrunk)
+        assert parsed["observations"][0]["input"] == "hello"
+        assert parsed["observations"][0]["output"] == "world"
