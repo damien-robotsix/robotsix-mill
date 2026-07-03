@@ -1659,9 +1659,29 @@ def test_handle_epic_decision_close_with_new_children_downgrades():
     assert not any(c[0] == "transition" for c in svc.calls)
 
 
-# -----------------------------------------------------------------------
-# Delivery classification + epic-reeval obsoletion guard (epic 4564)
-# -----------------------------------------------------------------------
+def test_validate_epic_state_skips_blocked(monkeypatch):
+    """_validate_epic_state returns None for a BLOCKED epic."""
+    from types import SimpleNamespace
+    from robotsix_mill.runtime.worker import _validate_epic_state
+    from robotsix_mill.core.states import State as S
+
+    class _Settings:
+        pass
+
+    settings = _Settings()
+    blocked_ticket = SimpleNamespace(id="E1", state=S.BLOCKED, board_id="b1")
+
+    class _MockSvc:
+        def get(self, ticket_id):
+            return blocked_ticket
+
+    mock_svc = _MockSvc()
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService",
+        lambda *a, **kw: mock_svc,
+    )
+    result = _validate_epic_state(settings, "E1")
+    assert result is None
 
 
 def _ns_ticket(tid, state):

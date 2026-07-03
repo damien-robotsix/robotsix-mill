@@ -79,6 +79,9 @@ def _validate_epic_state(settings, epic_id: str):
     if epic.state is State.EPIC_CLOSED:
         log.debug("epic %s: already EPIC_CLOSED — skipping re-evaluation", epic_id)
         return None
+    if epic.state is State.BLOCKED:
+        log.debug("epic %s: BLOCKED — skipping re-evaluation", epic_id)
+        return None
     return svc, epic
 
 

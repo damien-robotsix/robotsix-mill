@@ -724,6 +724,7 @@ src/robotsix_mill/runtime/routes/_epics.py:0: error: Function is missing a type 
 src/robotsix_mill/runtime/routes/_epics.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_epics.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/routes/_epics.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
+src/robotsix_mill/runtime/routes/_epics.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/routes/_epics.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_tickets_merge.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/routes/_tickets_merge.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]

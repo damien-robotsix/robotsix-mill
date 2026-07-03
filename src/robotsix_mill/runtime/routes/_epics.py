@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...core.models import TicketKind, TicketRead
+from ...core.states import State
 from ..deps import (
     enrich_ticket_read,
     get_run_registry,
@@ -78,6 +79,37 @@ def create_epic(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return enrich_ticket_read(ticket, settings, svc)
+
+
+@router.post("/tickets/{ticket_id}/abandon-epic", response_model=TicketRead)
+def abandon_epic(
+    ticket_id: str,
+    body: dict[str, Any],
+    request: Request,
+    svc=Depends(get_service),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Abandon an ``EPIC_OPEN`` epic by transitioning it to ``EPIC_CLOSED``.
+
+    The epic stops spawning children once abandoned (the re-eval worker
+    skips ``EPIC_CLOSED`` epics).  Accepts an optional ``actor`` field
+    in the JSON body (defaults to ``"operator"``).
+
+    Returns 422 when the ticket is not in ``EPIC_OPEN`` state.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.state is not State.EPIC_OPEN:
+        raise HTTPException(
+            422,
+            f"ticket {ticket_id} is not an open epic (current state: {ticket.state})",
+        )
+    actor = str(body.get("actor", "operator")) if body else "operator"
+    note = f"[abandoned by operator] {actor}"
+    ticket = svc.transition(ticket_id, State.EPIC_CLOSED, note=note)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
 @router.get(
