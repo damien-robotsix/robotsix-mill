@@ -7,10 +7,9 @@
   //
   //   class TicketKind(StrEnum):
   //       TASK = "task"
-  //       INQUIRY = "inquiry"
   //       EPIC = "epic"
   //
-  // The string literals "task", "inquiry", "epic" used throughout this file
+  // The string literals "task", "epic" used throughout this file
   // MUST stay in sync with that enum.
   // ---------------------------------------------------------------------------
 
@@ -942,8 +941,7 @@
       (redraftable ?
         '<button class="redraft-btn" title="Send back to draft" onclick="event.stopPropagation();redraft(' + jsq(t.id) + ')">Redraft</button>' : "") +
       '<button class="' + prioClass + '" title="Pulled from the queue ahead of non-priority tickets" onclick="event.stopPropagation();togglePriority(' + jsq(t.id) + ',' + (t.priority ? "false" : "true") + ')">' + prioLabel + '</button>' +
-      (t.kind === "inquiry" && t.state === "answered" ?
-        '<button class="redraft-btn" title="Turn this Q&A into an actionable task" onclick="event.stopPropagation();convertToTicket(' + jsq(t.id) + ')">Convert to ticket</button>' : "") +
+
       '<button class="move-btn" title="Move ticket to another board" style="background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();moveToBoard(' + jsq(t.id) + ',' + jsq(t.board_id) + ')">Move to board…</button>' +
       '<button class="del-btn" title="Delete ticket" style="position:static;opacity:1;margin-left:4px;margin-top:5px;display:inline-block" onclick="event.stopPropagation();del_(' + jsq(t.id) + ')">✕</button>';
   }
@@ -993,19 +991,6 @@
       if (!r.ok) { var e = await r.text(); alert("priority toggle failed: " + e); return; }
       refresh();
       if (sel === id) open_(id);
-    });
-  }
-
-  async function convertToTicket(id) {
-    await lockWhile(async function () {
-      var comment = prompt("Add a comment to guide the new ticket (optional):");
-      if (comment === null) return;
-      var r = await jpost("/tickets/" + id + "/convert-to-task", { comment: comment.trim() });
-      if (!r.ok) { var e = await r.text(); alert("convert to ticket failed: " + e); return; }
-      var nt = await r.json();
-      refresh();
-      if (nt && nt.id) open_(nt.id);
-      else if (sel === id) open_(id);
     });
   }
 
@@ -1193,7 +1178,6 @@
         '<h3>' + esc(t.title) + '</h3>' +
         '<div class="muted">' + t.id + '</div>' +
         '<p>state <b class="s-' + t.state + '" style="border-left:3px solid var(--c);padding-left:6px">' + t.state + '</b>' +
-        (t.kind === "inquiry" ? ' <span class="inquiry-badge">🔍 inquiry</span>' : "") +
         (t.kind === "epic" ? ' <span class="epic-badge">📋 epic</span>' : "") +
         ' · branch ' + esc(t.branch || "—") + '<br>' +
         (t.board_id ? 'repo <span class="repo-badge">' + esc(repoIdForBoardId(t.board_id)) + '</span> · ' : "") +
@@ -1644,69 +1628,6 @@
         }
       }
       close(); refresh();
-    }
-
-    backdrop.addEventListener("click", function(e) { if (e.target === backdrop) close(); });
-    document.getElementById("modal-cancel").addEventListener("click", close);
-    createBtn.addEventListener("click", doSubmit);
-    modal.addEventListener("keydown", function(e) {
-      if (e.key === "Escape") { e.preventDefault(); close(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doSubmit(); return; }
-      if (e.key === "Enter" && e.target === titleEl) { e.preventDefault(); descEl.focus(); return; }
-    });
-    titleEl.focus();
-  }
-
-  async function newInquiry() {
-    var backdrop = document.createElement("div");
-    backdrop.className = "modal-backdrop";
-    var modal = document.createElement("div");
-    modal.className = "modal";
-    var repoId = getRepoId();
-    var repoField = repoId === "all"
-      ? '<label class="modal-label">Repo <span class="modal-req">*</span></label>' +
-        '<select class="modal-input" id="modal-repo" style="width:100%">' +
-          (reposCache || []).map(function(r) { return '<option value="' + esc(r.repo_id) + '">' + esc(r.repo_id) + '</option>'; }).join("") +
-        '</select>'
-      : '<input type="hidden" id="modal-repo" value="' + esc(repoId) + '">';
-    modal.innerHTML =
-      '<h2>New Inquiry</h2>' +
-      '<label class="modal-label">Question / investigation prompt <span class="modal-req">*</span></label>' +
-      '<input type="text" class="modal-input" id="modal-title" placeholder="What do you want to know?" autocomplete="off">' +
-      '<div class="modal-field-error" id="modal-title-err"></div>' +
-      '<label class="modal-label">Context / background</label>' +
-      '<textarea class="modal-textarea" id="modal-desc" rows="8" placeholder="Rough idea, context, constraints… (optional)"></textarea>' +
-      repoField +
-      '<div class="modal-field-error" id="modal-repo-err"></div>' +
-      '<div class="modal-buttons">' +
-       '<span class="modal-submit-error" id="modal-submit-err"></span>' +
-       '<button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>' +
-       '<button type="button" class="modal-btn-create" id="modal-create">Create</button>' +
-      '</div>';
-    backdrop.appendChild(modal);
-    document.body.appendChild(backdrop);
-
-    var titleEl = document.getElementById("modal-title");
-    var titleErr = document.getElementById("modal-title-err");
-    var descEl = document.getElementById("modal-desc");
-    var submitErr = document.getElementById("modal-submit-err");
-    var createBtn = document.getElementById("modal-create");
-
-    function close() { document.body.removeChild(backdrop); }
-    function showTitleErr(msg) { titleErr.textContent = msg; }
-    function clearTitleErr() { titleErr.textContent = ""; }
-    function showSubmitErr(msg) { submitErr.textContent = msg; }
-    function clearSubmitErr() { submitErr.textContent = ""; }
-
-    async function doSubmit() {
-      var title = titleEl.value.trim();
-      if (!title) { showTitleErr("Question is required"); titleEl.focus(); return; }
-      clearTitleErr(); clearSubmitErr();
-      createBtn.disabled = true; createBtn.textContent = "Creating…";
-      var r = await jpost("/tickets", { title: title, description: descEl.value, kind: "inquiry", repo_id: document.getElementById("modal-repo").value });
-      if (!r.ok) { var e = await r.text(); showSubmitErr("create failed: " + e);
-        createBtn.disabled = false; createBtn.textContent = "Create"; }
-      else { close(); refresh(); }
     }
 
     backdrop.addEventListener("click", function(e) { if (e.target === backdrop) close(); });
@@ -2608,7 +2529,7 @@
   window.closeThread = closeThread;
   window.reopenThread = reopenThread;
   window.togglePriority = togglePriority;
-  window.convertToTicket = convertToTicket;
+
   window.moveToBoard = moveToBoard;
   window.generateChildren = generateChildren;
   window.newChildTicket = newChildTicket;
@@ -2623,7 +2544,7 @@
   window.openCandidates = openCandidates;
   window.newTicket = newTicket;
   window.newEpic = newEpic;
-  window.newInquiry = newInquiry;
+
   window.onRepoChange = onRepoChange;
   window.addRepo = addRepo;
   window.toggleClosed = toggleClosed;

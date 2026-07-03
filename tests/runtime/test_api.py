@@ -1146,24 +1146,6 @@ def test_board_has_new_ticket_affordance(client):
     assert 'jpost("/tickets"' in js
 
 
-def test_board_has_new_inquiry_affordance(client):
-    """The board exposes a '+ Ask' button wired to POST /tickets with kind='inquiry'.
-
-    Regression guard: the inquiry backend landed but the button was
-    forgotten (same as the comment-UI gap). This assertion prevents recurrence.
-    """
-    body = client.get("/").text
-    assert "newInquiry()" in body
-    assert "+ Ask" in body
-    js = client.get("/static/mill/board-mill.js").text
-    assert "newInquiry" in js
-    # The only thing that distinguishes inquiry creation from task creation:
-    assert 'kind: "inquiry"' in js, (
-        "newInquiry() must POST kind='inquiry', not the default 'task' — "
-        "without this the button silently creates tasks instead of inquiries"
-    )
-
-
 def test_board_has_manual_child_ticket_affordance(client):
     """The board exposes an 'Add Ticket' button inside epic drawers so users
     can manually create child tickets without relying on the LLM breakdown."""

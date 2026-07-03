@@ -1,7 +1,7 @@
 """Shared helper: build repo-scoped tool list for an agent.
 
 Extracted to eliminate copy-pasted tool-construction blocks across
-answering, ask_to_ticket, module_curator, bespoke,
+answering, module_curator, bespoke,
 config_syncing, trace_inspector, and refining agents.
 """
 

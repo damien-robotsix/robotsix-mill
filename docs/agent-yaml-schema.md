@@ -97,7 +97,7 @@ Which class of agent this is:
 - **`sandboxed`** — an agent that executes in an ephemeral sandbox
   (ci_fix, rebase, review_revision).
 - **`interactive`** — a prompt-to-ticket or Q&A agent triggered by user
-  interaction (ask_to_ticket, answer).
+  interaction (answer).
 
 ---
 
