@@ -12,6 +12,7 @@
   line range more clearly. Added an explicit warning to the explore agent's
   system prompt that ``read_file`` will refuse re-reads of already-served
   ranges and not to retry — synthesise from context instead.
+- Add grep-to-answer shortcut guidance to explore agent prompt: when grep output already provides the answer, skip read_file confirmation to save prompt tokens per scout call.
 - Boost trace-inspector request budget when the trace carries an `observation_storm` classifier flag — tools-on path floors at 40 requests (up from 20) and the tool-less fallback floors at 10 (up from 3), preventing `UsageLimitExceeded` mid-analysis on noisy traces.
 - Implement stage now clones the cross-repo target's fork repo (via `cross_repo_target.fork_remote_url`) instead of the managed repo when `cross_repo_target` is configured. This ensures the implement agent sees the target repository's actual file system — fixing silent "no change needed" outcomes when a target file already exists in mill but not in the target repo. (mill: Implement stage must clone cross-repo target instead of managed repo for cross_repo_target tickets (20260702T231513Z-implement-stage-must-clone-cross-repo-ta-4ddc))
 - Add shell completion support (bash, zsh) via shtab. The CLI now accepts
