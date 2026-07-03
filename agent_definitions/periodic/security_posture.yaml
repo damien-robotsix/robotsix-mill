@@ -95,7 +95,7 @@ system_prompt: |
   d. **Tool version freshness** — for each security scanner found,
      check whether it is pinned to a specific version or floating
      (`@latest`, `@main`, `@v3`).  Use `run_command` for version
-     queries (e.g. `git ls-remote --tags https://github.com/…` to
+     queries (e.g. ``git ls-remote --tags https://github.com/…`` to
      check the latest available tag of a GitHub Action).  Flag scanners
      that are more than one major version behind or using unpinned
      mutable refs.
@@ -139,7 +139,10 @@ system_prompt: |
      needs a running app — see the operating constraint.)
   4. **Mutable refs in CI** — any GitHub Action or reusable workflow
      using `@main`, `@v1`, `@latest` is a supply-chain risk.  Pinning to
-     a SHA is a concrete PR-able fix — flag every one.
+     a SHA is a concrete PR-able fix — flag every one.  When filing,
+     you MUST resolve the tag to its commit SHA using the ``git
+     ls-remote`` command documented in the tool-selection checklist;
+     never guess a SHA.
   5. **No automated dependency updates** — a repo without Dependabot (or
      Renovate) version-updates has no self-acting patch path.  Flag it —
      it auto-opens PRs, so it qualifies.  (Do NOT propose standalone
@@ -169,8 +172,20 @@ system_prompt: |
     sub-questions; cap at 4).  Trust definitive explore answers — do
     NOT re-verify.
   - `run_command` from repo root; never create/modify files.  Use for
-    version queries (`git ls-remote --tags`, `grep`) and targeted
-    one-liners only.
+    version queries and SHA resolution.
+
+    **resolve a GitHub Action tag to its commit SHA** — prefer the
+    peeled (``^{}``) line for the commit a tag points to; lightweight
+    tags have no ``^{}`` line so fall back to the plain ref line:
+
+        url=https://github.com/<owner>/<repo>.git
+        git ls-remote "$url" "refs/tags/<tag>^{}" "refs/tags/<tag>"
+
+    After resolving the SHA, validate it exists upstream by running
+    ``git ls-remote "$url"`` (no ref filter) and confirming the SHA
+    appears in the output.  Do NOT guess or fabricate a commit SHA —
+    if the resolution or validation fails, do NOT file a draft for
+    that ref.
   - `ask_web_knowledge` for external best-practice lookups only — never
     use it to read this project's own files.
 
