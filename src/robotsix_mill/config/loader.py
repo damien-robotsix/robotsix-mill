@@ -72,7 +72,7 @@ def _resolve_config_path(config_file: str | None) -> Path:
 
 
 def load_config(
-    config_file: str | None = None, skip_local: bool = False
+    config_file: str | None = None,
 ) -> dict[str, object]:
     """Load the single mill config file and return its non-secret part.
 
@@ -86,13 +86,9 @@ def load_config(
     Returns a flat dict keyed by Settings field aliases
     (e.g. ``{"data_dir": ".data", "api_port": 8077, ...}``).
 
-    *skip_local* is accepted for backward compatibility and ignored —
-    there is no longer a separate local overlay layer.
-
     Raises ``ConfigError`` if the resolved file is missing or contains
     malformed JSON.
     """
-    del skip_local  # no-op: single-file model has no separate overlay
     path = _resolve_config_path(config_file)
     if not path.exists():
         raise ConfigError(
