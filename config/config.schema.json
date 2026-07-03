@@ -1,8 +1,235 @@
 {
+  "$defs": {
+    "CrossRepoTarget": {
+      "description": "Cross-repo target: routes contributions from this repo to a\ndifferent (forked/external) repository via a fork-contribution\nworkflow.",
+      "properties": {
+        "auto_fork": {
+          "default": false,
+          "description": "When true, automatically create the fork via the forge API before pushing.",
+          "title": "Auto Fork",
+          "type": "boolean"
+        },
+        "base_branch": {
+          "default": "main",
+          "description": "The upstream branch to target in the cross-fork PR (default: main).",
+          "title": "Base Branch",
+          "type": "string"
+        },
+        "fork_remote_url": {
+          "description": "The fork repository URL where the branch is pushed before opening a cross-fork PR.",
+          "title": "Fork Remote Url",
+          "type": "string"
+        },
+        "upstream_remote_url": {
+          "description": "The upstream repository URL that PRs are opened against.",
+          "title": "Upstream Remote Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "upstream_remote_url",
+        "fork_remote_url"
+      ],
+      "title": "CrossRepoTarget",
+      "type": "object"
+    },
+    "RepoConfig": {
+      "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
+      "properties": {
+        "board_id": {
+          "description": "Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill').",
+          "title": "Board Id",
+          "type": "string"
+        },
+        "ci_monitor_enabled": {
+          "default": true,
+          "description": "When true, the CI monitor polls this repo's main-branch CI status periodically.",
+          "title": "Ci Monitor Enabled",
+          "type": "boolean"
+        },
+        "ci_monitor_interval_seconds": {
+          "default": 900,
+          "description": "Seconds between CI monitor polls for this repo (minimum 60).",
+          "title": "Ci Monitor Interval Seconds",
+          "type": "integer"
+        },
+        "cross_repo_target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CrossRepoTarget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery."
+        },
+        "deployed_log_folder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
+          "title": "Deployed Log Folder"
+        },
+        "forge_remote_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Git remote URL for this repo's forge (e.g. https://github.com/owner/repo).",
+          "title": "Forge Remote Url"
+        },
+        "langfuse_base_url": {
+          "default": "https://cloud.langfuse.com",
+          "description": "Langfuse instance base URL (default: https://cloud.langfuse.com).",
+          "title": "Langfuse Base Url",
+          "type": "string"
+        },
+        "langfuse_project_id": {
+          "default": "",
+          "description": "Langfuse project ID for trace attribution (populated from global secrets).",
+          "title": "Langfuse Project Id",
+          "type": "string"
+        },
+        "langfuse_project_name": {
+          "description": "Langfuse project name for trace attribution (populated from global secrets).",
+          "title": "Langfuse Project Name",
+          "type": "string"
+        },
+        "langfuse_public_key": {
+          "description": "Langfuse public key for trace observability (populated from global secrets).",
+          "title": "Langfuse Public Key",
+          "type": "string"
+        },
+        "langfuse_secret_key": {
+          "description": "Langfuse secret key for trace observability (populated from global secrets).",
+          "title": "Langfuse Secret Key",
+          "type": "string"
+        },
+        "max_concurrency": {
+          "default": 1,
+          "description": "Maximum number of tickets from this repo processed in parallel (minimum 1).",
+          "title": "Max Concurrency",
+          "type": "integer"
+        },
+        "max_inflight_prs": {
+          "default": 3,
+          "description": "Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
+          "title": "Max Inflight Prs",
+          "type": "integer"
+        },
+        "openrouter_api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-repo OpenRouter API key override. Unset falls back to the global key.",
+          "title": "Openrouter Api Key"
+        },
+        "repo_id": {
+          "description": "Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml.",
+          "title": "Repo Id",
+          "type": "string"
+        },
+        "sandbox_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-repo Docker sandbox image override. Unset falls back to settings.sandbox_image.",
+          "title": "Sandbox Image"
+        },
+        "source": {
+          "default": "config",
+          "description": "Source discriminator: 'config' for operator-configured entries, 'auto' for machine-registered overlay entries.",
+          "enum": [
+            "config",
+            "auto"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "working_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pinned working branch for member repos. When set, branches fork from and PR into this branch instead of the default.",
+          "title": "Working Branch"
+        }
+      },
+      "required": [
+        "repo_id",
+        "board_id",
+        "langfuse_project_name",
+        "langfuse_public_key",
+        "langfuse_secret_key"
+      ],
+      "title": "RepoConfig",
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "repos": {
+      "description": "Repository registry: maps each repo ID to its per-repo\nconfiguration (board identity, forge remote, Langfuse credentials,\nCI monitor settings).",
+      "properties": {
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepoConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional Langfuse configuration for the synthetic cross-repo meta board."
+        },
+        "repos": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RepoConfig"
+          },
+          "description": "Registry of per-repo configurations keyed by repo_id.",
+          "title": "Repos",
+          "type": "object"
+        }
+      },
+      "required": [
+        "repos"
+      ],
+      "title": "ReposRegistry",
+      "type": "object"
+    },
     "secrets": {
-      "description": "Secrets loaded from the ``secrets:`` block of the single mill\nconfig file (``config/config.json``, else ``config/config.example.json``).\n\nNever merged into ``Settings`` \u2014 secrets are kept in a separate\nmodel with redacted ``repr`` / ``model_dump`` and debug-logged\nattribute access.  A value equal to the literal ``SECRET`` sentinel\n(used throughout ``config.example.json``) is treated as unset, so the\nfield falls back to its ``None`` default.",
+      "description": "API keys, tokens, and credentials for external services\n(OpenRouter, forge, Langfuse, ntfy, etc.).",
       "properties": {
         "forge_repo_create_token": {
           "anyOf": [
@@ -14,6 +241,7 @@
             }
           ],
           "default": null,
+          "description": "A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos \u2014 use a classic PAT with repo-creation scope.",
           "format": "password",
           "title": "Forge Repo Create Token",
           "writeOnly": true
@@ -28,6 +256,7 @@
             }
           ],
           "default": null,
+          "description": "Personal access token (PAT) for the forge (GitHub/GitLab). Used for PR creation, branch push, and merge operations.",
           "format": "password",
           "title": "Forge Token",
           "writeOnly": true
@@ -42,6 +271,7 @@
             }
           ],
           "default": null,
+          "description": "GitHub App ID for App-based authentication. Required when FORGE_AUTH=app.",
           "format": "password",
           "title": "Github App Id",
           "writeOnly": true
@@ -56,6 +286,7 @@
             }
           ],
           "default": null,
+          "description": "GitHub App private key (PEM string). Alternative to github_app_private_key_path.",
           "format": "password",
           "title": "Github App Private Key",
           "writeOnly": true
@@ -70,6 +301,7 @@
             }
           ],
           "default": null,
+          "description": "Path to the GitHub App private key PEM file. Alternative to github_app_private_key.",
           "format": "password",
           "title": "Github App Private Key Path",
           "writeOnly": true
@@ -84,6 +316,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
           "format": "password",
           "title": "Langfuse Base Url",
           "writeOnly": true
@@ -98,6 +331,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse project ID for trace attribution.",
           "format": "password",
           "title": "Langfuse Project Id",
           "writeOnly": true
@@ -112,6 +346,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse project name for trace attribution.",
           "format": "password",
           "title": "Langfuse Project Name",
           "writeOnly": true
@@ -126,6 +361,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
           "format": "password",
           "title": "Langfuse Public Key",
           "writeOnly": true
@@ -140,6 +376,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse secret key for LLM observability tracing.",
           "format": "password",
           "title": "Langfuse Secret Key",
           "writeOnly": true
@@ -154,6 +391,7 @@
             }
           ],
           "default": null,
+          "description": "ntfy access token for authenticated push notifications.",
           "format": "password",
           "title": "Ntfy Token",
           "writeOnly": true
@@ -168,6 +406,7 @@
             }
           ],
           "default": null,
+          "description": "ntfy server URL for push notifications (https://ntfy.sh).",
           "format": "password",
           "title": "Ntfy Url",
           "writeOnly": true
@@ -182,6 +421,7 @@
             }
           ],
           "default": null,
+          "description": "API key for OpenRouter model access (https://openrouter.ai/keys). Required for LLM inference.",
           "format": "password",
           "title": "Openrouter Api Key",
           "writeOnly": true
@@ -196,6 +436,7 @@
             }
           ],
           "default": null,
+          "description": "OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
           "format": "password",
           "title": "Openrouter Management Key",
           "writeOnly": true
@@ -206,10 +447,11 @@
     },
     "settings": {
       "additionalProperties": false,
-      "description": "Central Pydantic configuration model for robotsix-mill.\n\nAll fields are sourced from ``os.environ`` and a single JSON config\nfile (``config/config.json`` or the committed\n``config/config.example.json`` template).  Conventional keys like\n``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain\ncompatible with the reference projects.  Mill-specific settings use\nthe ``MILL_`` / ``FORGE_`` prefix convention and declare explicit\n``Field(alias=...)`` values.",
+      "description": "Runtime settings for robotsix-mill: concurrency limits,\nAPI endpoints, feature toggles, stage-level controls,\nsandbox configuration, and agent budgets.",
       "properties": {
         "FORGE_AUTH": {
           "default": "token",
+          "description": "Forge authentication method: token (PAT) or app (GitHub App installation token).",
           "enum": [
             "token",
             "app"
@@ -219,6 +461,7 @@
         },
         "FORGE_KIND": {
           "default": "none",
+          "description": "Forge backend: github, gitlab, none, or auto (detected from remote URL).",
           "enum": [
             "github",
             "gitlab",
@@ -238,10 +481,12 @@
             }
           ],
           "default": null,
+          "description": "Git remote URL of the forge repository.",
           "title": "Forge Remote Url"
         },
         "FORGE_TARGET_BRANCH": {
           "default": "main",
+          "description": "Default target branch for PRs.",
           "title": "Forge Target Branch",
           "type": "string"
         },
@@ -255,6 +500,7 @@
             }
           ],
           "default": null,
+          "description": "Personal access token for forge API access (PR creation, push, merge).",
           "title": "Forge Token"
         },
         "GITHUB_APP_ID": {
@@ -267,6 +513,7 @@
             }
           ],
           "default": null,
+          "description": "GitHub App ID for App-based authentication.",
           "title": "Github App Id"
         },
         "GITHUB_APP_PRIVATE_KEY": {
@@ -279,6 +526,7 @@
             }
           ],
           "default": null,
+          "description": "GitHub App private key (PEM string).",
           "title": "Github App Private Key"
         },
         "GITHUB_APP_PRIVATE_KEY_PATH": {
@@ -291,6 +539,7 @@
             }
           ],
           "default": null,
+          "description": "Path to GitHub App private key PEM file.",
           "title": "Github App Private Key Path"
         },
         "LANGFUSE_BASE_URL": {
@@ -303,6 +552,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse instance base URL for LLM observability. Unset disables tracing.",
           "title": "Langfuse Base Url"
         },
         "LANGFUSE_PROJECT_ID": {
@@ -315,6 +565,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse project ID for trace attribution.",
           "title": "Langfuse Project Id"
         },
         "LANGFUSE_PUBLIC_KEY": {
@@ -327,6 +578,7 @@
             }
           ],
           "default": null,
+          "description": "Langfuse public key for LLM observability tracing.",
           "title": "Langfuse Public Key"
         },
         "LANGFUSE_SECRET_KEY": {
@@ -339,16 +591,19 @@
             }
           ],
           "default": null,
+          "description": "Langfuse secret key for LLM observability tracing.",
           "title": "Langfuse Secret Key"
         },
         "MILL_CLAUDE_MAX_CONCURRENCY": {
           "default": 4,
+          "description": "Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
           "minimum": 1,
           "title": "Mill Claude Max Concurrency",
           "type": "integer"
         },
         "MILL_COORDINATOR_TIMEOUT_SECONDS": {
           "default": 600,
+          "description": "Wall-clock timeout (seconds) for a single implement agent pass.",
           "minimum": 60,
           "title": "Mill Coordinator Timeout Seconds",
           "type": "integer"
@@ -364,21 +619,25 @@
             }
           ],
           "default": null,
+          "description": "Path to a directory of repo clones for cross-repo investigation by the maintenance agent.",
           "title": "Mill Investigation Workspace"
         },
         "MILL_LINT_ON_EDIT": {
           "default": true,
+          "description": "When true, pre-write Python syntax check on write_file/edit_file calls.",
           "title": "Mill Lint On Edit",
           "type": "boolean"
         },
         "MILL_MAX_GLOBAL_CONCURRENCY": {
           "default": 12,
+          "description": "Host-level cap on total concurrently-running stages across ALL boards.",
           "minimum": 1,
           "title": "Mill Max Global Concurrency",
           "type": "integer"
         },
         "MILL_PER_PASS_REQUEST_BUDGET": {
           "default": 500,
+          "description": "Per-pass request budget for the implement (coordinator) agent. Default 500.",
           "maximum": 5000,
           "minimum": 1,
           "title": "Mill Per Pass Request Budget",
@@ -386,11 +645,13 @@
         },
         "MILL_PR_SUMMARY_ENABLED": {
           "default": false,
+          "description": "When true, the deliver stage generates a structured PR body from the diff.",
           "title": "Mill Pr Summary Enabled",
           "type": "boolean"
         },
         "MILL_REPO_VISIBILITY_DEFAULT": {
           "default": "public",
+          "description": "Default visibility for newly created repositories: public or private.",
           "enum": [
             "public",
             "private"
@@ -400,16 +661,19 @@
         },
         "MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS": {
           "default": true,
+          "description": "When true, retrospect files draft tickets for AGENT.md proposals.",
           "title": "Mill Retrospect Spawn Agented Proposals",
           "type": "boolean"
         },
         "MILL_SCOPE_TRIAGE_ENABLED": {
           "default": true,
+          "description": "When true, a cheap scope-triage LLM inspects out-of-scope file changes before blocking.",
           "title": "Mill Scope Triage Enabled",
           "type": "boolean"
         },
         "MILL_SCOPE_TRIAGE_MAX_FILES": {
           "default": 50,
+          "description": "Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
           "minimum": 0,
           "title": "Mill Scope Triage Max Files",
           "type": "integer"
@@ -424,6 +688,7 @@
             }
           ],
           "default": null,
+          "description": "ntfy access token for authenticated push notifications.",
           "title": "Ntfy Token"
         },
         "NTFY_URL": {
@@ -436,6 +701,7 @@
             }
           ],
           "default": null,
+          "description": "ntfy server URL for push notifications.",
           "title": "Ntfy Url"
         },
         "OPENROUTER_API_KEY": {
@@ -448,132 +714,157 @@
             }
           ],
           "default": null,
+          "description": "API key for OpenRouter model access. Required for LLM inference.",
           "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic agent-check passes.",
           "title": "Agent Check Interval Seconds",
           "type": "integer"
         },
         "agent_check_periodic": {
           "default": true,
+          "description": "When true, run periodic agent-check passes for agent-definition coherence.",
           "title": "Agent Check Periodic",
           "type": "boolean"
         },
         "api_host": {
           "default": "127.0.0.1",
+          "description": "Management API listen host.",
           "title": "Api Host",
           "type": "string"
         },
         "api_port": {
           "default": 8077,
+          "description": "Management API listen port.",
           "title": "Api Port",
           "type": "integer"
         },
         "api_url": {
           "default": "http://127.0.0.1:8077",
+          "description": "Base URL the CLI client uses to reach the management API.",
           "pattern": "^https?://",
           "title": "Api Url",
           "type": "string"
         },
         "audit_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic audit passes.",
           "title": "Audit Interval Seconds",
           "type": "integer"
         },
         "audit_periodic": {
           "default": true,
+          "description": "When true, run periodic meta-audit passes for quality/security coverage.",
           "title": "Audit Periodic",
           "type": "boolean"
         },
         "audit_request_limit": {
           "default": 80,
+          "description": "Per-call request cap for the periodic audit agent's tool loop.",
           "minimum": 1,
           "title": "Audit Request Limit",
           "type": "integer"
         },
         "auto_approve_enabled": {
           "default": false,
+          "description": "When true, obviously-safe changes skip the human approval gate.",
           "title": "Auto Approve Enabled",
           "type": "boolean"
         },
         "auto_fix_max_cycles": {
           "default": 6,
+          "description": "Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without green CI. 0 disables.",
           "minimum": 0,
           "title": "Auto Fix Max Cycles",
           "type": "integer"
         },
         "auto_merge_enabled": {
           "default": false,
+          "description": "When true, the merge stage auto-merges green PRs via the forge API.",
           "title": "Auto Merge Enabled",
           "type": "boolean"
         },
         "auto_merge_main_debt_detection_enabled": {
           "default": true,
+          "description": "When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
           "title": "Auto Merge Main Debt Detection Enabled",
           "type": "boolean"
         },
         "bc_check_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic bc-check passes.",
           "title": "Bc Check Interval Seconds",
           "type": "integer"
         },
         "bc_check_periodic": {
           "default": true,
+          "description": "When true, run periodic backward-compatibility inspection passes.",
           "title": "Bc Check Periodic",
           "type": "boolean"
         },
         "bespoke_discovery_interval_seconds": {
           "default": 600,
+          "description": "Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles.",
           "title": "Bespoke Discovery Interval Seconds",
           "type": "integer"
         },
         "bespoke_periodic": {
           "default": true,
+          "description": "Master switch: when true, spawn a supervisor per repo that runs bespoke per-repo periodic agents.",
           "title": "Bespoke Periodic",
           "type": "boolean"
         },
         "board_list_cache_ttl_seconds": {
           "default": 0.0,
+          "description": "Short-TTL cache for the board-poll GET /tickets endpoint (seconds). 0.0 disables.",
           "minimum": 0.0,
           "title": "Board List Cache Ttl Seconds",
           "type": "number"
         },
         "branch_prefix": {
           "default": "mill/",
+          "description": "Prefix for per-ticket branch names.",
           "title": "Branch Prefix",
           "type": "string"
         },
         "ci_debt_recheck_interval_seconds": {
           "default": 3600,
+          "description": "Seconds between CI-debt recheck passes.",
           "title": "Ci Debt Recheck Interval Seconds",
           "type": "integer"
         },
         "ci_debt_recheck_periodic": {
           "default": true,
+          "description": "When true, periodically re-check BLOCKED tickets with pre-existing CI debt and auto-resume when debt clears.",
           "title": "Ci Debt Recheck Periodic",
           "type": "boolean"
         },
         "ci_fix_max_attempts": {
           "default": 2,
+          "description": "Multi-repo merge path only: max ci-fix attempts per cycle.",
           "minimum": 0,
           "title": "Ci Fix Max Attempts",
           "type": "integer"
         },
         "ci_fix_max_cycles": {
           "default": 3,
+          "description": "Multi-repo merge path only: max ci-fix cycles per ticket.",
           "minimum": 0,
           "title": "Ci Fix Max Cycles",
           "type": "integer"
         },
         "ci_fix_max_identical_failures": {
           "default": 2,
+          "description": "Consecutive identical CI failure cycles before escalating. 0 disables.",
           "minimum": 0,
           "title": "Ci Fix Max Identical Failures",
           "type": "integer"
         },
         "ci_fix_max_iterations": {
           "default": 5,
+          "description": "Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
           "minimum": 0,
           "title": "Ci Fix Max Iterations",
           "type": "integer"
@@ -589,28 +880,33 @@
             }
           ],
           "default": null,
+          "description": "Path to the CI-fix agent's Markdown memory ledger. When unset, derives from data_dir/board/ci_fix_memory.md.",
           "title": "Ci Fix Memory Path"
         },
         "ci_fix_request_limit": {
           "default": 120,
+          "description": "Per-run request budget for the ci-fix agent. 0 disables.",
           "minimum": 0,
           "title": "Ci Fix Request Limit",
           "type": "integer"
         },
         "ci_fix_wait_poll_interval_s": {
           "default": 30.0,
+          "description": "Seconds between CI conclusion polls during wait_for_ci.",
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Poll Interval S",
           "type": "number"
         },
         "ci_fix_wait_timeout_s": {
           "default": 1500.0,
+          "description": "Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Timeout S",
           "type": "number"
         },
         "ci_log_max_bytes": {
           "default": 65536,
+          "description": "Maximum bytes of CI log output to capture per check run.",
           "title": "Ci Log Max Bytes",
           "type": "integer"
         },
@@ -625,220 +921,262 @@
             }
           ],
           "default": null,
+          "description": "Path to the CI-fix agent's structured pattern memory (JSON). When unset, derives from data_dir/ci_patterns.json.",
           "title": "Ci Patterns Path"
         },
         "claude_sdk_vision_enabled": {
           "default": false,
+          "description": "Enable inline-image (vision) input on the Claude SDK transport. Requires a robotsix-llmio pin bump with real image-input support.",
           "title": "Claude Sdk Vision Enabled",
           "type": "boolean"
         },
         "codeql_fp_triage_enabled": {
           "default": true,
+          "description": "When true, ci_fix may invoke codeql_fp_triage to dismiss high-confidence CodeQL false positives.",
           "title": "Codeql Fp Triage Enabled",
           "type": "boolean"
         },
         "command_timeout": {
           "default": 1800,
+          "description": "Wall-clock cap (seconds) for shell tool and test command execution.",
           "exclusiveMinimum": 0,
           "title": "Command Timeout",
           "type": "integer"
         },
         "comments_after_body": {
           "default": false,
+          "description": "When true, the board detail drawer renders description.md below comments.",
           "title": "Comments After Body",
           "type": "boolean"
         },
         "completeness_check_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic completeness-check passes.",
           "title": "Completeness Check Interval Seconds",
           "type": "integer"
         },
         "completeness_check_periodic": {
           "default": true,
+          "description": "When true, run periodic feature-wiring completeness checks.",
           "title": "Completeness Check Periodic",
           "type": "boolean"
         },
         "completeness_check_request_limit": {
           "default": 80,
+          "description": "Request budget for the completeness-check agent.",
           "title": "Completeness Check Request Limit",
           "type": "integer"
         },
         "config_sync_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic config-sync passes.",
           "title": "Config Sync Interval Seconds",
           "type": "integer"
         },
         "config_sync_periodic": {
           "default": true,
+          "description": "When true, run daily config \u2194 .env \u2194 docs drift detection.",
           "title": "Config Sync Periodic",
           "type": "boolean"
         },
         "consult_request_limit": {
           "default": 15,
+          "description": "Per-call request cap for the domain-expert consultation sub-agent.",
           "minimum": 1,
           "title": "Consult Request Limit",
           "type": "integer"
         },
         "coordinator_max_tool_calls": {
           "default": 300,
+          "description": "Hard cap on total tool calls per coordinator (implement) trace.",
           "minimum": 1,
           "title": "Coordinator Max Tool Calls",
           "type": "integer"
         },
         "copy_paste_interval_seconds": {
           "default": 604800,
+          "description": "Seconds between periodic copy-paste passes.",
           "title": "Copy Paste Interval Seconds",
           "type": "integer"
         },
         "copy_paste_periodic": {
           "default": true,
+          "description": "When true, run weekly clone-detection sweeps.",
           "title": "Copy Paste Periodic",
           "type": "boolean"
         },
         "data_dir": {
           "default": ".data",
+          "description": "Local data directory. In container, always /data.",
           "format": "path",
           "title": "Data Dir",
           "type": "string"
         },
         "data_dir_gc_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic data-dir GC passes.",
           "title": "Data Dir Gc Interval Seconds",
           "type": "integer"
         },
         "data_dir_gc_periodic": {
           "default": true,
+          "description": "Master switch for the periodic data-dir GC pass.",
           "title": "Data Dir Gc Periodic",
           "type": "boolean"
         },
         "data_dir_gc_prune_closed": {
           "default": false,
+          "description": "When true, prune workspace directories of terminal-state tickets during GC.",
           "title": "Data Dir Gc Prune Closed",
           "type": "boolean"
         },
         "data_dir_gc_prune_closed_age_seconds": {
           "default": 604800,
+          "description": "Minimum age (seconds) of a terminal ticket before its workspace is eligible for GC.",
           "minimum": 0,
           "title": "Data Dir Gc Prune Closed Age Seconds",
           "type": "integer"
         },
         "data_dir_gc_prune_db_rows": {
           "default": true,
+          "description": "When true, purge oldest terminal-ticket database rows exceeding max_archived_tickets.",
           "title": "Data Dir Gc Prune Db Rows",
           "type": "boolean"
         },
         "data_dir_gc_prune_memory_ledgers": {
           "default": true,
+          "description": "When true, truncate over-cap memory ledger files on disk before size measurement.",
           "title": "Data Dir Gc Prune Memory Ledgers",
           "type": "boolean"
         },
         "data_dir_gc_prune_orphans": {
           "default": true,
+          "description": "When true, prune orphan workspace directories (ticket absent from DB) older than the configured age.",
           "title": "Data Dir Gc Prune Orphans",
           "type": "boolean"
         },
         "data_dir_gc_prune_orphans_age_seconds": {
           "default": 86400,
+          "description": "Minimum age (seconds) of an orphan workspace before GC.",
           "minimum": 0,
           "title": "Data Dir Gc Prune Orphans Age Seconds",
           "type": "integer"
         },
         "data_dir_gc_prune_terminal_clones": {
           "default": true,
+          "description": "When true, prune git clones inside workspaces of terminal-state tickets.",
           "title": "Data Dir Gc Prune Terminal Clones",
           "type": "boolean"
         },
         "data_dir_gc_prune_terminal_clones_age_seconds": {
           "default": 86400,
+          "description": "Minimum age (seconds) before terminal-ticket clones are pruned.",
           "minimum": 0,
           "title": "Data Dir Gc Prune Terminal Clones Age Seconds",
           "type": "integer"
         },
         "data_volume": {
           "default": "mill_data",
+          "description": "Named Docker volume for mill data.",
           "title": "Data Volume",
           "type": "string"
         },
         "db_maintenance_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic DB maintenance passes.",
           "title": "Db Maintenance Interval Seconds",
           "type": "integer"
         },
         "db_maintenance_periodic": {
           "default": true,
+          "description": "When true, run periodic DB maintenance (archive purge, event capping, PRAGMA optimize).",
           "title": "Db Maintenance Periodic",
           "type": "boolean"
         },
         "dedup_candidate_body_max_chars": {
           "default": 4000,
+          "description": "Character cap on each candidate body fed to the dedup prompt.",
           "title": "Dedup Candidate Body Max Chars",
           "type": "integer"
         },
         "dedup_lookback_days": {
           "default": 7,
+          "description": "Days back closed tickets are considered as duplicate candidates.",
           "title": "Dedup Lookback Days",
           "type": "integer"
         },
         "dedup_max_candidates": {
           "default": 8,
+          "description": "Maximum candidate tickets passed to the dedup LLM after similarity pre-filtering.",
           "minimum": 1,
           "title": "Dedup Max Candidates",
           "type": "integer"
         },
         "dedup_request_limit": {
           "default": 12,
+          "description": "Per-call request cap for the pre-refine dedup check.",
           "minimum": 1,
           "title": "Dedup Request Limit",
           "type": "integer"
         },
         "dedup_skip_on_no_overlap": {
           "default": true,
+          "description": "When true, skip the dedup LLM call when the draft shares zero token overlap with all candidates.",
           "title": "Dedup Skip On No Overlap",
           "type": "boolean"
         },
         "default_repo_id": {
           "default": "",
+          "description": "Default repo ID for legacy tickets lacking a board_id.",
           "title": "Default Repo Id",
           "type": "string"
         },
         "delete_branch_on_merge": {
           "default": true,
+          "description": "When true, the merge stage deletes the per-ticket head branch on the forge after merge.",
           "title": "Delete Branch On Merge",
           "type": "boolean"
         },
         "deliver_max_identical_blocks": {
           "default": 2,
+          "description": "Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
           "minimum": 0,
           "title": "Deliver Max Identical Blocks",
           "type": "integer"
         },
         "delta_context_retry_enabled": {
           "default": true,
+          "description": "When true, retry/audit/re-refine passes receive only the delta rather than full context.",
           "title": "Delta Context Retry Enabled",
           "type": "boolean"
         },
         "dependabot_ingest_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between Dependabot ingest passes.",
           "title": "Dependabot Ingest Interval Seconds",
           "type": "integer"
         },
         "dependabot_ingest_max_drafts_per_pass": {
           "default": 5,
+          "description": "Maximum Dependabot drafts per ingest pass. 0 disables.",
           "minimum": 0,
           "title": "Dependabot Ingest Max Drafts Per Pass",
           "type": "integer"
         },
         "dependabot_ingest_periodic": {
           "default": true,
+          "description": "When true, iterate registered repos and file deduped drafts for new Dependabot alerts.",
           "title": "Dependabot Ingest Periodic",
           "type": "boolean"
         },
         "diagnostic_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic diagnostic passes.",
           "title": "Diagnostic Interval Seconds",
           "type": "integer"
         },
         "diagnostic_monitored_repo_ids": {
+          "description": "Repos the daily diagnostic agent monitors each pass.",
           "items": {
             "type": "string"
           },
@@ -847,21 +1185,25 @@
         },
         "diagnostic_periodic": {
           "default": false,
+          "description": "When true, run daily deterministic diagnostic checks.",
           "title": "Diagnostic Periodic",
           "type": "boolean"
         },
         "diagnostic_target_repo_id": {
           "default": "robotsix-mill",
+          "description": "Board the diagnostic agent routes findings to.",
           "title": "Diagnostic Target Repo Id",
           "type": "string"
         },
         "doc_classifier_diff_max_chars": {
           "default": 6000,
+          "description": "Character cap on the git diff fed to the doc-classifier gate.",
           "title": "Doc Classifier Diff Max Chars",
           "type": "integer"
         },
         "doc_classifier_request_limit": {
           "default": 3,
+          "description": "Per-call request cap for the cheap doc-classifier gate.",
           "title": "Doc Classifier Request Limit",
           "type": "integer"
         },
@@ -876,89 +1218,106 @@
             }
           ],
           "default": null,
+          "description": "Path to the document agent's Markdown memory ledger. When unset, derives from data_dir/board/doc_memory.md.",
           "title": "Doc Memory Path"
         },
         "doc_request_limit": {
           "default": 32,
+          "description": "Per-call request cap for the document agent.",
           "title": "Doc Request Limit",
           "type": "integer"
         },
         "enable_repo_creation": {
           "default": false,
+          "description": "When true, Forge.create_repo() is permitted to create repositories via the forge API.",
           "title": "Enable Repo Creation",
           "type": "boolean"
         },
         "env_doc_sync_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic env-doc-sync passes.",
           "title": "Env Doc Sync Interval Seconds",
           "type": "integer"
         },
         "env_doc_sync_periodic": {
           "default": true,
+          "description": "When true, run daily env-var documentation consistency checks.",
           "title": "Env Doc Sync Periodic",
           "type": "boolean"
         },
         "epic_dedup_lookback_days": {
           "default": 7,
+          "description": "Recency window (days) for advisory duplicate detection in epic decomposition.",
           "title": "Epic Dedup Lookback Days",
           "type": "integer"
         },
         "explore_max_tokens": {
           "default": 4096,
+          "description": "Maximum output tokens for the exploration sub-agent.",
           "minimum": 1,
           "title": "Explore Max Tokens",
           "type": "integer"
         },
         "explore_request_limit": {
           "default": 100,
+          "description": "Per-call request cap for the exploration sub-agent.",
           "minimum": 1,
           "title": "Explore Request Limit",
           "type": "integer"
         },
         "fetch_image": {
           "default": "curlimages/curl:8.17.0",
+          "description": "Docker image used for isolated web_fetch calls (curl-based, network-only, no repo mount).",
           "title": "Fetch Image",
           "type": "string"
         },
         "forge_parity_interval_seconds": {
           "default": 604800,
+          "description": "Seconds between periodic forge-parity passes.",
           "title": "Forge Parity Interval Seconds",
           "type": "integer"
         },
         "forge_parity_periodic": {
           "default": true,
+          "description": "When true, run weekly forge-adapter drift detection.",
           "title": "Forge Parity Periodic",
           "type": "boolean"
         },
         "freshness_gate_enabled": {
           "default": false,
+          "description": "When true, a pre-refine gate verifies cited file paths and line ranges still exist on HEAD.",
           "title": "Freshness Gate Enabled",
           "type": "boolean"
         },
         "github_api_url": {
           "default": "https://api.github.com",
+          "description": "GitHub API base URL. Override for GitHub Enterprise.",
           "pattern": "^https?://",
           "title": "Github Api Url",
           "type": "string"
         },
         "gitlab_api_url": {
           "default": "https://gitlab.com/api/v4",
+          "description": "GitLab API base URL. Override for self-hosted GitLab instances.",
           "pattern": "^https?://",
           "title": "Gitlab Api Url",
           "type": "string"
         },
         "health_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic health passes.",
           "title": "Health Interval Seconds",
           "type": "integer"
         },
         "health_periodic": {
           "default": true,
+          "description": "When true, run periodic health passes for codebase-health inspection.",
           "title": "Health Periodic",
           "type": "boolean"
         },
         "implement_max_spawns_per_ticket": {
           "default": 3,
+          "description": "Maximum times the implement stage may be entered per ticket. 0 disables.",
           "minimum": 0,
           "title": "Implement Max Spawns Per Ticket",
           "type": "integer"
@@ -974,205 +1333,242 @@
             }
           ],
           "default": null,
+          "description": "Path to the implement agent's Markdown memory ledger. When unset, derives from data_dir/board/implement_memory.md.",
           "title": "Implement Memory Path"
         },
         "langfuse_cleanup_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between Langfuse trace cleanup passes.",
           "title": "Langfuse Cleanup Interval Seconds",
           "type": "integer"
         },
         "langfuse_cleanup_max_traces": {
           "default": 5000,
+          "description": "Maximum traces to retain in the Langfuse project during cleanup.",
           "title": "Langfuse Cleanup Max Traces",
           "type": "integer"
         },
         "langfuse_cleanup_periodic": {
           "default": true,
+          "description": "When true, run periodic Langfuse trace cleanup (delete oldest traces).",
           "title": "Langfuse Cleanup Periodic",
           "type": "boolean"
         },
         "language_instructions_dir": {
           "default": "agent_definitions/language_instructions",
+          "description": "Directory of per-language instruction Markdown snippets.",
           "format": "path",
           "title": "Language Instructions Dir",
           "type": "string"
         },
         "low_credit_poll_enabled": {
           "default": true,
+          "description": "Enable proactive OpenRouter credit-balance polling. The reactive 402 path still fires when disabled.",
           "title": "Low Credit Poll Enabled",
           "type": "boolean"
         },
         "low_credit_poll_interval_seconds": {
           "default": 3600,
+          "description": "Seconds between proactive OpenRouter credit-balance polls.",
           "minimum": 60,
           "title": "Low Credit Poll Interval Seconds",
           "type": "integer"
         },
         "low_credit_threshold_usd": {
           "default": 5.0,
+          "description": "OpenRouter balance below this threshold triggers an amber warning banner on the board.",
           "minimum": 0.0,
           "title": "Low Credit Threshold Usd",
           "type": "number"
         },
         "maintenance_request_limit": {
           "default": 100,
+          "description": "Per-call request cap for the maintenance agent's tool loop.",
           "minimum": 1,
           "title": "Maintenance Request Limit",
           "type": "integer"
         },
         "maintenance_triage_enabled": {
           "default": true,
+          "description": "When true, operational-action drafts route directly to MAINTENANCE.",
           "title": "Maintenance Triage Enabled",
           "type": "boolean"
         },
         "max_archived_tickets": {
           "default": 40,
+          "description": "Maximum terminal-state tickets to retain. 0 disables purging.",
           "minimum": 0,
           "title": "Max Archived Tickets",
           "type": "integer"
         },
         "max_comments_per_ticket": {
           "default": 500,
+          "description": "Maximum Comment rows per non-terminal ticket. Open threads are never pruned. 0 disables.",
           "minimum": 0,
           "title": "Max Comments Per Ticket",
           "type": "integer"
         },
         "max_events_per_ticket": {
           "default": 200,
+          "description": "Maximum TicketEvent rows per non-terminal ticket. 0 disables capping.",
           "minimum": 0,
           "title": "Max Events Per Ticket",
           "type": "integer"
         },
         "max_fix_iterations": {
           "default": 8,
+          "description": "Maximum implement\u2192test fix iterations before the ticket is BLOCKED.",
           "minimum": 0,
           "title": "Max Fix Iterations",
           "type": "integer"
         },
         "max_implement_review_cycles": {
           "default": 10,
+          "description": "Ceiling on total implement passes per ticket across all review rounds. 0 disables.",
           "minimum": 0,
           "title": "Max Implement Review Cycles",
           "type": "integer"
         },
         "max_memory_chars": {
           "default": 8000,
+          "description": "Maximum characters of the memory ledger to load per agent pass. 0 disables capping.",
           "minimum": 0,
           "title": "Max Memory Chars",
           "type": "integer"
         },
         "max_openrouter_marginal_usd_per_ticket": {
           "default": 3.0,
+          "description": "Maximum OpenRouter marginal cost per ticket. 0.0 disables.",
           "minimum": 0.0,
           "title": "Max Openrouter Marginal Usd Per Ticket",
           "type": "number"
         },
         "max_re_refine_cycles_before_cheap": {
           "default": 2,
+          "description": "Sendback re-refine rounds before forcing the cheap model. 0 disables.",
           "minimum": 0,
           "title": "Max Re Refine Cycles Before Cheap",
           "type": "integer"
         },
         "max_refine_explore_calls": {
           "default": 4,
+          "description": "Hard cap on explore/parallel_explore sub-agent calls per refine run. Set to 0 to disable exploration entirely.",
           "minimum": 0,
           "title": "Max Refine Explore Calls",
           "type": "integer"
         },
         "max_refine_passes_per_ticket": {
           "default": 3,
+          "description": "Per-ticket ceiling on total refine passes before escalating to BLOCKED. 0 disables.",
           "minimum": 0,
           "title": "Max Refine Passes Per Ticket",
           "type": "integer"
         },
         "max_refine_read_file_calls": {
           "default": 10,
+          "description": "Hard cap on read_file calls per refine/triage agent run. Set to 0 to disable the cap.",
           "minimum": 0,
           "title": "Max Refine Read File Calls",
           "type": "integer"
         },
         "max_spend_usd_per_ticket": {
           "default": 20.0,
+          "description": "Dollar-cap safety net: cumulative LLM spend per ticket before blocking. 0.0 disables.",
           "title": "Max Spend Usd Per Ticket",
           "type": "number"
         },
         "max_stuck_cycles": {
           "default": 3,
+          "description": "Maximum re-entries to the same stage without progress before escalating to BLOCKED.",
           "minimum": 0,
           "title": "Max Stuck Cycles",
           "type": "integer"
         },
         "max_traces_per_ticket": {
           "default": 15,
+          "description": "Maximum Langfuse traces per ticket. 0 disables.",
           "minimum": 0,
           "title": "Max Traces Per Ticket",
           "type": "integer"
         },
         "member_sync_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic member-sync passes.",
           "title": "Member Sync Interval Seconds",
           "type": "integer"
         },
         "member_sync_periodic": {
           "default": true,
+          "description": "When true, auto-discover workspace members from managed repo vcs2l manifests.",
           "title": "Member Sync Periodic",
           "type": "boolean"
         },
         "merge_poll_seconds": {
           "default": 120,
+          "description": "Re-check cadence (seconds) for human_mr_approval (PR open) waiting for external merge.",
           "exclusiveMinimum": 0,
           "title": "Merge Poll Seconds",
           "type": "integer"
         },
         "meta_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic meta-agent passes.",
           "title": "Meta Interval Seconds",
           "type": "integer"
         },
         "meta_periodic": {
           "default": false,
+          "description": "When true, run the daily cross-repo meta-agent pass for extraction/alignment proposals.",
           "title": "Meta Periodic",
           "type": "boolean"
         },
         "module_curator_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic module-curator passes.",
           "title": "Module Curator Interval Seconds",
           "type": "integer"
         },
         "module_curator_periodic": {
           "default": true,
+          "description": "When true, run daily module-taxonomy drift detection.",
           "title": "Module Curator Periodic",
           "type": "boolean"
         },
         "module_curator_request_limit": {
           "default": 120,
+          "description": "Request budget for the module-curator agent.",
           "minimum": 1,
           "title": "Module Curator Request Limit",
           "type": "integer"
         },
         "network_outage_retry_seconds": {
           "default": 120,
+          "description": "Seconds between re-poll attempts during a detected network outage.",
           "minimum": 1,
           "title": "Network Outage Retry Seconds",
           "type": "integer"
         },
         "network_probe_host": {
           "default": "github.com",
+          "description": "Hostname probed to distinguish network outages from upstream errors.",
           "title": "Network Probe Host",
           "type": "string"
         },
         "obsolescence_gate_enabled": {
           "default": false,
+          "description": "When true, an LLM pre-refine gate re-evaluates whether a cited gap still exists on HEAD.",
           "title": "Obsolescence Gate Enabled",
           "type": "boolean"
         },
         "obsolescence_request_limit": {
           "default": 6,
+          "description": "Per-call request cap for the obsolescence gate.",
           "minimum": 1,
           "title": "Obsolescence Request Limit",
           "type": "integer"
         },
         "orphaned_pr_bot_logins": {
+          "description": "Bot author logins trusted for orphaned-PR actions. Empty = auto-resolve from forge.",
           "items": {
             "type": "string"
           },
@@ -1181,82 +1577,97 @@
         },
         "orphaned_pr_check_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between orphaned-PR check passes.",
           "title": "Orphaned Pr Check Interval Seconds",
           "type": "integer"
         },
         "orphaned_pr_check_periodic": {
           "default": false,
+          "description": "When true, run periodic orphaned-PR detection and cleanup.",
           "title": "Orphaned Pr Check Periodic",
           "type": "boolean"
         },
         "orphaned_pr_dry_run": {
           "default": true,
+          "description": "When true, log intent only for orphaned-PR actions \u2014 no forge mutations.",
           "title": "Orphaned Pr Dry Run",
           "type": "boolean"
         },
         "orphaned_pr_max_actions_per_pass": {
           "default": 5,
+          "description": "Maximum combined close+file actions per orphaned-PR pass.",
           "minimum": 1,
           "title": "Orphaned Pr Max Actions Per Pass",
           "type": "integer"
         },
         "orphaned_pr_max_closes_per_pass": {
           "default": 10,
+          "description": "Maximum close actions per orphaned-PR pass (in addition to combined cap).",
           "minimum": 1,
           "title": "Orphaned Pr Max Closes Per Pass",
           "type": "integer"
         },
         "orphaned_pr_max_files_per_pass": {
           "default": 5,
+          "description": "Maximum file-ticket actions per orphaned-PR pass (in addition to combined cap).",
           "minimum": 1,
           "title": "Orphaned Pr Max Files Per Pass",
           "type": "integer"
         },
         "orphaned_pr_min_age_hours": {
           "default": 4,
+          "description": "Minimum ticket age (hours) before its PR is considered for orphan classification.",
           "minimum": 1,
           "title": "Orphaned Pr Min Age Hours",
           "type": "integer"
         },
         "orphaned_pr_track_foreign_prs": {
           "default": false,
+          "description": "When true, also file tracking tickets for foreign (non-mill) open PRs.",
           "title": "Orphaned Pr Track Foreign Prs",
           "type": "boolean"
         },
         "pin_bump_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic pin-bump passes.",
           "title": "Pin Bump Interval Seconds",
           "type": "integer"
         },
         "pin_bump_periodic": {
           "default": false,
+          "description": "When true, run scheduled dependency pin-bump PR actuator passes.",
           "title": "Pin Bump Periodic",
           "type": "boolean"
         },
         "ping_pong_max_alternations": {
           "default": 3,
+          "description": "Ceiling on REBASING to FIXING_CI alternations before escalating. 0 disables.",
           "minimum": 0,
           "title": "Ping Pong Max Alternations",
           "type": "integer"
         },
         "prerequisite_gate_enabled": {
           "default": true,
+          "description": "When true, a pre-implement gate verifies declared import prerequisites are satisfiable.",
           "title": "Prerequisite Gate Enabled",
           "type": "boolean"
         },
         "prune_clone_on_close": {
           "default": true,
+          "description": "When true, the workspace clone (repo/) is removed on ticket close.",
           "title": "Prune Clone On Close",
           "type": "boolean"
         },
         "read_file_max_chars": {
           "default": 50000,
+          "description": "Character cap on implicit full read_file payloads. 0 disables.",
           "minimum": 0,
           "title": "Read File Max Chars",
           "type": "integer"
         },
         "rebase_max_attempts": {
           "default": 3,
+          "description": "Maximum rebase attempts per ticket before escalating to BLOCKED.",
           "minimum": 0,
           "title": "Rebase Max Attempts",
           "type": "integer"
@@ -1272,55 +1683,65 @@
             }
           ],
           "default": null,
+          "description": "Path to the rebase agent's Markdown memory ledger. When unset, derives from data_dir/board/rebase_memory.md.",
           "title": "Rebase Memory Path"
         },
         "refine_advisory_dedup_enabled": {
           "default": true,
+          "description": "When true, a cheap advisory-dedup-verification gate runs after inflight-advisory phase.",
           "title": "Refine Advisory Dedup Enabled",
           "type": "boolean"
         },
         "refine_delta_reuse_enabled": {
           "default": true,
+          "description": "When true, re-refines reuse the prior description.md and apply only the operator's delta.",
           "title": "Refine Delta Reuse Enabled",
           "type": "boolean"
         },
         "refine_dynamic_limit_min": {
           "default": 12,
+          "description": "Floor for dynamic request-limit on large/complex specs.",
           "minimum": 1,
           "title": "Refine Dynamic Limit Min",
           "type": "integer"
         },
         "refine_dynamic_limit_multiplier": {
           "default": 1.5,
+          "description": "Multiplier for dynamic request-limit on large/complex specs.",
           "exclusiveMinimum": 1.0,
           "title": "Refine Dynamic Limit Multiplier",
           "type": "number"
         },
         "refine_dynamic_limit_spec_chars": {
           "default": 3000,
+          "description": "Character threshold above which the dynamic request-limit multiplier activates.",
           "minimum": 1,
           "title": "Refine Dynamic Limit Spec Chars",
           "type": "integer"
         },
         "refine_findings_downgrade_enabled": {
           "default": true,
+          "description": "When true, Opus refines with substantial triage findings downgrade to a cheaper model.",
           "title": "Refine Findings Downgrade Enabled",
           "type": "boolean"
         },
         "refine_findings_downgrade_min_chars": {
           "default": 150,
+          "description": "Minimum stripped-character length of triage findings for the Opus-to-cheaper downgrade.",
           "minimum": 0,
           "title": "Refine Findings Downgrade Min Chars",
           "type": "integer"
         },
         "refine_max_errors": {
           "default": 20,
+          "description": "Hard cap on tool-call errors before auto-termination of refine agent.",
           "minimum": 0,
           "title": "Refine Max Errors",
           "type": "integer"
         },
         "refine_max_tool_calls": {
           "default": 120,
+          "description": "Hard cap on total tool calls per refine trace.",
           "minimum": 1,
           "title": "Refine Max Tool Calls",
           "type": "integer"
@@ -1336,62 +1757,74 @@
             }
           ],
           "default": null,
+          "description": "Path to the refine agent's Markdown memory ledger. When unset, derives from data_dir/board/refine_memory.md.",
           "title": "Refine Memory Path"
         },
         "refine_mill_misroute_gate_enabled": {
           "default": true,
+          "description": "When true, drafts referencing mill-specific paths absent from checkout are redirected to the mill board.",
           "title": "Refine Mill Misroute Gate Enabled",
           "type": "boolean"
         },
         "refine_prescriptive_spec_code_lines_threshold": {
           "default": 50,
+          "description": "Drafts with more than this many fenced code lines skip refine entirely.",
           "title": "Refine Prescriptive Spec Code Lines Threshold",
           "type": "integer"
         },
         "refine_request_limit": {
           "default": 80,
+          "description": "Per-call request cap for the refine agent's tool loop.",
           "minimum": 1,
           "title": "Refine Request Limit",
           "type": "integer"
         },
         "refine_request_limit_simple": {
           "default": 40,
+          "description": "Per-call request cap for non-escalated (simple/sonnet) refine runs.",
           "minimum": 1,
           "title": "Refine Request Limit Simple",
           "type": "integer"
         },
         "refine_skip_llm_on_impl_ready_spec": {
           "default": true,
+          "description": "When true, implementation-ready specs skip the expensive LLM refine agent.",
           "title": "Refine Skip Llm On Impl Ready Spec",
           "type": "boolean"
         },
         "refine_subscription_model_complex": {
           "default": "opus",
+          "description": "Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
           "title": "Refine Subscription Model Complex",
           "type": "string"
         },
         "refine_subscription_model_default": {
           "default": "sonnet",
+          "description": "Claude model alias for non-escalated level-3 refines (complexity=simple).",
           "title": "Refine Subscription Model Default",
           "type": "string"
         },
         "refine_subscription_model_findings": {
           "default": "sonnet",
+          "description": "Claude model alias used when the findings-present downgrade fires.",
           "title": "Refine Subscription Model Findings",
           "type": "string"
         },
         "refine_subscription_tier_routing_enabled": {
           "default": true,
+          "description": "When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
           "title": "Refine Subscription Tier Routing Enabled",
           "type": "boolean"
         },
         "refine_triage_enabled": {
           "default": true,
+          "description": "When true, a cheap triage LLM call runs before full refine for implementation-ready drafts.",
           "title": "Refine Triage Enabled",
           "type": "boolean"
         },
         "refine_trivial_model_level": {
           "default": 3,
+          "description": "Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
           "maximum": 3,
           "minimum": 1,
           "title": "Refine Trivial Model Level",
@@ -1399,16 +1832,19 @@
         },
         "refine_trivial_routing_enabled": {
           "default": true,
+          "description": "When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
           "title": "Refine Trivial Routing Enabled",
           "type": "boolean"
         },
         "refine_trivial_subscription_model": {
           "default": "sonnet",
+          "description": "Claude model alias for trivial/forced-cheap refines on the subscription tier.",
           "title": "Refine Trivial Subscription Model",
           "type": "string"
         },
         "refine_usage_warning_threshold": {
           "default": 0.8,
+          "description": "Fraction (0.0\u20131.0) of request_limit at which a near-exhaustion warning is emitted.",
           "exclusiveMinimum": 0.0,
           "maximum": 1.0,
           "title": "Refine Usage Warning Threshold",
@@ -1416,47 +1852,55 @@
         },
         "refine_web_fetch_max_calls": {
           "default": 5,
+          "description": "Maximum real web_fetch calls across one refine trace.",
           "minimum": 1,
           "title": "Refine Web Fetch Max Calls",
           "type": "integer"
         },
         "refine_web_fetch_max_total_bytes": {
           "default": 500000,
+          "description": "Maximum fetch bytes across one refine trace. 0 disables.",
           "minimum": 0,
           "title": "Refine Web Fetch Max Total Bytes",
           "type": "integer"
         },
         "refine_web_search_max_calls": {
           "default": 5,
+          "description": "Maximum web_search calls across one refine trace.",
           "minimum": 1,
           "title": "Refine Web Search Max Calls",
           "type": "integer"
         },
         "requeue_batch_pause_seconds": {
           "default": 2.0,
+          "description": "Pause (seconds) between batches in the startup re-queue drip feed.",
           "minimum": 0.0,
           "title": "Requeue Batch Pause Seconds",
           "type": "number"
         },
         "requeue_batch_size": {
           "default": 5,
+          "description": "Tickets enqueued per batch in the startup re-queue drip feed.",
           "minimum": 1,
           "title": "Requeue Batch Size",
           "type": "integer"
         },
         "require_approval": {
           "default": true,
+          "description": "When true, refined tickets require human approval before implement stage.",
           "title": "Require Approval",
           "type": "boolean"
         },
         "retrospect_candidates_max_entries": {
           "default": 100,
+          "description": "Max entries retained in AGENT_CANDIDATES.md. 0 disables pruning.",
           "minimum": 0,
           "title": "Retrospect Candidates Max Entries",
           "type": "integer"
         },
         "retrospect_log_max_chars": {
           "default": 12000,
+          "description": "Maximum characters of history+comments logs fed to the retrospect agent. 0 disables.",
           "minimum": 0,
           "title": "Retrospect Log Max Chars",
           "type": "integer"
@@ -1472,54 +1916,64 @@
             }
           ],
           "default": null,
+          "description": "Path to the retrospect agent's Markdown memory ledger.",
           "title": "Retrospect Memory Path"
         },
         "retrospect_spawn_drafts": {
           "default": true,
+          "description": "When true, retrospect may file improvement draft tickets.",
           "title": "Retrospect Spawn Drafts",
           "type": "boolean"
         },
         "review_diff_max_chars": {
           "default": 200000,
+          "description": "Maximum characters of the combined git diff injected into the review prompt. 0 disables.",
           "minimum": 0,
           "title": "Review Diff Max Chars",
           "type": "integer"
         },
         "review_enabled": {
           "default": false,
+          "description": "When true, implement transitions to code_review before deliver.",
           "title": "Review Enabled",
           "type": "boolean"
         },
         "review_feedback_enabled": {
           "default": false,
+          "description": "When true, the review-revision agent auto-implements requested PR changes.",
           "title": "Review Feedback Enabled",
           "type": "boolean"
         },
         "review_max_rounds": {
           "default": 3,
+          "description": "Maximum CODE_REVIEW to READY to DOCUMENTING to CODE_REVIEW round-trips before escalation.",
           "minimum": 0,
           "title": "Review Max Rounds",
           "type": "integer"
         },
         "review_output_token_budget": {
           "default": 65536,
+          "description": "Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
           "minimum": 0,
           "title": "Review Output Token Budget",
           "type": "integer"
         },
         "review_prior_context_max_chars": {
           "default": 8000,
+          "description": "Maximum characters of prior review context fed to the review agent. 0 disables.",
           "minimum": 0,
           "title": "Review Prior Context Max Chars",
           "type": "integer"
         },
         "review_request_limit": {
           "default": 80,
+          "description": "Per-call request cap for the review agent.",
           "title": "Review Request Limit",
           "type": "integer"
         },
         "review_revision_max_attempts": {
           "default": 2,
+          "description": "Maximum review-revision attempts per ticket before escalating to BLOCKED.",
           "minimum": 1,
           "title": "Review Revision Max Attempts",
           "type": "integer"
@@ -1535,15 +1989,18 @@
             }
           ],
           "default": null,
+          "description": "Path to the review-revision agent's Markdown memory ledger. When unset, derives from data_dir/board/review_revision_memory.md.",
           "title": "Review Revision Memory Path"
         },
         "reviewer_agreement_gate_enabled": {
           "default": true,
+          "description": "When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
           "title": "Reviewer Agreement Gate Enabled",
           "type": "boolean"
         },
         "run_health_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic run-health passes.",
           "title": "Run Health Interval Seconds",
           "type": "integer"
         },
@@ -1558,20 +2015,24 @@
             }
           ],
           "default": null,
+          "description": "Path to the run-health agent's Markdown memory ledger.",
           "title": "Run Health Memory Path"
         },
         "run_health_periodic": {
           "default": true,
+          "description": "When true, run daily cross-board run-registry health monitoring.",
           "title": "Run Health Periodic",
           "type": "boolean"
         },
         "run_health_target_repo_id": {
           "default": "robotsix-mill",
+          "description": "Board the run-health agent files its drafts to.",
           "title": "Run Health Target Repo Id",
           "type": "string"
         },
         "run_health_window_hours": {
           "default": 168,
+          "description": "Lookback window (hours) for run-registry scans.",
           "title": "Run Health Window Hours",
           "type": "integer"
         },
@@ -1585,95 +2046,114 @@
             }
           ],
           "default": null,
+          "description": "Host path for bind-mounted .data directory. Overrides data_volume.",
           "title": "Sandbox Data Mount"
         },
         "sandbox_image": {
           "default": "python:3.14-slim",
+          "description": "Docker image for the command sandbox.",
           "title": "Sandbox Image",
           "type": "string"
         },
         "sandbox_memory": {
           "default": "2g",
+          "description": "Memory limit for sandbox containers.",
           "title": "Sandbox Memory",
           "type": "string"
         },
         "sandbox_network": {
           "default": "mill-sandbox-net",
+          "description": "Docker network sandbox containers connect to.",
           "title": "Sandbox Network",
           "type": "string"
         },
         "sandbox_pids_limit": {
           "default": 512,
+          "description": "PID limit for sandbox containers.",
           "title": "Sandbox Pids Limit",
           "type": "integer"
         },
         "sandbox_proxy_url": {
           "default": "http://sandbox-proxy:8888",
+          "description": "Egress proxy URL for sandbox containers. Set to empty string to disable.",
           "title": "Sandbox Proxy Url",
           "type": "string"
         },
         "sandbox_readonly": {
           "default": true,
+          "description": "When true, sandbox containers run with read-only root filesystem.",
           "title": "Sandbox Readonly",
           "type": "boolean"
         },
         "sandbox_reaper_interval_seconds": {
           "default": 3600,
+          "description": "Seconds between sandbox reaper passes.",
           "title": "Sandbox Reaper Interval Seconds",
           "type": "integer"
         },
         "sandbox_reaper_periodic": {
           "default": true,
+          "description": "When true, periodically force-remove leaked/orphaned sandbox containers.",
           "title": "Sandbox Reaper Periodic",
           "type": "boolean"
         },
         "security_posture_interval_seconds": {
           "default": 604800,
+          "description": "Seconds between periodic security-posture passes.",
           "title": "Security Posture Interval Seconds",
           "type": "integer"
         },
         "security_posture_periodic": {
           "default": true,
+          "description": "When true, run weekly security-scanning coverage audits.",
           "title": "Security Posture Periodic",
           "type": "boolean"
         },
         "security_posture_request_limit": {
           "default": 80,
+          "description": "Request budget for the security-posture agent.",
           "title": "Security Posture Request Limit",
           "type": "integer"
         },
         "shutdown_grace_seconds": {
           "default": 1800,
+          "description": "Maximum seconds to wait for in-flight periodic passes before teardown.",
           "title": "Shutdown Grace Seconds",
           "type": "integer"
         },
         "skills_dir": {
+          "description": "Directory of skill docs injected into refine and implement agent system prompts.",
           "format": "path",
           "title": "Skills Dir",
           "type": "string"
         },
         "smoke_command": {
           "default": "",
+          "description": "Global fallback smoke test command. Per-repo smoke_command in .robotsix-mill/config.json takes precedence.",
           "title": "Smoke Command",
           "type": "string"
         },
         "spec_review_enabled": {
           "default": true,
+          "description": "When true, a post-refinement review pass strips verbose narrative from the spec.",
           "title": "Spec Review Enabled",
           "type": "boolean"
         },
         "stage_retry_base_delay": {
           "default": 2.0,
+          "description": "Base delay (seconds) for exponential backoff between stage retries.",
           "title": "Stage Retry Base Delay",
           "type": "number"
         },
         "stage_retry_max_attempts": {
           "default": 5,
+          "description": "Maximum stage-level retry attempts for transient errors before escalating.",
           "title": "Stage Retry Max Attempts",
           "type": "integer"
         },
         "stage_retry_max_delay": {
           "default": 60.0,
+          "description": "Maximum delay (seconds) for exponential backoff between stage retries.",
           "title": "Stage Retry Max Delay",
           "type": "number"
         },
@@ -1681,235 +2161,280 @@
           "additionalProperties": {
             "type": "integer"
           },
+          "description": "Per-stage timeout overrides (dict). Keys are stage names, values are seconds.",
           "title": "Stage Timeout Overrides",
           "type": "object"
         },
         "stage_timeout_seconds": {
           "default": 2400,
+          "description": "Per-stage wall-clock timeout (seconds). 0 disables.",
           "title": "Stage Timeout Seconds",
           "type": "integer"
         },
         "stale_branch_cleanup_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic stale-branch cleanup passes.",
           "title": "Stale Branch Cleanup Interval Seconds",
           "type": "integer"
         },
         "stale_branch_cleanup_periodic": {
           "default": false,
+          "description": "When true, run periodic stale-branch cleanup passes.",
           "title": "Stale Branch Cleanup Periodic",
           "type": "boolean"
         },
         "stale_branch_cleanup_prefix_only": {
           "default": true,
+          "description": "When true, only delete branches matching branch_prefix.",
           "title": "Stale Branch Cleanup Prefix Only",
           "type": "boolean"
         },
         "stale_branch_max_age_days": {
           "default": 30,
+          "description": "Branch is eligible for cleanup only if its last commit is older than this many days.",
           "title": "Stale Branch Max Age Days",
           "type": "integer"
         },
         "startup_jitter_seconds": {
           "default": 30,
+          "description": "Max random jitter (seconds) added to per-repo periodic pass first-tick delay.",
           "minimum": 0,
           "title": "Startup Jitter Seconds",
           "type": "integer"
         },
         "state_sync_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic state-sync passes.",
           "title": "State Sync Interval Seconds",
           "type": "integer"
         },
         "state_sync_periodic": {
           "default": true,
+          "description": "When true, run daily State-enum consistency checks.",
           "title": "State Sync Periodic",
           "type": "boolean"
         },
         "subtask_request_limit": {
           "default": 30,
+          "description": "Per-subtask request budget when the coordinator delegates via spawn_subtask.",
           "title": "Subtask Request Limit",
           "type": "integer"
         },
         "survey_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic survey passes.",
           "title": "Survey Interval Seconds",
           "type": "integer"
         },
         "survey_periodic": {
           "default": true,
+          "description": "When true, run periodic survey passes for OSS project discovery.",
           "title": "Survey Periodic",
           "type": "boolean"
         },
         "survey_request_limit": {
           "default": 40,
+          "description": "Per-call request budget for the survey agent.",
           "title": "Survey Request Limit",
           "type": "integer"
         },
         "survey_web_fetch_max_calls": {
           "default": 5,
+          "description": "Maximum web_fetch calls per survey run.",
           "minimum": 1,
           "title": "Survey Web Fetch Max Calls",
           "type": "integer"
         },
         "survey_web_fetch_max_total_bytes": {
           "default": 500000,
+          "description": "Maximum fetch bytes per survey run. 0 disables.",
           "minimum": 0,
           "title": "Survey Web Fetch Max Total Bytes",
           "type": "integer"
         },
         "survey_web_search_max_calls": {
           "default": 5,
+          "description": "Maximum web_search calls per survey run.",
           "minimum": 1,
           "title": "Survey Web Search Max Calls",
           "type": "integer"
         },
         "test_command": {
           "default": "",
+          "description": "Global fallback test command. Per-repo test_command in repos config takes precedence.",
           "title": "Test Command",
           "type": "string"
         },
         "test_gap_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between periodic test-gap passes.",
           "title": "Test Gap Interval Seconds",
           "type": "integer"
         },
         "test_gap_max_errors": {
           "default": 20,
+          "description": "Hard cap on tool-call errors before auto-termination of test_gap agent.",
           "minimum": 0,
           "title": "Test Gap Max Errors",
           "type": "integer"
         },
         "test_gap_max_tool_calls": {
           "default": 100,
+          "description": "Hard cap on total tool calls per test_gap trace.",
           "minimum": 1,
           "title": "Test Gap Max Tool Calls",
           "type": "integer"
         },
         "test_gap_periodic": {
           "default": true,
+          "description": "When true, run periodic test-gap passes for test-coverage oversight.",
           "title": "Test Gap Periodic",
           "type": "boolean"
         },
         "test_gap_request_limit": {
           "default": 80,
+          "description": "Per-call request cap for the test-gap agent's tool loop.",
           "minimum": 1,
           "title": "Test Gap Request Limit",
           "type": "integer"
         },
         "test_request_limit": {
           "default": 30,
+          "description": "Request budget for the test agent when diagnosing failures.",
           "minimum": 1,
           "title": "Test Request Limit",
           "type": "integer"
         },
         "ticket_state_cycle_limit": {
           "default": 3,
+          "description": "Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
           "minimum": 0,
           "title": "Ticket State Cycle Limit",
           "type": "integer"
         },
         "timeout_escalation_interval_seconds": {
           "default": 3600,
+          "description": "Seconds between timeout-escalation passes.",
           "title": "Timeout Escalation Interval Seconds",
           "type": "integer"
         },
         "timeout_escalation_periodic": {
           "default": true,
+          "description": "When true, run periodic timeout-escalation passes for stuck AWAITING_USER_REPLY tickets.",
           "title": "Timeout Escalation Periodic",
           "type": "boolean"
         },
         "timeout_escalation_threshold_seconds": {
           "default": 259200,
+          "description": "Staleness threshold: tickets in AWAITING_USER_REPLY older than this are escalated to BLOCKED.",
           "title": "Timeout Escalation Threshold Seconds",
           "type": "integer"
         },
         "trace_health_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic trace-health checks.",
           "title": "Trace Health Interval Seconds",
           "type": "integer"
         },
         "trace_health_periodic": {
           "default": true,
+          "description": "When true, run periodic trace-health checks.",
           "title": "Trace Health Periodic",
           "type": "boolean"
         },
         "trace_review_cost_multiplier": {
           "default": 3.0,
+          "description": "Cost outlier multiplier: traces exceeding batch median x this are flagged for inspection.",
           "title": "Trace Review Cost Multiplier",
           "type": "number"
         },
         "trace_review_dedup_lookback_days": {
           "default": 7,
+          "description": "Recency window (days) for pre-filing duplicate check in trace-review.",
           "title": "Trace Review Dedup Lookback Days",
           "type": "integer"
         },
         "trace_review_initial_lookback_hours": {
           "default": 24,
+          "description": "First-run lookback window (hours) when no watermark exists yet.",
           "title": "Trace Review Initial Lookback Hours",
           "type": "integer"
         },
         "trace_review_inspector_max_obs_for_tools": {
           "default": 200,
+          "description": "Observation count above which the inspector drops code-access tools.",
           "title": "Trace Review Inspector Max Obs For Tools",
           "type": "integer"
         },
         "trace_review_inspector_max_requests": {
           "default": 80,
+          "description": "Ceiling for the trace inspector's tools-on request budget.",
           "title": "Trace Review Inspector Max Requests",
           "type": "integer"
         },
         "trace_review_inspector_min_requests": {
           "default": 20,
+          "description": "Floor for the trace inspector's tools-on request budget.",
           "title": "Trace Review Inspector Min Requests",
           "type": "integer"
         },
         "trace_review_inspector_requests_per_obs": {
           "default": 0.1,
+          "description": "Requests granted per trace observation before clamping to min/max.",
           "title": "Trace Review Inspector Requests Per Obs",
           "type": "number"
         },
         "trace_review_inspector_toolless_requests": {
           "default": 3,
+          "description": "Request budget for the tool-less (summary-only) inspector path.",
           "title": "Trace Review Inspector Toolless Requests",
           "type": "integer"
         },
         "trace_review_interval_seconds": {
           "default": 86400,
+          "description": "Seconds between automatic trace-review passes.",
           "title": "Trace Review Interval Seconds",
           "type": "integer"
         },
         "trace_review_max_drafts_per_run": {
           "default": 5,
+          "description": "Hard cap on total drafts a single trace-review pass may file.",
           "title": "Trace Review Max Drafts Per Run",
           "type": "integer"
         },
         "trace_review_max_errors": {
           "default": 20,
+          "description": "Hard cap on tool-call errors before the trace inspector is auto-terminated.",
           "title": "Trace Review Max Errors",
           "type": "integer"
         },
         "trace_review_max_inspections_per_run": {
           "default": 5,
+          "description": "Hard cap on LLM inspector calls per trace-review run. 0 disables.",
           "title": "Trace Review Max Inspections Per Run",
           "type": "integer"
         },
         "trace_review_max_repeated_tool": {
           "default": 50,
+          "description": "Absolute threshold for repeated-tool-call flagging in trace review.",
           "title": "Trace Review Max Repeated Tool",
           "type": "integer"
         },
         "trace_review_max_tool_calls": {
           "default": 100,
+          "description": "Hard cap on total tool calls per trace inspector run.",
           "title": "Trace Review Max Tool Calls",
           "type": "integer"
         },
         "trace_review_max_traces_per_run": {
           "default": 300,
+          "description": "Hard cap on how many traces a single trace-review run pulls full detail for. 0 disables.",
           "title": "Trace Review Max Traces Per Run",
           "type": "integer"
         },
         "trace_review_min_confidence": {
           "default": "medium",
+          "description": "Minimum inspector confidence for a finding to be filed as a draft.",
           "enum": [
             "high",
             "medium",
@@ -1920,6 +2445,7 @@
         },
         "trace_review_model_level": {
           "default": 1,
+          "description": "Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
           "maximum": 3,
           "minimum": 1,
           "title": "Trace Review Model Level",
@@ -1927,111 +2453,132 @@
         },
         "trace_review_obs_multiplier": {
           "default": 3.0,
+          "description": "Observation count multiplier: traces exceeding batch median x this are flagged.",
           "title": "Trace Review Obs Multiplier",
           "type": "number"
         },
         "trace_review_per_obs_cost_threshold": {
           "default": 0.001,
+          "description": "Per-observation cost threshold for trace-review outlier detection.",
           "title": "Trace Review Per Obs Cost Threshold",
           "type": "number"
         },
         "trace_review_periodic": {
           "default": true,
+          "description": "When true, run periodic trace-review passes (scans traces, flags outliers, files drafts).",
           "title": "Trace Review Periodic",
           "type": "boolean"
         },
         "trace_review_restart_correlation_window_seconds": {
           "default": 60,
+          "description": "Window (seconds) for correlating incomplete traces with process restarts.",
           "title": "Trace Review Restart Correlation Window Seconds",
           "type": "integer"
         },
         "trace_review_target_repo_id": {
           "default": "",
+          "description": "Target repo for trace-review draft tickets. Empty preserves source-repo routing.",
           "title": "Trace Review Target Repo Id",
           "type": "string"
         },
         "trace_review_tool_request_limit": {
           "default": 15,
+          "description": "Request budget for the interactive langfuse_inspect_trace tool.",
           "title": "Trace Review Tool Request Limit",
           "type": "integer"
         },
         "triage_boilerplate_interval_seconds": {
           "default": 604800,
+          "description": "Seconds between periodic triage-boilerplate passes.",
           "title": "Triage Boilerplate Interval Seconds",
           "type": "integer"
         },
         "triage_boilerplate_periodic": {
           "default": true,
+          "description": "When true, run weekly triage-pattern scans.",
           "title": "Triage Boilerplate Periodic",
           "type": "boolean"
         },
         "triage_request_limit": {
           "default": 8,
+          "description": "Per-call request cap for the pre-refine triage agent.",
           "title": "Triage Request Limit",
           "type": "integer"
         },
         "web_fetch_max_bytes": {
           "default": 2000000,
+          "description": "Maximum raw bytes per web_fetch call.",
           "minimum": 0,
           "title": "Web Fetch Max Bytes",
           "type": "integer"
         },
         "web_fetch_max_calls": {
           "default": 15,
+          "description": "Maximum real (cache-miss) web_fetch calls per web_knowledge consultation.",
           "minimum": 1,
           "title": "Web Fetch Max Calls",
           "type": "integer"
         },
         "web_fetch_max_text_bytes": {
           "default": 40000,
+          "description": "Post-extraction character cap per web_fetch (after HTML-to-text stripping).",
           "title": "Web Fetch Max Text Bytes",
           "type": "integer"
         },
         "web_fetch_max_total_bytes": {
           "default": 2000000,
+          "description": "Cumulative ceiling on returned text bytes per web_knowledge consultation. 0 disables.",
           "minimum": 0,
           "title": "Web Fetch Max Total Bytes",
           "type": "integer"
         },
         "web_fetch_raw": {
           "default": false,
+          "description": "When true, web_fetch returns the raw response body verbatim (no HTML stripping, no per-run URL dedupe).",
           "title": "Web Fetch Raw",
           "type": "boolean"
         },
         "web_fetch_timeout": {
           "default": 30,
+          "description": "Timeout (seconds) per web_fetch call.",
           "exclusiveMinimum": 0,
           "title": "Web Fetch Timeout",
           "type": "integer"
         },
         "web_knowledge_cache_ttl_hours": {
           "default": 72,
+          "description": "Hours since last_verified before a cached knowledge file is flagged as stale in the index.",
           "title": "Web Knowledge Cache Ttl Hours",
           "type": "integer"
         },
         "web_knowledge_model": {
           "default": "deepseek/deepseek-v4-flash",
+          "description": "Model alias for the web-knowledge gateway sub-agent.",
           "title": "Web Knowledge Model",
           "type": "string"
         },
         "web_knowledge_request_limit": {
           "default": 12,
+          "description": "Request budget for the web_knowledge sub-agent per consultation.",
           "title": "Web Knowledge Request Limit",
           "type": "integer"
         },
         "web_knowledge_stale_days": {
           "default": 30,
+          "description": "Days before a cached web_knowledge .md file is considered stale and eligible for refresh.",
           "title": "Web Knowledge Stale Days",
           "type": "integer"
         },
         "web_research_request_limit": {
           "default": 8,
+          "description": "Request budget for the web_research sub-agent spawned by refine/implement.",
           "minimum": 1,
           "title": "Web Research Request Limit",
           "type": "integer"
         },
         "web_search": {
           "default": true,
+          "description": "Enable web search via a cheap bounded sub-agent for refine and implement agents.",
           "title": "Web Search",
           "type": "boolean"
         }

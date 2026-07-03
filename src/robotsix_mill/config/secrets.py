@@ -1,9 +1,20 @@
 """The :class:`Secrets` model and its cached accessors.
 
-Split out of the former monolithic ``config.py``. The cached
-``_secrets`` singleton lives in ``config/__init__.py`` so test fixtures
-that poke ``robotsix_mill.config._secrets`` are observed by the
-accessors here (which read the package attribute at call time).
+Secrets are never merged into ``Settings`` — they are kept in a
+separate model with redacted ``repr`` / ``model_dump`` and
+debug-logged attribute access, so they cannot leak through logs,
+trace output, or accidental serialization.
+
+The cached ``_secrets`` singleton lives in ``config/__init__.py`` so
+test fixtures that poke ``robotsix_mill.config._secrets`` are
+observed by the accessors here (which read the package attribute at
+call time).
+
+Secrets are loaded from the ``secrets:`` block of the single mill
+config file (``config/config.json``, else ``config/config.example.json``).
+A value equal to the literal ``SECRET`` sentinel (used throughout
+``config.example.json``) is treated as unset, so the field falls back
+to its ``None`` default.
 """
 
 from __future__ import annotations
@@ -12,42 +23,78 @@ import inspect
 import logging
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
 class Secrets(BaseModel):
-    """Secrets loaded from the ``secrets:`` block of the single mill
-    config file (``config/config.json``, else ``config/config.example.json``).
-
-    Never merged into ``Settings`` — secrets are kept in a separate
-    model with redacted ``repr`` / ``model_dump`` and debug-logged
-    attribute access.  A value equal to the literal ``SECRET`` sentinel
-    (used throughout ``config.example.json``) is treated as unset, so the
-    field falls back to its ``None`` default.
+    """API keys, tokens, and credentials for external services
+    (OpenRouter, forge, Langfuse, ntfy, etc.).
     """
 
-    openrouter_api_key: str | None = None
-    forge_token: str | None = None
+    openrouter_api_key: str | None = Field(
+        default=None,
+        description="API key for OpenRouter model access (https://openrouter.ai/keys). Required for LLM inference.",
+    )
+    forge_token: str | None = Field(
+        default=None,
+        description="Personal access token (PAT) for the forge (GitHub/GitLab). Used for PR creation, branch push, and merge operations.",
+    )
     # A classic/fine-grained PAT used ONLY for repo creation (POST
     # /user/repos or /orgs/.../repos). GitHub App installation tokens
     # cannot create repositories under a personal account ("Resource not
     # accessible by integration"), so this PAT — with repo-creation
     # rights — is preferred for that one call while everyday push/PR
     # keeps using the App token. Falls back to the normal token if unset.
-    forge_repo_create_token: str | None = None
-    github_app_id: str | None = None
-    github_app_private_key: str | None = None
-    github_app_private_key_path: str | None = None
-    langfuse_public_key: str | None = None
-    langfuse_secret_key: str | None = None
-    langfuse_base_url: str | None = None
-    langfuse_project_id: str | None = None
-    langfuse_project_name: str | None = None
-    openrouter_management_key: str | None = None
-    ntfy_url: str | None = None
-    ntfy_token: str | None = None
+    forge_repo_create_token: str | None = Field(
+        default=None,
+        description="A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos — use a classic PAT with repo-creation scope.",
+    )
+    github_app_id: str | None = Field(
+        default=None,
+        description="GitHub App ID for App-based authentication. Required when FORGE_AUTH=app.",
+    )
+    github_app_private_key: str | None = Field(
+        default=None,
+        description="GitHub App private key (PEM string). Alternative to github_app_private_key_path.",
+    )
+    github_app_private_key_path: str | None = Field(
+        default=None,
+        description="Path to the GitHub App private key PEM file. Alternative to github_app_private_key.",
+    )
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
+    )
+    langfuse_secret_key: str | None = Field(
+        default=None,
+        description="Langfuse secret key for LLM observability tracing.",
+    )
+    langfuse_base_url: str | None = Field(
+        default=None,
+        description="Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
+    )
+    langfuse_project_id: str | None = Field(
+        default=None,
+        description="Langfuse project ID for trace attribution.",
+    )
+    langfuse_project_name: str | None = Field(
+        default=None,
+        description="Langfuse project name for trace attribution.",
+    )
+    openrouter_management_key: str | None = Field(
+        default=None,
+        description="OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
+    )
+    ntfy_url: str | None = Field(
+        default=None,
+        description="ntfy server URL for push notifications (https://ntfy.sh).",
+    )
+    ntfy_token: str | None = Field(
+        default=None,
+        description="ntfy access token for authenticated push notifications.",
+    )
 
     def __init__(self, _secrets_file: str | None = None, **data: Any) -> None:
         """Construct a ``Secrets`` instance.

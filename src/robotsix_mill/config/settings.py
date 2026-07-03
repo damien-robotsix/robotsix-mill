@@ -1,10 +1,15 @@
 """The :class:`Settings` model and ``load_settings()``.
 
-Assembles the field mixins (``_settings_core``, ``_settings_stages``,
-``_settings_periodic``, ``_settings_observability``) with
-``BaseSettings`` and carries ``model_config``, the
-``settings_customise_sources`` hook, the path/property helpers, and the
-cross-field validators. Split out of the former monolithic ``config.py``.
+Settings fields are assembled from four mixins (core, stages,
+periodic, observability) and wired into ``BaseSettings`` with
+JSON-file sourcing, env-var aliases, and cross-field validators.
+All fields are sourced from ``os.environ`` and a single JSON config
+file (``config/config.json`` or the committed
+``config/config.example.json`` template).  Conventional keys like
+``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
+compatible with the reference projects.  Mill-specific settings use
+the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
+``Field(alias=...)`` values.
 """
 
 from __future__ import annotations
@@ -41,15 +46,9 @@ class Settings(
     _CoreSettings,
     BaseSettings,
 ):
-    """Central Pydantic configuration model for robotsix-mill.
-
-    All fields are sourced from ``os.environ`` and a single JSON config
-    file (``config/config.json`` or the committed
-    ``config/config.example.json`` template).  Conventional keys like
-    ``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
-    compatible with the reference projects.  Mill-specific settings use
-    the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
-    ``Field(alias=...)`` values.
+    """Runtime settings for robotsix-mill: concurrency limits,
+    API endpoints, feature toggles, stage-level controls,
+    sandbox configuration, and agent budgets.
     """
 
     model_config = SettingsConfigDict(
