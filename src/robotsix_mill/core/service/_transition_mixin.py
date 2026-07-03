@@ -480,7 +480,6 @@ class _TransitionMixin(_ServiceBase):
             State.ANSWERED,
             State.EPIC_CLOSED,
             State.EPIC_OPEN,
-            State.BLOCKED,
         }
         try:
             board = self._board_for(ticket_id)
@@ -493,6 +492,11 @@ class _TransitionMixin(_ServiceBase):
                     f"{ticket_id}: cannot mark done — "
                     f"state {ticket.state} is not eligible for mark-done"
                 )
+            # Force‑close marker for blocked tickets so operators
+            # know this was a deliberate override.
+            if ticket.state is State.BLOCKED:
+                reason = note if note.strip() else "operator mark-done"
+                note = f"[force-closed from blocked] {reason}"
             # Refuse mark-done when duplicate changelog fragments
             # exist on the ticket's branch.
             repo_dir = self.workspace(ticket).repo_dir
