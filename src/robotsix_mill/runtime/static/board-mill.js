@@ -519,6 +519,24 @@
     });
   }
 
+  // Prepend a short-id badge (the ticket id's trailing hex suffix, e.g.
+  // "f77f") to each card so a ticket can be identified from the board
+  // without opening its detail view. The badge is click-selectable and
+  // its tooltip carries the full ticket id.
+  function applyShortIds() {
+    document.querySelectorAll('.board-card').forEach(function(card) {
+      var ticketId = card.dataset.cardId;
+      if (!ticketId) return;
+      if (card.querySelector('.short-id')) return;
+      var badge = document.createElement('span');
+      badge.className = 'short-id';
+      badge.textContent = ticketId.split('-').pop();
+      badge.title = ticketId;
+      badge.setAttribute('style', 'display:inline-block;font-family:ui-monospace,monospace;font-size:10px;color:#9ca3af;background:#1f2937;border:1px solid #374151;border-radius:3px;padding:1px 5px;margin-bottom:4px;user-select:all;cursor:text');
+      card.insertBefore(badge, card.firstChild);
+    });
+  }
+
   // Hide board columns that currently hold no cards. robotsix-board's
   // board.js renders every configured column (22 of them) whether or
   // not it has tickets; the mill only wants populated columns visible.
@@ -599,7 +617,7 @@
           refresh();
         } else if (msg.type === "ticket_update") {
           window.robotsixBoardRefresh();
-          setTimeout(function() { fetchActive().then(applyActiveLabels).then(applyMoveButtons); }, 500);
+          setTimeout(function() { fetchActive().then(applyActiveLabels).then(applyMoveButtons).then(applyShortIds); }, 500);
         }
       } catch (e) { /* ignore malformed messages */ }
     };
@@ -2393,7 +2411,7 @@
     // After a short delay, fetch active labels and apply to cards
     setTimeout(function() {
       if (refreshSeq === tok) {
-        fetchActive().then(applyActiveLabels).then(applyMoveButtons);
+        fetchActive().then(applyActiveLabels).then(applyMoveButtons).then(applyShortIds);
       }
     }, 600);
   }
@@ -2436,7 +2454,7 @@
 
     // Initial board render via robotsix-board, then active labels
     window.robotsixBoardRefresh();
-    setTimeout(function() { fetchActive().then(applyActiveLabels).then(applyMoveButtons); }, 600);
+    setTimeout(function() { fetchActive().then(applyActiveLabels).then(applyMoveButtons).then(applyShortIds); }, 600);
 
     // Intercept clicks on board cards BEFORE robotsix-board's handler
     var board = document.getElementById("board");
@@ -2478,7 +2496,7 @@
       else if (sel) refreshDetail(sel);
       // Refresh active labels on the board every 5s when drawer is closed
       if (!sel && !runsOpen && !candidatesOpen) {
-        fetchActive().then(applyActiveLabels).then(applyMoveButtons);
+        fetchActive().then(applyActiveLabels).then(applyMoveButtons).then(applyShortIds);
       }
     }, 1000);
   }
