@@ -13,7 +13,7 @@ from pathlib import Path
 from ...agents import refining
 from ...config import target_branch_for
 from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
-from ...core.models import Ticket, TicketKind
+from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
 from ...forge.auth import github_token
@@ -71,7 +71,14 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # Deterministic, no LLM, no workspace.  When the draft requests
         # a create-repo, fork-repo, or cross-repo investigation, route
         # directly to MAINTENANCE — skip the clone + full triage.
-        if s.maintenance_triage_enabled:
+        # Skip keyword maintenance triage for CI-created tickets (workflow
+        # failure reports are never operator maintenance requests) and for
+        # empty drafts (no text to match against). The LLM-triage path
+        # already guards SourceKind.CI at _triage.py L390.
+        _skip_keyword_triage = (
+            ticket.source == SourceKind.CI or not (draft or "").strip()
+        )
+        if s.maintenance_triage_enabled and not _skip_keyword_triage:
             action = refining._classify_maintenance_draft(title, draft)
             if action is not None:
                 # Preserve the original draft as an artifact for

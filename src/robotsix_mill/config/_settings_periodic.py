@@ -380,6 +380,18 @@ class _PeriodicSettings(BaseModel):
     # a specific path; unset (default) derives <data_dir>/<board>/run_health_memory.md.
     run_health_memory_path: Path | None = Field(default=None)
 
+    # --- CI-debt recheck (auto-resume tickets blocked by pre-existing CI debt) ---
+    # When True, a periodic pass re-checks BLOCKED tickets whose block note
+    # cites pre-existing target-branch CI debt.  When all the named workflows
+    # have turned green on the target branch, the ticket is auto-resumed back
+    # to IMPLEMENT_COMPLETE.  On by default — harmless when idle (no matching
+    # BLOCKED tickets → no-op).
+    ci_debt_recheck_periodic: bool = Field(default=True)
+    # Seconds between CI-debt recheck passes when
+    # MILL_CI_DEBT_RECHECK_PERIODIC=true.  Default 3600 (1 hour).
+    # Minimum enforced at 60 s in the worker loop.
+    ci_debt_recheck_interval_seconds: int = Field(default=3600)
+
     # --- diagnostic (daily deterministic diagnostic agent) ---
     # When True, a global daily pass iterates the pluggable diagnostic check
     # registry. Off by default — the skeleton ships with zero checks; later

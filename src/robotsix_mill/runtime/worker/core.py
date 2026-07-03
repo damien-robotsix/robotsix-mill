@@ -195,6 +195,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._orphaned_pr_check_task: asyncio.Task[None] | None = None
         self._db_maintenance_task: asyncio.Task | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
+        self._ci_debt_recheck_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
         self._dependabot_ingest_task: asyncio.Task[None] | None = None
         self._requeue_task: asyncio.Task[None] | None = None
@@ -795,6 +796,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             log_args=(self.ctx.settings.sandbox_reaper_interval_seconds,),
         )
         self._start_poll_loop_pass(
+            "ci-debt-recheck",
+            self._ci_debt_recheck_loop,
+            "_ci_debt_recheck_task",
+            log_msg="Periodic CI-debt recheck enabled: interval %ds",
+            log_args=(self.ctx.settings.ci_debt_recheck_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
             "dependabot-ingest",
             self._dependabot_ingest_poll_loop,
             "_dependabot_ingest_task",
@@ -892,6 +900,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_stale_branch_task",
             "_db_maintenance_task",
             "_sandbox_reaper_task",
+            "_ci_debt_recheck_task",
             "_credit_balance_task",
             "_requeue_task",
         ):

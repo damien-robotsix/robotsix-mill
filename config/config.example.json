@@ -33,6 +33,8 @@
     "bespoke_periodic": true,
     "board_list_cache_ttl_seconds": 3.0,
     "branch_prefix": "mill/",
+    "ci_debt_recheck_interval_seconds": 3600,
+    "ci_debt_recheck_periodic": true,
     "ci_fix_max_attempts": 2,
     "ci_fix_max_cycles": 3,
     "ci_fix_max_identical_failures": 2,

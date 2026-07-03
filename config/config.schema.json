@@ -544,6 +544,16 @@
           "title": "Branch Prefix",
           "type": "string"
         },
+        "ci_debt_recheck_interval_seconds": {
+          "default": 3600,
+          "title": "Ci Debt Recheck Interval Seconds",
+          "type": "integer"
+        },
+        "ci_debt_recheck_periodic": {
+          "default": true,
+          "title": "Ci Debt Recheck Periodic",
+          "type": "boolean"
+        },
         "ci_fix_max_attempts": {
           "default": 2,
           "minimum": 0,
