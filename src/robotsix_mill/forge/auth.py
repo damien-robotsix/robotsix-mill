@@ -95,9 +95,8 @@ def _mint_installation_token(
     }
     with httpx.Client(timeout=30) as c:
         inst = c.get(f"{api}/repos/{owner}/{repo}/installation", headers=h)
-        if inst.status_code == 404:
+        if not inst.is_success:
             raise GitHubAppNotInstalledError(owner, repo)
-        inst.raise_for_status()
         iid = inst.json()["id"]
         tok = c.post(f"{api}/app/installations/{iid}/access_tokens", headers=h)
         tok.raise_for_status()

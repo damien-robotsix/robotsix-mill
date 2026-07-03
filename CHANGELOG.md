@@ -10,6 +10,7 @@
   now calls this before accepting an `already_done` verdict, preventing
   false dismissals where a cited PR or commit does not touch any file
   named in the draft.
+- `_mint_installation_token`: catch all non-success responses from the GitHub App installation endpoint (not just 404), preventing `HTTPStatusError` from escaping and causing periodic-pass runs to be recorded as errors when the App is not installed on a board's repo (mill: audit errors on robotsix-yaml-config: GitHub API 404 for App installation endpoint (2×) (20260703T011001Z-audit-errors-on-robotsix-yaml-config-git-9d4d) [WIP])
 - Handle GitHub App 404 on `/installation` gracefully: raise a
   specific `GitHubAppNotInstalledError` instead of a generic
   `HTTPStatusError` so callers can distinguish "app not installed"
