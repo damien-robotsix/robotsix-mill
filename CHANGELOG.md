@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Add ``coherent_resolver`` module in ``robotsix_mill.deps`` — resolves cross-repo
+  git-rev consistency for shared transitive dependencies by computing a single agreed
+  commit per shared dep.  Includes a ``uv lock``-based coherence check that empirically
+  discovers ``Requirements contain conflicting URLs`` failures.
 - Add budget-discipline section to the trace inspector system prompt to prevent ``UsageLimitExceeded`` errors when the agent exhausts its request budget before filing findings
 - Dedup agent: add explicit output-format instruction to system prompt and enable `strict`/`extra='forbid'` on `DedupResult` model to prevent pre-JSON narration that caused structured-output parse failures.
 - Fix implement↔review convergence backstop to respect `cross_repo_target.base_branch` instead of always comparing against `origin/main`; extract `effective_target_branch()` helper to keep DRY between `_clone_and_branch` and the backstop gate.
