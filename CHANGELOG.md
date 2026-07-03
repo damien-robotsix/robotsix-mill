@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Enable `changelog_autofill` periodic workflow for this repo.
 - Security posture agent: add explicit `git ls-remote` SHA-resolution and
   validation instructions to the system prompt so the agent no longer
   fabricates or guesses commit SHAs when filing mutable-ref pinning drafts.
