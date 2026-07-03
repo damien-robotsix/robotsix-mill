@@ -311,6 +311,19 @@ class GitLabForge(
             target_namespace=target_namespace,
         )
 
+    def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
+        if not self.settings.enable_repo_creation:
+            raise NotConfiguredError(
+                "Repo metadata updates are disabled. Set enable_repo_creation=True "
+                "and verify the GitLab token has api scope with permission to "
+                "update projects in the target namespace."
+            )
+        return self._update_project(owner=owner, repo=repo, description=description)
+
+    def _update_project(self, *, owner: str, repo: str, description: str) -> bool:
+        # GitLab project description updates not yet implemented.
+        return False
+
     def delete_branch(self, *, branch: str) -> bool:
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._delete_branch(project_path, branch)

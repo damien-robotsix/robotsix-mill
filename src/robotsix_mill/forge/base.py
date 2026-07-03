@@ -252,6 +252,18 @@ class Forge(ABC):
         by configuration (e.g. a feature flag).
         """
 
+    @abstractmethod
+    def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
+        """Update a repository's metadata (description).
+
+        Returns ``True`` on success, ``False`` on failure (not found,
+        insufficient scope, network error). Must NEVER raise — catch
+        all API-level failures and return ``False``.
+
+        Must raise ``NotConfiguredError`` when repo metadata updates are
+        disabled by configuration (e.g. a feature flag).
+        """
+
     def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
         """List OPEN code-scanning (e.g. CodeQL) alerts on *source_branch*.
 

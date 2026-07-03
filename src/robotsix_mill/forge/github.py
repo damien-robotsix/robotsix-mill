@@ -409,3 +409,42 @@ class GitHubForge(
             source_repo=source_repo,
             target_namespace=target_namespace,
         )
+
+    def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
+        """Update an existing GitHub repository's metadata (description).
+
+        :param owner: org/user that owns the repo.
+        :param repo: repository name.
+        :param description: new repo description (clamped to GitHub's limit).
+        Returns ``True`` on success, ``False`` on any API failure. Raises
+        :class:`NotConfiguredError` when ``enable_repo_creation`` is off.
+        """
+        if not self.settings.enable_repo_creation:
+            raise NotConfiguredError(
+                "Repo metadata updates are disabled. Set enable_repo_creation=True "
+                "and verify the GitHub App installation has the "
+                "Administration:Read and write permission (or equivalent "
+                "PAT scope)."
+            )
+        return self._update_repo(owner=owner, repo=repo, description=description)
+
+    # --- HTTP seam (monkeypatched in tests) ---
+    def _update_repo(self, *, owner: str, repo: str, description: str) -> bool:
+        from ..config import get_secrets
+
+        from .auth import github_token
+
+        s = self.settings
+        token = get_secrets().forge_repo_create_token or github_token(
+            s, repo_config=self._repo_config
+        )
+        custom_headers = _build_headers(token)
+        payload = {"description": _clamp_repo_description(description)}
+
+        with self._http.client() as (c, api, _headers):
+            r = c.patch(
+                f"{api}/repos/{owner}/{repo}",
+                headers=custom_headers,
+                json=payload,
+            )
+        return r.status_code == 200

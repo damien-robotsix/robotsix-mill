@@ -2021,6 +2021,56 @@ def test_fork_repo_flag_disabled(tmp_path, monkeypatch):
         forge.fork_repo(source_owner="o", source_repo="r")
 
 
+# ---------------------------------------------------------------------------
+# update_repo
+# ---------------------------------------------------------------------------
+
+
+def test_update_repo_happy_path(tmp_path, monkeypatch):
+    """200 from PATCH → returns True."""
+    _mock_httpx(
+        monkeypatch,
+        patch_response=_make_response(200, {"description": "new desc"}),
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.update_repo(owner="o", repo="r", description="new desc")
+    assert result is True
+
+
+def test_update_repo_non_200_returns_false(tmp_path, monkeypatch):
+    """Non-200 from PATCH → returns False (never raises)."""
+    _mock_httpx(
+        monkeypatch,
+        patch_response=_make_response(404, {}, "not found"),
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    result = forge.update_repo(owner="o", repo="r", description="desc")
+    assert result is False
+
+
+def test_update_repo_flag_disabled(tmp_path, monkeypatch):
+    """enable_repo_creation=False (default) → NotConfiguredError."""
+    forge = _forge(tmp_path)  # no enable_repo_creation
+    with pytest.raises(NotConfiguredError, match="Repo metadata updates are disabled"):
+        forge.update_repo(owner="o", repo="r", description="desc")
+
+
+def test_update_repo_clamps_description(tmp_path, monkeypatch):
+    """Description is clamped via _clamp_repo_description before PATCH."""
+    captured = _mock_httpx(
+        monkeypatch,
+        patch_response=_make_response(200, {}),
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    long_desc = "x" * 400
+    result = forge.update_repo(owner="o", repo="r", description=long_desc)
+    assert result is True
+    # Should be clamped to ≤350 chars with ellipsis
+    sent = captured["patch_payload"]["description"]
+    assert len(sent) <= 350
+    assert sent.endswith("…")
+
+
 def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):
     """Open CodeQL alerts are fetched + normalised (rule/severity/path/line)."""
     raw = [
