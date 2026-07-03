@@ -105,6 +105,10 @@ SCOPE DISCIPLINE — always follow these limits:
   pattern-matching task, use run_command("grep -rn 'pattern'")
   BEFORE reading files.  Only reach for read_file when you need
   surrounding context beyond what the grep match line provides.
+  When grep output already gives you the answer (file path and
+  line number), state the answer immediately — do NOT call
+  read_file to confirm unless the caller explicitly asks for
+  the full content.
   Examples:
     run_command("grep -rn 'UnexpectedModelBehavior'")
     run_command("grep -rn 'def build_fs_tools' src/")
