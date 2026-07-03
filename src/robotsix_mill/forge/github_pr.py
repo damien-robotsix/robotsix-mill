@@ -121,8 +121,6 @@ class GitHubForgePRMixin:
     ) -> str:
         import time
 
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         payload = {"title": title, "head": head, "base": base, "body": body}
         # GitHub sometimes takes a few seconds to index a freshly-
         # pushed ref before the pulls API can resolve it — the
@@ -130,9 +128,10 @@ class GitHubForgePRMixin:
         # though the branch is visible via git/refs. Retry the
         # create call a few times before giving up; existing-PR
         # detection runs each round so we don't double-open.
-        with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
+        for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
+            max_retries=2,
+        ):
             url = f"{api}/repos/{owner}/{repo}/pulls"
-            already_retried_401 = False
             for attempt in range(4):
                 r = c.post(url, headers=headers, json=payload)
                 if r.status_code == 201:
@@ -166,18 +165,21 @@ class GitHubForgePRMixin:
                         time.sleep(2**attempt)  # 1s, 2s, 4s
                         continue
                 # 401 — intermittent App-token write auth flap
-                # (GitHub replica lag). Invalidate cached token,
-                # back off, regenerate headers, retry once.
-                if r.status_code == 401 and not already_retried_401:
-                    invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                    headers = self._http.regenerate_headers()  # type: ignore[attr-defined]
-                    already_retried_401 = True
-                    continue
+                # (GitHub replica lag). Break out of the inner
+                # attempt loop; the outer retrying_client loop
+                # invalidates the cached token and retries with
+                # fresh headers.
+                if r.status_code == 401:
+                    break
                 # Non-422 / non-401 (or final attempt) — surface.
                 break
-            raise RuntimeError(
-                f"GitHub PR create failed: {r.status_code} {r.text[:300]}"
-            )
+            else:
+                # Inner loop exhausted all 4 attempts (all 422s).
+                break
+            if r.status_code == 401:
+                continue  # trigger retrying_client retry
+            break  # success or non-401 failure
+        raise RuntimeError(f"GitHub PR create failed: {r.status_code} {r.text[:300]}")
 
     def pr_status(self, *, source_branch: str) -> dict | None:
         """Return the PR status for the PR whose head is *source_branch*.

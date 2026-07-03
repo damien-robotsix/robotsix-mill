@@ -412,8 +412,6 @@ class GitHubForgeCIMixin:
         run_id: int,
         full_log: bool = False,
     ) -> str:
-        from .auth import invalidate_and_backoff  # lazy: avoid import cycle
-
         s = self.settings  # type: ignore[attr-defined]
 
         # 1. List jobs for the run (with 401 retry).
@@ -450,60 +448,57 @@ class GitHubForgeCIMixin:
         log_max = s.ci_log_max_bytes
 
         # 3. Fetch logs for each failed job (with 401 retry per fetch).
-        with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-            for j in failed_jobs:
-                job_id = j["id"]
-                job_name = j.get("name", f"job-{job_id}")
-                # Each job-log fetch gets its own 401 retry.
-                raw: str = ""
-                for log_retry in range(2):
-                    try:
-                        log_resp = c.get(
-                            f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
-                            headers=headers,
-                            follow_redirects=True,
-                        )
-                        if log_resp.status_code == 401 and log_retry == 0:
-                            invalidate_and_backoff(self.settings, self._repo_config)  # type: ignore[attr-defined]
-                            headers = self._http.regenerate_headers()  # type: ignore[attr-defined]
-                            continue
-                        log_resp.raise_for_status()
-                        raw = log_resp.text
-                    except httpx.HTTPStatusError:
-                        sc = log_resp.status_code
-                        if sc == 403:
-                            raw = f"[log fetch failed for job {job_id}: HTTP 403 — App likely missing Actions:Read permission]"
-                        else:
-                            raw = f"[log fetch failed for job {job_id}: HTTP {sc}]"
-                    except Exception as exc:
-                        raw = (
-                            f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
-                        )
-                    else:
-                        if not raw:
-                            raw = f"[log fetch returned empty body for job {job_id}]"
-                    break  # success or final attempt
-
-                # Strip ANSI.
-                clean = _ANSI_RE.sub("", raw)
-                # Strip runner preamble boilerplate (OS version, runner
-                # image, git config, etc.) — pure token saving with zero
-                # diagnostic loss.
-                clean = _strip_runner_noise(clean)
-                # Capture the window around the FIRST failure marker (not a
-                # blind tail-cap) so an ``if: always()`` cascade — where a
-                # downstream always-step re-errors with misleading input —
-                # can't mask the step that actually failed first.
-                if not full_log:
-                    clean = _capture_failure_window(
-                        clean,
-                        log_max,
-                        failure_re=_LOG_FAILURE_RE,
-                        tail_context=_LOG_FAILURE_TAIL_CONTEXT,
+        for j in failed_jobs:
+            job_id = j["id"]
+            job_name = j.get("name", f"job-{job_id}")
+            # Each job-log fetch gets its own 401 retry.
+            raw: str = ""
+            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
+                max_retries=2,
+            ):
+                try:
+                    log_resp = c.get(
+                        f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
+                        headers=headers,
+                        follow_redirects=True,
                     )
+                    if log_resp.status_code == 401:
+                        continue
+                    log_resp.raise_for_status()
+                    raw = log_resp.text
+                except httpx.HTTPStatusError:
+                    sc = log_resp.status_code
+                    if sc == 403:
+                        raw = f"[log fetch failed for job {job_id}: HTTP 403 — App likely missing Actions:Read permission]"
+                    else:
+                        raw = f"[log fetch failed for job {job_id}: HTTP {sc}]"
+                except Exception as exc:
+                    raw = f"[log fetch failed for job {job_id}: {type(exc).__name__}]"
+                else:
+                    if not raw:
+                        raw = f"[log fetch returned empty body for job {job_id}]"
+                break  # success or final attempt
 
-                parts.append(f"### Job: {job_name} (id={job_id})\n")
-                parts.append(clean)
-                parts.append("\n")
+            # Strip ANSI.
+            clean = _ANSI_RE.sub("", raw)
+            # Strip runner preamble boilerplate (OS version, runner
+            # image, git config, etc.) — pure token saving with zero
+            # diagnostic loss.
+            clean = _strip_runner_noise(clean)
+            # Capture the window around the FIRST failure marker (not a
+            # blind tail-cap) so an ``if: always()`` cascade — where a
+            # downstream always-step re-errors with misleading input —
+            # can't mask the step that actually failed first.
+            if not full_log:
+                clean = _capture_failure_window(
+                    clean,
+                    log_max,
+                    failure_re=_LOG_FAILURE_RE,
+                    tail_context=_LOG_FAILURE_TAIL_CONTEXT,
+                )
+
+            parts.append(f"### Job: {job_name} (id={job_id})\n")
+            parts.append(clean)
+            parts.append("\n")
 
         return "\n".join(parts)

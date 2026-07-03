@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Extract 401-auth-retry inline loops in forge adapters into shared `retrying_client()` generator in `_ApiClient`. Added optional `headers_factory` parameter so callers with custom headers (e.g. repo-creation PAT) can use the same retry helper.
 - Enable `changelog_autofill` periodic workflow for this repo.
 - Security posture agent: add explicit `git ls-remote` SHA-resolution and
   validation instructions to the system prompt so the agent no longer

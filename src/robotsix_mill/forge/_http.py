@@ -139,6 +139,7 @@ class _ApiClient:
         self,
         max_retries: int = 2,
         on_retry: Callable[[], None] | None = None,
+        headers_factory: Callable[[], dict[str, str]] | None = None,
     ) -> Iterator[tuple[int, httpx.Client, str, dict[str, str]]]:
         """Generator that yields ``(retry_index, httpx.Client, api_base_url,
         headers_dict)`` for each attempt, with automatic 401 retry.
@@ -150,11 +151,16 @@ class _ApiClient:
 
         *on_retry* is an optional callback invoked at the start of each
         iteration — use it to clear accumulated output in pagination loops.
+
+        *headers_factory* overrides the default header generation — use it
+        when callers need custom headers (e.g. a repo-creation PAT instead
+        of the standard App installation token).
         """
         for retry_idx in range(max_retries):
             if on_retry is not None:
                 on_retry()
-            with self.client() as (c, api, headers):
+            with self.client() as (c, api, _headers):
+                headers = headers_factory() if headers_factory is not None else _headers
                 yield retry_idx, c, api, headers
             # If we reach here the caller did *not* break — they
             # continued (signalling a 401) or the body fell through.
