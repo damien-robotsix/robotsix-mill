@@ -152,6 +152,14 @@ class _CoreSettings(BaseModel):
         alias="MILL_COORDINATOR_TIMEOUT_SECONDS",
         description="Wall-clock timeout (seconds) for a single implement agent pass.",
     )
+    # Per-stage overrides for the coordinator (implement) timeout.
+    # Keys are stage names; values are seconds.  Falls back to
+    # coordinator_timeout_seconds when a stage isn't listed.  A value
+    # of 0 disables the timeout for that stage.
+    coordinator_timeout_overrides: dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-stage coordinator timeout overrides (dict). Keys are stage names, values are seconds.",
+    )
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
     # still bounds the outer loop; this cap bounds each individual
