@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .settings import Settings
 
@@ -37,10 +37,20 @@ class CrossRepoTarget(BaseModel):
       ``Forge.fork_repo()`` before push.
     """
 
-    upstream_remote_url: str
-    fork_remote_url: str
-    base_branch: str = "main"
-    auto_fork: bool = False
+    upstream_remote_url: str = Field(
+        description="The upstream repository URL that PRs are opened against."
+    )
+    fork_remote_url: str = Field(
+        description="The fork repository URL where the branch is pushed before opening a cross-fork PR."
+    )
+    base_branch: str = Field(
+        "main",
+        description="The upstream branch to target in the cross-fork PR (default: main).",
+    )
+    auto_fork: bool = Field(
+        False,
+        description="When true, automatically create the fork via the forge API before pushing.",
+    )
 
     @field_validator("upstream_remote_url", "fork_remote_url", "base_branch")
     @classmethod
@@ -55,20 +65,42 @@ class RepoConfig(BaseModel):
     Langfuse observability project credentials, and per-repo CI
     monitor settings."""
 
-    repo_id: str
-    board_id: str
-    langfuse_project_name: str
-    langfuse_project_id: str = ""
-    langfuse_public_key: str
-    langfuse_secret_key: str
-    langfuse_base_url: str = "https://cloud.langfuse.com"
+    repo_id: str = Field(
+        description="Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml."
+    )
+    board_id: str = Field(
+        description="Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill')."
+    )
+    langfuse_project_name: str = Field(
+        description="Langfuse project name for trace attribution (populated from global secrets)."
+    )
+    langfuse_project_id: str = Field(
+        "",
+        description="Langfuse project ID for trace attribution (populated from global secrets).",
+    )
+    langfuse_public_key: str = Field(
+        description="Langfuse public key for trace observability (populated from global secrets)."
+    )
+    langfuse_secret_key: str = Field(
+        description="Langfuse secret key for trace observability (populated from global secrets)."
+    )
+    langfuse_base_url: str = Field(
+        "https://cloud.langfuse.com",
+        description="Langfuse instance base URL (default: https://cloud.langfuse.com).",
+    )
     # NOTE: the langfuse_* fields above are populated centrally from the
     # global Langfuse credentials in the config.yaml secrets block (see _apply_global_langfuse).
     # They are identical across every repo — there is no per-repo Langfuse
     # configuration.
     # Per-repo OpenRouter inference key.
-    openrouter_api_key: str | None = None
-    forge_remote_url: str | None = None
+    openrouter_api_key: str | None = Field(
+        None,
+        description="Per-repo OpenRouter API key override. Unset falls back to the global key.",
+    )
+    forge_remote_url: str | None = Field(
+        None,
+        description="Git remote URL for this repo's forge (e.g. https://github.com/owner/repo).",
+    )
     # Optional path to the live deployment's log directory for this repo.
     # This is a deployment-specific host path (canonically absolute), so it
     # lives here in the operator's central, gitignored ``config/repos.yaml``
@@ -76,12 +108,18 @@ class RepoConfig(BaseModel):
     # avoid leaking deployment layout into the repo. When set and pointing at
     # an existing directory, the refine agent gets read access to it
     # (extra_roots + log-query tool). ``None``/empty → no log access.
-    deployed_log_folder: str | None = None
+    deployed_log_folder: str | None = Field(
+        None,
+        description="Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
+    )
     # Optional pinned working branch. When set, member repos branch from
     # and open PRs into this branch (e.g. "lyrical") instead of the fork's
     # default branch. Populated from the vcs2l manifest `version` by the
     # workspace member-sync mechanism; None → ordinary default-branch behaviour.
-    working_branch: str | None = None
+    working_branch: str | None = Field(
+        None,
+        description="Pinned working branch for member repos. When set, branches fork from and PR into this branch instead of the default.",
+    )
     # Optional per-repo sandbox image override. When set, this repo's
     # sandbox executions (test/smoke gates + the implement coordinator's
     # interactive run_command) use this image; ``None`` → fall back to
@@ -94,30 +132,51 @@ class RepoConfig(BaseModel):
     # whose on-PATH binaries run with the repo bind-mounted is a sandbox-trust
     # escalation. Keeping it in operator-controlled ``config/repos.yaml`` keeps
     # image selection on the trusted side of the boundary.
-    sandbox_image: str | None = None
+    sandbox_image: str | None = Field(
+        None,
+        description="Per-repo Docker sandbox image override. Unset falls back to settings.sandbox_image.",
+    )
     # Optional cross-repo target: when set, deliver pushes the ticket
     # branch to ``fork_remote_url`` and opens a fork→upstream PR against
     # ``upstream_remote_url``/``base_branch`` instead of the clone
     # remote. ``None`` → ordinary same-repo delivery (unchanged).
-    cross_repo_target: CrossRepoTarget | None = None
-    ci_monitor_enabled: bool = True
+    cross_repo_target: CrossRepoTarget | None = Field(
+        None,
+        description="Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery.",
+    )
+    ci_monitor_enabled: bool = Field(
+        True,
+        description="When true, the CI monitor polls this repo's main-branch CI status periodically.",
+    )
     # Default 900s (15 min): main-branch CI breaks should be turned into
     # tickets within minutes, not a day. A repo may override via the
     # ``ci_monitor.interval_seconds`` field in repos.yaml. Min 60 enforced.
-    ci_monitor_interval_seconds: int = 900
+    ci_monitor_interval_seconds: int = Field(
+        900,
+        description="Seconds between CI monitor polls for this repo (minimum 60).",
+    )
     # Number of tickets from THIS repo the worker will process in
     # parallel. Per-repo isolation: each repo gets its own consumer
     # pool, so a busy repo can't starve another. Default 1 keeps the
     # blast radius of any one ticket's bad behaviour contained.
-    max_concurrency: int = 1
+    max_concurrency: int = Field(
+        1,
+        description="Maximum number of tickets from this repo processed in parallel (minimum 1).",
+    )
     # Max number of in-flight PR tickets (DELIVERABLE through ADDRESSING_REVIEW)
     # before the worker stops dispatching new READY/DRAFT work for this repo.
     # Merge-pipeline tickets are always processed.  HUMAN_MR_APPROVAL, BLOCKED,
     # and AWAITING_USER_REPLY do NOT count.  Set to 0 to disable (current behavior).
-    max_inflight_prs: int = 3
+    max_inflight_prs: int = Field(
+        3,
+        description="Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
+    )
     # Source discriminator: ``"config"`` for operator-configured entries,
     # ``"auto"`` for machine-registered overlay entries.
-    source: Literal["config", "auto"] = "config"
+    source: Literal["config", "auto"] = Field(
+        "config",
+        description="Source discriminator: 'config' for operator-configured entries, 'auto' for machine-registered overlay entries.",
+    )
     # NOTE: per-repo ``test_command`` and ``language`` were REMOVED from
     # repos.yaml. A managed repo now owns both in its own source tree via
     # ``.robotsix-mill/config.yaml`` (``test_command`` + ``languages``); the
@@ -163,13 +222,13 @@ class RepoConfig(BaseModel):
 class ReposRegistry(BaseModel):
     """Container holding all :class:`RepoConfig` entries keyed by repo ID."""
 
-    repos: dict[str, RepoConfig]
-    # Optional Langfuse config for the synthetic cross-repo *meta* board.
-    # The meta-agent is not a registered repo (no clone/forge), so it is
-    # kept OUT of ``repos`` — but it gets its own dedicated Langfuse
-    # project here so its passes trace just like the per-repo pipelines.
-    # ``None`` when no ``meta:`` block is configured → meta runs untraced.
-    meta: RepoConfig | None = None
+    repos: dict[str, RepoConfig] = Field(
+        description="Registry of per-repo configurations keyed by repo_id."
+    )
+    meta: RepoConfig | None = Field(
+        None,
+        description="Optional Langfuse configuration for the synthetic cross-repo meta board.",
+    )
 
     @model_validator(mode="after")
     def _validate_keys_match_repo_ids(self) -> "ReposRegistry":

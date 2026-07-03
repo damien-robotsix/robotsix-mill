@@ -14,7 +14,11 @@ from pydantic import BaseModel, Field
 
 class _CoreSettings(BaseModel):
     # --- core ---
-    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
+    openrouter_api_key: str | None = Field(
+        default=None,
+        alias="OPENROUTER_API_KEY",
+        description="API key for OpenRouter model access. Required for LLM inference.",
+    )
     # Per-agent model selection is driven by each agent definition's
     # ``level: 1|2|3`` field, resolved to a (transport, model) by
     # ``build_agent`` via llmio's tier defaults. Transient 429/5xx/timeouts
@@ -32,7 +36,10 @@ class _CoreSettings(BaseModel):
     # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
     # storm. Applies to level-3 (Claude SDK) agents. Must be ≥ 1.
     claude_max_concurrency: int = Field(
-        default=4, alias="MILL_CLAUDE_MAX_CONCURRENCY", ge=1
+        default=4,
+        alias="MILL_CLAUDE_MAX_CONCURRENCY",
+        ge=1,
+        description="Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
     )
     # Host-level cap on total concurrently-running stages across ALL boards,
     # applied on top of each board's own ``max_concurrency``.  Default 12 sits
@@ -40,7 +47,10 @@ class _CoreSettings(BaseModel):
     # per-board caps summed (2+1+...+1), providing a genuine backstop without
     # throttling normal operation.
     max_global_concurrency: int = Field(
-        default=12, alias="MILL_MAX_GLOBAL_CONCURRENCY", ge=1
+        default=12,
+        alias="MILL_MAX_GLOBAL_CONCURRENCY",
+        ge=1,
+        description="Host-level cap on total concurrently-running stages across ALL boards.",
     )
     # Capability gate for inline-image (vision) input on the Claude SDK
     # transport. Default False: the installed robotsix-llmio claude_sdk
@@ -51,24 +61,36 @@ class _CoreSettings(BaseModel):
     # a text note while this is False. Flip to True (a one-line change)
     # once the bridge gains real image-input support (which also needs a
     # robotsix-llmio pin bump) to re-enable inline vision.
-    claude_sdk_vision_enabled: bool = Field(default=False)
+    claude_sdk_vision_enabled: bool = Field(
+        default=False,
+        description="Enable inline-image (vision) input on the Claude SDK transport. Requires a robotsix-llmio pin bump with real image-input support.",
+    )
     # Hard cap on explore/parallel_explore sub-agent calls per refine run.
     # Calls beyond this cap are rejected with a clear message. Default 4
     # mirrors the existing parallel_explore concurrency limit and bounds
     # per-run sub-agent cost. Set to 0 to disable exploration entirely.
-    max_refine_explore_calls: int = Field(default=4, ge=0)
+    max_refine_explore_calls: int = Field(
+        default=4,
+        ge=0,
+        description="Hard cap on explore/parallel_explore sub-agent calls per refine run. Set to 0 to disable exploration entirely.",
+    )
     # Hard cap on read_file calls per refine/triage agent run. Calls
     # beyond this cap are rejected with a clear message. Default 10
     # matches the documented prompt budget instruction. Set to 0 to
     # disable the cap entirely (unbounded reads).  None-typed callers
     # that don't pass read_file_max_calls are unaffected — this cap
     # is opt-in per build_fs_tools invocation.
-    max_refine_read_file_calls: int = Field(default=10, ge=0)
+    max_refine_read_file_calls: int = Field(
+        default=10,
+        ge=0,
+        description="Hard cap on read_file calls per refine/triage agent run. Set to 0 to disable the cap.",
+    )
     # How long a cached web_knowledge .md file is considered fresh
     # (days). A consultation that hits a stale file is allowed to
     # web_search and update the file.
     web_knowledge_stale_days: int = Field(
         default=30,
+        description="Days before a cached web_knowledge .md file is considered stale and eligible for refresh.",
     )
     # How long since the last ``last_verified`` touch before a cached
     # knowledge file is flagged as stale in the index (hours). When a
@@ -76,18 +98,21 @@ class _CoreSettings(BaseModel):
     # to cross-check claims with web_search before trusting the cache.
     web_knowledge_cache_ttl_hours: int = Field(
         default=72,
+        description="Hours since last_verified before a cached knowledge file is flagged as stale in the index.",
     )
     # Bound on the web_knowledge sub-agent's tool requests per
     # consultation. Each request is one Markdown read, one web_search,
     # or one Markdown write.
     web_knowledge_request_limit: int = Field(
         default=12,
+        description="Request budget for the web_knowledge sub-agent per consultation.",
     )
     # Web-knowledge gateway sub-agent model. Defaults to the llmio
     # tier-1 flash model; override to route this agent to a different
     # model without changing the global tier defaults.
     web_knowledge_model: str = Field(
         default="deepseek/deepseek-v4-flash",
+        description="Model alias for the web-knowledge gateway sub-agent.",
     )
     # Per-pass request budget for the implement (coordinator) agent.
     # Default 500 — high enough that normal-sized tickets finish in a
@@ -102,13 +127,18 @@ class _CoreSettings(BaseModel):
         ge=1,
         le=5000,
         alias="MILL_PER_PASS_REQUEST_BUDGET",
+        description="Per-pass request budget for the implement (coordinator) agent. Default 500.",
     )
     # Hard cap on total tool calls per coordinator (implement) trace.
     # The request cap defaults to 500; this ceiling sits generously
     # above any legitimate implement run while still terminating the
     # 1000+-read runaway loops that produced incomplete_trace +
     # cost_outlier flags.
-    coordinator_max_tool_calls: int = Field(default=300, ge=1)
+    coordinator_max_tool_calls: int = Field(
+        default=300,
+        ge=1,
+        description="Hard cap on total tool calls per coordinator (implement) trace.",
+    )
     # Wall-clock timeout (seconds) for a single implement agent pass.
     # When the agent exceeds this duration the pass is terminated and
     # the stage can retry (with a fresh budget) or escalate.  Default
@@ -120,12 +150,16 @@ class _CoreSettings(BaseModel):
         default=600,
         ge=60,
         alias="MILL_COORDINATOR_TIMEOUT_SECONDS",
+        description="Wall-clock timeout (seconds) for a single implement agent pass.",
     )
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
     # still bounds the outer loop; this cap bounds each individual
     # sub-agent so one stuck subtask can't drain the parent's budget.
-    subtask_request_limit: int = Field(default=30)
+    subtask_request_limit: int = Field(
+        default=30,
+        description="Per-subtask request budget when the coordinator delegates via spawn_subtask.",
+    )
     # The test agent inspects failing output, reads the relevant
     # sources, and distills the cause — exploration-heavy work that
     # easily exceeds 8 calls on a non-trivial failure (live case: the
@@ -140,10 +174,18 @@ class _CoreSettings(BaseModel):
     # json value wins at runtime via JsonSettingsSource; this just stops
     # the dry-Settings() default from contradicting it on machines without
     # a json override.
-    test_request_limit: int = Field(default=30, ge=1)
+    test_request_limit: int = Field(
+        default=30,
+        ge=1,
+        description="Request budget for the test agent when diagnosing failures.",
+    )
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
-    max_fix_iterations: int = Field(default=8, ge=0)
+    max_fix_iterations: int = Field(
+        default=8,
+        ge=0,
+        description="Maximum implement→test fix iterations before the ticket is BLOCKED.",
+    )
     # Bounded retry for TRANSIENT model/network failures (HTTP 429,
     # HTTP 5xx, connection/read timeouts) — used by every model call
     # and the ntfy POST. Non-transient errors (other 4xx, budget caps)
@@ -164,22 +206,45 @@ class _CoreSettings(BaseModel):
     # below this threshold the board shows an amber warning with a
     # top-up link.  Also triggered reactively by 402 insufficient-credit
     # errors from the stage error handlers.
-    low_credit_threshold_usd: float = Field(default=5.0, ge=0.0)
+    low_credit_threshold_usd: float = Field(
+        default=5.0,
+        ge=0.0,
+        description="OpenRouter balance below this threshold triggers an amber warning banner on the board.",
+    )
     # Background poll toggle.  Set false to disable the proactive
     # GET /api/v1/credits poll; the reactive 402 path still fires.
-    low_credit_poll_enabled: bool = Field(default=True)
+    low_credit_poll_enabled: bool = Field(
+        default=True,
+        description="Enable proactive OpenRouter credit-balance polling. The reactive 402 path still fires when disabled.",
+    )
     # Seconds between proactive credit-balance polls (default 1 hour).
-    low_credit_poll_interval_seconds: int = Field(default=3600, ge=60)
+    low_credit_poll_interval_seconds: int = Field(
+        default=3600,
+        ge=60,
+        description="Seconds between proactive OpenRouter credit-balance polls.",
+    )
 
     # --- startup re-queue & periodic first-tick jitter ---
     # Tickets enqueued per batch in the startup re-queue drip feed.
-    requeue_batch_size: int = Field(default=5, ge=1)
+    requeue_batch_size: int = Field(
+        default=5,
+        ge=1,
+        description="Tickets enqueued per batch in the startup re-queue drip feed.",
+    )
     # Pause (seconds) between batches in the startup re-queue drip feed.
-    requeue_batch_pause_seconds: float = Field(default=2.0, ge=0.0)
+    requeue_batch_pause_seconds: float = Field(
+        default=2.0,
+        ge=0.0,
+        description="Pause (seconds) between batches in the startup re-queue drip feed.",
+    )
     # Max random spread (seconds) added to the per-repo periodic pass
     # first-tick delay, spreading the initial fire across a window so
     # the post-boot thundering herd is diluted.
-    startup_jitter_seconds: int = Field(default=30, ge=0)
+    startup_jitter_seconds: int = Field(
+        default=30,
+        ge=0,
+        description="Max random jitter (seconds) added to per-repo periodic pass first-tick delay.",
+    )
 
     # Short-TTL cache for the board-poll GET /tickets endpoint (seconds).
     # The board UI + board-manager poll it every few seconds; each call is a
@@ -189,31 +254,63 @@ class _CoreSettings(BaseModel):
     # Field default is 0.0 (disabled) so unit tests that construct Settings()
     # directly see immediate list consistency (create-then-list); the live
     # mill enables it via config/config.example.json (3.0s).
-    board_list_cache_ttl_seconds: float = Field(default=0.0, ge=0.0)
+    board_list_cache_ttl_seconds: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Short-TTL cache for the board-poll GET /tickets endpoint (seconds). 0.0 disables.",
+    )
 
     # Retry policy for stage-level transient errors (httpx.ConnectError,
     # etc.).  These control how many times a stage is re-attempted and
     # the exponential-backoff delay between attempts inside the worker
     # loop.  Test-friendly: keep the defaults small enough for tests to
     # override without needing long sleeps.
-    stage_retry_max_attempts: int = Field(default=5)
-    stage_retry_base_delay: float = Field(default=2.0)
-    stage_retry_max_delay: float = Field(default=60.0)
+    stage_retry_max_attempts: int = Field(
+        default=5,
+        description="Maximum stage-level retry attempts for transient errors before escalating.",
+    )
+    stage_retry_base_delay: float = Field(
+        default=2.0,
+        description="Base delay (seconds) for exponential backoff between stage retries.",
+    )
+    stage_retry_max_delay: float = Field(
+        default=60.0,
+        description="Maximum delay (seconds) for exponential backoff between stage retries.",
+    )
     # Global-network-outage parking. When a stage fails with a
     # host-resolution error AND this probe host doesn't resolve either,
     # the worker re-schedules the ticket WITHOUT consuming a retry
     # attempt — an outage longer than the bounded stage-retry envelope
     # must not mass-block the board. The ticket re-polls every
     # network_outage_retry_seconds until connectivity returns.
-    network_probe_host: str = Field(default="github.com")
-    network_outage_retry_seconds: int = Field(default=120, ge=1)
+    network_probe_host: str = Field(
+        default="github.com",
+        description="Hostname probed to distinguish network outages from upstream errors.",
+    )
+    network_outage_retry_seconds: int = Field(
+        default=120,
+        ge=1,
+        description="Seconds between re-poll attempts during a detected network outage.",
+    )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the
     # coordinator uses when it needs domain-specific advice.
-    consult_request_limit: int = Field(default=15, ge=1)
-    explore_request_limit: int = Field(default=100, ge=1)
-    explore_max_tokens: int = Field(default=4096, ge=1)
+    consult_request_limit: int = Field(
+        default=15,
+        ge=1,
+        description="Per-call request cap for the domain-expert consultation sub-agent.",
+    )
+    explore_request_limit: int = Field(
+        default=100,
+        ge=1,
+        description="Per-call request cap for the exploration sub-agent.",
+    )
+    explore_max_tokens: int = Field(
+        default=4096,
+        ge=1,
+        description="Maximum output tokens for the exploration sub-agent.",
+    )
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
     # has its own 100-call budget), so the top-level refine loop should
@@ -228,11 +325,19 @@ class _CoreSettings(BaseModel):
     # Note: ``review_request_limit`` is also 80 (bumped from 40 — it has
     # no explore sub-agent and was saturating on test-heavy diffs; see its
     # field comment and ticket bc6d).
-    refine_request_limit: int = Field(default=80, ge=1)
+    refine_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for the refine agent's tool loop.",
+    )
     # Per-call cap for non-escalated (simple/sonnet) refine runs.
     # Lower than the main cap (80) because simple tickets need fewer
     # tool calls — the explore/parallel_explore sub-agents are gated off.
-    refine_request_limit_simple: int = Field(default=40, ge=1)
+    refine_request_limit_simple: int = Field(
+        default=40,
+        ge=1,
+        description="Per-call request cap for non-escalated (simple/sonnet) refine runs.",
+    )
     # Per-call cap for the maintenance agent's tool loop. Maintenance
     # tickets are operational one-offs (clone + inspect + post
     # findings); like refine, deep search is delegated to explore. An
@@ -242,101 +347,191 @@ class _CoreSettings(BaseModel):
     # Bumped from 60 → 100 to give headroom for investigation-heavy
     # tickets so the agent doesn't exhaust its budget on git history
     # searches when read_file + explore would be faster.
-    maintenance_request_limit: int = Field(default=100, ge=1)
+    maintenance_request_limit: int = Field(
+        default=100,
+        ge=1,
+        description="Per-call request cap for the maintenance agent's tool loop.",
+    )
     # Per-call cap for the dedup check — the agent reads candidate
     # ticket bodies to verify matches, so allow a slightly larger
     # budget than a naive single-call (bumped from 4 after the agent
     # exhausted its budget on narrow read_file slices).
-    dedup_request_limit: int = Field(default=12, ge=1)
+    dedup_request_limit: int = Field(
+        default=12,
+        ge=1,
+        description="Per-call request cap for the pre-refine dedup check.",
+    )
     # Per-call cap for the obsolescence gate — the agent reads a few
     # cited files to verify the gap, so allow a slightly larger budget
     # than the dedup check.
-    obsolescence_request_limit: int = Field(default=6, ge=1)
+    obsolescence_request_limit: int = Field(
+        default=6,
+        ge=1,
+        description="Per-call request cap for the obsolescence gate.",
+    )
     # Per-call cap for the periodic audit agent's tool loop. The audit
     # agent does broad work (license scan, pip-audit, coverage
     # introspection) and can saturate 50 calls on a genuine run —
     # 80 gives headroom; per-run cost ~$0.29 stays well under the
     # per-ticket $ backstop.
-    audit_request_limit: int = Field(default=80, ge=1)
+    audit_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for the periodic audit agent's tool loop.",
+    )
     # Per-call cap for the test-gap agent's tool loop. The test-gap
     # agent does broad work (explore storms scanning the full repo for
     # test-coverage gaps) and can saturate the pydantic-ai default of
     # 50 calls on a genuine run — 80 gives headroom matching the audit
     # agent's budget for a similar broad-scan workload.
-    test_gap_request_limit: int = Field(default=80, ge=1)
+    test_gap_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for the test-gap agent's tool loop.",
+    )
     # Hard cap on total tool calls per test_gap trace. 100 tool calls
     # is far beyond what any legitimate test-coverage scan requires —
     # only clearly broken runs are terminated.
-    test_gap_max_tool_calls: int = Field(default=100, ge=1)
+    test_gap_max_tool_calls: int = Field(
+        default=100,
+        ge=1,
+        description="Hard cap on total tool calls per test_gap trace.",
+    )
     # Hard cap on tool-call errors before auto-termination. A healthy
     # inspection should have near-zero errors; 20 indicates a broken
     # execution loop.
-    test_gap_max_errors: int = Field(default=20, ge=0)
+    test_gap_max_errors: int = Field(
+        default=20,
+        ge=0,
+        description="Hard cap on tool-call errors before auto-termination of test_gap agent.",
+    )
     # Hard cap on total tool calls per refine trace. A hard ceiling above
     # any legitimate refine run (the request cap is 80; 120 tool calls is a
     # generous headroom that still terminates the 100+-call broken loops).
-    refine_max_tool_calls: int = Field(default=120, ge=1)
+    refine_max_tool_calls: int = Field(
+        default=120,
+        ge=1,
+        description="Hard cap on total tool calls per refine trace.",
+    )
     # Hard cap on tool-call errors before auto-termination. Matches the
     # test_gap/trace_inspector default; a healthy refine has near-zero
     # tool errors.
-    refine_max_errors: int = Field(default=20, ge=0)
+    refine_max_errors: int = Field(
+        default=20,
+        ge=0,
+        description="Hard cap on tool-call errors before auto-termination of refine agent.",
+    )
     # Dynamic request-limit multiplier for large/complex specs.
     # When the draft exceeds refine_dynamic_limit_spec_chars (default
     # 3000) or the scope-triage agent's own budget was over 60% of
     # the refine limit, the effective request_limit is multiplied by
     # this factor (with a floor of refine_dynamic_limit_min).
-    refine_dynamic_limit_multiplier: float = Field(default=1.5, gt=1.0)
-    refine_dynamic_limit_min: int = Field(default=12, ge=1)
-    refine_dynamic_limit_spec_chars: int = Field(default=3000, ge=1)
+    refine_dynamic_limit_multiplier: float = Field(
+        default=1.5,
+        gt=1.0,
+        description="Multiplier for dynamic request-limit on large/complex specs.",
+    )
+    refine_dynamic_limit_min: int = Field(
+        default=12,
+        ge=1,
+        description="Floor for dynamic request-limit on large/complex specs.",
+    )
+    refine_dynamic_limit_spec_chars: int = Field(
+        default=3000,
+        ge=1,
+        description="Character threshold above which the dynamic request-limit multiplier activates.",
+    )
     # Emit a warning when the refine agent consumes more than this
     # fraction (0.0–1.0) of its request_limit, so near-exhaustion
     # patterns are observable even when the run doesn't crash.
-    refine_usage_warning_threshold: float = Field(default=0.8, gt=0.0, le=1.0)
-    doc_request_limit: int = Field(default=32)
-    doc_classifier_request_limit: int = Field(default=3)
+    refine_usage_warning_threshold: float = Field(
+        default=0.8,
+        gt=0.0,
+        le=1.0,
+        description="Fraction (0.0–1.0) of request_limit at which a near-exhaustion warning is emitted.",
+    )
+    doc_request_limit: int = Field(
+        default=32,
+        description="Per-call request cap for the document agent.",
+    )
+    doc_classifier_request_limit: int = Field(
+        default=3,
+        description="Per-call request cap for the cheap doc-classifier gate.",
+    )
     # Caps the git diff fed to the cheap doc-classifier gate. Truncation
     # is safe here: the classifier is conservatively biased toward
     # user_facing=True, so a truncated diff at worst loses signal and
     # routes to the full doc agent — the harmless direction. The full
     # doc agent still receives the untruncated diff.
-    doc_classifier_diff_max_chars: int = Field(default=6000)
+    doc_classifier_diff_max_chars: int = Field(
+        default=6000,
+        description="Character cap on the git diff fed to the doc-classifier gate.",
+    )
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped from the
     # loaded view; persist_memory also applies the cap on write when
     # max_chars is passed. Applies to all memory ledgers (refine, audit,
     # health, agent-check, etc.).
-    max_memory_chars: int = Field(default=8000, ge=0)
+    max_memory_chars: int = Field(
+        default=8000,
+        ge=0,
+        description="Maximum characters of the memory ledger to load per agent pass. 0 disables capping.",
+    )
     # Maximum characters of the retrospect stage's history + comments
     # logs fed to the agent. These are chronological, so the most-recent
     # tail is kept and older lines dropped. 0 disables capping.
-    retrospect_log_max_chars: int = Field(default=12000, ge=0)
+    retrospect_log_max_chars: int = Field(
+        default=12000,
+        ge=0,
+        description="Maximum characters of history+comments logs fed to the retrospect agent. 0 disables.",
+    )
     # Max number of entries retained in AGENT_CANDIDATES.md (the per-board
     # append-only queue of proposed AGENT.md rule additions). Pending
     # entries are always kept; resolved (validated/rejected) entries are
     # pruned oldest-first to honor this cap. 0 disables pruning.
-    retrospect_candidates_max_entries: int = Field(default=100, ge=0)
+    retrospect_candidates_max_entries: int = Field(
+        default=100,
+        ge=0,
+        description="Max entries retained in AGENT_CANDIDATES.md. 0 disables pruning.",
+    )
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
-    dedup_lookback_days: int = Field(default=7)
+    dedup_lookback_days: int = Field(
+        default=7,
+        description="Days back closed tickets are considered as duplicate candidates.",
+    )
     # Maximum number of candidates to pass to the dedup LLM after
     # similarity-based pre-filtering.  Caps the token budget regardless
     # of repo size.  ≥ 1 enforced by validator.
-    dedup_max_candidates: int = Field(default=8, ge=1)
+    dedup_max_candidates: int = Field(
+        default=8,
+        ge=1,
+        description="Maximum candidate tickets passed to the dedup LLM after similarity pre-filtering.",
+    )
     # When True (default), the pre-refine dedup LLM call is skipped
     # entirely when the draft shares zero meaningful token overlap with
     # every candidate (title+body) — the common "clearly unrelated"
     # case.  Saves 100% of the call cost for genuine non-duplicates.
-    dedup_skip_on_no_overlap: bool = Field(default=True)
+    dedup_skip_on_no_overlap: bool = Field(
+        default=True,
+        description="When true, skip the dedup LLM call when the draft shares zero token overlap with all candidates.",
+    )
     # Caps each candidate body fed to the dedup prompt (mirrors
     # doc_classifier_diff_max_chars). Generous by default so it only
     # clips pathologically long specs; ≤ 0 disables truncation.
-    dedup_candidate_body_max_chars: int = Field(default=4000)
+    dedup_candidate_body_max_chars: int = Field(
+        default=4000,
+        description="Character cap on each candidate body fed to the dedup prompt.",
+    )
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The
     # Dockerfile sets MILL_DATA_DIR=/data explicitly so the container
     # always uses the absolute path. Tests override via tmp_path.
-    data_dir: Path = Field(default=Path(".data"))
+    data_dir: Path = Field(
+        default=Path(".data"),
+        description="Local data directory. In container, always /data.",
+    )
 
     # Path to a directory containing clones of registered repos for
     # cross-repo investigation by the maintenance agent.  When set, the
@@ -346,44 +541,91 @@ class _CoreSettings(BaseModel):
     # Configurable via MILL_INVESTIGATION_WORKSPACE env var or
     # config/config.json.
     investigation_workspace: Path | None = Field(
-        default=None, alias="MILL_INVESTIGATION_WORKSPACE"
+        default=None,
+        alias="MILL_INVESTIGATION_WORKSPACE",
+        description="Path to a directory of repo clones for cross-repo investigation by the maintenance agent.",
     )
 
     # Default repo ID for legacy tickets that lack a board_id.
     # Set in config/config.json.  When empty (default), accessing
     # a legacy ticket without a board_id raises an error telling the
     # operator to configure this.
-    default_repo_id: str = Field(default="")
+    default_repo_id: str = Field(
+        default="",
+        description="Default repo ID for legacy tickets lacking a board_id.",
+    )
 
     # --- management-plane service ---
-    api_host: str = Field(default="127.0.0.1")
-    api_port: int = Field(default=8077)
+    api_host: str = Field(
+        default="127.0.0.1",
+        description="Management API listen host.",
+    )
+    api_port: int = Field(
+        default=8077,
+        description="Management API listen port.",
+    )
     # Base URL the CLI client talks to.
-    api_url: str = Field(default="http://127.0.0.1:8077", pattern=r"^https?://")
+    api_url: str = Field(
+        default="http://127.0.0.1:8077",
+        pattern=r"^https?://",
+        description="Base URL the CLI client uses to reach the management API.",
+    )
 
     # --- forge delivery (only used by the deliver stage) ---
     forge_kind: Literal["github", "gitlab", "none", "auto"] = Field(
-        default="none", alias="FORGE_KIND"
+        default="none",
+        alias="FORGE_KIND",
+        description="Forge backend: github, gitlab, none, or auto (detected from remote URL).",
     )
-    forge_remote_url: str | None = Field(default=None, alias="FORGE_REMOTE_URL")
-    forge_token: str | None = Field(default=None, alias="FORGE_TOKEN")
-    forge_target_branch: str = Field(default="main", alias="FORGE_TARGET_BRANCH")
+    forge_remote_url: str | None = Field(
+        default=None,
+        alias="FORGE_REMOTE_URL",
+        description="Git remote URL of the forge repository.",
+    )
+    forge_token: str | None = Field(
+        default=None,
+        alias="FORGE_TOKEN",
+        description="Personal access token for forge API access (PR creation, push, merge).",
+    )
+    forge_target_branch: str = Field(
+        default="main",
+        alias="FORGE_TARGET_BRANCH",
+        description="Default target branch for PRs.",
+    )
     # token  = use FORGE_TOKEN (PAT) directly.
     # app    = mint a short-lived GitHub App installation token so the
     #          bot identity (<app-slug>[bot]) authors the PR.
-    forge_auth: Literal["token", "app"] = Field(default="token", alias="FORGE_AUTH")
-    github_app_id: str | None = Field(default=None, alias="GITHUB_APP_ID")
+    forge_auth: Literal["token", "app"] = Field(
+        default="token",
+        alias="FORGE_AUTH",
+        description="Forge authentication method: token (PAT) or app (GitHub App installation token).",
+    )
+    github_app_id: str | None = Field(
+        default=None,
+        alias="GITHUB_APP_ID",
+        description="GitHub App ID for App-based authentication.",
+    )
     github_app_private_key: str | None = Field(
-        default=None, alias="GITHUB_APP_PRIVATE_KEY"
+        default=None,
+        alias="GITHUB_APP_PRIVATE_KEY",
+        description="GitHub App private key (PEM string).",
     )
     github_app_private_key_path: str | None = Field(
-        default=None, alias="GITHUB_APP_PRIVATE_KEY_PATH"
+        default=None,
+        alias="GITHUB_APP_PRIVATE_KEY_PATH",
+        description="Path to GitHub App private key PEM file.",
     )
     # GitHub API base (override for GitHub Enterprise).
-    github_api_url: str = Field(default="https://api.github.com", pattern=r"^https?://")
+    github_api_url: str = Field(
+        default="https://api.github.com",
+        pattern=r"^https?://",
+        description="GitHub API base URL. Override for GitHub Enterprise.",
+    )
     # GitLab API base (override for self-hosted GitLab instances).
     gitlab_api_url: str = Field(
-        default="https://gitlab.com/api/v4", pattern=r"^https?://"
+        default="https://gitlab.com/api/v4",
+        pattern=r"^https?://",
+        description="GitLab API base URL. Override for self-hosted GitLab instances.",
     )
 
     # --- implement stage ---
@@ -394,7 +636,10 @@ class _CoreSettings(BaseModel):
     # When both are empty, the test gate short-circuits to PASS
     # ("no test gate configured"). MILL_TEST_COMMAND can override for
     # single-repo / legacy setups.
-    test_command: str = Field(default="")
+    test_command: str = Field(
+        default="",
+        description="Global fallback test command. Per-repo test_command in repos config takes precedence.",
+    )
     # Global fallback for the path-scoped smoke gate command (run after
     # unit tests pass). Empty by default — the per-repo
     # `.robotsix-mill/config.json` `smoke_command` wins when set, this is
@@ -402,17 +647,31 @@ class _CoreSettings(BaseModel):
     # (short-circuits to PASS). MILL_SMOKE_COMMAND can override.
     # Path-scoping (`smoke_paths`) is inherently per-repo and lives only
     # in `.robotsix-mill/config.json`; there is no global counterpart.
-    smoke_command: str = Field(default="")
-    branch_prefix: str = Field(default="mill/")
+    smoke_command: str = Field(
+        default="",
+        description="Global fallback smoke test command. Per-repo smoke_command in .robotsix-mill/config.json takes precedence.",
+    )
+    branch_prefix: str = Field(
+        default="mill/",
+        description="Prefix for per-ticket branch names.",
+    )
     # Wall-clock cap (seconds) for the agent's shell tool and the test
     # command, so a hung command can't stall a worker forever.
-    command_timeout: int = Field(default=1800, gt=0)
+    command_timeout: int = Field(
+        default=1800,
+        gt=0,
+        description="Wall-clock cap (seconds) for shell tool and test command execution.",
+    )
     # Safety net: if a ticket re-enters the *same* model-driven stage
     # this many times without ever progressing (e.g. its run keeps being
     # interrupted, or a stage churns), the worker escalates it to BLOCKED
     # + notifies instead of silently re-billing the LLM forever. Poll
     # stages (merge/deliver) are exempt — human_mr_approval legitimately waits.
-    max_stuck_cycles: int = Field(default=3, ge=0)
+    max_stuck_cycles: int = Field(
+        default=3,
+        ge=0,
+        description="Maximum re-entries to the same stage without progress before escalating to BLOCKED.",
+    )
     # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
     # LLM spend exceeds this value (across all stages), the worker
     # escalates it to BLOCKED. 0.0 disables the cap entirely.
@@ -423,15 +682,29 @@ class _CoreSettings(BaseModel):
     # ticket costs ~$1–4, so $20 gives ample headroom while killing a runaway
     # before it burns a fortune. The block is RESUMABLE — a genuinely
     # expensive ticket can be resumed with resume-blocked to continue.
-    max_spend_usd_per_ticket: float = Field(default=20.0)
-    max_traces_per_ticket: int = Field(default=15, ge=0)
-    max_openrouter_marginal_usd_per_ticket: float = Field(default=3.0, ge=0.0)
+    max_spend_usd_per_ticket: float = Field(
+        default=20.0,
+        description="Dollar-cap safety net: cumulative LLM spend per ticket before blocking. 0.0 disables.",
+    )
+    max_traces_per_ticket: int = Field(
+        default=15,
+        ge=0,
+        description="Maximum Langfuse traces per ticket. 0 disables.",
+    )
+    max_openrouter_marginal_usd_per_ticket: float = Field(
+        default=3.0,
+        ge=0.0,
+        description="Maximum OpenRouter marginal cost per ticket. 0.0 disables.",
+    )
     # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
     # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0
     # disables the timeout entirely.  2400 s (40 min) comfortably
     # exceeds worst-case LLM latency (~190 s per call) and multiple
     # shell-command runs while still catching a true hang.
-    stage_timeout_seconds: int = Field(default=2400)
+    stage_timeout_seconds: int = Field(
+        default=2400,
+        description="Per-stage wall-clock timeout (seconds). 0 disables.",
+    )
     # Per-stage timeout overrides (JSON dict via env var, e.g.
     # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"refine":1200}').
     # Keys are stage names; values are seconds.  Falls back to
@@ -446,7 +719,8 @@ class _CoreSettings(BaseModel):
     # Supplying your own dict REPLACES the built-in — re-include
     # a "refine" entry if you still want a cap.
     stage_timeout_overrides: dict[str, int] = Field(
-        default_factory=lambda: {"refine": 900}
+        default_factory=lambda: {"refine": 900},
+        description="Per-stage timeout overrides (dict). Keys are stage names, values are seconds.",
     )
     # Maximum seconds to wait for in-flight periodic-agent passes
     # (survey, audit, health, …) to finish before tearing the worker
@@ -455,26 +729,53 @@ class _CoreSettings(BaseModel):
     # the wait completes; if you change one, change the other.
     # 0 → wait forever; set <= the docker grace period to bound the
     # final wait.
-    shutdown_grace_seconds: int = Field(default=1800)
+    shutdown_grace_seconds: int = Field(
+        default=1800,
+        description="Maximum seconds to wait for in-flight periodic passes before teardown.",
+    )
 
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain
     # MILL_TEST_COMMAND needs.
-    sandbox_image: str = Field(default="python:3.14-slim")
-    sandbox_memory: str = Field(default="2g")
-    sandbox_pids_limit: int = Field(default=512)
-    sandbox_readonly: bool = Field(default=True)
+    sandbox_image: str = Field(
+        default="python:3.14-slim",
+        description="Docker image for the command sandbox.",
+    )
+    sandbox_memory: str = Field(
+        default="2g",
+        description="Memory limit for sandbox containers.",
+    )
+    sandbox_pids_limit: int = Field(
+        default=512,
+        description="PID limit for sandbox containers.",
+    )
+    sandbox_readonly: bool = Field(
+        default=True,
+        description="When true, sandbox containers run with read-only root filesystem.",
+    )
     # Docker network sandbox containers connect to. The network must be
     # internal (no direct internet) with a filtering proxy attached —
     # sandbox commands reach PyPI/GitHub ONLY through the proxy.
-    sandbox_network: str = Field(default="mill-sandbox-net")
+    sandbox_network: str = Field(
+        default="mill-sandbox-net",
+        description="Docker network sandbox containers connect to.",
+    )
     # URL of the egress proxy. Sandbox containers receive HTTP_PROXY,
     # HTTPS_PROXY, http_proxy, and https_proxy set to this value.
     # Set to empty string to disable (restores --network none behavior).
-    sandbox_proxy_url: str = Field(default="http://sandbox-proxy:8888")
+    sandbox_proxy_url: str = Field(
+        default="http://sandbox-proxy:8888",
+        description="Egress proxy URL for sandbox containers. Set to empty string to disable.",
+    )
     # What the sandbox sibling containers mount at MILL_DATA_DIR. The
     # daemon resolves -v on the host, so this must be a named volume OR
     # the host path of a bind mount. data_volume is the fallback name;
     # sandbox_data_mount (host path) overrides it for bind-mounted ./.data.
-    data_volume: str = Field(default="mill_data")
-    sandbox_data_mount: str | None = Field(default=None)
+    data_volume: str = Field(
+        default="mill_data",
+        description="Named Docker volume for mill data.",
+    )
+    sandbox_data_mount: str | None = Field(
+        default=None,
+        description="Host path for bind-mounted .data directory. Overrides data_volume.",
+    )

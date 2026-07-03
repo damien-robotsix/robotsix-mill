@@ -18,10 +18,12 @@ SCHEMA_PATH = Path("config/config.schema.json")
 
 
 def build_schema() -> dict:
+    from robotsix_mill.config.repos import ReposRegistry
     from robotsix_mill.config.secrets import Secrets
     from robotsix_mill.config.settings import Settings
 
     settings_schema = Settings.model_json_schema()
+    repos_schema = ReposRegistry.model_json_schema()
 
     secrets_schema = Secrets.model_json_schema()
     secrets_schema = copy.deepcopy(secrets_schema)
@@ -40,6 +42,7 @@ def build_schema() -> dict:
         "properties": {
             "settings": settings_schema,
             "secrets": secrets_schema,
+            "repos": repos_schema,
         },
     }
 

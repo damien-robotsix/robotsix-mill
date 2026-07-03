@@ -299,6 +299,7 @@ DEP004 = ["shtab"]
 [tool.mypy]
 strict = true
 python_version = "3.14"
+plugins = ["pydantic.mypy"]
 packages = ["src/robotsix_mill"]
 ignore_missing_imports = true
 show_error_codes = true
