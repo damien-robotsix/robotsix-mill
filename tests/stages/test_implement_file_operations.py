@@ -14,7 +14,7 @@ from __future__ import annotations
 import subprocess
 from types import SimpleNamespace
 
-from robotsix_mill.config import ConfigError, RepoConfig, Settings
+from robotsix_mill.config import ConfigError, CrossRepoTarget, RepoConfig, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
@@ -605,6 +605,160 @@ class TestCloneAndBranch:
         assert isinstance(result, Outcome)
         assert result.next_state == State.BLOCKED
         assert "clone missing" in (result.note or "")
+
+    # -- cross_repo_target ------------------------------------------------
+
+    def _ctx_cross_repo(self, tmp_path):
+        """Return a StageContext with cross_repo_target set on the RepoConfig."""
+        db.reset_engine()
+        s = _settings(tmp_path)
+        db.init_db(s, board_id="test-board")
+        svc = TicketService(s, board_id="test-board")
+        cross = CrossRepoTarget(
+            upstream_remote_url="https://github.com/upstream/repo.git",
+            fork_remote_url="https://github.com/fork/repo.git",
+            base_branch="develop",
+        )
+        return StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="test-board",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+                cross_repo_target=cross,
+            ),
+        )
+
+    def test_cross_repo_clones_fork_not_managed(self, monkeypatch, tmp_path):
+        """When cross_repo_target is set, _clone_and_branch clones the fork."""
+        ctx = self._ctx_cross_repo(tmp_path)
+        ticket = _ticket(ctx)
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        # Capture the remote_url passed to git_ops.clone.
+        captured_remote = []
+
+        def _capture_clone(remote_url, repo_dir, target, token):
+            captured_remote.append(remote_url)
+            # Create .git so the hard-invariant guard does not re-clone.
+            (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
+            calls.append("clone")
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.clone",
+            _capture_clone,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.github_token",
+            lambda settings, repo_config=None: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
+            lambda path, ignore_errors=False: None,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        assert isinstance(result, tuple)
+        repo_dir, branch, resuming = result
+        assert resuming is False
+        assert len(captured_remote) == 1
+        assert captured_remote[0] == "https://github.com/fork/repo.git"
+
+    def test_cross_repo_uses_base_branch_as_target(self, monkeypatch, tmp_path):
+        """cross_repo_target.base_branch is used as the clone target branch."""
+        ctx = self._ctx_cross_repo(tmp_path)
+        ticket = _ticket(ctx)
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        captured_target = []
+
+        def _capture_clone(remote_url, repo_dir, target, token):
+            captured_target.append(target)
+            (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.clone",
+            _capture_clone,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.github_token",
+            lambda settings, repo_config=None: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
+            lambda path, ignore_errors=False: None,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        assert isinstance(result, tuple)
+        assert len(captured_target) == 1
+        assert captured_target[0] == "develop"
+
+    def test_cross_repo_resume_path(self, monkeypatch, tmp_path):
+        """Resume works when cross_repo_target is set."""
+        ctx = self._ctx_cross_repo(tmp_path)
+        ticket = _ticket(ctx)
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repo"
+        repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.github_token",
+            lambda settings, repo_config=None: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_exists",
+            lambda rd, branch: True,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        repo_dir_out, branch, resuming = result
+        assert resuming is True
+        assert "clone" not in calls
+        assert "checkout" in calls
+        assert "try_rebase_onto" in calls
+
+    def test_cross_repo_rebase_uses_fork_remote(self, monkeypatch, tmp_path):
+        """The rebase also targets the fork remote, not the managed repo."""
+        ctx = self._ctx_cross_repo(tmp_path)
+        ticket = _ticket(ctx)
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        # Override clone to create .git so the hard-invariant doesn't fire.
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.clone",
+            lambda remote_url, repo_dir, target, token: (repo_dir / ".git").mkdir(
+                parents=True, exist_ok=True
+            ),
+        )
+        captured_rebase_remote = []
+
+        def _capture_try_rebase(repo_dir, target, *, remote_url=None, token=None):
+            captured_rebase_remote.append(remote_url)
+            return True
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.try_rebase_onto",
+            _capture_try_rebase,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.github_token",
+            lambda settings, repo_config=None: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
+            lambda path, ignore_errors=False: None,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        assert isinstance(result, tuple)
+        assert len(captured_rebase_remote) == 1
+        assert captured_rebase_remote[0] == "https://github.com/fork/repo.git"
 
 
 # ---------------------------------------------------------------------------

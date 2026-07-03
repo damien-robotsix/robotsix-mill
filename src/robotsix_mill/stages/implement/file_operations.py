@@ -228,8 +228,19 @@ class FileOperationsMixin(_ImplementStageBase):
         ws = ctx.service.workspace(ticket)
         repo_dir = ws.dir / "repo"
         branch = f"{settings.branch_prefix}{ticket.id}"
-        remote_url = _resolve_remote_url(settings, ctx.repo_config)
-        target = target_branch_for(settings, ctx.repo_config)
+
+        # When cross_repo_target is set, clone the fork/target repo so
+        # the implement agent sees the target's file system — not the
+        # managed repo's.  File-existence checks, config analysis, and
+        # scope decisions then correctly target the repo that will
+        # receive the PR.
+        cross = ctx.repo_config.cross_repo_target
+        if cross:
+            remote_url = cross.fork_remote_url
+            target = cross.base_branch
+        else:
+            remote_url = _resolve_remote_url(settings, ctx.repo_config)
+            target = target_branch_for(settings, ctx.repo_config)
 
         # Resume iff a prior run left this ticket's clone + branch behind.
         resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
@@ -280,7 +291,7 @@ class FileOperationsMixin(_ImplementStageBase):
         if not git_ops.try_rebase_onto(
             repo_dir,
             target,
-            remote_url=_resolve_remote_url(settings, ctx.repo_config),
+            remote_url=remote_url,
             token=_rebase_token,
         ):
             return Outcome(
