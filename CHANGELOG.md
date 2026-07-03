@@ -10,6 +10,11 @@
   now calls this before accepting an `already_done` verdict, preventing
   false dismissals where a cited PR or commit does not touch any file
   named in the draft.
+- Handle GitHub App 404 on `/installation` gracefully: raise a
+  specific `GitHubAppNotInstalledError` instead of a generic
+  `HTTPStatusError` so callers can distinguish "app not installed"
+  from other HTTP failures.  `_clone_token` now logs a warning
+  and returns `None` rather than silently swallowing the error. (mill: audit errors on robotsix-yaml-config: GitHub API 404 for App installation endpoint (2×) (20260703T011001Z-audit-errors-on-robotsix-yaml-config-git-9d4d) [WIP])
 - Add ``coherent_resolver`` module in ``robotsix_mill.deps`` — resolves cross-repo
   git-rev consistency for shared transitive dependencies by computing a single agreed
   commit per shared dep.  Includes a ``uv lock``-based coherence check that empirically

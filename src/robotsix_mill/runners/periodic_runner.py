@@ -91,8 +91,19 @@ def _clone_token(settings, repo_config) -> str | None:
         except RuntimeError:
             return None
 
+    from ..forge.auth import GitHubAppNotInstalledError
+
     try:
         return github_token(settings, repo_config=repo_config)
+    except GitHubAppNotInstalledError:
+        import logging
+
+        _log = logging.getLogger(__name__)
+        _log.warning(
+            "Clone token unavailable for %s: GitHub App not installed",
+            repo_config.repo_id if repo_config else "default",
+        )
+        return None
     except Exception:
         return None
 
