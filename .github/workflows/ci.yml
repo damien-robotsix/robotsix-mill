@@ -125,3 +125,14 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/validate_workflow_permissions.py
+
+      - name: Check shell completions are up-to-date
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: |
+          uv run python scripts/gen_completions.py
+          git diff --exit-code contrib/completions/ || {
+            echo "contrib/completions/ is out of date."
+            echo "Run 'make completions' and commit the result."
+            exit 1
+          }

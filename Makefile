@@ -57,3 +57,7 @@ docs-build: install
 clean:
 	rm -rf $(VENV) .mill-data .pytest_cache
 	find . -name __pycache__ -type d -exec rm -rf {} +
+
+completions: install
+	$(BIN)/python scripts/gen_completions.py
+

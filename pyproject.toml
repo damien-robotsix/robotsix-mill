@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "shtab"]
 build-backend = "hatchling.build"
 
 [project]
@@ -54,7 +54,7 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 
 [tool.uv]
@@ -79,6 +79,7 @@ packages = ["src/robotsix_mill"]
 "agent_definitions" = "robotsix_mill/agent_definitions"
 "expert_definitions" = "robotsix_mill/expert_definitions"
 "skills" = "robotsix_mill/skills"
+"contrib/completions" = "robotsix_mill/completions"
 
 # Allow the direct git references in dependencies. Hatchling does not
 # process PEP 508 direct references by default, so keep this flag.
@@ -138,6 +139,9 @@ max-complexity = 10
 "tests/**" = ["S"]
 "dev/**" = ["S"]
 "scripts/**" = ["S"]
+# gen_completions.py inserts src/ into sys.path before importing
+# robotsix_mill.cli and shtab — E402 is expected.
+"scripts/gen_completions.py" = ["S", "E402"]
 # vulture_whitelist.py is a tool configuration file whose syntax
 # (bare-name expressions marking "used" identifiers for vulture's
 # dead-code scanner) triggers B018 ("useless expression") and F821
@@ -293,6 +297,10 @@ DEP003 = ["pydantic", "sqlalchemy", "openai"]
 # the import is deferred into _drive_browser(). Declaring it would bloat
 # the install and the network-isolated test sandbox can't fetch Chromium.
 DEP001 = ["playwright"]
+# shtab is a build-system dependency; the runtime import in cli/__init__.py
+# is guarded by the --print-completion flag.  The primary delivery mechanism
+# is static completion scripts shipped in the wheel.
+DEP004 = ["shtab"]
 
 [tool.mypy]
 strict = true

@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Add shell completion support (bash, zsh) via shtab. The CLI now accepts
+  ``--print-completion <shell>`` to generate on-the-fly completions, and
+  static completion scripts are shipped in the wheel at
+  ``robotsix_mill/completions/``. Use ``make completions`` to regenerate.
 - New `POST /tickets/{ticket_id}/abandon-epic` endpoint: transitions an `EPIC_OPEN` epic to `EPIC_CLOSED`. Once abandoned, the epic stops regenerating children. Non-`EPIC_OPEN` tickets return 422. BLOCKED epics also skip child-spawning re-evals.
 - Consumer migration: `robotsix-yaml-config` → `robotsix-config`. Swapped dependency in `pyproject.toml`, replaced YAML config loading with JSON (`config/config.json`), removed `_YAML_PATH_TO_ALIAS` translation layer (100+ entries), created `JsonSettingsSource`, rewrote `check_config_sync.py` for JSON validation, and generated `config/config.example.json` (282 settings + 14 secrets). 6441 tests pass.
 - Remove PyPI publish pipeline: drop `semantic-release` and `pypi-publish` jobs from `release.yml`, remove `python-semantic-release` dev dependency and `[tool.semantic_release]` config, delete `docs/publishing.md`, and update CI docs. Docker image publishing to GHCR is unaffected.
