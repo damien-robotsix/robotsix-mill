@@ -1067,7 +1067,7 @@ class TestFileReadCache:
         assert first == "original\n"
 
         second = tools["read_file"](path="f.txt")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_offset_limit_still_hits_cache(self, tmp_path, settings):
@@ -1087,7 +1087,7 @@ class TestFileReadCache:
 
         # Full read refused — dedup guard intercepts before cache lookup.
         result = tools["read_file"](path="f.txt")
-        assert result.startswith("refused:")
+        assert result.startswith("REFUSED")
         assert "already loaded in full" in result
 
     def test_write_file_invalidates(self, tmp_path, settings):
@@ -1155,7 +1155,7 @@ class TestFileReadCache:
 
         # Second read via the normal path — refused.
         second = tools["read_file"](path="sub/file.txt")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_parent_dotdot_paths_same_cache_entry(self, tmp_path, settings):
@@ -1172,7 +1172,7 @@ class TestFileReadCache:
         assert first == "cached\n"
 
         second = tools["read_file"](path="sub/../sub/file.txt")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_error_returns_not_cached(self, tmp_path, settings):
@@ -1239,7 +1239,7 @@ class TestFileReadCache:
         assert first == "hello\n"
 
         second = tools["read_file"](path="f.txt")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_offset_limit_read_not_stubbed(self, tmp_path, settings):
@@ -1281,7 +1281,7 @@ class TestFileReadCache:
 
         # Second read → refused (already served in full).
         second = tools["read_file"](path="f.txt")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_after_write_subsequent_read_returns_content(self, tmp_path, settings):
@@ -1304,7 +1304,7 @@ class TestFileReadCache:
 
         # Second read → refused (already served in full).
         second = tools["read_file"](path="f.txt")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
 
@@ -1593,7 +1593,7 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         ctx = types.SimpleNamespace(messages=[resp, req])
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
-        assert result.startswith("refused: A.txt (5 lines) is already loaded in full")
+        assert result.startswith("REFUSED (do NOT retry): A.txt (5 lines)")
         assert "A.txt" in result
 
     def test_partial_refused_after_prior_full_runtime_read(
@@ -1620,7 +1620,7 @@ class TestPartialReadRefusalWhenAlreadyLoaded:
         )
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=1)
-        assert result.startswith("refused: A.txt (3 lines) is already loaded in full")
+        assert result.startswith("REFUSED (do NOT retry): A.txt (3 lines)")
 
     def test_partial_allowed_when_only_partial_prior(self, tmp_path, settings):
         """A prior PARTIAL read doesn't block a later partial — the
@@ -1750,7 +1750,7 @@ class TestPartialSliceDedup:
         )
 
         result = tools["read_file"](ctx, path="A.txt", offset=2, limit=2)
-        assert result.startswith("refused:")
+        assert result.startswith("REFUSED")
         assert "A.txt" in result
         assert "already loaded earlier" in result
         # The refusal names the covering range (lines 2–3).
@@ -1778,7 +1778,7 @@ class TestPartialSliceDedup:
         )
 
         result = tools["read_file"](ctx, path="A.txt", offset=3, limit=1)
-        assert result.startswith("refused:")
+        assert result.startswith("REFUSED")
         assert "A.txt" in result
 
     def test_overlapping_but_extending_allowed(self, tmp_path, settings):
@@ -1860,7 +1860,7 @@ class TestClosureScopedDedup:
 
         # Second read: same range → refused.
         second = tools["read_file"](path="f.txt", offset=2, limit=2)
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "f.txt" in second
         assert "2" in second  # names the covering range
 
@@ -1877,7 +1877,7 @@ class TestClosureScopedDedup:
 
         # Partial slice → refused.
         refused = tools["read_file"](path="f.txt", offset=3, limit=1)
-        assert refused.startswith("refused:")
+        assert refused.startswith("REFUSED")
         assert "already loaded in full" in refused
 
     def test_full_reread_refused(self, tmp_path, settings):
@@ -1894,7 +1894,7 @@ class TestClosureScopedDedup:
 
         # Second full read → refused.
         refused = tools["read_file"](path="f.txt")
-        assert refused.startswith("refused:")
+        assert refused.startswith("REFUSED")
         assert "already loaded in full" in refused
 
     def test_first_read_is_served(self, tmp_path, settings):
@@ -1936,7 +1936,7 @@ class TestClosureScopedDedup:
 
         # Narrower slice inside that range → refused.
         refused = tools["read_file"](path="f.txt", offset=4, limit=1)
-        assert refused.startswith("refused:")
+        assert refused.startswith("REFUSED")
         assert "lines 3 onward" in refused
 
     def test_prior_offset_to_eof_covers_later_slice(self, tmp_path, settings):
@@ -1952,7 +1952,7 @@ class TestClosureScopedDedup:
 
         # Later read offset=2, limit=2 is fully inside → refused.
         refused = tools["read_file"](path="f.txt", offset=2, limit=2)
-        assert refused.startswith("refused:")
+        assert refused.startswith("REFUSED")
         assert "lines 2 onward" in refused
 
 
@@ -2175,7 +2175,7 @@ class TestReadFilePDF:
         assert "Cache me" in first
 
         second = tools["read_file"](path="doc.pdf")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_pdf_caching_equivalent_paths(self, tmp_path, settings):
@@ -2191,7 +2191,7 @@ class TestReadFilePDF:
         assert "Cached PDF" in first
 
         second = tools["read_file"](path="sub/doc.pdf")
-        assert second.startswith("refused:")
+        assert second.startswith("REFUSED")
         assert "already loaded in full" in second
 
     def test_pdf_cache_invalidated_by_write(self, tmp_path, settings):
