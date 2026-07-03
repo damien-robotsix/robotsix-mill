@@ -152,7 +152,7 @@ monitored.
 
 ### Conditions that would trigger re-evaluation
 
-- `/health/live` latency (p99) remains above 1s after children 1-4 land.
+- `/health` latency (p99) remains above 1s after children 1-4 land.
 - Profiling shows CPU-bound work (not I/O) consuming >100ms per tick on
   the event loop thread.
 - The thread pool (`default_executor`) is not saturated but the API

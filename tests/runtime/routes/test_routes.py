@@ -1260,24 +1260,22 @@ class _FakeLangfuseClient:
     """A non-None sentinel so _build_read_client → "configured"."""
 
 
-def test_health_live_returns_alive(client):
-    """GET /health/live returns 200 with status 'alive' and uptime_seconds."""
+def test_health_live_returns_404(client):
+    """GET /health/live returns 404 — the route was removed (round-4
+    standard: every component serves GET /health for liveness)."""
     r = client.get("/health/live")
+    assert r.status_code == 404
+
+
+def test_health_returns_alive(client):
+    """GET /health returns 200 with status 'alive' and uptime_seconds."""
+    r = client.get("/health")
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "alive"
     assert "uptime_seconds" in data
     assert isinstance(data["uptime_seconds"], int)
     assert data["uptime_seconds"] >= 0
-
-
-def test_health_legacy_still_ok(client):
-    """GET /health keeps returning 200 with status 'ok' (unchanged)."""
-    r = client.get("/health")
-    assert r.status_code == 200
-    data = r.json()
-    assert data["status"] == "ok"
-    assert "uptime_seconds" in data
 
 
 def test_health_ready_all_ok(client, monkeypatch):

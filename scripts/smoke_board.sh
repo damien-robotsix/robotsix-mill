@@ -65,7 +65,7 @@ for _ in $(seq 1 60); do
     echo "smoke: server process exited before becoming ready" >&2
     exit 1
   fi
-  if curl -fsS "${BASE_URL}/health" 2>/dev/null | grep -q '"status":"ok"'; then
+  if curl -fsS "${BASE_URL}/health" 2>/dev/null | grep -q '"status":"alive"'; then
     ready=1
     break
   fi

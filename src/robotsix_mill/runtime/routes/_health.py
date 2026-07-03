@@ -44,13 +44,6 @@ def _uptime_payload(request: Request) -> dict[str, Any]:
 
 @router.get("/health")
 def health(request: Request) -> dict[str, Any]:
-    payload: dict[str, Any] = {"status": "ok"}
-    payload.update(_uptime_payload(request))
-    return payload
-
-
-@router.get("/health/live")
-def health_live(request: Request) -> dict[str, Any]:
     payload: dict[str, Any] = {"status": "alive"}
     payload.update(_uptime_payload(request))
     return payload

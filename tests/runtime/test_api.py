@@ -37,7 +37,7 @@ def clean_failures():
 
 
 def test_health(client):
-    assert client.get("/health").json()["status"] == "ok"
+    assert client.get("/health").json()["status"] == "alive"
 
 
 def test_health_reports_uptime_when_started_at_set(client):
@@ -52,7 +52,7 @@ def test_health_reports_uptime_when_started_at_set(client):
         r = client.get("/health")
         assert r.status_code == 200
         body = r.json()
-        assert body["status"] == "ok"
+        assert body["status"] == "alive"
         assert body["started_at"] == started.isoformat()
         assert isinstance(body["uptime_seconds"], int)
         assert body["uptime_seconds"] >= 0
