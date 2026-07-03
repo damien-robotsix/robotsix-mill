@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add budget-discipline section to the trace inspector system prompt to prevent ``UsageLimitExceeded`` errors when the agent exhausts its request budget before filing findings
 - Fix implement↔review convergence backstop to respect `cross_repo_target.base_branch` instead of always comparing against `origin/main`; extract `effective_target_branch()` helper to keep DRY between `_clone_and_branch` and the backstop gate.
 - Board UI: show each ticket's short id (trailing hex suffix, e.g. `f77f`) as a click-selectable badge on its card, so tickets can be identified without opening the detail view.
 - In `trace_inspector.py`, `_shrink_trace_data` now sends a summarised
