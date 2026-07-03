@@ -16,10 +16,13 @@ driven here — that is covered by ``tests/stages/test_implement.py``.
 
 import json
 import logging
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from robotsix_mill.agents import coding
 from robotsix_mill.agents.testing import ENV_ERROR_PREFIX
 from robotsix_mill.core import db
 from robotsix_mill.core.models import TicketKind
@@ -820,3 +823,119 @@ def test_finalize_skips_towncrier_when_fragment_already_exists(
 
     # Exactly one commit happened (the agent's other changes still get committed).
     assert len(fake.commits) == 1
+
+
+# --- convergence backstop with cross_repo_target ------------------------
+
+
+def _write_file_map(ctx, ticket, *files):
+    """Write a minimal file_map.json for *ticket* listing *files*."""
+    ws = ctx.service.workspace(ticket)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        json.dumps([{"file": f, "note": "test"} for f in files]),
+        encoding="utf-8",
+    )
+
+
+def _make_bare_repo_on_branch(tmp_path: Path, branch: str) -> str:
+    """Create a bare repo whose default branch is *branch* (not main)."""
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    subprocess.run(
+        ["git", "-C", str(seed), "init", "-q", f"--initial-branch={branch}"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(seed), "config", "user.email", "t@t"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(seed), "config", "user.name", "t"],
+        check=True,
+        capture_output=True,
+    )
+    (seed / "README.md").write_text("seed\n")
+    subprocess.run(
+        ["git", "-C", str(seed), "add", "-A"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(seed), "commit", "-q", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+        check=True,
+        capture_output=True,
+    )
+    return f"file://{bare}"
+
+
+def test_convergence_backstop_uses_cross_repo_base_branch(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When cross_repo_target.base_branch is "develop", the convergence
+    backstop compares against origin/develop instead of origin/main."""
+    from robotsix_mill.config import CrossRepoTarget
+
+    remote = _make_bare_repo_on_branch(tmp_path, "develop")
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    ctx.repo_config.cross_repo_target = CrossRepoTarget(
+        upstream_remote_url=remote,
+        fork_remote_url=remote,
+        base_branch="develop",
+    )
+
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Bypass gates that require a real sandbox / API key.
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Run implement once so the branch exists.
+    def _run_once(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Simulate returning from review: set review_rounds > 0 and RESET
+    # the branch so it has no commits beyond origin/develop.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    branch = f"{ctx.settings.branch_prefix}{t.id}"
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "reset", "--hard", "origin/develop"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "checkout", "-B", branch],
+        check=True,
+        capture_output=True,
+    )
+
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Second implement run: resuming=True, review_rounds>0, branch has
+    # no commits ahead of origin/develop → backstop should block.
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.BLOCKED
+    assert "empty diff" in out2.note.lower()
+    # The note must reference the correct base branch.
+    assert "origin/develop" in out2.note.lower()

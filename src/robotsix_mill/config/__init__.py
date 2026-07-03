@@ -32,6 +32,7 @@ from .repos import (
     RepoConfig,
     ReposRegistry,
     _reset_repos_config,
+    effective_target_branch,
     get_repo_config,
     get_repos_config,
     load_repos_config,
@@ -70,5 +71,6 @@ __all__ = [
     "get_repos_config",
     "get_repo_config",
     "target_branch_for",
+    "effective_target_branch",
     "_reset_repos_config",
 ]

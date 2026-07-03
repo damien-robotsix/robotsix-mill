@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from ...agents.testing import ENV_ERROR_PREFIX
-from ...config import target_branch_for
+from ...config import effective_target_branch
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...forge.auth import _resolve_remote_url
@@ -330,7 +330,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         #    from review but the current branch has no commits beyond
         #    the target — there is nothing new to implement.
         if resuming and ticket.review_rounds > 0:
-            target = target_branch_for(s, ctx.repo_config)
+            target = effective_target_branch(s, ctx.repo_config)
             try:
                 count = subprocess.run(
                     [
@@ -354,7 +354,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             if ahead == 0:
                 note = (
                     "empty diff after review round — branch has no commits "
-                    "beyond origin/main. Re-implementing would produce no "
+                    f"beyond origin/{target}. Re-implementing would produce no "
                     "changes (review findings may be unfixable by further "
                     "automated passes)"
                 )
