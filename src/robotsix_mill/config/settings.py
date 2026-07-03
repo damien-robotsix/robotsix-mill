@@ -81,14 +81,14 @@ class Settings(
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Insert YAML source with second-lowest priority (above only
+        """Insert JSON source with second-lowest priority (above only
         Field defaults), so ``os.environ`` still overrides it.
 
         Precedence (highest to lowest):
         1. explicit ``Settings(k=v)`` kwargs
         2. ``os.environ``
         3. file secrets
-        4. ``config/*.yaml`` layered YAML
+        4. JSON config file (``config/config.json``)
         5. Field(default=…) static defaults
         """
         return (

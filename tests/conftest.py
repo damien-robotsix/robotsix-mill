@@ -19,7 +19,7 @@ def _isolate_default_data_dir(tmp_path_factory):
     returned dict carries ``data_dir = <session sandbox>``. Anything
     higher-priority (kwargs, env vars) still overrides.
     ``load_config()`` itself is NOT patched, so tests that
-    inspect raw JSON defaults continue to see ``.data``.
+    inspect raw YAML defaults continue to see ``.data``.
     """
     sandbox = tmp_path_factory.mktemp("mill-default-data")
     from robotsix_mill import config as _cfg
@@ -78,7 +78,7 @@ def _no_dotenv(monkeypatch):
     and inside the container.
 
     Pins the config loader to the committed ``config/config.example.json``
-    template (never the gitignored, host-specific ``config/config.json``)
+    template (never the gitignored, host-specific ``config/config.yaml``)
     by setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty —
     the loader treats ``""`` as "use the committed example", whose
     secrets are all the ``SECRET`` sentinel (i.e. unset)."""
@@ -88,7 +88,7 @@ def _no_dotenv(monkeypatch):
     # Disable the board-poll list cache by default in tests so GET /tickets
     # is always immediately consistent (create-then-list). The committed
     # config.example.json enables it (3.0s) in real deployments; env beats
-    # JSON, so this override is inert in production. Tests that exercise the
+    # YAML, so this override is inert in production. Tests that exercise the
     # cache opt in explicitly via Settings(board_list_cache_ttl_seconds=…)
     # (a kwarg, which beats env). Also clear the module-global cache so no
     # entry leaks across tests.

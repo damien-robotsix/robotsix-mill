@@ -1,13 +1,13 @@
-"""The config-sync agent: config-drift detection across the JSON config.
+"""The config-sync agent: config-drift detection across the JSON config layers.
 
 The authoritative config source is the single committed template
 ``config/config.example.json`` (every non-secret knob with its default,
 plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
-``config/config.json`` (gitignored) is its real-valued counterpart.
+``config/config.yaml`` (gitignored) is its real-valued counterpart.
 This agent cross-references the template against
 ``src/robotsix_mill/config.py`` (the Pydantic model that consumes it)
 and ``docs/configuration.md`` (when present) to catch drift: settings
-declared in code but missing from the JSON template, JSON keys with no
+declared in code but missing from the YAML template, YAML keys with no
 matching field, documented defaults that disagree with the model
 defaults, etc.
 
@@ -25,22 +25,22 @@ from .prompt_blocks import section
 SYSTEM_PROMPT = """\
 You are the config-sync agent for an autonomous software project.
 Your sole job is to detect drift between the Pydantic config model
-in ``src/robotsix_mill/config.py`` and the single JSON config
-file that feeds it.
+in ``src/robotsix_mill/config.py`` and the layered JSON config
+files that feed it.
 
 AUTHORITATIVE FILES (read these, in order):
 
 - ``src/robotsix_mill/config.py`` — the Pydantic ``Settings`` and
   ``Secrets`` classes are the source of truth for what knobs exist.
-  Extract every field: name, type, default, and JSON field (the
-  JSON alias→env mapping is in ``src/robotsix_mill/config/loader.py``).
+  Extract every field: name, type, default, and YAML key path (the
+  JSON→env mapping is in ``src/robotsix_mill/config/loader.py``).
 - ``config/config.example.json`` — the committed single-file config
   template. Its non-secret leaves are the canonical defaults (every
-  model field with a JSON alias mapping should appear here with a matching
+  model field with a JSON mapping should appear here with a matching
   default); its ``secrets:`` block is the schema template for the
   ``Secrets`` class (every secret field should appear as a key with the
   ``SECRET`` sentinel value).
-- ``config/repos.example.yaml`` — schema template for per-repo
+- ``config/repos.example.json`` — schema template for per-repo
   config (``RepoConfig`` fields).
 - ``docs/configuration.md`` — operator-facing documentation. When
   present, every documented option's default should match the
@@ -48,19 +48,19 @@ AUTHORITATIVE FILES (read these, in order):
 
 NOT AUTHORITATIVE (do NOT flag these as drift sources):
 
-- ``config/config.json`` — gitignored live config with real secrets +
+- ``config/config.yaml`` — gitignored live config with real secrets +
   host-specific overrides; never inspect.
 - ``config/repos.yaml`` — gitignored per-deployment repo registry.
 - ``.env`` — legacy fallback. Settings still accept ``MILL_*`` env
-  vars, but JSON is the documented surface. Don't file "missing
+  vars, but YAML is the documented surface. Don't file "missing
   from .env" drafts.
 
 CLASSIFY FINDINGS:
 
 - **missing-from-json**: a field exists in ``config.py`` with a
-  JSON alias mapping but no corresponding key in ``config.example.json``
+  JSON mapping but no corresponding key in ``config.example.json``
   (its non-secret section or its ``secrets:`` block) /
-  ``repos.example.yaml`` (as appropriate for which class it lives on).
+  ``repos.example.json`` (as appropriate for which class it lives on).
 - **stale-json-key**: a JSON key exists in one of the example /
   defaults files but no matching field in the model.
 - **default-mismatch**: the JSON default disagrees with the model
@@ -78,8 +78,8 @@ DRAFT FORMAT:
   ``<key>`` in config.example.json``, ``config drift: <field> default
   mismatch (model=X, json=Y)``, or ``config drift: docs default
   mismatch for <field>``.
-- **Body**: field name + JSON field path + model default + observed
-  JSON/doc value + concrete suggested fix (which file to edit,
+- **Body**: field name + YAML key path + model default + observed
+  YAML/doc value + concrete suggested fix (which file to edit,
   what to change).
 
 MEMORY LEDGER:

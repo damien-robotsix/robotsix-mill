@@ -1,6 +1,6 @@
 """Tests for the daily diagnostic agent skeleton.
 
-Covers Settings exposure, the empty-registry pass, the
+Covers Settings exposure + YAML aliases, the empty-registry pass, the
 pluggable check registry seam (registering a check without editing the
 runner), graceful per-check failure isolation, the RunRegistry kind, and
 the worker poll-loop gating flag.
@@ -52,7 +52,7 @@ def _patch_repos(monkeypatch, *repo_ids):
     )
 
 
-# --- Settings fields -------------------------------------------------------
+# --- Settings + YAML alias -------------------------------------------------
 
 
 def test_settings_expose_diagnostic_fields():
@@ -63,19 +63,18 @@ def test_settings_expose_diagnostic_fields():
     assert s.diagnostic_monitored_repo_ids == []
 
 
-def test_diagnostic_field_names_and_defaults():
-    """Verify the Settings model defines diagnostic fields with correct defaults."""
-    # Settings is a pydantic-settings model; check field presence + defaults.
-    fields = Settings.model_fields
-    assert "diagnostic_periodic" in fields
-    assert fields["diagnostic_periodic"].default is False
-    assert "diagnostic_interval_seconds" in fields
-    assert fields["diagnostic_interval_seconds"].default == 86400
-    assert "diagnostic_target_repo_id" in fields
-    assert fields["diagnostic_target_repo_id"].default == "robotsix-mill"
-    assert "diagnostic_monitored_repo_ids" in fields
-    # default_factory=list — the field uses a factory, not a static default
-    assert fields["diagnostic_monitored_repo_ids"].default_factory is not None
+def test_config_example_json_has_diagnostic_settings():
+    import json
+    from pathlib import Path
+
+    config_path = Path(__file__).resolve().parents[2] / "config" / "config.example.json"
+    with open(config_path) as fh:
+        data = json.load(fh)
+    settings = data["settings"]
+    assert settings["diagnostic_periodic"] is False
+    assert settings["diagnostic_interval_seconds"] == 86400
+    assert settings["diagnostic_target_repo_id"] == "robotsix-mill"
+    assert settings["diagnostic_monitored_repo_ids"] == []
 
 
 # --- empty-registry pass ---------------------------------------------------

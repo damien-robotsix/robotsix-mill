@@ -1,9 +1,8 @@
 """Single config entry point: repos read from the main config.json.
 
-Repos live under the ``repos:`` key at the top level of
-``config/config.json`` — the sole on-disk source.  The standalone
-``config/repos.yaml`` is not read at all (the deprecated fallback was
-removed).  Zero repos is valid.
+Repos live under the ``repos:`` key of ``config/config.json`` — the sole
+on-disk source.  The standalone ``config/repos.yaml`` is not read at all
+(the deprecated fallback was removed).  Zero repos is valid.
 """
 
 from __future__ import annotations
@@ -13,29 +12,22 @@ import json
 from robotsix_mill.config.loader import load_repos_yaml
 
 
-def _write_json_config(path, settings=None, repos=None):
-    """Write a minimal JSON config file with optional settings and repos."""
-    doc = {}
-    if settings:
-        doc["settings"] = settings
-    if repos:
-        doc["repos"] = repos
-    path.write_text(json.dumps(doc))
-
-
 def test_repos_read_from_main_config_json(tmp_path, monkeypatch):
     """The ``repos:`` section of the main config.json is authoritative."""
-    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)  # not the "" pin
     cfg = tmp_path / "config.json"
-    _write_json_config(
-        cfg,
-        settings={"data_dir": str(tmp_path / "data")},
-        repos={
-            "demo": {
-                "board_id": "demo",
-                "forge_remote_url": "https://github.com/o/demo",
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {},
+                "repos": {
+                    "demo": {
+                        "board_id": "demo",
+                        "forge_remote_url": "https://github.com/o/demo",
+                    }
+                },
             }
-        },
+        )
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
@@ -48,10 +40,13 @@ def test_empty_repos_key_means_zero_repos(tmp_path, monkeypatch):
     """An explicit empty ``repos:`` key yields zero repos (valid)."""
     monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
     cfg = tmp_path / "config.json"
-    _write_json_config(
-        cfg,
-        settings={"data_dir": str(tmp_path / "data")},
-        repos={},
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {"data_dir": ".data"},
+                "repos": {},
+            }
+        )
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
@@ -70,7 +65,14 @@ def test_standalone_repos_yaml_is_ignored(tmp_path, monkeypatch):
         "    forge_remote_url: https://github.com/o/ghost\n"
     )
     cfg = tmp_path / "config.json"
-    _write_json_config(cfg, settings={"data_dir": str(tmp_path / "data")})
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {"data_dir": ".data"},
+                "repos": {},
+            }
+        )
+    )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
     assert load_repos_yaml() == {}
@@ -97,15 +99,18 @@ def test_overlay_entries_appear_in_merged_repos(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     cfg = tmp_path / "config.json"
-    _write_json_config(
-        cfg,
-        settings={"data_dir": str(data_dir)},
-        repos={
-            "repo_a": {
-                "board_id": "board-a",
-                "forge_remote_url": "https://github.com/o/repo_a",
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {"data_dir": str(data_dir)},
+                "repos": {
+                    "repo_a": {
+                        "board_id": "board-a",
+                        "forge_remote_url": "https://github.com/o/repo_a",
+                    }
+                },
             }
-        },
+        )
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
@@ -130,15 +135,18 @@ def test_operator_wins_on_repo_id_conflict(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     cfg = tmp_path / "config.json"
-    _write_json_config(
-        cfg,
-        settings={"data_dir": str(data_dir)},
-        repos={
-            "repo_a": {
-                "board_id": "operator-board",
-                "forge_remote_url": "https://github.com/o/operator",
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {"data_dir": str(data_dir)},
+                "repos": {
+                    "repo_a": {
+                        "board_id": "operator-board",
+                        "forge_remote_url": "https://github.com/o/operator",
+                    }
+                },
             }
-        },
+        )
     )
     monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
 
@@ -153,3 +161,31 @@ def test_operator_wins_on_repo_id_conflict(tmp_path, monkeypatch):
     repos = load_repos_yaml()
     assert set(repos) == {"repo_a"}
     assert repos["repo_a"]["board_id"] == "operator-board"
+    assert repos["repo_a"]["forge_remote_url"] == "https://github.com/o/operator"
+
+
+def test_missing_overlay_tolerated(tmp_path, monkeypatch):
+    """When the overlay does not exist, operator repos are returned without error."""
+    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cfg = tmp_path / "config.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {"data_dir": str(data_dir)},
+                "repos": {
+                    "repo_a": {
+                        "board_id": "board-a",
+                        "forge_remote_url": "https://github.com/o/repo_a",
+                    }
+                },
+            }
+        )
+    )
+    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+
+    # No overlay file created — should not error.
+    repos = load_repos_yaml()
+    assert set(repos) == {"repo_a"}
+    assert repos["repo_a"]["board_id"] == "board-a"

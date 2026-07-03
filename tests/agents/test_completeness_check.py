@@ -93,7 +93,7 @@ def test_completeness_check_result_field_types():
     result = cc_agent.CompletenessCheckResult(
         updated_memory="# CC Memory\n",
         draft_titles=["Add YAML mapping for foo"],
-        draft_bodies=["The foo_periodic field has no JSON config entry..."],
+        draft_bodies=["The foo_periodic field has no config entry..."],
         gap_ids=["foo_missing_yaml_mapping"],
     )
     assert isinstance(result.updated_memory, str)
