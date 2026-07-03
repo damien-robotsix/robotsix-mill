@@ -1,11 +1,18 @@
 # Configuration reference
 
-robotsix-mill uses a **single YAML config file**. Every non-secret knob
-plus a top-level `secrets:` block (API keys, tokens) live in one
-`config/config.yaml`. The committed `config/config.example.yaml`
-documents the full structure with safe defaults and `SECRET` sentinel
+robotsix-mill uses a **single JSON config file**. Every non-secret knob
+plus a top-level `"secrets"` block (API keys, tokens) live in one
+`config/config.json`. The committed `config/config.example.json`
+documents the full structure with safe defaults and `"SECRET"` sentinel
 placeholders. Secrets are loaded by a dedicated `Secrets` model — they
 are never logged and their values are redacted in diagnostics.
+
+> **Note:** The config file is flat alias-keyed JSON (e.g. `"MILL_DATA_DIR"`,
+> `"data_dir"`), not nested YAML. The "YAML path" column in the setting
+> tables below shows the **conceptual** dotted path for readability — the
+> actual JSON keys are the flat aliases from the "Env var" column (or their
+> unprefixed equivalents). See [Add a new setting](#add-a-new-setting) for
+> how to wire a new field.
 
 ---
 
@@ -17,18 +24,18 @@ Settings are resolved from these layers (highest priority first):
 |----------|--------|-------------|
 | 1 (highest) | Explicit `Settings(k=v)` kwargs | Programmatic overrides from callers |
 | 2 | `os.environ` | Any `MILL_*` or unprefixed variable set in the environment |
-| 3 | The config file | `config/config.yaml` if present, else the committed `config/config.example.yaml` |
+| 3 | The config file | `config/config.json` if present, else the committed `config/config.example.json` |
 | 4 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
 
 The non-secret part of the file feeds the `Settings` model; environment
-variables win over any YAML value. Point `MILL_CONFIG_FILE` at a
+variables win over any JSON value. Point `MILL_CONFIG_FILE` at a
 specific file to override the default resolution (an empty string forces
 the committed example, the hermetic choice used by the test suite).
 
-**Secrets** are loaded from the `secrets:` block of the same file
+**Secrets** are loaded from the `"secrets"` block of the same file
 (path overridable via `MILL_SECRETS_FILE`). They never participate in
 the Settings merge; access them via `get_secrets()`. A secret whose
-value is the literal `SECRET` sentinel (as in `config.example.yaml`) is
+value is the literal `"SECRET"` sentinel (as in `config.example.json`) is
 treated as unset.
 
 ---
@@ -37,9 +44,10 @@ treated as unset.
 
 ```
 config/
-  config.yaml              # gitignored: THE single config — all knobs + repos: + a secrets: block
-  config.example.yaml      # committed: template (safe defaults + SECRET sentinels)
-  repos.example.yaml       # committed: example entries for the repos: key of config.yaml
+  config.json              # gitignored: THE single config — all knobs + a "secrets" block
+  config.example.json      # committed: template (safe defaults + "SECRET" sentinels)
+  config.schema.json       # committed: JSON Schema for config.json
+  repos.example.yaml       # committed: example entries for the repos: key (see Repos registry below)
 ```
 
 ### Getting started
@@ -47,14 +55,14 @@ config/
 Copy the committed template and fill in your real values:
 
 ```sh
-cp config/config.example.yaml config/config.yaml
-# edit config/config.yaml — set the secrets: block and any host overrides
-chmod 600 config/config.yaml          # it now holds real credentials
+cp config/config.example.json config/config.json
+# edit config/config.json — set the "secrets" block and any host overrides
+chmod 600 config/config.json          # it now holds real credentials
 ```
 
-`config/config.yaml` is gitignored and never committed. If it is absent
+`config/config.json` is gitignored and never committed. If it is absent
 (CI, a fresh checkout), the loader falls back to the committed
-`config/config.example.yaml`, whose all-`SECRET` secrets resolve to
+`config/config.example.json`, whose all-`"SECRET"` secrets resolve to
 "unset".
 
 ---
@@ -63,7 +71,7 @@ chmod 600 config/config.yaml          # it now holds real credentials
 
 ### Change which model an agent uses
 
-Models are not configured per-agent in YAML. Each agent definition
+Models are not configured per-agent in the JSON config file. Each agent definition
 (`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3`,
 which resolves to a `(transport, model)` via robotsix-llmio's tier
 defaults (see [§1 Capability levels](#1-capability-levels-model-selection)).
@@ -72,50 +80,54 @@ what a level maps to, change the defaults in robotsix-llmio.
 
 ### Use a different database URL / data directory
 
-```yaml
-# config/config.yaml
-service:
-  data_dir: /data/mill-prod
+```json
+// config/config.json
+{
+  "settings": {
+    "MILL_DATA_DIR": "/data/mill-prod"
+  }
+}
 ```
 
 ### Enable periodic audit and trace-health checks
 
-```yaml
-# config/config.yaml
-periodic:
-  audit:
-    enabled: true
-    interval_seconds: 43200
-  trace_health:
-    enabled: true
-    interval_seconds: 86400
+```json
+// config/config.json
+{
+  "settings": {
+    "audit_periodic": true,
+    "audit_interval_seconds": 43200,
+    "trace_health_periodic": true,
+    "trace_health_interval_seconds": 86400
+  }
+}
 ```
 
 ### Deploy to production with overrides
 
-Put deployment values directly in `config/config.yaml` (or point
+Put deployment values directly in `config/config.json` (or point
 `MILL_CONFIG_FILE` at an alternative single file):
 
-```yaml
-# config/config.yaml
-core:
-  limits:
-    max_concurrency: 2
-    max_spend_usd_per_ticket: 5.0
-forge:
-  kind: github
-  remote_url: https://github.com/your-org/your-repo
-  target_branch: main
-sandbox:
-  test_command: pytest -q --timeout=300
+```json
+// config/config.json
+{
+  "settings": {
+    "MILL_MAX_GLOBAL_CONCURRENCY": 2,
+    "MILL_MAX_SPEND_USD_PER_TICKET": 5.0,
+    "FORGE_KIND": "github",
+    "FORGE_REMOTE_URL": "https://github.com/your-org/your-repo",
+    "FORGE_TARGET_BRANCH": "main",
+    "MILL_TEST_COMMAND": "pytest -q --timeout=300"
+  }
+}
 ```
 
-This `sandbox.test_command` is the global fallback. A managed repo can
+This `MILL_TEST_COMMAND` is the global fallback. A managed repo can
 override it by committing a `test_command` to its own
 `.robotsix-mill/config.yaml`, and the operator can override it per repo
 in `repos.yaml`. The precedence is: per-repo `.robotsix-mill/config.yaml`
 `test_command` > `repos.yaml` per-repo `test_command` > this global
-`sandbox.test_command`; empty everywhere makes the gate pass.
+`MILL_TEST_COMMAND`; empty everywhere makes the gate pass.
 
 #### Test gate environment-error circuit breaker
 
@@ -241,7 +253,7 @@ repo cannot break mill by committing a broken config file.
 Then run:
 
 ```sh
-docker compose up -d   # reads config/config.yaml (or set MILL_CONFIG_FILE)
+docker compose up -d   # reads config/config.json (or set MILL_CONFIG_FILE)
 ```
 
 ### Deployed log folder (`deployed_log_folder`)
@@ -273,14 +285,17 @@ repos:
 
 ### Set up secrets
 
-Fill in the `secrets:` block of `config/config.yaml` (replace each
-`SECRET` sentinel with a real value):
+Fill in the `"secrets"` block of `config/config.json` (replace each
+`"SECRET"` sentinel with a real value):
 
-```yaml
-# config/config.yaml
-secrets:
-  openrouter_api_key: "sk-or-..."
-  forge_token: "ghp_..."
+```json
+// config/config.json
+{
+  "secrets": {
+    "openrouter_api_key": "sk-or-...",
+    "forge_token": "ghp_..."
+  }
+}
 ```
 
 File permissions should be `0600` (it holds real credentials).
@@ -289,40 +304,34 @@ File permissions should be `0600` (it holds real credentials).
 
 1. Add the field to the Pydantic model in `src/robotsix_mill/config/`
    (in the appropriate group class if grouped, or on `Settings` directly).
-2. Add the default value to `config/config.example.json` under the
-   correct alias key (flat key, either the field name or its alias).
-3. For fields with an explicit alias, use `Field(alias="...")` — no
-   separate mapping dict is needed. The `JsonSettingsSource` automatically
-   matches JSON keys against field aliases.
-4. If it's a secret, add it to the `Secrets` model and to the `secrets:`
-   block of `config/config.example.json` (as a `SECRET` sentinel) instead.
-5. Access it in code: `settings.my_new_field` for settings,
+   Use `Field(alias=...)` with a `MILL_` prefix + uppercase underscore
+   naming convention (e.g. `Field(alias="MILL_MY_NEW_FIELD")`). The alias
+   is the flat JSON key — there is no nested YAML path.
+2. Add the alias key and its default value to the `"settings"` block of
+   `config/config.example.json`.
+3. If it's a secret, add it to the `Secrets` model and to the `"secrets"`
+   block of `config/config.example.json` (as a `"SECRET"` sentinel) instead.
+4. Access it in code: `settings.my_new_field` for settings,
    `get_secrets().my_new_secret` for secrets.
 
-Steps 2–4 are enforced deterministically by
+Steps 1–3 are enforced deterministically by
 `scripts/check_config_sync.py`, which runs as a blocking CI step
 ("Validate config sync") and as the `validate-config-sync` pre-commit
-hook. It validates JSON example keys against model field names/aliases
-(and vice versa), and checks that the `secrets:` block matches the
-`Secrets` model. Intentional gaps live in the script's
-inline-commented exception sets. (Doc-table drift is not gated here —
-the heuristic `config_sync` agent still covers that.)
-
-Environment variable naming convention: use `Field(alias=...)` on the
-Pydantic model with a `MILL_` prefix + uppercase with underscores
-(e.g. `Field(alias="MILL_MY_NEW_FIELD")`).  Aliases are automatically
-matched by `JsonSettingsSource` — there is no separate mapping layer or
-double-underscore convention.
+hook. It fails if a `"settings"` key in `config.example.json` names a
+non-existent `Settings` field/alias (or vice-versa), or if the
+`"secrets"` block drifts from the `Secrets` model. Intentional gaps
+live in the script's inline-commented exception sets. (Doc-table drift
+is not gated here — the heuristic `config_sync` agent still covers that.)
 
 ## Config drift prevention
 
 **Rule:** Every new Pydantic settings field added to
 `_settings_periodic.py` or `settings.py` MUST have a corresponding
-entry in `config/config.example.json` under its alias key (flat key,
-either the field name or its alias) in the same commit. Fields
-omitted from the JSON are invisible to `check_config_sync.py` —
-the suite only cross-references JSON keys ↔ model fields (invariants
-1 and 2 in the script), not Settings-model ↔ arbitrary surfaces.
+entry in BOTH `config/config.example.json` (under the `"settings"`
+block) AND a `Field(alias=...)` on the model in the same commit.
+Fields missing from both surfaces are invisible to
+`check_config_sync.py` — the suite only cross-references JSON keys ↔
+model fields, not Settings-model ↔ surfaces.
 
 **Rationale:** PR #1546 and the still-unfiled prune_orphans gap
 (PR #1533): two instances where Pydantic fields were added to the
@@ -336,8 +345,10 @@ the same commit" discipline.
 ## Full setting reference
 
 Every setting below shows:
-- **JSON key** — the key in `config/config.example.json` settings block
-- **Env var** — the environment variable override
+- **YAML path** — the **conceptual** dotted path (for readability). The
+  actual `config/config.example.json` uses flat alias keys — the "Env var"
+  column shows the real JSON key (the Pydantic field `alias`).
+- **Env var** — the environment variable override (also the flat JSON key)
 - **Default** — the committed default value
 - **Description** — what it controls
 
@@ -346,8 +357,8 @@ Every setting below shows:
 Per-agent model selection is declared in each **agent definition's**
 `level: 1|2|3` field. `build_agent` resolves a level to a
 `(transport, model)` pair via robotsix-llmio's baked tier defaults — there
-is no per-agent model config in YAML and no global backend toggle. The
-level *is* the backend choice.
+is no per-agent model config in the JSON config file and no global backend
+toggle. The level *is* the backend choice.
 
 | Level | Transport | Model | Intent |
 |-------|-----------|-------|--------|
@@ -380,11 +391,11 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
 | `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
 | `core.limits.refine_requests_simple` | `MILL_REFINE_REQUEST_LIMIT_SIMPLE` | `40` | Per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off) |
-| `core.limits.refine_max_tool_calls` | `MILL_REFINE_MAX_TOOL_CALLS` | `120` | (YAML-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
-| `core.limits.refine_max_errors` | `MILL_REFINE_MAX_ERRORS` | `20` | (YAML-only) Max tool-call errors per refine trace before auto-termination |
-| `core.limits.refine_web_fetch_max_calls` | — | `5` | (YAML-only) Max real (cache-miss) `web_fetch` calls across one whole refine trace (cross-consult) |
-| `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (YAML-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
-| `core.limits.refine_web_search_max_calls` | — | `5` | (YAML-only) Max `web_search` calls across one whole refine trace (cross-consult) |
+| `core.limits.refine_max_tool_calls` | `MILL_REFINE_MAX_TOOL_CALLS` | `120` | (config-file-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |
+| `core.limits.refine_max_errors` | `MILL_REFINE_MAX_ERRORS` | `20` | (config-file-only) Max tool-call errors per refine trace before auto-termination |
+| `core.limits.refine_web_fetch_max_calls` | — | `5` | (config-file-only) Max real (cache-miss) `web_fetch` calls across one whole refine trace (cross-consult) |
+| `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (config-file-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
+| `core.limits.refine_web_search_max_calls` | — | `5` | (config-file-only) Max `web_search` calls across one whole refine trace (cross-consult) |
 | `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `100` | Per-call request cap for the maintenance agent |
 | `core.limits.audit_requests` | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the periodic audit agent |
 | `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `32` | Per-run request cap for the document agent |
@@ -525,8 +536,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
 | `web.fetch_timeout` | `MILL_WEB_FETCH_TIMEOUT` | `30` | Timeout (seconds) per web fetch |
-| `web.fetch_max_calls` | — | `15` | (YAML-only) Max real (cache-miss) fetches per web-knowledge consult; cache hits and `web.fetch_raw` returns do NOT count |
-| `web.fetch_max_total_bytes` | — | `2000000` | (YAML-only) Cumulative ceiling on returned (post-extraction, post-cap) text bytes per consult; `0` disables the byte ceiling |
+| `web.fetch_max_calls` | — | `15` | (config-file-only) Max real (cache-miss) fetches per web-knowledge consult; cache hits and `web.fetch_raw` returns do NOT count |
+| `web.fetch_max_total_bytes` | — | `2000000` | (config-file-only) Cumulative ceiling on returned (post-extraction, post-cap) text bytes per consult; `0` disables the byte ceiling |
 
 ### 10.1 Web knowledge agent
 
@@ -534,7 +545,7 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | — | `MILL_WEB_KNOWLEDGE_MODEL` | `deepseek/deepseek-v4-flash` | Web-knowledge gateway sub-agent model — multi-turn flash agent that owns the per-library Markdown knowledge base and decides autonomously whether to answer from cache or web-search. Every agent's route to the internet flows through this gateway. |
 | — | `MILL_WEB_KNOWLEDGE_STALE_DAYS` | `30` | Days before a cached web-knowledge .md file is considered stale. A consult that hits a stale file is allowed to web-search and update it. Users can tune this to match their tolerance for stale documentation. |
-| `core.web_knowledge_cache_ttl_hours` | — | `72` | (YAML-only) Hours since the last `last_verified` touch before a cached knowledge file is flagged `[STALE]` in the agent's index. When flagged, the web_knowledge agent's system prompt warns it to cross-check claims with `web_search` before trusting cached data. |
+| `core.web_knowledge_cache_ttl_hours` | — | `72` | (config-file-only) Hours since the last `last_verified` touch before a cached knowledge file is flagged `[STALE]` in the agent's index. When flagged, the web_knowledge agent's system prompt warns it to cross-check claims with `web_search` before trusting cached data. |
 | — | `MILL_WEB_KNOWLEDGE_REQUEST_LIMIT` | `12` | Per-consult request cap for the web-knowledge sub-agent. Each request is one Markdown read, one web-search, or one Markdown write. |
 
 ### 11. Pipeline tail (merge stage)
@@ -549,7 +560,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.ci_fix_max_identical_failures` | `MILL_CI_FIX_MAX_IDENTICAL_FAILURES` | `2` | Max consecutive identical CI failure cycles before escalating to BLOCKED. When the same failure fingerprint repeats this many times without progress, the stage short-circuits. Set to 0 to disable. |
 | `pipeline.ci_fix_wait_poll_interval_s` | `MILL_CI_FIX_WAIT_POLL_INTERVAL_S` | `30.0` | How often `wait_for_ci` polls the forge for CI conclusion while a run is in progress |
 | `pipeline.ci_fix_wait_timeout_s` | `MILL_CI_FIX_WAIT_TIMEOUT_S` | `1500.0` | Max seconds a single `wait_for_ci` call blocks before returning a still-pending signal |
-| `pipeline.deliver_max_identical_blocks` | — | `2` | (YAML-only) Max consecutive identical merge-guard blocks before escalating the deliver stage's meta-triage-fallback guard to a stronger BLOCKED requiring human intervention. When the same brand-new top-level file fingerprint repeats this many times without progress (e.g. a deterministic resume→block loop), the stage escalates instead of burning cost. Set to 0 to disable. |
+| `pipeline.deliver_max_identical_blocks` | — | `2` | (config-file-only) Max consecutive identical merge-guard blocks before escalating the deliver stage's meta-triage-fallback guard to a stronger BLOCKED requiring human intervention. When the same brand-new top-level file fingerprint repeats this many times without progress (e.g. a deterministic resume→block loop), the stage escalates instead of burning cost. Set to 0 to disable. |
 | `pipeline.ci_fix_request_limit` | `MILL_CI_FIX_REQUEST_LIMIT` | `120` | Per-run request budget for the ci-fix agent (must cover ALL fix→push→verify iterations). When exhausted, pydantic-ai raises `UsageLimitExceeded`, which the retry layer catches and triggers the fallback model (if configured). Set to 0 to disable. |
 | `pipeline.review_revision_max_attempts` | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations before BLOCK |
 | `pipeline.branch_prefix` | `MILL_BRANCH_PREFIX` | `mill/` | Prefix for deliver-stage branch names |
@@ -568,9 +579,9 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | `stages.review.prior_context_max_chars` | `MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS` | `8000` | Max characters of the re-review prior-context block (prior review comments + the implement rebuttal) fed to the review agent. Each component is tail-kept (most-recent content survives) so multi-round reviews don't re-pay for the entire accumulated history. Set to `0` to disable the cap. |
 | `stages.review.diff_max_chars` | `MILL_REVIEW_DIFF_MAX_CHARS` | `200_000` | Max characters of the combined git diff injected into the review prompt. The raw `git diff origin/<target>...HEAD` can balloon to megabytes (divergent base, generated/lockfile churn, branch history) regardless of how few lines the intended change touches, overflowing even a 1M-token model context. When the diff exceeds this limit it is **middle-truncated** (head + tail kept, middle dropped, with a marker stating how many characters were omitted) so both early and late files get representation. ~200K chars ≈ 50K tokens, leaving room for spec + prior context + preseed + tools + the output reservation. Set to `0` to disable the cap (unbounded diffs). |
-| `stages.review.output_token_budget` | `MILL_REVIEW_OUTPUT_TOKEN_BUDGET` | `65536` | Output token budget for the review agent retry when the primary attempt exhausts its `max_tokens` before generating a response (the reasoning model burns output tokens on internal reasoning). This is the **retry** budget; the primary attempt uses the YAML `max_tokens`. Set higher than the YAML `max_tokens`. Set to `0` to disable the output-exhaustion retry (falls straight to `NEEDS_DISCUSSION`). |
-| `core.lint_on_edit` | `MILL_LINT_ON_EDIT` | `true` | Pre-write Python syntax check on `write_file`/`edit_file`. When True, a SyntaxError aborts the edit before writing broken code. Configured via `core.lint_on_edit` in YAML config. |
-| `core.read_file_max_chars` | `MILL_READ_FILE_MAX_CHARS` | `50000` | (YAML-only) Character cap on an *implicit full* `read_file` (`offset=1`, `limit=None`) payload returned to any `build_fs_tools` agent (implement, review, document). Over the cap the tool returns a head + tail slice plus an elision marker stating the file's total line count and steering the agent to re-read the omitted region with `offset`/`limit`; explicit ranged reads are **never** truncated. ~50K chars ≈ 12.5K tokens — above ordinary source modules (returned in full), so only large generated/lock/baseline files are trimmed before they bloat the re-billed prefix. Set to `0` to disable the cap. |
+| `stages.review.output_token_budget` | `MILL_REVIEW_OUTPUT_TOKEN_BUDGET` | `65536` | Output token budget for the review agent retry when the primary attempt exhausts its `max_tokens` before generating a response (the reasoning model burns output tokens on internal reasoning). This is the **retry** budget; the primary attempt uses the agent definition's `max_tokens`. Set higher than the agent definition `max_tokens`. Set to `0` to disable the output-exhaustion retry (falls straight to `NEEDS_DISCUSSION`). |
+| `core.lint_on_edit` | `MILL_LINT_ON_EDIT` | `true` | Pre-write Python syntax check on `write_file`/`edit_file`. When True, a SyntaxError aborts the edit before writing broken code. Configured via `core.lint_on_edit` in the JSON config file. |
+| `core.read_file_max_chars` | `MILL_READ_FILE_MAX_CHARS` | `50000` | (config-file-only) Character cap on an *implicit full* `read_file` (`offset=1`, `limit=None`) payload returned to any `build_fs_tools` agent (implement, review, document). Over the cap the tool returns a head + tail slice plus an elision marker stating the file's total line count and steering the agent to re-read the omitted region with `offset`/`limit`; explicit ranged reads are **never** truncated. ~50K chars ≈ 12.5K tokens — above ordinary source modules (returned in full), so only large generated/lock/baseline files are trimmed before they bloat the re-billed prefix. Set to `0` to disable the cap. |
 
 **Graceful token-exhaustion handling.** If a token-limit error is hit on
 the first review pass, the review is retried once with no preseed and a
@@ -863,13 +874,13 @@ These four periodic agents each carry one or two extra fields beyond the generic
 
 ## Secrets reference
 
-Secrets are loaded from the `secrets:` block of `config/config.yaml` by
+Secrets are loaded from the `"secrets"` block of `config/config.json` by
 a separate `Secrets` Pydantic model. They are **not** merged into
 `Settings` — access them via `get_secrets()`. A value equal to the
-literal `SECRET` sentinel (as in `config.example.yaml`) is treated as
+literal `"SECRET"` sentinel (as in `config.example.json`) is treated as
 unset.
 
-| YAML key | Env var override | Description |
+| JSON key | Env var override | Description |
 |----------|-----------------|-------------|
 | `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key (required for any LLM call) |
 | `openrouter_management_key` | — | OpenRouter management API key for credit balance checks (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side fetching. |
@@ -886,9 +897,9 @@ unset.
 | `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
 | `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
 
-Secrets live in the `secrets:` block of `config/config.yaml` (overridable
-via `MILL_SECRETS_FILE` env var). Template: the `secrets:` block of
-`config/config.example.yaml`.
+Secrets live in the `"secrets"` block of `config/config.json` (overridable
+via `MILL_SECRETS_FILE` env var). Template: the `"secrets"` block of
+`config/config.example.json`.
 
 > ¹ The `langfuse_*` fields on `Secrets` are **not** user-configurable
 > via the `secrets:` block or environment variables.  They exist on the model
@@ -918,12 +929,11 @@ repo entry (and thus which Langfuse project) is used for its traces.
 
 ### Set up
 
-Add a `repos:` block to `config/config.yaml` — one entry per repository
-(example entries in `config/repos.example.yaml`; a standalone
-`config/repos.yaml` is no longer read):
+Add a `"repos"` block to `config/config.json` — one entry per repository
+(example entries in `config/repos.example.yaml`):
 
 ```yaml
-# config/config.yaml
+# config/repos.yaml (or the "repos" key of config/config.json)
 repos:
   my-repo:
     board_id: "my-board"
@@ -973,14 +983,14 @@ List the registered repos from the CLI:
 robotsix-mill repos list
 ```
 
-Source: the `repos:` key of `config/config.yaml` (overridable via the
+Source: the `"repos"` key of `config/config.json` (overridable via the
 `MILL_REPOS_FILE` env var, which reads the given file directly). Set
 `MILL_REPOS_FILE=""` to disable repos config entirely. Example entries:
 `config/repos.example.yaml`.
 
 ### Field reference
 
-| YAML key | Required | Default | Description |
+| YAML key (in repos.yaml) | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
 | `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
@@ -992,7 +1002,7 @@ Source: the `repos:` key of `config/config.yaml` (overridable via the
 
 Each repo ID must be unique and non-empty. The `board_id` must also be
 non-empty. The registry validates that every entry's `repo_id` matches
-its YAML key.
+its key in the repos map.
 
 ### Per-repo branch configuration
 
@@ -1118,4 +1128,4 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 - [observability.md](observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
 - [deployment.md](deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
-- [`config/config.example.yaml`](../config/config.example.yaml) — committed single-file config template (defaults + `secrets:` block)
+- [`config/config.example.json`](../config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)
