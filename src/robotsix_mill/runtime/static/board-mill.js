@@ -77,6 +77,7 @@
     frontend_sync: '#06b6d4',
     security_posture: '#4a1a2e',
     triage_boilerplate: '#d97706',
+    data_dir_gc: '#312e81',
     meta: '#a855f7',
   };
 

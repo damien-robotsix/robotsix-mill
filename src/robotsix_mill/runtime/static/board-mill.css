@@ -106,7 +106,7 @@ h1 {
 .src-state-sync      { background: #164e63; color: #0891b2; }
 .src-module-curator  { background: #4a1a00; color: #f97316; }
 .src-copy-paste      { background: #4a0d2e; color: #ec4899; }
-.src-data-dir-audit  { background: #312e81; color: #a5b4fc; }
+.src-data-dir-gc     { background: #312e81; color: #a5b4fc; }
 .src-meta            { background: #3b0764; color: #a855f7; }
 .src-orphaned-pr-check { background: #3b0764; color: #a855f7; }
 .src-run-health      { background: #1e3a5f; color: #3b82f6; }
