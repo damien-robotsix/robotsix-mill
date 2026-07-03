@@ -9,14 +9,11 @@ bump stale pins.  No LLM call — pure graph computation.
 from __future__ import annotations
 
 import logging
-import re
-import subprocess
 import tempfile
 from pathlib import Path
 
 from robotsix_mill.config.repos import (
     RepoConfig,
-    ReposRegistry,
     get_repos_config,
     target_branch_for,
 )
@@ -28,11 +25,8 @@ from robotsix_mill.deps.bump_planner import (
 )
 from robotsix_mill.deps.internal_graph import (
     CyclicDependencyError,
-    GitPin,
-    InternalDepGraph,
     build_internal_dep_graph,
 )
-from robotsix_mill.forge import Forge, get_forge
 from robotsix_mill.forge.auth import github_token
 from robotsix_mill.vcs import git_ops
 

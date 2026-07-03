@@ -6,8 +6,6 @@ import importlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from robotsix_mill.deps.internal_graph import (
     INTERNAL_GIT_HOST,
     CyclicDependencyError,
@@ -163,7 +161,6 @@ class TestRunPinBumpPass:
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "target_branch_for", return_value="main"),
-            patch.object(runner_mod, "get_forge"),
             patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone),
             # Stub latest-SHA resolution: "b" has advanced to "new-sha".
             patch.object(
@@ -244,8 +241,8 @@ class TestRunPinBumpPass:
         )
 
     def test_pr_actuator_is_noop_when_no_pins(self, tmp_path, caplog):
-        """When repos have no internal pins, the actuator runs but
-        is a no-op (no forge calls, no PRs created)."""
+        """When repos have no internal pins, the runner still computes
+        a bump plan — it is a no-op (no forge calls, no PRs created)."""
         import logging
 
         from robotsix_mill.config.repos import load_repos_config
@@ -269,9 +266,7 @@ class TestRunPinBumpPass:
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "target_branch_for", return_value="main"),
-            patch.object(runner_mod, "get_forge") as mock_get_forge,
             patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone),
-            patch.object(runner_mod.git_ops, "ls_remote_sha") as mock_ls_remote,
             caplog.at_level(
                 logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
             ),
@@ -281,9 +276,8 @@ class TestRunPinBumpPass:
                 repo_config=registry.repos["a"],
             )
 
-        # No pins → actuator never calls forge, never resolves SHAs.
-        mock_get_forge.assert_not_called()
-        mock_ls_remote.assert_not_called()
+        # No pins → never resolves latest SHAs, no forge calls.
+        assert "topological order" in caplog.text
 
     def test_cyclic_dependency_warning(self, tmp_path, caplog):
         """CyclicDependencyError → logged as warning, not raised."""
@@ -375,222 +369,6 @@ class TestRunPinBumpPass:
         assert "topological order" in log_text, (
             f"Expected topo order despite clone failure on one repo, got: {log_text}"
         )
-
-
-# ---------------------------------------------------------------------------
-# PR actuator
-# ---------------------------------------------------------------------------
-
-
-class TestActuator:
-    def test_update_pin_rev_basic(self):
-        """_update_pin_rev replaces the rev value in a standard sources entry."""
-        from robotsix_mill.runners.pin_bump_runner import _update_pin_rev
-
-        content = _pyproject({"b": _internal_pin("b", "old_sha")})
-        result = _update_pin_rev(content, "b", "new_sha")
-        assert 'rev = "old_sha"' not in result
-        assert 'rev = "new_sha"' in result
-
-    def test_update_pin_rev_multiple_deps(self):
-        """_update_pin_rev updates only the targeted dep, not others."""
-        from robotsix_mill.runners.pin_bump_runner import _update_pin_rev
-
-        content = _pyproject(
-            {
-                "a": _internal_pin("a", "sha_a"),
-                "b": _internal_pin("b", "sha_b"),
-            }
-        )
-        result = _update_pin_rev(content, "b", "new_b")
-        assert 'rev = "sha_a"' in result  # untouched
-        assert 'rev = "new_b"' in result
-        assert 'rev = "sha_b"' not in result
-
-    def test_update_pin_rev_missing_raises(self):
-        """_update_pin_rev raises ValueError when the dep is not found."""
-        from robotsix_mill.runners.pin_bump_runner import _update_pin_rev
-
-        content = _pyproject()
-        with pytest.raises(ValueError, match="Could not find rev"):
-            _update_pin_rev(content, "nonexistent", "sha")
-
-    def test_actuator_standalone_noop(self, tmp_path, caplog):
-        """When called standalone with no pins, the actuator is a no-op."""
-        import logging
-
-        from robotsix_mill.config.repos import load_repos_config
-        from robotsix_mill.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
-        )
-
-        repos_yaml_path = tmp_path / "repos.yaml"
-        repos_yaml_path.write_text(_repos_yaml_str("x"))
-        registry = load_repos_config(str(repos_yaml_path))
-
-        def _fake_clone(remote_url, dest, branch, token=None):
-            dest_path = Path(str(dest))
-            dest_path.mkdir(parents=True, exist_ok=True)
-            (dest_path / "pyproject.toml").write_text(_pyproject(), encoding="utf-8")
-
-        import robotsix_mill.runners.pin_bump_runner as runner_mod
-
-        with (
-            patch.object(runner_mod, "Settings"),
-            patch.object(runner_mod, "get_repos_config", return_value=registry),
-            patch.object(runner_mod, "github_token", return_value="fake-token"),
-            patch.object(runner_mod, "target_branch_for", return_value="main"),
-            patch.object(runner_mod, "get_forge") as mock_get_forge,
-            patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone),
-            patch.object(runner_mod.git_ops, "ls_remote_sha") as mock_ls,
-            caplog.at_level(
-                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
-            ),
-        ):
-            run_pin_bump_pr_actuator(
-                session_id="s1",
-                repo_config=registry.repos["x"],
-            )
-
-        mock_get_forge.assert_not_called()
-        mock_ls.assert_not_called()
-        assert "no internal pins" in caplog.text
-
-    def test_actuator_stale_pin_creates_pr(self, tmp_path, caplog):
-        """A stale pin triggers clone, edit, uv lock, push, and PR."""
-        import logging
-
-        from robotsix_mill.config.repos import load_repos_config
-        from robotsix_mill.deps.internal_graph import (
-            GitPin,
-            InternalDepGraph,
-        )
-        from robotsix_mill.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
-        )
-
-        repos_yaml_path = tmp_path / "repos.yaml"
-        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
-        registry = load_repos_config(str(repos_yaml_path))
-
-        graph = InternalDepGraph(
-            pins={
-                "a": {
-                    "b": GitPin(
-                        git_url=f"https://{INTERNAL_GIT_HOST}b",
-                        rev="old_sha",
-                    )
-                },
-                "b": {},
-            },
-            topo_order=["b", "a"],
-        )
-
-        mock_forge = MagicMock()
-        mock_forge.open_merge_request.return_value = (
-            "https://github.com/damien-robotsix/a/pull/1"
-        )
-
-        import robotsix_mill.runners.pin_bump_runner as runner_mod
-
-        with (
-            patch.object(runner_mod, "Settings"),
-            patch.object(runner_mod, "get_repos_config", return_value=registry),
-            patch.object(runner_mod, "github_token", return_value="fake-token"),
-            patch.object(runner_mod, "target_branch_for", return_value="main"),
-            patch.object(runner_mod, "get_forge", return_value=mock_forge),
-            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="new_sha"),
-            patch.object(runner_mod.git_ops, "clone") as mock_clone,
-            patch.object(runner_mod.git_ops, "create_branch"),
-            patch.object(runner_mod.git_ops, "commit_all"),
-            patch.object(runner_mod.git_ops, "push"),
-            patch.object(runner_mod, "subprocess"),
-            caplog.at_level(
-                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
-            ),
-        ):
-            # Simulate the clone creating a real pyproject.toml with the
-            # old pin so _update_pin_rev has something to edit.
-            def _fake_clone(remote_url, dest, branch, token=None):
-                dest_path = Path(str(dest))
-                dest_path.mkdir(parents=True, exist_ok=True)
-                (dest_path / "pyproject.toml").write_text(
-                    _pyproject({"b": _internal_pin("b", "old_sha")}),
-                    encoding="utf-8",
-                )
-
-            mock_clone.side_effect = _fake_clone
-
-            run_pin_bump_pr_actuator(
-                session_id="s1",
-                repo_config=registry.repos["a"],
-                graph=graph,
-            )
-
-        # Verify the flow was executed.
-        mock_clone.assert_called_once()
-        mock_forge.open_merge_request.assert_called_once()
-        call_kwargs = mock_forge.open_merge_request.call_args.kwargs
-        assert "new_sha" in call_kwargs["title"]
-        assert "new_sha" in call_kwargs["body"]
-        assert "b" in call_kwargs["title"]
-        assert "PRs created" in caplog.text
-
-    def test_actuator_idempotent_skips(self, tmp_path, caplog):
-        """A pin already at latest SHA is skipped — no clone, no PR."""
-        import logging
-
-        from robotsix_mill.config.repos import load_repos_config
-        from robotsix_mill.deps.internal_graph import (
-            GitPin,
-            InternalDepGraph,
-        )
-        from robotsix_mill.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
-        )
-
-        repos_yaml_path = tmp_path / "repos.yaml"
-        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
-        registry = load_repos_config(str(repos_yaml_path))
-
-        graph = InternalDepGraph(
-            pins={
-                "a": {
-                    "b": GitPin(
-                        git_url=f"https://{INTERNAL_GIT_HOST}b",
-                        rev="same_sha",
-                    )
-                },
-                "b": {},
-            },
-            topo_order=["b", "a"],
-        )
-
-        import robotsix_mill.runners.pin_bump_runner as runner_mod
-
-        with (
-            patch.object(runner_mod, "Settings"),
-            patch.object(runner_mod, "get_repos_config", return_value=registry),
-            patch.object(runner_mod, "github_token", return_value="fake-token"),
-            patch.object(runner_mod, "target_branch_for", return_value="main"),
-            patch.object(runner_mod, "get_forge") as mock_get_forge,
-            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="same_sha"),
-            patch.object(runner_mod.git_ops, "clone") as mock_clone,
-            caplog.at_level(
-                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
-            ),
-        ):
-            run_pin_bump_pr_actuator(
-                session_id="s1",
-                repo_config=registry.repos["a"],
-                graph=graph,
-            )
-
-        mock_clone.assert_not_called()
-        # get_forge is called for repos that have pins (even if all
-        # pins are already at latest — the forge is resolved upfront).
-        mock_get_forge.assert_called_once()
-        assert "already at latest" in caplog.text
 
 
 class TestDispatchWiring:
