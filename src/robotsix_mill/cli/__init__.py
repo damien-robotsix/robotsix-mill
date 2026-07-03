@@ -580,23 +580,15 @@ from .epic import _epic_new  # noqa: E402
 from .inquire import _inquire  # noqa: E402
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Entry point for the robotsix-mill CLI.
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the robotsix-mill argument parser.
 
-    Available subcommands:
-
-    * ``serve`` — run the API and event-driven worker
-    * ``ticket new|list|show|approve|resume-blocked`` — ticket lifecycle
-      operations
-    * ``audit`` — run an audit pass and emit gap drafts
-    * ``trace-health`` — check Langfuse for unsessioned / unnamed traces
-    * ``health`` — run a health pass and emit gap drafts
-    * ``copy-paste`` — run a copy-paste / code-duplication detection pass
-
-    Returns 0 on success, nonzero on failure.
+    Separated from ``main()`` so that completion-script generators
+    (e.g. ``scripts/gen_completions.py``) can introspect the parser
+    without side effects.
     """
     parser = argparse.ArgumentParser(prog="robotsix-mill")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub = parser.add_subparsers(dest="cmd")
 
     p_serve = sub.add_parser("serve", help="run the API + event-driven worker")
     p_serve.add_argument(
@@ -885,7 +877,47 @@ def main(argv: list[str] | None = None) -> int:
         "registered; optional when only one)",
     )
 
+    # --print-completion (shtab shell completion)
+    parser.add_argument(
+        "--print-completion",
+        choices=["bash", "zsh", "tcsh"],
+        help="print shell completion script for the specified shell",
+    )
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Entry point for the robotsix-mill CLI.
+
+    Available subcommands:
+
+    * ``serve`` — run the API and event-driven worker
+    * ``ticket new|list|show|approve|resume-blocked`` — ticket lifecycle
+      operations
+    * ``audit`` — run an audit pass and emit gap drafts
+    * ``trace-health`` — check Langfuse for unsessioned / unnamed traces
+    * ``health`` — run a health pass and emit gap drafts
+    * ``copy-paste`` — run a copy-paste / code-duplication detection pass
+
+    Returns 0 on success, nonzero on failure.
+    """
+    parser = build_parser()
     args = parser.parse_args(argv)
+
+    if getattr(args, "print_completion", None):
+        try:
+            import shtab
+        except ImportError:
+            print(
+                "shtab is required for --print-completion. "
+                "Install it with: pip install shtab",
+                file=sys.stderr,
+            )
+            return 1
+        print(shtab.complete(parser, shell=args.print_completion))  # nosec B604 -- shell= is a shell name, not shell=True
+        return 0
+
     settings = Settings()
 
     if args.cmd == "serve":
