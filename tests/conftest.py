@@ -66,8 +66,10 @@ def _no_dotenv(monkeypatch):
     """Hermeticity: never let the developer's ambient env vars leak into
     tests (they can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
     the suite hit the network). Settings no longer reads .env/secrets.env
-    files; it only reads ``os.environ`` and ``config/*.yaml``.  Clear
-    EVERY ambient credential/endpoint var — pydantic-settings reads
+    files; it only reads ``os.environ`` and a single JSON config file
+    (``config/config.json`` or the committed
+    ``config/config.example.json`` template).  Clear EVERY ambient
+    credential/endpoint var — pydantic-settings reads
     os.environ, so anything exported in the shell *or in the running mill
     container* (where the implement stage runs the suite as its gate)
     leaks in. An unstripped LANGFUSE_*/FORGE_*/NTFY_* flips
@@ -81,17 +83,15 @@ def _no_dotenv(monkeypatch):
     template (never the gitignored, host-specific ``config/config.json``)
     by setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty —
     the loader treats ``""`` as "use the committed example", whose
-    secrets are all the ``SECRET`` sentinel (i.e. unset)."""
+    secrets are all the ``SECRET`` sentinel (i.e. unset).
+    """
+    # Pin to the committed example template (never the gitignored
+    # host-specific config/config.json).  The loader treats empty-string
+    # ``""`` as "use the committed example", whose secrets are all the
+    # ``SECRET`` sentinel (i.e. unset).
     monkeypatch.setenv("MILL_CONFIG_FILE", "")
     monkeypatch.setenv("MILL_SECRETS_FILE", "")
     monkeypatch.setenv("MILL_REPOS_FILE", "")
-    # Disable the board-poll list cache by default in tests so GET /tickets
-    # is always immediately consistent (create-then-list). The committed
-    # config.example.json enables it (3.0s) in real deployments; env beats
-    # JSON, so this override is inert in production. Tests that exercise the
-    # cache opt in explicitly via Settings(board_list_cache_ttl_seconds=…)
-    # (a kwarg, which beats env). Also clear the module-global cache so no
-    # entry leaks across tests.
     monkeypatch.setenv("MILL_BOARD_LIST_CACHE_TTL_SECONDS", "0")
     from robotsix_mill.runtime.routes import _tickets as _tickets_routes
 

@@ -137,9 +137,9 @@ class _CoreSettings(BaseModel):
     # before producing a usable diagnosis on multi-test failures.
     # Cost-bounded by the ticket-level cap. Aligned with
     # config/config.example.json's core.limits.test_requests (30). The
-    # JSON config value wins at runtime; this just stops
+    # json value wins at runtime via JsonSettingsSource; this just stops
     # the dry-Settings() default from contradicting it on machines without
-    # a JSON config override.
+    # a json override.
     test_request_limit: int = Field(default=30, ge=1)
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
@@ -390,18 +390,18 @@ class _CoreSettings(BaseModel):
     # Command run to verify the implementation; empty string skips the
     # test gate. Failures feed back into the bounded fix loop.
     # Global fallback for the test gate command. Empty by default —
-    # per-repo `test_command` in repos.yaml is the authoritative source.
+    # per-repo `test_command` in repos config is the authoritative source.
     # When both are empty, the test gate short-circuits to PASS
     # ("no test gate configured"). MILL_TEST_COMMAND can override for
     # single-repo / legacy setups.
     test_command: str = Field(default="")
     # Global fallback for the path-scoped smoke gate command (run after
     # unit tests pass). Empty by default — the per-repo
-    # `.robotsix-mill/config.yaml` `smoke_command` wins when set, this is
+    # `.robotsix-mill/config.json` `smoke_command` wins when set, this is
     # the fleet-wide fallback, and empty everywhere means no smoke gate
     # (short-circuits to PASS). MILL_SMOKE_COMMAND can override.
     # Path-scoping (`smoke_paths`) is inherently per-repo and lives only
-    # in `.robotsix-mill/config.yaml`; there is no global counterpart.
+    # in `.robotsix-mill/config.json`; there is no global counterpart.
     smoke_command: str = Field(default="")
     branch_prefix: str = Field(default="mill/")
     # Wall-clock cap (seconds) for the agent's shell tool and the test

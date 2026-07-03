@@ -206,7 +206,7 @@
     },
     "settings": {
       "additionalProperties": false,
-      "description": "Central Pydantic configuration model for robotsix-mill.\n\nAll fields are sourced from ``os.environ`` and layered\n``config/*.yaml`` files.  Conventional keys like\n``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain\ncompatible with the reference projects.  Mill-specific settings use\nthe ``MILL_`` / ``FORGE_`` prefix convention and declare explicit\n``Field(alias=...)`` values.",
+      "description": "Central Pydantic configuration model for robotsix-mill.\n\nAll fields are sourced from ``os.environ`` and a single JSON config\nfile (``config/config.json`` or the committed\n``config/config.example.json`` template).  Conventional keys like\n``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain\ncompatible with the reference projects.  Mill-specific settings use\nthe ``MILL_`` / ``FORGE_`` prefix convention and declare explicit\n``Field(alias=...)`` values.",
       "properties": {
         "FORGE_AUTH": {
           "default": "token",

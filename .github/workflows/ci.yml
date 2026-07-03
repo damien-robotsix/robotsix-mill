@@ -73,10 +73,10 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: |
           uv run python -c "
-          import subprocess, sys
+          import subprocess, sys, yaml
           from pathlib import Path
           from robotsix_modules.validation.registration import check_registration
-          import yaml
+
           taxonomy = yaml.safe_load(Path('docs/modules.yaml').read_text())
           result = subprocess.run(['git', 'ls-files', '-s'],
                                   capture_output=True, text=True)

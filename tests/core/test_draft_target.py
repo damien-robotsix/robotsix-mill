@@ -174,10 +174,10 @@ def test_referenced_mill_paths_absent_non_mill_prefixed_paths_ignored(tmp_path):
 
 
 def test_referenced_mill_paths_absent_config_mill_prefix(tmp_path):
-    """``config/config.example.yaml`` is a spec-descriptive path —
+    """``config/config.example.json`` is a spec-descriptive path —
     classified as conceptual, not a source-tree path → excluded."""
     result = referenced_mill_paths_absent(
-        title="Tweak config/config.example.yaml",
+        title="Tweak config/config.example.json",
         body="",
         repo_dir=tmp_path,
     )
@@ -631,16 +631,16 @@ def test_is_spec_descriptive_path_source_tree_prefixes_return_false():
 
 
 def test_is_spec_descriptive_path_bare_config_yaml():
-    """Bare config/config.yaml and config/config.example.yaml are conceptual."""
+    """Bare config/config.yaml and config/config.example.json are conceptual."""
     assert _is_spec_descriptive_path("config/config.yaml")
-    assert _is_spec_descriptive_path("config/config.example.yaml")
+    assert _is_spec_descriptive_path("config/config.example.json")
     assert _is_spec_descriptive_path("CONFIG/CONFIG.YAML")
 
 
 def test_is_spec_descriptive_path_config_under_src_not_conceptual():
     """config/config.yaml under src/ is a source-tree path, not conceptual."""
     assert not _is_spec_descriptive_path("src/robotsix_mill/config/config.yaml")
-    assert not _is_spec_descriptive_path("src/myapp/config/config.example.yaml")
+    assert not _is_spec_descriptive_path("src/myapp/config/config.example.json")
 
 
 def test_is_spec_descriptive_path_absolute_paths():
@@ -662,9 +662,9 @@ def test_is_spec_descriptive_path_container_paths():
 
 def test_is_spec_descriptive_path_template_files():
     """Template files (.example.yaml, .env.example) are conceptual."""
-    assert _is_spec_descriptive_path("config/config.example.yaml")
+    assert _is_spec_descriptive_path("config/config.example.json")
     assert _is_spec_descriptive_path(".env.example")
-    assert _is_spec_descriptive_path("path/to/settings.example.yaml")
+    assert _is_spec_descriptive_path("path/to/settings.example.json")
 
 
 def test_is_spec_descriptive_path_compose_files():

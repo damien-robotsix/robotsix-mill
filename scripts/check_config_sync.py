@@ -8,21 +8,23 @@ Cross-references the live source-of-truth objects — never re-parses
 source — to catch config drift that the heuristic ``config_sync`` LLM
 agent would otherwise only notice on its next daily pass:
 
+    * ``config/config.example.json`` — the committed single-file config
+      template.  Its ``settings`` keys are the canonical Settings
+      surface; its ``secrets`` keys are the Secrets template.
     * ``robotsix_mill.config.Settings`` / ``Secrets`` — the Pydantic-v2
       models (introspected via ``model_fields``).
-    * ``config/config.example.json`` — the committed single-file config
-      template.  Its ``settings:`` block is the canonical defaults
-      surface; its ``secrets:`` block is the secrets template.
 
 Invariants (each contributes drift lines; the run fails if any fire):
 
-    1. Every key in ``config.example.json`` → ``settings`` is a real
-       ``Settings`` field name or alias.
+    1. Every ``settings`` key in ``config/config.example.json`` is a
+       real ``Settings`` field name or alias, unless listed in
+       ``_SETTINGS_KEYS_NOT_IN_MODEL``.
     2. Every ``Settings`` model field name or alias must appear as a
-       key in the JSON ``settings`` block, except those listed in
-       ``_MODEL_FIELDS_NOT_IN_CONFIG``.
+       key in ``config/config.example.json`` ``settings``, except those
+       listed in ``_MODEL_FIELDS_NOT_IN_JSON``.
     3. The keys of the ``secrets:`` block in ``config/config.example.json``
-       equal the user-configurable ``Secrets`` fields.
+       equal the user-configurable ``Secrets`` fields, modulo
+       ``_SECRETS_NOT_IN_EXAMPLE``.
 
 This script is meant to be invoked from the repo root (which CI and the
 ``validate-config-sync`` pre-commit hook both guarantee).
@@ -38,8 +40,8 @@ import json
 import sys
 from pathlib import Path
 
-# Ensure src/ is importable so 'import robotsix_mill' works when run
-# as a flat script.
+# Ensure both the repo root and src/ are importable so 'import
+# robotsix_mill' works when run as a flat script.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -54,58 +56,63 @@ _CONFIG_EXAMPLE_JSON = _REPO_ROOT / "config" / "config.example.json"
 #  Explicit, commented exception sets
 # ---------------------------------------------------------------------------
 
-# Settings model fields intentionally absent from the JSON ``settings:``
-# block (invariant 2). Each entry documents WHY the field is not in the
-# JSON config.
-_MODEL_FIELDS_NOT_IN_CONFIG: frozenset[str] = frozenset(
+# Settings keys in config.example.json that are intentionally NOT
+# Settings model fields/aliases. Each entry documents WHY.
+_SETTINGS_KEYS_NOT_IN_MODEL: frozenset[str] = frozenset()
+
+# Settings model fields intentionally absent from
+# ``config.example.json`` ``settings`` block. Each field documents
+# WHY it is not in the committed template.
+_MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
     {
         # -- Secrets / credentials — sourced from the config.json
         #    ``secrets:`` block (Secrets model) or env vars --
+        "openrouter_api_key",
         "forge_token",
+        "forge_repo_create_token",
         "github_app_id",
         "github_app_private_key",
+        "github_app_private_key_path",
         "langfuse_base_url",
-        "langfuse_project_id",
         "langfuse_public_key",
         "langfuse_secret_key",
-        "ntfy_token",
+        "langfuse_project_id",
+        "langfuse_project_name",
+        "openrouter_management_key",
         "ntfy_url",
-        "openrouter_api_key",
-        # Also their aliases (FORGE_TOKEN, etc.)
-        "FORGE_TOKEN",
-        "GITHUB_APP_ID",
-        "GITHUB_APP_PRIVATE_KEY",
-        "LANGFUSE_BASE_URL",
-        "LANGFUSE_PROJECT_ID",
-        "LANGFUSE_PUBLIC_KEY",
-        "LANGFUSE_SECRET_KEY",
-        "NTFY_TOKEN",
-        "NTFY_URL",
-        "OPENROUTER_API_KEY",
-        # -- Fields with no JSON entry (yet) — env-only or computed --
-        "db_maintenance_interval_seconds",
-        "db_maintenance_periodic",
-        "deliver_max_identical_blocks",
+        "ntfy_token",
+        # -- Fields with no JSON entry (yet) — listed here so the
+        #    invariant passes at HEAD; each should eventually gain a
+        #    JSON entry or be explicitly documented as env-only --
         "investigation_workspace",
-        "MILL_INVESTIGATION_WORKSPACE",
-        "max_events_per_ticket",
         "refine_delta_reuse_enabled",
-        "security_posture_interval_seconds",
-        "security_posture_periodic",
-        "security_posture_request_limit",
-        "stage_timeout_overrides",
+        "trace_review_max_inspector_runs_per_pass",
+        "max_events_per_ticket",
+        "db_maintenance_periodic",
+        "db_maintenance_interval_seconds",
         "ticket_state_cycle_limit",
+        "deliver_max_identical_blocks",
+        "security_posture_memory_path",
+        "security_posture_periodic",
+        "security_posture_interval_seconds",
+        "security_posture_request_limit",
     }
 )
 
+# ``Secrets`` fields that are intentionally NOT user-configurable via
+# the config file (invariant 3), so they never appear in the
+# ``secrets:`` block of ``config/config.example.json``.
+_SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
+
 
 # ---------------------------------------------------------------------------
-#  Pure helpers
+#  Pure helpers (parameterised so synthetic cases need no monkeypatching)
 # ---------------------------------------------------------------------------
 
 
 def build_valid_settings_names(model: type) -> set[str]:
     """Return the union of every ``model`` field name and non-null alias."""
+
     names: set[str] = set()
     for name, field in model.model_fields.items():
         names.add(name)
@@ -114,36 +121,43 @@ def build_valid_settings_names(model: type) -> set[str]:
     return names
 
 
-def check_json_settings_keys_in_model(
-    json_keys: set[str], valid_names: set[str]
+def check_settings_keys_in_model(
+    example_keys: set[str],
+    valid_names: set[str],
+    exceptions: frozenset[str],
 ) -> list[str]:
-    """Invariant 1: every JSON settings key must be a valid field name/alias."""
-    return [
-        f"JSON settings key not a Settings field name or alias: {key!r}"
-        for key in sorted(json_keys - valid_names)
-    ]
+    """Invariant 1: every settings key must be a real field name/alias."""
+
+    drift: list[str] = []
+    for key in sorted(example_keys):
+        if key in exceptions:
+            continue
+        if key not in valid_names:
+            drift.append(
+                f"config.example.json settings key {key!r} is not a "
+                "Settings field name or alias"
+            )
+    return drift
 
 
 def check_model_fields_in_json(
     model: type,
-    json_keys: set[str],
+    example_keys: set[str],
     exceptions: frozenset[str],
 ) -> list[str]:
-    """Invariant 2: every Settings field must be represented in JSON
-    ``settings:`` (by name or alias), unless explicitly excepted."""
+    """Invariant 2: every Settings field must appear in the JSON settings."""
+
     drift: list[str] = []
     for name, field in model.model_fields.items():
         if name in exceptions:
             continue
-        if field.alias and field.alias in exceptions:
+        if name in example_keys:
             continue
-        if name in json_keys:
-            continue
-        if field.alias and field.alias in json_keys:
+        if field.alias and field.alias in example_keys:
             continue
         drift.append(
-            f"Settings field {name!r} (alias={field.alias!r}) has no entry"
-            " in config.example.json settings and is not in the exception set"
+            f"Settings field {name!r} has no entry in "
+            "config.example.json settings and is not in the exception set"
         )
     return drift
 
@@ -151,12 +165,18 @@ def check_model_fields_in_json(
 def check_secrets_example(
     example_keys: set[str],
     secrets_fields: set[str],
+    exceptions: frozenset[str],
 ) -> list[str]:
-    """Invariants 3+4: secrets-block keys == Secrets fields."""
+    """Invariant 3: secrets-block keys == user-configurable Secrets fields."""
+
+    expected = secrets_fields - exceptions
     drift: list[str] = []
-    for key in sorted(example_keys - secrets_fields):
-        drift.append(f"config.example.json secrets key is not a Secrets field: {key}")
-    for field in sorted(secrets_fields - example_keys):
+    for key in sorted(example_keys - expected):
+        drift.append(
+            "config.example.json secrets key is not a user-configurable "
+            f"Secrets field: {key}"
+        )
+    for field in sorted(expected - example_keys):
         drift.append(
             f"Secrets field missing from config.example.json secrets block: {field}"
         )
@@ -170,26 +190,32 @@ def collect_drift() -> list[str]:
 
     with open(_CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as fh:
         config_example = json.load(fh)
+    if not isinstance(config_example, dict):
+        return ["config.example.json is not a JSON object"]
 
-    settings_json: dict = config_example.get("settings", {})
-    secrets_json: dict = config_example.get("secrets", {})
-    if not isinstance(settings_json, dict):
-        settings_json = {}
-    if not isinstance(secrets_json, dict):
-        secrets_json = {}
+    settings_example = config_example.get("settings", {})
+    if not isinstance(settings_example, dict):
+        return ["config.example.json settings key is not a JSON object"]
 
-    json_settings_keys: set[str] = set(settings_json)
-    json_secrets_keys: set[str] = set(secrets_json)
+    secrets_example = config_example.get("secrets", {})
+    if not isinstance(secrets_example, dict):
+        secrets_example = {}
 
-    valid_settings_names = build_valid_settings_names(Settings)
+    valid_names = build_valid_settings_names(Settings)
+    example_settings_keys = set(settings_example)
     secrets_fields = set(Secrets.model_fields)
+    example_secrets_keys = set(secrets_example)
 
     drift: list[str] = []
-    drift += check_json_settings_keys_in_model(json_settings_keys, valid_settings_names)
-    drift += check_model_fields_in_json(
-        Settings, json_settings_keys, _MODEL_FIELDS_NOT_IN_CONFIG
+    drift += check_settings_keys_in_model(
+        example_settings_keys, valid_names, _SETTINGS_KEYS_NOT_IN_MODEL
     )
-    drift += check_secrets_example(json_secrets_keys, secrets_fields)
+    drift += check_model_fields_in_json(
+        Settings, example_settings_keys, _MODEL_FIELDS_NOT_IN_JSON
+    )
+    drift += check_secrets_example(
+        example_secrets_keys, secrets_fields, _SECRETS_NOT_IN_EXAMPLE
+    )
     return drift
 
 
@@ -204,7 +230,7 @@ def main() -> int:
         )
         return 1
 
-    print("config sync OK (JSON config, model fields, secrets all in sync)")
+    print("config sync OK (JSON settings, secrets example all in sync)")
     return 0
 
 

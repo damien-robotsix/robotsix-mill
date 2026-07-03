@@ -134,6 +134,10 @@ settings_customise_sources
 dotenv_settings
 ci_patterns_file
 get_field_value
+# Backward-compat aliases after JSON migration — intentionally kept as
+# public API shims so existing callers don't break.
+load_yaml_config
+load_secrets_yaml
 
 # -- core --------------------------------------------------------------------
 _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator

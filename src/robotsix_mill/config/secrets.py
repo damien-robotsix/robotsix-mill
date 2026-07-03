@@ -58,7 +58,7 @@ class Secrets(BaseModel):
         ``config/config.example.json``).  Its ``secrets:`` block is passed
         as field defaults, which explicit ``**data`` kwargs can override.
         """
-        from .loader import load_secrets as _load_secrets
+        from .loader import load_secrets_json
 
         file_path: str | None = _secrets_file
         if file_path is None:
@@ -66,8 +66,8 @@ class Secrets(BaseModel):
 
             file_path = os.environ.get("MILL_SECRETS_FILE")
 
-        secrets_data = _load_secrets(file_path)
-        merged = {**secrets_data, **data}
+        yaml_data = load_secrets_json(file_path)
+        merged = {**yaml_data, **data}
         super().__init__(**merged)
 
     def __repr__(self) -> str:

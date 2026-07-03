@@ -3,9 +3,9 @@
 The mill reads a SINGLE config file: ``config/config.json`` (gitignored)
 when present, else the committed ``config/config.example.json`` template
 (so CI / tests without a ``config.json`` still get the committed
-defaults).  The file holds every non-secret knob under a ``settings:``
-key plus a ``secrets:`` block; :func:`load_config` returns the non-secret
-part (for the ``Settings`` model) and :func:`load_secrets` returns the
+defaults).  The file holds every non-secret knob plus a top-level
+``secrets:`` block; :func:`load_config` returns the non-secret part
+(for the ``Settings`` model) and :func:`load_secrets_json` returns the
 ``secrets:`` sub-map (for the ``Secrets`` model).
 
 The JSON ``settings`` keys are flat Pydantic field aliases (e.g.
@@ -29,13 +29,13 @@ import yaml
 
 class ConfigError(Exception):
     """Raised for config-loading failures — missing required files,
-    parse errors, etc."""
+    JSON parse errors, etc."""
 
     pass
 
 
 # ---------------------------------------------------------------------------
-#  Config loading
+#  JSON loading
 # ---------------------------------------------------------------------------
 
 _CONFIG_DIR = Path("config")
@@ -71,19 +71,20 @@ def _resolve_config_path(config_file: str | None) -> Path:
     return _CONFIG_FILE if _CONFIG_FILE.exists() else _EXAMPLE_FILE
 
 
-def load_config(config_file: str | None = None, skip_local: bool = False) -> dict:
-    """Load the single mill config file and return its ``settings:`` block.
+def load_config(
+    config_file: str | None = None, skip_local: bool = False
+) -> dict[str, object]:
+    """Load the single mill config file and return its non-secret part.
 
     Reads ``config/config.json`` when present, else the committed
     ``config/config.example.json`` (overridable via the *config_file* arg
     or the ``MILL_CONFIG_FILE`` env var; ``""`` forces the committed
-    example).  The ``settings:`` block is a flat alias-keyed dict
-    (e.g. ``{"MILL_MAX_GLOBAL_CONCURRENCY": 12, ...}``) — no flattening
-    is needed.
+    example).  The top-level ``secrets:`` block is stripped — it is
+    consumed separately by :func:`load_secrets_json` / the ``Secrets``
+    model, never merged into ``Settings``.
 
-    The top-level ``secrets:`` block is NOT included in the return value;
-    it is consumed separately by :func:`load_secrets` / the ``Secrets``
-    model.
+    Returns a flat dict keyed by Settings field aliases
+    (e.g. ``{"data_dir": ".data", "api_port": 8077, ...}``).
 
     *skip_local* is accepted for backward compatibility and ignored —
     there is no longer a separate local overlay layer.
@@ -100,16 +101,24 @@ def load_config(config_file: str | None = None, skip_local: bool = False) -> dic
             "MILL_CONFIG_FILE at a config file."
         )
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ConfigError(str(exc)) from exc
-    if not isinstance(data, dict):
-        return {}
-    settings: object = data.get("settings", {})
-    return settings if isinstance(settings, dict) else {}
+        raise ConfigError(f"Invalid JSON in {path}: {exc}") from exc
+    result = dict(data) if isinstance(data, dict) else {}
+    result.pop("secrets", None)
+    # Return just the ``settings`` sub-dict when present; fall back to
+    # top-level (backward compat with flat top-level files).
+    if "settings" in result:
+        settings = result["settings"]
+        if isinstance(settings, dict):
+            return dict(settings)
+    # Top-level-only format (no ``settings`` wrapper): return everything
+    # except repos (which is consumed separately).
+    result.pop("repos", None)
+    return result
 
 
-def load_secrets(secrets_file: str | None = None) -> dict:
+def load_secrets_json(secrets_file: str | None = None) -> dict[str, object]:
     """Return the ``secrets:`` sub-map of the single mill config file.
 
     Path resolution mirrors :func:`load_config`: explicit
@@ -142,9 +151,9 @@ def load_secrets(secrets_file: str | None = None) -> dict:
         return {}
 
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ConfigError(str(exc)) from exc
+        raise ConfigError(f"Invalid JSON in {path}: {exc}") from exc
 
     raw = data.get("secrets", {}) if isinstance(data, dict) else {}
     if not isinstance(raw, dict):
@@ -159,10 +168,10 @@ def load_secrets(secrets_file: str | None = None) -> dict:
     }
 
 
-def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
+def _load_repos_document(file_path: str | None = None) -> dict[str, object]:  # noqa: C901
     """Read and parse the repos configuration document.
 
-    Merges operator repos from ``config.json`` (``repos:`` key) with
+    Merges operator repos from the JSON config (``repos:`` key) with
     machine-owned overlay entries from ``<data_dir>/registered_repos.yaml``.
     The operator entry wins on repo-id conflict. Returns the merged
     ``{"repos": {...}}`` mapping, or ``{}`` when nothing is configured —
@@ -184,41 +193,44 @@ def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
         if not path.exists():
             return {}
         try:
-            data = yaml.safe_load(path.read_text())
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
-            raise ConfigError(str(exc)) from exc
+            raise ConfigError(f"Invalid YAML in {path}: {exc}") from exc
         return data if isinstance(data, dict) else {}
 
-    # 2. Operator repos from config.json (``repos:`` key at top level,
-    #    not inside ``settings:`` — repos are not Settings fields).
-    cfg: dict[str, object] = {}
-    full_data: dict[str, object] = {}
-    operator_repos: dict[str, object] = {}
+    # 2. Operator repos from the JSON config (``repos:`` key).
     try:
-        config_path = _resolve_config_path(None)
-        if config_path.exists():
-            full_data = json.loads(config_path.read_text())
-            if isinstance(full_data, dict):
-                settings_raw = full_data.get("settings", {})
-                cfg = settings_raw if isinstance(settings_raw, dict) else {}
-                raw_repos = full_data.get("repos", {})
-                if isinstance(raw_repos, dict):
-                    operator_repos = raw_repos
-    except ConfigError, json.JSONDecodeError, OSError:
-        pass  # Config file missing/malformed — proceed with defaults.
+        # Re-read the raw file to get repos
+        raw_path = _resolve_config_path(None)
+        if raw_path.exists():
+            raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
+            cfg_raw = raw_data if isinstance(raw_data, dict) else {}
+        else:
+            cfg_raw = {}
+    except ConfigError:
+        cfg_raw = {}
+
+    has_operator_key = isinstance(cfg_raw, dict) and "repos" in cfg_raw
+    operator_repos: dict[str, object] = (
+        (cfg_raw.get("repos") or {}) if has_operator_key else {}
+    )
+    if not isinstance(operator_repos, dict):
+        operator_repos = {}
 
     # 3. Machine-owned overlay: <data_dir>/registered_repos.yaml.
-    #    data_dir is read from the same loaded config (settings.data_dir)
-    #    to stay consistent with Settings without a circular import.
-    data_dir_raw: object = (
-        (cfg.get("data_dir", ".data")) if isinstance(cfg, dict) else ".data"
-    )
-    data_dir_str: str = data_dir_raw if isinstance(data_dir_raw, str) else ".data"
+    #    data_dir is read from the settings to stay consistent without
+    #    a circular import.
+    try:
+        settings = load_config()
+        data_dir_str: str = str(settings.get("data_dir", ".data"))
+    except ConfigError:
+        data_dir_str = ".data"
+
     overlay_path = Path(data_dir_str) / "registered_repos.yaml"
     overlay_repos: dict[str, object] = {}
     if overlay_path.exists():
         try:
-            overlay_data = yaml.safe_load(overlay_path.read_text())
+            overlay_data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
             raw_overlay = (
                 (overlay_data.get("repos") or {})
                 if isinstance(overlay_data, dict)
@@ -226,7 +238,7 @@ def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
             )
             if isinstance(raw_overlay, dict):
                 overlay_repos = raw_overlay
-        except yaml.YAMLError:
+        except yaml.YAMLError, OSError:
             pass  # corrupt overlay is tolerated; treat as empty
 
     # 4. Inject source marker so load_repos_config can set RepoConfig.source.
@@ -242,8 +254,8 @@ def _load_repos_document(file_path: str | None = None) -> dict:  # noqa: C901
     return {}
 
 
-def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
-    """Read the merged repos configuration (``config/config.json`` +
+def load_repos_json(file_path: str | None = None) -> dict[str, object]:
+    """Read the merged repos configuration (JSON config ``repos:`` key +
     ``<data_dir>/registered_repos.yaml``).
 
     Returns a dict keyed by repo ID with nested ``board_id`` and
@@ -253,7 +265,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
     Missing key/file → returns an empty dict (not an error — repos config
     is optional).
 
-    Malformed YAML → raises ``ConfigError`` with the file path and
+    Malformed JSON → raises ``ConfigError`` with the file path and
     parse error details.
     """
     data = _load_repos_document(file_path)
@@ -271,3 +283,16 @@ def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
     # Flat format (override files only): the document IS the repo mapping.
     # The sibling ``meta`` block is not a repo, so never surface it as one.
     return {k: v for k, v in data.items() if k != "meta"}
+
+
+# ---------------------------------------------------------------------------
+#  Backward-compatible aliases
+# ---------------------------------------------------------------------------
+
+# These names were the public API before the JSON migration. Keep them
+# as aliases so any remaining callers don't break immediately — they
+# can be cleaned up in a follow-up.
+
+load_yaml_config = load_config
+load_secrets_yaml = load_secrets_json
+load_repos_yaml = load_repos_json
