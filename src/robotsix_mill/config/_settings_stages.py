@@ -25,11 +25,11 @@ class _StagesSettings(BaseModel):
     # pricey model and keeps its context lean (conclusions, not pages).
     web_search: bool = Field(
         description="Enable web search via a cheap bounded sub-agent for refine and implement agents.",
-        lt=True,
+        default=True,
     )
     web_research_request_limit: int = Field(
         description="Request budget for the web_research sub-agent spawned by refine/implement.",
-        lt=8,
+        default=8,
         ge=1,
     )
     # web_fetch runs in its OWN container: network ON, but NO repo/data
@@ -37,13 +37,13 @@ class _StagesSettings(BaseModel):
     # agent could encode data into a fetched URL. http(s) only.
     fetch_image: str = Field(
         description="Docker image used for isolated web_fetch calls (curl-based, network-only, no repo mount).",
-        lt="curlimages/curl:8.17.0",
+        default="curlimages/curl:8.17.0",
     )
     web_fetch_max_bytes: int = Field(
-        description="Maximum raw bytes per web_fetch call.", lt=2_000_000, ge=0
+        description="Maximum raw bytes per web_fetch call.", default=2_000_000, ge=0
     )
     web_fetch_timeout: int = Field(
-        description="Timeout (seconds) per web_fetch call.", lt=30, gt=0
+        description="Timeout (seconds) per web_fetch call.", default=30, gt=0
     )
     # Post-extraction cap, applied AFTER HTML→text stripping. The
     # network-level ``web_fetch_max_bytes`` bounds raw bytes; this
@@ -77,7 +77,7 @@ class _StagesSettings(BaseModel):
     # Configured via ``web.fetch_max_calls`` in the YAML config.
     web_fetch_max_calls: int = Field(
         description="Maximum real (cache-miss) web_fetch calls per web_knowledge consultation.",
-        lt=15,
+        default=15,
         ge=1,
     )
     # Cumulative ceiling on returned (post-extraction, post-cap) text
@@ -85,7 +85,7 @@ class _StagesSettings(BaseModel):
     # Configured via ``web.fetch_max_total_bytes`` in the YAML config.
     web_fetch_max_total_bytes: int = Field(
         description="Cumulative ceiling on returned text bytes per web_knowledge consultation. 0 disables.",
-        lt=2_000_000,
+        default=2_000_000,
         ge=0,
     )
     # Per-TRACE (cross-consult) web budget for the refine stage,
@@ -96,17 +96,17 @@ class _StagesSettings(BaseModel):
     # once at the start of each refine trace (see ``run_refine_agent``).
     # Max real (cache-miss) fetches across one refine trace.
     refine_web_fetch_max_calls: int = Field(
-        description="Maximum real web_fetch calls across one refine trace.", lt=5, ge=1
+        description="Maximum real web_fetch calls across one refine trace.", default=5, ge=1
     )
     # Max fetch bytes across one refine trace; ``0`` disables the ceiling.
     refine_web_fetch_max_total_bytes: int = Field(
         description="Maximum fetch bytes across one refine trace. 0 disables.",
-        lt=500_000,
+        default=500_000,
         ge=0,
     )
     # Max web_search calls across one refine trace.
     refine_web_search_max_calls: int = Field(
-        description="Maximum web_search calls across one refine trace.", lt=5, ge=1
+        description="Maximum web_search calls across one refine trace.", default=5, ge=1
     )
     # Pre-write Python syntax check on `write_file` / `edit_file`. When
     # True (default) a SyntaxError aborts the edit and the agent gets
@@ -115,7 +115,7 @@ class _StagesSettings(BaseModel):
     # Configured via ``core.lint_on_edit`` in the YAML config.
     lint_on_edit: bool = Field(
         description="When true, pre-write Python syntax check on write_file/edit_file calls.",
-        lt=True,
+        default=True,
         alias="MILL_LINT_ON_EDIT",
     )
     # Character cap on an *implicit full* ``read_file`` (offset=1,
@@ -132,7 +132,7 @@ class _StagesSettings(BaseModel):
     # config.
     read_file_max_chars: int = Field(
         description="Character cap on implicit full read_file payloads. 0 disables.",
-        lt=50_000,
+        default=50_000,
         ge=0,
     )
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
@@ -157,7 +157,7 @@ class _StagesSettings(BaseModel):
     # the implement stage kicks in. Set false for fully-autonomous mode.
     require_approval: bool = Field(
         description="When true, refined tickets require human approval before implement stage.",
-        lt=True,
+        default=True,
     )
 
     # When true, a cheap conservative LLM call inspects the refined spec
@@ -167,7 +167,7 @@ class _StagesSettings(BaseModel):
     # (default), every gated ticket waits for a human click.
     auto_approve_enabled: bool = Field(
         description="When true, obviously-safe changes skip the human approval gate.",
-        lt=False,
+        default=False,
     )
 
     # --- dual-model review gate (implement → deliver) ---
@@ -176,7 +176,7 @@ class _StagesSettings(BaseModel):
     # deliver stage pushes + opens the PR. Default False (opt-in).
     review_enabled: bool = Field(
         description="When true, implement transitions to code_review before deliver.",
-        lt=False,
+        default=False,
     )
     # When true (and review is enabled + the review agent marks the
     # change as auto-merge-eligible), the merge stage will attempt to
@@ -184,7 +184,7 @@ class _StagesSettings(BaseModel):
     # human. Default False (opt-in).
     auto_merge_enabled: bool = Field(
         description="When true, the merge stage auto-merges green PRs via the forge API.",
-        lt=False,
+        default=False,
     )
     # When True (default), the single-repo auto-merge decision detects
     # pre-existing main-branch CI debt: if every workflow failing on the
@@ -195,14 +195,14 @@ class _StagesSettings(BaseModel):
     # flag exists so an operator can disable it.
     auto_merge_main_debt_detection_enabled: bool = Field(
         description="When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
-        lt=True,
+        default=True,
     )
     # When True, the board's ticket detail drawer renders description.md
     # below the comments with a collapsible "Hide" toggle (the frontend
     # reads ``gatesCache.comments_after_body``). Default False (opt-in).
     comments_after_body: bool = Field(
         description="When true, the board detail drawer renders description.md below comments.",
-        lt=False,
+        default=False,
     )
     # When True (and a human reviewer requests changes on the PR),
     # the merge stage will invoke the review-revision agent to
@@ -210,7 +210,7 @@ class _StagesSettings(BaseModel):
     # (opt-in — this is a powerful autonomous capability).
     review_feedback_enabled: bool = Field(
         description="When true, the review-revision agent auto-implements requested PR changes.",
-        lt=False,
+        default=False,
     )
     # When True (default), a cheap triage LLM call runs before the full
     # refine agent.  Drafts that are already precise, single-scoped, and
@@ -218,7 +218,7 @@ class _StagesSettings(BaseModel):
     # Set False to force full refine for all tickets without a deploy.
     refine_triage_enabled: bool = Field(
         description="When true, a cheap triage LLM call runs before full refine for implementation-ready drafts.",
-        lt=True,
+        default=True,
     )
     # When a ticket draft contains more than this many lines of code
     # inside fenced code blocks (triple backticks), the draft is
@@ -227,7 +227,7 @@ class _StagesSettings(BaseModel):
     # disable the deterministic shortcut.  Default 50.
     refine_prescriptive_spec_code_lines_threshold: int = Field(
         description="Drafts with more than this many fenced code lines skip refine entirely.",
-        lt=50,
+        default=50,
     )
     # When True (default), the refine stage detects specs whose
     # implementation section already contains complete file-path +
@@ -239,7 +239,7 @@ class _StagesSettings(BaseModel):
     # LLM path.  Set False to always run the full refine agent.
     refine_skip_llm_on_impl_ready_spec: bool = Field(
         description="When true, implementation-ready specs skip the expensive LLM refine agent.",
-        lt=True,
+        default=True,
     )
     # When True (default), a pre-Opus guard checks whether the reviewer's
     # feedback on a sendback ticket already agrees with the draft's
@@ -248,7 +248,7 @@ class _StagesSettings(BaseModel):
     # agent (~$0.28).  Requires ``refine_triage_enabled=True``.
     reviewer_agreement_gate_enabled: bool = Field(
         description="When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
-        lt=True,
+        default=True,
     )
     # When True (default), a maintenance-triage check runs during refine
     # to detect operational-action drafts (create repo, fork repo,
@@ -256,7 +256,7 @@ class _StagesSettings(BaseModel):
     # bypassing the full refine→implement pipeline.
     maintenance_triage_enabled: bool = Field(
         description="When true, operational-action drafts route directly to MAINTENANCE.",
-        lt=True,
+        default=True,
     )
     # When True (default), the cheap advisory-dedup-verification gate runs
     # after the inflight-advisory phase and before the expensive refine
@@ -268,7 +268,7 @@ class _StagesSettings(BaseModel):
     # the full refine agent runs).
     refine_advisory_dedup_enabled: bool = Field(
         description="When true, a cheap advisory-dedup-verification gate runs after inflight-advisory phase.",
-        lt=True,
+        default=True,
     )
     # When True, a deterministic pre-refine gate verifies that file paths
     # and line ranges cited in the ticket draft still exist on the
@@ -278,7 +278,7 @@ class _StagesSettings(BaseModel):
     # agent runs.  Default False (opt-in).
     freshness_gate_enabled: bool = Field(
         description="When true, a pre-refine gate verifies cited file paths and line ranges still exist on HEAD.",
-        lt=False,
+        default=False,
     )
     # When True, an LLM-based pre-refine gate re-evaluates whether a
     # spawned follow-up/corrective draft's cited gap (e.g. "add doc
@@ -289,7 +289,7 @@ class _StagesSettings(BaseModel):
     # risky).
     obsolescence_gate_enabled: bool = Field(
         description="When true, an LLM pre-refine gate re-evaluates whether a cited gap still exists on HEAD.",
-        lt=False,
+        default=False,
     )
     # When True (default), a deterministic pre-refine gate detects
     # drafts that reference mill-specific source paths
@@ -299,7 +299,7 @@ class _StagesSettings(BaseModel):
     # to opt out and let refine proceed locally.
     refine_mill_misroute_gate_enabled: bool = Field(
         description="When true, drafts referencing mill-specific paths absent from checkout are redirected to the mill board.",
-        lt=True,
+        default=True,
     )
     # When True, a deterministic pre-implement gate verifies that
     # external symbol/import prerequisites the spec declares in a
@@ -315,7 +315,7 @@ class _StagesSettings(BaseModel):
     # explicitly declared, verifiably unmet directive.
     prerequisite_gate_enabled: bool = Field(
         description="When true, a pre-implement gate verifies declared import prerequisites are satisfiable.",
-        lt=True,
+        default=True,
     )
     # When True, the refine stage runs a post-refinement review pass that
     # strips verbose exploratory narrative from the spec, producing a
@@ -324,7 +324,7 @@ class _StagesSettings(BaseModel):
     # narrative, saving significant token cost on downstream agents.
     spec_review_enabled: bool = Field(
         description="When true, a post-refinement review pass strips verbose narrative from the spec.",
-        lt=True,
+        default=True,
     )
     # When True (default), a cheap scope-triage LLM call inspects
     # out-of-scope file changes before blocking the ticket. The agent
@@ -332,7 +332,7 @@ class _StagesSettings(BaseModel):
     # (uncertain). Set False to restore immediate BLOCKED behaviour.
     scope_triage_enabled: bool = Field(
         description="When true, a cheap scope-triage LLM inspects out-of-scope file changes before blocking.",
-        lt=True,
+        default=True,
         alias="MILL_SCOPE_TRIAGE_ENABLED",
     )
     # When True, the deliver stage generates a structured PR body
@@ -340,7 +340,7 @@ class _StagesSettings(BaseModel):
     # via a cheap one-shot LLM call instead of pasting the raw spec.
     pr_summary_enabled: bool = Field(
         description="When true, the deliver stage generates a structured PR body from the diff.",
-        lt=False,
+        default=False,
         alias="MILL_PR_SUMMARY_ENABLED",
     )
     # When True, Forge.create_repo() is permitted to create repositories
@@ -349,7 +349,7 @@ class _StagesSettings(BaseModel):
     # the necessary repository-creation scope.
     enable_repo_creation: bool = Field(
         description="When true, Forge.create_repo() is permitted to create repositories via the forge API.",
-        lt=False,
+        default=False,
     )
     # Default visibility for newly created repositories.
     # "public" — repos are public unless the caller specifies private=True.
@@ -364,32 +364,32 @@ class _StagesSettings(BaseModel):
     # mill/<id> branches automatically; set False to keep them.
     delete_branch_on_merge: bool = Field(
         description="When true, the merge stage deletes the per-ticket head branch on the forge after merge.",
-        lt=True,
+        default=True,
     )
     # -- periodic stale-branch cleanup --
     # When True, the worker runs a periodic pass that lists remote branches
     # and deletes old, unprotected, no-open-PR branches (per prefix/age guards).
     # Default False — destructive, opt-in.
     stale_branch_cleanup_periodic: bool = Field(
-        description="When true, run periodic stale-branch cleanup passes.", lt=False
+        description="When true, run periodic stale-branch cleanup passes.", default=False
     )
     # Seconds between automatic stale-branch cleanup passes. Only used when
     # MILL_STALE_BRANCH_CLEANUP_PERIODIC=true. Enforced minimum 3600s (1h)
     # in the worker to avoid hammering the forge API.
     stale_branch_cleanup_interval_seconds: int = Field(
-        description="Seconds between automatic stale-branch cleanup passes.", lt=86400
+        description="Seconds between automatic stale-branch cleanup passes.", default=86400
     )
     # A branch is eligible for cleanup only if its last commit is older than
     # this many days. Default 30 days.
     stale_branch_max_age_days: int = Field(
         description="Branch is eligible for cleanup only if its last commit is older than this many days.",
-        lt=30,
+        default=30,
     )
     # When True, only delete branches whose name starts with ``branch_prefix``
     # (the "old mill" branches). When False, also reap any other stale branch
     # ("stale dev").
     stale_branch_cleanup_prefix_only: bool = Field(
-        description="When true, only delete branches matching branch_prefix.", lt=True
+        description="When true, only delete branches matching branch_prefix.", default=True
     )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
@@ -397,7 +397,7 @@ class _StagesSettings(BaseModel):
     # effectively disabled). Default 3.
     review_max_rounds: int = Field(
         description="Maximum CODE_REVIEW to READY to DOCUMENTING to CODE_REVIEW round-trips before escalation.",
-        lt=3,
+        default=3,
         ge=0,
     )
 
@@ -410,7 +410,7 @@ class _StagesSettings(BaseModel):
     # Set to 0 to disable.
     max_implement_review_cycles: int = Field(
         description="Ceiling on total implement passes per ticket across all review rounds. 0 disables.",
-        lt=10,
+        default=10,
         ge=0,
     )
     # Maximum number of times the implement stage may be entered (spawned)
@@ -424,7 +424,7 @@ class _StagesSettings(BaseModel):
     # one successful run.  Set to 0 to disable.
     implement_max_spawns_per_ticket: int = Field(
         description="Maximum times the implement stage may be entered per ticket. 0 disables.",
-        lt=3,
+        default=3,
         ge=0,
     )
     # How many model requests the review agent may make in one run
@@ -441,7 +441,7 @@ class _StagesSettings(BaseModel):
     # ~$0.03-0.09 and the per-ticket spend cap is the real backstop). See
     # ticket bc6d.
     review_request_limit: int = Field(
-        description="Per-call request cap for the review agent.", lt=80
+        description="Per-call request cap for the review agent.", default=80
     )
     # Maximum characters of the re-review prior-context block (prior
     # review comments + the implement rebuttal) fed to the review agent.
@@ -450,7 +450,7 @@ class _StagesSettings(BaseModel):
     # disables the cap.
     review_prior_context_max_chars: int = Field(
         description="Maximum characters of prior review context fed to the review agent. 0 disables.",
-        lt=8000,
+        default=8000,
         ge=0,
     )
     # Maximum characters of the combined git diff injected into the review
@@ -463,7 +463,7 @@ class _StagesSettings(BaseModel):
     # output reservation. 0 disables the cap.
     review_diff_max_chars: int = Field(
         description="Maximum characters of the combined git diff injected into the review prompt. 0 disables.",
-        lt=200_000,
+        default=200_000,
         ge=0,
     )
     # Output token budget for the review agent retry when the primary
@@ -474,7 +474,7 @@ class _StagesSettings(BaseModel):
     # output-exhaustion retry (falls straight to NEEDS_DISCUSSION).
     review_output_token_budget: int = Field(
         description="Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
-        lt=65536,
+        default=65536,
         ge=0,
     )
     # Maximum number of out-of-scope TEXT files fed into the scope-triage
@@ -491,7 +491,7 @@ class _StagesSettings(BaseModel):
     )
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(
-        description="Per-call request cap for the pre-refine triage agent.", lt=8
+        description="Per-call request cap for the pre-refine triage agent.", default=8
     )
 
     # --- retrospect stage (done -> reviewed) ---
@@ -499,7 +499,7 @@ class _StagesSettings(BaseModel):
     # human-gate-after-refine exists, that draft auto-flows to done and
     # is retrospected again — set False to analyse without spawning.
     retrospect_spawn_drafts: bool = Field(
-        description="When true, retrospect may file improvement draft tickets.", lt=True
+        description="When true, retrospect may file improvement draft tickets.", default=True
     )
     # When True, retrospect files a draft ticket per AGENT.md
     # proposal on the originating repo's board.
@@ -561,7 +561,7 @@ class _StagesSettings(BaseModel):
     # (cheapest), the default; raising it costs more and is opt-in only.
     trace_review_model_level: int = Field(
         description="Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
-        lt=1,
+        default=1,
         ge=1,
         le=3,
     )
@@ -570,14 +570,14 @@ class _StagesSettings(BaseModel):
     # Set False to force all refines through the default level.
     refine_trivial_routing_enabled: bool = Field(
         description="When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
-        lt=True,
+        default=True,
     )
     # Model level used for trivial-scope refines.  Default 3 = flat-cost
     # Claude subscription (marginal $0).  Set to 1 or 2 to roll back to
     # pay-per-token DeepSeek (OpenRouter, ~$0.0002+/run).
     refine_trivial_model_level: int = Field(
         description="Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
-        lt=3,
+        default=3,
         ge=1,
         le=3,
     )
@@ -587,7 +587,7 @@ class _StagesSettings(BaseModel):
     # consumes this; DeepSeek levels 1/2 ignore it.
     refine_trivial_subscription_model: str = Field(
         description="Claude model alias for trivial/forced-cheap refines on the subscription tier.",
-        lt="sonnet",
+        default="sonnet",
     )
     # When True (default), non-trivial level-3 refines route to a cheaper
     # Claude alias (sonnet) for "simple" tickets and keep Opus only for
@@ -595,19 +595,19 @@ class _StagesSettings(BaseModel):
     # transport.  Set False for a clean rollback to Opus-always.
     refine_subscription_tier_routing_enabled: bool = Field(
         description="When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
-        lt=True,
+        default=True,
     )
     # Claude model alias for non-escalated level-3 refines (complexity="simple").
     # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
     refine_subscription_model_default: str = Field(
         description="Claude model alias for non-escalated level-3 refines (complexity=simple).",
-        lt="sonnet",
+        default="sonnet",
     )
     # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
     # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
     refine_subscription_model_complex: str = Field(
         description="Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
-        lt="opus",
+        default="opus",
     )
     # When True (default), a non-trivial level-3 refine that WOULD route to
     # Opus (complexity="needs-exploration") is downgraded to a cheaper Claude
@@ -617,14 +617,14 @@ class _StagesSettings(BaseModel):
     # clean rollback to the prior simple/complex binary.
     refine_findings_downgrade_enabled: bool = Field(
         description="When true, Opus refines with substantial triage findings downgrade to a cheaper model.",
-        lt=True,
+        default=True,
     )
     # Minimum stripped-character length of the triage exploration findings for
     # the Opus->cheaper downgrade above to fire. Below this, findings are
     # treated as insufficient and Opus is kept.
     refine_findings_downgrade_min_chars: int = Field(
         description="Minimum stripped-character length of triage findings for the Opus-to-cheaper downgrade.",
-        lt=150,
+        default=150,
         ge=0,
     )
     # Claude model alias used when the findings-present downgrade fires.
@@ -632,7 +632,7 @@ class _StagesSettings(BaseModel):
     # the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
     refine_subscription_model_findings: str = Field(
         description="Claude model alias used when the findings-present downgrade fires.",
-        lt="sonnet",
+        default="sonnet",
     )
     # Maximum number of "changes requested" re-refine rounds before the
     # refine agent is forced to the cheap model (``refine_trivial_model_level``)
@@ -641,7 +641,7 @@ class _StagesSettings(BaseModel):
     # Opus unless already caught by trivial-scope routing.
     max_re_refine_cycles_before_cheap: int = Field(
         description="Sendback re-refine rounds before forcing the cheap model. 0 disables.",
-        lt=2,
+        default=2,
         ge=0,
     )
     # Per-ticket ceiling on total refine passes before escalating to BLOCKED
@@ -650,7 +650,7 @@ class _StagesSettings(BaseModel):
     # quota without converging.  Set to 0 to disable the cap entirely.
     max_refine_passes_per_ticket: int = Field(
         description="Per-ticket ceiling on total refine passes before escalating to BLOCKED. 0 disables.",
-        lt=3,
+        default=3,
         ge=0,
     )
     # When True, a refine run re-entered after an operator sendback
@@ -660,7 +660,7 @@ class _StagesSettings(BaseModel):
     # from scratch.
     refine_delta_reuse_enabled: bool = Field(
         description="When true, re-refines reuse the prior description.md and apply only the operator's delta.",
-        lt=True,
+        default=True,
     )
     # When True, retry/audit/re-refine passes on the same ticket receive
     # only the delta (failing item + minimal spec) rather than the full
@@ -670,7 +670,7 @@ class _StagesSettings(BaseModel):
     # OpenRouter and helping subscription stages stay under plan ceilings.
     delta_context_retry_enabled: bool = Field(
         description="When true, retry/audit/re-refine passes receive only the delta rather than full context.",
-        lt=True,
+        default=True,
     )
     # ---------- trace inspector dynamic budget ----------
     # Floor for the tools-on request budget.  Even a tiny trace gets
@@ -793,7 +793,7 @@ class _StagesSettings(BaseModel):
     # stages and may want different policies.
     trace_review_dedup_lookback_days: int = Field(
         description="Recency window (days) for pre-filing duplicate check in trace-review.",
-        lt=7,
+        default=7,
     )
     # Recency window (days) for the advisory pre-filing duplicate check in
     # epic decomposition (``dedup.find_child_overlaps``).  A proposed child
@@ -802,7 +802,7 @@ class _StagesSettings(BaseModel):
     # so the epic-decomposition policy can diverge.
     epic_dedup_lookback_days: int = Field(
         description="Recency window (days) for advisory duplicate detection in epic decomposition.",
-        lt=7,
+        default=7,
     )
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
@@ -814,14 +814,14 @@ class _StagesSettings(BaseModel):
     # timer exists only to observe the external merge event.
     merge_poll_seconds: int = Field(
         description="Re-check cadence (seconds) for human_mr_approval (PR open) waiting for external merge.",
-        lt=120,
+        default=120,
         gt=0,
     )
     # When true (default), the workspace's clone (repo/) is removed on
     # close to save disk space.
     prune_clone_on_close: bool = Field(
         description="When true, the workspace clone (repo/) is removed on ticket close.",
-        lt=True,
+        default=True,
     )
     # Maximum number of terminal-state tickets (CLOSED, ANSWERED,
     # EPIC_CLOSED) to retain.  When a ticket transitions to a terminal
@@ -830,7 +830,7 @@ class _StagesSettings(BaseModel):
     # active (non-terminal) child.  Set to 0 to disable purging.
     max_archived_tickets: int = Field(
         description="Maximum terminal-state tickets to retain. 0 disables purging.",
-        lt=40,
+        default=40,
         ge=0,
     )
 
@@ -841,10 +841,10 @@ class _StagesSettings(BaseModel):
     # and (c) runs PRAGMA optimize to reclaim freed pages.
     db_maintenance_periodic: bool = Field(
         description="When true, run periodic DB maintenance (archive purge, event capping, PRAGMA optimize).",
-        lt=True,
+        default=True,
     )
     db_maintenance_interval_seconds: int = Field(
-        description="Seconds between periodic DB maintenance passes.", lt=86400
+        description="Seconds between periodic DB maintenance passes.", default=86400
     )
 
     # --- sandbox reaper (periodic orphan-container cleanup) ---
@@ -857,17 +857,17 @@ class _StagesSettings(BaseModel):
     # enforced). The startup reaper in lifespan is the complementary guard.
     sandbox_reaper_periodic: bool = Field(
         description="When true, periodically force-remove leaked/orphaned sandbox containers.",
-        lt=True,
+        default=True,
     )
     sandbox_reaper_interval_seconds: int = Field(
-        description="Seconds between sandbox reaper passes.", lt=3600
+        description="Seconds between sandbox reaper passes.", default=3600
     )
     # Maximum TicketEvent rows to retain per non-terminal ticket.
     # Events beyond this cap are pruned (oldest first).  Set to 0 to disable
     # per-ticket event capping entirely (archive purge still runs).
     max_events_per_ticket: int = Field(
         description="Maximum TicketEvent rows per non-terminal ticket. 0 disables capping.",
-        lt=200,
+        default=200,
         ge=0,
     )
 
@@ -877,7 +877,7 @@ class _StagesSettings(BaseModel):
     # discussions are preserved. Set to 0 to disable comment capping.
     max_comments_per_ticket: int = Field(
         description="Maximum Comment rows per non-terminal ticket. Open threads are never pruned. 0 disables.",
-        lt=500,
+        default=500,
         ge=0,
     )
 
@@ -888,7 +888,7 @@ class _StagesSettings(BaseModel):
     # rebase attempts per ticket before escalating to BLOCKED.
     rebase_max_attempts: int = Field(
         description="Maximum rebase attempts per ticket before escalating to BLOCKED.",
-        lt=3,
+        default=3,
         ge=0,
     )
 
@@ -907,7 +907,7 @@ class _StagesSettings(BaseModel):
     # agent's verify loop (it would never be allowed to wait).
     ci_fix_max_iterations: int = Field(
         description="Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-        lt=5,
+        default=5,
         ge=0,
     )
 
@@ -917,12 +917,12 @@ class _StagesSettings(BaseModel):
     # longer uses these — its budget is ci_fix_max_iterations.
     ci_fix_max_attempts: int = Field(
         description="Multi-repo merge path only: max ci-fix attempts per cycle.",
-        lt=2,
+        default=2,
         ge=0,
     )
     ci_fix_max_cycles: int = Field(
         description="Multi-repo merge path only: max ci-fix cycles per ticket.",
-        lt=3,
+        default=3,
         ge=0,
     )
 
@@ -933,7 +933,7 @@ class _StagesSettings(BaseModel):
     # resolves.  Set to 0 to disable the check entirely.
     ci_fix_max_identical_failures: int = Field(
         description="Consecutive identical CI failure cycles before escalating. 0 disables.",
-        lt=2,
+        default=2,
         ge=0,
     )
 
@@ -946,7 +946,7 @@ class _StagesSettings(BaseModel):
     # loop.  Set to 0 to disable the check entirely.
     deliver_max_identical_blocks: int = Field(
         description="Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
-        lt=2,
+        default=2,
         ge=0,
     )
 
@@ -954,7 +954,7 @@ class _StagesSettings(BaseModel):
     # conclusion while a run is in progress.
     ci_fix_wait_poll_interval_s: float = Field(
         description="Seconds between CI conclusion polls during wait_for_ci.",
-        lt=30.0,
+        default=30.0,
         gt=0,
     )
 
@@ -963,7 +963,7 @@ class _StagesSettings(BaseModel):
     # default because a full CI run (build + tests) can take many minutes.
     ci_fix_wait_timeout_s: float = Field(
         description="Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
-        lt=1500.0,
+        default=1500.0,
         gt=0,
     )
 
@@ -974,7 +974,7 @@ class _StagesSettings(BaseModel):
     # triggers the fallback model (if configured).  Set to 0 to disable.
     ci_fix_request_limit: int = Field(
         description="Per-run request budget for the ci-fix agent. 0 disables.",
-        lt=120,
+        default=120,
         ge=0,
     )
 
@@ -988,7 +988,7 @@ class _StagesSettings(BaseModel):
     # plus 2 re-runs (~2 re-implement cycles). Set to 0 to disable.
     ticket_state_cycle_limit: int = Field(
         description="Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
-        lt=3,
+        default=3,
         ge=0,
     )
 
@@ -999,7 +999,7 @@ class _StagesSettings(BaseModel):
     # disable this automatic unblock path.
     codeql_fp_triage_enabled: bool = Field(
         description="When true, ci_fix may invoke codeql_fp_triage to dismiss high-confidence CodeQL false positives.",
-        lt=True,
+        default=True,
     )
 
     # Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without
@@ -1011,7 +1011,7 @@ class _StagesSettings(BaseModel):
     # disable.  Default 6 (covers e.g. 3 rebase + 3 ci_fix cycles).
     auto_fix_max_cycles: int = Field(
         description="Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without green CI. 0 disables.",
-        lt=6,
+        default=6,
         ge=0,
     )
 
@@ -1023,14 +1023,14 @@ class _StagesSettings(BaseModel):
     # to disable.  Default 3.
     ping_pong_max_alternations: int = Field(
         description="Ceiling on REBASING to FIXING_CI alternations before escalating. 0 disables.",
-        lt=3,
+        default=3,
         ge=0,
     )
 
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(
         description="Maximum review-revision attempts per ticket before escalating to BLOCKED.",
-        lt=2,
+        default=2,
         ge=1,
     )
 
@@ -1039,7 +1039,7 @@ class _StagesSettings(BaseModel):
     # (see config/repos.yaml).  ci_log_max_bytes stays global — it is an
     # operational cap, not a per-repo policy decision.
     ci_log_max_bytes: int = Field(
-        description="Maximum bytes of CI log output to capture per check run.", lt=65536
+        description="Maximum bytes of CI log output to capture per check run.", default=65536
     )
 
     # --- langfuse cleanup (caps trace count for the shared workspace project) ---
@@ -1048,12 +1048,12 @@ class _StagesSettings(BaseModel):
     # langfuse_cleanup_max_traces rows. Default True (enabled out of the box).
     langfuse_cleanup_periodic: bool = Field(
         description="When true, run periodic Langfuse trace cleanup (delete oldest traces).",
-        lt=True,
+        default=True,
     )
     langfuse_cleanup_interval_seconds: int = Field(
-        description="Seconds between Langfuse trace cleanup passes.", lt=86400
+        description="Seconds between Langfuse trace cleanup passes.", default=86400
     )
     langfuse_cleanup_max_traces: int = Field(
         description="Maximum traces to retain in the Langfuse project during cleanup.",
-        lt=5000,
+        default=5000,
     )

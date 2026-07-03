@@ -1,205 +1,205 @@
 {
+  "$defs": {
+    "CrossRepoTarget": {
+      "description": "Cross-repo target: routes contributions from this repo to a\ndifferent (forked/external) repository via a fork-contribution\nworkflow.",
+      "properties": {
+        "auto_fork": {
+          "default": false,
+          "description": "When true, automatically create the fork via the forge API before pushing.",
+          "title": "Auto Fork",
+          "type": "boolean"
+        },
+        "base_branch": {
+          "default": "main",
+          "description": "The upstream branch to target in the cross-fork PR (default: main).",
+          "title": "Base Branch",
+          "type": "string"
+        },
+        "fork_remote_url": {
+          "description": "The fork repository URL where the branch is pushed before opening a cross-fork PR.",
+          "title": "Fork Remote Url",
+          "type": "string"
+        },
+        "upstream_remote_url": {
+          "description": "The upstream repository URL that PRs are opened against.",
+          "title": "Upstream Remote Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "upstream_remote_url",
+        "fork_remote_url"
+      ],
+      "title": "CrossRepoTarget",
+      "type": "object"
+    },
+    "RepoConfig": {
+      "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
+      "properties": {
+        "board_id": {
+          "description": "Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill').",
+          "title": "Board Id",
+          "type": "string"
+        },
+        "ci_monitor_enabled": {
+          "default": true,
+          "description": "When true, the CI monitor polls this repo's main-branch CI status periodically.",
+          "title": "Ci Monitor Enabled",
+          "type": "boolean"
+        },
+        "ci_monitor_interval_seconds": {
+          "default": 900,
+          "description": "Seconds between CI monitor polls for this repo (minimum 60).",
+          "title": "Ci Monitor Interval Seconds",
+          "type": "integer"
+        },
+        "cross_repo_target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CrossRepoTarget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery."
+        },
+        "deployed_log_folder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
+          "title": "Deployed Log Folder"
+        },
+        "forge_remote_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Git remote URL for this repo's forge (e.g. https://github.com/owner/repo).",
+          "title": "Forge Remote Url"
+        },
+        "langfuse_base_url": {
+          "default": "https://cloud.langfuse.com",
+          "description": "Langfuse instance base URL (default: https://cloud.langfuse.com).",
+          "title": "Langfuse Base Url",
+          "type": "string"
+        },
+        "langfuse_project_id": {
+          "default": "",
+          "description": "Langfuse project ID for trace attribution (populated from global secrets).",
+          "title": "Langfuse Project Id",
+          "type": "string"
+        },
+        "langfuse_project_name": {
+          "description": "Langfuse project name for trace attribution (populated from global secrets).",
+          "title": "Langfuse Project Name",
+          "type": "string"
+        },
+        "langfuse_public_key": {
+          "description": "Langfuse public key for trace observability (populated from global secrets).",
+          "title": "Langfuse Public Key",
+          "type": "string"
+        },
+        "langfuse_secret_key": {
+          "description": "Langfuse secret key for trace observability (populated from global secrets).",
+          "title": "Langfuse Secret Key",
+          "type": "string"
+        },
+        "max_concurrency": {
+          "default": 1,
+          "description": "Maximum number of tickets from this repo processed in parallel (minimum 1).",
+          "title": "Max Concurrency",
+          "type": "integer"
+        },
+        "max_inflight_prs": {
+          "default": 3,
+          "description": "Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
+          "title": "Max Inflight Prs",
+          "type": "integer"
+        },
+        "openrouter_api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-repo OpenRouter API key override. Unset falls back to the global key.",
+          "title": "Openrouter Api Key"
+        },
+        "repo_id": {
+          "description": "Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml.",
+          "title": "Repo Id",
+          "type": "string"
+        },
+        "sandbox_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-repo Docker sandbox image override. Unset falls back to settings.sandbox_image.",
+          "title": "Sandbox Image"
+        },
+        "source": {
+          "default": "config",
+          "description": "Source discriminator: 'config' for operator-configured entries, 'auto' for machine-registered overlay entries.",
+          "enum": [
+            "config",
+            "auto"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "working_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pinned working branch for member repos. When set, branches fork from and PR into this branch instead of the default.",
+          "title": "Working Branch"
+        }
+      },
+      "required": [
+        "repo_id",
+        "board_id",
+        "langfuse_project_name",
+        "langfuse_public_key",
+        "langfuse_secret_key"
+      ],
+      "title": "RepoConfig",
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "repos": {
-      "$defs": {
-        "CrossRepoTarget": {
-          "description": "Declarative *cross-repo target* for a repo whose deliverable\nbelongs in a different (forked/external) repository.\n\nWhen a :class:`RepoConfig` carries one of these, the deliver/merge\nstages drive a fork-contribution workflow: the ticket's branch is\npushed to ``fork_remote_url`` and a PR is opened *fork \u2192 upstream*\nagainst ``base_branch`` on ``upstream_remote_url`` (the merge\ntarget Y), instead of pushing to the clone remote.\n\nFields:\n- ``upstream_remote_url`` \u2014 the repo PRs are opened against (Y).\n- ``fork_remote_url`` \u2014 the fork the branch is pushed to.\n- ``base_branch`` \u2014 the upstream branch to PR into (mirrors\n  ``forge_target_branch``).\n- ``auto_fork`` \u2014 when True, ensure the fork exists via\n  ``Forge.fork_repo()`` before push.",
-          "properties": {
-            "auto_fork": {
-              "default": false,
-              "description": "When true, automatically create the fork via the forge API before pushing.",
-              "title": "Auto Fork",
-              "type": "boolean"
-            },
-            "base_branch": {
-              "default": "main",
-              "description": "The upstream branch to target in the cross-fork PR (default: main).",
-              "title": "Base Branch",
-              "type": "string"
-            },
-            "fork_remote_url": {
-              "description": "The fork repository URL where the branch is pushed before opening a cross-fork PR.",
-              "title": "Fork Remote Url",
-              "type": "string"
-            },
-            "upstream_remote_url": {
-              "description": "The upstream repository URL that PRs are opened against.",
-              "title": "Upstream Remote Url",
-              "type": "string"
-            }
-          },
-          "required": [
-            "upstream_remote_url",
-            "fork_remote_url"
-          ],
-          "title": "CrossRepoTarget",
-          "type": "object"
-        },
-        "RepoConfig": {
-          "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
-          "properties": {
-            "board_id": {
-              "description": "Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill').",
-              "title": "Board Id",
-              "type": "string"
-            },
-            "ci_monitor_enabled": {
-              "default": true,
-              "description": "When true, the CI monitor polls this repo's main-branch CI status periodically.",
-              "title": "Ci Monitor Enabled",
-              "type": "boolean"
-            },
-            "ci_monitor_interval_seconds": {
-              "default": 900,
-              "description": "Seconds between CI monitor polls for this repo (minimum 60).",
-              "title": "Ci Monitor Interval Seconds",
-              "type": "integer"
-            },
-            "cross_repo_target": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/CrossRepoTarget"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery."
-            },
-            "deployed_log_folder": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
-              "title": "Deployed Log Folder"
-            },
-            "forge_remote_url": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Git remote URL for this repo's forge (e.g. https://github.com/owner/repo).",
-              "title": "Forge Remote Url"
-            },
-            "langfuse_base_url": {
-              "default": "https://cloud.langfuse.com",
-              "description": "Langfuse instance base URL (default: https://cloud.langfuse.com).",
-              "title": "Langfuse Base Url",
-              "type": "string"
-            },
-            "langfuse_project_id": {
-              "default": "",
-              "description": "Langfuse project ID for trace attribution (populated from global secrets).",
-              "title": "Langfuse Project Id",
-              "type": "string"
-            },
-            "langfuse_project_name": {
-              "description": "Langfuse project name for trace attribution (populated from global secrets).",
-              "title": "Langfuse Project Name",
-              "type": "string"
-            },
-            "langfuse_public_key": {
-              "description": "Langfuse public key for trace observability (populated from global secrets).",
-              "title": "Langfuse Public Key",
-              "type": "string"
-            },
-            "langfuse_secret_key": {
-              "description": "Langfuse secret key for trace observability (populated from global secrets).",
-              "title": "Langfuse Secret Key",
-              "type": "string"
-            },
-            "max_concurrency": {
-              "default": 1,
-              "description": "Maximum number of tickets from this repo processed in parallel (minimum 1).",
-              "title": "Max Concurrency",
-              "type": "integer"
-            },
-            "max_inflight_prs": {
-              "default": 3,
-              "description": "Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
-              "title": "Max Inflight Prs",
-              "type": "integer"
-            },
-            "openrouter_api_key": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Per-repo OpenRouter API key override. Unset falls back to the global key.",
-              "title": "Openrouter Api Key"
-            },
-            "repo_id": {
-              "description": "Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml.",
-              "title": "Repo Id",
-              "type": "string"
-            },
-            "sandbox_image": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Per-repo Docker sandbox image override. Unset falls back to settings.sandbox_image.",
-              "title": "Sandbox Image"
-            },
-            "source": {
-              "default": "config",
-              "description": "Source discriminator: 'config' for operator-configured entries, 'auto' for machine-registered overlay entries.",
-              "enum": [
-                "config",
-                "auto"
-              ],
-              "title": "Source",
-              "type": "string"
-            },
-            "working_branch": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Pinned working branch for member repos. When set, branches fork from and PR into this branch instead of the default.",
-              "title": "Working Branch"
-            }
-          },
-          "required": [
-            "repo_id",
-            "board_id",
-            "langfuse_project_name",
-            "langfuse_public_key",
-            "langfuse_secret_key"
-          ],
-          "title": "RepoConfig",
-          "type": "object"
-        }
-      },
-      "description": "Container holding all :class:`RepoConfig` entries keyed by repo ID.",
+      "description": "Repository registry: maps each repo ID to its per-repo\nconfiguration (board identity, forge remote, Langfuse credentials,\nCI monitor settings).",
       "properties": {
         "meta": {
           "anyOf": [
@@ -229,7 +229,7 @@
       "type": "object"
     },
     "secrets": {
-      "description": "API keys, tokens, and credentials for external services\n(OpenRouter, forge, Langfuse, ntfy, etc.).\n\nLoaded from the ``secrets:`` block of the single mill config\nfile (``config/config.json``, else ``config/config.example.json``).\nA value equal to the literal ``SECRET`` sentinel (used throughout\n``config.example.json``) is treated as unset, so the field falls\nback to its ``None`` default.",
+      "description": "API keys, tokens, and credentials for external services\n(OpenRouter, forge, Langfuse, ntfy, etc.).",
       "properties": {
         "forge_repo_create_token": {
           "anyOf": [
@@ -447,7 +447,7 @@
     },
     "settings": {
       "additionalProperties": false,
-      "description": "Central Pydantic configuration model for robotsix-mill.\n\nAll fields are sourced from ``os.environ`` and a single JSON config\nfile (``config/config.json`` or the committed\n``config/config.example.json`` template).  Conventional keys like\n``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain\ncompatible with the reference projects.  Mill-specific settings use\nthe ``MILL_`` / ``FORGE_`` prefix convention and declare explicit\n``Field(alias=...)`` values.",
+      "description": "Runtime settings for robotsix-mill: concurrency limits,\nAPI endpoints, feature toggles, stage-level controls,\nsandbox configuration, and agent budgets.",
       "properties": {
         "FORGE_AUTH": {
           "default": "token",
@@ -623,8 +623,8 @@
           "title": "Mill Investigation Workspace"
         },
         "MILL_LINT_ON_EDIT": {
+          "default": true,
           "description": "When true, pre-write Python syntax check on write_file/edit_file calls.",
-          "lt": true,
           "title": "Mill Lint On Edit",
           "type": "boolean"
         },
@@ -644,8 +644,8 @@
           "type": "integer"
         },
         "MILL_PR_SUMMARY_ENABLED": {
+          "default": false,
           "description": "When true, the deliver stage generates a structured PR body from the diff.",
-          "lt": false,
           "title": "Mill Pr Summary Enabled",
           "type": "boolean"
         },
@@ -666,8 +666,8 @@
           "type": "boolean"
         },
         "MILL_SCOPE_TRIAGE_ENABLED": {
+          "default": true,
           "description": "When true, a cheap scope-triage LLM inspects out-of-scope file changes before blocking.",
-          "lt": true,
           "title": "Mill Scope Triage Enabled",
           "type": "boolean"
         },
@@ -768,27 +768,27 @@
           "type": "integer"
         },
         "auto_approve_enabled": {
+          "default": false,
           "description": "When true, obviously-safe changes skip the human approval gate.",
-          "lt": false,
           "title": "Auto Approve Enabled",
           "type": "boolean"
         },
         "auto_fix_max_cycles": {
+          "default": 6,
           "description": "Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without green CI. 0 disables.",
-          "exclusiveMaximum": 6,
           "minimum": 0,
           "title": "Auto Fix Max Cycles",
           "type": "integer"
         },
         "auto_merge_enabled": {
+          "default": false,
           "description": "When true, the merge stage auto-merges green PRs via the forge API.",
-          "lt": false,
           "title": "Auto Merge Enabled",
           "type": "boolean"
         },
         "auto_merge_main_debt_detection_enabled": {
+          "default": true,
           "description": "When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
-          "lt": true,
           "title": "Auto Merge Main Debt Detection Enabled",
           "type": "boolean"
         },
@@ -842,29 +842,29 @@
           "type": "boolean"
         },
         "ci_fix_max_attempts": {
+          "default": 2,
           "description": "Multi-repo merge path only: max ci-fix attempts per cycle.",
-          "exclusiveMaximum": 2,
           "minimum": 0,
           "title": "Ci Fix Max Attempts",
           "type": "integer"
         },
         "ci_fix_max_cycles": {
+          "default": 3,
           "description": "Multi-repo merge path only: max ci-fix cycles per ticket.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Ci Fix Max Cycles",
           "type": "integer"
         },
         "ci_fix_max_identical_failures": {
+          "default": 2,
           "description": "Consecutive identical CI failure cycles before escalating. 0 disables.",
-          "exclusiveMaximum": 2,
           "minimum": 0,
           "title": "Ci Fix Max Identical Failures",
           "type": "integer"
         },
         "ci_fix_max_iterations": {
+          "default": 5,
           "description": "Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-          "exclusiveMaximum": 5,
           "minimum": 0,
           "title": "Ci Fix Max Iterations",
           "type": "integer"
@@ -884,29 +884,29 @@
           "title": "Ci Fix Memory Path"
         },
         "ci_fix_request_limit": {
+          "default": 120,
           "description": "Per-run request budget for the ci-fix agent. 0 disables.",
-          "exclusiveMaximum": 120,
           "minimum": 0,
           "title": "Ci Fix Request Limit",
           "type": "integer"
         },
         "ci_fix_wait_poll_interval_s": {
+          "default": 30.0,
           "description": "Seconds between CI conclusion polls during wait_for_ci.",
-          "exclusiveMaximum": 30.0,
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Poll Interval S",
           "type": "number"
         },
         "ci_fix_wait_timeout_s": {
+          "default": 1500.0,
           "description": "Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
-          "exclusiveMaximum": 1500.0,
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Timeout S",
           "type": "number"
         },
         "ci_log_max_bytes": {
+          "default": 65536,
           "description": "Maximum bytes of CI log output to capture per check run.",
-          "exclusiveMaximum": 65536,
           "title": "Ci Log Max Bytes",
           "type": "integer"
         },
@@ -931,8 +931,8 @@
           "type": "boolean"
         },
         "codeql_fp_triage_enabled": {
+          "default": true,
           "description": "When true, ci_fix may invoke codeql_fp_triage to dismiss high-confidence CodeQL false positives.",
-          "lt": true,
           "title": "Codeql Fp Triage Enabled",
           "type": "boolean"
         },
@@ -944,8 +944,8 @@
           "type": "integer"
         },
         "comments_after_body": {
+          "default": false,
           "description": "When true, the board detail drawer renders description.md below comments.",
-          "lt": false,
           "title": "Comments After Body",
           "type": "boolean"
         },
@@ -1082,14 +1082,14 @@
           "type": "string"
         },
         "db_maintenance_interval_seconds": {
+          "default": 86400,
           "description": "Seconds between periodic DB maintenance passes.",
-          "exclusiveMaximum": 86400,
           "title": "Db Maintenance Interval Seconds",
           "type": "integer"
         },
         "db_maintenance_periodic": {
+          "default": true,
           "description": "When true, run periodic DB maintenance (archive purge, event capping, PRAGMA optimize).",
-          "lt": true,
           "title": "Db Maintenance Periodic",
           "type": "boolean"
         },
@@ -1132,21 +1132,21 @@
           "type": "string"
         },
         "delete_branch_on_merge": {
+          "default": true,
           "description": "When true, the merge stage deletes the per-ticket head branch on the forge after merge.",
-          "lt": true,
           "title": "Delete Branch On Merge",
           "type": "boolean"
         },
         "deliver_max_identical_blocks": {
+          "default": 2,
           "description": "Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
-          "exclusiveMaximum": 2,
           "minimum": 0,
           "title": "Deliver Max Identical Blocks",
           "type": "integer"
         },
         "delta_context_retry_enabled": {
+          "default": true,
           "description": "When true, retry/audit/re-refine passes receive only the delta rather than full context.",
-          "lt": true,
           "title": "Delta Context Retry Enabled",
           "type": "boolean"
         },
@@ -1228,8 +1228,8 @@
           "type": "integer"
         },
         "enable_repo_creation": {
+          "default": false,
           "description": "When true, Forge.create_repo() is permitted to create repositories via the forge API.",
-          "lt": false,
           "title": "Enable Repo Creation",
           "type": "boolean"
         },
@@ -1246,8 +1246,8 @@
           "type": "boolean"
         },
         "epic_dedup_lookback_days": {
+          "default": 7,
           "description": "Recency window (days) for advisory duplicate detection in epic decomposition.",
-          "exclusiveMaximum": 7,
           "title": "Epic Dedup Lookback Days",
           "type": "integer"
         },
@@ -1266,8 +1266,8 @@
           "type": "integer"
         },
         "fetch_image": {
+          "default": "curlimages/curl:8.17.0",
           "description": "Docker image used for isolated web_fetch calls (curl-based, network-only, no repo mount).",
-          "lt": "curlimages/curl:8.17.0",
           "title": "Fetch Image",
           "type": "string"
         },
@@ -1284,8 +1284,8 @@
           "type": "boolean"
         },
         "freshness_gate_enabled": {
+          "default": false,
           "description": "When true, a pre-refine gate verifies cited file paths and line ranges still exist on HEAD.",
-          "lt": false,
           "title": "Freshness Gate Enabled",
           "type": "boolean"
         },
@@ -1316,8 +1316,8 @@
           "type": "boolean"
         },
         "implement_max_spawns_per_ticket": {
+          "default": 3,
           "description": "Maximum times the implement stage may be entered per ticket. 0 disables.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Implement Max Spawns Per Ticket",
           "type": "integer"
@@ -1337,20 +1337,20 @@
           "title": "Implement Memory Path"
         },
         "langfuse_cleanup_interval_seconds": {
+          "default": 86400,
           "description": "Seconds between Langfuse trace cleanup passes.",
-          "exclusiveMaximum": 86400,
           "title": "Langfuse Cleanup Interval Seconds",
           "type": "integer"
         },
         "langfuse_cleanup_max_traces": {
+          "default": 5000,
           "description": "Maximum traces to retain in the Langfuse project during cleanup.",
-          "exclusiveMaximum": 5000,
           "title": "Langfuse Cleanup Max Traces",
           "type": "integer"
         },
         "langfuse_cleanup_periodic": {
+          "default": true,
           "description": "When true, run periodic Langfuse trace cleanup (delete oldest traces).",
-          "lt": true,
           "title": "Langfuse Cleanup Periodic",
           "type": "boolean"
         },
@@ -1389,28 +1389,28 @@
           "type": "integer"
         },
         "maintenance_triage_enabled": {
+          "default": true,
           "description": "When true, operational-action drafts route directly to MAINTENANCE.",
-          "lt": true,
           "title": "Maintenance Triage Enabled",
           "type": "boolean"
         },
         "max_archived_tickets": {
+          "default": 40,
           "description": "Maximum terminal-state tickets to retain. 0 disables purging.",
-          "exclusiveMaximum": 40,
           "minimum": 0,
           "title": "Max Archived Tickets",
           "type": "integer"
         },
         "max_comments_per_ticket": {
+          "default": 500,
           "description": "Maximum Comment rows per non-terminal ticket. Open threads are never pruned. 0 disables.",
-          "exclusiveMaximum": 500,
           "minimum": 0,
           "title": "Max Comments Per Ticket",
           "type": "integer"
         },
         "max_events_per_ticket": {
+          "default": 200,
           "description": "Maximum TicketEvent rows per non-terminal ticket. 0 disables capping.",
-          "exclusiveMaximum": 200,
           "minimum": 0,
           "title": "Max Events Per Ticket",
           "type": "integer"
@@ -1423,8 +1423,8 @@
           "type": "integer"
         },
         "max_implement_review_cycles": {
+          "default": 10,
           "description": "Ceiling on total implement passes per ticket across all review rounds. 0 disables.",
-          "exclusiveMaximum": 10,
           "minimum": 0,
           "title": "Max Implement Review Cycles",
           "type": "integer"
@@ -1444,8 +1444,8 @@
           "type": "number"
         },
         "max_re_refine_cycles_before_cheap": {
+          "default": 2,
           "description": "Sendback re-refine rounds before forcing the cheap model. 0 disables.",
-          "exclusiveMaximum": 2,
           "minimum": 0,
           "title": "Max Re Refine Cycles Before Cheap",
           "type": "integer"
@@ -1458,8 +1458,8 @@
           "type": "integer"
         },
         "max_refine_passes_per_ticket": {
+          "default": 3,
           "description": "Per-ticket ceiling on total refine passes before escalating to BLOCKED. 0 disables.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Max Refine Passes Per Ticket",
           "type": "integer"
@@ -1504,8 +1504,8 @@
           "type": "boolean"
         },
         "merge_poll_seconds": {
+          "default": 120,
           "description": "Re-check cadence (seconds) for human_mr_approval (PR open) waiting for external merge.",
-          "exclusiveMaximum": 120,
           "exclusiveMinimum": 0,
           "title": "Merge Poll Seconds",
           "type": "integer"
@@ -1555,8 +1555,8 @@
           "type": "string"
         },
         "obsolescence_gate_enabled": {
+          "default": false,
           "description": "When true, an LLM pre-refine gate re-evaluates whether a cited gap still exists on HEAD.",
-          "lt": false,
           "title": "Obsolescence Gate Enabled",
           "type": "boolean"
         },
@@ -1640,34 +1640,34 @@
           "type": "boolean"
         },
         "ping_pong_max_alternations": {
+          "default": 3,
           "description": "Ceiling on REBASING to FIXING_CI alternations before escalating. 0 disables.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Ping Pong Max Alternations",
           "type": "integer"
         },
         "prerequisite_gate_enabled": {
+          "default": true,
           "description": "When true, a pre-implement gate verifies declared import prerequisites are satisfiable.",
-          "lt": true,
           "title": "Prerequisite Gate Enabled",
           "type": "boolean"
         },
         "prune_clone_on_close": {
+          "default": true,
           "description": "When true, the workspace clone (repo/) is removed on ticket close.",
-          "lt": true,
           "title": "Prune Clone On Close",
           "type": "boolean"
         },
         "read_file_max_chars": {
+          "default": 50000,
           "description": "Character cap on implicit full read_file payloads. 0 disables.",
-          "exclusiveMaximum": 50000,
           "minimum": 0,
           "title": "Read File Max Chars",
           "type": "integer"
         },
         "rebase_max_attempts": {
+          "default": 3,
           "description": "Maximum rebase attempts per ticket before escalating to BLOCKED.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Rebase Max Attempts",
           "type": "integer"
@@ -1687,14 +1687,14 @@
           "title": "Rebase Memory Path"
         },
         "refine_advisory_dedup_enabled": {
+          "default": true,
           "description": "When true, a cheap advisory-dedup-verification gate runs after inflight-advisory phase.",
-          "lt": true,
           "title": "Refine Advisory Dedup Enabled",
           "type": "boolean"
         },
         "refine_delta_reuse_enabled": {
+          "default": true,
           "description": "When true, re-refines reuse the prior description.md and apply only the operator's delta.",
-          "lt": true,
           "title": "Refine Delta Reuse Enabled",
           "type": "boolean"
         },
@@ -1720,14 +1720,14 @@
           "type": "integer"
         },
         "refine_findings_downgrade_enabled": {
+          "default": true,
           "description": "When true, Opus refines with substantial triage findings downgrade to a cheaper model.",
-          "lt": true,
           "title": "Refine Findings Downgrade Enabled",
           "type": "boolean"
         },
         "refine_findings_downgrade_min_chars": {
+          "default": 150,
           "description": "Minimum stripped-character length of triage findings for the Opus-to-cheaper downgrade.",
-          "exclusiveMaximum": 150,
           "minimum": 0,
           "title": "Refine Findings Downgrade Min Chars",
           "type": "integer"
@@ -1761,14 +1761,14 @@
           "title": "Refine Memory Path"
         },
         "refine_mill_misroute_gate_enabled": {
+          "default": true,
           "description": "When true, drafts referencing mill-specific paths absent from checkout are redirected to the mill board.",
-          "lt": true,
           "title": "Refine Mill Misroute Gate Enabled",
           "type": "boolean"
         },
         "refine_prescriptive_spec_code_lines_threshold": {
+          "default": 50,
           "description": "Drafts with more than this many fenced code lines skip refine entirely.",
-          "exclusiveMaximum": 50,
           "title": "Refine Prescriptive Spec Code Lines Threshold",
           "type": "integer"
         },
@@ -1787,58 +1787,58 @@
           "type": "integer"
         },
         "refine_skip_llm_on_impl_ready_spec": {
+          "default": true,
           "description": "When true, implementation-ready specs skip the expensive LLM refine agent.",
-          "lt": true,
           "title": "Refine Skip Llm On Impl Ready Spec",
           "type": "boolean"
         },
         "refine_subscription_model_complex": {
+          "default": "opus",
           "description": "Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
-          "lt": "opus",
           "title": "Refine Subscription Model Complex",
           "type": "string"
         },
         "refine_subscription_model_default": {
+          "default": "sonnet",
           "description": "Claude model alias for non-escalated level-3 refines (complexity=simple).",
-          "lt": "sonnet",
           "title": "Refine Subscription Model Default",
           "type": "string"
         },
         "refine_subscription_model_findings": {
+          "default": "sonnet",
           "description": "Claude model alias used when the findings-present downgrade fires.",
-          "lt": "sonnet",
           "title": "Refine Subscription Model Findings",
           "type": "string"
         },
         "refine_subscription_tier_routing_enabled": {
+          "default": true,
           "description": "When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
-          "lt": true,
           "title": "Refine Subscription Tier Routing Enabled",
           "type": "boolean"
         },
         "refine_triage_enabled": {
+          "default": true,
           "description": "When true, a cheap triage LLM call runs before full refine for implementation-ready drafts.",
-          "lt": true,
           "title": "Refine Triage Enabled",
           "type": "boolean"
         },
         "refine_trivial_model_level": {
+          "default": 3,
           "description": "Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
-          "exclusiveMaximum": 3,
           "maximum": 3,
           "minimum": 1,
           "title": "Refine Trivial Model Level",
           "type": "integer"
         },
         "refine_trivial_routing_enabled": {
+          "default": true,
           "description": "When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
-          "lt": true,
           "title": "Refine Trivial Routing Enabled",
           "type": "boolean"
         },
         "refine_trivial_subscription_model": {
+          "default": "sonnet",
           "description": "Claude model alias for trivial/forced-cheap refines on the subscription tier.",
-          "lt": "sonnet",
           "title": "Refine Trivial Subscription Model",
           "type": "string"
         },
@@ -1851,22 +1851,22 @@
           "type": "number"
         },
         "refine_web_fetch_max_calls": {
+          "default": 5,
           "description": "Maximum real web_fetch calls across one refine trace.",
-          "exclusiveMaximum": 5,
           "minimum": 1,
           "title": "Refine Web Fetch Max Calls",
           "type": "integer"
         },
         "refine_web_fetch_max_total_bytes": {
+          "default": 500000,
           "description": "Maximum fetch bytes across one refine trace. 0 disables.",
-          "exclusiveMaximum": 500000,
           "minimum": 0,
           "title": "Refine Web Fetch Max Total Bytes",
           "type": "integer"
         },
         "refine_web_search_max_calls": {
+          "default": 5,
           "description": "Maximum web_search calls across one refine trace.",
-          "exclusiveMaximum": 5,
           "minimum": 1,
           "title": "Refine Web Search Max Calls",
           "type": "integer"
@@ -1886,8 +1886,8 @@
           "type": "integer"
         },
         "require_approval": {
+          "default": true,
           "description": "When true, refined tickets require human approval before implement stage.",
-          "lt": true,
           "title": "Require Approval",
           "type": "boolean"
         },
@@ -1920,60 +1920,60 @@
           "title": "Retrospect Memory Path"
         },
         "retrospect_spawn_drafts": {
+          "default": true,
           "description": "When true, retrospect may file improvement draft tickets.",
-          "lt": true,
           "title": "Retrospect Spawn Drafts",
           "type": "boolean"
         },
         "review_diff_max_chars": {
+          "default": 200000,
           "description": "Maximum characters of the combined git diff injected into the review prompt. 0 disables.",
-          "exclusiveMaximum": 200000,
           "minimum": 0,
           "title": "Review Diff Max Chars",
           "type": "integer"
         },
         "review_enabled": {
+          "default": false,
           "description": "When true, implement transitions to code_review before deliver.",
-          "lt": false,
           "title": "Review Enabled",
           "type": "boolean"
         },
         "review_feedback_enabled": {
+          "default": false,
           "description": "When true, the review-revision agent auto-implements requested PR changes.",
-          "lt": false,
           "title": "Review Feedback Enabled",
           "type": "boolean"
         },
         "review_max_rounds": {
+          "default": 3,
           "description": "Maximum CODE_REVIEW to READY to DOCUMENTING to CODE_REVIEW round-trips before escalation.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Review Max Rounds",
           "type": "integer"
         },
         "review_output_token_budget": {
+          "default": 65536,
           "description": "Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
-          "exclusiveMaximum": 65536,
           "minimum": 0,
           "title": "Review Output Token Budget",
           "type": "integer"
         },
         "review_prior_context_max_chars": {
+          "default": 8000,
           "description": "Maximum characters of prior review context fed to the review agent. 0 disables.",
-          "exclusiveMaximum": 8000,
           "minimum": 0,
           "title": "Review Prior Context Max Chars",
           "type": "integer"
         },
         "review_request_limit": {
+          "default": 80,
           "description": "Per-call request cap for the review agent.",
-          "exclusiveMaximum": 80,
           "title": "Review Request Limit",
           "type": "integer"
         },
         "review_revision_max_attempts": {
+          "default": 2,
           "description": "Maximum review-revision attempts per ticket before escalating to BLOCKED.",
-          "exclusiveMaximum": 2,
           "minimum": 1,
           "title": "Review Revision Max Attempts",
           "type": "integer"
@@ -1993,8 +1993,8 @@
           "title": "Review Revision Memory Path"
         },
         "reviewer_agreement_gate_enabled": {
+          "default": true,
           "description": "When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
-          "lt": true,
           "title": "Reviewer Agreement Gate Enabled",
           "type": "boolean"
         },
@@ -2086,14 +2086,14 @@
           "type": "boolean"
         },
         "sandbox_reaper_interval_seconds": {
+          "default": 3600,
           "description": "Seconds between sandbox reaper passes.",
-          "exclusiveMaximum": 3600,
           "title": "Sandbox Reaper Interval Seconds",
           "type": "integer"
         },
         "sandbox_reaper_periodic": {
+          "default": true,
           "description": "When true, periodically force-remove leaked/orphaned sandbox containers.",
-          "lt": true,
           "title": "Sandbox Reaper Periodic",
           "type": "boolean"
         },
@@ -2134,8 +2134,8 @@
           "type": "string"
         },
         "spec_review_enabled": {
+          "default": true,
           "description": "When true, a post-refinement review pass strips verbose narrative from the spec.",
-          "lt": true,
           "title": "Spec Review Enabled",
           "type": "boolean"
         },
@@ -2172,26 +2172,26 @@
           "type": "integer"
         },
         "stale_branch_cleanup_interval_seconds": {
+          "default": 86400,
           "description": "Seconds between automatic stale-branch cleanup passes.",
-          "exclusiveMaximum": 86400,
           "title": "Stale Branch Cleanup Interval Seconds",
           "type": "integer"
         },
         "stale_branch_cleanup_periodic": {
+          "default": false,
           "description": "When true, run periodic stale-branch cleanup passes.",
-          "lt": false,
           "title": "Stale Branch Cleanup Periodic",
           "type": "boolean"
         },
         "stale_branch_cleanup_prefix_only": {
+          "default": true,
           "description": "When true, only delete branches matching branch_prefix.",
-          "lt": true,
           "title": "Stale Branch Cleanup Prefix Only",
           "type": "boolean"
         },
         "stale_branch_max_age_days": {
+          "default": 30,
           "description": "Branch is eligible for cleanup only if its last commit is older than this many days.",
-          "exclusiveMaximum": 30,
           "title": "Stale Branch Max Age Days",
           "type": "integer"
         },
@@ -2306,8 +2306,8 @@
           "type": "integer"
         },
         "ticket_state_cycle_limit": {
+          "default": 3,
           "description": "Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
-          "exclusiveMaximum": 3,
           "minimum": 0,
           "title": "Ticket State Cycle Limit",
           "type": "integer"
@@ -2349,8 +2349,8 @@
           "type": "number"
         },
         "trace_review_dedup_lookback_days": {
+          "default": 7,
           "description": "Recency window (days) for pre-filing duplicate check in trace-review.",
-          "exclusiveMaximum": 7,
           "title": "Trace Review Dedup Lookback Days",
           "type": "integer"
         },
@@ -2444,8 +2444,8 @@
           "type": "string"
         },
         "trace_review_model_level": {
+          "default": 1,
           "description": "Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
-          "exclusiveMaximum": 1,
           "maximum": 3,
           "minimum": 1,
           "title": "Trace Review Model Level",
@@ -2500,21 +2500,21 @@
           "type": "boolean"
         },
         "triage_request_limit": {
+          "default": 8,
           "description": "Per-call request cap for the pre-refine triage agent.",
-          "exclusiveMaximum": 8,
           "title": "Triage Request Limit",
           "type": "integer"
         },
         "web_fetch_max_bytes": {
+          "default": 2000000,
           "description": "Maximum raw bytes per web_fetch call.",
-          "exclusiveMaximum": 2000000,
           "minimum": 0,
           "title": "Web Fetch Max Bytes",
           "type": "integer"
         },
         "web_fetch_max_calls": {
+          "default": 15,
           "description": "Maximum real (cache-miss) web_fetch calls per web_knowledge consultation.",
-          "exclusiveMaximum": 15,
           "minimum": 1,
           "title": "Web Fetch Max Calls",
           "type": "integer"
@@ -2526,8 +2526,8 @@
           "type": "integer"
         },
         "web_fetch_max_total_bytes": {
+          "default": 2000000,
           "description": "Cumulative ceiling on returned text bytes per web_knowledge consultation. 0 disables.",
-          "exclusiveMaximum": 2000000,
           "minimum": 0,
           "title": "Web Fetch Max Total Bytes",
           "type": "integer"
@@ -2539,8 +2539,8 @@
           "type": "boolean"
         },
         "web_fetch_timeout": {
+          "default": 30,
           "description": "Timeout (seconds) per web_fetch call.",
-          "exclusiveMaximum": 30,
           "exclusiveMinimum": 0,
           "title": "Web Fetch Timeout",
           "type": "integer"
@@ -2570,111 +2570,19 @@
           "type": "integer"
         },
         "web_research_request_limit": {
+          "default": 8,
           "description": "Request budget for the web_research sub-agent spawned by refine/implement.",
-          "exclusiveMaximum": 8,
           "minimum": 1,
           "title": "Web Research Request Limit",
           "type": "integer"
         },
         "web_search": {
+          "default": true,
           "description": "Enable web search via a cheap bounded sub-agent for refine and implement agents.",
-          "lt": true,
           "title": "Web Search",
           "type": "boolean"
         }
       },
-      "required": [
-        "web_search",
-        "web_research_request_limit",
-        "fetch_image",
-        "web_fetch_max_bytes",
-        "web_fetch_timeout",
-        "web_fetch_max_calls",
-        "web_fetch_max_total_bytes",
-        "refine_web_fetch_max_calls",
-        "refine_web_fetch_max_total_bytes",
-        "refine_web_search_max_calls",
-        "MILL_LINT_ON_EDIT",
-        "read_file_max_chars",
-        "require_approval",
-        "auto_approve_enabled",
-        "review_enabled",
-        "auto_merge_enabled",
-        "auto_merge_main_debt_detection_enabled",
-        "comments_after_body",
-        "review_feedback_enabled",
-        "refine_triage_enabled",
-        "refine_prescriptive_spec_code_lines_threshold",
-        "refine_skip_llm_on_impl_ready_spec",
-        "reviewer_agreement_gate_enabled",
-        "maintenance_triage_enabled",
-        "refine_advisory_dedup_enabled",
-        "freshness_gate_enabled",
-        "obsolescence_gate_enabled",
-        "refine_mill_misroute_gate_enabled",
-        "prerequisite_gate_enabled",
-        "spec_review_enabled",
-        "MILL_SCOPE_TRIAGE_ENABLED",
-        "MILL_PR_SUMMARY_ENABLED",
-        "enable_repo_creation",
-        "delete_branch_on_merge",
-        "stale_branch_cleanup_periodic",
-        "stale_branch_cleanup_interval_seconds",
-        "stale_branch_max_age_days",
-        "stale_branch_cleanup_prefix_only",
-        "review_max_rounds",
-        "max_implement_review_cycles",
-        "implement_max_spawns_per_ticket",
-        "review_request_limit",
-        "review_prior_context_max_chars",
-        "review_diff_max_chars",
-        "review_output_token_budget",
-        "triage_request_limit",
-        "retrospect_spawn_drafts",
-        "trace_review_model_level",
-        "refine_trivial_routing_enabled",
-        "refine_trivial_model_level",
-        "refine_trivial_subscription_model",
-        "refine_subscription_tier_routing_enabled",
-        "refine_subscription_model_default",
-        "refine_subscription_model_complex",
-        "refine_findings_downgrade_enabled",
-        "refine_findings_downgrade_min_chars",
-        "refine_subscription_model_findings",
-        "max_re_refine_cycles_before_cheap",
-        "max_refine_passes_per_ticket",
-        "refine_delta_reuse_enabled",
-        "delta_context_retry_enabled",
-        "trace_review_dedup_lookback_days",
-        "epic_dedup_lookback_days",
-        "merge_poll_seconds",
-        "prune_clone_on_close",
-        "max_archived_tickets",
-        "db_maintenance_periodic",
-        "db_maintenance_interval_seconds",
-        "sandbox_reaper_periodic",
-        "sandbox_reaper_interval_seconds",
-        "max_events_per_ticket",
-        "max_comments_per_ticket",
-        "rebase_max_attempts",
-        "ci_fix_max_iterations",
-        "ci_fix_max_attempts",
-        "ci_fix_max_cycles",
-        "ci_fix_max_identical_failures",
-        "deliver_max_identical_blocks",
-        "ci_fix_wait_poll_interval_s",
-        "ci_fix_wait_timeout_s",
-        "ci_fix_request_limit",
-        "ticket_state_cycle_limit",
-        "codeql_fp_triage_enabled",
-        "auto_fix_max_cycles",
-        "ping_pong_max_alternations",
-        "review_revision_max_attempts",
-        "ci_log_max_bytes",
-        "langfuse_cleanup_periodic",
-        "langfuse_cleanup_interval_seconds",
-        "langfuse_cleanup_max_traces"
-      ],
       "title": "Settings",
       "type": "object"
     }

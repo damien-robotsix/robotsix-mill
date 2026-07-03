@@ -5,7 +5,7 @@
 - Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy image publishing.
 - Review stage now verifies PR/commit claims in "already addressed" gap dismissals via `verify_claim`, preventing false approvals when a cited artifact does not actually touch the target files.
 - Add "+ Repo" button to the board header that opens a modal form to register a new repo via POST /repos, refreshing the repo selector on success.
-- Add operator-facing `Field(description=…)` to every settings, secrets, and repos config field so the central-deploy Configure UI renders help bubbles instead of bare key paths. Regenerate `config/config.schema.json` with all descriptions. Move implementation notes out of the `Secrets` class docstring so the published schema description is operator-facing. Include `ReposRegistry` in the published schema under a `repos` key.
+- Deploy-UI config schema: changed class-level docstrings on Settings, Secrets, CrossRepoTarget, and ReposRegistry to be operator-facing descriptions instead of implementation notes. Regenerated `config/config.schema.json`.
 - Add `verify_claim()` helper to verify that PR/commit references in
   "already done" claims actually touch the target files. The dedup guard
   now calls this before accepting an `already_done` verdict, preventing

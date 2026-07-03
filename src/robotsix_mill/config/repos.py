@@ -19,22 +19,14 @@ from .settings import Settings
 
 
 class CrossRepoTarget(BaseModel):
-    """Declarative *cross-repo target* for a repo whose deliverable
-    belongs in a different (forked/external) repository.
-
-    When a :class:`RepoConfig` carries one of these, the deliver/merge
-    stages drive a fork-contribution workflow: the ticket's branch is
-    pushed to ``fork_remote_url`` and a PR is opened *fork → upstream*
-    against ``base_branch`` on ``upstream_remote_url`` (the merge
-    target Y), instead of pushing to the clone remote.
-
-    Fields:
-    - ``upstream_remote_url`` — the repo PRs are opened against (Y).
-    - ``fork_remote_url`` — the fork the branch is pushed to.
-    - ``base_branch`` — the upstream branch to PR into (mirrors
-      ``forge_target_branch``).
-    - ``auto_fork`` — when True, ensure the fork exists via
-      ``Forge.fork_repo()`` before push.
+    # When a ``RepoConfig`` carries one of these, the deliver/merge
+    # stages drive a fork-contribution workflow: the ticket's branch is
+    # pushed to ``fork_remote_url`` and a PR is opened *fork → upstream*
+    # against ``base_branch`` on ``upstream_remote_url``, instead of
+    # pushing to the clone remote.
+    """Cross-repo target: routes contributions from this repo to a
+    different (forked/external) repository via a fork-contribution
+    workflow.
     """
 
     upstream_remote_url: str = Field(
@@ -220,7 +212,10 @@ class RepoConfig(BaseModel):
 
 
 class ReposRegistry(BaseModel):
-    """Container holding all :class:`RepoConfig` entries keyed by repo ID."""
+    """Repository registry: maps each repo ID to its per-repo
+    configuration (board identity, forge remote, Langfuse credentials,
+    CI monitor settings).
+    """
 
     repos: dict[str, RepoConfig] = Field(
         description="Registry of per-repo configurations keyed by repo_id."

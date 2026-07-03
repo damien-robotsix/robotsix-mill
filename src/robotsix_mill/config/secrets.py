@@ -1,9 +1,20 @@
 """The :class:`Secrets` model and its cached accessors.
 
-Split out of the former monolithic ``config.py``. The cached
-``_secrets`` singleton lives in ``config/__init__.py`` so test fixtures
-that poke ``robotsix_mill.config._secrets`` are observed by the
-accessors here (which read the package attribute at call time).
+Secrets are never merged into ``Settings`` — they are kept in a
+separate model with redacted ``repr`` / ``model_dump`` and
+debug-logged attribute access, so they cannot leak through logs,
+trace output, or accidental serialization.
+
+The cached ``_secrets`` singleton lives in ``config/__init__.py`` so
+test fixtures that poke ``robotsix_mill.config._secrets`` are
+observed by the accessors here (which read the package attribute at
+call time).
+
+Secrets are loaded from the ``secrets:`` block of the single mill
+config file (``config/config.json``, else ``config/config.example.json``).
+A value equal to the literal ``SECRET`` sentinel (used throughout
+``config.example.json``) is treated as unset, so the field falls back
+to its ``None`` default.
 """
 
 from __future__ import annotations
@@ -18,17 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 class Secrets(BaseModel):
-    # Never merged into ``Settings`` — secrets are kept in a separate
-    # model with redacted ``repr`` / ``model_dump`` and debug-logged
-    # attribute access.
     """API keys, tokens, and credentials for external services
     (OpenRouter, forge, Langfuse, ntfy, etc.).
-
-    Loaded from the ``secrets:`` block of the single mill config
-    file (``config/config.json``, else ``config/config.example.json``).
-    A value equal to the literal ``SECRET`` sentinel (used throughout
-    ``config.example.json``) is treated as unset, so the field falls
-    back to its ``None`` default.
     """
 
     openrouter_api_key: str | None = Field(
