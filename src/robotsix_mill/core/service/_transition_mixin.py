@@ -517,6 +517,20 @@ class _TransitionMixin(_ServiceBase):
                 forge_target_branch=self.settings.forge_target_branch,
                 branch_name=ticket.branch,
             )
+            # Close any open [ASK_USER] threads before force-closing —
+            # the operator's mark-done means the question is moot.
+            # Record the fact in the note so it's visible in history.
+            open_ask = self._has_open_ask_user_threads(ticket_id, s)
+            if open_ask:
+                now = datetime.now(timezone.utc)
+                for c in open_ask:
+                    c.closed_at = now
+                    s.add(c)
+                prefix = (
+                    f"[force-closed with {len(open_ask)} open [ASK_USER] "
+                    f"thread(s) — automatically closed]"
+                )
+                note = f"{prefix} {note}" if note.strip() else prefix
             # Augment the note with citation warnings before persisting.
             note = _verify_citations(note, repo_dir)
             comment = None
