@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Slimmed `agent_definitions/language_instructions/python.md` and `javascript.md` to mill-specific sandbox constraints only; generic conventions now live at robotsix-standards.
 - Deploy: point `deploy/docker-compose.yml` `robotsix.deploy.config-target` to `/app/config/config.json` (was `config.yaml`), matching the JSON config-standard the mill reads. Requires the coupled robotsix-central-deploy onboarding migration to write JSON.
 - Refine/triage stage ``_clone_or_resume`` now honours ``cross_repo_target``:
   when set, clones the fork's remote URL and targets the fork's
