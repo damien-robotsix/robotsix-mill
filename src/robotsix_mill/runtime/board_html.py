@@ -87,6 +87,11 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <select id="repo-selector" onchange="onRepoChange(this.value)" style="font-size:11px;background:#1d212c;border:1px solid #2c313d;color:#cfd3db;border-radius:4px;padding:3px 6px">
   <option value="all">All repos</option>
 </select>
+<button id="add-repo-btn" onclick="addRepo()" style="font-size:11px;padding:3px 10px;
+background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;
+margin-left:4px" title="Register a new repo">
+  + Repo
+</button>
 <div class="agents-dropdown">
   <button class="agents-trigger" onclick="toggleAgentsMenu(event)">🤖 Agents ▾</button>
   <div class="agents-menu" id="agents-menu" onclick="event.stopPropagation()">
