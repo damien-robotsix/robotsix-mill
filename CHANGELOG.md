@@ -1,6 +1,11 @@
 ## 0.0.0 (unreleased)
 
 - Deploy: point `deploy/docker-compose.yml` `robotsix.deploy.config-target` to `/app/config/config.json` (was `config.yaml`), matching the JSON config-standard the mill reads. Requires the coupled robotsix-central-deploy onboarding migration to write JSON.
+- Refine/triage stage ``_clone_or_resume`` now honours ``cross_repo_target``:
+  when set, clones the fork's remote URL and targets the fork's
+  ``base_branch`` instead of the managed repo. Prevents false "already
+  exists" / "no change needed" conclusions during file-existence checks and
+  config analysis for cross-repo-target tickets.
 - Fix mill Docker image build: `COPY contrib/` into the builder stage so the `contrib/completions` wheel force-include resolves (was failing the image build with `Forced include not found`, blocking image publishing).
 - Fix release Docker build: add missing `COPY contrib/ ./contrib/` to the builder stage so hatchling can find the `contrib/completions` force-include path.
 - Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy image publishing.
