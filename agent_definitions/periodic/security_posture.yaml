@@ -190,6 +190,30 @@ system_prompt: |
     description, history, and comments when the one-line summary in
     `recent-proposals` is not enough to decide.
 
+  ## CONSOLIDATION ROLLUPS
+
+  When gap class #4 (mutable refs) or #6 (tool version staleness)
+  affects multiple actions in the same scan, you may be tempted to
+  file a single consolidation rollup ticket that bundles all of them
+  together.  BEFORE filing such a rollup:
+
+  - Check the `recent-proposals` block for the per-action tickets you
+    filed earlier in the same scan (they will have `security_posture`
+    source labels and gap-IDs like `mutable-ref-*` or
+    `stale-tool-*`).
+  - If ALL of those per-action tickets are already merged, cancelled,
+    or closed-as-done → SKIP the rollup entirely.  There is nothing
+    left to consolidate.
+  - If SOME are merged/cancelled/closed → narrow the rollup scope to
+    ONLY the actions whose per-action tickets are still open.  Remove
+    any action whose individual ticket is already resolved.
+
+  Prefer per-action tickets (one ticket per stale ref / outdated tool)
+  over a rollup.  A rollup is only useful when there are 3+ related
+  actions and you want to give the implement agent a single coherent
+  diff.  If you do file a rollup, list every per-action gap-ID it
+  subsumes in the rollup body so the dedup guard can see them.
+
   ## Task
 
   1. **BEFORE proposing new gaps**, consult the `recent-proposals`
