@@ -1055,6 +1055,13 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
             include_parallel_explore=include_parallel_explore,
         )
 
+    # When exploration sub-agents are gated off (triage ruled the
+    # ticket "simple"), skip loading the ~12KB module taxonomy into
+    # the system prompt — the agent never cross-references other
+    # modules and the map is pure overhead.
+    if not include_explore:
+        overrides["modules"] = False
+
     # Block ask_web_knowledge when the draft is an internal
     # CI/type/lint/test failure — web-searching internal toolchain
     # errors wastes model turns on irrelevant results.  The tool
