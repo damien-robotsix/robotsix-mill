@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from robotsix_mill.config.repos import (
     target_branch_for,
 )
 from robotsix_mill.config.settings import Settings
+from robotsix_mill.deps.coherent_resolver import run_coherence_check
 from robotsix_mill.deps.internal_graph import (
     CyclicDependencyError,
     GitPin,
@@ -107,6 +107,10 @@ def run_pin_bump_pass(
         return
 
     settings = Settings()
+    if not settings.pin_bump_periodic:
+        log.info("pin_bump: periodic pin bump is disabled — nothing to do")
+        return
+
     registry = get_repos_config()
 
     # Gather pyproject.toml text from every reachable registered repo.
@@ -222,6 +226,10 @@ def run_pin_bump_pr_actuator(
         return
 
     settings = Settings()
+    if not settings.pin_bump_periodic:
+        log.info("pin_bump: periodic pin bump is disabled — nothing to do")
+        return
+
     registry = get_repos_config()
 
     if graph is None:
@@ -348,6 +356,47 @@ def _bump_one_pin(
     )
 
 
+def _pr_guards_ok(
+    *,
+    repo_id: str,
+    rc: RepoConfig,
+    dep_name: str,
+    branch_name: str,
+    forge: Forge,
+) -> bool:
+    """Return ``True`` when it's safe to proceed with a PR for *branch_name*.
+
+    Returns ``False`` (with an appropriate log message) when an open
+    PR already exists or the in-flight cap has been reached.
+    """
+    existing = forge.pr_status(source_branch=branch_name)
+    if existing is not None and existing.get("state") == "open":
+        log.info(
+            "pin_bump: PR for %s → %s already open (%s) — skipping",
+            repo_id,
+            dep_name,
+            existing.get("url", "no url"),
+        )
+        return False
+
+    if rc.max_inflight_prs > 0:
+        open_branches = forge.list_open_pr_branches()
+        mill_bump_count = sum(
+            1 for b in open_branches if b.startswith("mill/pin-bump/")
+        )
+        if mill_bump_count >= rc.max_inflight_prs:
+            log.info(
+                "pin_bump: %s at pin-bump in-flight cap (%d/%d) — skipping %s",
+                repo_id,
+                mill_bump_count,
+                rc.max_inflight_prs,
+                dep_name,
+            )
+            return False
+
+    return True
+
+
 def _apply_one_bump(
     *,
     repo_id: str,
@@ -362,6 +411,15 @@ def _apply_one_bump(
 ) -> None:
     """Clone *rc*, update the pin rev, regenerate uv.lock, push, and open a PR."""
     branch_name = f"mill/pin-bump/{dep_name}"
+
+    if not _pr_guards_ok(
+        repo_id=repo_id,
+        rc=rc,
+        dep_name=dep_name,
+        branch_name=branch_name,
+        forge=forge,
+    ):
+        return
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -402,32 +460,18 @@ def _apply_one_bump(
 
         toml_path.write_text(updated_text, encoding="utf-8")
 
-        # Regenerate uv.lock (best-effort; warn-and-proceed on failure).
-        try:
-            result = subprocess.run(
-                ["uv", "lock"],  # noqa: S607
-                cwd=tmp_path,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                check=False,
-            )
-        except Exception as exc:
+        # Run coherence check via uv lock; skip PR on conflicts.
+        conflicts = run_coherence_check(tmp_path)
+        if conflicts:
             log.warning(
-                "pin_bump: uv lock failed for %s — "
-                "proceeding with existing uv.lock (%s)",
+                "pin_bump: coherence check failed for %s → %s "
+                "(%d conflict(s)) — skipping PR: %s",
                 repo_id,
-                exc,
+                dep_name,
+                len(conflicts),
+                conflicts,
             )
-        else:
-            if result.returncode != 0:
-                log.warning(
-                    "pin_bump: uv lock failed for %s (exit %s) — "
-                    "proceeding with existing uv.lock: %s",
-                    repo_id,
-                    result.returncode,
-                    (result.stderr or "")[:500],
-                )
+            return
 
         # Create branch, commit, push.
         try:

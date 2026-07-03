@@ -315,6 +315,35 @@ class TestRunPinBumpPass:
             f"Expected topo order despite clone failure on one repo, got: {log_text}"
         )
 
+    def test_disabled_by_config_returns_early(self, tmp_path, caplog):
+        """When settings.periodic.pin_bump_periodic is False, the pass
+        returns immediately without doing any work."""
+        import logging
+
+        from robotsix_mill.runners.pin_bump_runner import run_pin_bump_pass
+
+        import robotsix_mill.runners.pin_bump_runner as runner_mod
+
+        mock_settings = MagicMock()
+        mock_settings.pin_bump_periodic = False
+
+        with (
+            patch.object(runner_mod, "Settings", return_value=mock_settings),
+            patch.object(runner_mod, "get_repos_config") as mock_registry,
+            patch.object(runner_mod, "github_token") as mock_token,
+            caplog.at_level(
+                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
+            ),
+        ):
+            run_pin_bump_pass(
+                session_id="s1",
+                repo_config=_make_repo_config("https://example.com/repo"),
+            )
+
+        mock_registry.assert_not_called()
+        mock_token.assert_not_called()
+        assert "disabled" in caplog.text
+
 
 # ---------------------------------------------------------------------------
 # PR actuator
@@ -426,6 +455,8 @@ class TestActuator:
         )
 
         mock_forge = MagicMock()
+        mock_forge.pr_status.return_value = None
+        mock_forge.list_open_pr_branches.return_value = set()
         mock_forge.open_merge_request.return_value = (
             "https://github.com/damien-robotsix/a/pull/1"
         )
@@ -443,7 +474,7 @@ class TestActuator:
             patch.object(runner_mod.git_ops, "create_branch"),
             patch.object(runner_mod.git_ops, "commit_all"),
             patch.object(runner_mod.git_ops, "push"),
-            patch.object(runner_mod, "subprocess"),
+            patch.object(runner_mod, "run_coherence_check", return_value=[]),
             caplog.at_level(
                 logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
             ),
@@ -530,6 +561,211 @@ class TestActuator:
         # pins are already at latest — the forge is resolved upfront).
         mock_get_forge.assert_called_once()
         assert "already at latest" in caplog.text
+
+    def test_duplicate_pr_skipped(self, tmp_path, caplog):
+        """When an open PR already exists for the bump branch, skip."""
+        import logging
+
+        from robotsix_mill.config.repos import load_repos_config
+        from robotsix_mill.deps.internal_graph import (
+            GitPin,
+            InternalDepGraph,
+        )
+        from robotsix_mill.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+        registry = load_repos_config(str(repos_yaml_path))
+
+        graph = InternalDepGraph(
+            pins={
+                "a": {
+                    "b": GitPin(
+                        git_url=f"https://{INTERNAL_GIT_HOST}b",
+                        rev="old_sha",
+                    )
+                },
+                "b": {},
+            },
+            topo_order=["b", "a"],
+        )
+
+        mock_forge = MagicMock()
+        # Report an already-open PR for the target branch.
+        mock_forge.pr_status.return_value = {
+            "state": "open",
+            "url": "https://github.com/damien-robotsix/a/pull/42",
+        }
+
+        import robotsix_mill.runners.pin_bump_runner as runner_mod
+
+        with (
+            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "get_repos_config", return_value=registry),
+            patch.object(runner_mod, "github_token", return_value="fake-token"),
+            patch.object(runner_mod, "target_branch_for", return_value="main"),
+            patch.object(runner_mod, "get_forge", return_value=mock_forge),
+            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="new_sha"),
+            patch.object(runner_mod.git_ops, "clone") as mock_clone,
+            caplog.at_level(
+                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
+            ),
+        ):
+            run_pin_bump_pr_actuator(
+                session_id="s1",
+                repo_config=registry.repos["a"],
+                graph=graph,
+            )
+
+        # Must not clone or open a PR — the duplicate guard fires first.
+        mock_clone.assert_not_called()
+        mock_forge.open_merge_request.assert_not_called()
+        assert "already open" in caplog.text
+
+    def test_inflight_cap_skipped(self, tmp_path, caplog):
+        """When in-flight pin-bump PRs reach max_inflight_prs, skip."""
+        import logging
+
+        from robotsix_mill.config.repos import load_repos_config
+        from robotsix_mill.deps.internal_graph import (
+            GitPin,
+            InternalDepGraph,
+        )
+        from robotsix_mill.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+        registry = load_repos_config(str(repos_yaml_path))
+        # Set max_inflight_prs=1 so the second open PR is blocked.
+        registry.repos["a"].max_inflight_prs = 1
+
+        graph = InternalDepGraph(
+            pins={
+                "a": {
+                    "b": GitPin(
+                        git_url=f"https://{INTERNAL_GIT_HOST}b",
+                        rev="old_sha",
+                    )
+                },
+                "b": {},
+            },
+            topo_order=["b", "a"],
+        )
+
+        mock_forge = MagicMock()
+        # No duplicate PR, but in-flight cap reached.
+        mock_forge.pr_status.return_value = None
+        mock_forge.list_open_pr_branches.return_value = {
+            "mill/pin-bump/x",
+            "mill/pin-bump/y",
+        }
+
+        import robotsix_mill.runners.pin_bump_runner as runner_mod
+
+        with (
+            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "get_repos_config", return_value=registry),
+            patch.object(runner_mod, "github_token", return_value="fake-token"),
+            patch.object(runner_mod, "target_branch_for", return_value="main"),
+            patch.object(runner_mod, "get_forge", return_value=mock_forge),
+            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="new_sha"),
+            patch.object(runner_mod.git_ops, "clone") as mock_clone,
+            caplog.at_level(
+                logging.INFO, logger="robotsix_mill.runners.pin_bump_runner"
+            ),
+        ):
+            run_pin_bump_pr_actuator(
+                session_id="s1",
+                repo_config=registry.repos["a"],
+                graph=graph,
+            )
+
+        mock_clone.assert_not_called()
+        mock_forge.open_merge_request.assert_not_called()
+        assert "in-flight cap" in caplog.text
+
+    def test_coherence_conflict_skips_pr(self, tmp_path, caplog):
+        """A repo whose run_coherence_check reports conflicts is
+        skipped with a WARNING and no PR."""
+        import logging
+
+        from robotsix_mill.config.repos import load_repos_config
+        from robotsix_mill.deps.internal_graph import (
+            GitPin,
+            InternalDepGraph,
+        )
+        from robotsix_mill.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+        registry = load_repos_config(str(repos_yaml_path))
+
+        graph = InternalDepGraph(
+            pins={
+                "a": {
+                    "b": GitPin(
+                        git_url=f"https://{INTERNAL_GIT_HOST}b",
+                        rev="old_sha",
+                    )
+                },
+                "b": {},
+            },
+            topo_order=["b", "a"],
+        )
+
+        mock_forge = MagicMock()
+        mock_forge.pr_status.return_value = None
+        mock_forge.list_open_pr_branches.return_value = set()
+
+        import robotsix_mill.runners.pin_bump_runner as runner_mod
+
+        with (
+            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "get_repos_config", return_value=registry),
+            patch.object(runner_mod, "github_token", return_value="fake-token"),
+            patch.object(runner_mod, "target_branch_for", return_value="main"),
+            patch.object(runner_mod, "get_forge", return_value=mock_forge),
+            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="new_sha"),
+            patch.object(runner_mod.git_ops, "clone") as mock_clone,
+            patch.object(runner_mod.git_ops, "create_branch"),
+            patch.object(runner_mod.git_ops, "commit_all"),
+            patch.object(runner_mod.git_ops, "push"),
+            patch.object(
+                runner_mod,
+                "run_coherence_check",
+                return_value=["Requirements contain conflicting URLs for package foo:"],
+            ),
+            caplog.at_level(
+                logging.WARNING, logger="robotsix_mill.runners.pin_bump_runner"
+            ),
+        ):
+            # Simulate clone creating a real pyproject.toml.
+            def _fake_clone(remote_url, dest, branch, token=None):
+                dest_path = Path(str(dest))
+                dest_path.mkdir(parents=True, exist_ok=True)
+                (dest_path / "pyproject.toml").write_text(
+                    _pyproject({"b": _internal_pin("b", "old_sha")}),
+                    encoding="utf-8",
+                )
+
+            mock_clone.side_effect = _fake_clone
+
+            run_pin_bump_pr_actuator(
+                session_id="s1",
+                repo_config=registry.repos["a"],
+                graph=graph,
+            )
+
+        # Clone happened, but PR was NOT opened because coherence
+        # check reported conflicts.
+        mock_forge.open_merge_request.assert_not_called()
+        assert "coherence check" in caplog.text
 
 
 class TestDispatchWiring:
