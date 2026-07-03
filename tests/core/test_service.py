@@ -1155,6 +1155,33 @@ def test_transition_epic_open_to_epic_closed(service):
     assert updated.state is State.EPIC_CLOSED
 
 
+def test_mark_done_auto_closes_open_ask_user_threads(service):
+    """mark_done closes open [ASK_USER] threads and records it in the note."""
+    t = service.create("Force-closing with open question")
+    service.add_comment(t.id, "[ASK_USER]\n\nShould we proceed?", author="implement")
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+    assert comment is not None
+    assert "[force-closed with 1 open [ASK_USER] thread" in comment.body
+
+    # The [ASK_USER] thread must now be closed.
+    comments = service.list_comments(t.id)
+    ask_comments = [cm for cm in comments if cm.body.startswith("[ASK_USER]")]
+    assert len(ask_comments) == 1
+    assert ask_comments[0].closed_at is not None
+
+
+def test_mark_done_no_ask_user_threads_clean_note(service):
+    """When there are no open [ASK_USER] threads, the note is unchanged."""
+    t = service.create("Clean force-close")
+    comment, ticket = service.mark_done(t.id, note="no longer needed")
+    assert ticket.state is State.DONE
+    assert comment is not None
+    assert comment.body == "no longer needed"
+    assert "[force-closed" not in comment.body
+
+
 # -- mark_done citation verification -----------------------------------
 
 
