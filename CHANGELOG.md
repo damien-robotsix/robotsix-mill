@@ -1,6 +1,10 @@
 ## 0.0.0 (unreleased)
 
 - Enable `changelog_autofill` periodic workflow for this repo.
+- Add `agent_references/pre-commit-ci.md` documenting standard
+  boilerplate fixes for the four most common pre-commit CI failures
+  (mdformat wrapping, missing trailing newline, stale detect-secrets
+  baseline, ruff formatting).
 - Security posture agent: add explicit `git ls-remote` SHA-resolution and
   validation instructions to the system prompt so the agent no longer
   fabricates or guesses commit SHAs when filing mutable-ref pinning drafts.
