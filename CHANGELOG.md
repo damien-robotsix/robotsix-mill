@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Fix CSS class name mismatch for `data_dir_gc` source: rename `.src-data-dir-audit` to `.src-data-dir-gc` and add missing `AGENT_COLORS` entry.
+- Extract `_collect_candidate_boards()` to `_ServiceBase`, deduplicating the cross-board discovery algorithm that was copy-pasted across `_get_anywhere()`, `list_children_across_boards()`, and `_board_for_comment()`.
 - Update "Add a new setting" and "Config drift prevention" sections of `docs/configuration.md` to describe the current JSON-based config mechanism instead of the removed `_YAML_PATH_TO_ALIAS` / YAML-path mapping (the config file is `config/config.example.json`, and `JsonSettingsSource` matches alias keys automatically).
 - Update `docs/configuration.md` to correctly describe the JSON config format
   (not YAML): fix file extensions, convert code examples to JSON with flat

@@ -68,27 +68,7 @@ class _QueryMixin(_ServiceBase):
            (robust to test setups that don't register repos but write
            per-board DBs via the migration / direct-board service).
         """
-        from ...config import get_repos_config
-
-        candidates: list[str] = []
-        try:
-            for rc in get_repos_config().repos.values():
-                if rc.board_id and rc.board_id not in candidates:
-                    candidates.append(rc.board_id)
-        except Exception as exc:
-            log.warning(
-                "Failed to load repos config for _get_anywhere: %s(%r)",
-                type(exc).__name__,
-                exc,
-            )
-        # Disk-scan fallback for boards not in the registry.
-        try:
-            for sub in self.settings.data_dir.iterdir():
-                if sub.is_dir() and (sub / "mill.db").exists():
-                    if sub.name not in candidates:
-                        candidates.append(sub.name)
-        except OSError:
-            pass
+        candidates = self._collect_candidate_boards(caller_name="_get_anywhere")
         for board_id in candidates:
             with db.session(self.settings, board_id) as s:
                 ticket = s.get(Ticket, ticket_id)
@@ -222,27 +202,9 @@ class _QueryMixin(_ServiceBase):
         Each returned ticket has its ``board_id`` resolved via
         :meth:`_resolve_board_id`.
         """
-        from ...config import get_repos_config
-
-        candidates: list[str] = []
-        try:
-            for rc in get_repos_config().repos.values():
-                if rc.board_id and rc.board_id not in candidates:
-                    candidates.append(rc.board_id)
-        except Exception as exc:
-            log.warning(
-                "Failed to load repos config for list_children_across_boards: %s(%r)",
-                type(exc).__name__,
-                exc,
-            )
-        # Disk-scan fallback for boards not in the registry.
-        try:
-            for sub in self.settings.data_dir.iterdir():
-                if sub.is_dir() and (sub / "mill.db").exists():
-                    if sub.name not in candidates:
-                        candidates.append(sub.name)
-        except OSError:
-            pass
+        candidates = self._collect_candidate_boards(
+            caller_name="list_children_across_boards"
+        )
 
         result: list[Ticket] = []
         seen: set[str] = set()
