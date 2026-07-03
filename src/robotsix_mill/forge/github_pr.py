@@ -622,6 +622,7 @@ class GitHubForgePRMixin:
             ):
                 url = f"{api}/repos/{owner}/{repo}/branches"
                 page = 1
+                hit_401 = False
                 while True:
                     r = c.get(
                         url,
@@ -629,7 +630,8 @@ class GitHubForgePRMixin:
                         params={"per_page": 100, "page": page},
                     )
                     if r.status_code == 401:
-                        continue
+                        hit_401 = True
+                        break
                     r.raise_for_status()
                     items = r.json()
                     for b in items:
@@ -649,6 +651,9 @@ class GitHubForgePRMixin:
                     if len(items) < 100:
                         break
                     page += 1
+                if hit_401:
+                    continue
+                break
         except Exception:
             return []
         return out
@@ -661,6 +666,7 @@ class GitHubForgePRMixin:
             ):
                 url = f"{api}/repos/{owner}/{repo}/pulls"
                 page = 1
+                hit_401 = False
                 while True:
                     r = c.get(
                         url,
@@ -672,7 +678,8 @@ class GitHubForgePRMixin:
                         },
                     )
                     if r.status_code == 401:
-                        continue
+                        hit_401 = True
+                        break
                     r.raise_for_status()
                     items = r.json()
                     for pr in items:
@@ -682,6 +689,9 @@ class GitHubForgePRMixin:
                     if len(items) < 100:
                         break
                     page += 1
+                if hit_401:
+                    continue
+                break
         except Exception:
             return set()
         return out
@@ -702,6 +712,7 @@ class GitHubForgePRMixin:
             ):
                 url = f"{api}/repos/{owner}/{repo}/pulls"
                 page = 1
+                hit_401 = False
                 while True:
                     r = c.get(
                         url,
@@ -713,7 +724,8 @@ class GitHubForgePRMixin:
                         },
                     )
                     if r.status_code == 401:
-                        continue
+                        hit_401 = True
+                        break
                     r.raise_for_status()
                     items = r.json()
                     for pr in items:
@@ -732,6 +744,9 @@ class GitHubForgePRMixin:
                     if len(items) < 100:
                         break
                     page += 1
+                if hit_401:
+                    continue
+                break
         except Exception:
             return []
         return out
