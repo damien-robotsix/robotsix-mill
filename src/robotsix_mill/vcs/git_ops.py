@@ -292,6 +292,41 @@ def remote_branch_sha(repo: Path, branch: str) -> str | None:
         return None
 
 
+def ls_remote_sha(
+    remote_url: str, ref: str = "HEAD", token: str | None = None
+) -> str | None:
+    """Resolve *ref* on *remote_url* to a commit SHA without cloning.
+
+    Runs ``git ls-remote`` against the remote and returns the SHA,
+    or ``None`` on any failure (timeout, non-zero exit, unparseable
+    output).  For private repos pass the forge *token* — it is
+    injected into ``https://`` URLs via :func:`_authed_url`.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", _authed_url(remote_url, token), ref],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        sha, _, _ = line.partition("\t")
+        if sha:
+            return sha
+
+    return None
+
+
 def branch_ancestry(repo: Path, branch: str, target: str) -> list[dict[str, str]]:
     """Return commits on ``origin/<branch>`` not on ``origin/<target>``.
 
