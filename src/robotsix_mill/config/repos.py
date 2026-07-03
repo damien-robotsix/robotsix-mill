@@ -373,6 +373,18 @@ def target_branch_for(settings: Settings, repo_config: RepoConfig | None) -> str
     return settings.forge_target_branch
 
 
+def effective_target_branch(settings: Settings, repo_config: RepoConfig | None) -> str:
+    """Resolve the effective target branch for git operations.
+
+    When *repo_config* has a ``cross_repo_target``, use its
+    ``base_branch`` (e.g. ``develop`` on the upstream fork target).
+    Otherwise fall back to :func:`target_branch_for`.
+    """
+    if repo_config is not None and repo_config.cross_repo_target is not None:
+        return repo_config.cross_repo_target.base_branch
+    return target_branch_for(settings, repo_config)
+
+
 def _reset_repos_config() -> None:
     """Clear the cached :class:`ReposRegistry` singleton (for tests)."""
     import robotsix_mill.config as _pkg

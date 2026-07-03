@@ -6,7 +6,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ...config import ConfigError, Settings, get_repo_config, target_branch_for
+from ...config import (
+    ConfigError,
+    Settings,
+    effective_target_branch,
+    get_repo_config,
+    target_branch_for,
+)
 from ...core.states import State
 from ...forge.auth import _resolve_remote_url, github_token
 from ...vcs import git_ops
@@ -240,7 +246,7 @@ class FileOperationsMixin(_ImplementStageBase):
             target = cross.base_branch
         else:
             remote_url = _resolve_remote_url(settings, ctx.repo_config)
-            target = target_branch_for(settings, ctx.repo_config)
+            target = effective_target_branch(settings, ctx.repo_config)
 
         # Resume iff a prior run left this ticket's clone + branch behind.
         resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
