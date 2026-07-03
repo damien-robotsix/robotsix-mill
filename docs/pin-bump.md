@@ -2,9 +2,16 @@
 
 The pin-bump agent is a scheduled periodic workflow that detects
 outdated dependency pins across managed repositories and opens PRs to
-bump them. The PR actuator is tracked separately; this document covers
-the configuration wiring, presence-file trigger, and network egress
-requirements.
+bump them. **The scheduled runner (harness) is now delivered:** every
+registered repo with a `.robotsix-mill/periodic/pin_bump.yaml` presence
+file triggers a detection pass that computes the internal-dependency
+graph and logs the current pin SHAs. The **PR actuator** (SHA-latest
+resolution → `pyproject.toml` edit → `uv lock` → cross-repo PR
+creation) is tracked separately and is NOT part of the current harness;
+the harness performs detection + reporting only (dry-run, zero PRs).
+
+This document covers the configuration wiring, presence-file trigger,
+dispatch, and network egress requirements.
 
 ---
 
@@ -49,6 +56,41 @@ name: pin_bump
 enabled: true
 interval_seconds: 43200  # twice daily
 ```
+
+---
+
+## Scheduled runner (harness)
+
+The `pin_bump` workflow is registered as `schedule_only` in the
+built-in kind map (`periodic_loader.py`), which means it carries no
+LLM prompt and is dispatched to a deterministic runner. The dispatch
+entry lives in `_SCHEDULE_ONLY_RUNNERS` (`poll_loops.py`):
+
+```
+"pin_bump": "robotsix_mill.runners.pin_bump_runner:run_pin_bump_pass"
+```
+
+The runner (`src/robotsix_mill/runners/pin_bump_runner.py`) is a
+**detection-only** pass:
+
+1. Loads the repos registry (`get_repos_config()`).
+2. For each registered repo with a `forge_remote_url` and a working
+   forge token, clones the default branch and reads `pyproject.toml`.
+3. Calls `build_internal_dep_graph(pyproject_map, registry)` from
+   `deps/internal_graph.py` to compute:
+   - `InternalDepGraph.topo_order` — topological sort (leaves first).
+   - `InternalDepGraph.pins` — current `{repo_id: {dep: GitPin(git_url, rev)}}`.
+4. Logs the topological order and each pin's current SHA at `INFO`.
+5. Returns `None`. **Zero PRs are created.**
+
+All expected failures (missing remote URL, missing forge token, clone
+failure, cyclic dependency graph) are caught and logged at `WARNING`
+level — the pass never raises out of the scheduler loop.
+
+The PR actuator (SHA-latest resolution, `pyproject.toml` rewriting,
+`uv lock` regeneration, cross-repo PR creation) is a **separately
+tracked** deliverable and is explicitly out of scope for the current
+harness. The `pin_bump_periodic` default remains `False` (opt-in).
 
 ---
 
