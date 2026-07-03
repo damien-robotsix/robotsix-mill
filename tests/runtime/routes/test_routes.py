@@ -623,6 +623,38 @@ def test_mark_done_happy_path(client, service):
     assert data["state"] == "done"
 
 
+# -- POST /tickets/{id}/abandon-epic ------------------------------------
+
+
+def test_abandon_epic_happy_path(client, service):
+    """POST /tickets/{id}/abandon-epic transitions an EPIC_OPEN epic
+    to EPIC_CLOSED and returns 200."""
+    epic = service.create("Abandon me", kind=TicketKind.EPIC)
+    assert epic.state is State.EPIC_OPEN
+
+    r = client.post(
+        f"/tickets/{epic.id}/abandon-epic",
+        json={"actor": "tester"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["id"] == epic.id
+    assert data["state"] == "epic_closed"
+
+
+def test_abandon_epic_rejects_non_epic_open(client, service):
+    """POST /tickets/{id}/abandon-epic returns 422 when the ticket is
+    not in EPIC_OPEN state."""
+    t = service.create("Regular task")
+
+    r = client.post(
+        f"/tickets/{t.id}/abandon-epic",
+        json={"actor": "tester"},
+    )
+    assert r.status_code == 422
+    assert "not an open epic" in r.json()["detail"]
+
+
 # -- WebSocket /ws/board (live board auto-refresh) ----------------------
 
 

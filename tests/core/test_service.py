@@ -1147,6 +1147,14 @@ def test_mark_done_rejects_epic_open(service):
         service.mark_done(t.id)
 
 
+def test_transition_epic_open_to_epic_closed(service):
+    """transition() allows EPIC_OPEN → EPIC_CLOSED."""
+    t = service.create("abandon me", kind=TicketKind.EPIC)
+    assert t.state is State.EPIC_OPEN
+    updated = service.transition(t.id, State.EPIC_CLOSED, note="abandoned")
+    assert updated.state is State.EPIC_CLOSED
+
+
 # -- mark_done citation verification -----------------------------------
 
 
