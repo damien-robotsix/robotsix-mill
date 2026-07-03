@@ -126,6 +126,9 @@ db_maintenance_periodic
 sandbox_reaper_periodic
 dependabot_ingest_periodic
 orphaned_pr_check_periodic
+orphaned_pr_check_interval_seconds
+repo_description_sync_periodic
+repo_description_sync_interval_seconds
 pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
@@ -258,6 +261,7 @@ run_trace_review_pass
 run_verify_pass
 run_changelog_autofill_pass
 run_pin_bump_pass
+run_repo_description_sync_pass
 
 # -- vcs ---------------------------------------------------------------------
 # Tested git utility with no current production caller: ci_fix's proactive
