@@ -240,7 +240,13 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             resuming = git_ops.branch_exists(repo_dir, branch)
             ctx.service.set_branch(ticket.id, branch)
         else:
-            remote_url = _resolve_remote_url(s, ctx.repo_config)
+            # When cross_repo_target is set, use the fork remote URL
+            # instead of the managed repo's remote; the implement
+            # agent must clone the target repo, not mill.
+            if ctx.repo_config.cross_repo_target:
+                remote_url = ctx.repo_config.cross_repo_target.fork_remote_url
+            else:
+                remote_url = _resolve_remote_url(s, ctx.repo_config)
             if not remote_url:
                 return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
 
