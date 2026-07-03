@@ -66,6 +66,10 @@ COPY src/ ./src/
 COPY agent_definitions/ ./agent_definitions/
 COPY expert_definitions/ ./expert_definitions/
 COPY skills/ ./skills/
+# contrib/completions is force-included into the wheel (pyproject.toml
+# [tool.hatch.build.targets.wheel.force-include]); it must be in the build
+# context or the wheel build fails with "Forced include not found".
+COPY contrib/ ./contrib/
 # DO NOT switch this to `uv sync` / `UV_PROJECT_ENVIRONMENT=system`. That
 # env var is a venv PATH, not a mode: uv builds a venv at /build/system and
 # puts the `robotsix-mill` console script at /build/system/bin, so the base
