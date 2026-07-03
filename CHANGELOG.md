@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Boost trace-inspector request budget when the trace carries an `observation_storm` classifier flag — tools-on path floors at 40 requests (up from 20) and the tool-less fallback floors at 10 (up from 3), preventing `UsageLimitExceeded` mid-analysis on noisy traces.
 - Add shell completion support (bash, zsh) via shtab. The CLI now accepts
   ``--print-completion <shell>`` to generate on-the-fly completions, and
   static completion scripts are shipped in the wheel at

@@ -510,6 +510,15 @@ def run_trace_inspector(
     # Request budget: tools-on scales with observation count so the
     # inspector has room to read → reason → emit for complex traces;
     # tool-less (including the oversized-trace fallback) stays cheap.
+    # When the classifier flagged an observation storm, the trace is
+    # large and noisy — the inspector needs extra requests to explore
+    # code paths before it can produce grounded findings.  Double the
+    # already-computed budget (or raise the tool-less floor) so it
+    # doesn't hit UsageLimitExceeded mid-analysis.
+    _observation_storm = classifier_flags and any(
+        f.startswith("observation_storm") for f in classifier_flags
+    )
+
     if tools_on:
         request_limit = max(
             settings.trace_review_inspector_min_requests,
@@ -523,10 +532,14 @@ def run_trace_inspector(
         # raises — a caller cannot punch through the dynamic ceiling.
         if request_limit_override is not None:
             request_limit = min(request_limit, request_limit_override)
+        if _observation_storm:
+            request_limit = max(request_limit, 40)
         tool_calls_limit = settings.trace_review_max_tool_calls
         error_limit = settings.trace_review_max_errors
     else:
         request_limit = settings.trace_review_inspector_toolless_requests
+        if _observation_storm:
+            request_limit = max(request_limit, 10)
         tool_calls_limit = None
         error_limit = 0
 
