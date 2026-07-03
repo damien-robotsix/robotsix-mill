@@ -882,6 +882,192 @@ def _strip_advisory_block(text: str) -> str:
     return text[pos:]
 
 
+def verify_claim(
+    claim_text: str,
+    target_files: list[str],
+    repo_dir: Path | None,
+) -> bool:
+    """Verify that a claim citing a PR or commit SHA actually touches
+    *target_files*.
+
+    Best-effort: returns ``True`` when verification passes *or* when there
+    is nothing to verify (no PR/SHA reference, no target files, or no
+    *repo_dir*).  Returns ``False`` only when a cited artifact is
+    **confirmed** NOT to touch any target file — i.e. when the stage can
+    prove the claim is wrong.
+
+    Verification rules:
+
+    1. Extract PR numbers (``#NNN``) and commit SHAs from *claim_text*.
+    2. For each PR reference, check ``git log origin/main --grep '#NNN'
+       -- <file>`` for each target file — any match confirms the claim.
+    3. For each commit SHA, check ``git diff --stat <sha>~1..<sha>
+       -- <file>`` for each target file — any match confirms the claim.
+    4. When no concrete reference (PR/SHA) is found but *claim_text*
+       contains an external-fix phrase (e.g. "already fixed"), check
+       ``git log -n 1 -- <file>`` for each target file — any recent
+       commit touching the file counts as plausible confirmation.
+    """
+    if repo_dir is None:
+        return True  # nothing to verify against
+    if not target_files:
+        return True  # nothing to verify
+
+    # Bail out early when the repo is not a valid git repository —
+    # every git subcommand will fail and we cannot prove anything.
+    if not (repo_dir / ".git").exists():
+        return True
+
+    pr_numbers: list[str] = _PR_MR_REF_RE.findall(claim_text or "")
+    commit_shas: list[str] = _COMMIT_SHA_RE.findall(claim_text or "")
+
+    # ── verify PR references ──────────────────────────────────────────
+    for pr_ref in pr_numbers:
+        pr_num = pr_ref.lstrip("#!")
+        try:
+            for f in target_files:
+                grep_result = subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "log",
+                        "origin/main",
+                        "--oneline",
+                        "--grep",
+                        f"#{pr_num}",
+                        "--",
+                        f,
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                if grep_result.returncode == 0 and grep_result.stdout.strip():
+                    log.debug(
+                        "verify_claim: PR %s confirmed — touches %s",
+                        pr_ref,
+                        f,
+                    )
+                    return True
+        except Exception:
+            log.debug(
+                "verify_claim: git log for PR %s failed — allowing (best-effort)",
+                pr_ref,
+                exc_info=True,
+            )
+            return True  # can't verify → allow
+
+    # ── verify commit SHAs ────────────────────────────────────────────
+    for sha in commit_shas:
+        try:
+            type_check = subprocess.run(
+                ["git", "-C", str(repo_dir), "cat-file", "-t", sha],
+                capture_output=True,
+                text=True,
+            )
+            if type_check.returncode != 0 or type_check.stdout.strip() != "commit":
+                continue
+        except Exception:
+            log.debug(
+                "verify_claim: git cat-file for %s failed — allowing (best-effort)",
+                sha[:10],
+                exc_info=True,
+            )
+            return True  # can't verify → allow
+
+        try:
+            for f in target_files:
+                # Use diff-tree --root which works for both initial and
+                # normal commits (unlike diff sha~1..sha which fails on
+                # root commits with no parent).
+                diff_result = subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "diff-tree",
+                        "--root",
+                        "--no-commit-id",
+                        "-r",
+                        sha,
+                        "--",
+                        f,
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                if diff_result.returncode == 0 and diff_result.stdout.strip():
+                    log.debug(
+                        "verify_claim: commit %s confirmed — touches %s",
+                        sha[:10],
+                        f,
+                    )
+                    return True
+        except Exception:
+            log.debug(
+                "verify_claim: git diff for %s failed — allowing (best-effort)",
+                sha[:10],
+                exc_info=True,
+            )
+            return True  # can't verify → allow
+
+    # ── no concrete reference → check for external-fix phrase ─────────
+    if not pr_numbers and not commit_shas:
+        if _rationale_claims_external_fix(claim_text):
+            try:
+                for f in target_files:
+                    log_result = subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(repo_dir),
+                            "log",
+                            "origin/main",
+                            "--oneline",
+                            "-n",
+                            "1",
+                            "--",
+                            f,
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if log_result.returncode == 0 and log_result.stdout.strip():
+                        log.debug(
+                            "verify_claim: HEAD claim plausible — "
+                            "recent commit touches %s",
+                            f,
+                        )
+                        return True
+            except Exception:
+                log.debug(
+                    "verify_claim: git log for HEAD claim failed — "
+                    "allowing (best-effort)",
+                    exc_info=True,
+                )
+                return True
+            # External-fix phrase but no commit touches any target file.
+            log.info(
+                "verify_claim: external-fix claim unverified — "
+                "no recent commit touches any target file (%s)",
+                ", ".join(target_files[:5]),
+            )
+            return False
+
+        # No concrete reference and no external-fix phrase → nothing to verify.
+        return True
+
+    # Concrete references were found but NONE touched any target file.
+    cited = pr_numbers + [s[:10] for s in commit_shas]
+    log.info(
+        "verify_claim: cited refs (%s) do not touch any target file (%s) — "
+        "claim unverified",
+        ", ".join(cited[:5]),
+        ", ".join(target_files[:5]),
+    )
+    return False
+
+
 def _build_candidates_block(candidates: list[Ticket], ctx: StageContext) -> str:
     """Render candidates for the dedup check as one Markdown section
     per ticket.

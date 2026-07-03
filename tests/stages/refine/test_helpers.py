@@ -27,6 +27,7 @@ from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine.helpers import (
     _advisory_candidate_id,
     _strip_advisory_block,
+    verify_claim,
 )
 
 
@@ -635,3 +636,205 @@ def test_strip_advisory_block_idempotent():
     body = "## Problem\nThe real body.\n"
     assert _strip_advisory_block(body) == body
     assert _strip_advisory_block(_strip_advisory_block(body)) == body
+
+
+# ---------------------------------------------------------------------------
+# verify_claim
+# ---------------------------------------------------------------------------
+
+
+def test_verify_claim_no_repo_dir_returns_true():
+    """No repo to verify against — allow (best-effort)."""
+    assert verify_claim("fixed in PR #346", ["ci.yml"], None) is True
+
+
+def test_verify_claim_no_target_files_returns_true():
+    """No target files — nothing to verify, allow."""
+    assert verify_claim("fixed in PR #346", [], Path("/tmp/does-not-exist")) is True
+
+
+def test_verify_claim_no_pr_or_sha_returns_true():
+    """No concrete reference in the claim — nothing to verify."""
+    assert (
+        verify_claim(
+            "this was already resolved", ["ci.yml"], Path("/tmp/does-not-exist")
+        )
+        is True
+    )
+
+
+def test_verify_claim_pr_confirmed(tmp_path):
+    """A PR reference whose merge commit touches the target file → True."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "ci.yml").write_text("name: CI\n")
+    subprocess.run(["git", "-C", str(repo), "add", "ci.yml"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "Merge PR #346: fix CI"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert verify_claim("fixed in PR #346", ["ci.yml"], repo) is True
+
+
+def test_verify_claim_pr_not_touching_target_file(tmp_path):
+    """A PR whose merge commit does NOT touch the target file → False."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "README.md").write_text("hello\n")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "Merge PR #346: update docs"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert verify_claim("fixed in PR #346", ["ci.yml"], repo) is False
+
+
+def test_verify_claim_commit_sha_confirmed(tmp_path):
+    """A commit SHA that touches the target file → True."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "ci.yml").write_text("name: CI\n")
+    subprocess.run(["git", "-C", str(repo), "add", "ci.yml"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "fix CI"], check=True)
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert verify_claim(f"fixed in {sha}", ["ci.yml"], repo) is True
+
+
+def test_verify_claim_commit_sha_not_touching_target(tmp_path):
+    """A commit SHA that does NOT touch the target file → False."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "README.md").write_text("hello\n")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "update docs"], check=True
+    )
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert verify_claim(f"fixed in {sha}", ["ci.yml"], repo) is False
+
+
+def test_verify_claim_external_fix_phrase_with_recent_commit(tmp_path):
+    """External-fix phrase with a recent commit touching target → True."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "ci.yml").write_text("name: CI\n")
+    subprocess.run(["git", "-C", str(repo), "add", "ci.yml"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "fix CI"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert verify_claim("this was already fixed at HEAD", ["ci.yml"], repo) is True
+
+
+def test_verify_claim_external_fix_phrase_no_recent_commit(tmp_path):
+    """External-fix phrase but no recent commit touches target → False."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    # Create a commit that does NOT touch ci.yml so origin/main can exist.
+    (repo / "README.md").write_text("hello\n")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "initial"], check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert verify_claim("this was already fixed at HEAD", ["ci.yml"], repo) is False
+
+
+def test_verify_claim_multiple_targets_one_matches(tmp_path):
+    """One target file matches → True even if others don't."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    (repo / "ci.yml").write_text("name: CI\n")
+    subprocess.run(["git", "-C", str(repo), "add", "ci.yml"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "Merge PR #346: fix CI"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+        check=True,
+    )
+
+    assert (
+        verify_claim("fixed in PR #346", ["ci.yml", "other.yml", "README.md"], repo)
+        is True
+    )
+
+
+def test_verify_claim_importable_from_refine_module():
+    """verify_claim is re-exported from the refine package for monkeypatch targets."""
+    from robotsix_mill.stages.refine import verify_claim as vc
+
+    assert callable(vc)
+    assert vc("no refs here", [], Path("/tmp/does-not-exist")) is True
