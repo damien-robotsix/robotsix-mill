@@ -3,6 +3,10 @@
 - Security posture agent: add explicit `git ls-remote` SHA-resolution and
   validation instructions to the system prompt so the agent no longer
   fabricates or guesses commit SHAs when filing mutable-ref pinning drafts.
+- Plumb `include_write_file` parameter through `make_agent_runner` /
+  `run_periodic_agent` / `_build_periodic_tools` so that the
+  `env_doc_sync` periodic agent can receive the `write_file` tool
+  (fixing a mismatch between its system prompt and available tools).
 - Remove the "+ Ask" button from the board UI and the inquiry-to-task
   conversion pipeline (`convertToTicket` JS, `/convert-to-task` route,
   `ask_to_ticket` agent).  Inquiries can still be created via the CLI
