@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add "+ Repo" button to the board header that opens a modal form to register a new repo via POST /repos, refreshing the repo selector on success.
 - Add ``coherent_resolver`` module in ``robotsix_mill.deps`` — resolves cross-repo
   git-rev consistency for shared transitive dependencies by computing a single agreed
   commit per shared dep.  Includes a ``uv lock``-based coherence check that empirically

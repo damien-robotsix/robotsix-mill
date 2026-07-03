@@ -379,6 +379,84 @@
   }
 
   // =========================================================================
+  // Add repo modal
+  // =========================================================================
+  async function addRepo() {
+    var backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    var modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML =
+      '<h2>Register Repo</h2>' +
+      '<label class="modal-label">Repo ID <span class="modal-req">*</span></label>' +
+      '<input type="text" class="modal-input" id="modal-repo-id" placeholder="e.g. robotsix-mill" autocomplete="off">' +
+      '<div class="modal-field-error" id="modal-repo-id-err"></div>' +
+      '<label class="modal-label">Forge Remote URL <span class="modal-req">*</span></label>' +
+      '<input type="text" class="modal-input" id="modal-forge-url" placeholder="e.g. https://github.com/org/repo.git" autocomplete="off">' +
+      '<div class="modal-field-error" id="modal-forge-url-err"></div>' +
+      '<label class="modal-label">Board ID <span style="color:#7d828c;font-size:10px">(optional — defaults to repo_id)</span></label>' +
+      '<input type="text" class="modal-input" id="modal-board-id" placeholder="e.g. robotsix-mill" autocomplete="off">' +
+      '<div class="modal-buttons">' +
+       '<span class="modal-submit-error" id="modal-submit-err"></span>' +
+       '<button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>' +
+       '<button type="button" class="modal-btn-create" id="modal-create">Register</button>' +
+      '</div>';
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    var repoIdEl = document.getElementById("modal-repo-id");
+    var repoIdErr = document.getElementById("modal-repo-id-err");
+    var forgeUrlEl = document.getElementById("modal-forge-url");
+    var forgeUrlErr = document.getElementById("modal-forge-url-err");
+    var boardIdEl = document.getElementById("modal-board-id");
+    var submitErr = document.getElementById("modal-submit-err");
+    var createBtn = document.getElementById("modal-create");
+
+    function close() { document.body.removeChild(backdrop); }
+    function showRepoIdErr(msg) { repoIdErr.textContent = msg; }
+    function clearRepoIdErr() { repoIdErr.textContent = ""; }
+    function showForgeUrlErr(msg) { forgeUrlErr.textContent = msg; }
+    function clearForgeUrlErr() { forgeUrlErr.textContent = ""; }
+    function showSubmitErr(msg) { submitErr.textContent = msg; }
+    function clearSubmitErr() { submitErr.textContent = ""; }
+
+    async function doSubmit() {
+      var repoId = repoIdEl.value.trim();
+      var forgeUrl = forgeUrlEl.value.trim();
+      if (!repoId) { showRepoIdErr("Repo ID is required"); repoIdEl.focus(); return; }
+      clearRepoIdErr();
+      if (!forgeUrl) { showForgeUrlErr("Forge remote URL is required"); forgeUrlEl.focus(); return; }
+      clearForgeUrlErr();
+      clearSubmitErr();
+      createBtn.disabled = true; createBtn.textContent = "Registering…";
+      var body = { repo_id: repoId, forge_remote_url: forgeUrl };
+      var boardId = boardIdEl.value.trim();
+      if (boardId) body.board_id = boardId;
+      var r = await jpost("/repos", body);
+      if (!r.ok) {
+        var e = await r.text();
+        showSubmitErr("registration failed: " + e);
+        createBtn.disabled = false; createBtn.textContent = "Register";
+        return;
+      }
+      reposCache = null;
+      await fetchRepos();
+      close();
+    }
+
+    backdrop.addEventListener("click", function(e) { if (e.target === backdrop) close(); });
+    document.getElementById("modal-cancel").addEventListener("click", close);
+    createBtn.addEventListener("click", doSubmit);
+    modal.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") { e.preventDefault(); close(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doSubmit(); return; }
+      if (e.key === "Enter" && e.target === repoIdEl) { e.preventDefault(); forgeUrlEl.focus(); return; }
+      if (e.key === "Enter" && e.target === forgeUrlEl) { e.preventDefault(); boardIdEl.focus(); return; }
+    });
+    repoIdEl.focus();
+  }
+
+  // =========================================================================
   // Gates
   // =========================================================================
   async function fetchGates() {
@@ -2546,6 +2624,7 @@
   window.newEpic = newEpic;
   window.newInquiry = newInquiry;
   window.onRepoChange = onRepoChange;
+  window.addRepo = addRepo;
   window.toggleClosed = toggleClosed;
   window.fetchRepos = fetchRepos;
   window.connectWebSocket = connectWebSocket;
