@@ -662,10 +662,11 @@ def build_fs_tools(
                     except ValueError, OSError:
                         line_count = "?"
                     return (
-                        f"refused: {path} ({line_count} lines) is already "
-                        f"loaded in full earlier in this conversation — "
-                        f"scroll back to find it.  Do not re-read a slice "
-                        f"of a file you already have in full."
+                        f"REFUSED (do NOT retry): {path} "
+                        f"({line_count} lines) — already loaded in full "
+                        f"earlier in this conversation.  Scroll back to "
+                        f"find it; synthesise from context instead of "
+                        f"re-reading."
                     )
                 else:
                     # Covered by a prior partial read.
@@ -675,10 +676,10 @@ def build_fs_tools(
                         cov_end_line = cov_o + cov_l - 1
                         cov_range = f"lines {cov_o}–{cov_end_line}"
                     return (
-                        f"refused: {path} {cov_range} already loaded "
-                        f"earlier in this conversation — scroll back to "
-                        f"find them.  Do not re-read a range that is "
-                        f"already in context."
+                        f"REFUSED (do NOT retry): {path} "
+                        f"{cov_range} — already loaded earlier in this "
+                        f"conversation.  Scroll back to find them; "
+                        f"synthesise from context instead of re-reading."
                     )
 
         # Closure-scoped dedup for the Claude-SDK path (ctx is None).
@@ -699,10 +700,11 @@ def build_fs_tools(
                     if _offset >= stored_offset and req_end <= cov_end:
                         if stored_offset == 1 and stored_limit is None:
                             return (
-                                f"refused: {path} is already loaded in full "
-                                f"earlier in this conversation — scroll back "
-                                f"to find it. Do not re-read a slice of a "
-                                f"file you already have in full."
+                                f"REFUSED (do NOT retry): {path} "
+                                f"— already loaded in full earlier in this "
+                                f"conversation.  Scroll back to find it; "
+                                f"synthesise from context instead of "
+                                f"re-reading."
                             )
                         else:
                             if stored_limit is None:
@@ -711,10 +713,11 @@ def build_fs_tools(
                                 cov_end_line = stored_offset + stored_limit - 1
                                 cov_range = f"lines {stored_offset}–{cov_end_line}"
                             return (
-                                f"refused: {path} {cov_range} already loaded "
-                                f"earlier in this conversation — scroll back "
-                                f"to find them. Do not re-read a range that "
-                                f"is already in context."
+                                f"REFUSED (do NOT retry): {path} "
+                                f"{cov_range} — already loaded earlier in "
+                                f"this conversation.  Scroll back to find "
+                                f"them; synthesise from context instead of "
+                                f"re-reading."
                             )
 
         # Read (or refresh) via _read_cached, then slice.

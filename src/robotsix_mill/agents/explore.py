@@ -160,14 +160,17 @@ SCOPE DISCIPLINE — always follow these limits:
     read_file("config/repos.yaml", offset=1, limit=30)
 - NEVER RE-READ A RANGE YOU ALREADY HOLD: ``read_file`` refuses any
   partial slice whose line range (including a subset of a wider prior
-  read) you have already read this answer, returning a ``"refused: ...
-  already loaded earlier ..."`` string and **no new content** — a
-  wasted turn.  Track the ``(path, offset, limit)`` ranges you have
-  already read; never re-issue a ``read_file`` for a range you already
-  hold.  If you need those lines again, scroll back to the earlier
-  result instead of re-calling.  A subset re-read (e.g. you read
-  ``offset=29, limit=12`` then ask for ``offset=29, limit=1``) is also
-  refused — the narrower range is already contained in the wider one.
+  read) you have already read this answer, returning a ``"REFUSED (do
+  NOT retry): ..."`` string and **no new content** — a wasted turn.
+  **WARNING: ``read_file`` will REFUSE a re-read of a range already
+  served in this conversation. If you receive a "REFUSED" response, do
+  NOT retry — synthesise from the content already in context.** Track
+  the ``(path, offset, limit)`` ranges you have already read; never
+  re-issue a ``read_file`` for a range you already hold.  If you need
+  those lines again, scroll back to the earlier result instead of
+  re-calling.  A subset re-read (e.g. you read ``offset=29, limit=12``
+  then ask for ``offset=29, limit=1``) is also refused — the narrower
+  range is already contained in the wider one.
 - MERGE ADJACENT READ RANGES: when you need several nearby
   regions of the same file, request the maximum contiguous range
   you expect to need in a single read.  Do NOT issue several short

@@ -278,7 +278,7 @@ def test_system_prompt_warns_against_re_reading_already_held_ranges():
     read ranges and scroll back instead of re-issuing."""
     sp = explore._SYSTEM_PROMPT.lower()
     assert "never re-read" in sp or "never re-issue" in sp
-    assert "already loaded earlier" in sp
+    assert "already read this answer" in sp
     assert "no new content" in sp
     assert "subset" in sp
 
