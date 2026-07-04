@@ -17,6 +17,7 @@ dependencies = [
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
     "robotsix-llmio[openrouter,claude-sdk]",
+    "robotsix-config",  # config-standard migration (33bf)
     "prometheus-fastapi-instrumentator>=8",
     "pydantic-settings>=2",
     "pyyaml>=6",
@@ -63,6 +64,7 @@ default-groups = ["dev"]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "73f2d555caa21de47a3732824d776e04719b3011" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
+robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "d29de204db62910f062456e5055fc2fe232e04a9" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
@@ -264,6 +266,7 @@ extend_exclude = ["_llmio_check/"]
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.
 DEP002 = [
+    "robotsix-config",  # staging dep until 33bf imports it
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
