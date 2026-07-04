@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Internal: verified trace-review classifier does not produce false-positive `tool_errors` from `validate_artifact` spans (no code change needed)
 - Enable the diagnostic periodic workflow: create the per-repo presence file
   (`.robotsix-mill/periodic/diagnostic.yaml`) and flip `enabled: true` in the
   agent definition. The check registry starts empty; individual checks are
