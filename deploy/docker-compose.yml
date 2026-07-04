@@ -60,6 +60,7 @@ services:
       robotsix.deploy.primary: "true"
       robotsix.deploy.claude-mount: "true"
       robotsix.deploy.config-target: "/app/config/config.json"
+      robotsix.deploy.chat-access: "true"
     environment:
       # Reach the Docker daemon through the hardened socket-proxy sibling
       # rather than a mounted socket.  The Docker CLI (which the sandbox

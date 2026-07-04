@@ -204,6 +204,9 @@ register_repo
 # RepoRegistrationResult.registered — pydantic response-model field, read
 # only via serialization (and by API clients), never by name in src/.
 registered
+# GET /chat-skill handler — invoked via @router.get decorator, not by
+# direct Python call. Tested via HTTP TestClient.
+chat_skill
 # POST /tickets/ingest handler — invoked via @router.post decorator, not
 # by direct Python call. Tested via HTTP TestClient.
 ingest_ticket
