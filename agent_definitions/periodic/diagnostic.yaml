@@ -16,7 +16,7 @@ description: >-
 category: periodic
 
 interval: 1d
-enabled: false
+enabled: true
 
 level: 2
 
