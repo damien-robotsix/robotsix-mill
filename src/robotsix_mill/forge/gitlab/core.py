@@ -320,6 +320,29 @@ class GitLabForge(
             )
         return self._update_project(owner=owner, repo=repo, description=description)
 
+    def get_repo_description(self, *, owner: str, repo: str) -> str:
+        """Return the current description of *owner/repo* or ``""`` on failure.
+
+        Calls ``GET /projects/:id`` to read back the description.
+        Must NEVER raise.
+        """
+        return self._get_repo_description(owner=owner, repo=repo)
+
+    def _get_repo_description(self, *, owner: str, repo: str) -> str:
+        from urllib.parse import quote
+
+        token = gitlab_token()
+        headers = _build_headers(token)
+        project_path = f"{owner}/{repo}"
+        encoded = quote(project_path, safe="")
+        try:
+            r = self._http.get(f"/projects/{encoded}", headers=headers)
+            if r.status_code == 200:
+                return (r.json().get("description") or "")[:2000]
+        except Exception:
+            pass
+        return ""
+
     def _update_project(self, *, owner: str, repo: str, description: str) -> bool:
         from urllib.parse import quote
 

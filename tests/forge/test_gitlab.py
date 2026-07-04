@@ -2086,6 +2086,89 @@ def test_fork_repo_disabled_raises_notconfigured(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# get_repo_description
+# ---------------------------------------------------------------------------
+
+
+def test_get_repo_description_happy_path(tmp_path, monkeypatch):
+    """200 from GET /projects/:id → returns description."""
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "/projects/": _make_response(200, {"description": "my desc"}),
+        },
+    )
+    forge = _forge(tmp_path)
+    result = forge.get_repo_description(owner="ns", repo="proj")
+    assert result == "my desc"
+
+
+def test_get_repo_description_non_200_returns_empty(tmp_path, monkeypatch):
+    """Non-200 from GET → returns '' (never raises)."""
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "/projects/": _make_response(404, {}, "not found"),
+        },
+    )
+    forge = _forge(tmp_path)
+    result = forge.get_repo_description(owner="ns", repo="proj")
+    assert result == ""
+
+
+def test_get_repo_description_null_description(tmp_path, monkeypatch):
+    """description is None → returns ''."""
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "/projects/": _make_response(200, {"description": None}),
+        },
+    )
+    forge = _forge(tmp_path)
+    result = forge.get_repo_description(owner="ns", repo="proj")
+    assert result == ""
+
+
+def test_get_repo_description_clamps_to_2000_chars(tmp_path, monkeypatch):
+    """Descriptions longer than GitLab's 2000-char limit are truncated."""
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "/projects/": _make_response(200, {"description": "x" * 2500}),
+        },
+    )
+    forge = _forge(tmp_path)
+    result = forge.get_repo_description(owner="ns", repo="proj")
+    assert len(result) == 2000
+    assert result == "x" * 2000
+
+
+def test_get_repo_description_exception_returns_empty(tmp_path, monkeypatch):
+    """Network error → returns '' (never raises)."""
+
+    class FailingClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            raise real_httpx.ConnectError("net down")
+
+        def put(self, url, headers=None, json=None, **kwargs):
+            return _make_response(500, {}, "error")
+
+    monkeypatch.setattr(real_httpx, "Client", FailingClient)
+    forge = _forge(tmp_path)
+    result = forge.get_repo_description(owner="ns", repo="proj")
+    assert result == ""
+
+
+# ---------------------------------------------------------------------------
 # _delete_branch (via delete_branch)
 # ---------------------------------------------------------------------------
 
