@@ -10,6 +10,7 @@
     "MILL_PER_PASS_REQUEST_BUDGET": 500,
     "agent_check_interval_seconds": 86400,
     "agent_check_periodic": true,
+    "allow_runtime_repo_registration": false,
     "api_host": "0.0.0.0",
     "api_port": 8077,
     "api_url": "http://127.0.0.1:8077",

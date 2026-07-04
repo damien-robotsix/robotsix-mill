@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Internal: verified trace-review classifier does not produce false-positive `tool_errors` from `validate_artifact` spans (no code change needed)
+- Gate `POST /repos` behind a new `allow_runtime_repo_registration` setting (default `false`). When off, only operator-configured repos (in `config/config.json`) accept tickets; auto-registered repos are rejected by `POST /tickets`, `POST /tickets/ingest`, and `POST /repos`. Added `DELETE /repos/{id}` to deregister runtime-added repos.
 - Enable the diagnostic periodic workflow: create the per-repo presence file
   (`.robotsix-mill/periodic/diagnostic.yaml`) and flip `enabled: true` in the
   agent definition. The check registry starts empty; individual checks are

@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, field_validator
 
 from ...config import RepoConfig, ReposRegistry, Settings
@@ -87,6 +87,16 @@ def register_repo(
     New registrations return 201 and the repo is immediately visible via
     ``request.app.state.repos`` without a container restart.
     """
+    # Gate: runtime repo registration is opt-in. When the flag is off
+    # (default), only operator-configured repos (in config/config.json)
+    # are accepted — POST /repos is refused.
+    if not settings.allow_runtime_repo_registration:
+        raise HTTPException(
+            status_code=403,
+            detail="Runtime repo registration is disabled. "
+            "Set allow_runtime_repo_registration=true in config to enable.",
+        )
+
     effective_board_id = body.board_id or body.repo_id
 
     # Idempotency: if the repo_id already exists in the registry,
@@ -188,4 +198,67 @@ def register_repo(
         board_id=effective_board_id,
         forge_remote_url=body.forge_remote_url,
         registered=True,
+    )
+
+
+@router.delete(
+    "/repos/{repo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def deregister_repo(
+    repo_id: str,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    repos: ReposRegistry = Depends(get_repos_registry),
+) -> None:
+    """Remove a runtime-registered repo from the machine-owned overlay.
+
+    Only repos with ``source="auto"`` (machine-registered) can be
+    deregistered.  Operator-configured repos (``source="config"``)
+    are permanent and return 403.  Unknown repos return 404.
+
+    After removal the overlay YAML is updated and the in-process
+    :class:`ReposRegistry` is hot-reloaded.
+    """
+    if repo_id not in repos.repos:
+        raise HTTPException(status_code=404, detail=f"Unknown repo_id: {repo_id!r}")
+
+    rc = repos.repos[repo_id]
+    if rc.source != "auto":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Repo '{repo_id}' is operator-configured and cannot be "
+            "deregistered via API. Remove it from config/config.json instead.",
+        )
+
+    # Remove from the overlay YAML file.
+    _data_root = os.path.realpath(os.fspath(settings.data_dir))
+    _safe_path_str = os.path.realpath(os.path.join(_data_root, "registered_repos.yaml"))
+    if not _safe_path_str.startswith(_data_root + os.sep):
+        raise ValueError(
+            f"Path escapes data directory: {_safe_path_str} is not within {_data_root}"
+        )
+    overlay_path = Path(_safe_path_str)
+    if overlay_path.exists():
+        data = yaml.safe_load(overlay_path.read_text(encoding="utf-8")) or {}
+        if isinstance(data, dict) and "repos" in data:
+            data["repos"].pop(repo_id, None)
+            if not data["repos"]:
+                data.pop("repos", None)
+            with open(overlay_path, "w", encoding="utf-8") as fh:
+                yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
+
+    # Hot-reload: clear cached singleton and re-read merged config.
+    _reset_repos_config()
+    new_repos = load_repos_config()
+    # Preserve operator-configured repos from the original registry
+    # that load_repos_config may have missed.
+    for rid, r_config in repos.repos.items():
+        if rid != repo_id and rid not in new_repos.repos:
+            new_repos.repos[rid] = r_config
+    request.app.state.repos = new_repos
+
+    log.info(
+        "Deregistered repo %r via runtime overlay",
+        _sanitize_log_value(repo_id),
     )

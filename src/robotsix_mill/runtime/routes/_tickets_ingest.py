@@ -21,7 +21,7 @@ from ...agents.dedup import (
     rank_candidates_by_similarity,
     run_dedup_check,
 )
-from ...config import ReposRegistry, Settings
+from ...config import RepoConfig, ReposRegistry, Settings
 from ...core.models import TicketKind
 from ...core.service import TicketService
 from ...core.states import State
@@ -36,6 +36,23 @@ from ..worker import Worker
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Tickets"])
+
+
+def _check_repo_workable(
+    repo_config: "RepoConfig",
+    repo_id: str,
+    settings: "Settings",
+) -> None:
+    """Reject tickets for auto-registered repos when runtime
+    registration is disabled (the repo was registered via
+    POST /repos but the instance isn't configured to work it)."""
+    if repo_config.source == "auto" and not settings.allow_runtime_repo_registration:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Repo '{repo_id}' was registered at runtime but "
+            "runtime repo registration is disabled. Tickets are only "
+            "accepted for operator-configured repos.",
+        )
 
 
 class TicketIngest(BaseModel):
@@ -74,6 +91,10 @@ def ingest_ticket(
         raise HTTPException(
             status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
         )
+
+    # 2. Reject auto-registered repos when the flag is off.
+    _check_repo_workable(repo_config, body.repo_id, settings)
+
     board_id = repo_config.board_id
 
     # 2. Candidate selection — scope to the target board.
