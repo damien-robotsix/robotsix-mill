@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix `mill-socket-proxy` crash-loop: add `tmpfs: /run` for haproxy pidfile and patch the `docker-events` backend with required timeouts (`timeout connect`, `timeout http-request`, `timeout http-keep-alive`) for haproxy 3.x compatibility.
 - Internal: verified trace-review classifier does not produce false-positive `tool_errors` from `validate_artifact` spans (no code change needed)
 - Enable the diagnostic periodic workflow: create the per-repo presence file
   (`.robotsix-mill/periodic/diagnostic.yaml`) and flip `enabled: true` in the
