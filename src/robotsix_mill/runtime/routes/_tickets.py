@@ -97,6 +97,19 @@ def create_ticket(
     repos = request.app.state.repos
     board_id = _resolve_board_id(body.repo_id, repos)
 
+    # Reject tickets for auto-registered repos when runtime
+    # registration is disabled (the repo was registered via
+    # POST /repos but the instance isn't configured to work it).
+    if body.repo_id and body.repo_id in repos.repos:
+        rc = repos.repos[body.repo_id]
+        if rc.source == "auto" and not settings.allow_runtime_repo_registration:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Repo '{body.repo_id}' was registered at runtime but "
+                "runtime repo registration is disabled. Tickets are only "
+                "accepted for operator-configured repos.",
+            )
+
     try:
         ticket = svc.create(
             body.title,

@@ -13,6 +13,7 @@ from robotsix_mill.runtime.api import create_app
 @pytest.fixture
 def client(settings, repos_registry):
     """Single-repo TestClient for /repos endpoint tests."""
+    settings.allow_runtime_repo_registration = True
     with TestClient(
         create_app(repos_registry, settings, single_repo_id="test-repo")
     ) as c:
@@ -165,3 +166,57 @@ def test_hot_reload(client, settings):
 
     # The original operator-configured repo must still be present.
     assert "test-repo" in repos.repos
+
+
+def test_register_rejected_when_flag_off(client, settings):
+    """POST /repos with allow_runtime_repo_registration=False → 403."""
+    settings.allow_runtime_repo_registration = False
+    payload = {
+        "repo_id": "rejected-repo",
+        "forge_remote_url": "https://github.com/x/y",
+    }
+    r = client.post("/repos", json=payload)
+    assert r.status_code == 403
+    assert "disabled" in r.json()["detail"]
+
+
+def test_deregister_auto_repo(client, settings):
+    """DELETE /repos/{id} for an auto-registered repo → 204, repo removed."""
+    settings.allow_runtime_repo_registration = True
+    # Register first.
+    payload = {
+        "repo_id": "delete-me",
+        "forge_remote_url": "https://github.com/x/y",
+    }
+    r = client.post("/repos", json=payload)
+    assert r.status_code == 201
+
+    # Deregister.
+    r = client.delete("/repos/delete-me")
+    assert r.status_code == 204
+
+    # Verify it's gone from the registry.
+    repos = client.app.state.repos
+    assert "delete-me" not in repos.repos
+
+    # Verify the overlay YAML no longer has the entry.
+    overlay_path = Path(settings.data_dir) / "registered_repos.yaml"
+    if overlay_path.exists():
+        overlay = yaml.safe_load(overlay_path.read_text()) or {}
+        repos_in_overlay = overlay.get("repos", {}) if isinstance(overlay, dict) else {}
+        assert "delete-me" not in repos_in_overlay
+
+
+def test_deregister_unknown_repo(client):
+    """DELETE /repos/{id} for an unknown repo → 404."""
+    r = client.delete("/repos/nonexistent")
+    assert r.status_code == 404
+
+
+def test_deregister_operator_repo(client, settings):
+    """DELETE /repos/{id} for an operator-configured repo → 403."""
+    settings.allow_runtime_repo_registration = True
+    # "test-repo" is the operator-configured repo from the fixture.
+    r = client.delete("/repos/test-repo")
+    assert r.status_code == 403
+    assert "operator-configured" in r.json()["detail"]

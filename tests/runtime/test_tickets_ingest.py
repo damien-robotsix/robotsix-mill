@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from robotsix_mill.config import RepoConfig
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.runtime.api import create_app
@@ -217,5 +218,51 @@ def test_ingest_already_done_treated_as_negative(client, service):
     ) as mock_dedup:
         r = client.post("/tickets/ingest", json=_ingest_payload())
     assert mock_dedup.called
+    assert r.status_code == 201
+    assert r.json()["deduped"] is False
+
+
+# ---------------------------------------------------------------------------
+# Auto-registered repo rejected when flag is off
+# ---------------------------------------------------------------------------
+def test_ingest_rejects_auto_repo_when_flag_off(client, settings):
+    """POST /tickets/ingest for an auto-registered repo → 400 when the
+    runtime registration flag is off."""
+    # Add an auto-registered repo to the registry.
+    auto_repo = RepoConfig(
+        repo_id="auto-repo",
+        board_id="auto-board",
+        langfuse_project_name="",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        forge_remote_url="https://github.com/x/y",
+        source="auto",
+    )
+    client.app.state.repos.repos["auto-repo"] = auto_repo
+
+    settings.allow_runtime_repo_registration = False
+    payload = _ingest_payload(repo_id="auto-repo")
+    r = client.post("/tickets/ingest", json=payload)
+    assert r.status_code == 400
+    assert "registered at runtime" in r.json()["detail"]
+
+
+def test_ingest_accepts_auto_repo_when_flag_on(client, settings):
+    """POST /tickets/ingest for an auto-registered repo → 201 when the
+    runtime registration flag is on."""
+    auto_repo = RepoConfig(
+        repo_id="auto-repo-2",
+        board_id="auto-board-2",
+        langfuse_project_name="",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        forge_remote_url="https://github.com/x/y",
+        source="auto",
+    )
+    client.app.state.repos.repos["auto-repo-2"] = auto_repo
+
+    settings.allow_runtime_repo_registration = True
+    payload = _ingest_payload(repo_id="auto-repo-2")
+    r = client.post("/tickets/ingest", json=payload)
     assert r.status_code == 201
     assert r.json()["deduped"] is False

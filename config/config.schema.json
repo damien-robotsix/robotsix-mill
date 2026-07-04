@@ -729,6 +729,12 @@
           "title": "Agent Check Periodic",
           "type": "boolean"
         },
+        "allow_runtime_repo_registration": {
+          "default": false,
+          "description": "When true, allow POST /repos to hot-register repos at runtime. When false, only operator-configured repos are accepted.",
+          "title": "Allow Runtime Repo Registration",
+          "type": "boolean"
+        },
         "api_host": {
           "default": "127.0.0.1",
           "description": "Management API listen host.",
