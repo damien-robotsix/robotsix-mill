@@ -1,7 +1,17 @@
 """Additive SQLite column migrations — shared helpers.
 
-These functions mirror the intent of
-``robotsix_llmio.core.sqlite_utils`` but the llmio API is NOT a
+.. deprecated::
+    This module is **deprecated** as of the Alembic migration
+    adoption (``alembic/``).  ``db.py`` no longer calls
+    ``run_additive_migrations`` — Alembic handles all schema
+    changes via versioned migration files.  This file is kept
+    temporarily for reference; it will be removed once all
+    deployments have transitioned to Alembic-tracked databases.
+
+Historical context (kept for archaeology)
+-----------------------------------------
+These functions mirrored the intent of
+``robotsix_llmio.core.sqlite_utils`` but the llmio API was NOT a
 drop-in replacement as of llmio pin ``3da3c4317f4a``:
 
 * ``run_additive_migrations`` takes ``(table, column_ddls)`` in llmio
@@ -9,17 +19,8 @@ drop-in replacement as of llmio pin ``3da3c4317f4a``:
   signature.
 * llmio uses ``conn.execute(str)`` which works with raw
   ``sqlite3.Connection`` but raises ``ObjectNotExecutableError`` on
-  SQLAlchemy ≥2.0 ``Connection``.  Mill passes a SA connection from
-  ``engine.begin()``, so llmio's version cannot be used as-is.
-
-Keep this module until llmio's ``sqlite_utils`` supports both
-``sqlite3.Connection`` and SQLAlchemy ``Connection`` (like the
-``_execute_sql`` adapter here does) AND its API matches the call-sites
-in ``db.py``.
-
-Once that is done, switch the import in ``db.py`` to
-``from robotsix_llmio.core.sqlite_utils import run_additive_migrations``
-and delete this file.
+  SQLAlchemy ≥2.0 ``Connection``.  Mill passed a SA connection from
+  ``engine.begin()``, so llmio's version could not be used as-is.
 """
 
 from __future__ import annotations

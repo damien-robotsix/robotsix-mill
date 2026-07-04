@@ -9,6 +9,15 @@ cached process-wide, one per board.
 while the worker coroutine owns DB access; all writes for a given
 board are still serialized through that board's single worker, so
 SQLite's single-writer model is respected.
+
+Schema migration
+----------------
+``SQLModel.metadata.create_all()`` creates tables on fresh databases.
+Alembic (``alembic/``) handles all subsequent schema changes — column
+additions, renames, type changes, and table restructures.  The previous
+hand-rolled additive-migration system (``sqlite_utils.py``) is retained
+temporarily for reference but is no longer called; it will be removed
+once all deployments have transitioned.
 """
 
 from __future__ import annotations
@@ -23,7 +32,6 @@ from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
-from .sqlite_utils import run_additive_migrations
 
 log = logging.getLogger("robotsix_mill.db")
 
@@ -87,57 +95,122 @@ def get_engine(settings: Settings, board_id: str):
     return engine
 
 
+def _run_alembic_migrations(
+    settings: Settings, board_id: str, engine: object
+) -> None:
+    """Run Alembic migrations against the per-board SQLite database.
+
+    When Alembic is installed (dev/CI environments), runs
+    ``alembic upgrade head`` on tracked databases, and stamps
+    fresh or pre-Alembic databases as ``head`` after running the
+    legacy additive migrations one last time to catch any
+    straggling columns.
+
+    When Alembic is NOT installed (production deployments where it
+    is only a dev dependency), falls back to the legacy
+    ``run_additive_migrations`` behaviour so that ``init_db``
+    remains functional.  Production deployments should run Alembic
+    migrations via ``make migrate`` or ``scripts/migrate.sh``
+    before deploying.
+    """
+    try:
+        from alembic import command
+        from alembic.config import Config
+    except ImportError:
+        # Alembic not installed (production) — fall back to legacy
+        # additive migrations so init_db still works.
+        from .sqlite_utils import run_additive_migrations as _legacy_migrate
+
+        with engine.begin() as conn:
+            _legacy_migrate(
+                conn,
+                [
+                    ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
+                    ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
+                    ("ticket", "paused_from TEXT"),
+                    ("ticket", "unblocks TEXT"),
+                    ("ticket", "labels TEXT"),
+                    ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
+                    ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
+                    ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
+                    (
+                        "ticket",
+                        "refine_output_hash TEXT NOT NULL DEFAULT ''",
+                    ),
+                    ("ticketevent", "prev_hash TEXT"),
+                    ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
+                ],
+            )
+        return
+
+    from sqlalchemy import inspect as sa_inspect
+
+    path = _db_path(settings, board_id)
+    db_url = f"sqlite:///{path}"
+
+    # Resolve alembic.ini relative to the repo root.  We walk up from
+    # this file's location (src/robotsix_mill/core/) until we find it.
+    import robotsix_mill.core.db as _db_module  # noqa: F811
+
+    _here = Path(_db_module.__file__).resolve().parent  # .../core/
+    _root = _here.parent.parent.parent  # repo root
+    alembic_ini = _root / "alembic.ini"
+    if not alembic_ini.is_file():
+        # Fallback: try CWD (works when run from repo root, e.g. tests).
+        alembic_ini = Path("alembic.ini")
+
+    alembic_cfg = Config(str(alembic_ini))
+    alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+
+    with engine.connect() as conn:
+        inspector = sa_inspect(conn)
+        has_alembic = "alembic_version" in inspector.get_table_names()
+
+    if has_alembic:
+        command.upgrade(alembic_cfg, "head")
+    else:
+        # Pre-Alembic database: run legacy additive migrations one last
+        # time to catch any columns that may be missing from hand-rolled
+        # pre-Alembic schemas (``create_all`` only creates tables, not
+        # columns on existing tables).  Then stamp as ``head`` so future
+        # runs use ``upgrade head``.
+        from .sqlite_utils import run_additive_migrations as _legacy_migrate
+
+        with engine.begin() as conn2:
+            _legacy_migrate(
+                conn2,
+                [
+                    ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
+                    ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
+                    ("ticket", "paused_from TEXT"),
+                    ("ticket", "unblocks TEXT"),
+                    ("ticket", "labels TEXT"),
+                    ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
+                    ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
+                    ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
+                    (
+                        "ticket",
+                        "refine_output_hash TEXT NOT NULL DEFAULT ''",
+                    ),
+                    ("ticketevent", "prev_hash TEXT"),
+                    ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
+                ],
+            )
+        command.stamp(alembic_cfg, "head")
+
+
 def init_db(settings: Settings, board_id: str) -> None:
-    """Create tables (if missing) on the per-board DB."""
+    """Create tables (if missing) on the per-board DB and apply any
+    pending Alembic migrations."""
     # import models so SQLModel.metadata is populated before create_all
     from . import models  # noqa: F401
 
     engine = get_engine(settings, board_id)
     SQLModel.metadata.create_all(engine)
 
-    # SQLite / SQLModel do not auto-add columns to existing tables.
-    # Additive migrations — each ALTER TABLE is wrapped in an
-    # add_column_if_missing call that catches sqlite3.OperationalError
-    # (typically "duplicate column name") so repeated runs are safe.
-    with engine.begin() as conn:
-        run_additive_migrations(
-            conn,
-            [
-                # board_id column from RepoConfig.
-                ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
-                # Operator-set priority flag.
-                ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
-                # paused_from column: records the originating state when a
-                # ticket is paused mid-stage to await a user reply
-                # (AWAITING_USER_REPLY).
-                ("ticket", "paused_from TEXT"),
-                # unblocks column: JSON list of ticket IDs to auto-unblock
-                # when this ticket completes (the inverse of depends_on,
-                # declared on the solver).
-                ("ticket", "unblocks TEXT"),
-                # labels column: JSON list of free-form label strings on the
-                # ticket.
-                ("ticket", "labels TEXT"),
-                # pre_redraft_cost_usd column: snapshot of the full Langfuse
-                # session cost captured at the last redraft, subtracted from
-                # the live session total so the dollar-cap limit restarts at
-                # zero after a redraft.
-                ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
-                # implement_cycles column: total implement passes across
-                # all review rounds (ticket lifetime). Feeds the
-                # implement↔review convergence backstop.
-                ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
-                # refine_passes column: count of refine passes per ticket
-                # (lifetime). Feeds the refine convergence backstop.
-                ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
-                # refine_output_hash column: hash of description.md output
-                # from the most recent refine pass, for convergence detection.
-                ("ticket", "refine_output_hash TEXT NOT NULL DEFAULT ''"),
-                # Hash-chain integrity columns for TicketEvent.
-                ("ticketevent", "prev_hash TEXT"),
-                ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
-            ],
-        )
+    # Run Alembic migrations — stamps fresh databases as ``head``,
+    # applies pending migrations on existing ones.
+    _run_alembic_migrations(settings, board_id, engine)
 
     # Self-heal any legacy rows whose ``kind`` was persisted as the
     # lowercase StrEnum *value* instead of the canonical uppercase
