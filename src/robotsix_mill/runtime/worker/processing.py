@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -440,10 +441,12 @@ async def _process_ticket_inner(
             # span is still active when attributes are stamped ---
             try:
                 # stage.run is sync (LLM/tool) — keep the loop responsive
+                started = time.monotonic()
                 if active_map is not None:
                     active_map[ticket_id] = {
                         "stage": stage_name,
                         "started_at": datetime.now(timezone.utc).isoformat(),
+                        "started_monotonic": started,
                     }
                 timeout = ctx.settings.stage_timeout_overrides.get(
                     stage_name, ctx.settings.stage_timeout_seconds
@@ -468,19 +471,24 @@ async def _process_ticket_inner(
                 timeout = ctx.settings.stage_timeout_overrides.get(
                     stage_name, ctx.settings.stage_timeout_seconds
                 )
+                elapsed = time.monotonic() - started
                 log.error(
-                    "%s: %s timed out after %ds — escalating to BLOCKED",
+                    "%s: %s timed out after %ds (elapsed %.1fs) — escalating to BLOCKED",
                     stage_name,
                     ticket_id,
                     timeout,
+                    elapsed,
                 )
-                note = f"stage {stage_name} timed out after {timeout}s"[:200]
+                note = f"stage {stage_name} timed out after {timeout}s (elapsed {elapsed:.1f}s)"[
+                    :200
+                ]
                 if root_io is not None:
                     root_io.set_attribute("error.classification", "timeout")
                     root_io.set_attribute("error.timeout_seconds", str(timeout))
+                    root_io.set_attribute("error.elapsed_seconds", f"{elapsed:.1f}")
                     root_io.set_output(
                         {
-                            "error": f"stage {stage_name} timed out after {timeout}s",
+                            "error": f"stage {stage_name} timed out after {timeout}s (elapsed {elapsed:.1f}s)",
                             "next_state": "BLOCKED",
                         }
                     )

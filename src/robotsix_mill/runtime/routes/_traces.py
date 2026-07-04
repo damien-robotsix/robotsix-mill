@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -82,7 +83,14 @@ def list_active(
     When omitted, returns all (current behaviour preserved).
     """
     active = [
-        {"ticket_id": tid, "stage": info["stage"], "started_at": info["started_at"]}
+        {
+            "ticket_id": tid,
+            "stage": info["stage"],
+            "started_at": info["started_at"],
+            "elapsed_seconds": round(
+                time.monotonic() - info.get("started_monotonic", 0), 1
+            ),
+        }
         for tid, info in worker._active.items()
     ]
     if repo_id is not None:

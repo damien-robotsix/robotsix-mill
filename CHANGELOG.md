@@ -1,6 +1,10 @@
 ## 0.0.0 (unreleased)
 
 - Serve ``GET /chat-skill`` endpoint returning a SKILL.md document that teaches the chat agent how to drive the board API (read tickets, post comments, manage state transitions, create via ingest). Includes mandatory safety rules requiring user confirmation for state-changing operations.
+- Stage timeout bookkeeping now tracks monotonic time alongside UTC
+  wall-clock time; timeout log messages and traces include actual
+  elapsed seconds to distinguish genuine timeouts from clock-skew
+  false positives.
 - Deploy: set `MILL_API_HOST=0.0.0.0` in `deploy/docker-compose.yml` so the container binds all interfaces (reachable by the central-deploy gateway) regardless of the onboard-written `api_host`.
 
 - Remove the dead `skip_local` parameter from `load_config()` in `src/robotsix_mill/config/loader.py` (no callers remained).
