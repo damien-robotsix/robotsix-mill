@@ -93,6 +93,20 @@ services:
       # socket WITHOUT a contract-forbidden host bind-mount in this file —
       # the way claude-mount injects /root/.claude into the mill container.
       robotsix.deploy.host-docker-sock: "true"
+    # haproxy 3.x requires a writable /run for its pidfile; without a tmpfs
+    # the container crashes with "Cannot create pidfile /run/haproxy.pid".
+    tmpfs:
+      - /run
+    # The shipped docker-entrypoint.sh already resolves BIND_CONFIG and
+    # writes a processed config to /tmp/haproxy.cfg.  We patch that
+    # processed copy to add the timeouts haproxy 3.x requires on the
+    # docker-events backend, then start haproxy with the corrected config.
+    command:
+      - sh
+      - -c
+      - |
+        sed -i '/^backend docker-events$/a\    timeout connect 10s\n    timeout http-request 10s\n    timeout http-keep-alive 10s' /tmp/haproxy.cfg
+        exec haproxy -W -db -f /tmp/haproxy.cfg
     environment:
       # Grant exactly the API surface the sandbox CLI calls:
       #   docker run  -> POST /containers/create + /containers/{id}/start
