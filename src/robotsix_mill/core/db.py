@@ -119,24 +119,32 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
         # additive migrations so init_db still works.
         from .sqlite_utils import run_additive_migrations as _legacy_migrate
 
-        with engine.begin() as conn:
+        # engine.connect() (not begin()) because add_column_if_missing
+        # calls conn.commit() internally after each ALTER TABLE, which
+        # would close an engine.begin() transaction and break subsequent
+        # operations.
+        with engine.connect() as conn:
             _legacy_migrate(
-                conn,  # type: ignore[arg-type]
+                conn,
+                "ticket",
                 [
-                    ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
-                    ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
-                    ("ticket", "paused_from TEXT"),
-                    ("ticket", "unblocks TEXT"),
-                    ("ticket", "labels TEXT"),
-                    ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
-                    ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
-                    ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
-                    (
-                        "ticket",
-                        "refine_output_hash TEXT NOT NULL DEFAULT ''",
-                    ),
-                    ("ticketevent", "prev_hash TEXT"),
-                    ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
+                    "board_id TEXT NOT NULL DEFAULT ''",
+                    "priority INTEGER NOT NULL DEFAULT 0",
+                    "paused_from TEXT",
+                    "unblocks TEXT",
+                    "labels TEXT",
+                    "pre_redraft_cost_usd REAL DEFAULT 0.0",
+                    "implement_cycles INTEGER NOT NULL DEFAULT 0",
+                    "refine_passes INTEGER NOT NULL DEFAULT 0",
+                    "refine_output_hash TEXT NOT NULL DEFAULT ''",
+                ],
+            )
+            _legacy_migrate(
+                conn,
+                "ticketevent",
+                [
+                    "prev_hash TEXT",
+                    "hash TEXT NOT NULL DEFAULT ''",
                 ],
             )
         return
@@ -172,24 +180,29 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
         # runs use ``upgrade head``.
         from .sqlite_utils import run_additive_migrations as _legacy_migrate
 
-        with engine.begin() as conn2:
+        # engine.connect() (not begin()) — see note above.
+        with engine.connect() as conn2:
             _legacy_migrate(
-                conn2,  # type: ignore[arg-type]
+                conn2,
+                "ticket",
                 [
-                    ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
-                    ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
-                    ("ticket", "paused_from TEXT"),
-                    ("ticket", "unblocks TEXT"),
-                    ("ticket", "labels TEXT"),
-                    ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
-                    ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
-                    ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
-                    (
-                        "ticket",
-                        "refine_output_hash TEXT NOT NULL DEFAULT ''",
-                    ),
-                    ("ticketevent", "prev_hash TEXT"),
-                    ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
+                    "board_id TEXT NOT NULL DEFAULT ''",
+                    "priority INTEGER NOT NULL DEFAULT 0",
+                    "paused_from TEXT",
+                    "unblocks TEXT",
+                    "labels TEXT",
+                    "pre_redraft_cost_usd REAL DEFAULT 0.0",
+                    "implement_cycles INTEGER NOT NULL DEFAULT 0",
+                    "refine_passes INTEGER NOT NULL DEFAULT 0",
+                    "refine_output_hash TEXT NOT NULL DEFAULT ''",
+                ],
+            )
+            _legacy_migrate(
+                conn2,
+                "ticketevent",
+                [
+                    "prev_hash TEXT",
+                    "hash TEXT NOT NULL DEFAULT ''",
                 ],
             )
         command.stamp(alembic_cfg, "head")

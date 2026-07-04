@@ -51,6 +51,7 @@ modules:
       - src/robotsix_mill/core/workspace.py
       - src/robotsix_mill/core/datetime_utils.py
       - src/robotsix_mill/core/text_utils.py
+      - src/robotsix_mill/core/sqlite_utils.py
       - src/robotsix_mill/core/delta_context.py
       - src/robotsix_mill/core/constants.py
       - src/robotsix_mill/core/text_noop.py
@@ -64,6 +65,7 @@ modules:
       - tests/core/test_models.py
       - tests/core/test_states.py
       - tests/core/test_service.py
+      - tests/core/test_sqlite_utils.py
       - tests/core/test_datetime_utils.py
       - tests/core/test_text_noop.py
       - tests/core/test_text_utils.py
