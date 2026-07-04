@@ -88,6 +88,11 @@ class State(StrEnum):
     EPIC_CLOSED = "epic_closed"  # epic closed (terminal)
 
 
+#: Terminal states that are excluded from default listings (CLOSED,
+#: EPIC_CLOSED, ANSWERED).  These states have empty transition sets
+#: in the state machine and represent completed/archived work.
+_TERMINAL_STATES: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
+
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {

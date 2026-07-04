@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...config import Settings
 from ...core.models import Ticket
-from ...core.states import State
+from ...core.states import State, _TERMINAL_STATES
 from ..board_adapter import MillBoardAdapter
 from ..deps import (
     enrich_ticket_read,
@@ -21,11 +21,6 @@ from ..deps import (
     get_worker,
     maybe_enqueue,
 )
-
-# Terminal states excluded from default board listings — matches the
-# set in ``_tickets._LIST_TERMINAL_STATES`` (CLOSED, EPIC_CLOSED,
-# ANSWERED). States with empty transition sets in the state machine.
-_BOARD_LIST_TERMINAL: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["Board"])
@@ -103,7 +98,7 @@ def board_cards(
         ]
         services.append(_TicketService(settings, board_id="meta"))
 
-    exclude = set(_BOARD_LIST_TERMINAL) if not include_closed else None
+    exclude = set(_TERMINAL_STATES) if not include_closed else None
 
     # Collect all (ticket, settings, svc) tuples first, then sort.
     collected: list[tuple[Ticket, Settings, _TicketService]] = []

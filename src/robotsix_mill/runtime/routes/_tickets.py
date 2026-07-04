@@ -33,7 +33,7 @@ from ...config import RepoConfig, ReposRegistry, Settings
 
 from ...core.models import Ticket
 from ...core.service import TicketService
-from ...core.states import State
+from ...core.states import State, _TERMINAL_STATES
 from ..worker import Worker
 from ..deps import (
     enrich_ticket_read,
@@ -43,11 +43,6 @@ from ..deps import (
     maybe_enqueue,
 )
 from ._repo_helpers import _resolve_board_id
-
-# Terminal states that are excluded from default listings (CLOSED,
-# EPIC_CLOSED, ANSWERED).  These states have empty transition sets
-# in the state machine and represent completed/archived work.
-_LIST_TERMINAL_STATES: set[State] = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
 
 log = logging.getLogger(__name__)
 
@@ -211,7 +206,7 @@ def _list_tickets_compute(
     a thin, obviously-correct guard around the expensive all-board fanout."""
     exclude = None
     if not include_closed:
-        exclude = set(_LIST_TERMINAL_STATES)
+        exclude = set(_TERMINAL_STATES)
         # When the caller explicitly filters for a terminal state
         # (e.g. ``state=closed``), remove it from the exclusion set
         # so the explicit filter takes precedence — otherwise the
