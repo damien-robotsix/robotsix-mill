@@ -55,7 +55,15 @@ def _insert_changelog_entry(repo_dir: Path, entry_text: str) -> str:
 
     header_idx = _find_header_idx(lines)
     if header_idx is None:
-        lines.insert(0, f"{_HEADER}\n\n{entry_text}\n")
+        # Insert after the top-level heading (# ...) when one exists,
+        # so the unreleased section does not jump above the file title.
+        insertion_point = 0
+        if lines and lines[0].strip().startswith("# "):
+            insertion_point = 1
+            # Skip any blank lines immediately after the heading.
+            while insertion_point < len(lines) and lines[insertion_point].strip() == "":
+                insertion_point += 1
+        lines.insert(insertion_point, f"{_HEADER}\n\n{entry_text}\n")
         changelog_path.write_text("".join(lines), encoding="utf-8")
         return "changelog_insert: added header + entry at top"
 

@@ -20,6 +20,7 @@
   per ticket.
 - Add prompt rule to implement agent: do not `explore` to confirm an empty `list_threads` result — proceed with the task and note the inability to reply in structured output.
 - Added guardrail in implement agent's Tool-use discipline: do not re-read files that an `explore` sub-agent already quoted in its summary. This reduces redundant `read_file` calls and saves token budget.
+- Fix `insert_changelog_entry` tool: when no `## 0.0.0 (unreleased)` section exists, insert the header + entry after the file's top-level heading (`# Changelog`) instead of prepending to position 0, preserving the correct heading order. (mill: tool_error — The `insert_changelog_entry` tool (observation e135a2bc) overwrote CHANGELOG.md entirely i (20260704T173450Z-tool-error-the-insert-changelog-entry-to-bb41) [WIP])
 - Deps: add `robotsix-config` (pinned commit `d29de204`) as a dependency to unblock the config-standard migration (`33bf`/`da3e`) prerequisite gate; deptry-ignored until imported.
 - Pipeline: a ticket already satisfied on main (empty diff vs base — clean tree, no commits beyond base, no surviving edits, tests green) now terminates DONE instead of looping empty PRs in `blocked`. Real-diff failures still block. Added an operator escape hatch: `mark-done` now works from `blocked`/`rebasing`.
 - Fix `mill-socket-proxy` crash-loop: add `tmpfs: /run` for haproxy pidfile and patch the `docker-events` backend with required timeouts (`timeout connect`, `timeout http-request`, `timeout http-keep-alive`) for haproxy 3.x compatibility.

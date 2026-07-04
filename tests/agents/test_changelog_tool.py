@@ -120,5 +120,7 @@ def test_adds_header_when_missing(tmp_path: Path):
     result = _insert_changelog_entry(tmp_path, "- **new**: entry")
     assert "added header + entry" in result
     content = changelog.read_text()
-    assert content.startswith(f"{_HEADER}\n\n- **new**: entry\n")
-    assert "old entry" in content
+    # Should preserve the top-level heading and insert the unreleased
+    # section after it, not before.
+    expected = f"# Old header\n\n{_HEADER}\n\n- **new**: entry\n- old entry\n"
+    assert content == expected
