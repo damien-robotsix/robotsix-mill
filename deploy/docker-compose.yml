@@ -106,6 +106,10 @@ services:
       - -c
       - |
         sed -i '/^backend docker-events$/a\    timeout connect 10s\n    timeout http-request 10s\n    timeout http-keep-alive 10s' /tmp/haproxy.cfg
+        # Drop the pidfile directive: deployers may run this container as a
+        # non-root user, and haproxy exits fatally when it cannot write the
+        # pidfile. Foreground master mode (-W -db) does not need one.
+        sed -i '/^[[:space:]]*pidfile/d' /tmp/haproxy.cfg
         exec haproxy -W -db -f /tmp/haproxy.cfg
     environment:
       # Grant exactly the API surface the sandbox CLI calls:
