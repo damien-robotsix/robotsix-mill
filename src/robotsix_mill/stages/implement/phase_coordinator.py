@@ -151,8 +151,14 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         #    that attempt, re-spawning would produce the same result.
         #    Fail fast before a trace opens to prevent the $0.00 trace /
         #    no-op re-spawn pattern.
+        #
+        #    Skip the guard when the ticket is in a transient-retry
+        #    window (retry_attempt > 0): the previous attempt was
+        #    aborted by an infra error (coordinator timeout, 5xx), not a
+        #    completed agent run, so the BLOCKED implement.md is stale
+        #    and the retry should proceed.
         implement_md = ws.artifacts_dir / "implement.md"
-        if implement_md.exists():
+        if implement_md.exists() and ticket.retry_attempt == 0:
             try:
                 md_content = implement_md.read_text(encoding="utf-8")
             except OSError:

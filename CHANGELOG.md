@@ -1,7 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Deps: add `robotsix-config` (pinned commit `d29de204`) as a dependency to unblock the config-standard migration (`33bf`/`da3e`) prerequisite gate; deptry-ignored until imported.
-
+- spec-unchanged guard no longer blocks transient retries: when a ticket is in a transient-retry window (``retry_attempt > 0``, e.g. after a coordinator timeout or 5xx), the stale ``implement.md`` guard is skipped so the retry can proceed.  Manual re-spawns (resumed from BLOCKED) are still guarded as before.
 - Pipeline: a ticket already satisfied on main (empty diff vs base — clean tree, no commits beyond base, no surviving edits, tests green) now terminates DONE instead of looping empty PRs in `blocked`. Real-diff failures still block. Added an operator escape hatch: `mark-done` now works from `blocked`/`rebasing`.
 
 - Fix `mill-socket-proxy` crash-loop: add `tmpfs: /run` for haproxy pidfile and patch the `docker-events` backend with required timeouts (`timeout connect`, `timeout http-request`, `timeout http-keep-alive`) for haproxy 3.x compatibility.

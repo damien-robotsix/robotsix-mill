@@ -5604,6 +5604,52 @@ def test_stale_respawn_guard_skips_without_implement_md(
     assert out is None, f"preflight must allow on first run, got: {out}"
 
 
+def test_stale_respawn_guard_skips_on_transient_retry(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the ticket is in a transient-retry window (retry_attempt > 0),
+    preflight must skip the stale re-spawn guard so automatic retries of
+    aborted (not completed) implement attempts can proceed."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Transient retry", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Write implement.md with matching fingerprint — under normal
+    # circumstances this would trigger the guard.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nagent error: timeout\n",
+        encoding="utf-8",
+    )
+
+    # Simulate a transient retry in progress (attempt 1 of 5).
+    ctx.service.set_retry_state(
+        t.id,
+        retry_attempt=1,
+        last_transient_error="TimeoutError('coordinator timeout')",
+        next_retry_at=None,
+    )
+    t = ctx.service.get(t.id)
+    assert t.retry_attempt == 1
+
+    # Preflight should allow — transient retry is not a manual re-spawn.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow on transient retry, got: {out}"
+
+
 def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeypatch):
     """When the convergence backstop fires (empty diff after review) it
     now terminates DONE (already satisfied). implement.md must still be
