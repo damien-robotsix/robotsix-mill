@@ -30,8 +30,21 @@ from robotsix_mill.core import models  # noqa: F401
 config = context.config
 
 # Set up Python logging from the config file section (optional).
+# Save the root logger's handlers before fileConfig replaces them
+# (alembic.ini [logger_root] sets handlers=console, which nukes any
+# pre-existing handlers such as pytest caplog).  Restore them after
+# so both the alembic console handler and any prior handlers coexist.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name, disable_existing_loggers=False)
+    import logging
+
+    _root = logging.getLogger()
+    _saved_handlers = list(_root.handlers)
+    try:
+        fileConfig(config.config_file_name, disable_existing_loggers=False)
+    finally:
+        for h in _saved_handlers:
+            if h not in _root.handlers:
+                _root.addHandler(h)
 
 # The metadata object that autogenerate compares against the live DB.
 target_metadata = SQLModel.metadata
