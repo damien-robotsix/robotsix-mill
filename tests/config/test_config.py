@@ -401,6 +401,24 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     (
         "trace_health_interval_seconds",
         "MILL_TRACE_HEALTH_INTERVAL_SECONDS",
+        "86400",
+        86400,
+    ),
+    (
+        "coordinator_timeout_overrides",
+        "MILL_COORDINATOR_TIMEOUT_OVERRIDES",
+        '{"explore": 600, "refine": 1200}',
+        {"explore": 600, "refine": 1200},
+    ),
+    (
+        "repo_description_sync_periodic",
+        "MILL_REPO_DESCRIPTION_SYNC_PERIODIC",
+        "1",
+        True,
+    ),
+    (
+        "repo_description_sync_interval_seconds",
+        "MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS",
         "43200",
         43200,
     ),
@@ -418,12 +436,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("diagnostic_periodic", "MILL_DIAGNOSTIC_PERIODIC", "1", True),
     ("diagnostic_interval_seconds", "MILL_DIAGNOSTIC_INTERVAL_SECONDS", "43200", 43200),
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
-    (
-        "web_knowledge_model",
-        "MILL_WEB_KNOWLEDGE_MODEL",
-        "deepseek/deepseek-v4-pro",
-        "deepseek/deepseek-v4-pro",
-    ),
     ("epic_dedup_lookback_days", "MILL_EPIC_DEDUP_LOOKBACK_DAYS", "14", 14),
     # --- survey agent ---
     # --- review revision ---
@@ -480,8 +492,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("delete_branch_on_merge", "MILL_DELETE_BRANCH_ON_MERGE", "0", False),
     # --- ci_fix_max_iterations ---
     ("ci_fix_max_iterations", "MILL_CI_FIX_MAX_ITERATIONS", "3", 3),
-    # --- ci_fix_request_limit via YAML alias ---
-    ("ci_fix_request_limit", "MILL_CI_FIX_REQUEST_LIMIT", "80", 80),
     # --- network probe ---
     ("network_probe_host", "MILL_NETWORK_PROBE_HOST", "gitlab.com", "gitlab.com"),
     ("network_outage_retry_seconds", "MILL_NETWORK_OUTAGE_RETRY_SECONDS", "60", 60),
@@ -679,7 +689,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("board_list_cache_ttl_seconds", "MILL_BOARD_LIST_CACHE_TTL_SECONDS", "5.0", 5.0),
     # --- enable_repo_creation (string alias) ---
     ("enable_repo_creation", "MILL_ENABLE_REPO_CREATION", "0", False),
-    # --- progress log interval ---
 ]
 
 
