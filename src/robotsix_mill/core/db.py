@@ -28,7 +28,7 @@ from typing import Any
 
 import sqlite3
 
-from sqlalchemy import event
+from sqlalchemy import Engine, event
 from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
@@ -36,7 +36,7 @@ from ..config import Settings
 log = logging.getLogger("robotsix_mill.db")
 
 # Per-board engine cache.
-_engines: dict[str, object] = {}
+_engines: dict[str, Engine] = {}
 
 # Tracks which boards have had init_db() called so we can lazily
 # materialize schema on first access for a fresh repo.
@@ -95,7 +95,7 @@ def get_engine(settings: Settings, board_id: str):
     return engine
 
 
-def _run_alembic_migrations(settings: Settings, board_id: str, engine: object) -> None:
+def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -> None:
     """Run Alembic migrations against the per-board SQLite database.
 
     When Alembic is installed (dev/CI environments), runs
@@ -121,7 +121,7 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: object) -
 
         with engine.begin() as conn:
             _legacy_migrate(
-                conn,
+                conn,  # type: ignore[arg-type]
                 [
                     ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
                     ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
@@ -174,7 +174,7 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: object) -
 
         with engine.begin() as conn2:
             _legacy_migrate(
-                conn2,
+                conn2,  # type: ignore[arg-type]
                 [
                     ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
                     ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
@@ -247,7 +247,7 @@ def reset_engine() -> None:
     global _engines, _initialized
     for engine in _engines.values():
         try:
-            engine.dispose()  # type: ignore[attr-defined]
+            engine.dispose()
         except Exception:
             pass
     _engines = {}
