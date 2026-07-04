@@ -21,6 +21,7 @@ from ...core import db
 from ...core.states import State
 from ..board_adapter import MillBoardAdapter
 from ..board_html import build_board_skeleton, render_board_html
+from ...config import RepoConfig
 from ..deps import enrich_ticket_read, get_repos_registry, get_settings, get_worker
 from ...langfuse.client import _build_read_client, _langfuse_api_get
 
@@ -246,7 +247,7 @@ def list_repos(
     (``--repo-id`` passed) only that repo is returned.
     """
 
-    def _entry(rc) -> dict:
+    def _entry(rc: "RepoConfig") -> dict[str, str | None]:
         return {
             "repo_id": rc.repo_id,
             "board_id": rc.board_id,
