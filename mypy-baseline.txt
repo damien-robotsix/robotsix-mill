@@ -183,7 +183,6 @@ src/robotsix_mill/langfuse/client.py:0: error: Missing type arguments for generi
 src/robotsix_mill/langfuse/client.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/langfuse/client.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/jscpd_tool.py:0: error: Missing type arguments for generic type "CompletedProcess"  [type-arg]
-src/robotsix_mill/core/db.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/core/service/_queries.py:0: error: Argument 1 to "order_by" of "GenerativeSelect" has incompatible type "datetime"; expected "Literal[_NoArg.NO_ARG] | str | ColumnElement[Any] | _HasClauseElement[Any] | SQLCoreOperations[Any] | ExpressionElementRole[Any] | TypedColumnsClauseRole[Any] | Callable[[], ColumnElement[Any]] | LambdaElement | None"  [arg-type]
 src/robotsix_mill/core/service/_queries.py:0: error: "State" has no attribute "notin_"  [attr-defined]
 src/robotsix_mill/core/service/_queries.py:0: error: Function "robotsix_mill.core.service._queries._QueryMixin.list" is not valid as a type  [valid-type]

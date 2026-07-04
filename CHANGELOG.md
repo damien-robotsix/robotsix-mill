@@ -7,7 +7,13 @@
 - Enable `member_sync` periodic workflow for the mill repo itself via `.robotsix-mill/periodic/member_sync.yaml` presence file.
 - Serve ``GET /chat-skill`` endpoint returning a SKILL.md document that teaches the chat agent how to drive the board API (read tickets, post comments, manage state transitions, create via ingest). Includes mandatory safety rules requiring user confirmation for state-changing operations.
 - Deploy: set `MILL_API_HOST=0.0.0.0` in `deploy/docker-compose.yml` so the container binds all interfaces (reachable by the central-deploy gateway) regardless of the onboard-written `api_host`.
-
+- Adopt Alembic for SQLite schema migrations, replacing the hand-rolled
+  additive-migration system in `db.py`.  An initial migration captures all
+  existing tables (ticket, ticketevent, comment, memory) and columns.
+  `init_db()` now runs Alembic `upgrade head` on tracked databases and
+  stamps fresh/pre-Alembic databases as `head` after a one-time legacy
+  migration pass.  `make migrate` and `scripts/migrate.sh` are added for
+  local/CI use.  `sqlite_utils.py` is marked deprecated.
 - Remove the dead `skip_local` parameter from `load_config()` in `src/robotsix_mill/config/loader.py` (no callers remained).
 - Config: `load_repos_config` accepts both the nested `ReposRegistry` (`{meta, repos}`) shape written by central-deploy onboarding and the legacy flat `{repo_id: cfg}` shape, so a fresh onboard no longer crash-loops on `repos={"meta":null,"repos":{}}`.
 

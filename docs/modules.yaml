@@ -563,6 +563,10 @@ modules:
       - tests/dev-tooling/test_docs_nav.py
       - tests/dev-tooling/test_modules_yaml_paths.py
       - tests/dev-tooling/test_check_config_sync.py
+      - alembic.ini
+      - alembic/env.py
+      - alembic/script.py.mako
+      - alembic/versions/*.py
     dependencies: []
 
   # -------------------------------------------------------------------
