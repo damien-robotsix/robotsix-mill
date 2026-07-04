@@ -67,6 +67,10 @@ services:
       # behaviour (config split, defaults seeding, no socket-GID join) off
       # the presence of this variable.
       DOCKER_HOST: "tcp://mill-socket-proxy:2375"
+      # Bind all interfaces so the central-deploy gateway (a separate
+      # container) can reach the API.  Env overrides the config file's
+      # api_host, so this holds regardless of what the onboard form writes.
+      MILL_API_HOST: "0.0.0.0"
     volumes:
       - mill-data:/data
       - mill-config:/app/config
