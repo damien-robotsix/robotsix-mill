@@ -95,6 +95,33 @@ def test_is_transient_claude_sdk_genuine_error_not_transient():
     assert is_transient(Exception("some other failure")) is False
 
 
+def test_is_transient_unexpected_model_behavior():
+    """``UnexpectedModelBehavior`` (pydantic-ai) is transient when caused by
+    upstream API gateways returning null/malformed responses.  A fresh
+    invocation usually succeeds — retrying is cheaper than degrading a
+    pass or falling back to a weaker model."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    assert is_transient(UnexpectedModelBehavior("output retries exhausted")) is True
+
+    # Must also be recognised through cause/context chains
+    inner = UnexpectedModelBehavior("output retries exhausted")
+    wrapped = RuntimeError("agent run failed")
+    wrapped.__cause__ = inner
+    # is_transient doesn't walk chains for UnexpectedModelBehavior (only for
+    # OpenRouter and Claude SDK errors), but the direct instance is transient.
+    assert is_transient(inner) is True
+
+
+def test_is_transient_unexpected_model_behavior_not_other_pydantic_ai():
+    """Other pydantic-ai exceptions (e.g. UsageLimitExceeded) must NOT be
+    transient — only UnexpectedModelBehavior is the transient upstream glitch
+    signature."""
+    from pydantic_ai.exceptions import UsageLimitExceeded
+
+    assert is_transient(UsageLimitExceeded("cap")) is False
+
+
 def test_is_transient_openrouter_finish_reason_error():
     """OpenRouter returns finish_reason='error' on an upstream provider
     failure; the OpenAI SDK raises a pydantic ValidationError because

@@ -79,14 +79,34 @@ def is_transient(exc: BaseException) -> bool:
     misconfiguration and fast-failed, but observed behaviour shows it is
     transient — a fresh run on the same input succeeds normally at similar
     cost, so retrying it is cheaper than blocking and re-running the whole
-    stage."""
+    stage.
+
+    ``UnexpectedModelBehavior`` (pydantic-ai) is also transient when caused by
+    upstream API gateways returning null/malformed responses (e.g. OpenRouter
+    returning an empty body).  A fresh invocation usually succeeds — retrying
+    is cheaper than degrading a pass / falling back to a weaker model."""
     if _is_claude_sdk_degenerate_result(exc):
         log.warning(
             "Claude SDK degenerate 'success' result detected — "
             "retrying (transient in practice)"
         )
         return True
-    return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
+    if _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc):
+        return True
+    # Lazy import — pydantic_ai is a heavy import and may not be available
+    # in all entry-point contexts (see base.py's lazy-import convention).
+    try:
+        from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+        if isinstance(exc, UnexpectedModelBehavior):
+            log.warning(
+                "UnexpectedModelBehavior (likely transient upstream API "
+                "glitch) — retrying"
+            )
+            return True
+    except ImportError:
+        pass
+    return False
 
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
