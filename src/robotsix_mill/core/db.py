@@ -95,9 +95,7 @@ def get_engine(settings: Settings, board_id: str):
     return engine
 
 
-def _run_alembic_migrations(
-    settings: Settings, board_id: str, engine: object
-) -> None:
+def _run_alembic_migrations(settings: Settings, board_id: str, engine: object) -> None:
     """Run Alembic migrations against the per-board SQLite database.
 
     When Alembic is installed (dev/CI environments), runs
@@ -150,9 +148,7 @@ def _run_alembic_migrations(
 
     # Resolve alembic.ini relative to the repo root.  We walk up from
     # this file's location (src/robotsix_mill/core/) until we find it.
-    import robotsix_mill.core.db as _db_module  # noqa: F811
-
-    _here = Path(_db_module.__file__).resolve().parent  # .../core/
+    _here = Path(__file__).resolve().parent  # .../core/
     _root = _here.parent.parent.parent  # repo root
     alembic_ini = _root / "alembic.ini"
     if not alembic_ini.is_file():
