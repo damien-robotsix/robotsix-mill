@@ -1,5 +1,14 @@
 ## 0.0.0 (unreleased)
 
+- Config: complete the cutover from YAML to JSON config (robotsix-config standard).
+  ``MillConfig`` is now the single Pydantic model loaded via
+  ``robotsix_config.load_config`` (``ROBOTSIX_CONFIG_FILE``, default
+  ``config/config.json``). Secrets fields use ``SecretStr``. The
+  ``entrypoint.sh`` now locks down ``config.json`` to ``0600``. All
+  YAML-specific config handling, ``json_source.py``, and legacy
+  ``load_config``/``load_secrets_json`` shims have been removed.
+  Restores ``_split_registry_shape`` call in ``load_repos_config``
+  (regression from the initial migration pass).
 - Deps: add `robotsix-config` (pinned commit `d29de204`) as a dependency to unblock the config-standard migration (`33bf`/`da3e`) prerequisite gate; deptry-ignored until imported.
 
 - Pipeline: a ticket already satisfied on main (empty diff vs base — clean tree, no commits beyond base, no surviving edits, tests green) now terminates DONE instead of looping empty PRs in `blocked`. Real-diff failures still block. Added an operator escape hatch: `mark-done` now works from `blocked`/`rebasing`.

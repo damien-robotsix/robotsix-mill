@@ -77,8 +77,11 @@ def _write_config(tmp_path, monkeypatch, repos_value):
     conf.write_text(
         json.dumps({"settings": {"data_dir": str(data_dir)}, "repos": repos_value})
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(conf))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(conf))
     cfg._reset_repos_config()
+    from robotsix_mill.config.mill_config import _reset_config_cache
+
+    _reset_config_cache()
 
 
 def test_onboard_nested_empty_does_not_crash(tmp_path, monkeypatch):

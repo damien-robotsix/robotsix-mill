@@ -424,9 +424,7 @@ def test_install_project_noop_without_network(tmp_path, monkeypatch):
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
     pip = "pip install --user --quiet --disable-pip-version-check"
-    expected_tail = (
-        f"({pip} '.[dev]' || {pip} .) ; pytest -q"
-    )
+    expected_tail = f"({pip} '.[dev]' || {pip} .) ; pytest -q"
     assert seen["argv"][-1].startswith(PATH_EXPORT)
     assert expected_tail in seen["argv"][-1]
 

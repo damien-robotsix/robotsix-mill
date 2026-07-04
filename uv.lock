@@ -1698,6 +1698,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=5" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17" },
+    { name = "robotsix-config" },
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config.git?rev=0757c65b5963d5828ecde97c9ea041360bf52ee0" },
     { name = "robotsix-llmio", extras = ["openrouter", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=73f2d555caa21de47a3732824d776e04719b3011" },
     { name = "sqlmodel", specifier = ">=0.0.22" },

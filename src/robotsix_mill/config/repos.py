@@ -311,8 +311,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     from .loader import load_repos_json
 
     raw = load_repos_json(config_file)
-    repos_mapping = raw
-    meta_raw = None
+    repos_mapping, meta_raw = _split_registry_shape(raw)
     repos: dict[str, RepoConfig] = {}
     for repo_id, repo_data in repos_mapping.items():
         ci_monitor = (

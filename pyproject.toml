@@ -270,7 +270,6 @@ extend_exclude = ["_llmio_check/"]
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.
 DEP002 = [
-    "robotsix-config",  # staging dep until 33bf imports it
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
