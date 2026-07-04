@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Fix `docker compose build` failure for sandbox-proxy: switch
+  `docker-compose.override.example.yml` to build from repo root
+  (`context: .`, `dockerfile: sandbox/proxy/Dockerfile`) so the
+  Dockerfile's `COPY sandbox/proxy/…` paths resolve correctly.
 - Implement agent pre-flight checks are now scope-aware: when the diff
   touches no ``.py`` files (doc-only, changelog-only, config-only PRs),
   ruff, mypy, and deptry are skipped, saving ~60-80s of wall-clock time

@@ -50,3 +50,10 @@ services:
       # a LIVE rw share with your own ~/.claude, so the container's CLI and
       # any interactive `claude` session on the host write the same files.
       - ${HOME}/.claude:/home/mill/.claude
+
+  sandbox-proxy:
+    build:
+      context: .
+      dockerfile: sandbox/proxy/Dockerfile
+      pull_policy: never
+    image: robotsix/mill-sandbox-proxy:dev
