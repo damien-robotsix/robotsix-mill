@@ -6,6 +6,7 @@
 - Remove the dead `skip_local` parameter from `load_config()` in `src/robotsix_mill/config/loader.py` (no callers remained).
 - Config: `load_repos_config` accepts both the nested `ReposRegistry` (`{meta, repos}`) shape written by central-deploy onboarding and the legacy flat `{repo_id: cfg}` shape, so a fresh onboard no longer crash-loops on `repos={"meta":null,"repos":{}}`.
 
+- Enable pin-bump periodic workflow: add `.robotsix-mill/periodic/pin_bump.yaml` presence file to activate the built-in fleet-wide git-dependency pin-bump runner.
 - Extract the 401-auth-retry pattern from ~10 inline `for retry in range(2)` loops across `github.py`, `github_ci.py`, and `github_pr.py` into a shared `_ApiClient.retrying_client()` generator. The generator yields `(retry_index, client, api_base, headers)` per attempt, handles token invalidation + 2 s backoff automatically, and lets callers `continue` on 401 / `break` on success. Added optional `headers_factory` parameter so callers with custom headers (e.g. repo-creation PAT) can use the same retry helper.
 - Pin-bump PR actuator: coherence-check skip on conflicts, duplicate-PR guard, and `max_inflight_prs` throttling. The actuator now uses `run_coherence_check` (`deps/coherent_resolver.py`) instead of raw `uv lock`, and gates on `pin_bump_periodic`.
 - Enable `changelog_autofill` periodic workflow for this repo.
@@ -55,7 +56,7 @@
 - Extended the skip-refine mechanical fast-path to cover user-source (draft pipeline) tickets. User-created tickets with mechanical drafts now bypass the expensive refine agent when the auto-approve triage confirms no design decisions are needed — matching the existing behaviour for classify, audit-gap, and CI→draft pipelines.
 - Fix mill Docker image build: `COPY contrib/` into the builder stage so the `contrib/completions` wheel force-include resolves (was failing the image build with `Forced include not found`, blocking image publishing).
 - Fix release Docker build: add missing `COPY contrib/ ./contrib/` to the builder stage so hatchling can find the `contrib/completions` force-include path.
-- Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy image publishing.
+- Fix `release.yml` startup_failure: remove the invalid `secrets: GITHUB_TOKEN` passed to the reusable `docker-release.yml` (GITHUB_TOKEN is reserved and cannot be passed to a reusable; the reusable uses the auto-token internally). Unblocks mill/sandbox/proxy/image publishing.
 - Review stage now verifies PR/commit claims in "already addressed" gap dismissals via `verify_claim`, preventing false approvals when a cited artifact does not actually touch the target files.
 - Add "+ Repo" button to the board header that opens a modal form to register a new repo via POST /repos, refreshing the repo selector on success.
 - Deploy-UI config schema: changed class-level docstrings on Settings, Secrets, CrossRepoTarget, and ReposRegistry to be operator-facing descriptions instead of implementation notes. Regenerated `config/config.schema.json`.

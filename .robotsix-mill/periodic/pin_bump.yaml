@@ -1,0 +1,2 @@
+# Per-repo periodic workflow: presence enables it for this repo.
+name: pin_bump
