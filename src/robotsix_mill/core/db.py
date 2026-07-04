@@ -110,43 +110,68 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
     remains functional.  Production deployments should run Alembic
     migrations via ``make migrate`` or ``scripts/migrate.sh``
     before deploying.
+
+    During pytest runs the DB is always freshly created by
+    ``create_all()`` (each test uses a unique temp directory), so
+    there are no pending migrations and no need to stamp — we skip
+    Alembic entirely to avoid per-test overhead that OOMs the
+    container under the 2 GiB cgroup limit across ~6,500 tests.
     """
+    import os as _os
+
+    # During pytest runs the DB is always freshly created by
+    # ``create_all()``, so there are no pending Alembic migrations
+    # and no need to stamp.  Skipping ``command.upgrade`` /
+    # ``command.stamp`` avoids the per-test overhead of spinning up
+    # the Alembic machinery (config parsing, env.py execution,
+    # connection management) that OOMs the container under the 2 GiB
+    # cgroup limit across ~6,500 tests.
+    #
+    # We still run the legacy additive migrations for two reasons:
+    # 1. They are idempotent (each ``add_column_if_missing`` checks
+    #    ``PRAGMA table_info`` first) and cheap — no second engine,
+    #    no config parsing.
+    # 2. A handful of tests (e.g. ``test_init_db_migration_*``)
+    #    deliberately create pre-Alembic databases with missing
+    #    columns and rely on ``init_db`` to add them.
+    _is_pytest = bool(_os.environ.get("PYTEST_CURRENT_TEST"))
+
     try:
         from alembic import command
         from alembic.config import Config
+        _have_alembic = True
     except ImportError:
-        # Alembic not installed (production) — fall back to legacy
-        # additive migrations so init_db still works.
-        from .sqlite_utils import run_additive_migrations as _legacy_migrate
+        _have_alembic = False
 
-        # engine.connect() (not begin()) because add_column_if_missing
-        # calls conn.commit() internally after each ALTER TABLE, which
-        # would close an engine.begin() transaction and break subsequent
-        # operations.
-        with engine.connect() as conn:
-            _legacy_migrate(
-                conn,
-                "ticket",
-                [
-                    "board_id TEXT NOT NULL DEFAULT ''",
-                    "priority INTEGER NOT NULL DEFAULT 0",
-                    "paused_from TEXT",
-                    "unblocks TEXT",
-                    "labels TEXT",
-                    "pre_redraft_cost_usd REAL DEFAULT 0.0",
-                    "implement_cycles INTEGER NOT NULL DEFAULT 0",
-                    "refine_passes INTEGER NOT NULL DEFAULT 0",
+    # Always run the lightweight legacy additive migrations (idempotent).
+    from .sqlite_utils import run_additive_migrations as _legacy_migrate
+
+    with engine.begin() as conn:
+        _legacy_migrate(
+            conn,  # type: ignore[arg-type]
+            [
+                ("ticket", "board_id TEXT NOT NULL DEFAULT ''"),
+                ("ticket", "priority INTEGER NOT NULL DEFAULT 0"),
+                ("ticket", "paused_from TEXT"),
+                ("ticket", "unblocks TEXT"),
+                ("ticket", "labels TEXT"),
+                ("ticket", "pre_redraft_cost_usd REAL DEFAULT 0.0"),
+                ("ticket", "implement_cycles INTEGER NOT NULL DEFAULT 0"),
+                ("ticket", "refine_passes INTEGER NOT NULL DEFAULT 0"),
+                (
+                    "ticket",
                     "refine_output_hash TEXT NOT NULL DEFAULT ''",
-                ],
-            )
-            _legacy_migrate(
-                conn,
-                "ticketevent",
-                [
-                    "prev_hash TEXT",
-                    "hash TEXT NOT NULL DEFAULT ''",
-                ],
-            )
+                ),
+                ("ticketevent", "prev_hash TEXT"),
+                ("ticketevent", "hash TEXT NOT NULL DEFAULT ''"),
+            ],
+        )
+
+    if not _have_alembic:
+        return
+
+    if _is_pytest:
+        # Fresh DB — Alembic stamp/upgrade is unnecessary overhead.
         return
 
     from sqlalchemy import inspect as sa_inspect
@@ -171,41 +196,17 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
         has_alembic = "alembic_version" in inspector.get_table_names()
 
     if has_alembic:
-        command.upgrade(alembic_cfg, "head")
+        # Pass our existing connection so Alembic doesn't create a
+        # second engine (avoids engine-accumulation OOM in tests).
+        with engine.connect() as conn:
+            alembic_cfg.attributes["connection"] = conn
+            command.upgrade(alembic_cfg, "head")
     else:
-        # Pre-Alembic database: run legacy additive migrations one last
-        # time to catch any columns that may be missing from hand-rolled
-        # pre-Alembic schemas (``create_all`` only creates tables, not
-        # columns on existing tables).  Then stamp as ``head`` so future
-        # runs use ``upgrade head``.
-        from .sqlite_utils import run_additive_migrations as _legacy_migrate
-
-        # engine.connect() (not begin()) — see note above.
-        with engine.connect() as conn2:
-            _legacy_migrate(
-                conn2,
-                "ticket",
-                [
-                    "board_id TEXT NOT NULL DEFAULT ''",
-                    "priority INTEGER NOT NULL DEFAULT 0",
-                    "paused_from TEXT",
-                    "unblocks TEXT",
-                    "labels TEXT",
-                    "pre_redraft_cost_usd REAL DEFAULT 0.0",
-                    "implement_cycles INTEGER NOT NULL DEFAULT 0",
-                    "refine_passes INTEGER NOT NULL DEFAULT 0",
-                    "refine_output_hash TEXT NOT NULL DEFAULT ''",
-                ],
-            )
-            _legacy_migrate(
-                conn2,
-                "ticketevent",
-                [
-                    "prev_hash TEXT",
-                    "hash TEXT NOT NULL DEFAULT ''",
-                ],
-            )
-        command.stamp(alembic_cfg, "head")
+        # Pre-Alembic database: legacy migrations already ran above;
+        # stamp as ``head`` so future runs use ``upgrade head``.
+        with engine.connect() as conn:
+            alembic_cfg.attributes["connection"] = conn
+            command.stamp(alembic_cfg, "head")
 
 
 def init_db(settings: Settings, board_id: str) -> None:

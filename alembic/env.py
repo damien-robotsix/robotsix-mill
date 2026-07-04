@@ -77,25 +77,42 @@ def run_migrations_online() -> None:
 
     The per-board SQLite URL must be set on *config* before this
     function is called — see ``db._run_alembic_migrations()``.
+
+    If the caller has already placed a live connection in
+    ``config.attributes["connection"]``, it is used directly and no
+    second engine is created.  Otherwise a new engine is spun up
+    (and disposed afterwards) from ``sqlalchemy.url``.
     """
     from sqlalchemy import create_engine
+
+    preexisting_connection = config.attributes.get("connection")
+
+    if preexisting_connection is not None:
+        context.configure(
+            connection=preexisting_connection,
+            target_metadata=target_metadata,
+            render_as_batch=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+        return
 
     connectable = create_engine(
         config.get_main_option("sqlalchemy.url"),
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            # batch mode: recreate tables for operations SQLite
-            # doesn't support natively (DROP COLUMN, ALTER COLUMN,
-            # RENAME COLUMN).
-            render_as_batch=True,
-        )
+    try:
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                render_as_batch=True,
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        connectable.dispose()
 
 
 if context.is_offline_mode():
