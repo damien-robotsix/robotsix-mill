@@ -195,7 +195,7 @@ class GitHubForge(
 
         def _mk_headers() -> dict[str, str]:
             nonlocal token, custom_headers
-            token = get_secrets().forge_repo_create_token or github_token(
+            token = get_secrets().forge_repo_create_token or github_token(  # type: ignore[assignment]
                 s, repo_config=self._repo_config
             )
             custom_headers = _build_headers(token)
@@ -322,7 +322,7 @@ class GitHubForge(
             token = get_secrets().forge_repo_create_token or github_token(
                 s, repo_config=self._repo_config
             )
-            return _build_headers(token)
+            return _build_headers(token)  # type: ignore[arg-type]
 
         for _retry, c, api, headers in self._http.retrying_client(
             headers_factory=_mk_headers,
@@ -440,7 +440,7 @@ class GitHubForge(
         token = get_secrets().forge_repo_create_token or github_token(
             s, repo_config=self._repo_config
         )
-        custom_headers = _build_headers(token)
+        custom_headers = _build_headers(token)  # type: ignore[arg-type]
 
         with self._http.client() as (c, api, _headers):
             r = c.get(
@@ -460,7 +460,7 @@ class GitHubForge(
         token = get_secrets().forge_repo_create_token or github_token(
             s, repo_config=self._repo_config
         )
-        custom_headers = _build_headers(token)
+        custom_headers = _build_headers(token)  # type: ignore[arg-type]
         payload = {"description": _clamp_repo_description(description)}
 
         with self._http.client() as (c, api, _headers):

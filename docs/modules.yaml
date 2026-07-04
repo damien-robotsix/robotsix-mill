@@ -15,15 +15,14 @@ modules:
   - id: config
     description: >-
       Application configuration layer.  Provides Settings (pydantic-settings),
-      RepoConfig/ReposRegistry, YAML config loading, and secrets management.
-      Every other module depends on this.
+      RepoConfig/ReposRegistry, JSON config loading via robotsix-config,
+      and secrets management.  Every other module depends on this.
     paths:
       - src/robotsix_mill/config/*.py
       - src/robotsix_mill/__init__.py
       - src/robotsix_mill/py.typed
       - config/config.schema.json
       - config/config.example.json
-      - config/repos.example.yaml
       - .robotsix-mill/config.yaml
       - .robotsix-mill/periodic/*.yaml
       - tests/config/test_config.py

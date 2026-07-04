@@ -219,7 +219,7 @@ def _scaffold_initial_commit(
             workspace_dir,
             settings.forge_target_branch,
             repo_info.clone_url,
-            token,
+            token,  # type: ignore[arg-type]
         )
     finally:
         shutil.rmtree(workspace_dir, ignore_errors=True)

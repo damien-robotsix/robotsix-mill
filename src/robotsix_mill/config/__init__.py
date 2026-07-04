@@ -1,4 +1,5 @@
-"""Runtime configuration, sourced from environment, .env, and secrets.env.
+"""Runtime configuration, sourced from a single JSON config file
+(``config/config.json`` or ``ROBOTSIX_CONFIG_FILE``).
 
 Conventional keys (``OPENROUTER_API_KEY``, ``LANGFUSE_*``) are
 unprefixed to match the reference projects; mill-specific knobs use the
@@ -9,24 +10,24 @@ by responsibility, while preserving the exact public API via the
 re-exports below — every ``from robotsix_mill.config import ...`` site
 keeps working unchanged. Submodules:
 
-- ``json_source`` — :class:`JsonSettingsSource`, the pydantic-settings
-  JSON source.
+- ``mill_config`` — :class:`MillConfig` top-level model loaded via
+  ``robotsix_config.load_config`` and cached.
 - ``settings`` — the :class:`Settings` model (assembled from the
   ``_settings_*`` field mixins) and :func:`load_settings`.
-- ``secrets`` — the :class:`Secrets` model and its cached accessors.
+- ``secrets`` — the :class:`Secrets` model (with :class:`pydantic.SecretStr`
+  fields) and its cached accessors.
 - ``repos`` — the per-repo :class:`CrossRepoTarget` / :class:`RepoConfig`
   / :class:`ReposRegistry` models and their loaders.
 
-The cached ``_secrets`` / ``_repos_config`` singletons are defined here
-(not in the submodules) so test fixtures that assign
-``robotsix_mill.config._secrets`` / ``._repos_config`` are observed by
-the submodule accessors, which read these package attributes at call
-time.
+The cached config singleton lives in ``mill_config.py`` so test
+fixtures that assign ``robotsix_mill.config._repos_config`` are
+still observed by the submodule accessors.
 """
 
 from __future__ import annotations
 
 from .loader import ConfigError
+from .mill_config import MillConfig, _reset_config_cache
 from .repos import (
     CrossRepoTarget,
     RepoConfig,
@@ -46,17 +47,21 @@ from .secrets import (
     logger,
 )
 from .settings import Settings, load_settings
-from .json_source import JsonSettingsSource
 
-# Cached singletons live here so test fixtures poking
-# ``robotsix_mill.config._secrets`` / ``._repos_config`` are visible to
-# the accessors in ``secrets.py`` / ``repos.py``.
-_secrets: Secrets | None = None
+# Cached repos config singleton — kept here so test fixtures poking
+# ``robotsix_mill.config._repos_config`` are visible to the accessors
+# in ``repos.py``.
 _repos_config: ReposRegistry | None = None
+
+# Backward-compat: test fixtures assign ``robotsix_mill.config._secrets``
+# to inject a mock Secrets instance.  When set, :func:`get_secrets`
+# returns it instead of loading from the JSON file.
+_secrets: Secrets | None = None
 
 __all__ = [
     "ConfigError",
-    "JsonSettingsSource",
+    "MillConfig",
+    "_reset_config_cache",
     "Settings",
     "load_settings",
     "Secrets",

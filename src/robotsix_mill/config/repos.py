@@ -304,15 +304,15 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     """Load repos configuration from ``config/config.json``'s ``repos:``
     key (or the ``MILL_REPOS_FILE`` / *config_file* override).
 
-    Reads YAML via :func:`~robotsix_mill.config.loader.load_repos_yaml`,
-    normalises the nested-``ReposRegistry`` and legacy-flat shapes via
-    :func:`_split_registry_shape`, constructs a :class:`RepoConfig` for
-    each entry, validates, and returns a :class:`ReposRegistry`.
+    Reads JSON via :func:`~robotsix_mill.config.loader.load_repos_json`,
+    constructs a :class:`RepoConfig` for each entry, validates, and
+    returns a :class:`ReposRegistry`.
     """
-    from .loader import load_repos_yaml
+    from .loader import load_repos_json
 
-    raw = load_repos_yaml(config_file)
-    repos_mapping, meta_raw = _split_registry_shape(raw)
+    raw = load_repos_json(config_file)
+    repos_mapping = raw
+    meta_raw = None
     repos: dict[str, RepoConfig] = {}
     for repo_id, repo_data in repos_mapping.items():
         ci_monitor = (

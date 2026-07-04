@@ -97,7 +97,7 @@ def _export_openrouter_key_to_env() -> None:
 
     or_key = get_secrets().openrouter_api_key
     if or_key:
-        os.environ.setdefault("OPENROUTER_API_KEY", or_key)
+        os.environ.setdefault("OPENROUTER_API_KEY", or_key)  # type: ignore[arg-type]
 
 
 def create_lifespan(

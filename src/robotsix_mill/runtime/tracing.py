@@ -231,8 +231,8 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
             "/"
         )
-        public_key = secrets.langfuse_public_key
-        secret_key = secrets.langfuse_secret_key
+        public_key = secrets.langfuse_public_key  # type: ignore[assignment]
+        secret_key = secrets.langfuse_secret_key  # type: ignore[assignment]
         project_name = None
 
     # Already configured for this Langfuse project? Nothing to do.
@@ -505,7 +505,7 @@ def start_ticket_root_span(
     if repo_config is not None and repo_config.langfuse_public_key:
         pk = repo_config.langfuse_public_key
     else:
-        pk = get_secrets().langfuse_public_key or ""
+        pk = get_secrets().langfuse_public_key or ""  # type: ignore[assignment]
 
     # Repo-qualified Langfuse session id so a single shared project's
     # session list reads clearly (e.g. ``robotsix-llmio · <ticket-id>``).

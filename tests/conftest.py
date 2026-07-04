@@ -7,35 +7,33 @@ from robotsix_mill.core.service import TicketService
 
 @pytest.fixture(autouse=True, scope="session")
 def _isolate_default_data_dir(tmp_path_factory):
-    """Redirect bare ``Settings()`` constructions to a session tmp dir.
+    """Redirect config-loaded ``Settings`` to a session tmp data dir.
 
-    Tests that pass ``data_dir=...`` explicitly keep their override
-    (kwargs win at pydantic-settings' init layer). Tests that build a
-    bare ``Settings()`` — directly or via a runner that calls it
-    internally — get the session sandbox instead of the project's
-    real ``.data/`` directory.
+    Tests that pass ``data_dir=...`` explicitly keep their override.
+    Tests that load via ``load_settings()`` / ``load_mill_config()``
+    get the session sandbox instead of the project's real ``.data/``
+    directory.
 
-    Mechanics: monkey-patch ``JsonSettingsSource.__call__`` so its
-    returned dict carries ``data_dir = <session sandbox>``. Anything
-    higher-priority (kwargs, env vars) still overrides.
-    ``load_config()`` itself is NOT patched, so tests that
-    inspect raw JSON defaults continue to see ``.data``.
+    Mechanics: monkey-patch ``MillConfig`` so its default ``settings``
+    field carries ``data_dir = <session sandbox>``.  The cached config
+    is reset after patching so the test suite picks up the patched
+    default.
     """
     sandbox = tmp_path_factory.mktemp("mill-default-data")
-    from robotsix_mill import config as _cfg
+    from robotsix_mill.config.mill_config import MillConfig, _reset_config_cache
 
-    real_call = _cfg.JsonSettingsSource.__call__
+    _orig_default = MillConfig.model_fields["settings"].default
 
-    def patched(self):
-        result = real_call(self)
-        result["data_dir"] = str(sandbox)
-        return result
+    # Build a Settings with the sandbox data_dir, respecting existing defaults
+    default_settings = Settings(data_dir=sandbox)
+    MillConfig.model_fields["settings"].default = default_settings
+    _reset_config_cache()
 
-    _cfg.JsonSettingsSource.__call__ = patched
     try:
         yield sandbox
     finally:
-        _cfg.JsonSettingsSource.__call__ = real_call
+        MillConfig.model_fields["settings"].default = _orig_default
+        _reset_config_cache()
 
 
 @pytest.fixture(autouse=True)

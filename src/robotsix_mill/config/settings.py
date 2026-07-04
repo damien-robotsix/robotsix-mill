@@ -1,21 +1,19 @@
 """The :class:`Settings` model and ``load_settings()``.
 
 Settings fields are assembled from four mixins (core, stages,
-periodic, observability) and wired into ``BaseSettings`` with
-JSON-file sourcing, env-var aliases, and cross-field validators.
-All fields are sourced from ``os.environ`` and a single JSON config
-file (``config/config.json`` or the committed
-``config/config.example.json`` template).  Conventional keys like
-``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
-compatible with the reference projects.  Mill-specific settings use
-the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
-``Field(alias=...)`` values.
+periodic, observability).  The model is loaded via
+:func:`robotsix_config.load_config` through the top-level
+:class:`~.mill_config.MillConfig` wrapper — the JSON config file
+(``config/config.json``) is the single source of config values.
+There is no env-var overlay; Pydantic field defaults fill any
+keys the file omits.
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import (
@@ -29,9 +27,32 @@ from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
 from .secrets import get_secrets
-from .json_source import JsonSettingsSource
 
 log = logging.getLogger(__name__)
+
+
+class _MillConfigJsonSource(PydanticBaseSettingsSource):
+    """Pydantic-settings source that loads from the :class:`MillConfig` JSON file.
+
+    This source reads the ``settings`` block of ``config/config.json``
+    (via ``robotsix_config.load_config`` → ``MillConfig``) and returns
+    the flat alias-keyed dict.  It sits at the lowest priority so
+    explicit ``Settings(k=v)`` kwargs and env vars can still override
+    for tests.
+    """
+
+    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
+        raise NotImplementedError
+
+    def __call__(self) -> dict[str, Any]:
+        from .mill_config import load_mill_config
+
+        try:
+            config = load_mill_config()
+        except Exception:
+            return {}
+        # Dump the settings model back to a flat, alias-keyed dict.
+        return config.settings.model_dump(by_alias=True)
 
 
 class Settings(
@@ -81,8 +102,8 @@ class Settings(
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Insert JSON source with second-lowest priority (above only
-        Field defaults), so ``os.environ`` still overrides it.
+        """Insert JSON source with lowest priority (above only Field
+        defaults), so explicit ``Settings(k=v)`` kwargs still override.
 
         Precedence (highest to lowest):
         1. explicit ``Settings(k=v)`` kwargs
@@ -95,7 +116,7 @@ class Settings(
             init_settings,
             env_settings,
             file_secret_settings,
-            JsonSettingsSource(settings_cls),
+            _MillConfigJsonSource(settings_cls),
         )
 
     def workspaces_dir_for(self, board_id: str) -> Path:
@@ -212,5 +233,13 @@ class Settings(
 
 
 def load_settings() -> Settings:
-    """Load and return a :class:`Settings` instance from env / ``.env`` files."""
-    return Settings()
+    """Load and return a :class:`Settings` instance from the JSON config file.
+
+    Delegates to :func:`~.mill_config.load_mill_config` which reads
+    ``config/config.json`` (or ``ROBOTSIX_CONFIG_FILE``) via
+    ``robotsix_config.load_config`` and returns the cached
+    ``MillConfig.settings`` field.
+    """
+    from .mill_config import load_mill_config
+
+    return load_mill_config().settings

@@ -54,8 +54,8 @@ def run_langfuse_cleanup_pass(
         host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip(
             "/"
         )
-        public_key = get_secrets().langfuse_public_key
-        secret_key = get_secrets().langfuse_secret_key
+        public_key = get_secrets().langfuse_public_key  # type: ignore[assignment]
+        secret_key = get_secrets().langfuse_secret_key  # type: ignore[assignment]
         label = "default"
 
     if not (public_key and secret_key):

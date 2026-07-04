@@ -1,240 +1,14 @@
 {
   "$defs": {
-    "CrossRepoTarget": {
-      "description": "Cross-repo target: routes contributions from this repo to a\ndifferent (forked/external) repository via a fork-contribution\nworkflow.",
-      "properties": {
-        "auto_fork": {
-          "default": false,
-          "description": "When true, automatically create the fork via the forge API before pushing.",
-          "title": "Auto Fork",
-          "type": "boolean"
-        },
-        "base_branch": {
-          "default": "main",
-          "description": "The upstream branch to target in the cross-fork PR (default: main).",
-          "title": "Base Branch",
-          "type": "string"
-        },
-        "fork_remote_url": {
-          "description": "The fork repository URL where the branch is pushed before opening a cross-fork PR.",
-          "title": "Fork Remote Url",
-          "type": "string"
-        },
-        "upstream_remote_url": {
-          "description": "The upstream repository URL that PRs are opened against.",
-          "title": "Upstream Remote Url",
-          "type": "string"
-        }
-      },
-      "required": [
-        "upstream_remote_url",
-        "fork_remote_url"
-      ],
-      "title": "CrossRepoTarget",
-      "type": "object"
-    },
-    "RepoConfig": {
-      "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
-      "properties": {
-        "board_id": {
-          "description": "Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill').",
-          "title": "Board Id",
-          "type": "string"
-        },
-        "ci_monitor_enabled": {
-          "default": true,
-          "description": "When true, the CI monitor polls this repo's main-branch CI status periodically.",
-          "title": "Ci Monitor Enabled",
-          "type": "boolean"
-        },
-        "ci_monitor_interval_seconds": {
-          "default": 900,
-          "description": "Seconds between CI monitor polls for this repo (minimum 60).",
-          "title": "Ci Monitor Interval Seconds",
-          "type": "integer"
-        },
-        "cross_repo_target": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CrossRepoTarget"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery."
-        },
-        "deployed_log_folder": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
-          "title": "Deployed Log Folder"
-        },
-        "forge_remote_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Git remote URL for this repo's forge (e.g. https://github.com/owner/repo).",
-          "title": "Forge Remote Url"
-        },
-        "langfuse_base_url": {
-          "default": "https://cloud.langfuse.com",
-          "description": "Langfuse instance base URL (default: https://cloud.langfuse.com).",
-          "title": "Langfuse Base Url",
-          "type": "string"
-        },
-        "langfuse_project_id": {
-          "default": "",
-          "description": "Langfuse project ID for trace attribution (populated from global secrets).",
-          "title": "Langfuse Project Id",
-          "type": "string"
-        },
-        "langfuse_project_name": {
-          "description": "Langfuse project name for trace attribution (populated from global secrets).",
-          "title": "Langfuse Project Name",
-          "type": "string"
-        },
-        "langfuse_public_key": {
-          "description": "Langfuse public key for trace observability (populated from global secrets).",
-          "title": "Langfuse Public Key",
-          "type": "string"
-        },
-        "langfuse_secret_key": {
-          "description": "Langfuse secret key for trace observability (populated from global secrets).",
-          "title": "Langfuse Secret Key",
-          "type": "string"
-        },
-        "max_concurrency": {
-          "default": 1,
-          "description": "Maximum number of tickets from this repo processed in parallel (minimum 1).",
-          "title": "Max Concurrency",
-          "type": "integer"
-        },
-        "max_inflight_prs": {
-          "default": 3,
-          "description": "Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
-          "title": "Max Inflight Prs",
-          "type": "integer"
-        },
-        "openrouter_api_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Per-repo OpenRouter API key override. Unset falls back to the global key.",
-          "title": "Openrouter Api Key"
-        },
-        "repo_id": {
-          "description": "Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml.",
-          "title": "Repo Id",
-          "type": "string"
-        },
-        "sandbox_image": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Per-repo Docker sandbox image override. Unset falls back to settings.sandbox_image.",
-          "title": "Sandbox Image"
-        },
-        "source": {
-          "default": "config",
-          "description": "Source discriminator: 'config' for operator-configured entries, 'auto' for machine-registered overlay entries.",
-          "enum": [
-            "config",
-            "auto"
-          ],
-          "title": "Source",
-          "type": "string"
-        },
-        "working_branch": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Pinned working branch for member repos. When set, branches fork from and PR into this branch instead of the default.",
-          "title": "Working Branch"
-        }
-      },
-      "required": [
-        "repo_id",
-        "board_id",
-        "langfuse_project_name",
-        "langfuse_public_key",
-        "langfuse_secret_key"
-      ],
-      "title": "RepoConfig",
-      "type": "object"
-    }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "properties": {
-    "repos": {
-      "description": "Repository registry: maps each repo ID to its per-repo\nconfiguration (board identity, forge remote, Langfuse credentials,\nCI monitor settings).",
-      "properties": {
-        "meta": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RepoConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional Langfuse configuration for the synthetic cross-repo meta board."
-        },
-        "repos": {
-          "additionalProperties": {
-            "$ref": "#/$defs/RepoConfig"
-          },
-          "description": "Registry of per-repo configurations keyed by repo_id.",
-          "title": "Repos",
-          "type": "object"
-        }
-      },
-      "required": [
-        "repos"
-      ],
-      "title": "ReposRegistry",
-      "type": "object"
-    },
-    "secrets": {
+    "Secrets": {
       "description": "API keys, tokens, and credentials for external services\n(OpenRouter, forge, Langfuse, ntfy, etc.).",
       "properties": {
         "forge_repo_create_token": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -242,14 +16,14 @@
           ],
           "default": null,
           "description": "A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos \u2014 use a classic PAT with repo-creation scope.",
-          "format": "password",
-          "title": "Forge Repo Create Token",
-          "writeOnly": true
+          "title": "Forge Repo Create Token"
         },
         "forge_token": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -257,9 +31,7 @@
           ],
           "default": null,
           "description": "Personal access token (PAT) for the forge (GitHub/GitLab). Used for PR creation, branch push, and merge operations.",
-          "format": "password",
-          "title": "Forge Token",
-          "writeOnly": true
+          "title": "Forge Token"
         },
         "github_app_id": {
           "anyOf": [
@@ -272,14 +44,14 @@
           ],
           "default": null,
           "description": "GitHub App ID for App-based authentication. Required when FORGE_AUTH=app.",
-          "format": "password",
-          "title": "Github App Id",
-          "writeOnly": true
+          "title": "Github App Id"
         },
         "github_app_private_key": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -287,9 +59,7 @@
           ],
           "default": null,
           "description": "GitHub App private key (PEM string). Alternative to github_app_private_key_path.",
-          "format": "password",
-          "title": "Github App Private Key",
-          "writeOnly": true
+          "title": "Github App Private Key"
         },
         "github_app_private_key_path": {
           "anyOf": [
@@ -302,9 +72,7 @@
           ],
           "default": null,
           "description": "Path to the GitHub App private key PEM file. Alternative to github_app_private_key.",
-          "format": "password",
-          "title": "Github App Private Key Path",
-          "writeOnly": true
+          "title": "Github App Private Key Path"
         },
         "langfuse_base_url": {
           "anyOf": [
@@ -317,9 +85,7 @@
           ],
           "default": null,
           "description": "Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
-          "format": "password",
-          "title": "Langfuse Base Url",
-          "writeOnly": true
+          "title": "Langfuse Base Url"
         },
         "langfuse_project_id": {
           "anyOf": [
@@ -332,9 +98,7 @@
           ],
           "default": null,
           "description": "Langfuse project ID for trace attribution.",
-          "format": "password",
-          "title": "Langfuse Project Id",
-          "writeOnly": true
+          "title": "Langfuse Project Id"
         },
         "langfuse_project_name": {
           "anyOf": [
@@ -347,14 +111,14 @@
           ],
           "default": null,
           "description": "Langfuse project name for trace attribution.",
-          "format": "password",
-          "title": "Langfuse Project Name",
-          "writeOnly": true
+          "title": "Langfuse Project Name"
         },
         "langfuse_public_key": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -362,14 +126,14 @@
           ],
           "default": null,
           "description": "Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
-          "format": "password",
-          "title": "Langfuse Public Key",
-          "writeOnly": true
+          "title": "Langfuse Public Key"
         },
         "langfuse_secret_key": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -377,14 +141,14 @@
           ],
           "default": null,
           "description": "Langfuse secret key for LLM observability tracing.",
-          "format": "password",
-          "title": "Langfuse Secret Key",
-          "writeOnly": true
+          "title": "Langfuse Secret Key"
         },
         "ntfy_token": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -392,9 +156,7 @@
           ],
           "default": null,
           "description": "ntfy access token for authenticated push notifications.",
-          "format": "password",
-          "title": "Ntfy Token",
-          "writeOnly": true
+          "title": "Ntfy Token"
         },
         "ntfy_url": {
           "anyOf": [
@@ -407,14 +169,14 @@
           ],
           "default": null,
           "description": "ntfy server URL for push notifications (https://ntfy.sh).",
-          "format": "password",
-          "title": "Ntfy Url",
-          "writeOnly": true
+          "title": "Ntfy Url"
         },
         "openrouter_api_key": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -422,14 +184,14 @@
           ],
           "default": null,
           "description": "API key for OpenRouter model access (https://openrouter.ai/keys). Required for LLM inference.",
-          "format": "password",
-          "title": "Openrouter Api Key",
-          "writeOnly": true
+          "title": "Openrouter Api Key"
         },
         "openrouter_management_key": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -437,15 +199,13 @@
           ],
           "default": null,
           "description": "OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
-          "format": "password",
-          "title": "Openrouter Management Key",
-          "writeOnly": true
+          "title": "Openrouter Management Key"
         }
       },
       "title": "Secrets",
       "type": "object"
     },
-    "settings": {
+    "Settings": {
       "additionalProperties": false,
       "description": "Runtime settings for robotsix-mill: concurrency limits,\nAPI endpoints, feature toggles, stage-level controls,\nsandbox configuration, and agent budgets.",
       "properties": {
@@ -2613,6 +2373,23 @@
       "type": "object"
     }
   },
-  "title": "Mill Configuration",
+  "description": "Top-level config model \u2014 one file, one source of truth.\n\nThe JSON file's top-level keys map directly to these fields.\n``repos`` is kept as a raw dict because the repos pipeline\n(operator entries + ``registered_repos.yaml`` overlay) is\npost-processed by :func:`~.loader.load_repos_config`.",
+  "properties": {
+    "repos": {
+      "additionalProperties": true,
+      "description": "Operator-configured repo registry (merged with the machine-owned overlay at load time).",
+      "title": "Repos",
+      "type": "object"
+    },
+    "secrets": {
+      "$ref": "#/$defs/Secrets",
+      "description": "API keys, tokens, and credentials. Fields use SecretStr so the deploy UI renders password inputs."
+    },
+    "settings": {
+      "$ref": "#/$defs/Settings",
+      "description": "All non-secret runtime settings. Keys are flat field aliases (e.g. MILL_MAX_GLOBAL_CONCURRENCY)."
+    }
+  },
+  "title": "MillConfig",
   "type": "object"
 }

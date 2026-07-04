@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from robotsix_mill.config.loader import load_repos_yaml
+from robotsix_mill.config.loader import load_repos_json
 
 
 def test_repos_read_from_main_config_json(tmp_path, monkeypatch):
@@ -29,9 +29,9 @@ def test_repos_read_from_main_config_json(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
-    repos = load_repos_yaml()
+    repos = load_repos_json()
     assert set(repos) == {"demo"}
     assert repos["demo"]["board_id"] == "demo"
 
@@ -48,9 +48,9 @@ def test_empty_repos_key_means_zero_repos(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
-    assert load_repos_yaml() == {}
+    assert load_repos_json() == {}
 
 
 def test_standalone_repos_yaml_is_ignored(tmp_path, monkeypatch):
@@ -73,14 +73,14 @@ def test_standalone_repos_yaml_is_ignored(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
-    assert load_repos_yaml() == {}
+    assert load_repos_json() == {}
 
 
 def test_explicit_repos_file_still_overrides(tmp_path, monkeypatch):
     """A MILL_REPOS_FILE override still reads that file directly (tests)."""
-    monkeypatch.delenv("MILL_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("ROBOTSIX_CONFIG_FILE", raising=False)
     override = tmp_path / "repos.yaml"
     override.write_text(
         "repos:\n"
@@ -90,7 +90,7 @@ def test_explicit_repos_file_still_overrides(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("MILL_REPOS_FILE", str(override))
 
-    assert set(load_repos_yaml()) == {"leg"}
+    assert set(load_repos_json()) == {"leg"}
 
 
 def test_overlay_entries_appear_in_merged_repos(tmp_path, monkeypatch):
@@ -112,7 +112,7 @@ def test_overlay_entries_appear_in_merged_repos(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
     overlay = data_dir / "registered_repos.yaml"
     overlay.write_text(
@@ -122,7 +122,7 @@ def test_overlay_entries_appear_in_merged_repos(tmp_path, monkeypatch):
         "    forge_remote_url: https://github.com/o/repo_b\n"
     )
 
-    repos = load_repos_yaml()
+    repos = load_repos_json()
     assert set(repos) == {"repo_a", "repo_b"}
     assert repos["repo_a"]["board_id"] == "board-a"
     assert repos["repo_b"]["board_id"] == "board-b"
@@ -148,7 +148,7 @@ def test_operator_wins_on_repo_id_conflict(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
     overlay = data_dir / "registered_repos.yaml"
     overlay.write_text(
@@ -158,7 +158,7 @@ def test_operator_wins_on_repo_id_conflict(tmp_path, monkeypatch):
         "    forge_remote_url: https://github.com/o/auto\n"
     )
 
-    repos = load_repos_yaml()
+    repos = load_repos_json()
     assert set(repos) == {"repo_a"}
     assert repos["repo_a"]["board_id"] == "operator-board"
     assert repos["repo_a"]["forge_remote_url"] == "https://github.com/o/operator"
@@ -183,9 +183,9 @@ def test_missing_overlay_tolerated(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
     # No overlay file created — should not error.
-    repos = load_repos_yaml()
+    repos = load_repos_json()
     assert set(repos) == {"repo_a"}
     assert repos["repo_a"]["board_id"] == "board-a"

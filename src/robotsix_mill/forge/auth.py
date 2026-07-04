@@ -54,7 +54,7 @@ def _private_key() -> str:
             return f.read()
     key = get_secrets().github_app_private_key or ""
     # allow a single-line env value with literal "\n"
-    return key.replace("\\n", "\n")
+    return key.replace("\\n", "\n")  # type: ignore[union-attr]
 
 
 def _resolve_remote_url(
@@ -113,7 +113,7 @@ def gitlab_token() -> str:
     token = get_secrets().forge_token
     if not token:
         raise RuntimeError("FORGE_TOKEN not set")
-    return token
+    return token  # type: ignore[return-value]
 
 
 def invalidate_github_token(
@@ -149,7 +149,7 @@ def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> s
     if settings.forge_auth != "app":
         if not get_secrets().forge_token:
             raise RuntimeError("FORGE_TOKEN not set")
-        return get_secrets().forge_token
+        return get_secrets().forge_token  # type: ignore[return-value]
 
     if not get_secrets().github_app_id or not (
         get_secrets().github_app_private_key

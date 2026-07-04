@@ -508,7 +508,7 @@ class GitLabForge(
         # back to the normal forge token otherwise.  Mirrors the GitHub
         # pattern where App installation tokens cannot create repos.
         token = get_secrets().forge_repo_create_token or gitlab_token()
-        custom_headers = _build_headers(token)
+        custom_headers = _build_headers(token)  # type: ignore[arg-type]
 
         payload: dict = {
             "name": name,
@@ -557,7 +557,7 @@ class GitLabForge(
         # Prefer a dedicated repo-creation token when configured; fall
         # back to the normal forge token otherwise.
         token = get_secrets().forge_repo_create_token or gitlab_token()
-        custom_headers = _build_headers(token)
+        custom_headers = _build_headers(token)  # type: ignore[arg-type]
 
         source_path = f"{source_owner}/{source_repo}"
         pid = self._resolve_project_id(source_path)

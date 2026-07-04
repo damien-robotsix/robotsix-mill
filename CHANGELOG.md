@@ -21,6 +21,7 @@
   stamps fresh/pre-Alembic databases as `head` after a one-time legacy
   migration pass.  `make migrate` and `scripts/migrate.sh` are added for
   local/CI use.  `sqlite_utils.py` is marked deprecated.
+- Cut over config loading to the fleet-standard ``robotsix-config`` library: replaced hand-rolled ``load_config()`` / ``JsonSettingsSource`` with ``robotsix_config.load_config(MillConfig)``, a single ``BaseModel`` that mirrors the ``config/config.json`` top-level structure (``settings``, ``secrets``, ``repos``). Secrets fields now use ``pydantic.SecretStr`` with transparent unwrapping for backward compat; the ``"SECRET"`` sentinel is handled by a ``model_validator``. Deleted ``config/repos.example.yaml``, ``src/robotsix_mill/config/json_source.py``, and the ``load_yaml_config`` / ``load_secrets_yaml`` / ``load_repos_yaml`` backward-compat aliases. Schema generation (`scripts/emit_config_schema.py`) now delegates to ``robotsix_config.config_schema(MillConfig)``.
 - Remove the dead `skip_local` parameter from `load_config()` in `src/robotsix_mill/config/loader.py` (no callers remained).
 - Config: `load_repos_config` accepts both the nested `ReposRegistry` (`{meta, repos}`) shape written by central-deploy onboarding and the legacy flat `{repo_id: cfg}` shape, so a fresh onboard no longer crash-loops on `repos={"meta":null,"repos":{}}`.
 

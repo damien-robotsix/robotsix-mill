@@ -66,14 +66,14 @@ def _build_read_client(
         secret_key = secrets.langfuse_secret_key
         base_url = secrets.langfuse_base_url
     else:
-        public_key = repo_config.langfuse_public_key
-        secret_key = repo_config.langfuse_secret_key
+        public_key = repo_config.langfuse_public_key  # type: ignore[assignment]
+        secret_key = repo_config.langfuse_secret_key  # type: ignore[assignment]
         base_url = repo_config.langfuse_base_url
         if not (public_key and secret_key):
             return None
     return LangfuseReadClient(
-        public_key=public_key or "",
-        secret_key=secret_key or "",
+        public_key=public_key or "",  # type: ignore[arg-type]
+        secret_key=secret_key or "",  # type: ignore[arg-type]
         base_url=base_url,
     )
 

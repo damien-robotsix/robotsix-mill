@@ -112,7 +112,7 @@ def _forge_token(settings, repo_config) -> str | None:
     """Resolve the forge token via ``get_secrets().forge_token``.
     Raises if the secret is missing — used by health, test_gap,
     config_sync, and completeness_check runners."""
-    return get_secrets().forge_token
+    return get_secrets().forge_token  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

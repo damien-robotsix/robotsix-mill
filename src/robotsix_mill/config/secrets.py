@@ -1,20 +1,13 @@
 """The :class:`Secrets` model and its cached accessors.
 
 Secrets are never merged into ``Settings`` — they are kept in a
-separate model with redacted ``repr`` / ``model_dump`` and
-debug-logged attribute access, so they cannot leak through logs,
-trace output, or accidental serialization.
+separate model.  All secret fields use :class:`pydantic.SecretStr`
+so the values are masked in ``repr`` / ``str`` and the JSON Schema
+marks them as ``writeOnly`` password fields for the deploy UI.
 
-The cached ``_secrets`` singleton lives in ``config/__init__.py`` so
-test fixtures that poke ``robotsix_mill.config._secrets`` are
-observed by the accessors here (which read the package attribute at
-call time).
-
-Secrets are loaded from the ``secrets:`` block of the single mill
-config file (``config/config.json``, else ``config/config.example.json``).
-A value equal to the literal ``SECRET`` sentinel (used throughout
-``config.example.json``) is treated as unset, so the field falls back
-to its ``None`` default.
+The cached singleton is maintained by :func:`.mill_config.load_mill_config`;
+:func:`get_secrets` returns the ``secrets`` field from the cached
+``MillConfig``.
 """
 
 from __future__ import annotations
@@ -23,7 +16,7 @@ import inspect
 import logging
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +26,11 @@ class Secrets(BaseModel):
     (OpenRouter, forge, Langfuse, ntfy, etc.).
     """
 
-    openrouter_api_key: str | None = Field(
+    openrouter_api_key: SecretStr | None = Field(
         default=None,
         description="API key for OpenRouter model access (https://openrouter.ai/keys). Required for LLM inference.",
     )
-    forge_token: str | None = Field(
+    forge_token: SecretStr | None = Field(
         default=None,
         description="Personal access token (PAT) for the forge (GitHub/GitLab). Used for PR creation, branch push, and merge operations.",
     )
@@ -47,7 +40,7 @@ class Secrets(BaseModel):
     # accessible by integration"), so this PAT — with repo-creation
     # rights — is preferred for that one call while everyday push/PR
     # keeps using the App token. Falls back to the normal token if unset.
-    forge_repo_create_token: str | None = Field(
+    forge_repo_create_token: SecretStr | None = Field(
         default=None,
         description="A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos — use a classic PAT with repo-creation scope.",
     )
@@ -55,7 +48,7 @@ class Secrets(BaseModel):
         default=None,
         description="GitHub App ID for App-based authentication. Required when FORGE_AUTH=app.",
     )
-    github_app_private_key: str | None = Field(
+    github_app_private_key: SecretStr | None = Field(
         default=None,
         description="GitHub App private key (PEM string). Alternative to github_app_private_key_path.",
     )
@@ -63,11 +56,11 @@ class Secrets(BaseModel):
         default=None,
         description="Path to the GitHub App private key PEM file. Alternative to github_app_private_key.",
     )
-    langfuse_public_key: str | None = Field(
+    langfuse_public_key: SecretStr | None = Field(
         default=None,
         description="Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
     )
-    langfuse_secret_key: str | None = Field(
+    langfuse_secret_key: SecretStr | None = Field(
         default=None,
         description="Langfuse secret key for LLM observability tracing.",
     )
@@ -83,7 +76,7 @@ class Secrets(BaseModel):
         default=None,
         description="Langfuse project name for trace attribution.",
     )
-    openrouter_management_key: str | None = Field(
+    openrouter_management_key: SecretStr | None = Field(
         default=None,
         description="OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
     )
@@ -91,31 +84,21 @@ class Secrets(BaseModel):
         default=None,
         description="ntfy server URL for push notifications (https://ntfy.sh).",
     )
-    ntfy_token: str | None = Field(
+    ntf_token: SecretStr | None = Field(
         default=None,
         description="ntfy access token for authenticated push notifications.",
     )
 
-    def __init__(self, _secrets_file: str | None = None, **data: Any) -> None:
-        """Construct a ``Secrets`` instance.
-
-        If ``_secrets_file`` is provided it is used as the JSON source;
-        otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
-        single mill config file (``config/config.json``, else
-        ``config/config.example.json``).  Its ``secrets:`` block is passed
-        as field defaults, which explicit ``**data`` kwargs can override.
-        """
-        from .loader import load_secrets_json
-
-        file_path: str | None = _secrets_file
-        if file_path is None:
-            import os
-
-            file_path = os.environ.get("MILL_SECRETS_FILE")
-
-        yaml_data = load_secrets_json(file_path)
-        merged = {**yaml_data, **data}
-        super().__init__(**merged)
+    @model_validator(mode="before")
+    @classmethod
+    def _replace_sentinel_with_none(cls, data: Any) -> Any:
+        """Replace the ``"SECRET"`` sentinel (used in ``config.example.json``)
+        with ``None`` so the example file behaves like "no secret configured"."""
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, str) and value == "SECRET":  # noqa: S105
+                    data[key] = None
+        return data
 
     def __repr__(self) -> str:
         field_names = list(type(self).model_fields.keys())
@@ -157,36 +140,57 @@ class Secrets(BaseModel):
                 _logger = logging.getLogger(__name__)
                 _logger.debug("Secrets.%s accessed by %s", name, caller_module)
         try:
-            return super().__getattribute__(name)
+            value = super().__getattribute__(name)
         except AttributeError:
             # Pydantic v2 field lookup: model_computed_fields etc.
             return object.__getattribute__(self, name)
+        # Transparently unwrap SecretStr so existing callers keep working
+        # with plain strings without needing .get_secret_value().
+        if isinstance(value, SecretStr):
+            return value.get_secret_value()
+        return value
 
 
 def load_secrets(secrets_file: str | None = None) -> Secrets:
-    """Load and return a :class:`Secrets` instance from JSON.
+    """Load and return a :class:`Secrets` instance from the JSON config file.
 
-    If *secrets_file* is provided it is used as the JSON source;
-    otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
-    single mill config file (``config/config.json``, else
-    ``config/config.example.json``).
+    Delegates to :func:`~.mill_config.load_mill_config` which reads
+    ``config/config.json`` (or ``ROBOTSIX_CONFIG_FILE``) via
+    ``robotsix_config.load_config`` and returns the cached
+    ``MillConfig.secrets`` field.
+
+    When *secrets_file* is provided the cache is bypassed so a test
+    that monkeypatches the file sees a fresh load.
     """
-    return Secrets(_secrets_file=secrets_file)
+    from .mill_config import load_mill_config
+
+    return load_mill_config(config_file=secrets_file).secrets
 
 
 def get_secrets() -> Secrets:
-    """Return a cached :class:`Secrets` singleton, constructing it on first call."""
+    """Return a cached :class:`Secrets` singleton.
+
+    When ``robotsix_mill.config._secrets`` is set (by test fixtures),
+    returns that instance directly — this preserves the long-standing
+    test pattern of assigning ``_cfg._secrets = Secrets(...)``.
+
+    Otherwise loads from the JSON config file via
+    :func:`~.mill_config.load_mill_config`.
+    """
     import robotsix_mill.config as _pkg
 
-    cached = _pkg._secrets
-    if cached is None:
-        cached = Secrets()
-        _pkg._secrets = cached
-    return cached
+    if _pkg._secrets is not None:
+        return _pkg._secrets
+    from .mill_config import load_mill_config
+
+    return load_mill_config().secrets
 
 
 def _reset_secrets() -> None:
-    """Clear the cached :class:`Secrets` singleton (for tests)."""
+    """Clear the cached secrets and config singletons (for tests)."""
     import robotsix_mill.config as _pkg
 
     _pkg._secrets = None
+    from .mill_config import _reset_config_cache
+
+    _reset_config_cache()
