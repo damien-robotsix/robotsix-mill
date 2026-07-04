@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `agent_references/betterleaks.md` with Betterleaks configuration reference (repo URL, hook id, version v1.6.0, baseline mode, config precedence, `.betterleaks.toml` format) to eliminate web research on future Betterleaks migrations.
 - Implement agent pre-flight checks are now scope-aware: when the diff
   touches no ``.py`` files (doc-only, changelog-only, config-only PRs),
   ruff, mypy, and deptry are skipped, saving ~60-80s of wall-clock time
