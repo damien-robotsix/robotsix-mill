@@ -13,7 +13,6 @@ from robotsix_mill.config import (
 _BASE_REPO = """\
 repos:
   example:
-    board_id: "example-board"
     forge_remote_url: "https://github.com/me/example.git"
     langfuse:
       public_key: "pk"

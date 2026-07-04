@@ -1971,7 +1971,7 @@ def _multirepo_settings(tmp_path):
         trace_review_target_repo_id="robotsix-mill",
     )
     db.init_db(settings, board_id="test-board")
-    db.init_db(settings, board_id="mill-board")
+    db.init_db(settings, board_id="robotsix-mill")
     return settings
 
 
@@ -1990,7 +1990,7 @@ def test_mill_internal_draft_routed_to_mill_board(tmp_path):
 
     settings = _multirepo_settings(tmp_path)
     audited_svc = TicketService(settings, board_id="test-board")
-    mill_svc = TicketService(settings, board_id="mill-board")
+    mill_svc = TicketService(settings, board_id="robotsix-mill")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")
@@ -2034,7 +2034,7 @@ def test_repo_specific_draft_stays_on_audited_board(tmp_path):
 
     settings = _multirepo_settings(tmp_path)
     audited_svc = TicketService(settings, board_id="test-board")
-    mill_svc = TicketService(settings, board_id="mill-board")
+    mill_svc = TicketService(settings, board_id="robotsix-mill")
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")

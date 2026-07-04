@@ -16,7 +16,7 @@ def _test_repo_config():
     from robotsix_mill.config import RepoConfig
 
     return RepoConfig(
-        repo_id="test-repo",
+        repo_id="test-board",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -65,7 +65,7 @@ def test_run_config_sync_pass_reads_existing_memory(tmp_path, monkeypatch):
     from robotsix_mill.agents import config_syncing
 
     settings = _make_settings(tmp_path)
-    memory_file = settings.data_dir / "test-repo" / "config_sync_memory.md"
+    memory_file = settings.data_dir / "test-board" / "config_sync_memory.md"
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("# Existing memory\n## Proposed\n- gap1\n", encoding="utf-8")
 
@@ -110,7 +110,7 @@ def test_run_config_sync_pass_writes_memory_verbatim(tmp_path, monkeypatch):
     )
 
     run_config_sync_pass(session_id="test-sid", repo_config=_test_repo_config())
-    memory_file = settings.data_dir / "test-repo" / "config_sync_memory.md"
+    memory_file = settings.data_dir / "test-board" / "config_sync_memory.md"
     assert memory_file.exists()
     assert memory_file.read_text(encoding="utf-8") == updated
 
@@ -184,7 +184,7 @@ def test_run_config_sync_pass_missing_memory_file(tmp_path, monkeypatch):
     from robotsix_mill.agents import config_syncing
 
     settings = _make_settings(tmp_path)
-    memory_file = settings.data_dir / "test-repo" / "config_sync_memory.md"
+    memory_file = settings.data_dir / "test-board" / "config_sync_memory.md"
     if memory_file.exists():
         memory_file.unlink()
 

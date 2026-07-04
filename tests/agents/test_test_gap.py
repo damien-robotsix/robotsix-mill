@@ -194,10 +194,11 @@ def test_run_test_gap_pass_writes_memory_verbatim(tmp_path, monkeypatch):
 def test_run_test_gap_pass_creates_draft_tickets(tmp_path, monkeypatch):
     """Runner creates draft tickets for each proposed gap with
     source='test_gap'."""
+    repo_config = _test_repo_config()
     settings = _make_settings(tmp_path)
     db.reset_engine()
-    db.init_db(settings, board_id="test-board")
-    service = TicketService(settings, board_id="test-board")
+    db.init_db(settings, board_id=repo_config.repo_id)
+    service = TicketService(settings, board_id=repo_config.repo_id)
 
     def mock_agent(**kwargs):
         return test_gap_agent.TestGapResult(

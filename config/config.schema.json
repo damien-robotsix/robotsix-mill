@@ -1135,7 +1135,7 @@
         },
         "default_repo_id": {
           "default": "",
-          "description": "Default repo ID for legacy tickets lacking a board_id.",
+          "description": "Default repo ID for legacy tickets lacking a repo_id.",
           "title": "Default Repo Id",
           "type": "string"
         },

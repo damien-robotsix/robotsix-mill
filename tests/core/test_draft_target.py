@@ -66,15 +66,15 @@ def test_resolve_mill_service_unknown_repo_id_returns_none(
 def test_resolve_mill_service_missing_board_id_returns_none(
     settings, service, monkeypatch, caplog
 ):
-    """A target repo whose config has no ``board_id`` → warn and return None."""
+    """A target repo whose config has no ``repo_id`` → warn and return None."""
     settings.trace_review_target_repo_id = "robotsix-mill"
-    rc = SimpleNamespace(board_id="")
+    rc = SimpleNamespace(repo_id="")
     reg = SimpleNamespace(repos={"robotsix-mill": rc})
     monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: reg)
     with caplog.at_level(logging.WARNING):
         result = resolve_mill_service(settings, service)
     assert result is None
-    assert "has no board_id" in caplog.text
+    assert "has no repo_id" in caplog.text
 
 
 def test_resolve_mill_service_success_returns_bound_service(
@@ -82,7 +82,7 @@ def test_resolve_mill_service_success_returns_bound_service(
 ):
     """A valid target repo → a fresh ``TicketService`` bound to its board."""
     settings.trace_review_target_repo_id = "robotsix-mill"
-    rc = SimpleNamespace(board_id="mill-board")
+    rc = SimpleNamespace(repo_id="mill-board")
     reg = SimpleNamespace(repos={"robotsix-mill": rc})
     monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: reg)
     result = resolve_mill_service(settings, service)

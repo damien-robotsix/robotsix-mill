@@ -29,7 +29,7 @@ def _one_repo(monkeypatch, board_id="robotsix-mill"):
     monkeypatch.setattr(
         rhr,
         "get_repos_config",
-        lambda: SimpleNamespace(repos={board_id: SimpleNamespace(board_id=board_id)}),
+        lambda: SimpleNamespace(repos={board_id: SimpleNamespace(repo_id=board_id)}),
     )
 
 

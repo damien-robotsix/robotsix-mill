@@ -34,7 +34,7 @@ def _test_repo_config():
     from robotsix_mill.config import RepoConfig
 
     return RepoConfig(
-        repo_id="test-repo",
+        repo_id="test-board",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -1359,12 +1359,12 @@ class TestTargetRepoRouting:
         assert len(result.drafts_created) == 1
 
         # Draft lives on the TARGET board, not the source board.
-        target_svc = TicketService(s, board_id="mill-board")
+        target_svc = TicketService(s, board_id="mill-repo")
         target_tickets = target_svc.list()
         assert len(target_tickets) == 1
         assert target_tickets[0].source == SourceKind.TRACE_REVIEW
 
-        source_svc = TicketService(s, board_id="source-board")
+        source_svc = TicketService(s, board_id="source-repo")
         assert source_svc.list() == []
 
         # Clean up the pinned registry so other tests don't see it.

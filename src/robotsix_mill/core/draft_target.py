@@ -206,7 +206,7 @@ def resolve_mill_service(
         return None
     if not rc.repo_id:
         log.warning(
-            "%s: configured mill target %r has no board_id — caller "
+            "%s: configured mill target %r has no repo_id — caller "
             "should fall back to the current repo",
             caller_label or "draft_target",
             target_repo_id,

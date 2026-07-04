@@ -2631,7 +2631,7 @@ def test_board_for_comment_returns_bound_board_when_ticket_id_given(service):
 
 @pytest.fixture
 def migrate_env(settings, service):
-    """Register two boards (test-board + other-board) in the repos
+    """Register two boards (test-board + other-repo) in the repos
     config singleton and init the target DB, so ``migrate`` can
     validate its target. Returns (service, other_service)."""
     import robotsix_mill.config as _cfg
@@ -2640,8 +2640,8 @@ def migrate_env(settings, service):
 
     _cfg._repos_config = ReposRegistry(
         repos={
-            "test-repo": RepoConfig(
-                repo_id="test-repo",
+            "test-board": RepoConfig(
+                repo_id="test-board",
                 langfuse_project_name="proj-a",
                 langfuse_public_key="pk-a",
                 langfuse_secret_key="sk-a",
@@ -2690,7 +2690,7 @@ def test_migrate_moves_ticket_history_and_workspace(settings, migrate_env):
     # History preserved + migration event appended, hash chain intact.
     hist = other.history(t.id)
     assert hist[0].note == "created"
-    assert "migrated from board 'test-board' to 'other-board'" in hist[-1].note
+    assert "migrated from board 'test-board' to 'other-repo'" in hist[-1].note
     assert "belongs there" in hist[-1].note
     for prev, cur in zip(hist, hist[1:], strict=False):
         assert cur.prev_hash == prev.hash
@@ -2838,7 +2838,7 @@ def test_migrate_epic_subtree_moves_all_tickets(settings, migrate_env):
         hist = other.history(tid)
         assert len(hist) >= 2, f"{tid}: expected ≥2 events, got {len(hist)}"
         assert hist[0].note == "created"
-        assert "migrated from board 'test-board' to 'other-board'" in hist[-1].note
+        assert "migrated from board 'test-board' to 'other-repo'" in hist[-1].note
 
     # Comments preserved.
     assert [c.body for c in other.list_comments(epic.id)] == ["epic comment"]

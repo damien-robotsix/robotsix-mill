@@ -999,9 +999,8 @@ Source: the `"repos"` key of `config/config.json` (overridable via the
 | `repos.<id>.langfuse.secret_key` | yes | — | Langfuse secret key for this repo's project |
 | `repos.<id>.langfuse.base_url` | no | `https://cloud.langfuse.com` | Langfuse base URL |
 
-Each repo ID must be unique and non-empty. The `board_id` must also be
-non-empty. The registry validates that every entry's `repo_id` matches
-its key in the repos map.
+Each repo ID must be unique and non-empty. The registry validates that
+every entry's `repo_id` matches its key in the repos map.
 
 ### Per-repo branch configuration
 
