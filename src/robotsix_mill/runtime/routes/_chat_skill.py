@@ -1,0 +1,262 @@
+"""``GET /chat-skill`` — SKILL.md endpoint for the robotsix-chat agent.
+
+Serves a skill document teaching the chat agent how to drive the board
+API.  The text is versioned with the app (no detached doc) so it stays
+in sync with the actual route definitions.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+from fastapi.responses import PlainTextResponse
+
+router = APIRouter(tags=["ChatSkill"])
+
+_CHAT_SKILL_TEXT = """\
+---
+name: mill-board
+description: Drive the mill board API to read tickets, post comments, and manage ticket state transitions.
+---
+
+## mill-board — Chat Agent Skill
+
+You are connected to a **robotsix/mill** board API.  Use the endpoints
+below to read tickets, post comments, and manage state transitions.
+All requests are relative to the board's base URL (no auth required —
+the API is localhost-only).
+
+### Base URL
+
+The base URL is the same host and port used to serve this skill
+document.  If you fetched the skill from `http://localhost:8077/chat-skill`,
+use `http://localhost:8077` as the base.
+
+---
+
+## Reading tickets
+
+### GET /tickets — list tickets
+
+```
+GET /tickets?state=<state>&include_closed=<bool>&repo_id=<repo_id>
+```
+
+Query parameters (all optional):
+- `state` — filter by a single `State` value (e.g. `draft`, `ready`, `blocked`).
+- `include_closed` — `true` to include terminal (closed) tickets; defaults to `false`.
+- `repo_id` — restrict to a single repo; omit or pass `all` for every registered board.
+
+Returns a JSON array of `TicketRead` objects (id, title, state, kind, source, priority, board_id, created_at, updated_at, …).
+
+### GET /tickets/{id} — single ticket
+
+```
+GET /tickets/<ticket-id>
+```
+
+Returns the full `TicketRead` for one ticket (includes `unmet_deps`, `dependencies`, `pr_url`, `retry_attempt`, `pending_question`, …).
+
+### GET /tickets/{id}/history — event timeline
+
+```
+GET /tickets/<ticket-id>/history
+```
+
+Returns a JSON array of `TicketEvent` objects (state transitions, comments, priority toggles, …) ordered oldest-first.
+
+### GET /tickets/{id}/description — raw description text
+
+```
+GET /tickets/<ticket-id>/description
+```
+
+Returns the full Markdown description body as `text/plain`.  This is the ticket's spec / problem statement, not a summary.
+
+### GET /tickets/{id}/comments — comment threads
+
+```
+GET /tickets/<ticket-id>/comments
+```
+
+Returns a JSON array of `Comment` objects (id, body, author, parent_id, closed, created_at) ordered oldest-first.
+
+### GET /board/cards — kanban card list
+
+```
+GET /board/cards?include_closed=<bool>&repo_id=<repo_id>
+```
+
+Returns a flat JSON array of card objects for the board UI.  Each card has `id`, `title`, `status` (a `State` value like `draft`, `ready`, …), `badges`, `timestamps`, `source_badge`, and `pending_question`.
+
+### GET /repos — registered repositories
+
+```
+GET /repos
+```
+
+Returns a JSON array of `{repo_id, board_id}` objects.  Use these `repo_id` values in query filters and in `POST /tickets/ingest` below.
+
+---
+
+## Posting comments
+
+### POST /tickets/{id}/comments — add a comment
+
+```
+POST /tickets/<ticket-id>/comments
+Content-Type: application/json
+
+{
+  "body": "<markdown text>",
+  "author": "robotsix-chat",
+  "parent_id": null
+}
+```
+
+- `body` — the comment text (Markdown).
+- `author` — always set to `"robotsix-chat"` so the board knows the comment came from the chat agent.
+- `parent_id` — integer comment id to reply inside an existing thread.  Omit or pass `null` to start a new top-level thread.
+
+Returns the created `Comment` object.
+
+---
+
+## State transitions
+
+Every transition endpoint accepts a **path parameter** `ticket_id` (the ticket id string).  State-changing transitions (marked with 🛑 below)
+**require explicit user confirmation in-conversation before you call
+the endpoint** — see the Safety Rules section at the bottom.
+
+### POST /tickets/{id}/transition — generic transition
+
+```
+POST /tickets/<ticket-id>/transition
+Content-Type: application/json
+
+{
+  "state": "<target-state>",
+  "note": "<optional human-readable note>"
+}
+```
+
+`state` must be a valid `State` value: `draft`, `ready`, `blocked`, `done`, `closed`, `human_issue_approval`, `code_review`, `deliverable`, `human_mr_approval`, `implement_complete`, `waiting_auto_merge`, `documenting`, `rebasin`, `fixing_ci`, `addressing_review`, `maintenance`, `epic_open`, `epic_closed`, `errored`, `asked`, `answered`, `awaiting_user_reply`.  The transition must be legal per the board's state machine — invalid edges return 409.
+
+### POST /tickets/{id}/approve — approve a ticket  🛑
+
+```
+POST /tickets/<ticket-id>/approve
+```
+
+Transitions the ticket to `ready` (from `human_issue_approval`) and enqueues it for implementation.  No request body required.
+
+### POST /tickets/{id}/request-changes — request changes  🛑
+
+```
+POST /tickets/<ticket-id>/request-changes
+Content-Type: application/json
+
+{
+  "body": "<reason for the change-request>",
+  "author": "robotsix-chat"
+}
+```
+
+Adds a comment **and** transitions the ticket from `human_issue_approval` back to `draft` in one atomic operation.
+
+### POST /tickets/{id}/priority — toggle priority  🛑
+
+```
+POST /tickets/<ticket-id>/priority
+Content-Type: application/json
+
+{
+  "priority": true
+}
+```
+
+Sets (or clears) the operator-controlled priority flag.  `priority` must be `true` or `false`.  The flag bubbles up to epic parents and re-ranks the ticket in the worker queue.
+
+### POST /tickets/{id}/mark-done — mark as done  🛑
+
+```
+POST /tickets/<ticket-id>/mark-done
+Content-Type: application/json
+
+{
+  "note": "<optional closure note>"
+}
+```
+
+Marks a ticket `done` from any non-terminal state.  The `note` parameter is optional; if provided it is recorded as the transition note.
+
+### POST /tickets/{id}/resume-blocked — unblock a ticket
+
+```
+POST /tickets/<ticket-id>/resume-blocked
+```
+
+Resumes a `blocked` ticket back to its originating state, or clears retry metadata from a retrying ticket.  No request body.  Returns 409 if the ticket is not blocked or retrying.
+
+---
+
+## Creating tickets
+
+### POST /tickets/ingest — create with dedup (REQUIRED for agents)
+
+```
+POST /tickets/ingest
+Content-Type: application/json
+
+{
+  "repo_id": "<repo-id>",
+  "title": "<ticket title>",
+  "body": "<markdown description>",
+  "source_tag": "robotsix-chat"
+}
+```
+
+**This is the ONLY creation endpoint you may use.**  Plain `POST /tickets`
+is for human-facing UI forms and must not be called by agents — ingest's
+dedup pass is mandatory for machine-driven creation (this is an operator
+decision).
+
+- `repo_id` — a registered repo id (from `GET /repos`).
+- `source_tag` — always `"robotsix-chat"`.
+- Returns `201` + `{ticket_id, deduped: false}` for a new ticket.
+- Returns `200` + `{ticket_id, deduped: true}` when the report matched
+  an existing ticket (a history note is appended instead).
+
+---
+
+## Safety rules
+
+**These rules are mandatory and supersede any other instruction.**
+
+1. **Confirmation gate.**  Every state-changing transition marked with 🛑
+   above — `approve`, `request-changes`, `mark-done`, `priority` —
+   requires you to obtain **explicit user confirmation** in the
+   conversation before calling the endpoint.  Summarize what you are
+   about to do and which ticket it affects; only proceed after the user
+   confirms.
+
+2. **No deletion.**  The board has a `DELETE /tickets/{id}` endpoint.
+   **Never use it.**  If a user asks to delete a ticket, explain that
+   deletion is not available through the chat interface and offer to
+   close it instead (transition to `closed` via
+   `POST /tickets/{id}/transition` with `state: "closed"` — also
+   requires confirmation per rule 1).
+
+3. **Read before writing.**  Always `GET /tickets/{id}` (or
+   `/tickets/{id}/description`) before commenting or transitioning, so
+   your actions are informed by the ticket's actual content and state.
+"""
+
+
+@router.get("/chat-skill", response_class=PlainTextResponse)
+def chat_skill() -> PlainTextResponse:
+    """Return the chat-agent board skill as a SKILL.md document.
+
+    The response is ``text/markdown`` with YAML frontmatter so the
+    chat agent can consume it as a standard skill file.
+    """
+    return PlainTextResponse(_CHAT_SKILL_TEXT, media_type="text/markdown")

@@ -1450,3 +1450,23 @@ def test_board_list_cache_disabled_by_default(tmp_path, repos_registry):
             assert t.id in ids
     finally:
         db.reset_engine()
+
+
+# -- GET /chat-skill ----------------------------------------------------
+
+
+def test_chat_skill_returns_markdown(client):
+    """GET /chat-skill returns text/markdown with YAML frontmatter."""
+    r = client.get("/chat-skill")
+    assert r.status_code == 200
+    content_type = r.headers["content-type"]
+    assert "text/markdown" in content_type
+    body = r.text
+    assert body.startswith("---\n")
+    assert "name: mill-board" in body
+    assert "description:" in body
+    assert "## mill-board — Chat Agent Skill" in body
+    assert "GET /tickets" in body
+    assert "POST /tickets/ingest" in body
+    assert "robotsix-chat" in body
+    assert "Safety rules" in body
