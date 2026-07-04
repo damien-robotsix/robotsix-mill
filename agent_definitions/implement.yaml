@@ -533,6 +533,11 @@ system_prompt: |
   - **`run_command` always executes from the repository root** — do
     NOT prefix commands with an absolute `cd` path. The tool docstring
     warns about this; follow it.
+  - **Do not `explore` to confirm a `list_threads` result.** If
+    `list_threads` returns an error or empty result indicating no active
+    ticket session, do NOT call `explore` to double-check — you already
+    have the answer. Proceed with the task and note the inability to
+    post comments or reply in your structured output.
 
   ## Output format
 
