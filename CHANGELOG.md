@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Extract shared `_get_ticket_or_404`, `_enrich`, and `_get_and_enrich` helpers in ticket routes, replacing the repeated guard-and-enrich incantation across 16 handlers in `_tickets.py` and `_tickets_transitions.py`.
 - Move `docs/expert-yaml-schema.md` → `docs/agent-definitions/expert-yaml-schema.md`, updating all cross-references in README.md, docs/index.md, docs/agents/index.md, and mkdocs.yml; add `docs/agent-definitions/**/*` to the agent-definitions module in docs/modules.yaml.
 - Move dev-tooling docs (`ci-policy.md`, `deployment.md`, `reusable-workflow-callers.md`) from `docs/` to `docs/dev-tooling/`; update `mkdocs.yml` nav, cross-references, and module paths. (mill: Reorganize module dev-tooling: align to per-module layout (src/docs/tests) (20260705T234900Z-reorganize-module-dev-tooling-align-to-p-0030))
 - Move `docs/security.md` → `docs/sandbox/security.md` and update all cross-references (README, ARCHITECTURE, mkdocs.yml). Add `docs/sandbox/**/*` to sandbox module paths in `docs/modules.yaml`.
@@ -12,7 +13,7 @@
 - skip-changelog (test-only addition)
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
-  it into their config were setting a silently-ignored key.
+  it into their config were setting a silently-ignored key. (mill: Extract shared get-ticket-or-404 helper in runtime routes (20260704T142433Z-extract-shared-get-ticket-or-404-helper-6f4c) [WIP])
 - Sandbox (deploy mode): re-establish the internal egress network and the
   `sandbox-proxy` attachment before **every** sandbox spawn instead of once
   per process. A deploy can recreate the `sandbox-proxy` sibling at any

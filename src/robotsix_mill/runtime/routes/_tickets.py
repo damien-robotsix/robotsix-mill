@@ -79,6 +79,29 @@ def _repo_config_for_ticket(ticket: Ticket, repos: ReposRegistry) -> RepoConfig 
     return None
 
 
+def _get_ticket_or_404(ticket_id: str, svc: TicketService) -> Ticket:
+    """Return *ticket* or raise ``HTTPException(404)``."""
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    return ticket
+
+
+def _enrich(
+    ticket: Ticket, settings: Settings, svc: TicketService, request: Request
+) -> TicketRead:
+    """Resolve repo config and enrich *ticket* into a ``TicketRead``."""
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
+def _get_and_enrich(
+    ticket_id: str, svc: TicketService, settings: Settings, request: Request
+) -> TicketRead:
+    """Get a ticket or raise 404, then return the enriched read model."""
+    return _enrich(_get_ticket_or_404(ticket_id, svc), settings, svc, request)
+
+
 @router.post("/tickets", response_model=TicketRead, status_code=201)
 def create_ticket(
     body: TicketCreate,
@@ -278,11 +301,7 @@ def get_ticket(
     Returns the fully enriched ``TicketRead`` (with cost and PR link).
     Raises 404 when the ticket does not exist.
     """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _get_and_enrich(ticket_id, svc, settings, request)
 
 
 @router.get("/tickets/{ticket_id}/history", response_model=list[TicketEvent])
@@ -295,8 +314,7 @@ def get_history(
     Returns the ordered list of ``TicketEvent`` rows.  Raises 404 when
     the ticket does not exist.
     """
-    if svc.get(ticket_id) is None:
-        raise HTTPException(404, "ticket not found")
+    _get_ticket_or_404(ticket_id, svc)
     return svc.history(ticket_id)
 
 
@@ -311,9 +329,7 @@ def get_description(
     Returns ``{"description": "..."}``.  Raises 404 when the ticket
     does not exist.
     """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
     return {"description": svc.workspace(ticket).read_description()}
 
 
@@ -342,9 +358,7 @@ async def upload_screenshot(
     input). Rejects non-image uploads with 400 and unknown tickets with
     404. The filename is reduced to its basename to prevent traversal.
     """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
 
     media_type = file.content_type
     if media_type not in _SCREENSHOT_MEDIA_TYPES:
@@ -382,9 +396,7 @@ def get_retrospect(
     board surface what retrospect actually wrote — without this the
     DONE -> CLOSED transition looks like it happened with no
     reflection, even when retrospect did run and write real analysis."""
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
     ws = svc.workspace(ticket)
     p = ws.artifacts_dir / "retrospect.md"
     if not p.exists():
@@ -425,9 +437,7 @@ def list_artifacts(
     ...]}`` sorted by mtime ascending. Used by the board UI's drawer
     to surface each agent's output — pre-v1 the implement / refine /
     retrospect markdowns only existed on disk."""
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
     ws = svc.workspace(ticket)
     d = ws.artifacts_dir
     items: list[dict] = []
@@ -469,9 +479,7 @@ def get_artifact(
     markdown / JSON; a hex viewer can be added later if needed."""
     if "/" in name or ".." in name or name.startswith("."):
         raise HTTPException(400, "invalid artifact name")
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
     p = svc.workspace(ticket).artifacts_dir / name
     if not p.is_file():
         raise HTTPException(404, "artifact not found")
@@ -514,8 +522,7 @@ def transition(
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     maybe_enqueue(ticket, worker)  # human unblock re-triggers the chain
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)
 
 
 @router.post("/tickets/{ticket_id}/migrate", response_model=TicketRead)
@@ -542,8 +549,7 @@ def migrate_ticket(
     except ValueError as e:
         raise HTTPException(400, str(e)) from None
     maybe_enqueue(ticket, worker)  # draft → refine on the new board
-    repo_config = _repo_config_for_ticket(ticket, repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)
 
 
 @router.post("/tickets/{ticket_id}/unblocks", response_model=TicketRead)
@@ -567,8 +573,7 @@ def set_unblocks(
         ticket = svc.set_unblocks(ticket_id, raw)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)
 
 
 @router.post("/tickets/{ticket_id}/approve", response_model=TicketRead)
@@ -608,5 +613,4 @@ def approve_ticket(
         pass  # best-effort: approval always succeeds
 
     maybe_enqueue(ticket, worker)  # implement picks it up from ready
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)

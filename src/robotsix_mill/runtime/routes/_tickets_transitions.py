@@ -9,13 +9,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from ...core.models import CommentCreate, TicketRead
 from ...core.states import STAGE_FOR_STATE, State
 from ..deps import (
-    enrich_ticket_read,
     get_service,
     get_settings,
     get_worker,
     maybe_enqueue,
 )
-from ._tickets import _repo_config_for_ticket
+from ._tickets import _repo_config_for_ticket, _enrich, _get_ticket_or_404
 
 log = logging.getLogger(__name__)
 
@@ -38,10 +37,9 @@ def request_changes(
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     maybe_enqueue(ticket, worker)
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return {
         "comment": comment,
-        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+        "ticket": _enrich(ticket, settings, svc, request),
     }
 
 
@@ -64,9 +62,7 @@ def set_priority(
         changed_ids = svc.set_priority(ticket_id, priority)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
     # Force a fresh enqueue with the new priority rank for every
     # ticket whose priority actually flipped — the target plus any
     # descendants that inherited the flag from an epic. `maybe_enqueue`
@@ -77,8 +73,7 @@ def set_priority(
         ct = svc.get(cid)
         if ct is not None and ct.state in STAGE_FOR_STATE:
             worker.requeue_with_current_priority(cid)
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)
 
 
 @router.post("/tickets/{ticket_id}/redraft")
@@ -99,10 +94,9 @@ def redraft(
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     maybe_enqueue(ticket, worker)
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return {
         "comment": comment,
-        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+        "ticket": _enrich(ticket, settings, svc, request),
     }
 
 
@@ -127,8 +121,7 @@ def mark_done(
         comment, ticket = svc.mark_done(ticket_id, note=note)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)
 
 
 @router.post("/tickets/{ticket_id}/resume-blocked", response_model=TicketRead)
@@ -145,9 +138,7 @@ def resume_blocked(
     For retrying tickets (retry_attempt > 0 in any non-BLOCKED state),
     clears the retry metadata and re-enqueues immediately.
     """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
 
     if ticket.state is State.BLOCKED:
         try:
@@ -168,8 +159,7 @@ def resume_blocked(
         )
 
     maybe_enqueue(ticket, worker)
-    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
-    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+    return _enrich(ticket, settings, svc, request)
 
 
 @router.get("/tickets/{ticket_id}/cost-breakdown")
@@ -193,9 +183,7 @@ def cost_breakdown(
     renderHistoryHtml matches the entries to history events by inferred
     agent name + nearest-in-time-≤ pairing.
     """
-    ticket = svc.get(ticket_id)
-    if ticket is None:
-        raise HTTPException(404, "ticket not found")
+    ticket = _get_ticket_or_404(ticket_id, svc)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     from ...langfuse.client import session_traces
 
