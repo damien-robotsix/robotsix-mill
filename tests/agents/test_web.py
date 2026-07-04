@@ -25,21 +25,6 @@ def _settings(tmp_path, **env):
     return Settings(**env)
 
 
-# --- agent_references/ folder shipped with the repo ---------------------
-
-
-def test_repo_ships_agent_references():
-    """The real agent_references/ dir is committed and discoverable, so
-    the implement agent can read entries when AGENT.md points it there.
-    No auto-loading — agents pull on demand."""
-    from pathlib import Path
-
-    p = Path("agent_references")
-    assert p.is_dir(), "agent_references/ folder is missing from the repo"
-    files = sorted(x.name for x in p.glob("*.md"))
-    assert "sqlalchemy-sqlite.md" in files, files
-
-
 # --- web research sub-agent (the cost fix) ------------------------------
 
 

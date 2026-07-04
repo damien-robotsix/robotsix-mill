@@ -1838,10 +1838,8 @@ def test_aware_vs_aware_comparison_no_typeerror(service):
 
 def test_refine_agent_does_not_inject_tech_references(monkeypatch, tmp_path):
     """Refine's system prompt must stay narrow — no auto-injected
-    technology constraints. Reference docs live under
-    agent_references/ and are pulled on-demand by the implement
-    agent via the pointer in AGENT.md. This test guards against a
-    regression that re-introduces refine-time push of those docs."""
+    technology constraints. This test guards against a regression
+    that re-introduces refine-time push of those docs."""
     from robotsix_mill.agents import base as base_mod
 
     seen_system_prompt: list[str] = []

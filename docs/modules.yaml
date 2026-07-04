@@ -531,7 +531,6 @@ modules:
       - docs/guides/**/*
       - docs/reference/**/*
       - mkdocs.yml
-      - agent_references/**/*
     dependencies: []
 
   - id: dev-tooling
