@@ -770,8 +770,8 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
                 (),
                 {
                     "output": AuditResult(
-                        draft_ticket_titles=[],
-                        draft_ticket_bodies=[],
+                        draft_titles=[],
+                        draft_bodies=[],
                         gap_ids=[],
                         updated_memory="",
                     )
