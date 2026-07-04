@@ -7,9 +7,9 @@ import pytest
 import sqlalchemy as sa
 
 from robotsix_mill.core.sqlite_utils import (
-    _execute_sql,
     add_column_if_missing,
     run_additive_migrations,
+    _exec,
 )
 
 
@@ -37,13 +37,13 @@ def sa_conn():
 
 
 # ---------------------------------------------------------------------------
-# _execute_sql
+# _exec
 # ---------------------------------------------------------------------------
 
 
-def test_execute_sql_raw_sqlite3(sqlite3_conn):
-    """_execute_sql creates a table via raw sqlite3.Connection."""
-    _execute_sql(sqlite3_conn, "CREATE TABLE u (x INTEGER)")
+def test_exec_raw_sqlite3(sqlite3_conn):
+    """_exec creates a table via raw sqlite3.Connection."""
+    _exec(sqlite3_conn, "CREATE TABLE u (x INTEGER)")
     rows = list(
         sqlite3_conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='u'"
@@ -52,9 +52,9 @@ def test_execute_sql_raw_sqlite3(sqlite3_conn):
     assert len(rows) == 1
 
 
-def test_execute_sql_sa_connection(sa_conn):
-    """_execute_sql creates a table via SQLAlchemy Connection."""
-    _execute_sql(sa_conn, "CREATE TABLE u (x INTEGER)")
+def test_exec_sa_connection(sa_conn):
+    """_exec creates a table via SQLAlchemy Connection."""
+    _exec(sa_conn, "CREATE TABLE u (x INTEGER)")
     sa_conn.commit()
     result = sa_conn.execute(
         sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='u'")
@@ -73,7 +73,6 @@ def test_add_column_returns_true(sqlite3_conn):
     result = add_column_if_missing(sqlite3_conn, "t", "name TEXT")
     assert result is True
 
-    # Verify column actually exists
     cols = [row[1] for row in sqlite3_conn.execute("PRAGMA table_info('t')")]
     assert "name" in cols
 
@@ -101,18 +100,13 @@ def test_add_column_sa_connection(sa_conn):
 
 def test_run_additive_migrations_batch(sqlite3_conn):
     """Batch of 3 migrations: first two new, third already exists."""
-    # Pre-add the third column so it already exists
     add_column_if_missing(sqlite3_conn, "t", "c3 TEXT")
 
-    migrations: list[tuple[str, str]] = [
-        ("t", "c1 TEXT"),
-        ("t", "c2 INTEGER"),
-        ("t", "c3 TEXT"),
-    ]
-    results = run_additive_migrations(sqlite3_conn, migrations)
+    results = run_additive_migrations(
+        sqlite3_conn, "t", ["c1 TEXT", "c2 INTEGER", "c3 TEXT"]
+    )
     assert results == [True, True, False]
 
-    # Verify columns exist
     cols = [row[1] for row in sqlite3_conn.execute("PRAGMA table_info('t')")]
     assert "c1" in cols
     assert "c2" in cols
@@ -121,17 +115,13 @@ def test_run_additive_migrations_batch(sqlite3_conn):
 
 def test_run_additive_migrations_all_new(sqlite3_conn):
     """All migrations are new → all True."""
-    migrations: list[tuple[str, str]] = [
-        ("t", "a TEXT"),
-        ("t", "b TEXT"),
-    ]
-    results = run_additive_migrations(sqlite3_conn, migrations)
+    results = run_additive_migrations(sqlite3_conn, "t", ["a TEXT", "b TEXT"])
     assert results == [True, True]
 
 
 def test_run_additive_migrations_empty(sqlite3_conn):
     """Empty migration list returns empty list."""
-    results = run_additive_migrations(sqlite3_conn, [])
+    results = run_additive_migrations(sqlite3_conn, "t", [])
     assert results == []
 
 
@@ -141,18 +131,18 @@ def test_run_additive_migrations_empty(sqlite3_conn):
 
 
 def test_nonexistent_table_raises(sqlite3_conn):
-    """ALTER TABLE on a nonexistent table propagates OperationalError."""
+    """PRAGMA on a nonexistent table returns empty → ALTER TABLE raises."""
     with pytest.raises(sqlite3.OperationalError, match="no such table"):
         add_column_if_missing(sqlite3_conn, "nonexistent", "x TEXT")
 
 
 def test_nonexistent_table_raises_sa(sa_conn):
-    """ALTER TABLE on a nonexistent table via SA propagates OperationalError."""
+    """PRAGMA on a nonexistent table via SA returns empty → ALTER raises."""
     with pytest.raises(sa.exc.OperationalError):
         add_column_if_missing(sa_conn, "nonexistent", "x TEXT")
 
 
 def test_invalid_column_def_raises(sqlite3_conn):
-    """Malformed column definition propagates OperationalError (not silent False)."""
+    """Malformed column definition propagates OperationalError."""
     with pytest.raises(sqlite3.OperationalError):
         add_column_if_missing(sqlite3_conn, "t", "123 INVALID")
