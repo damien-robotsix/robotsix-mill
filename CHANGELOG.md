@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- GitLab forge: implement `get_authenticated_user_login` (parity with GitHub adapter).
+  Calls `GET /user` via the GitLab API, returns the `username` field, and caches the result.
 - Move `docs/expert-yaml-schema.md` → `docs/agent-definitions/expert-yaml-schema.md`, updating all cross-references in README.md, docs/index.md, docs/agents/index.md, and mkdocs.yml; add `docs/agent-definitions/**/*` to the agent-definitions module in docs/modules.yaml.
 - Move dev-tooling docs (`ci-policy.md`, `deployment.md`, `reusable-workflow-callers.md`) from `docs/` to `docs/dev-tooling/`; update `mkdocs.yml` nav, cross-references, and module paths. (mill: Reorganize module dev-tooling: align to per-module layout (src/docs/tests) (20260705T234900Z-reorganize-module-dev-tooling-align-to-p-0030))
 - Move `docs/security.md` → `docs/sandbox/security.md` and update all cross-references (README, ARCHITECTURE, mkdocs.yml). Add `docs/sandbox/**/*` to sandbox module paths in `docs/modules.yaml`.
@@ -25,7 +27,7 @@
 - Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`
 - Migration from `robotsix-yaml-config` → `robotsix-config`: dependency swapped, config layer rewritten to use stdlib `json` + pyyaml for overlay YAML, `JsonSettingsSource` replaces `YamlSettingsSource`, `config/config.example.json` committed (was `.yaml`), schema regeneration updated.
-- Diagnostic investigation: traced "interrupted by process restart" errors across 19 agent/board pairs to `RunRegistry` orphan reconciliation — identified OOM kills under combined mill + sandbox memory pressure as the most likely root cause, with deployment rollouts as a secondary contributor.
+- Diagnostic investigation: traced "interrupted by process restart" errors across 19 agent/board pairs to `RunRegistry` orphan reconciliation — identified OOM kills under combined mill + sandbox memory pressure as the most likely root cause, with deployment rollouts as a secondary contributor. (mill: forge parity: GitLab missing get_authenticated_user_login implementation (20260704T194108Z-forge-parity-gitlab-missing-get-authenti-7758) [WIP])
 - Add `agent_references/betterleaks.md` with Betterleaks configuration reference (repo URL, hook id, version v1.6.0, baseline mode, config precedence, `.betterleaks.toml` format) to eliminate web research on future Betterleaks migrations.
 - Implement agent pre-flight checks are now scope-aware: when the diff
   touches no ``.py`` files (doc-only, changelog-only, config-only PRs),

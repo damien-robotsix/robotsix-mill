@@ -2284,3 +2284,102 @@ def test_capture_failure_window_gitlab_tailcaps_without_marker():
         "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
     )
     assert out == "x" * 65536
+
+
+# ---------------------------------------------------------------------------
+# get_authenticated_user_login / _get_authenticated_user_login
+# ---------------------------------------------------------------------------
+
+
+def test_get_authenticated_user_login_success(tmp_path, monkeypatch):
+    """Successful GET /user → cached username string."""
+    resp = _make_response(200, {"username": "my-bot"})
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            return resp
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    login = forge.get_authenticated_user_login()
+    assert login == "my-bot"
+
+
+def test_get_authenticated_user_login_cache_hit(tmp_path, monkeypatch):
+    """Second call returns cached value without making another HTTP request."""
+    call_count = [0]
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            call_count[0] += 1
+            return _make_response(200, {"username": "cached-bot"})
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    login1 = forge.get_authenticated_user_login()
+    assert login1 == "cached-bot"
+    assert call_count[0] == 1
+
+    login2 = forge.get_authenticated_user_login()
+    assert login2 == "cached-bot"
+    assert call_count[0] == 1  # no second request
+
+
+def test_get_authenticated_user_login_http_error(tmp_path, monkeypatch):
+    """HTTP error → '' (no exception raised)."""
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            return _make_response(500, {}, "boom")
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+
+    forge = _forge(tmp_path)
+    login = forge.get_authenticated_user_login()
+    assert login == ""
+
+
+def test_get_authenticated_user_login_exception(tmp_path, monkeypatch):
+    """Exception in _get_authenticated_user_login → cached as ''."""
+    monkeypatch.setattr(
+        GitLabForge,
+        "_get_authenticated_user_login",
+        lambda self: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    forge = _forge(tmp_path)
+    login = forge.get_authenticated_user_login()
+    assert login == ""
+
+    # Cache hit — should still be ''
+    login2 = forge.get_authenticated_user_login()
+    assert login2 == ""

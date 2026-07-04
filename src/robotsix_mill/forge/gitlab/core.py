@@ -352,6 +352,22 @@ class GitLabForge(
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_open_prs(project_path)
 
+    def get_authenticated_user_login(self) -> str:
+        """Return the username of the GitLab user associated with the current token.
+
+        Calls GET /user. Caches the result on the instance after the first call.
+        Returns '' on any failure (MUST NOT raise).
+        """
+        cached = getattr(self, "_cached_bot_login", None)
+        if cached is not None:
+            return cached
+        try:
+            login = self._get_authenticated_user_login()
+        except Exception:
+            login = ""
+        self._cached_bot_login = login
+        return login
+
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
     # ------------------------------------------------------------------
@@ -886,3 +902,10 @@ class GitLabForge(
         except Exception:
             return []
         return out
+
+    def _get_authenticated_user_login(self) -> str:
+        with self._http.client() as (c, api, headers):
+            r = c.get(f"{api}/user", headers=headers)
+            if r.status_code == 200:
+                return r.json().get("username", "")
+        return ""
