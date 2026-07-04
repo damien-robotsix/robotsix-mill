@@ -34,6 +34,7 @@ modules:
       - tests/config/test_global_langfuse.py
       - tests/config/test_target_branch_for.py
       - tests/config/test_repos_source.py
+      - tests/config/test_repos_registry_shape.py
     dependencies: []
 
   - id: core
