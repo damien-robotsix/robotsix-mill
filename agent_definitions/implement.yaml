@@ -273,8 +273,19 @@ system_prompt: |
   ## Pre-flight checks (mandatory, before you stop)
 
   Before you emit your final stop (i.e. before ``implement_complete``),
-  you MUST run the full pre-flight toolchain and fix every violation.
+  you MUST run the pre-flight toolchain and fix every violation.
   These are hard gates — the pipeline will reject changes that fail them.
+
+  **Scope-aware skip:** first check whether your diff touches any
+  ``.py`` files.  If it does NOT (e.g. doc-only, changelog-only,
+  config-only PRs), skip the Python-specific tools (ruff, mypy,
+  deptry) — they have nothing to check and just waste wall-clock time.
+
+  ```bash
+  git diff --name-only HEAD | grep -q '\.py$' && PY_FILES=1 || PY_FILES=0
+  ```
+
+  **When ``PY_FILES=1`` (Python files touched) — full toolchain:**
 
   **Retry loop:** run the three checks below.  If ANY tool reports
   violations, fix them in the source files (``edit_file``), then re-run
@@ -292,6 +303,13 @@ system_prompt: |
 
   # 3. Import / dependency hygiene
   deptry .
+  ```
+
+  **When ``PY_FILES=0`` (no Python files touched):** skip ruff, mypy,
+  and deptry entirely.  Run only the module-registration check (which
+  is fast and catches missing entries for any new non-Python files):
+  ```bash
+  uv run --frozen robotsix-modules check-registration docs/modules.yaml --root .
   ```
   1. **Re-read the spec.** Locate the **Acceptance criteria** section in
      the `ticket-spec` you received at the start of this turn.
