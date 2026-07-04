@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Generator
 from pathlib import Path
@@ -751,3 +752,19 @@ def test_field_names_are_present_in_config_audit():
     s = Settings()
     assert hasattr(s, "coordinator_request_limit")
     assert hasattr(s, "coordinator_max_tool_calls")
+
+
+# ===========================================================================
+#  Example template regression guards
+# ===========================================================================
+
+
+def test_example_config_is_container_ready():
+    """The onboard template must bind 0.0.0.0 so the gateway (separate
+    container) can reach the mill upstream.  A loopback default here would
+    re-introduce the 502-behind-auth regression that had to be hand-patched
+    live on 2026-07-04."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    example_path = repo_root / "config" / "config.example.json"
+    data = json.loads(example_path.read_text())
+    assert data["settings"]["api_host"] == "0.0.0.0"
