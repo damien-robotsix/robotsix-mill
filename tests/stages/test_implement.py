@@ -429,7 +429,13 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     assert (ctx.service.workspace(t).artifacts_dir / "implement.md").exists()
 
 
-def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
+def test_no_changes_terminates_done_when_already_satisfied(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A fresh run whose test gate passes and that produces an empty diff
+    with NO edit-tool calls and NO gitignored writes is a genuine no-op:
+    the spec is already satisfied. Terminate DONE instead of looping in
+    BLOCKED (ticket 0976)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
@@ -438,8 +444,8 @@ def test_no_changes_blocks(ctx_factory, tmp_path, monkeypatch):
     t = _ticket(ctx)
     _write_file_map(ctx, t, "dummy.txt")
     out = ImplementStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
-    assert "no changes" in out.note
+    assert out.next_state is State.DONE
+    assert "already satisfied" in out.note.lower()
 
 
 def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
@@ -2504,12 +2510,15 @@ def test_no_change_needed_with_rationale_transitions_to_done(
     assert "1234" in out.note  # rationale carried into the note
 
 
-def test_no_change_needed_empty_rationale_still_blocks(
+def test_no_change_needed_empty_rationale_terminates_done(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """Defensive: setting ``no_change_needed=True`` with an empty
-    rationale must NOT route to DONE — that would close the ticket
-    silently. Falls through to the normal silent-no-change BLOCK."""
+    """``no_change_needed=True`` with an empty rationale falls through
+    the rationale-gated bypass to the general empty-diff handler. With
+    no edit-tool calls and no gitignored writes it is a genuine no-op
+    (empty diff vs base), so it now terminates DONE (already satisfied)
+    rather than looping in BLOCKED (ticket 0976). Nothing was produced,
+    so no real work can be lost."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
 
@@ -2530,8 +2539,8 @@ def test_no_change_needed_empty_rationale_still_blocks(
     t = _ticket(ctx)
     out = ImplementStage().run(t, ctx)
 
-    assert out.next_state is State.BLOCKED
-    assert "no changes produced" in out.note
+    assert out.next_state is State.DONE
+    assert "already satisfied" in out.note.lower()
 
 
 def test_no_change_needed_ignored_when_branch_ahead_of_main(
@@ -5130,9 +5139,13 @@ def test_convergence_backstop_halts_at_cycle_cap(ctx_factory, tmp_path, monkeypa
     assert "2/2" in out.note
 
 
-def test_convergence_empty_diff_after_review_blocks(ctx_factory, tmp_path, monkeypatch):
+def test_convergence_empty_diff_after_review_terminates_done(
+    ctx_factory, tmp_path, monkeypatch
+):
     """When a ticket returns from review (review_rounds > 0) and the
-    branch has no commits beyond origin/main, implement blocks early.
+    branch has no commits beyond origin/main, there is genuinely nothing
+    to merge — implement terminates DONE (already satisfied) instead of
+    looping in BLOCKED (ticket 0976).
     """
     remote = make_bare_repo(tmp_path)
 
@@ -5183,9 +5196,10 @@ def test_convergence_empty_diff_after_review_blocks(ctx_factory, tmp_path, monke
     assert t.review_rounds == 1
 
     # Second implement run: resuming=True, review_rounds>0, branch has no
-    # commits ahead → empty-diff detection should block.
+    # commits ahead → genuine no-op → terminate DONE (already satisfied).
     out2 = ImplementStage().run(t, ctx)
-    assert out2.next_state is State.BLOCKED
+    assert out2.next_state is State.DONE
+    assert "already satisfied" in out2.note.lower()
     assert "empty diff" in out2.note.lower()
 
 
@@ -5591,9 +5605,10 @@ def test_stale_respawn_guard_skips_without_implement_md(
 
 
 def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeypatch):
-    """When the convergence backstop fires (empty diff after review),
-    implement.md must be written so the stale re-spawn guard can
-    prevent the same no-op on the next attempt."""
+    """When the convergence backstop fires (empty diff after review) it
+    now terminates DONE (already satisfied). implement.md must still be
+    written (with the passed marker + spec-fingerprint) so the artifact
+    trail is intact."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -5637,16 +5652,16 @@ def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeyp
     t = ctx.service.get(t.id)
     assert t.review_rounds == 1
 
-    # Second run: convergence backstop fires → BLOCKED.
+    # Second run: convergence backstop fires → DONE (already satisfied).
     out2 = ImplementStage().run(t, ctx)
-    assert out2.next_state is State.BLOCKED
-    assert "empty diff" in out2.note.lower()
+    assert out2.next_state is State.DONE
+    assert "already satisfied" in out2.note.lower()
 
-    # implement.md must have been written with BLOCKED outcome.
+    # implement.md must have been written with the passed outcome.
     md = ws.artifacts_dir / "implement.md"
     assert md.exists(), "convergence backstop must write implement.md"
     content = md.read_text(encoding="utf-8")
-    assert "BLOCKED — resumable" in content
+    assert "passed" in content
     assert "spec-fingerprint:" in content
 
 

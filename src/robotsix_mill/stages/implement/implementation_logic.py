@@ -447,25 +447,43 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 )
                 and not resuming
             ):
-                # Silent no-change on a fresh run (agent didn't signal):
-                # BLOCK so the operator can investigate. Capture the
-                # agent's own narrative so they have something to
-                # inspect — otherwise the ticket lands in BLOCKED with
-                # only a one-line reason and the previous iteration's
-                # artifacts (which may not exist on a fresh implement
-                # run).
+                # Empty diff on a fresh run: the working tree is clean AND
+                # the branch has no commits beyond ``origin/<target>`` —
+                # there is genuinely nothing to merge. This is the single
+                # biggest source of BLOCKED-loop tickets: a spec already
+                # satisfied on main loops implement → empty PR → close →
+                # BLOCKED → resume forever. Resolve it deterministically
+                # here — but ONLY when the empty diff is genuinely a
+                # no-op, never when real work may have been lost.
+                #
+                # Two guards protect against silently closing real work:
+                #
+                #   (a) gitignored edits — real writes into a gitignored
+                #       path are invisible to ``git status`` and surface
+                #       as an opaque empty diff. Closing DONE would lose
+                #       deliverable work → BLOCK.
+                #   (b) edit-claim contradiction — the run invoked
+                #       file-mutating tools yet nothing landed (edits
+                #       reverted, workspace reset mid-run, or written off
+                #       clone). Closing DONE would lose that work → BLOCK.
+                #       A confirmed formatter-reverted / redundant edit
+                #       (``_edits_formatter_reverted`` is True) is a true
+                #       no-op and is exempt (mirrors the ``no_change_needed``
+                #       guard above).
+                #
+                # When NEITHER guard fires, the agent looked and made no
+                # (surviving) edits: the spec is already satisfied. Close
+                # DONE with a clear terminal note instead of looping.
                 no_change_summary = summary or (
                     "Agent finished without producing any file edits and "
                     "without explanation. Check artifacts/implement_messages.json "
                     "for the full transcript."
                 )
-                # Gitignored-edit detector: real writes into a gitignored
-                # path (e.g. a manifest board whose ``.gitignore`` carries
-                # ``/src/*`` for vcs-imported sub-repos) are invisible to
-                # ``git status`` and surface here as an opaque empty diff.
-                # Name the paths so the operator sees WHAT happened instead
-                # of guessing (live case: robotsix-mill-ros2 writes under
-                # ``src/ros2/…`` blocked as "no changes produced").
+                # Guard (a): gitignored-edit detector. Real writes into a
+                # gitignored path (e.g. a manifest board whose ``.gitignore``
+                # carries ``/src/*`` for vcs-imported sub-repos) are
+                # invisible to ``git status`` and must NOT be closed as a
+                # no-op.
                 ignored_hits = cls._claimed_gitignored_edits(repo_dir, new_msgs)
                 if ignored_hits:
                     hit_list = ", ".join(f"`{p}`" for p in ignored_hits)
@@ -477,40 +495,87 @@ class ImplementationLogicMixin(_ImplementStageBase):
                         "the board needs manifest-aware delivery for that "
                         f"sub-tree.\n\n{no_change_summary}"
                     )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        no_change_summary,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    reason = " ".join(no_change_summary.split())
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            f"no changes produced — {reason[:300]}"
+                            + ("… (see implement.md)" if len(reason) > 300 else ""),
+                        ),
+                    )
+                # Guard (b): edit-claim contradiction. The run invoked
+                # edit tools but nothing survived → likely lost work.
+                # Exempt only a confirmed formatter-reverted / redundant
+                # no-op (True); None/False → BLOCK.
+                edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
+                    has_changes=False, new_messages=new_msgs
+                )
+                if edit_tools and (
+                    cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
+                ):
+                    tool_list = ", ".join(edit_tools)
+                    diag = (
+                        f"{no_change_summary}\n\n"
+                        "[Diagnostic] implement produced an empty diff, but the "
+                        f"agent invoked file-mutating tools ({tool_list}) during "
+                        "the run and replaying those edits + formatting still "
+                        "produced a real change (or could not be verified). An "
+                        "empty diff after real edit calls means the work did NOT "
+                        "persist (edits reverted, workspace reset mid-run, or "
+                        "written outside the clone). Closing as no-change would "
+                        "silently lose that work, so the ticket is BLOCKED for "
+                        "inspection."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "edit-claim contradiction (empty diff after edit calls)",
+                        ),
+                    )
+                # Genuine no-op: clean working tree, no commits beyond the
+                # base, no gitignored writes, no lost edits. The spec is
+                # already satisfied — terminate DONE instead of looping.
+                done_note = "already satisfied — no changes needed (empty diff vs base)"
                 cls._finalize(
                     ctx,
                     ticket,
                     repo_dir,
                     branch,
-                    f"{no_change_summary}\n\n"
-                    "[Diagnostic] implement returned BLOCKED because "
-                    "`git diff` was empty after the agent run AND the "
-                    "agent did NOT set ``no_change_needed=True``. "
-                    "Common causes: (1) agent decided no edits were "
-                    "necessary but didn't escalate via the result "
-                    "schema; (2) the agent loaded a stale "
-                    "conversation_state from a sibling stage and "
-                    "treated it as already-completed work.",
-                    ok=False,
+                    f"{done_note}\n\n{no_change_summary}",
+                    ok=True,
                     reference_files=ref_files,
                     extra_roots=extra_roots,
                 )
-                # Surface the agent's OWN reason in the operator-visible
-                # block note — not a bare "no changes produced". Otherwise the
-                # ticket lands in BLOCKED with an opaque one-liner and the
-                # operator has to open artifacts/implement.md to learn why
-                # (the recurring "blocked with no explanation" complaint). The
-                # full narrative still lives in implement.md (_finalize above);
-                # this is the short, operator-facing form.
-                reason = " ".join(no_change_summary.split())
-                note = "no changes produced"
-                if reason:
-                    note = f"no changes produced — {reason[:300]}" + (
-                        "… (see implement.md)" if len(reason) > 300 else ""
-                    )
+                log.info(
+                    "%s: empty diff on fresh run with no lost work — DONE "
+                    "(already satisfied)",
+                    ticket.id,
+                )
                 return _SinglePassResult(
                     next_action="return",
-                    outcome=Outcome(State.BLOCKED, note),
+                    outcome=Outcome(State.DONE, done_note),
                 )
             # --- per-claimed-file edit-claim verification ---
             # We reach here only on a non-empty-diff proceed (the two
