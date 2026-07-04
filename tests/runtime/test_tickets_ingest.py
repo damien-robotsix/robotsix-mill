@@ -8,8 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from robotsix_mill.config import RepoConfig
+from robotsix_mill.core import db as core_db
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
 
 
@@ -17,6 +19,13 @@ from robotsix_mill.runtime.api import create_app
 def service(settings) -> TicketService:
     """Return the board-scoped service for the test board."""
     return TicketService(settings, board_id="test-board")
+
+
+@pytest.fixture
+def meta_service(settings) -> TicketService:
+    """Return the board-scoped service for the synthetic meta board."""
+    core_db.init_db(settings, board_id="meta")
+    return TicketService(settings, board_id="meta")
 
 
 @pytest.fixture
@@ -266,3 +275,93 @@ def test_ingest_accepts_auto_repo_when_flag_on(client, settings):
     r = client.post("/tickets/ingest", json=payload)
     assert r.status_code == 201
     assert r.json()["deduped"] is False
+
+
+# ---------------------------------------------------------------------------
+# Meta board ingest (agent-driven repo creation requests)
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_meta_board_creates_ticket(client, meta_service):
+    """POST /tickets/ingest with repo_id='meta' creates a ticket on the
+    meta board and transitions it to HUMAN_ISSUE_APPROVAL."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            repo_id="meta",
+            title="Create repo robotsix-chat-mobile",
+            body="We need a new repository for the mobile chat client.",
+            source_tag="robotsix-chat",
+        ),
+    )
+    assert r.status_code == 201, r.json()
+    body = r.json()
+    assert body["deduped"] is False
+    assert body["ticket_id"]
+
+    ticket = meta_service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.title == "Create repo robotsix-chat-mobile"
+    assert ticket.state == State.HUMAN_ISSUE_APPROVAL
+
+
+def test_ingest_meta_board_dedup(client, meta_service):
+    """POST /tickets/ingest to meta twice with overlapping content returns
+    200 deduped=True on the second call."""
+    payload = _ingest_payload(
+        repo_id="meta",
+        title="Create repo my-new-service",
+        body="Requesting a new repository for the my-new-service project.",
+        source_tag="robotsix-chat",
+    )
+
+    # First call — create.
+    r1 = client.post("/tickets/ingest", json=payload)
+    assert r1.status_code == 201
+    ticket_id = r1.json()["ticket_id"]
+
+    # Second call — should dedup.
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+        return_value={
+            "duplicate_of": ticket_id,
+            "already_done": None,
+            "reason": "same repo request",
+        },
+    ) as mock_dedup:
+        r2 = client.post("/tickets/ingest", json=payload)
+    assert mock_dedup.called
+    assert r2.status_code == 200
+    body = r2.json()
+    assert body["ticket_id"] == ticket_id
+    assert body["deduped"] is True
+
+    # History note appended.
+    history = meta_service.history(ticket_id)
+    notes = [e.note for e in history if e.note and "re-reported by" in e.note]
+    assert len(notes) == 1
+    assert "robotsix-chat" in notes[0]
+
+
+def test_ingest_meta_board_no_candidates_skips_llm(client, meta_service):
+    """When the meta board has no candidates, run_dedup_check is never
+    called and the ticket is created directly in HUMAN_ISSUE_APPROVAL."""
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+    ) as mock_dedup:
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                repo_id="meta",
+                title="Create repo another-service",
+                body="New repo needed.",
+                source_tag="robotsix-chat",
+            ),
+        )
+    assert mock_dedup.call_count == 0
+    assert r.status_code == 201
+    assert r.json()["deduped"] is False
+
+    ticket = meta_service.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == State.HUMAN_ISSUE_APPROVAL

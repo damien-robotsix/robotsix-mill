@@ -85,20 +85,34 @@ def ingest_ticket(
     existing ticket (a history note is appended to the existing one).
     Returns 404 when *repo_id* is not registered.
     """
-    # 1. Repo validation — 404 for unknown repo_id.
-    repo_config = repos.repos.get(body.repo_id)
-    if repo_config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
-        )
+    # 1. Resolve board_id.
+    #    "meta" is the synthetic board for cross-cutting concerns
+    #    (repo creation requests, etc.) — it has no forge_remote_url
+    #    and lives outside the regular ReposRegistry, so we short-
+    #    circuit the repo lookup here (matching _repo_helpers.py).
+    if body.repo_id == "meta":
+        board_id = "meta"
+    else:
+        repo_config = repos.repos.get(body.repo_id)
+        if repo_config is None:
+            raise HTTPException(
+                status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
+            )
 
-    # 2. Reject auto-registered repos when the flag is off.
-    _check_repo_workable(repo_config, body.repo_id, settings)
+        # 2. Reject auto-registered repos when the flag is off.
+        _check_repo_workable(repo_config, body.repo_id, settings)
 
-    board_id = repo_config.board_id
+        board_id = repo_config.board_id
 
-    # 2. Candidate selection — scope to the target board.
+    # 3. Candidate selection — scope to the target board.
     board_svc = TicketService(settings, board_id=board_id)
+
+    # Meta-board ingest lands in HUMAN_ISSUE_APPROVAL so a human
+    # must explicitly approve before any repo-creation work begins.
+    post_create_state = (
+        State.HUMAN_ISSUE_APPROVAL if body.repo_id == "meta" else None
+    )
+
     all_tickets = board_svc.list()
 
     now = datetime.now(timezone.utc)
@@ -114,7 +128,10 @@ def ingest_ticket(
     ]
 
     if not candidates:
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return _create_ticket(
+            body, board_id, board_svc, worker, settings,
+            post_create_state=post_create_state,
+        )
 
     # 3. Cheap prefilter — skip LLM when no token overlap.
     candidate_texts: list[str] = []
@@ -129,7 +146,10 @@ def ingest_ticket(
         draft_body=body.body,
         candidates_texts=candidate_texts,
     ):
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return _create_ticket(
+            body, board_id, board_svc, worker, settings,
+            post_create_state=post_create_state,
+        )
 
     # 4. LLM dedup.
     top = rank_candidates_by_similarity(
@@ -161,7 +181,10 @@ def ingest_ticket(
         )
     except Exception as exc:
         logger.warning("ingest dedup LLM failed, creating ticket (fail-open): %s", exc)
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return _create_ticket(
+            body, board_id, board_svc, worker, settings,
+            post_create_state=post_create_state,
+        )
 
     if verdict.get("duplicate_of"):
         dup_id: str = verdict["duplicate_of"]
@@ -175,7 +198,10 @@ def ingest_ticket(
         )
 
     # already_done is deliberately not acted on — fall through to create.
-    return _create_ticket(body, board_id, board_svc, worker, settings)
+    return _create_ticket(
+        body, board_id, board_svc, worker, settings,
+        post_create_state=post_create_state,
+    )
 
 
 def _create_ticket(
@@ -184,9 +210,17 @@ def _create_ticket(
     board_svc: TicketService,
     worker: Worker,
     settings: Settings,
+    *,
+    post_create_state: State | None = None,
 ) -> JSONResponse:
     """Create a new draft ticket and enqueue it.  Shared between the
-    dedup-miss path and the fail-open path."""
+    dedup-miss path and the fail-open path.
+
+    When *post_create_state* is given the ticket is transitioned to
+    that state immediately after creation (before enqueue).  This is
+    used for meta-board tickets that must land in
+    ``HUMAN_ISSUE_APPROVAL`` before any work begins.
+    """
     ticket = board_svc.create(
         title=body.title,
         description=body.body,
@@ -194,6 +228,15 @@ def _create_ticket(
         kind=TicketKind.TASK,
         board_id=board_id,
     )
+    if post_create_state is not None:
+        board_svc.transition(
+            ticket.id,
+            post_create_state,
+            note=(
+                "Agent-requested repo creation — "
+                "awaiting human approval before execution."
+            ),
+        )
     maybe_enqueue(ticket, worker)
     return JSONResponse(
         status_code=201,

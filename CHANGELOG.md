@@ -13,6 +13,11 @@
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.
+- `POST /tickets/ingest` now accepts ``repo_id="meta"`` for agent-driven
+  repo-creation requests.  Tickets land in ``human_issue_approval`` so a
+  human must explicitly approve before any repo is created.  The dedup
+  pass still applies — duplicate requests attach a history note instead
+  of creating a new ticket.
 - Sandbox (deploy mode): re-establish the internal egress network and the
   `sandbox-proxy` attachment before **every** sandbox spawn instead of once
   per process. A deploy can recreate the `sandbox-proxy` sibling at any
