@@ -2455,6 +2455,36 @@ async def test_refine_stage_timeout_blocks_ticket(ctx, service, monkeypatch):
     assert "refine" in note
 
 
+async def test_inner_timeout_error_is_not_reported_as_stage_timeout(
+    ctx, service, monkeypatch
+):
+    """A ``TimeoutError`` raised *inside* ``stage.run`` (HTTP call, sandbox
+    exec — ``asyncio.TimeoutError`` is the builtin ``TimeoutError`` since
+    3.11) must NOT be misreported as the per-stage deadline. It goes through
+    the ordinary stage-error path (transient classification/retry), not the
+    hard "stage timed out after Ns" BLOCKED escalation."""
+    ctx.settings.stage_timeout_overrides = {"refine": 3600}  # plenty of headroom
+
+    class InnerTimeoutRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            raise TimeoutError("sandbox exec timed out")  # inner, not our deadline
+
+    monkeypatch.setitem(registry.STAGES, "refine", InnerTimeoutRefine())
+    t = service.create("inner-timeout")
+    await process_ticket(t.id, ctx)
+    reloaded = service.get(t.id)
+    notes = " | ".join(h.note or "" for h in service.history(t.id))
+    assert "timed out after" not in notes, (
+        "inner TimeoutError must not be attributed to the stage deadline"
+    )
+    # The transient-error path either schedules a retry or (when exhausted)
+    # blocks with a different note — never the instant deadline escalation.
+    assert reloaded.retry_attempt > 0 or reloaded.state is not State.BLOCKED
+
+
 async def test_stage_timeout_disabled_when_override_is_zero(ctx, service, monkeypatch):
     """A per-stage override of 0 disables the timeout for that stage.
 

@@ -63,6 +63,20 @@ def _post_trace_event(
 _TERMINAL = {State.CLOSED, State.ERRORED, State.BLOCKED}
 
 
+class _StageDeadlineExceeded(Exception):
+    """The per-stage wall-clock deadline expired.
+
+    Since Python 3.11 ``asyncio.TimeoutError`` IS the builtin
+    ``TimeoutError``, so a timeout raised *inside* ``stage.run`` (an HTTP
+    call, a sandbox exec) is indistinguishable from the stage deadline by
+    exception type alone. The wait block below converts only a genuine
+    deadline expiry into this sentinel; every other ``TimeoutError`` falls
+    through to the ordinary stage-error path (transient classification +
+    bounded retries) instead of being misreported as
+    "stage timed out after Ns" and hard-BLOCKing the ticket.
+    """
+
+
 async def process_ticket(
     ticket_id: str, ctx: StageContext, active_map: dict | None = None
 ) -> None:
@@ -451,7 +465,16 @@ async def _process_ticket_inner(
                 coro = asyncio.to_thread(stage.run, ticket, ctx)
                 try:
                     if timeout > 0:
-                        outcome = await asyncio.wait_for(coro, timeout=timeout)
+                        deadline = asyncio.timeout(timeout)
+                        try:
+                            async with deadline:
+                                outcome = await coro
+                        except TimeoutError:
+                            if deadline.expired():
+                                raise _StageDeadlineExceeded from None
+                            # TimeoutError raised by stage.run itself
+                            # (HTTP/sandbox/...) — not our deadline.
+                            raise
                     else:
                         outcome = await coro
                 finally:
@@ -464,7 +487,7 @@ async def _process_ticket_inner(
                     root_io.set_attribute(
                         "outcome.next_state", outcome.next_state.value
                     )
-            except asyncio.TimeoutError:
+            except _StageDeadlineExceeded:
                 timeout = ctx.settings.stage_timeout_overrides.get(
                     stage_name, ctx.settings.stage_timeout_seconds
                 )
