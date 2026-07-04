@@ -346,6 +346,7 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
         trace["observations"] = [
             {k: v for k, v in o.items() if k in _KEEP_FIELDS and v is not None}
             for o in obs
+            if isinstance(o, dict)
         ]
         shrunk = _json.dumps(trace, default=str)
         if len(shrunk) <= max_chars:
@@ -356,6 +357,12 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
             + shrunk[-max_chars // 2 :],
             obs_count,
         )
+
+    # Filter out non-dict observations before processing — they cause
+    # "'str' object has no attribute 'items'" crashes when Langfuse trace
+    # observations contain unexpected scalar values mixed into the array.
+    obs = [o for o in obs if isinstance(o, dict)]
+    trace["observations"] = obs
 
     for o in obs:
         for k in ("input", "output", "metadata"):

@@ -1024,3 +1024,34 @@ class TestShrinkTraceData:
         parsed = json.loads(shrunk)
         assert parsed["observations"][0]["input"] == "hello"
         assert parsed["observations"][0]["output"] == "world"
+
+    def test_non_dict_observations_are_skipped_small_trace(self):
+        """Non-dict observations are silently skipped in the small-trace path."""
+        trace = {
+            "id": "t-mixed",
+            "observations": [
+                {"id": "obs-1", "input": "ok", "output": "fine"},
+                "INVALID_STRING_OBS",
+                {"id": "obs-2", "input": "also-ok"},
+            ],
+        }
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 3
+        parsed = json.loads(shrunk)
+        assert len(parsed["observations"]) == 2
+        assert parsed["observations"][0]["id"] == "obs-1"
+        assert parsed["observations"][1]["id"] == "obs-2"
+
+    def test_non_dict_observations_are_skipped_large_trace(self):
+        """Non-dict observations are silently skipped in the observation-storm path."""
+        obs = [
+            {"id": f"obs-{i}", "type": "GENERATION", "level": "DEFAULT"}
+            for i in range(200)
+        ]
+        obs.append("INVALID_STRING_OBS")
+        trace = {"id": "t-mixed-large", "observations": obs}
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 201
+        parsed = json.loads(shrunk)
+        # The string observation should have been filtered out.
+        assert len(parsed["observations"]) == 200
