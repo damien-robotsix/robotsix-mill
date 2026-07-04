@@ -3,6 +3,8 @@
 - Deploy: set `MILL_API_HOST=0.0.0.0` in `deploy/docker-compose.yml` so the container binds all interfaces (reachable by the central-deploy gateway) regardless of the onboard-written `api_host`.
 
 - Remove the dead `skip_local` parameter from `load_config()` in `src/robotsix_mill/config/loader.py` (no callers remained).
+- Config: `load_repos_config` accepts both the nested `ReposRegistry` (`{meta, repos}`) shape written by central-deploy onboarding and the legacy flat `{repo_id: cfg}` shape, so a fresh onboard no longer crash-loops on `repos={"meta":null,"repos":{}}`.
+
 - Extract the 401-auth-retry pattern from ~10 inline `for retry in range(2)` loops across `github.py`, `github_ci.py`, and `github_pr.py` into a shared `_ApiClient.retrying_client()` generator. The generator yields `(retry_index, client, api_base, headers)` per attempt, handles token invalidation + 2 s backoff automatically, and lets callers `continue` on 401 / `break` on success. Added optional `headers_factory` parameter so callers with custom headers (e.g. repo-creation PAT) can use the same retry helper.
 - Pin-bump PR actuator: coherence-check skip on conflicts, duplicate-PR guard, and `max_inflight_prs` throttling. The actuator now uses `run_coherence_check` (`deps/coherent_resolver.py`) instead of raw `uv lock`, and gates on `pin_bump_periodic`.
 - Enable `changelog_autofill` periodic workflow for this repo.
