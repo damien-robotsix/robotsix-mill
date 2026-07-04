@@ -402,8 +402,10 @@ def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
 
 
 def test_install_project_noop_without_network(tmp_path, monkeypatch):
-    """No egress proxy → pip can't reach PyPI; skip the install rather
-    than turn a runnable gate into a guaranteed failure."""
+    """No egress proxy → install is still attempted (best-effort) but
+    uses ``;`` so the command always runs regardless of install success.
+    The sandbox may still have network (agent workspace); when it
+    doesn't, pip fails fast with DNS error under --network none."""
     repo = tmp_path / "ticket"
     repo.mkdir()
     (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
@@ -421,7 +423,12 @@ def test_install_project_noop_without_network(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     sandbox.run("pytest -q", repo_dir=repo, settings=s, install_project=True)
-    assert seen["argv"][-1] == PATH_EXPORT + "pytest -q"
+    pip = "pip install --user --quiet --disable-pip-version-check"
+    expected_tail = (
+        f"({pip} '.[dev]' || {pip} .) ; pytest -q"
+    )
+    assert seen["argv"][-1].startswith(PATH_EXPORT)
+    assert expected_tail in seen["argv"][-1]
 
 
 def test_install_project_off_by_default(tmp_path, monkeypatch):
@@ -948,8 +955,8 @@ def test_maybe_install_prefix_uv_lock_missing(tmp_path):
 
 
 def test_maybe_install_prefix_uv_sources_no_proxy_noop(tmp_path):
-    """[tool.uv.sources] present but no proxy → command unchanged
-    (same as existing no-network behavior)."""
+    """[tool.uv.sources] present but no proxy → install is still
+    attempted (best-effort) with ``;`` so the command always runs."""
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "pyproject.toml").write_text(
@@ -967,7 +974,10 @@ def test_maybe_install_prefix_uv_sources_no_proxy_noop(tmp_path):
     )
 
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
-    assert prefix == "pytest -q"
+    pip = "pip install --user --quiet --disable-pip-version-check"
+    assert "uv sync" in prefix
+    assert f"({pip} '.[dev]' || {pip} .)" in prefix
+    assert prefix.endswith("; pytest -q")
 
 
 def test_maybe_install_prefix_uv_sources_no_pyproject_noop(tmp_path):

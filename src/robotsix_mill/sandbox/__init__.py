@@ -271,7 +271,9 @@ def _has_uv_sources(repo_dir: Path) -> bool:
 
     * ``[tool.uv.sources]`` table (explicit uv source config).
     * PEP 508 ``@ git+https://`` direct references in dependency strings
-      (pip cannot resolve git-sourced dependencies declared this way).
+      (these are also handled by modern pip, but we still prefer ``uv``
+      for consistency — the ``git+https://`` match is a fast string scan
+      that avoids a full TOML parse).
 
     Uses ``tomllib`` (the same pattern as ``prerequisite.py``) and is
     guarded against missing/malformed files — returns ``False`` on any
@@ -307,12 +309,8 @@ def _has_uv_sources(repo_dir: Path) -> bool:
 def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> str:
     """Prepend a read-only-safe project install to *command*, if warranted.
 
-    Returns *command* unchanged unless ALL of:
-
-    * the repo is a Python project (``pyproject.toml`` present), and
-    * the sandbox has egress (an egress proxy is configured) — without
-      network ``pip`` can't reach PyPI, so installing is impossible and
-      we must not turn a runnable gate into a guaranteed failure.
+    Returns *command* unchanged only when the repo has no
+    ``pyproject.toml`` (not a Python project).
 
     When the repo declares ``[tool.uv.sources]`` AND a ``uv.lock`` exists,
     the function prefers ``uv sync --frozen --no-dev`` over ``pip install``.
@@ -335,13 +333,23 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
 
     Build/runtime deps that are already baked into the image are simply
     re-resolved as already-satisfied — cheap. The win is the deps the
-    image lacks (the ticket's newly-added ones)."""
-    if not settings.sandbox_proxy_url:
-        return command
+    image lacks (the ticket's newly-added ones).
+
+    The install is always best-effort: when the sandbox has an egress
+    proxy configured we use ``&&`` so a failed install stops early
+    (network should be available).  Without a proxy we use ``;`` so the
+    command runs regardless — the sandbox may still have network (e.g.
+    agent workspace), and a ``pip`` failure with ``--network none`` is a
+    fast DNS error, not a hang."""
     if not (repo_dir / "pyproject.toml").exists():
         return command
 
     pip = "pip install --user --quiet --disable-pip-version-check"
+    # With a proxy we expect network → fail fast on install errors.
+    # Without a proxy the sandbox may still have connectivity (agent
+    # workspace); install failures are fast DNS errors under
+    # --network none, so always attempt and always proceed.
+    connector = "&&" if settings.sandbox_proxy_url else ";"
 
     # When the repo declares [tool.uv.sources] AND a uv.lock exists, prefer
     # `uv sync --frozen --no-dev` over pip.  pip has no [tool.uv.sources]
@@ -353,7 +361,7 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
         return (
             f"(command -v uv >/dev/null 2>&1 && ({uv}) || "
             f"(echo 'WARNING: uv not found, falling back to pip' >&2; "
-            f"({pip} '.[dev]' || {pip} .))) && " + command
+            f"({pip} '.[dev]' || {pip} .))) {connector} " + command
         )
 
     # No [tool.uv.sources] — pip path unchanged.
@@ -364,7 +372,7 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # robotsix repos); fall back to a plain install for any repo that has
     # no `dev` extra (pip would otherwise error), so this never regresses
     # a previously-runnable gate.
-    return f"({pip} '.[dev]' || {pip} .) && " + command
+    return f"({pip} '.[dev]' || {pip} .) {connector} " + command
 
 
 def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:

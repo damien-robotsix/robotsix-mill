@@ -7,6 +7,8 @@
 - Fix `mill-socket-proxy` crash-loop: add `tmpfs: /run` for haproxy pidfile and patch the `docker-events` backend with required timeouts (`timeout connect`, `timeout http-request`, `timeout http-keep-alive`) for haproxy 3.x compatibility.
 - Internal: verified trace-review classifier does not produce false-positive `tool_errors` from `validate_artifact` spans (no code change needed)
 - Gate `POST /repos` behind a new `allow_runtime_repo_registration` setting (default `false`). When off, only operator-configured repos (in `config/config.json`) accept tickets; auto-registered repos are rejected by `POST /tickets`, `POST /tickets/ingest`, and `POST /repos`. Added `DELETE /repos/{id}` to deregister runtime-added repos.
+- Sandbox runner: always attempt project dependency installation before running the test command (not just when an egress proxy is configured).  Uses ``;`` instead of ``&&`` in the no-proxy case so the test always runs even if ``pip`` cannot reach the network.  Fixes ``ModuleNotFoundError`` for git-sourced dependencies like ``robotsix-config`` when the sandbox has connectivity but no explicit proxy URL set.
+- Convert `robotsix-config` dependency from `[tool.uv.sources]`-only to a PEP 508 direct reference so `pip install` (not just `uv sync`) can resolve it.
 - Enable the diagnostic periodic workflow: create the per-repo presence file
   (`.robotsix-mill/periodic/diagnostic.yaml`) and flip `enabled: true` in the
   agent definition. The check registry starts empty; individual checks are

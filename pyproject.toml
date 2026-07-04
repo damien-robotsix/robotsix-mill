@@ -34,7 +34,8 @@ dependencies = [
     # Typed configuration loader (one pydantic model, one JSON file).
     # Reads ROBOTSIX_CONFIG_FILE (default config/config.json), validates
     # against a pydantic BaseModel, emits JSON Schema for deploy UIs.
-    "robotsix-config",
+    # PEP 508 direct reference — pip can resolve this without [tool.uv.sources].
+    "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@0757c65b5963d5828ecde97c9ea041360bf52ee0",
 ]
 
 [project.optional-dependencies]
@@ -68,7 +69,6 @@ default-groups = ["dev"]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "73f2d555caa21de47a3732824d776e04719b3011" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
-robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config.git", rev = "0757c65b5963d5828ecde97c9ea041360bf52ee0" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
