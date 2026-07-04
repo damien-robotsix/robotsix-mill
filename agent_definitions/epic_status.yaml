@@ -7,7 +7,7 @@ description: >-
   child-ticket states, and decides whether to close, keep open, update
   the description, or update dependencies
 
-category: periodic
+category: pipeline
 
 level: 1
 
