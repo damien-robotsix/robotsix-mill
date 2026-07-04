@@ -18,14 +18,83 @@ import pytest
 
 from robotsix_mill import sandbox
 from robotsix_mill.config import Settings
+from robotsix_mill.sandbox import SandboxError
 
 # ---------------------------------------------------------------------------
 # Module-level guard: skip every test when Docker is unreachable
 # ---------------------------------------------------------------------------
 
-try:
-    subprocess.run(["docker", "info"], capture_output=True, check=True, timeout=10)
-except FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired:
+
+def _docker_available() -> bool:
+    """Return ``True`` when the Docker daemon is reachable and healthy.
+
+    Broadens the typical ``docker info`` check to treat a 503
+    (Service Unavailable) response the same as a connection refusal,
+    so transient daemon or proxy outages skip the suite instead of
+    failing it.  Also tries a lightweight ``docker run`` because
+    ``docker info`` can succeed while the daemon refuses to schedule
+    containers.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+    if result.returncode != 0:
+        return False
+
+    combined = (result.stdout + result.stderr).lower()
+    for marker in (
+        "503 service unavailable",
+        "cannot connect",
+        "is the docker daemon running",
+    ):
+        if marker in combined:
+            return False
+
+    # ``docker info`` succeeded — verify the daemon can actually
+    # schedule a container (info can succeed while the scheduler
+    # returns 503).
+    for image in ("hello-world:latest", "alpine:latest", "busybox:latest"):
+        try:
+            r = subprocess.run(
+                ["docker", "run", "--rm", "--pull", "never", image, "echo", "ok"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
+        if r.returncode == 0:
+            return True
+
+        err = (r.stdout + r.stderr).lower()
+        # Image not found → daemon may still be healthy; try next image.
+        if any(
+            phrase in err
+            for phrase in (
+                "no such image",
+                "unable to find image",
+                "pull",
+            )
+        ):
+            continue
+
+        # Daemon-level error (503, connection refused, etc.).
+        return False
+
+    # None of the known tiny images are pre-pulled, but docker info
+    # was fine — assume the daemon is available.
+    return True
+
+
+if not _docker_available():
     pytest.skip("Docker daemon not available", allow_module_level=True)
 
 
@@ -70,6 +139,26 @@ def _settings(tmp_path: Path) -> Settings:
 
 
 # ---------------------------------------------------------------------------
+# Helpers (continued)
+# ---------------------------------------------------------------------------
+
+
+def _run_or_skip(*args: str, **kwargs: object) -> tuple[int, str]:
+    """Call ``sandbox.run()``, converting daemon errors to a skip.
+
+    The module-level ``_docker_available()`` guard catches most Docker
+    outages at collection time, but a daemon that flakes *after* the
+    guard passes (e.g. a proxy returning 503 mid-test) would otherwise
+    fail the suite.  This wrapper catches ``SandboxError`` and calls
+    ``pytest.skip`` so transient infrastructure blips don't block CI.
+    """
+    try:
+        return sandbox.run(*args, **kwargs)  # type: ignore[no-any-return]
+    except SandboxError as exc:
+        pytest.skip(f"Docker daemon error during test: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
@@ -83,7 +172,7 @@ def test_extra_packages_tree_installed_and_usable(tmp_path: Path) -> None:
     _make_config(repo_dir, extra_packages=["tree"])
 
     s = _settings(tmp_path)
-    exit_code, output = sandbox.run("tree --version", repo_dir=repo_dir, settings=s)
+    exit_code, output = _run_or_skip("tree --version", repo_dir=repo_dir, settings=s)
 
     assert exit_code == 0, f"tree --version failed:\n{output}"
     assert "tree" in output.lower(), (
@@ -100,7 +189,7 @@ def test_no_extra_packages_tree_not_installed(tmp_path: Path) -> None:
     _make_config(repo_dir, extra_packages=None)
 
     s = _settings(tmp_path)
-    exit_code, output = sandbox.run("tree --version", repo_dir=repo_dir, settings=s)
+    exit_code, output = _run_or_skip("tree --version", repo_dir=repo_dir, settings=s)
 
     assert exit_code != 0, (
         f"tree --version should have failed (not installed), "

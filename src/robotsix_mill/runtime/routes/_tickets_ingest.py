@@ -86,16 +86,22 @@ def ingest_ticket(
     Returns 404 when *repo_id* is not registered.
     """
     # 1. Repo validation — 404 for unknown repo_id.
-    repo_config = repos.repos.get(body.repo_id)
-    if repo_config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
-        )
+    # The synthetic meta board is not a key in repos.repos; special-case it
+    # like every other route that accepts a repo_id (POST /tickets, POST /epics,
+    # GET /runs, GET /active, _resolve_board_id).
+    if body.repo_id == "meta":
+        board_id = "meta"
+    else:
+        repo_config = repos.repos.get(body.repo_id)
+        if repo_config is None:
+            raise HTTPException(
+                status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
+            )
 
-    # 2. Reject auto-registered repos when the flag is off.
-    _check_repo_workable(repo_config, body.repo_id, settings)
+        # Reject auto-registered repos when the flag is off.
+        _check_repo_workable(repo_config, body.repo_id, settings)
 
-    board_id = repo_config.board_id
+        board_id = repo_config.board_id
 
     # 2. Candidate selection — scope to the target board.
     board_svc = TicketService(settings, board_id=board_id)

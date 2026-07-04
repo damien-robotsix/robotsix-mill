@@ -266,3 +266,84 @@ def test_ingest_accepts_auto_repo_when_flag_on(client, settings):
     r = client.post("/tickets/ingest", json=payload)
     assert r.status_code == 201
     assert r.json()["deduped"] is False
+
+
+# ---------------------------------------------------------------------------
+# Meta board ingest
+# ---------------------------------------------------------------------------
+def test_ingest_meta_creates_ticket(client):
+    """POST /tickets/ingest with repo_id='meta' returns 201 and creates
+    a ticket on the synthetic meta board."""
+    payload = _ingest_payload(
+        repo_id="meta",
+        title="Create new repo robotsix-chat-mobile",
+        body="We need a new repository for the mobile chat client.",
+        source_tag="robotsix-chat",
+    )
+    r = client.post("/tickets/ingest", json=payload)
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+    assert body["ticket_id"]
+
+
+def test_ingest_meta_dedup_hit(client, settings):
+    """When a matching ticket already exists on the meta board,
+    repo_id='meta' returns 200 with deduped=True."""
+    meta_svc = TicketService(settings, board_id="meta")
+    existing = meta_svc.create(
+        "Create new repo robotsix-chat-mobile",
+        "We need a new repository for the mobile chat client.",
+        source=SourceKind.USER,
+        kind=TicketKind.TASK,
+        board_id="meta",
+    )
+
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+        return_value={
+            "duplicate_of": existing.id,
+            "already_done": None,
+            "reason": "same request",
+        },
+    ) as mock_dedup:
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                repo_id="meta",
+                title="Create new repo robotsix-chat-mobile",
+                body="We need a new repository for the mobile chat client.",
+                source_tag="robotsix-chat",
+            ),
+        )
+    assert mock_dedup.called
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ticket_id"] == existing.id
+    assert body["deduped"] is True
+
+    # History note appended to meta board ticket.
+    history = meta_svc.history(existing.id)
+    notes = [e.note for e in history if e.note and "re-reported by" in e.note]
+    assert len(notes) == 1
+    assert "robotsix-chat" in notes[0]
+
+
+def test_ingest_meta_no_candidates_skips_llm(client):
+    """When the meta board has zero tickets, repo_id='meta' skips LLM
+    and creates directly."""
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+    ) as mock_dedup:
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                repo_id="meta",
+                title="Create new repo",
+                body="We need a new repo.",
+                source_tag="robotsix-chat",
+            ),
+        )
+    assert mock_dedup.call_count == 0
+    assert r.status_code == 201
+    assert r.json()["deduped"] is False
