@@ -352,6 +352,10 @@ class GitLabForge(
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_open_prs(project_path)
 
+    def get_pr_labels(self, pr_number: int) -> list[str]:
+        project_path = _parse_gitlab_project_path(self._remote_url)
+        return self._get_pr_labels(project_path=project_path, mr_iid=pr_number)
+
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
     # ------------------------------------------------------------------
@@ -399,6 +403,16 @@ class GitLabForge(
         )
         r.raise_for_status()
         return r.json()
+
+    def _get_pr_labels(self, *, project_path: str, mr_iid: int) -> list[str]:
+        """Return label names for the given MR. Returns [] on any error."""
+        try:
+            mr = self._get_mr_by_iid(project_path=project_path, mr_iid=mr_iid)
+            if mr is None:
+                return []
+            return mr.get("labels", [])
+        except Exception:
+            return []
 
     def _mr_notes(self, *, project_path: str, mr_iid: int) -> list[dict]:
         """GET /projects/:id/merge_requests/:iid/notes?per_page=100."""

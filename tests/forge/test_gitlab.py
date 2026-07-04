@@ -445,6 +445,69 @@ def test_pr_status_by_url_unparseable_returns_none(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# get_pr_labels
+# ---------------------------------------------------------------------------
+
+
+def test_get_pr_labels_returns_labels_from_mr(tmp_path, monkeypatch):
+    """get_pr_labels extracts labels from the MR object."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "https://gitlab.com/ns/project/-/merge_requests/7",
+        "merge_status": "can_be_merged",
+        "sha": "abc123",
+        "labels": ["Skip-Changelog", "backport"],
+    }
+    get_map = {
+        "projects/42/merge_requests/7": _make_response(200, mr),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    labels = forge.get_pr_labels(7)
+    assert labels == ["Skip-Changelog", "backport"]
+
+
+def test_get_pr_labels_no_labels_field_returns_empty(tmp_path, monkeypatch):
+    """MR without a labels key → []."""
+    project_json = {"id": 42}
+    mr = {
+        "iid": 7,
+        "state": "opened",
+        "web_url": "https://gitlab.com/ns/project/-/merge_requests/7",
+        "merge_status": "can_be_merged",
+        "sha": "abc123",
+    }
+    get_map = {
+        "projects/42/merge_requests/7": _make_response(200, mr),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    labels = forge.get_pr_labels(7)
+    assert labels == []
+
+
+def test_get_pr_labels_api_error_returns_empty(tmp_path, monkeypatch):
+    """API errors → [] (never raise)."""
+    get_map = {
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+        "projects/42/merge_requests/7": _make_response(
+            500, {}, text="Internal Server Error"
+        ),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    labels = forge.get_pr_labels(7)
+    assert labels == []
+
+
+# ---------------------------------------------------------------------------
 # check_status
 # ---------------------------------------------------------------------------
 
