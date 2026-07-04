@@ -80,7 +80,6 @@ def ctx_factory(tmp_path, fake_sandbox):
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2216,7 +2215,6 @@ def _mock_repos_config(monkeypatch, extra_repos=None):
     repos = {
         "test-repo": RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -2261,7 +2259,6 @@ def test_triage_migrate_success_calls_migrate_and_returns_draft(
         extra_repos={
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2358,7 +2355,6 @@ def test_triage_migrate_anti_bounce_prior_migration_escalates(
         extra_repos={
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2398,7 +2394,6 @@ def test_triage_migrate_anti_bounce_target_is_prior_board_escalates(
         extra_repos={
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2441,7 +2436,6 @@ def test_triage_migrate_value_error_escalates_to_human(
         extra_repos={
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2475,7 +2469,6 @@ def test_triage_migrate_resolves_repo_id_to_board(ctx_factory, monkeypatch, tmp_
         extra_repos={
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2513,7 +2506,6 @@ def test_triage_migrate_note_suffix_parsing_and_anti_bounce(
         extra_repos={
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",

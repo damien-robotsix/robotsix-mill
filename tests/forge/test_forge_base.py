@@ -118,7 +118,6 @@ class TestGetForgeAuto:
 
         rc = RepoConfig(
             repo_id="test",
-            board_id="test",
             langfuse_project_name="test",
             langfuse_public_key="pk",
             langfuse_secret_key="sk",
@@ -141,7 +140,6 @@ def _repo_config(url):
 
     return RepoConfig(
         repo_id="test",
-        board_id="test",
         langfuse_project_name="test",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",

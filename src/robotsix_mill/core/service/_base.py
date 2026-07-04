@@ -105,8 +105,8 @@ class _ServiceBase:
             candidates.append(self.board_id)
         try:
             for rc in get_repos_config().repos.values():
-                if rc.board_id and rc.board_id not in candidates:
-                    candidates.append(rc.board_id)
+                if rc.repo_id and rc.repo_id not in candidates:
+                    candidates.append(rc.repo_id)
         except Exception as exc:
             log.warning(
                 "Failed to load repos config for %s: %s(%r)",

@@ -79,7 +79,6 @@ cp config/config.example.yaml config/config.yaml         # set secrets.openroute
 # in config/repos.example.yaml)
 ```
 
-> **Note:** `board_id` is mandatory — every ticket must belong to a repo
 > configured under the `repos:` key of `config/config.yaml`. There is no
 > longer a board-less default. For single-repo deployments, configure
 > exactly one repo.

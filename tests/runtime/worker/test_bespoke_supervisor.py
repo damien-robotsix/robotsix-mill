@@ -55,7 +55,6 @@ def settings(tmp_path, monkeypatch):
 def repo_config():
     return RepoConfig(
         repo_id="my-app",
-        board_id="my-app",
         langfuse_project_name="my-app",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -64,7 +63,7 @@ def repo_config():
 
 @pytest.fixture
 def worker(settings, repo_config):
-    svc = TicketService(settings, board_id=repo_config.board_id)
+    svc = TicketService(settings, board_id=repo_config.repo_id)
     ctx = StageContext(
         settings=settings,
         service=svc,
@@ -113,7 +112,7 @@ class TestBespokeSupervisor:
         ``.robotsix-mill/agents/`` results in a per-bespoke loop task
         being spawned by the supervisor on its next discovery cycle."""
         _stub_clone_helpers(monkeypatch)
-        clone = _make_clone(tmp_path, repo_config.board_id)
+        clone = _make_clone(tmp_path, repo_config.repo_id)
         _write_yaml(
             clone / ".robotsix-mill" / "agents" / "mail.yaml",
             {
@@ -228,7 +227,7 @@ class TestBespokeSupervisor:
         this, the operator can't actually retire a bespoke agent —
         they'd be stuck running the prior definition forever."""
         _stub_clone_helpers(monkeypatch)
-        clone = _make_clone(tmp_path, repo_config.board_id)
+        clone = _make_clone(tmp_path, repo_config.repo_id)
         yaml_path = clone / ".robotsix-mill" / "agents" / "mail.yaml"
         _write_yaml(
             yaml_path,
@@ -302,7 +301,7 @@ class TestBespokeSupervisor:
         definition takes effect — silent staleness would be worse
         than a brief interruption."""
         _stub_clone_helpers(monkeypatch)
-        clone = _make_clone(tmp_path, repo_config.board_id)
+        clone = _make_clone(tmp_path, repo_config.repo_id)
         yaml_path = clone / ".robotsix-mill" / "agents" / "mail.yaml"
         _write_yaml(
             yaml_path,
@@ -374,7 +373,7 @@ class TestBespokeSupervisor:
         Without that, a worker shutdown would leak periodic LLM
         invocations into the next process lifetime."""
         _stub_clone_helpers(monkeypatch)
-        clone = _make_clone(tmp_path, repo_config.board_id)
+        clone = _make_clone(tmp_path, repo_config.repo_id)
         for name in ("a", "b", "c"):
             _write_yaml(
                 clone / ".robotsix-mill" / "agents" / f"{name}.yaml",
@@ -433,7 +432,7 @@ class TestPeriodicSupervisorWorkflows:
         supervisor schedule a periodic-workflow loop (llm_agent kind) with the
         merged definition."""
         _stub_clone_helpers(monkeypatch)
-        clone = _make_clone(tmp_path, repo_config.board_id)
+        clone = _make_clone(tmp_path, repo_config.repo_id)
         _write_yaml(
             clone / ".robotsix-mill" / "periodic" / "audit.yaml",
             {"name": "audit", "interval_seconds": 4242},
@@ -469,7 +468,7 @@ class TestPeriodicSupervisorWorkflows:
         assert scheduled[0].interval_seconds == 4242
 
     def test_has_periodic_presence(self, tmp_path, worker, repo_config):
-        clone = _make_clone(tmp_path, repo_config.board_id)
+        clone = _make_clone(tmp_path, repo_config.repo_id)
         assert worker._has_periodic_presence(repo_config, "audit") is False
         _write_yaml(
             clone / ".robotsix-mill" / "periodic" / "audit.yaml", {"name": "audit"}

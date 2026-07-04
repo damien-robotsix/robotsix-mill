@@ -533,8 +533,8 @@ def _run_epic_reprocess(
         try:
             repos = get_repos_config()
             for rid, rc in repos.repos.items():
-                available_repos.append((rid, rc.board_id))
-                if rc.board_id == board_id:
+                available_repos.append((rid, rc.repo_id))
+                if rc.repo_id == board_id:
                     epic_repo_id = rid
         except Exception:
             repos = None

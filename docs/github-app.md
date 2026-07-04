@@ -130,11 +130,9 @@ When serving multiple repos from a single mill process (see
 # config/repos.yaml
 repos:
   - repo_id: repo-a
-    board_id: board-a
     FORGE_REMOTE_URL: https://github.com/owner-a/repo-a.git
     # … Langfuse keys …
   - repo_id: repo-b
-    board_id: board-b
     FORGE_REMOTE_URL: https://github.com/owner-b/repo-b.git
     # … Langfuse keys …
 ```

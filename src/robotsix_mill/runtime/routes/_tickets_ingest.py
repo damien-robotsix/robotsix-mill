@@ -95,7 +95,7 @@ def ingest_ticket(
     # 2. Reject auto-registered repos when the flag is off.
     _check_repo_workable(repo_config, body.repo_id, settings)
 
-    board_id = repo_config.board_id
+    board_id = repo_config.repo_id
 
     # 2. Candidate selection — scope to the target board.
     board_svc = TicketService(settings, board_id=board_id)

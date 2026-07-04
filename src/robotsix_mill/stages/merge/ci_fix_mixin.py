@@ -236,7 +236,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                         repo_id,
                     )
 
-                mem_path = s.memory_file_for("ci_fix", rc.board_id)
+                mem_path = s.memory_file_for("ci_fix", rc.repo_id)
                 result = _facade.run_ci_fix_agent(
                     settings=s,
                     repo_dir=str(repo_dir),
@@ -244,7 +244,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     failing_summary=failing_summary,
                     memory=_facade.load_memory(mem_path),
                     ticket_id=ticket.id,
-                    board_id=rc.board_id,
+                    board_id=rc.repo_id,
                     target=target_branch_for(s, rc),
                     remote_url=remote_url,
                     token=token,
@@ -408,7 +408,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 repo_dir=repo_dir,
                 alerts_json=json.dumps(eligible),
                 ticket_id=ticket.id,
-                board_id=rc.board_id,
+                board_id=rc.repo_id,
             )
         except Exception:  # noqa: BLE001
             log.warning(

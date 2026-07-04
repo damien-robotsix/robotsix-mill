@@ -509,7 +509,7 @@ def test_enqueue_orders_late_stage_before_draft(ctx, service):
     w.enqueue(mid.id)
     w.enqueue(late.id)
     # Drain the right queue and capture pop order.
-    q = w._queue_for(ctx.repo_config.board_id if ctx.repo_config else "")
+    q = w._queue_for(ctx.repo_config.repo_id if ctx.repo_config else "")
     popped: list[str] = []
     while q.qsize():
         popped.append(q.get_nowait()[-1])
@@ -601,7 +601,6 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
         repos={
             "repo-a": RepoConfig(
                 repo_id="repo-a",
-                board_id="ba",
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -609,7 +608,6 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
             ),
             "repo-b": RepoConfig(
                 repo_id="repo-b",
-                board_id="bb",
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -665,7 +663,7 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                board_id=ctx.repo_config.repo_id if ctx.repo_config else "",
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -1216,7 +1214,6 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
 
     fake_repo = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="p",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -1989,7 +1986,6 @@ def test_max_inflight_prs_rejects_negative():
     with pytest.raises(ValueError):  # pydantic ValidationError
         RepoConfig(
             repo_id="r",
-            board_id="b",
             langfuse_project_name="p",
             langfuse_public_key="pk",
             langfuse_secret_key="sk",
@@ -2003,7 +1999,6 @@ def test_max_inflight_prs_accepts_zero():
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2018,7 +2013,6 @@ def test_max_inflight_prs_defaults_to_3():
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2569,7 +2563,7 @@ async def test_global_concurrency_cap_bounds_concurrent_stages(
 
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
-    board_a = ctx.repo_config.board_id if ctx.repo_config else "ba"
+    board_a = ctx.repo_config.repo_id if ctx.repo_config else "ba"
     board_b = "bb"
     fake_repos = ReposRegistry(
         repos={

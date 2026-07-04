@@ -536,10 +536,10 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
         Meta-board tickets have no registered ``repo_config``; their
         ledger is keyed on the ticket's own ``board_id`` (``"meta"``).
-        Every other board uses ``ctx.repo_config.board_id``. This must
+        Every other board uses ``ctx.repo_config.repo_id``. This must
         match :class:`Settings.memory_file_for`'s non-empty requirement.
         """
-        return ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
+        return ctx.repo_config.repo_id if ctx.repo_config else ticket.board_id
 
     @classmethod
     def _implement_loop(

@@ -386,7 +386,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             try:
                 repos = get_repos_config()
                 for rc in repos.repos.values():
-                    if rc.board_id == ticket.board_id:
+                    if rc.repo_id == ticket.board_id:
                         repo_config = rc
                         break
             except Exception:

@@ -59,7 +59,6 @@ def ctx_factory(tmp_path, fake_sandbox):
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -3558,7 +3557,6 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
 
     board_a_repo = RepoConfig(
         repo_id="board-a-repo",
-        board_id="board-a",
         langfuse_project_name="proj-a",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
@@ -3566,7 +3564,6 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
     )
     board_b_repo = RepoConfig(
         repo_id="board-b-repo",
-        board_id="board-b",
         langfuse_project_name="proj-b",
         langfuse_public_key="pk-b",
         langfuse_secret_key="sk-b",
@@ -3628,7 +3625,6 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
 
     board_a_repo = RepoConfig(
         repo_id="board-a-repo",
-        board_id="board-a",
         langfuse_project_name="proj-a",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
@@ -3636,7 +3632,6 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
     )
     board_b_repo = RepoConfig(
         repo_id="board-b-repo",
-        board_id="board-b",
         langfuse_project_name="proj-b",
         langfuse_public_key="pk-b",
         langfuse_secret_key="sk-b",
@@ -3711,7 +3706,6 @@ def test_clone_or_resume_cross_repo_target_uses_fork_url_and_base_branch(
     )
     repo = RepoConfig(
         repo_id="cross-repo",
-        board_id="board-cross",
         langfuse_project_name="proj-cross",
         langfuse_public_key="pk-cross",
         langfuse_secret_key="sk-cross",

@@ -6647,21 +6647,18 @@ def test_triage_prompt_includes_registered_boards():
         repos={
             "repo-a": RepoConfig(
                 repo_id="repo-a",
-                board_id="board-a",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
             ),
             "repo-b": RepoConfig(
                 repo_id="repo-b",
-                board_id="board-b",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
             ),
             "repo-c": RepoConfig(
                 repo_id="repo-c",
-                board_id="board-c",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",

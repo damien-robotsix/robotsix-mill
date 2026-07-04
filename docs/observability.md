@@ -49,7 +49,7 @@ member-sync sets automatically for auto-registered workspace members.
 
 The operator declares a repo's deployed-log folder as a per-repo key in
 mill's central, **gitignored** `config/repos.yaml` — alongside
-`board_id` / `forge_remote_url` / `langfuse:`. The value is a
+`forge_remote_url` / `langfuse:`. The value is a
 deployment-specific host path, so it must **not** be committed into the
 managed repo (the old repo-owned `.robotsix-mill/config.yaml` key is
 deprecated and ignored — a deprecation warning is logged if it is still
@@ -109,7 +109,6 @@ Using robotsix-auto-mail as the example:
 # config/repos.yaml
 repos:
   robotsix-auto-mail:
-    board_id: "auto-mail"
     forge_remote_url: "https://github.com/robotsix/robotsix-auto-mail.git"
     deployed_log_folder: /var/log/robotsix-auto-mail
     langfuse:

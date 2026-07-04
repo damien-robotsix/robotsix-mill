@@ -110,7 +110,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_DATA_DIR` | `data_dir` | `.mill-data` | `Path` | Settings + Dockerfile | identifying | commented-out | §5 | `core/db.py`, `runtime/api.py`, all `*_runner.py`, `cli.py` | Dockerfile overrides to `/data` |
-| `MILL_DEFAULT_REPO_ID` | `default_repo_id` | `""` | `str` | Settings | non-sensitive | default | §6 | `core/service.py` (legacy ticket resolution) | Backward-compat: auto-assigned board_id for pre-migration tickets |
+| `MILL_DEFAULT_REPO_ID` | `default_repo_id` | `""` | `str` | Settings | non-sensitive | default | §6 | `core/service.py` (legacy ticket resolution) | Backward-compat: auto-assigned repo_id for pre-migration tickets |
 | `MILL_API_HOST` | `api_host` | `127.0.0.1` | `str` | Settings + Dockerfile | non-sensitive | commented-out | §5 | `runtime/api.py` | Dockerfile overrides to `0.0.0.0` |
 | `MILL_API_PORT` | `api_port` | `8077` | `int` | Settings | non-sensitive | active (`8077`) | §5 | `runtime/api.py` | |
 | `MILL_API_URL` | `api_url` | `http://127.0.0.1:8077` | `str` | Settings + Dockerfile | identifying | active | §5 | `cli.py` | Dockerfile sets same value |

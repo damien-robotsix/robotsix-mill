@@ -30,7 +30,6 @@ def settings(tmp_path):
 def repo_config():
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         forge_remote_url="https://github.com/test/repo",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
@@ -40,7 +39,7 @@ def repo_config():
 
 @pytest.fixture
 def svc(settings, repo_config):
-    return TicketService(settings, board_id=repo_config.board_id)
+    return TicketService(settings, board_id=repo_config.repo_id)
 
 
 def _make_blocked_ticket(svc: TicketService, note: str) -> Ticket:

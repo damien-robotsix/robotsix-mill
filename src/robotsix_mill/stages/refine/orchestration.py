@@ -311,7 +311,7 @@ class RefineAgentMixin:
         ``RefineResult`` to continue with.
         """
         memory_board_id = (
-            ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
+            ctx.repo_config.repo_id if ctx.repo_config else ticket.board_id
         )
         memory_text = _load_refine_memory(s, memory_board_id)
 

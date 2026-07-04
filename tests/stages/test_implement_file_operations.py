@@ -42,7 +42,6 @@ def _ctx(tmp_path, **kw):
         service=svc,
         repo_config=RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -624,7 +623,6 @@ class TestCloneAndBranch:
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",

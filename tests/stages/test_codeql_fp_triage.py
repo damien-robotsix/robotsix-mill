@@ -41,7 +41,6 @@ def _ctx(tmp_path, **env):
         service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -870,7 +869,6 @@ def test_dismiss_code_scanning_alert_patch(monkeypatch):
     )
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

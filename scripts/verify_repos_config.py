@@ -58,11 +58,6 @@ def main() -> int:
     if repo.repo_id != "robotsix-mill":
         errors.append(f"repo_id is '{repo.repo_id}', expected 'robotsix-mill'")
 
-    if not repo.board_id:
-        errors.append("board_id is empty")
-    if repo.board_id != "robotsix-mill-board":
-        errors.append(f"board_id is '{repo.board_id}', expected 'robotsix-mill-board'")
-
     if not repo.langfuse_project_name:
         errors.append("langfuse_project_name is empty")
 

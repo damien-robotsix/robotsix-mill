@@ -45,7 +45,6 @@ def _seed_runs(settings, board_id, entries):
 def _repo(repo_id="r", public="pk", secret="sk", base="https://lf.example.com"):
     return RepoConfig(
         repo_id=repo_id,
-        board_id="b",
         langfuse_project_name="proj",
         langfuse_public_key=public,
         langfuse_secret_key=secret,

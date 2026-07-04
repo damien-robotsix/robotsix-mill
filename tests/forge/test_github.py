@@ -253,7 +253,6 @@ def test_create_pr_base_honors_repo_working_branch(tmp_path, monkeypatch):
     )
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="r",
         langfuse_public_key="",
         langfuse_secret_key="",
@@ -279,7 +278,6 @@ def test_create_pr_cross_fork_head_and_upstream_base(tmp_path, monkeypatch):
     )
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="r",
         langfuse_public_key="",
         langfuse_secret_key="",
@@ -2426,7 +2424,6 @@ def test_head_owner_is_fork_owner_for_cross_repo_target(tmp_path):
         _settings(tmp_path),
         repo_config=RepoConfig(
             repo_id="r",
-            board_id="b",
             langfuse_project_name="r",
             langfuse_public_key="",
             langfuse_secret_key="",
@@ -2440,7 +2437,6 @@ def test_head_owner_is_fork_owner_for_cross_repo_target(tmp_path):
         _settings(tmp_path),
         repo_config=RepoConfig(
             repo_id="r",
-            board_id="b",
             langfuse_project_name="r",
             langfuse_public_key="",
             langfuse_secret_key="",
@@ -2466,7 +2462,6 @@ def test_get_pr_cross_repo_uses_fork_owner_in_head_filter(tmp_path, monkeypatch)
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="r",
         langfuse_public_key="",
         langfuse_secret_key="",
@@ -2532,7 +2527,6 @@ def test_create_pr_cross_repo_422_retry_does_not_double_qualify_head(
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="r",
         langfuse_public_key="",
         langfuse_secret_key="",
@@ -2590,7 +2584,6 @@ def test_delete_branch_cross_repo_targets_fork_not_upstream(
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="r",
         langfuse_public_key="",
         langfuse_secret_key="",

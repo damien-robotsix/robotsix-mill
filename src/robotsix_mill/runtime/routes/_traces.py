@@ -98,9 +98,7 @@ def list_active(
         else:
             # The synthetic meta board is a valid board id even though it is
             # not a registered repo; filter on its board_id directly.
-            target_board = (
-                "meta" if repo_id == "meta" else repos.repos[repo_id].board_id
-            )
+            target_board = "meta" if repo_id == "meta" else repos.repos[repo_id].repo_id
             # Look up each active ticket's board_id from the service
             filtered = []
             for item in active:

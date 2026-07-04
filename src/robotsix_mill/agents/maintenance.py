@@ -695,9 +695,7 @@ def run_maintenance_agent(  # noqa: C901 — clone-failure degrade branch + meta
         try:
             from ..config import get_repos_config
 
-            board_ids = sorted(
-                {rc.board_id for rc in get_repos_config().repos.values()}
-            )
+            board_ids = sorted({rc.repo_id for rc in get_repos_config().repos.values()})
             if board_ids:
                 repo_context += (
                     "\n# Registered boards (valid migrate_to_board targets)\n"

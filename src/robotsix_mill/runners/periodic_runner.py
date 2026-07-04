@@ -227,7 +227,7 @@ def run_periodic_pass(
             "required — configure at least one repo in "
             "config/repos.yaml and pass its RepoConfig in."
         )
-    service = TicketService(settings, board_id=repo_config.board_id)
+    service = TicketService(settings, board_id=repo_config.repo_id)
     repo_data_dir = settings.data_dir / repo_config.repo_id
     repo_data_dir.mkdir(parents=True, exist_ok=True)
     memory_file = repo_data_dir / config.memory_filename

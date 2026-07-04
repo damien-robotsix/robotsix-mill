@@ -643,7 +643,6 @@ def test_run_test_agent_repo_config_sandbox_image(monkeypatch, tmp_path):
     s = _make_settings_for_gate(tmp_path)
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         sandbox_image="custom-image:latest",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",

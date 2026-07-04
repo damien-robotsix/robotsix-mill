@@ -286,7 +286,7 @@ class MultiRepoMixin(_MergeStageBase):
                     token=token,
                     branch=target,
                 )
-                mem_path = s.memory_file_for("rebase", rc.board_id)
+                mem_path = s.memory_file_for("rebase", rc.repo_id)
                 result = _facade.run_rebase_agent(
                     settings=s,
                     repo_dir=str(repo_dir),

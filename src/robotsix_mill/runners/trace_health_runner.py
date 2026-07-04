@@ -57,7 +57,7 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
             "run_trace_health_check: repo_config is required — "
             "configure at least one repo in config/repos.yaml."
         )
-    service = TicketService(settings, board_id=repo_config.board_id)
+    service = TicketService(settings, board_id=repo_config.repo_id)
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(hours=24)
     window_end = now
@@ -99,13 +99,13 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
         )
 
     # 5. Dedup: skip if an open trace-health ticket already exists.
-    with session(settings, repo_config.board_id) as s:
+    with session(settings, repo_config.repo_id) as s:
         stmt = (
             select(Ticket)
             .where(Ticket.source == SourceKind.TRACE_HEALTH)
             .where(Ticket.state != State.CLOSED)
         )
-        stmt = stmt.where(Ticket.board_id == repo_config.board_id)
+        stmt = stmt.where(Ticket.board_id == repo_config.repo_id)
         existing = list(s.exec(stmt).all())
     if existing:
         log.info(

@@ -27,9 +27,9 @@ def _resolve_board_id(repo_id: str | None, repos: ReposRegistry) -> str:
                 status_code=400,
                 detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
             )
-        return repos.repos[repo_id].board_id
+        return repos.repos[repo_id].repo_id
     if len(repos.repos) == 1:
-        return next(iter(repos.repos.values())).board_id
+        return next(iter(repos.repos.values())).repo_id
     sorted_keys = sorted(repos.repos.keys())
     raise HTTPException(
         status_code=400,

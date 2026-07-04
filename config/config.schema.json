@@ -36,11 +36,6 @@
     "RepoConfig": {
       "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
       "properties": {
-        "board_id": {
-          "description": "Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill').",
-          "title": "Board Id",
-          "type": "string"
-        },
         "ci_monitor_enabled": {
           "default": true,
           "description": "When true, the CI monitor polls this repo's main-branch CI status periodically.",
@@ -187,7 +182,6 @@
       },
       "required": [
         "repo_id",
-        "board_id",
         "langfuse_project_name",
         "langfuse_public_key",
         "langfuse_secret_key"

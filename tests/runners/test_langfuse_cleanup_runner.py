@@ -31,7 +31,6 @@ def _settings(tmp_path):
 def _repo(public="pk-test", secret="sk-test", base="https://lf.example.com"):
     return RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="proj",
         langfuse_public_key=public,
         langfuse_secret_key=secret,

@@ -60,7 +60,6 @@ def ctx_factory(tmp_path, fake_sandbox):
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -494,7 +493,7 @@ def test_load_context_memory_wiring(ctx_factory, monkeypatch):
 def test_memory_board_id_uses_repo_config(ctx_factory):
     ctx = ctx_factory()
     t = _ticket(ctx)
-    assert ImplementStage._memory_board_id(ctx, t) == ctx.repo_config.board_id
+    assert ImplementStage._memory_board_id(ctx, t) == ctx.repo_config.repo_id
     assert ImplementStage._memory_board_id(ctx, t) == "test-board"
 
 

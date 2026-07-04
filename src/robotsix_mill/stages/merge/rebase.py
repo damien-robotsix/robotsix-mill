@@ -213,7 +213,7 @@ class RebaseMixin(_MergeStageBase):
                 # sandbox or the agent's prompt.
                 rebase_memory_path = s.memory_file_for(
                     "rebase",
-                    (repo_config.board_id if repo_config else "")
+                    (repo_config.repo_id if repo_config else "")
                     or s.board_id
                     or ticket.board_id,
                 )

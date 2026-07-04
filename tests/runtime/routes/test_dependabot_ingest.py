@@ -34,7 +34,6 @@ def _ctx(tmp_path, **env):
 
     repo_config = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -44,7 +43,7 @@ def _ctx(tmp_path, **env):
 
     return StageContext(
         settings=s,
-        service=TicketService(s, board_id=repo_config.board_id),
+        service=TicketService(s, board_id=repo_config.repo_id),
         repo_config=repo_config,
     )
 

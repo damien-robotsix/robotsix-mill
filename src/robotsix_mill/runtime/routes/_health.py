@@ -61,10 +61,10 @@ def _resolve_board_id(request: Request) -> str | None:
     single: str | None = request.app.state.single_repo_id
     if single is not None:
         rc = repos.repos[single]
-        return str(rc.board_id)
+        return str(rc.repo_id)
     if not repos.repos:
         return None
-    return str(next(iter(repos.repos.values())).board_id)
+    return str(next(iter(repos.repos.values())).repo_id)
 
 
 async def _check_database(settings: Settings, board_id: str) -> dict[str, Any]:
@@ -256,14 +256,15 @@ def list_repos(
 
     single = request.app.state.single_repo_id
     if single is not None:
-        return [_entry(repos.repos[single])]
-    result = [_entry(rc) for rc in repos.repos.values()]
+        rc = repos.repos[single]
+        return [{"repo_id": rc.repo_id}]
+    result = [{"repo_id": rc.repo_id} for rc in repos.repos.values()]
     # The cross-repo meta-agent files extraction proposals to a synthetic
     # "meta" board that is NOT a registered repo (no clone/forge — see
-    # meta/runner.py, board_id="meta"). Surface it in the selector so
+    # meta/runner.py). Surface it in the selector so
     # operators can review those drafts; it is deliberately kept out of
     # the ReposRegistry so the worker/clone/cost loops never touch it.
-    result.append({"repo_id": "meta", "board_id": "meta", "forge_remote_url": None})
+    result.append({"repo_id": "meta"})
     return result
 
 

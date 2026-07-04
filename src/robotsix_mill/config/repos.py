@@ -60,9 +60,6 @@ class RepoConfig(BaseModel):
     repo_id: str = Field(
         description="Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml."
     )
-    board_id: str = Field(
-        description="Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill')."
-    )
     langfuse_project_name: str = Field(
         description="Langfuse project name for trace attribution (populated from global secrets)."
     )
@@ -182,7 +179,7 @@ class RepoConfig(BaseModel):
     # global ``Settings.<name>_periodic`` switches remain as fleet-wide
     # kill-switches.
 
-    @field_validator("repo_id", "board_id")
+    @field_validator("repo_id")
     @classmethod
     def _validate_non_empty(cls, v: str) -> str:
         if not v.strip():
@@ -334,11 +331,20 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
         # Langfuse is configured GLOBALLY (top-level ``langfuse`` block —
         # see _apply_global_langfuse), never per repo. Each repo starts
         # with empty langfuse fields and is populated from the global block.
+        # Legacy board_id compat: accept when it equals repo_id, error when it diverges.
+        if isinstance(repo_data, dict) and "board_id" in repo_data:
+            legacy_board = repo_data["board_id"]
+            if legacy_board != repo_id:
+                from .loader import ConfigError
+
+                raise ConfigError(
+                    f"Repo '{repo_id}': legacy board_id '{legacy_board}' does not "
+                    f"match repo_id '{repo_id}'. board_id has been removed; "
+                    f"use repo_id as the board identifier instead."
+                )
+
         repos[repo_id] = RepoConfig(
             repo_id=repo_id,
-            board_id=repo_data.get("board_id", "")
-            if isinstance(repo_data, dict)
-            else "",
             langfuse_project_name="",
             langfuse_project_id="",
             langfuse_public_key="",
@@ -434,7 +440,6 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
         repos[repo_id] = cfg.model_copy(update=lf_fields)
     return RepoConfig(
         repo_id="meta",
-        board_id="meta",
         langfuse_project_name=project_name,
         langfuse_project_id=project_id,
         langfuse_public_key=pk,
@@ -545,4 +550,4 @@ def resolve_child_board_id(
         )
         return epic_board_id
 
-    return repos.repos[repo_id].board_id
+    return repos.repos[repo_id].repo_id

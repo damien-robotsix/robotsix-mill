@@ -130,7 +130,6 @@ def test_overlay_round_trip(settings):
         data = yaml.safe_load(overlay_path) or {}
     data.setdefault("repos", {})
     data["repos"]["roundtrip-repo"] = {
-        "board_id": "roundtrip-repo",
         "forge_remote_url": "https://github.com/r/t",
         "_mill_source": "auto",
     }
@@ -142,7 +141,7 @@ def test_overlay_round_trip(settings):
     registry = load_repos_config(config_file=str(overlay_path))
     assert "roundtrip-repo" in registry.repos
     rc = registry.repos["roundtrip-repo"]
-    assert rc.board_id == "roundtrip-repo"
+    assert rc.repo_id == "roundtrip-repo"
     assert rc.forge_remote_url == "https://github.com/r/t"
     assert rc.source == "auto"
 
@@ -161,7 +160,7 @@ def test_hot_reload(client, settings):
     repos = client.app.state.repos
     assert "hot-reload-repo" in repos.repos
     rc = repos.repos["hot-reload-repo"]
-    assert rc.board_id == "hot-reload-repo"
+    assert rc.repo_id == "hot-reload-repo"
     assert rc.forge_remote_url == "https://github.com/h/r"
 
     # The original operator-configured repo must still be present.

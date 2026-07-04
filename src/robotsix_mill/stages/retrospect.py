@@ -519,7 +519,7 @@ class RetrospectStage(Stage):
         AGENT.md proposals are always
         relative to the repo retrospect just audited, so they are filed
         on ``ctx.service`` — for a registered-repo run
-        ``ctx.service.board_id == ctx.repo_config.board_id``, i.e. *this*
+        ``ctx.service.board_id == ctx.repo_config.repo_id``, i.e. *this*
         repo's board. No mill-routing is applied: a proposal made for
         repo X must land on repo X's board, never on mill.
 

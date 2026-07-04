@@ -44,7 +44,6 @@ def settings(tmp_path, monkeypatch):
 def repo_config():
     return RepoConfig(
         repo_id="my-app",
-        board_id="my-app",
         langfuse_project_name="my-app",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -53,7 +52,7 @@ def repo_config():
 
 @pytest.fixture
 def worker(settings, repo_config):
-    svc = TicketService(settings, board_id=repo_config.board_id)
+    svc = TicketService(settings, board_id=repo_config.repo_id)
     ctx = StageContext(settings=settings, service=svc, repo_config=repo_config)
     return Worker(ctx, run_registry=None)
 

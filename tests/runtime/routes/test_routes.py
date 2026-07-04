@@ -1018,14 +1018,12 @@ def migrate_client(settings):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="proj-a",
                 langfuse_public_key="pk-a",
                 langfuse_secret_key="sk-a",
             ),
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="proj-b",
                 langfuse_public_key="pk-b",
                 langfuse_secret_key="sk-b",
@@ -1033,7 +1031,7 @@ def migrate_client(settings):
         }
     )
     _cfg._repos_config = registry
-    _db.init_db(settings, board_id="other-board")
+    _db.init_db(settings, board_id="other-repo")
     with TestClient(create_app(registry, settings)) as c:
         yield c
     _cfg._repos_config = None
@@ -1050,7 +1048,7 @@ def test_migrate_ticket_happy_path(migrate_client, service):
     )
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["board_id"] == "other-board"
+    assert data["board_id"] == "other-repo"
     assert data["state"] == "draft"
 
     r2 = migrate_client.get(f"/tickets/{t.id}/history")
@@ -1084,14 +1082,14 @@ def test_migrate_epic_via_route(migrate_client, service):
     )
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["board_id"] == "other-board"
+    assert data["board_id"] == "other-repo"
     assert data["state"] == "draft"
 
     # Both tickets landed on the target board.
     for tid in [epic.id, child.id]:
         r2 = migrate_client.get(f"/tickets/{tid}")
         assert r2.status_code == 200
-        assert r2.json()["board_id"] == "other-board"
+        assert r2.json()["board_id"] == "other-repo"
 
     # History includes migration note.
     r3 = migrate_client.get(f"/tickets/{epic.id}/history")

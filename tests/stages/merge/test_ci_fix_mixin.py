@@ -85,7 +85,7 @@ def repo_dir(tmp_path):
 @pytest.fixture
 def repo_config():
     rc = MagicMock()
-    rc.board_id = "board-1"
+    rc.repo_id = "board-1"
     return rc
 
 

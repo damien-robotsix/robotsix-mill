@@ -58,7 +58,6 @@ def _ctx(tmp_path, **env):
         service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -404,7 +403,6 @@ def _ctx_cross(tmp_path, cct, **env):
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -549,7 +547,6 @@ def _install_repos_registry(entries: list[tuple[str, str]]) -> None:
         repos={
             rid: RepoConfig(
                 repo_id=rid,
-                board_id="meta",
                 langfuse_project_name=f"p-{rid}",
                 langfuse_public_key=f"pk-{rid}",
                 langfuse_secret_key=f"sk-{rid}",

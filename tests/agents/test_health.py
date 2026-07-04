@@ -21,7 +21,6 @@ def _test_repo_config():
 
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -620,8 +619,8 @@ async def test_worker_spawns_periodic_supervisor_per_repo(
     worker = Worker(ctx)
     worker.start()
 
-    assert repo_config.board_id in worker._periodic_supervisor_tasks
-    assert not worker._periodic_supervisor_tasks[repo_config.board_id].done()
+    assert repo_config.repo_id in worker._periodic_supervisor_tasks
+    assert not worker._periodic_supervisor_tasks[repo_config.repo_id].done()
     # No static per-agent health task exists anymore.
     assert getattr(worker, "_health_task", None) is None
 

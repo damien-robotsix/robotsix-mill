@@ -375,7 +375,7 @@ def run_roadmap_sync_pass(
     operator can read ``summary`` for the cause.
     """
     settings = Settings()
-    board_id = repo_config.board_id if repo_config else ""
+    board_id = repo_config.repo_id if repo_config else ""
     service = TicketService(settings, board_id=board_id)
 
     repo_dir = _clone_or_reuse(settings, repo_config)

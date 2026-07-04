@@ -293,7 +293,7 @@ def run_orphaned_pr_check_pass(
         raise ValueError("orphaned_pr_check requires a repo_config")
 
     settings = Settings()
-    service = TicketService(settings, board_id=repo_config.board_id)
+    service = TicketService(settings, board_id=repo_config.repo_id)
     forge = get_forge(settings, repo_config=repo_config)
     result = OrphanedPrCheckResult(
         repo_id=repo_config.repo_id,

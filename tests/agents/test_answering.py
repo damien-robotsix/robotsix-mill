@@ -165,7 +165,6 @@ def test_repo_config_forwarded_to_client(tmp_path, monkeypatch):
 
     rc = RepoConfig(
         repo_id="my-repo",
-        board_id="b1",
         langfuse_project_name="proj",
         langfuse_public_key="pk-rc",
         langfuse_secret_key="sk-rc",

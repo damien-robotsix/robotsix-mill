@@ -79,9 +79,9 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
         repos = get_repos_config().repos
         if repos:
             for rc in repos.values():
-                probe = TicketService(settings, board_id=rc.board_id)
+                probe = TicketService(settings, board_id=rc.repo_id)
                 if probe.get(ticket_id) is not None:
-                    board_id = rc.board_id
+                    board_id = rc.repo_id
                     break
             if not board_id:
                 return (

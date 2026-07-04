@@ -7,6 +7,7 @@
 - Fix `mill-socket-proxy` crash-loop: add `tmpfs: /run` for haproxy pidfile and patch the `docker-events` backend with required timeouts (`timeout connect`, `timeout http-request`, `timeout http-keep-alive`) for haproxy 3.x compatibility.
 - Internal: verified trace-review classifier does not produce false-positive `tool_errors` from `validate_artifact` spans (no code change needed)
 - Gate `POST /repos` behind a new `allow_runtime_repo_registration` setting (default `false`). When off, only operator-configured repos (in `config/config.json`) accept tickets; auto-registered repos are rejected by `POST /tickets`, `POST /tickets/ingest`, and `POST /repos`. Added `DELETE /repos/{id}` to deregister runtime-added repos.
+- **config:** remove `board_id` from `RepoConfig` — the board identifier is now always `repo_id`. A legacy `board_id` in config data is accepted when it equals `repo_id` and raises `ConfigError` otherwise. Drop `board_id` field from the add-repo UI and `/repos` API response.
 - Enable the diagnostic periodic workflow: create the per-repo presence file
   (`.robotsix-mill/periodic/diagnostic.yaml`) and flip `enabled: true` in the
   agent definition. The check registry starts empty; individual checks are

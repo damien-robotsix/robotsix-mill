@@ -3,19 +3,17 @@
 # config/repos.yaml is NO LONGER read).  Copy the repos: block below
 # into config/config.json and fill in your repo configs.
 #
-# Each repo gets its own board ID and Langfuse project for observability
-# isolation.  This file is NOT merged into the main Settings object — it
+# Each repo gets its own board (data directory / DB) keyed by repo_id.
+# This file is NOT merged into the main Settings object — it
 # is loaded by a separate ReposRegistry Pydantic model.
 #
-# There is no longer a board-less default — every repo must define a
-# `board_id`. For single-repo deployments, configure exactly one repo
+# For single-repo deployments, configure exactly one repo
 # entry below.
 #
 # Override the file path with MILL_REPOS_FILE env var.
 
 repos:
   example-repo:
-    board_id: "example-board"
     # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
     # deployed_log_folder: "/var/log/example-repo"  # optional — host path to
     #                             #   the live deployment's log directory. When

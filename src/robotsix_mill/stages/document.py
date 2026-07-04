@@ -139,7 +139,7 @@ class DocumentStage(Stage):
                 diff=diff,
                 spec=spec,
                 extra_roots=extra_roots,
-                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                board_id=ctx.repo_config.repo_id if ctx.repo_config else "",
                 reference_files=preload_paths or None,
             )
         except Exception as e:

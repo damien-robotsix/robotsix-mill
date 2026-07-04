@@ -373,9 +373,9 @@
   }
 
   function repoIdForBoardId(boardId) {
-    if (!reposCache || !boardId) return boardId;
-    var r = reposCache.find(function(r) { return r.board_id === boardId; });
-    return r ? r.repo_id : boardId;
+    // boardId IS repo_id now (board_id removed from config);
+    // this function remains for backward compat with stored ticket.board_id values.
+    return boardId;
   }
 
   // =========================================================================
@@ -394,8 +394,6 @@
       '<label class="modal-label">Forge Remote URL <span class="modal-req">*</span></label>' +
       '<input type="text" class="modal-input" id="modal-forge-url" placeholder="e.g. https://github.com/org/repo.git" autocomplete="off">' +
       '<div class="modal-field-error" id="modal-forge-url-err"></div>' +
-      '<label class="modal-label">Board ID <span style="color:#7d828c;font-size:10px">(optional — defaults to repo_id)</span></label>' +
-      '<input type="text" class="modal-input" id="modal-board-id" placeholder="e.g. robotsix-mill" autocomplete="off">' +
       '<div class="modal-buttons">' +
        '<span class="modal-submit-error" id="modal-submit-err"></span>' +
        '<button type="button" class="modal-btn-cancel" id="modal-cancel">Cancel</button>' +
@@ -408,7 +406,6 @@
     var repoIdErr = document.getElementById("modal-repo-id-err");
     var forgeUrlEl = document.getElementById("modal-forge-url");
     var forgeUrlErr = document.getElementById("modal-forge-url-err");
-    var boardIdEl = document.getElementById("modal-board-id");
     var submitErr = document.getElementById("modal-submit-err");
     var createBtn = document.getElementById("modal-create");
 
@@ -430,8 +427,6 @@
       clearSubmitErr();
       createBtn.disabled = true; createBtn.textContent = "Registering…";
       var body = { repo_id: repoId, forge_remote_url: forgeUrl };
-      var boardId = boardIdEl.value.trim();
-      if (boardId) body.board_id = boardId;
       var r = await jpost("/repos", body);
       if (!r.ok) {
         var e = await r.text();
@@ -451,7 +446,7 @@
       if (e.key === "Escape") { e.preventDefault(); close(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doSubmit(); return; }
       if (e.key === "Enter" && e.target === repoIdEl) { e.preventDefault(); forgeUrlEl.focus(); return; }
-      if (e.key === "Enter" && e.target === forgeUrlEl) { e.preventDefault(); boardIdEl.focus(); return; }
+      if (e.key === "Enter" && e.target === forgeUrlEl) { e.preventDefault(); createBtn.focus(); return; }
     });
     repoIdEl.focus();
   }
@@ -1394,8 +1389,8 @@
       '<label class="modal-label">Target board <span class="modal-req">*</span></label>' +
       '<select class="modal-input" id="modal-board" style="width:100%">' +
         '<option value="">Select board…</option>' +
-        (reposCache || []).filter(function(r) { return r.board_id !== boardId; }).map(function(r) {
-          return '<option value="' + esc(r.repo_id) + '">' + esc(r.repo_id) + (r.board_id === "meta" ? " (meta)" : "") + '</option>';
+        (reposCache || []).filter(function(r) { return r.repo_id !== boardId; }).map(function(r) {
+          return '<option value="' + esc(r.repo_id) + '">' + esc(r.repo_id) + (r.repo_id === "meta" ? " (meta)" : "") + '</option>';
         }).join("") +
       '</select>' +
       '<label class="modal-label" style="margin-top:12px">Note (optional)</label>' +

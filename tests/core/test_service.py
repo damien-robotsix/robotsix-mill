@@ -716,8 +716,8 @@ def test_unmet_dependencies_cross_board(settings, service):
     from robotsix_mill.core import db as _db
     from robotsix_mill.core.service import TicketService as _TS
 
-    _db.init_db(settings, board_id="other-board")
-    other = _TS(settings, board_id="other-board")
+    _db.init_db(settings, board_id="other-repo")
+    other = _TS(settings, board_id="other-repo")
     dep = other.create("dep on other board")
 
     t = service.create("Depender", depends_on=f'["{dep.id}"]')
@@ -2642,22 +2642,20 @@ def migrate_env(settings, service):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="proj-a",
                 langfuse_public_key="pk-a",
                 langfuse_secret_key="sk-a",
             ),
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
                 langfuse_project_name="proj-b",
                 langfuse_public_key="pk-b",
                 langfuse_secret_key="sk-b",
             ),
         }
     )
-    _db.init_db(settings, board_id="other-board")
-    other = TicketService(settings, board_id="other-board")
+    _db.init_db(settings, board_id="other-repo")
+    other = TicketService(settings, board_id="other-repo")
     yield service, other
     _cfg._repos_config = None
 
@@ -2668,9 +2666,9 @@ def test_migrate_moves_ticket_history_and_workspace(settings, migrate_env):
     service.add_comment(t.id, "a human remark")
     src_ws = settings.workspaces_dir_for("test-board") / t.id
 
-    migrated = service.migrate(t.id, "other-board", note="belongs there")
+    migrated = service.migrate(t.id, "other-repo", note="belongs there")
 
-    assert migrated.board_id == "other-board"
+    assert migrated.board_id == "other-repo"
     assert migrated.state is State.DRAFT
     # Row moved: gone from the source DB, present in the target DB.
     from robotsix_mill.core import db as _db
@@ -2678,11 +2676,11 @@ def test_migrate_moves_ticket_history_and_workspace(settings, migrate_env):
 
     with _db.session(settings, "test-board") as s:
         assert s.get(TicketModel, t.id) is None
-    with _db.session(settings, "other-board") as s:
+    with _db.session(settings, "other-repo") as s:
         assert s.get(TicketModel, t.id) is not None
 
     # Workspace moved with its description.
-    dst_ws = settings.workspaces_dir_for("other-board") / t.id
+    dst_ws = settings.workspaces_dir_for("other-repo") / t.id
     assert not src_ws.exists()
     assert migrated.workspace_path == str(dst_ws)
     assert other.workspace(migrated).read_description() == (
@@ -2708,7 +2706,7 @@ def test_migrate_accepts_repo_id_and_resets_block_state(migrate_env):
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="not actionable here")
     migrated = service.migrate(t.id, "other-repo")
-    assert migrated.board_id == "other-board"
+    assert migrated.board_id == "other-repo"
     assert migrated.state is State.DRAFT
     assert migrated.blocked_from is None
     assert "(was blocked)" in other.history(t.id)[-1].note
@@ -2722,9 +2720,9 @@ def test_migrate_prunes_repo_clone_and_baseline_cache(settings, migrate_env):
     (ws.artifacts_dir / "baseline_check.json").write_text("{}")
     (ws.artifacts_dir / "draft-original.md").write_text("keep me")
 
-    service.migrate(t.id, "other-board")
+    service.migrate(t.id, "other-repo")
 
-    dst_ws = settings.workspaces_dir_for("other-board") / t.id
+    dst_ws = settings.workspaces_dir_for("other-repo") / t.id
     assert not (dst_ws / "repo").exists()
     assert not (dst_ws / "artifacts" / "baseline_check.json").exists()
     assert (dst_ws / "artifacts" / "draft-original.md").read_text() == "keep me"
@@ -2738,13 +2736,13 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     with pytest.raises(ValueError, match="already on board"):
         service.migrate(t.id, "test-board")
     with pytest.raises(KeyError):
-        service.migrate("nonexistent-id", "other-board")
+        service.migrate("nonexistent-id", "other-repo")
 
     # Leaf epic (no children) CAN be migrated — the old hard-block is
     # lifted so that mis-filed epics can be moved.
     epic = service.create("an epic", kind=TicketKind.EPIC)
-    migrated_epic = service.migrate(epic.id, "other-board")
-    assert migrated_epic.board_id == "other-board"
+    migrated_epic = service.migrate(epic.id, "other-repo")
+    assert migrated_epic.board_id == "other-repo"
     assert migrated_epic.state is State.DRAFT
 
     # A non-epic child linked to a parent KEEPS the parent link across the
@@ -2752,8 +2750,8 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     # survives the move intact.
     parent = service.create("parent task")
     child = service.create("child task", parent_id=parent.id)
-    migrated_child = service.migrate(child.id, "other-board")
-    assert migrated_child.board_id == "other-board"
+    migrated_child = service.migrate(child.id, "other-repo")
+    assert migrated_child.board_id == "other-repo"
     assert migrated_child.parent_id == parent.id
 
     # A non-epic parent WITH children is still blocked (the subtree
@@ -2761,14 +2759,14 @@ def test_migrate_rejects_bad_targets_and_states(migrate_env):
     parent2 = service.create("parent2 task")
     service.create("child2 task", parent_id=parent2.id)
     with pytest.raises(ValueError, match="has child tickets"):
-        service.migrate(parent2.id, "other-board")
+        service.migrate(parent2.id, "other-repo")
 
     # In-flight states refuse migration.
     busy = service.create("busy", "b")
     service.transition(busy.id, State.READY)
     service.transition(busy.id, State.DELIVERABLE)
     with pytest.raises(ValueError, match="can be migrated"):
-        service.migrate(busy.id, "other-board")
+        service.migrate(busy.id, "other-repo")
 
 
 # ---------------------------------------------------------------------------
@@ -2799,18 +2797,18 @@ def test_migrate_epic_subtree_moves_all_tickets(settings, migrate_env):
         ws.mkdir(parents=True, exist_ok=True)
         (ws / "description.md").write_text(f"desc-{tid}")
 
-    migrated = service.migrate(epic.id, "other-board", note="wrong board")
+    migrated = service.migrate(epic.id, "other-repo", note="wrong board")
 
     # Root ticket returned.
     assert migrated.id == epic.id
-    assert migrated.board_id == "other-board"
+    assert migrated.board_id == "other-repo"
     assert migrated.state is State.DRAFT
 
     # All four tickets exist on the target board.
     for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
         t = other.get(tid)
         assert t is not None, f"{tid} missing from target board"
-        assert t.board_id == "other-board"
+        assert t.board_id == "other-repo"
         assert t.state is State.DRAFT
 
     # Parent links intact.
@@ -2829,7 +2827,7 @@ def test_migrate_epic_subtree_moves_all_tickets(settings, migrate_env):
     # Workspace dirs moved to target board.
     for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
         src_ws = settings.workspaces_dir_for("test-board") / tid
-        dst_ws = settings.workspaces_dir_for("other-board") / tid
+        dst_ws = settings.workspaces_dir_for("other-repo") / tid
         assert not src_ws.exists(), f"source workspace {tid} still exists"
         assert dst_ws.exists(), f"target workspace {tid} missing"
         assert (dst_ws / "description.md").read_text() == f"desc-{tid}"
@@ -2868,11 +2866,11 @@ def test_migrate_epic_subtree_rejects_non_migratable_child(migrate_env):
     service.transition(child_bad.id, State.DELIVERABLE)
 
     with pytest.raises(ValueError, match="non-migratable states"):
-        service.migrate(epic.id, "other-board")
+        service.migrate(epic.id, "other-repo")
 
     # The error should name the blocking child.
     with pytest.raises(ValueError, match=child_bad.id):
-        service.migrate(epic.id, "other-board")
+        service.migrate(epic.id, "other-repo")
 
     # Verify nothing moved: the epic and children still on source board.
     assert service.get(epic.id) is not None
@@ -2900,14 +2898,14 @@ def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
     from robotsix_mill.core import db as _db
     from robotsix_mill.core.models import Ticket as TicketModel
 
-    with _db.session(settings, "other-board") as s:
+    with _db.session(settings, "other-repo") as s:
         s.add(
             TicketModel(
                 id=child.id,
                 title="collision",
-                board_id="other-board",
+                board_id="other-repo",
                 workspace_path=str(
-                    settings.workspaces_dir_for("other-board") / child.id
+                    settings.workspaces_dir_for("other-repo") / child.id
                 ),
             )
         )
@@ -2916,12 +2914,12 @@ def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
     import sqlalchemy.exc
 
     with pytest.raises(sqlalchemy.exc.IntegrityError):
-        service.migrate(epic.id, "other-board")
+        service.migrate(epic.id, "other-repo")
 
     # Workspace dirs rolled back: source still has them, target does not.
     for tid in [epic.id, child.id]:
         src_ws = settings.workspaces_dir_for("test-board") / tid
-        dst_ws = settings.workspaces_dir_for("other-board") / tid
+        dst_ws = settings.workspaces_dir_for("other-repo") / tid
         assert src_ws.exists(), f"source workspace {tid} was not rolled back"
         assert (src_ws / "description.md").read_text() == f"desc-{tid}", (
             f"source workspace {tid} content lost"

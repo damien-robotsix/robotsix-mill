@@ -295,14 +295,12 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
 
     repo_a = RepoConfig(
         repo_id="repo-a",
-        board_id="board-a",
         langfuse_project_name="proj-a",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
     )
     repo_b = RepoConfig(
         repo_id="repo-b",
-        board_id="board-b",
         langfuse_project_name="proj-b",
         langfuse_public_key="pk-b",
         langfuse_secret_key="sk-b",
@@ -353,14 +351,12 @@ def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
 
     repo_a = RepoConfig(
         repo_id="repo-a",
-        board_id="board-a",
         langfuse_project_name="proj-a",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
     )
     RepoConfig(
         repo_id="repo-b",
-        board_id="board-b",
         langfuse_project_name="proj-b",
         langfuse_public_key="pk-b",
         langfuse_secret_key="sk-b",

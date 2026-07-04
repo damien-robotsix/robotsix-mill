@@ -138,7 +138,7 @@ def _collect_candidates(settings: Settings) -> list[_Candidate]:
     groups: dict[tuple[str, str], _Candidate] = {}
 
     for repo in get_repos_config().repos.values():
-        path = settings.data_dir / repo.board_id / "runs.json"
+        path = settings.data_dir / repo.repo_id / "runs.json"
         for entry in _read_registry_entries(path):
             started = _parse_ts(entry.get("started_at"))
             if started is None or started < cutoff:
@@ -163,7 +163,7 @@ def _collect_candidates(settings: Settings) -> list[_Candidate]:
             if cand is None:
                 groups[key] = _Candidate(
                     kind=kind,
-                    board_id=repo.board_id,
+                    board_id=repo.repo_id,
                     status=str(status),
                     signature=signature,
                     count=1,
@@ -176,7 +176,7 @@ def _collect_candidates(settings: Settings) -> list[_Candidate]:
                 if started > cand.last_dt:
                     cand.last_dt = started
                     cand.last_seen = iso
-                    cand.board_id = repo.board_id
+                    cand.board_id = repo.repo_id
                     cand.status = str(status)
                     cand.sample = (sig_source or "").strip()
 

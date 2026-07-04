@@ -88,13 +88,13 @@ def _ci_debt_recheck_pass(
     from ...forge import get_forge
     from sqlmodel import col, select
 
-    svc = TicketService(settings, board_id=repo_config.board_id)
+    svc = TicketService(settings, board_id=repo_config.repo_id)
     target = target_branch_for(settings, repo_config)
 
     blocked = svc.list(state=State.BLOCKED)
     for ticket in blocked:
         # Fetch the most recent event note for this BLOCKED ticket.
-        with core_db.session(settings, repo_config.board_id) as s:
+        with core_db.session(settings, repo_config.repo_id) as s:
             last_event = s.exec(
                 select(TicketEvent.note)
                 .where(TicketEvent.ticket_id == ticket.id)
@@ -840,7 +840,7 @@ class PeriodicPassesMixin(_WorkerBase):
 
         settings = self.ctx.settings
         interval = max(60, settings.bespoke_discovery_interval_seconds)
-        board_id = repo_config.board_id
+        board_id = repo_config.repo_id
         target = target_branch_for(settings, repo_config)
         forge_url = repo_config.forge_remote_url or settings.forge_remote_url
         repo_data_dir = settings.data_dir / repo_config.repo_id

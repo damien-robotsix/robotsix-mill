@@ -74,7 +74,7 @@ def _repo_config_for_ticket(ticket: Ticket, repos: ReposRegistry) -> RepoConfig 
     if not ticket.board_id:
         return None
     for rc in repos.repos.values():
-        if rc.board_id == ticket.board_id:
+        if rc.repo_id == ticket.board_id:
             return rc
     return None
 
@@ -233,8 +233,7 @@ def _list_tickets_compute(
         services = [_TicketService(settings, board_id=board_id)]
     else:
         services = [
-            _TicketService(settings, board_id=rc.board_id)
-            for rc in repos.repos.values()
+            _TicketService(settings, board_id=rc.repo_id) for rc in repos.repos.values()
         ]
         # Include the synthetic meta board in the "all repos" view so
         # extraction proposals are never silently hidden.
@@ -253,7 +252,7 @@ def _list_tickets_compute(
     # only when the board is actually being polled.
     from ..cost_warm import warm_ticket_costs
 
-    rc_by_board = {rc.board_id: rc for rc in repos.repos.values()}
+    rc_by_board = {rc.repo_id: rc for rc in repos.repos.values()}
     terminal = {State.CLOSED, State.EPIC_CLOSED}
     warm_items = [
         (t.id, rc_by_board.get(t.board_id)) for t in tickets if t.state not in terminal

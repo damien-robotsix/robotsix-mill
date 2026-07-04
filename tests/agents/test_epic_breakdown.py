@@ -181,14 +181,12 @@ def _make_repos_double():
         repos={
             "robotsix-llmio": RepoConfig(
                 repo_id="robotsix-llmio",
-                board_id="board-llmio",
                 langfuse_project_name="llmio",
                 langfuse_public_key="pk-llmio",
                 langfuse_secret_key="sk-llmio",
             ),
             "robotsix-calendar-agent": RepoConfig(
                 repo_id="robotsix-calendar-agent",
-                board_id="board-calendar",
                 langfuse_project_name="calendar",
                 langfuse_public_key="pk-cal",
                 langfuse_secret_key="sk-cal",
@@ -205,7 +203,6 @@ def _make_repos_single():
         repos={
             "robotsix-llmio": RepoConfig(
                 repo_id="robotsix-llmio",
-                board_id="board-llmio",
                 langfuse_project_name="llmio",
                 langfuse_public_key="pk-llmio",
                 langfuse_secret_key="sk-llmio",

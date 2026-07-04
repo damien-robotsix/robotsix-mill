@@ -102,14 +102,14 @@ def list_candidates(
         for rc in request.app.state.repos.repos.values():
             if rc.repo_id == "meta":
                 continue
-            path = candidates_path(settings.data_dir, rc.board_id)
+            path = candidates_path(settings.data_dir, rc.repo_id)
             cands = load_candidates(path)
             if not include_acted:
                 cands = [c for c in cands if c.status == "pending"]
             out.extend(_to_read(c, rc.repo_id) for c in cands)
         return out
     rc = _resolve_board(repo_id, request)
-    path = candidates_path(settings.data_dir, rc.board_id)
+    path = candidates_path(settings.data_dir, rc.repo_id)
     cands = load_candidates(path)
     if not include_acted:
         cands = [c for c in cands if c.status == "pending"]
@@ -135,7 +135,7 @@ def validate_candidate(
     right AGENT.md.
     """
     rc = _resolve_board(repo_id, request)
-    path = candidates_path(settings.data_dir, rc.board_id)
+    path = candidates_path(settings.data_dir, rc.repo_id)
     cands = load_candidates(path)
     target = next((c for c in cands if c.candidate_id == candidate_id), None)
     if target is None:
@@ -148,13 +148,13 @@ def validate_candidate(
         )
 
     title, body = to_ticket_payload(target)
-    svc = TicketService(settings, board_id=rc.board_id)
+    svc = TicketService(settings, board_id=rc.repo_id)
     try:
         ticket = svc.create(
             title,
             body,
             source=SourceKind.RETROSPECT,
-            board_id=rc.board_id,
+            board_id=rc.repo_id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
@@ -219,7 +219,7 @@ def reject_candidate(
     stays in the file as audit trail but the UI hides it on the next
     refresh."""
     rc = _resolve_board(repo_id, request)
-    path = candidates_path(settings.data_dir, rc.board_id)
+    path = candidates_path(settings.data_dir, rc.repo_id)
     updated = update_status(path, candidate_id, new_status="rejected")
     if updated is None:
         raise HTTPException(404, "candidate not found")

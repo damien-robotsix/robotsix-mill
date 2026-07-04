@@ -57,9 +57,9 @@ def create_epic(
                 status_code=400,
                 detail=f"Unknown repo: '{repo_id}'. Known repos: {sorted_keys}",
             )
-        board_id = repos.repos[repo_id].board_id
+        board_id = repos.repos[repo_id].repo_id
     elif len(repos.repos) == 1:
-        board_id = next(iter(repos.repos.values())).board_id
+        board_id = next(iter(repos.repos.values())).repo_id
     else:
         # Multi-repo mode with no repo_id: require it.
         sorted_keys = sorted(repos.repos.keys())
@@ -211,8 +211,8 @@ def generate_children(  # noqa: C901
                 available_repos: list[tuple[str, str]] = []
                 epic_repo_id = ""
                 for rid, rc in repos.repos.items():
-                    available_repos.append((rid, rc.board_id))
-                    if rc.board_id == epic_board_id:
+                    available_repos.append((rid, rc.repo_id))
+                    if rc.repo_id == epic_board_id:
                         epic_repo_id = rid
 
                 result = run_epic_breakdown_agent(

@@ -35,7 +35,6 @@ def _test_repo_config():
 
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -1262,12 +1261,12 @@ class TestRunTraceReviewPass:
         )
 
         rc = _test_repo_config()
-        before = _load_watermark(capped, rc.board_id)
+        before = _load_watermark(capped, rc.repo_id)
         assert before is None
 
         run_trace_review_pass(session_id="sess-cap-wm", repo_config=rc)
 
-        after = _load_watermark(capped, rc.board_id)
+        after = _load_watermark(capped, rc.repo_id)
         assert after is not None
         assert after.tzinfo is not None  # UTC
 
@@ -1304,14 +1303,12 @@ class TestTargetRepoRouting:
             repos={
                 "source-repo": RepoConfig(
                     repo_id="source-repo",
-                    board_id="source-board",
                     langfuse_project_name="src",
                     langfuse_public_key="pk",
                     langfuse_secret_key="sk",
                 ),
                 "mill-repo": RepoConfig(
                     repo_id="mill-repo",
-                    board_id="mill-board",
                     langfuse_project_name="mill",
                     langfuse_public_key="pk2",
                     langfuse_secret_key="sk2",
@@ -1731,7 +1728,7 @@ class TestTraceReviewMemoryCap:
         assert sorted(detail_ids) == ["t3", "t4", "t5"]
         # Watermark advanced to ~now (the older backlog is dropped, not
         # incrementally drained), so the next run only sees newer traces.
-        wm = _load_watermark(capped, rc.board_id)
+        wm = _load_watermark(capped, rc.repo_id)
         assert wm is not None
         assert wm >= before
         assert wm.isoformat() != "2026-06-19T02:00:00+00:00"

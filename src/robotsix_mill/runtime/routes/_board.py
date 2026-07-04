@@ -98,8 +98,7 @@ def board_cards(
         services = [_TicketService(settings, board_id=board_id)]
     else:
         services = [
-            _TicketService(settings, board_id=rc.board_id)
-            for rc in repos.repos.values()
+            _TicketService(settings, board_id=rc.repo_id) for rc in repos.repos.values()
         ]
         services.append(_TicketService(settings, board_id="meta"))
 
@@ -158,4 +157,4 @@ def board_move(
 def _resolve_board_id(repo_id: str, repos) -> str:
     """Resolve a repo_id to its board_id, falling back to repo_id itself."""
     rc = repos.repos.get(repo_id)
-    return rc.board_id if rc else repo_id
+    return rc.repo_id if rc else repo_id

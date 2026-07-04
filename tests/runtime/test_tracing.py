@@ -82,7 +82,6 @@ def test_ensure_tracing_skips_repo_without_creds(monkeypatch):
     )
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="p",
         langfuse_public_key="",
         langfuse_secret_key="",
@@ -134,7 +133,6 @@ def test_ensure_tracing_delegates_to_llmio(monkeypatch):
     )
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="proj",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
@@ -186,7 +184,6 @@ def test_ensure_tracing_idempotent_per_key(monkeypatch):
     )
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="proj",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
@@ -207,14 +204,12 @@ def test_ensure_tracing_multi_tenant_registers_each_key(monkeypatch):
     )
     repo_a = RepoConfig(
         repo_id="a",
-        board_id="ba",
         langfuse_project_name="proj-a",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
     )
     repo_b = RepoConfig(
         repo_id="b",
-        board_id="bb",
         langfuse_project_name="proj-b",
         langfuse_public_key="pk-b",
         langfuse_secret_key="sk-b",
@@ -239,7 +234,6 @@ def test_export_adapter_records_failure_and_clears_on_success(monkeypatch):
     )
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="proj-a",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
@@ -297,7 +291,6 @@ def test_start_ticket_root_span_enters_llmio_contexts(monkeypatch):
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
         langfuse_project_name="proj",
         langfuse_public_key="pk-a",
         langfuse_secret_key="sk-a",
@@ -589,7 +582,6 @@ def test_double_sigterm_no_deadlock(monkeypatch):
 
 MILL_CONFIG = RepoConfig(
     repo_id="mill",
-    board_id="mill-board",
     langfuse_project_name="robotsix-mill",
     langfuse_public_key="pk-mill",
     langfuse_secret_key="sk-mill",

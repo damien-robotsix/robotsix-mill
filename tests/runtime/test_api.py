@@ -110,48 +110,21 @@ def test_list_repos_single_repo(client):
     r = client.get("/repos")
     assert r.status_code == 200
     body = r.json()
-    assert body == [
-        {"repo_id": "test-repo", "board_id": "test-board", "forge_remote_url": None}
-    ]
+    assert body == [{"repo_id": "test-repo"}]
     assert all(e["repo_id"] != "meta" for e in body)
 
 
 def test_list_repos_multi_repo(multi_repo_client):
     """Multi-repo mode lists every repo plus the meta entry appended
-    last, exposing repo_id/board_id and a credential-free
-    forge_remote_url (no Langfuse secrets)."""
+    last, exposing only repo_id (no Langfuse secrets)."""
     r = multi_repo_client.get("/repos")
     assert r.status_code == 200
     body = r.json()
-    assert {
-        "repo_id": "repo-a",
-        "board_id": "board-a",
-        "forge_remote_url": None,
-    } in body
-    assert {
-        "repo_id": "repo-b",
-        "board_id": "board-b",
-        "forge_remote_url": None,
-    } in body
-    assert body[-1] == {"repo_id": "meta", "board_id": "meta", "forge_remote_url": None}
+    assert {"repo_id": "repo-a"} in body
+    assert {"repo_id": "repo-b"} in body
+    assert body[-1] == {"repo_id": "meta"}
     for entry in body:
-        assert set(entry.keys()) == {"repo_id", "board_id", "forge_remote_url"}
-
-
-def test_public_forge_url_strips_credentials():
-    """Tokenized remote URLs must never leak through the unauthenticated
-    /repos endpoint — userinfo is stripped, everything else preserved."""
-    from robotsix_mill.runtime.routes._health import _public_forge_url
-
-    assert (
-        _public_forge_url("https://oauth2:tok3n@github.com/o/r.git")
-        == "https://github.com/o/r.git"
-    )
-    assert (
-        _public_forge_url("https://github.com/o/r.git") == "https://github.com/o/r.git"
-    )
-    assert _public_forge_url(None) is None
-    assert _public_forge_url("") is None
+        assert set(entry.keys()) == {"repo_id"}
 
 
 def test_gates(client, settings):
@@ -2517,14 +2490,12 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",
@@ -2569,14 +2540,12 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",
@@ -2619,14 +2588,12 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",
@@ -2663,7 +2630,6 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
@@ -2693,14 +2659,12 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",

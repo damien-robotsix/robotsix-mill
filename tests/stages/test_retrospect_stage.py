@@ -173,7 +173,6 @@ def ctx_factory(tmp_path, fake_sandbox):
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -798,7 +797,7 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     assert memory_file.exists()
     assert memory_file.read_text() == memory_content
@@ -849,7 +848,7 @@ def test_no_change_run_skips_write(ctx_factory, monkeypatch):
     assert out.next_state is State.CLOSED
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     assert not memory_file.exists()
 
@@ -862,7 +861,7 @@ def test_no_change_run_leaves_existing_file_untouched(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     original = "## Existing Pattern\n\nEvidence: observed in TKT-001\n"
@@ -889,7 +888,7 @@ def test_append_only_run_merges_delta(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text(
@@ -938,7 +937,7 @@ def test_first_run_delta_creates_file(ctx_factory, monkeypatch):
     assert out.next_state is State.CLOSED
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     assert memory_file.exists()
     assert memory_file.read_text() == "## New Pattern\n\nObserved in TKT-XXX."
@@ -953,7 +952,7 @@ def test_both_fields_updated_memory_wins(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("## Old\n\nstale\n", encoding="utf-8")
@@ -1022,7 +1021,7 @@ def test_memory_edits_replace_op_rewrites_entry(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     old_entry = "## Flaky tests\n\nObserved in 2026-01-01 run; still active.\n"
@@ -1054,7 +1053,7 @@ def test_memory_edits_remove_op_drops_entry(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     entry_a = "## Keep me\n\nStill relevant.\n"
@@ -1087,7 +1086,7 @@ def test_memory_edits_append_op_adds_section(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text(
@@ -1121,7 +1120,7 @@ def test_memory_edits_find_not_found_leaves_ledger_unchanged(ctx_factory, monkey
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     original = "## Existing Pattern\n\nEvidence: observed in TKT-001\n"
@@ -1150,7 +1149,7 @@ def test_memory_edits_loses_to_updated_memory(ctx_factory, monkeypatch):
 
     memory_file = ctx.settings.memory_file_for(
         "retrospect",
-        ctx.repo_config.board_id if ctx.repo_config else "",
+        ctx.repo_config.repo_id if ctx.repo_config else "",
     )
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text("## Old\n\nstale\n", encoding="utf-8")
@@ -2032,14 +2031,12 @@ def _multirepo_ctx(tmp_path):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="t",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
             ),
             "robotsix-mill": RepoConfig(
                 repo_id="robotsix-mill",
-                board_id="mill-board",
                 langfuse_project_name="mill",
                 langfuse_public_key="pk2",
                 langfuse_secret_key="sk2",
@@ -2278,7 +2275,6 @@ def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
         repos={
             rid: RepoConfig(
                 repo_id=rid,
-                board_id="meta",
                 langfuse_project_name=f"p-{rid}",
                 langfuse_public_key=f"pk-{rid}",
                 langfuse_secret_key=f"sk-{rid}",
@@ -2576,7 +2572,7 @@ def test_memory_board_id_prefers_repo_config(settings, repo_config):
     svc = TicketService(settings, board_id="test-board")
     t = svc.create("repo thing")
     ctx = StageContext(settings=settings, service=svc, repo_config=repo_config)
-    assert ctx.memory_board_id(t) == repo_config.board_id
+    assert ctx.memory_board_id(t) == repo_config.repo_id
 
 
 # ------------------------------------------------------------------

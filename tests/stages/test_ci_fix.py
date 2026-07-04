@@ -42,7 +42,6 @@ def _ctx(tmp_path, **env):
         service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -1422,7 +1421,7 @@ def test_identical_failure_blocks_after_max_consecutive(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
 
     # Compute the current failure fingerprint and pre-seed the fingerprint file.
-    repo_id = ctx.repo_config.board_id
+    repo_id = ctx.repo_config.repo_id
     failing = [{"name": "lint", "summary": "err", "text": None, "annotations": []}]
     summary = _build_failing_summary(failing)
     fp = _ci_failure_fingerprint(summary, repo_id)
@@ -1486,7 +1485,7 @@ def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
 
-    repo_id = ctx.repo_config.board_id
+    repo_id = ctx.repo_config.repo_id
     artifacts = ctx.service.workspace(t).artifacts_dir
     artifacts.mkdir(parents=True, exist_ok=True)
 

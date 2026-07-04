@@ -260,14 +260,13 @@ docker compose up -d   # reads config/config.json (or set MILL_CONFIG_FILE)
 
 The operator can point the refine agent at a repo's live deployment log
 directory by setting a single per-repo field in mill's central,
-gitignored `config/repos.yaml` (alongside `board_id` / `forge_remote_url`
+gitignored `config/repos.yaml` (alongside `forge_remote_url`
 / `langfuse:`):
 
 ```yaml
 # config/repos.yaml
 repos:
   robotsix-auto-mail:
-    board_id: "..."
     deployed_log_folder: /var/log/robotsix-auto-mail
 ```
 
@@ -467,7 +466,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `service.data_dir` | `MILL_DATA_DIR` | `.data` | Data directory for DB, workspaces, and memory ledgers |
-| `service.default_repo_id` | `MILL_DEFAULT_REPO_ID` | `""` | Backward-compatibility fallback: board_id assigned to tickets created before the mandatory-board_id migration. Not a substitute for configuring repos.yaml. |
+| `service.default_repo_id` | `MILL_DEFAULT_REPO_ID` | `""` | Backward-compatibility fallback: repo_id assigned to tickets created before the mandatory-repo_id migration. Not a substitute for configuring repos.yaml. |
 | `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
@@ -917,15 +916,17 @@ Langfuse observability project. It is loaded **separately** from
 participates in the Settings merge. Access it via `get_repos_config()`
 or `get_repo_config("repo-id")`.
 
-> **There is no longer a board-less default.** Every ticket must carry a
-> `board_id` from `config/repos.yaml`. The legacy `<data_dir>/mill.db`
-> that held tickets without a board_id has been removed. For single-repo
-> deployments, configure exactly one repo entry.
+> **There is no longer a separate `board_id` field.** Every repo is
+> identified solely by `repo_id` — the board identifier IS the repo_id.
+> The legacy `<data_dir>/mill.db` that held tickets without a repo_id
+> has been removed. For single-repo deployments, configure exactly one
+> repo entry.
 
 Langfuse credentials are read from ``RepoConfig`` at call time (per
 ticket, per operation) — they are **not** stamped onto the global
-``Secrets`` singleton.  Each ticket's ``board_id`` determines which
-repo entry (and thus which Langfuse project) is used for its traces.
+``Secrets`` singleton.  Each ticket's ``repo_id`` (formerly ``board_id``)
+determines which repo entry (and thus which Langfuse project) is used
+for its traces.
 
 ### Set up
 
@@ -936,7 +937,6 @@ Add a `"repos"` block to `config/config.json` — one entry per repository
 # config/repos.yaml (or the "repos" key of config/config.json)
 repos:
   my-repo:
-    board_id: "my-board"
     # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
     langfuse:
       project_name: "my-repo"
@@ -992,7 +992,6 @@ Source: the `"repos"` key of `config/config.json` (overridable via the
 
 | YAML key (in repos.yaml) | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
 | `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
 | `repos.<id>.working_branch` | no | — | Per-repo target branch for clone/baseline/deliver operations. When set, overrides the global `forge_target_branch`. Use this for repos whose default branch is not `main` (e.g. `rolling`, `lyrical`, `develop`). Automatically populated by member-sync from the manifest `version` field. |
 | `repos.<id>.langfuse.project_name` | yes | — | Langfuse project name for this repo's traces |
@@ -1019,7 +1018,6 @@ This allows repos with non-main default branches to be fully onboarded:
 # config/repos.yaml
 repos:
   ros2-example-interfaces:
-    board_id: "example-interfaces"
     forge_remote_url: "https://github.com/damien-robotsix/example_interfaces.git"
     working_branch: lyrical  # This repo's default branch is 'lyrical', not 'main'
     langfuse:

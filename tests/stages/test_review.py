@@ -57,7 +57,6 @@ def ctx_factory(tmp_path, fake_sandbox):
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -1398,7 +1397,6 @@ def test_extra_roots_passed_when_workflow_ref_matches_repos_config(
     repos_cfg = get_repos_config()
     repos_cfg.repos["sibling"] = RepoConfig(
         repo_id="sibling",
-        board_id="test-board",
         langfuse_project_name="test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

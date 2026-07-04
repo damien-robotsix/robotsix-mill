@@ -10,7 +10,6 @@ from robotsix_mill.config import Settings, RepoConfig, target_branch_for
 def _repo_config(working_branch):
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

@@ -11,7 +11,7 @@ clone data.
 ## Registration
 
 No registration is needed: the meta board is synthetic and is
-constructed automatically (`repo_id`/`board_id` `"meta"`).  It does
+constructed automatically (`repo_id` `"meta"`).  It does
 not appear under the `repos:` key of `config/config.yaml` and has no
 clone or forge remote.
 

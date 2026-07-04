@@ -178,7 +178,7 @@ class _DeleteMixin(_ServiceBase):
                 (
                     rc
                     for rc in get_repos_config().repos.values()
-                    if rc.board_id == ticket.board_id
+                    if rc.repo_id == ticket.board_id
                 ),
                 None,
             )
