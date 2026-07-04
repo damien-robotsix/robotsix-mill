@@ -31,7 +31,7 @@ config = context.config
 
 # Set up Python logging from the config file section (optional).
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # The metadata object that autogenerate compares against the live DB.
 target_metadata = SQLModel.metadata

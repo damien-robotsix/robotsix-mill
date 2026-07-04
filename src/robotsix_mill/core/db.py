@@ -61,7 +61,7 @@ def _db_path(settings: Settings, board_id: str) -> Path:
     return settings.data_dir / board_id / "mill.db"
 
 
-def get_engine(settings: Settings, board_id: str):
+def get_engine(settings: Settings, board_id: str) -> Engine:
     """Return the per-board SQLite engine, creating it on first call.
 
     *board_id* is required — raises ``ValueError`` (via
