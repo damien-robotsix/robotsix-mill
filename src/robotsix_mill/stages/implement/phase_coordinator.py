@@ -352,11 +352,17 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             ):
                 ahead = -1  # can't determine → don't block
             if ahead == 0:
+                # The branch has no commits beyond origin/<target> —
+                # there is genuinely nothing to merge. Re-implementing
+                # would loop forever (empty PR → close → BLOCKED →
+                # resume). This is a true no-op: terminate DONE with a
+                # clear terminal note instead. ``ahead == 0`` (rev-list
+                # count) is a precise "no commits beyond base" signal, so
+                # there is no real work to lose.
                 note = (
-                    "empty diff after review round — branch has no commits "
-                    f"beyond origin/{target}. Re-implementing would produce no "
-                    "changes (review findings may be unfixable by further "
-                    "automated passes)"
+                    "already satisfied — no changes needed (empty diff vs base "
+                    f"after review round; branch has no commits beyond "
+                    f"origin/{target})"
                 )
                 self._finalize(
                     ctx,
@@ -364,11 +370,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     repo_dir,
                     branch,
                     note,
-                    ok=False,
+                    ok=True,
                     reference_files=None,
                     extra_roots=extra_roots,
                 )
-                return Outcome(State.BLOCKED, note)
+                return Outcome(State.DONE, note)
 
         # Phase 2: deterministic, stage-owned implement loop.
         return self._implement_loop(

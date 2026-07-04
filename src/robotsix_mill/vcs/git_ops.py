@@ -710,11 +710,13 @@ def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:
         return True
 
 
-def branch_has_net_diff(repo: Path, target_branch: str = "main") -> bool:
-    """Return True when HEAD has a non-empty content diff vs ``origin/main``.
+def branch_has_net_diff(
+    repo: Path, target_branch: str = "main", ref: str = "HEAD"
+) -> bool:
+    """Return True when *ref* has a non-empty content diff vs ``origin/main``.
 
-    Uses the three-dot ``git diff --quiet origin/main...HEAD`` semantic
-    (compare HEAD against the merge-base), which is exactly what the forge
+    Uses the three-dot ``git diff --quiet origin/main...<ref>`` semantic
+    (compare *ref* against the merge-base), which is exactly what the forge
     evaluates when opening a PR. This is distinct from
     :func:`branch_is_ahead_of_main`, which counts *commits*: a branch can carry
     a commit that is not on main by SHA (ahead by commit count) yet whose net
@@ -722,6 +724,10 @@ def branch_has_net_diff(repo: Path, target_branch: str = "main") -> bool:
     change, or the commit was a no-op. The forge rejects such a PR with a 422
     "No commits between main and branch", so deliver must check the net diff,
     not just the commit count, before opening one.
+
+    *ref* defaults to ``HEAD`` (the checked-out branch). Pass an explicit
+    branch name when the caller cannot rely on HEAD being the feature branch
+    (e.g. the merge stage's closed-PR no-op check).
 
     Fetches ``origin main`` first so the local ref is current. A fetch or diff
     failure returns True (assume there IS a diff) so delivery proceeds — we
@@ -734,7 +740,7 @@ def branch_has_net_diff(repo: Path, target_branch: str = "main") -> bool:
 
     # `git diff --quiet` exits 0 when there is NO diff, 1 when there is one.
     result = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--quiet", f"origin/{target_branch}...HEAD"],
+        ["git", "-C", str(repo), "diff", "--quiet", f"origin/{target_branch}...{ref}"],
         capture_output=True,
         text=True,
     )

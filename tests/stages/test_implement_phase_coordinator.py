@@ -933,9 +933,11 @@ def test_convergence_backstop_uses_cross_repo_base_branch(
     assert t.review_rounds == 1
 
     # Second implement run: resuming=True, review_rounds>0, branch has
-    # no commits ahead of origin/develop → backstop should block.
+    # no commits ahead of origin/develop → genuine no-op → terminate DONE
+    # (already satisfied) instead of looping in BLOCKED.
     out2 = ImplementStage().run(t, ctx)
-    assert out2.next_state is State.BLOCKED
+    assert out2.next_state is State.DONE
+    assert "already satisfied" in out2.note.lower()
     assert "empty diff" in out2.note.lower()
     # The note must reference the correct base branch.
     assert "origin/develop" in out2.note.lower()

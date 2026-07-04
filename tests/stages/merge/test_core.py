@@ -421,6 +421,86 @@ def test_closed_unmerged_blocks(tmp_path, monkeypatch):
     assert "closed without merge" in out.note
 
 
+def _seed_workspace_clone(ctx, t, *, net_diff: bool) -> None:
+    """Build the ticket's workspace clone (``ws.dir/repo``) from a bare
+    remote with a ``mill/<id>`` branch. When *net_diff* is False the branch
+    is identical to origin/main (empty-after-rebase); when True it carries
+    a real change."""
+    import subprocess as _sp
+    from robotsix_mill.vcs import git_ops
+
+    tmp = ctx.service.workspace(t).dir
+    seed = tmp / "seed"
+    seed.mkdir(parents=True)
+
+    def _g(cwd, *args):
+        _sp.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+    _g(seed, "init", "-q")
+    _g(seed, "config", "user.email", "t@t")
+    _g(seed, "config", "user.name", "t")
+    (seed / "README.md").write_text("seed\n")
+    _g(seed, "add", "-A")
+    _g(seed, "commit", "-q", "-m", "init")
+    _g(seed, "branch", "-M", "main")
+    bare = tmp / "remote.git"
+    _sp.run(
+        ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+        check=True,
+        capture_output=True,
+    )
+    repo = ctx.service.workspace(t).repo_dir
+    git_ops.clone(f"file://{bare}", repo, "main")
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    if net_diff:
+        (repo / "change.txt").write_text("real change\n")
+        git_ops.commit_all(repo, "real work")
+    ctx.service.set_branch(t.id, branch)
+
+
+def test_closed_unmerged_empty_branch_terminates_done(tmp_path, monkeypatch):
+    """A PR closed without merge whose branch has NO net diff vs the
+    target (empty-after-rebase: main already carries the change) is a
+    genuine no-op → DONE, not a BLOCKED-resume loop (ticket 0976)."""
+    ctx = _gh(tmp_path, delete_branch_on_merge=False)
+    t = _human_mr_approval(ctx)
+    _seed_workspace_clone(ctx, t, net_diff=False)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "closed",
+            "url": "u-empty",
+        },
+    )
+    out = MergeStage().run(ctx.service.get(t.id), ctx)
+    assert out.next_state is State.DONE
+    assert "already satisfied" in out.note.lower()
+    assert (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
+
+
+def test_closed_unmerged_nonempty_branch_still_blocks(tmp_path, monkeypatch):
+    """A PR closed without merge whose branch DOES carry real changes must
+    still BLOCK (resumable) — never silently close real work."""
+    ctx = _gh(tmp_path)
+    t = _human_mr_approval(ctx)
+    _seed_workspace_clone(ctx, t, net_diff=True)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "closed",
+            "url": "u-real",
+        },
+    )
+    out = MergeStage().run(ctx.service.get(t.id), ctx)
+    assert out.next_state is State.BLOCKED
+    assert "closed without merge" in out.note
+
+
 def test_open_is_noop(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
     monkeypatch.setattr(

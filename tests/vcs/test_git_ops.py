@@ -621,6 +621,22 @@ class TestBranchHasNetDiff:
         result = git_ops.branch_has_net_diff(dest)
         assert result is True
 
+    def test_explicit_ref_not_head(self, tmp_path):
+        """The optional ``ref`` arg checks a named branch, not HEAD — so a
+        caller that cannot rely on HEAD being the feature branch (the merge
+        stage's closed-PR no-op check) still gets the right answer."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Feature branch carries a real change...
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("diff content")
+        git_ops.commit_all(dest, "add new.txt")
+        # ...but HEAD is moved back to main (empty vs base).
+        git_ops.checkout(dest, "main")
+        assert git_ops.branch_has_net_diff(dest, ref="HEAD") is False
+        assert git_ops.branch_has_net_diff(dest, ref="feature") is True
+
     def test_with_custom_target_branch(self, tmp_path):
         """Test branch_has_net_diff with custom target_branch (non-main).
         Creates a develop branch and tests against it."""

@@ -1102,6 +1102,82 @@ def test_mark_done_from_blocked_with_caller_note(service):
     assert "[force-closed from blocked] PR #123 already merged" in hist[-1].note
 
 
+def _make_repo_with_unmerged_branch(service, t, branch: str) -> None:
+    """Create a workspace clone whose *branch* carries a commit that is
+    NOT on origin/main, so ``verify_merge_before_done`` would raise."""
+    import subprocess as _sp
+
+    ws = service.workspace(t)
+    repo = ws.repo_dir
+    repo.mkdir(parents=True, exist_ok=True)
+
+    def _g(*args):
+        _sp.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+    _g("init")
+    _g("config", "user.email", "test@example.com")
+    _g("config", "user.name", "Test")
+    (repo / "file.txt").write_text("base")
+    _g("add", ".")
+    _g("commit", "-m", "initial")
+    # origin/main pinned at the base commit.
+    _g("branch", "origin/main")
+    # A feature branch with an extra, un-merged commit.
+    _g("checkout", "-b", branch)
+    (repo / "file.txt").write_text("feature change")
+    _g("commit", "-am", "unmerged work")
+    service.set_branch(t.id, branch)
+
+
+def test_mark_done_from_blocked_bypasses_merge_verify(service):
+    """Escape hatch: an operator can force-close a stuck BLOCKED ticket
+    whose branch was never merged. The merge-verification gate (which
+    would otherwise 409) is skipped for the deliberate override."""
+    t = service.create("blocked no-op loop")
+    branch = f"{service.settings.branch_prefix}{t.id}"
+    _make_repo_with_unmerged_branch(service, t, branch)
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="PR closed without merge — resumable")
+
+    comment, ticket = service.mark_done(t.id, note="already satisfied on main")
+    assert ticket.state is State.DONE
+    assert comment is not None
+    assert "[force-closed from blocked] already satisfied on main" in comment.body
+
+
+def test_mark_done_from_rebasing_bypasses_merge_verify(service):
+    """Escape hatch also works from REBASING (a ticket wedged in the
+    rebase agent), whose branch is conflicting/un-merged."""
+    t = service.create("rebasing wedge")
+    branch = f"{service.settings.branch_prefix}{t.id}"
+    _make_repo_with_unmerged_branch(service, t, branch)
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.IMPLEMENT_COMPLETE)
+    service.transition(t.id, State.REBASING, note="conflicting")
+
+    comment, ticket = service.mark_done(t.id)
+    assert ticket.state is State.DONE
+    assert comment is not None
+    assert "[force-closed from rebasing] operator mark-done" in comment.body
+
+
+def test_mark_done_still_verifies_merge_from_normal_state(service):
+    """The escape-hatch bypass is scoped to BLOCKED/REBASING only: a
+    normal (non-stuck) state with an un-merged branch still refuses
+    mark-done so an operator can't prematurely close an open PR."""
+    t = service.create("open pr premature close")
+    branch = f"{service.settings.branch_prefix}{t.id}"
+    _make_repo_with_unmerged_branch(service, t, branch)
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.DELIVERABLE)
+    service.transition(t.id, State.IMPLEMENT_COMPLETE)
+    service.transition(t.id, State.HUMAN_MR_APPROVAL)
+
+    with pytest.raises(TransitionError, match="not been merged"):
+        service.mark_done(t.id)
+
+
 def test_mark_done_with_note_creates_comment(service):
     """A non-empty note creates a Comment alongside the event."""
     t = service.create("with note")

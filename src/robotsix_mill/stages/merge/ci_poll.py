@@ -136,12 +136,62 @@ class CIPollMixin(_MergeStageBase):
             log.info("%s: PR merged → done", ticket.id)
             return None, Outcome(State.DONE, f"merged: {pr.get('url', '')}")
         if pr.get("state") == "closed":
+            # A PR closed without merge normally means a human (or the
+            # forge) rejected it — resumable BLOCKED. BUT when the branch
+            # has no net diff vs the target (empty-after-rebase: main
+            # already carries the change), there is nothing left to
+            # merge and re-queueing would loop forever. Terminate DONE in
+            # that genuine-no-op case. The net-diff check fetches origin
+            # and fails safe to "has diff" → BLOCKED, so a real change is
+            # never silently closed.
+            if self._closed_pr_branch_is_empty(ticket, ctx, branch):
+                log.info(
+                    "%s: PR closed without merge and branch is empty vs target "
+                    "→ DONE (already satisfied)",
+                    ticket.id,
+                )
+                ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                    "merge.md"
+                ).write_text(f"closed-empty: {pr.get('url', '')}\n", encoding="utf-8")
+                self._cleanup_branch_on_done(ticket, ctx, branch)
+                return None, Outcome(
+                    State.DONE,
+                    "already satisfied — PR closed with an empty branch (no "
+                    f"changes to merge): {pr.get('url', '')}",
+                )
             return None, Outcome(
                 State.BLOCKED,
                 f"PR closed without merge — resumable: {pr.get('url', '')}",
             )
 
         return pr, None
+
+    def _closed_pr_branch_is_empty(
+        self, ticket: Ticket, ctx: StageContext, branch: str
+    ) -> bool:
+        """Return True iff the ticket's branch has no net diff vs the target.
+
+        Best-effort and fail-safe: returns False (→ keep BLOCKED) whenever
+        emptiness cannot be positively confirmed (no workspace clone,
+        branch ref missing, git error). Only a confirmed empty net diff
+        vs ``origin/<target>`` returns True, so a PR that was closed while
+        still carrying real changes is never silently marked DONE.
+        """
+        from ...vcs import git_ops
+        from robotsix_mill.stages import merge as _facade
+
+        repo_dir = _facade._workspace_repo_dir(ctx, ticket)
+        if repo_dir is None:
+            return False
+        repo_path = Path(repo_dir)
+        # Resolve the branch ref: prefer the local branch, fall back to
+        # HEAD only if the branch ref is unavailable.
+        ref = branch if git_ops.branch_exists(repo_path, branch) else "HEAD"
+        target = target_branch_for(ctx.settings, ctx.repo_config)
+        try:
+            return not git_ops.branch_has_net_diff(repo_path, target, ref=ref)
+        except Exception:  # noqa: BLE001 — fail safe: keep BLOCKED on any error
+            return False
 
     def _poll_implement_complete(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status for a ticket in IMPLEMENT_COMPLETE.

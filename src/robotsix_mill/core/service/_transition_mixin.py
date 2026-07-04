@@ -492,11 +492,16 @@ class _TransitionMixin(_ServiceBase):
                     f"{ticket_id}: cannot mark done — "
                     f"state {ticket.state} is not eligible for mark-done"
                 )
-            # Force‑close marker for blocked tickets so operators
-            # know this was a deliberate override.
-            if ticket.state is State.BLOCKED:
+            # Force‑close marker for stuck tickets so operators know
+            # this was a deliberate override. BLOCKED and REBASING are
+            # the "stuck" states the escape hatch exists for — a no-op
+            # ticket that loops in BLOCKED, or a ticket wedged in the
+            # rebase agent — so both get the marker.
+            force_close_states = {State.BLOCKED, State.REBASING}
+            is_force_close = ticket.state in force_close_states
+            if is_force_close:
                 reason = note if note.strip() else "operator mark-done"
-                note = f"[force-closed from blocked] {reason}"
+                note = f"[force-closed from {ticket.state}] {reason}"
             # Refuse mark-done when duplicate changelog fragments
             # exist on the ticket's branch.
             repo_dir = self.workspace(ticket).repo_dir
@@ -510,13 +515,22 @@ class _TransitionMixin(_ServiceBase):
             # Refuse mark-done when the ticket's branch hasn't been
             # merged to origin/main (best-effort — skipped when the
             # workspace clone or branch isn't available).
-            verify_merge_before_done(
-                ticket_id=ticket_id,
-                repo_dir=repo_dir,
-                branch_prefix=self.settings.branch_prefix,
-                forge_target_branch=self.settings.forge_target_branch,
-                branch_name=ticket.branch,
-            )
+            #
+            # Escape-hatch exemption: a deliberate operator force-close
+            # of a stuck BLOCKED/REBASING ticket bypasses the merge
+            # verification. These are exactly the states where a no-op
+            # ticket loops — its branch was never merged (there was
+            # nothing to merge), so the merge check would 409 forever
+            # and there would be no way to close the stuck ticket. The
+            # operator is explicitly deciding to terminate it.
+            if not is_force_close:
+                verify_merge_before_done(
+                    ticket_id=ticket_id,
+                    repo_dir=repo_dir,
+                    branch_prefix=self.settings.branch_prefix,
+                    forge_target_branch=self.settings.forge_target_branch,
+                    branch_name=ticket.branch,
+                )
             # Close any open [ASK_USER] threads before force-closing —
             # the operator's mark-done means the question is moot.
             # Record the fact in the note so it's visible in history.
