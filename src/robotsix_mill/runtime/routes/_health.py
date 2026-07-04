@@ -220,6 +220,19 @@ def langfuse_status_clear() -> None:
     clear_export_failures()
 
 
+def _public_forge_url(url: str | None) -> str | None:
+    """Strip any userinfo (tokens) from a forge remote URL before exposing it."""
+    if not url:
+        return None
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    if parts.hostname is None:
+        return url  # not a URL shape (e.g. ssh scp-like) — return as-is
+    netloc = parts.hostname + (f":{parts.port}" if parts.port else "")
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
 @router.get("/repos")
 def list_repos(
     request: Request,
@@ -227,23 +240,29 @@ def list_repos(
 ) -> list[dict]:
     """Return the registered repos for the UI repo selector.
 
-    No secrets (Langfuse keys) are included — only ``repo_id`` and
-    ``board_id``.  In single-repo mode (``--repo-id`` passed) only
-    that repo is returned.
+    No secrets (Langfuse keys) are included — ``repo_id``, ``board_id``
+    and a credential-stripped ``forge_remote_url`` (so agent consumers
+    like robotsix-chat can locate the code).  In single-repo mode
+    (``--repo-id`` passed) only that repo is returned.
     """
+
+    def _entry(rc) -> dict:
+        return {
+            "repo_id": rc.repo_id,
+            "board_id": rc.board_id,
+            "forge_remote_url": _public_forge_url(rc.forge_remote_url),
+        }
+
     single = request.app.state.single_repo_id
     if single is not None:
-        rc = repos.repos[single]
-        return [{"repo_id": rc.repo_id, "board_id": rc.board_id}]
-    result = [
-        {"repo_id": rc.repo_id, "board_id": rc.board_id} for rc in repos.repos.values()
-    ]
+        return [_entry(repos.repos[single])]
+    result = [_entry(rc) for rc in repos.repos.values()]
     # The cross-repo meta-agent files extraction proposals to a synthetic
     # "meta" board that is NOT a registered repo (no clone/forge — see
     # meta/runner.py, board_id="meta"). Surface it in the selector so
     # operators can review those drafts; it is deliberately kept out of
     # the ReposRegistry so the worker/clone/cost loops never touch it.
-    result.append({"repo_id": "meta", "board_id": "meta"})
+    result.append({"repo_id": "meta", "board_id": "meta", "forge_remote_url": None})
     return result
 
 

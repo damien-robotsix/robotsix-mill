@@ -94,7 +94,9 @@ Returns a flat JSON array of card objects for the board UI.  Each card has `id`,
 GET /repos
 ```
 
-Returns a JSON array of `{repo_id, board_id}` objects.  Use these `repo_id` values in query filters and in `POST /tickets/ingest` below.
+Returns a JSON array of `{repo_id, board_id, forge_remote_url}` objects.  Use these `repo_id` values in query filters and in `POST /tickets/ingest` below.
+
+`forge_remote_url` is the canonical code location for the repo (credential-free). When discussing a ticket, map its `repo_id` to the matching entry and use that URL with your own repository tooling to read code, link files, or answer implementation questions. The synthetic `meta` board has no repository (`forge_remote_url` is null).
 
 ---
 
