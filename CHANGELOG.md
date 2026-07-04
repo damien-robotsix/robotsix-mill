@@ -13,6 +13,7 @@
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.
+- Fix typo in `_chat_skill.py` API docs: `rebasin` → `rebasing` in the valid state values list for the transition endpoint. (mill: state sync: typo — "rebasin" in _chat_skill.py docstring (20260704T181120Z-state-sync-typo-rebasin-in-chat-skill-py-836b) [WIP])
 - Sandbox (deploy mode): re-establish the internal egress network and the
   `sandbox-proxy` attachment before **every** sandbox spawn instead of once
   per process. A deploy can recreate the `sandbox-proxy` sibling at any
