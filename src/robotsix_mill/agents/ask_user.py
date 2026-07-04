@@ -53,12 +53,12 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
             return "__ASK_USER_PAUSE__"
         _called[0] = True
 
-        from ._ticket_context import current_ticket_service
+        from ._ticket_context import _resolve_current_ticket
 
-        result = current_ticket_service(settings)
-        if result is None:
-            return "Error: no active ticket session — cannot determine current ticket."
-        _, ticket_id = result
+        resolved = _resolve_current_ticket(settings)
+        if isinstance(resolved, str):
+            return resolved
+        _, ticket_id = resolved
 
         # Resolve the ticket's board BEFORE constructing the service,
         # otherwise the unbound service falls through to an empty

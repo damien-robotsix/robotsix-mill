@@ -68,15 +68,12 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         if h in _seen:
             return "post_comment: duplicate body in this run — skipped"
 
-        from ._ticket_context import current_ticket_service
+        from ._ticket_context import _resolve_current_ticket
 
-        result = current_ticket_service(settings)
-        if result is None:
-            return (
-                "post_comment: no active ticket session — cannot "
-                "determine current ticket."
-            )
-        svc, ticket_id = result
+        resolved = _resolve_current_ticket(settings, error_prefix="post_comment")
+        if isinstance(resolved, str):
+            return resolved
+        svc, ticket_id = resolved
         try:
             comment = svc.add_comment(
                 ticket_id,
