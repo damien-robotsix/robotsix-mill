@@ -178,16 +178,23 @@ def test_repos_endpoint(multi_repo_client):
     assert repo_ids == {"repo-a", "repo-b", "meta"}
     assert board_ids == {"board-a", "board-b", "meta"}
 
-    # No credential leak
+    # No credential leak: Langfuse keys never appear, and the exposed
+    # forge_remote_url (operator-requested so agent consumers can locate
+    # the code) must be credential-stripped — no userinfo, ever.
     for entry in data:
         for forbidden in (
             "langfuse_secret_key",
             "langfuse_public_key",
             "langfuse_base_url",
-            "forge_remote_url",
         ):
             assert forbidden not in entry, (
                 f"credential leak: '{forbidden}' in /repos response"
+            )
+        url = entry["forge_remote_url"]
+        if url is not None:
+            authority = url.split("://", 1)[-1].split("/", 1)[0]
+            assert "@" not in authority, (
+                f"credential leak: userinfo in forge_remote_url {url!r}"
             )
 
 
