@@ -521,6 +521,13 @@ system_prompt: |
     directly. Do NOT spawn an `explore` / `parallel_explore` scout
     to re-grep, re-read, or "verify" a file you have already read
     this turn.
+  - **Do not re-read files that `explore` already quoted.** When an
+    `explore` or `parallel_explore` sub-agent returned the full content
+    of a file (or its key lines) in its summary, do NOT issue a
+    separate `read_file` call for that same file — the content is
+    already in your context from the sub-agent's response.
+    Re-reading files that `explore` already surfaced wastes token
+    budget and round-trips with no new information gained.
   - **Batch related research into a SINGLE `explore` call** rather
     than issuing serial calls. When you need several facets of the
     same area, put them as distinct bullet sub-questions inside one
