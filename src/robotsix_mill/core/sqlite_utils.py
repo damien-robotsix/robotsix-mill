@@ -1,7 +1,5 @@
 """Additive SQLite column migration utilities.
 
-"""Additive SQLite column migration utilities.
-
 .. deprecated::
     This module is **deprecated** as of the Alembic migration
     adoption (``alembic/``).  ``db.py`` no longer calls
@@ -28,7 +26,6 @@ drop-in replacement as of llmio pin ``3da3c4317f4a``:
   ``sqlite3.Connection`` but raises ``ObjectNotExecutableError`` on
   SQLAlchemy ≥2.0 ``Connection``.  Mill passed a SA connection from
   ``engine.begin()``, so llmio's version could not be used as-is.
-"""
 """
 
 from __future__ import annotations
