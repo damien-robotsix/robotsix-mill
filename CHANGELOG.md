@@ -4,6 +4,7 @@
   (`.robotsix-mill/periodic/diagnostic.yaml`) and flip `enabled: true` in the
   agent definition. The check registry starts empty; individual checks are
   registered in follow-up tickets.
+- Enable `member_sync` periodic workflow for the mill repo itself via `.robotsix-mill/periodic/member_sync.yaml` presence file.
 - Serve ``GET /chat-skill`` endpoint returning a SKILL.md document that teaches the chat agent how to drive the board API (read tickets, post comments, manage state transitions, create via ingest). Includes mandatory safety rules requiring user confirmation for state-changing operations.
 - Deploy: set `MILL_API_HOST=0.0.0.0` in `deploy/docker-compose.yml` so the container binds all interfaces (reachable by the central-deploy gateway) regardless of the onboard-written `api_host`.
 
