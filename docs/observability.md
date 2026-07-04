@@ -67,7 +67,7 @@ The actual mechanism, not an idealized one:
 
 - **Langfuse keys live in `config/repos.yaml`**, which is
   operator-managed and **gitignored** (exactly like
-  the `config/config.yaml` `secrets:` block) — it is never committed. Keys are read from
+  the `config/config.json` `secrets:` block) — it is never committed. Keys are read from
   `RepoConfig` at call time, not stamped onto the global `Secrets`
   singleton.
 - **`deployed_log_folder` lives in `config/repos.yaml` too** — it is a

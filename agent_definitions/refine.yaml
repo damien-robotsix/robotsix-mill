@@ -188,9 +188,9 @@ system_prompt: |
     an operator should create or commit elsewhere.  These are
     **concepts**, not files this checkout owns.
 
-  **Key rule:** a spec mentioning a path like `config/config.yaml` or
-  `config/config.example.yaml` in the context of *"the operator should
-  commit config/config.example.yaml to their repo"* is describing a
+  **Key rule:** a spec mentioning a path like `config/config.json` or
+  `config/config.example.json` in the context of *"the operator should
+  commit config/config.example.json to their repo"* is describing a
   recommendation, not a file that must exist in the current checkout.
   Do **not** treat such paths as evidence of misrouting.  Always read
   the surrounding prose to determine WHICH kind of path a token is.

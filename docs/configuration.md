@@ -47,7 +47,7 @@ config/
   config.json              # gitignored: THE single config — all knobs + a "secrets" block
   config.example.json      # committed: template (safe defaults + "SECRET" sentinels)
   config.schema.json       # committed: JSON Schema for config.json
-  repos.example.yaml       # committed: example entries for the repos: key (see Repos registry below)
+  repos.example.json       # committed: example entries for the repos: key (see Repos registry below)
 ```
 
 ### Getting started
@@ -930,10 +930,10 @@ repo entry (and thus which Langfuse project) is used for its traces.
 ### Set up
 
 Add a `"repos"` block to `config/config.json` — one entry per repository
-(example entries in `config/repos.example.yaml`):
+(example entries in `config/repos.example.json`):
 
 ```yaml
-# config/repos.yaml (or the "repos" key of config/config.json)
+# config/repos.json (or the "repos" key of config/config.json)
 repos:
   my-repo:
     board_id: "my-board"
@@ -986,7 +986,7 @@ robotsix-mill repos list
 Source: the `"repos"` key of `config/config.json` (overridable via the
 `MILL_REPOS_FILE` env var, which reads the given file directly). Set
 `MILL_REPOS_FILE=""` to disable repos config entirely. Example entries:
-`config/repos.example.yaml`.
+`config/repos.example.json`.
 
 ### Field reference
 

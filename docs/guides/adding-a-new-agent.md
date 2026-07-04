@@ -234,7 +234,7 @@ monkeypatch seam for tests.
 
 ## Step 4 — Add config defaults
 
-Edit `config/config.example.yaml`.  You need two entries:
+Edit `config/config.example.json`.  You need two entries:
 
 1. **Model default** — in the `core.models` block, add the model
    identifier that the `${MILL_<NAME>_MODEL}` env-var reference
@@ -395,7 +395,7 @@ Key points:
 - [ ] `PERIODIC_PASS_CONFIGS` entry in `src/robotsix_mill/runners/periodic_runner.py`
 - [ ] Result dataclass alias (e.g. `HealthPassResult`) in `periodic_runner.py`
 - [ ] Thin runner stub at `src/robotsix_mill/runners/<name>_runner.py`
-- [ ] Config defaults in `config/config.example.yaml` (model + per-agent block)
+- [ ] Config defaults in `config/config.example.json` (model + per-agent block)
 - [ ] Task attribute in `src/robotsix_mill/runtime/worker/core.py`
 - [ ] Poll-loop wiring (periodic) **or** HTTP route (`_passes.py`)
 - [ ] Shutdown cancellation entry in `core.py`

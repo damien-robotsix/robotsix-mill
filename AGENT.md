@@ -197,7 +197,7 @@ pre-commit hook and CI step, both running
 ### `module_curator` periodic agent
 
 A read-only agent runs daily (configurable via
-`module_curator_interval_seconds` in `config/config.example.yaml`,
+`module_curator_interval_seconds` in `config/config.example.json`,
 default 86400 s). It **never** moves files, deletes files, or edits
 `docs/modules.yaml`. Its tools are `explore`, `read_file`, `list_dir`,
 and `run_command`.

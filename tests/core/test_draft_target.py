@@ -366,14 +366,14 @@ def test_referenced_mill_paths_absent_git_check_ignore_fails_open(
 def test_referenced_mill_paths_absent_config_yaml_ignored_scenario(
     tmp_path, monkeypatch
 ):
-    """The specific ticket scenario: ``config/config.yaml`` is absent and
+    """The specific ticket scenario: ``config/config.json`` is absent and
     gitignored → excluded (no false-positive consumer-migration ticket)."""
     monkeypatch.setattr(
         "robotsix_mill.core.draft_target.git_ops.ignored_paths",
-        lambda _repo, paths: ["config/config.yaml"],
+        lambda _repo, paths: ["config/config.json"],
     )
     result = referenced_mill_paths_absent(
-        title="Fix config/config.yaml",
+        title="Fix config/config.json",
         body="",
         repo_dir=tmp_path,
     )
@@ -630,16 +630,16 @@ def test_is_spec_descriptive_path_source_tree_prefixes_return_false():
     assert not _is_spec_descriptive_path("agent_definitions/refine.yaml")
 
 
-def test_is_spec_descriptive_path_bare_config_yaml():
-    """Bare config/config.yaml and config/config.example.json are conceptual."""
-    assert _is_spec_descriptive_path("config/config.yaml")
+def test_is_spec_descriptive_path_bare_config_json():
+    """Bare config/config.json and config/config.example.json are conceptual."""
+    assert _is_spec_descriptive_path("config/config.json")
     assert _is_spec_descriptive_path("config/config.example.json")
-    assert _is_spec_descriptive_path("CONFIG/CONFIG.YAML")
+    assert _is_spec_descriptive_path("CONFIG/CONFIG.JSON")
 
 
 def test_is_spec_descriptive_path_config_under_src_not_conceptual():
-    """config/config.yaml under src/ is a source-tree path, not conceptual."""
-    assert not _is_spec_descriptive_path("src/robotsix_mill/config/config.yaml")
+    """config/config.json under src/ is a source-tree path, not conceptual."""
+    assert not _is_spec_descriptive_path("src/robotsix_mill/config/config.json")
     assert not _is_spec_descriptive_path("src/myapp/config/config.example.json")
 
 

@@ -81,7 +81,7 @@ class RepoConfig(BaseModel):
         description="Langfuse instance base URL (default: https://cloud.langfuse.com).",
     )
     # NOTE: the langfuse_* fields above are populated centrally from the
-    # global Langfuse credentials in the config.yaml secrets block (see _apply_global_langfuse).
+    # global Langfuse credentials in the config.json secrets block (see _apply_global_langfuse).
     # They are identical across every repo — there is no per-repo Langfuse
     # configuration.
     # Per-repo OpenRouter inference key.
@@ -380,7 +380,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
 
     _validate_cross_repo_forge_compat(repos, load_settings().forge_kind)
 
-    # Single global Langfuse project: the langfuse_* keys in the config.yaml secrets block
+    # Single global Langfuse project: the langfuse_* keys in the config.json secrets block
     # configure observability for EVERY repo and the meta board. There is no
     # per-repo Langfuse config (sessions stay per-repo legible via the
     # repo-qualified session id — see runtime.tracing.qualify_session).
@@ -407,7 +407,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
 
 def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
     """Populate every repo and the meta board from the global Langfuse
-    credentials in the config.yaml ``secrets:`` block (``Secrets.langfuse_*``) — the one place
+    credentials in the config.json ``secrets:`` block (``Secrets.langfuse_*``) — the one place
     Langfuse is configured.
 
     Returns the meta-board ``RepoConfig`` (or ``None`` when the credentials

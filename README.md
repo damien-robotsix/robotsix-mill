@@ -47,20 +47,20 @@ pragmatic security stance.
 Settings are managed through a YAML pipeline (see
 [docs/configuration.md](docs/configuration.md) for full details):
 
-- **`config/config.yaml`** — THE single config file (gitignored): every
+- **`config/config.json`** — THE single config file (gitignored): every
   non-secret knob plus a top-level `secrets:` block (API keys, tokens).
-- **`config/config.example.yaml`** — committed template (safe defaults +
+- **`config/config.example.json`** — committed template (safe defaults +
   `SECRET` sentinel placeholders); the source of truth for every
   configurable knob.
 - **Environment variables** — any `MILL_*` variable overrides the
-  YAML value (e.g. `MILL_MODEL=anthropic/claude-sonnet-4`).
-- **`repos:` key in `config/config.yaml`** — per-repo board config
-  (a standalone `config/repos.yaml` is no longer read). Example
-  entries at `config/repos.example.yaml`.
+  JSON value (e.g. `MILL_MODEL=anthropic/claude-sonnet-4`).
+- **`repos:` key in `config/config.json`** — per-repo board config
+  (a standalone `config/repos.json` is no longer read). Example
+  entries at `config/repos.example.json`.
 
-The loading order is: `config/config.yaml` (else the committed
-`config/config.example.yaml`) → environment variables (highest). The
-loader falls back to the committed example when `config.yaml` is absent.
+The loading order is: `config/config.json` (else the committed
+`config/config.example.json`) → environment variables (highest). The
+loader falls back to the committed example when `config.json` is absent.
 
 ## Getting started
 
@@ -74,13 +74,13 @@ loader falls back to the committed example when `config.yaml` is absent.
 ```sh
 git clone https://github.com/damien-robotsix/robotsix-mill.git
 cd robotsix-mill
-cp config/config.example.yaml config/config.yaml         # set secrets.openrouter_api_key + any overrides
-# then add a `repos:` block to config/config.yaml (example entries
-# in config/repos.example.yaml)
+cp config/config.example.json config/config.json         # set secrets.openrouter_api_key + any overrides
+# then add a `repos:` block to config/config.json (example entries
+# in config/repos.example.json)
 ```
 
 > **Note:** `board_id` is mandatory — every ticket must belong to a repo
-> configured under the `repos:` key of `config/config.yaml`. There is no
+> configured under the `repos:` key of `config/config.json`. There is no
 > longer a board-less default. For single-repo deployments, configure
 > exactly one repo.
 

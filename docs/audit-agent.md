@@ -47,7 +47,7 @@ curl -X POST http://localhost:8077/audit
 
 **Periodic polling (opt-in):**
 ```yaml
-# In config/config.yaml:
+# In config/config.json:
 periodic:
   audit:
     enabled: true

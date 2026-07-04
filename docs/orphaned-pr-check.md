@@ -11,7 +11,7 @@ Detects open PRs on managed repos with no active mill ticket driving them
 and either auto-closes obsolete ones or files a tracking ticket.
 
 **Enabling.** Opt-in — default `false`. Set
-`orphaned_pr_check.enabled` to `true` in `config/config.yaml`.
+`orphaned_pr_check.enabled` to `true` in `config/config.json`.
 
 **Dry-run.** Default `true` (safe). Logs all actions but makes no forge
 mutations. Set `orphaned_pr_check.dry_run` to `false` for real closes and
@@ -99,7 +99,7 @@ dry_run=<true|false>
 
 ## Config example
 
-From `config/config.example.yaml`:
+From `config/config.example.json`:
 
 ```yaml
 periodic:

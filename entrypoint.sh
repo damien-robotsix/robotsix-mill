@@ -19,14 +19,14 @@ if [[ "$(id -u)" == "0" ]]; then
     # host docker.sock to join — skip the GID step entirely. Instead,
     # reconcile the config volume that central-deploy populated.
     #
-    # The mill now reads a SINGLE config file: /app/config/config.yaml,
+    # The mill now reads a SINGLE config file: /app/config/config.json,
     # which central-deploy writes into the mill-config volume and which
     # holds every non-secret knob plus a top-level `secrets:` block. No
     # split / overlay reconstruction is needed. Lock it down (it carries
     # real credentials) and hand config + data to the unprivileged runtime
-    # user so it can read config.yaml and write its DB.
-    if [[ -f /app/config/config.yaml ]]; then
-      chmod 600 /app/config/config.yaml 2>/dev/null || true
+    # user so it can read config.json and write its DB.
+    if [[ -f /app/config/config.json ]]; then
+      chmod 600 /app/config/config.json 2>/dev/null || true
     fi
     chown -R mill:mill /app/config 2>/dev/null || true
     chown mill:mill /data 2>/dev/null || true

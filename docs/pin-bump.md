@@ -32,7 +32,7 @@ dispatch, and network egress requirements.
 ### Global defaults
 
 The master switch and interval live under `periodic.pin_bump` in
-`config/config.yaml` (defaults in `config/config.example.yaml`):
+`config/config.json` (defaults in `config/config.example.json`):
 
 ```yaml
 periodic:
@@ -155,7 +155,7 @@ through the existing `extra_sandbox_packages` mechanism or by baking
 credentials into the sandbox image.
 
 To create PRs, the pin-bump pass uses the standard forge credentials
-already configured in `config/config.yaml` (`forge_token` or GitHub
+already configured in `config/config.json` (`forge_token` or GitHub
 App). No additional forge credentials are needed.
 
 ---

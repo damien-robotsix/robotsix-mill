@@ -50,7 +50,7 @@ curl -X POST http://localhost:8077/trace-health
 
 **Periodic polling (opt-in):**
 ```yaml
-# In config/config.yaml:
+# In config/config.json:
 periodic:
   trace_health:
     enabled: true

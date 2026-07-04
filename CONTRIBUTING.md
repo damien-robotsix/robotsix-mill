@@ -5,7 +5,7 @@
 Python **3.14** is required (see [`.python-version`](.python-version)).
 
 ```bash
-cp config/config.example.yaml config/config.yaml   # fill in secrets.openrouter_api_key at minimum
+cp config/config.example.json config/config.json   # fill in secrets.openrouter_api_key at minimum
 make install                  # editable install into .venv with dev+tracing extras
 make dev                      # hot-reload server on http://127.0.0.1:8077
 make test                     # pytest with coverage (fail-under 70%)

@@ -40,7 +40,7 @@ AUTHORITATIVE FILES (read these, in order):
   default); its ``secrets:`` block is the schema template for the
   ``Secrets`` class (every secret field should appear as a key with the
   ``SECRET`` sentinel value).
-- ``config/repos.example.yaml`` — schema template for per-repo
+- ``config/repos.example.json`` — schema template for per-repo
   config (``RepoConfig`` fields).
 - ``docs/configuration.md`` — operator-facing documentation. When
   present, every documented option's default should match the

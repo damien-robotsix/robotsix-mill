@@ -12,13 +12,13 @@ clone data.
 
 No registration is needed: the meta board is synthetic and is
 constructed automatically (`repo_id`/`board_id` `"meta"`).  It does
-not appear under the `repos:` key of `config/config.yaml` and has no
+not appear under the `repos:` key of `config/config.json` and has no
 clone or forge remote.
 
 ### Langfuse credentials
 
 Langfuse is configured **globally** (the `langfuse_*` entries of the
-`secrets:` block in `config/config.yaml`); the meta board — like every
+`secrets:` block in `config/config.json`); the meta board — like every
 repo — is populated from those credentials at load time.  When they
 are absent, the meta-agent simply runs untraced.
 

@@ -1,7 +1,7 @@
 # Delivery identity: GitHub App bot (recommended) or PAT
 
 The `deliver` stage pushes the ticket branch and opens a Pull Request.
-Two ways to authenticate, set via `FORGE_AUTH` in `config/config.yaml`
+Two ways to authenticate, set via `FORGE_AUTH` in `config/config.json`
 (or as an environment variable):
 
 | `FORGE_AUTH` | Identity on the PR/commits | Setup |
@@ -19,7 +19,7 @@ identity as robotsix-project.
 ## Common forge settings
 
 ```yaml
-# config/config.yaml
+# config/config.json
 forge:
   kind: github
   remote_url: https://github.com/<owner>/<repo>.git
@@ -29,7 +29,7 @@ forge:
 ## Option A — PAT (quick, for testing)
 
 ```yaml
-# config/config.yaml
+# config/config.json
 secrets:
   forge_token: <token>
 ```
@@ -98,13 +98,13 @@ installation automatically from `FORGE_REMOTE_URL`.)
 ### 4. Configure settings and secrets
 
 ```yaml
-# config/config.yaml
+# config/config.json
 forge:
   auth_mode: app
 ```
 
 ```yaml
-# config/config.yaml
+# config/config.json
 secrets:
   github_app_id: "<the integer App ID>"
   # Either point at the .pem file (recommended via bind mount):
@@ -159,7 +159,7 @@ if the operator registers separate credentials.
 > **Different Apps per repo**: if repos need separate GitHub App
 > identities, register each App, install it on the relevant repo, and
 > provide per-App credentials. Currently the mill uses a single
-> `GITHUB_APP_ID` / private key pair (from the `config.yaml` `secrets:` block); per-repo
+> `GITHUB_APP_ID` / private key pair (from the `config.json` `secrets:` block); per-repo
 > App credentials are a future enhancement. For most deployments, one
 > App installed on all repos is sufficient.
 
@@ -174,7 +174,7 @@ compatibility with single-repo deployments.
   implement agent runs in the separate `--network none` sandbox and
   cannot read it (see [docker-architecture.md](docker-architecture.md)).
 - `GITHUB_APP_PRIVATE_KEY*` and `FORGE_TOKEN` are secrets — keep them in
-  the gitignored `config/config.yaml` `secrets:` block (or a mounted file); never commit them.
+  the gitignored `config/config.json` `secrets:` block (or a mounted file); never commit them.
 - GitHub Enterprise: set `MILL_GITHUB_API_URL=https://<host>/api/v3`.
 - Bot commit authorship: the PR is authored by the bot; commit author
   is mill's git identity. Setting commits to the bot too is a future

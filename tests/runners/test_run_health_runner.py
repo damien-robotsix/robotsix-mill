@@ -48,7 +48,7 @@ def test_digest_flags_failures_and_excludes_healthy(tmp_path, monkeypatch):
             "kind": "bc_check",
             "started_at": recent,
             "status": "error",
-            "error": "YAML parse error in config/config.yaml",
+            "error": "JSON parse error in config/config.json",
             "summary": "",
         },
         # OK but degraded summary -> flagged
@@ -110,14 +110,14 @@ def test_recurring_failures_collapse_into_one_group(tmp_path, monkeypatch):
             "kind": "bc_check",
             "started_at": t1,
             "status": "error",
-            "error": "YAML parse error in /tmp/clone-abc123/config/config.yaml could not find expected :",
+            "error": "JSON parse error in /tmp/clone-abc123/config/config.json could not find expected :",
         },
         {
             "id": "2",
             "kind": "bc_check",
             "started_at": t2,
             "status": "error",
-            "error": "YAML parse error in /tmp/clone-def456/config/config.yaml could not find expected :",
+            "error": "JSON parse error in /tmp/clone-def456/config/config.json could not find expected :",
         },
     ]
     _write_runs(tmp_path, "robotsix-mill", entries)

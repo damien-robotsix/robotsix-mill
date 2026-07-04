@@ -14,7 +14,7 @@
 # root-equivalent control of the host daemon. Only ./.data is bound in;
 # the project source is NOT, so the agent has no path to it. The host
 # path of `./.data` is set via `sandbox.data_mount` in
-# config/config.yaml (the bind-mount target on the host docker
+# config/config.json (the bind-mount target on the host docker
 # daemon's filesystem — needed because the sibling sandbox runs
 # outside the mill container).
 
@@ -58,9 +58,9 @@ services:
     # docker GID — 959, 999, 1000 — Just Works).
     volumes:
       - ./.data:/data
-      # Bind-mount config/ so the single config file (config.yaml, with
+      # Bind-mount config/ so the single config file (config.json, with
       # its secrets: block) is picked up without rebuilding the image.
-      # The committed config.example.yaml still exists in the image; the
+      # The committed config.example.json still exists in the image; the
       # bind shadows it with the host's same files plus
       # any overrides.
       - ./config:/app/config

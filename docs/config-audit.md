@@ -1,14 +1,14 @@
 # Configuration Audit
 
 > **SUPERSEDED (historical).** This audit predates the single-file config
-> migration. The mill now reads ONE file — `config/config.yaml` (else the
-> committed `config/config.example.yaml`), with secrets under a top-level
+> migration. The mill now reads ONE file — `config/config.json` (else the
+> committed `config/config.example.json`), with secrets under a top-level
 > `secrets:` block. The multi-file layout described below
 > (`mill.defaults.yaml` / `mill.local.yaml` / `mill.production.yaml` /
 > `secrets.yaml`) no longer exists. See `docs/configuration.md` for the
 > current model; this doc is kept for historical analysis only.
 
-> Generated from a full-repo survey of `config.py`, `config/config.example.yaml`,
+> Generated from a full-repo survey of `config.py`, `config/config.example.json`,
 > `docs/configuration.md`, `Dockerfile`,
 > `docker-compose.yml`, CI workflows, shell scripts, and all source files
 > that read config values.

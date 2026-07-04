@@ -20,7 +20,7 @@ def test_config_sync_system_prompt_covers_key_dimensions():
     for kw in (
         "config.py",
         "config.example.json",
-        "repos.example.yaml",
+        "repos.example.json",
         "docs/configuration.md",
         "missing-from-json",
         "stale-json-key",

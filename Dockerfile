@@ -111,7 +111,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
 # from inside the sandbox. `gh` lives in the app image too because the
-# dev-pinned sandbox runs `robotsix/mill:dev` (config/config.yaml
+# dev-pinned sandbox runs `robotsix/mill:dev` (config/config.json
 # `sandbox.image`), not `robotsix/mill-sandbox`, so it must be in the `base`
 # stage to reach that path; every image derived from base (dev, production)
 # inherits it. `gh` is not in Debian's default apt repos, so add the official
@@ -179,9 +179,9 @@ ENV MILL_BUILD_SHA=${MILL_BUILD_SHA}
 
 # Runtime config used to be set here via MILL_* env vars (data_dir,
 # api_host, api_url). The MILL_* alias surface was retired in
-# 9cd2630; the equivalent settings now live in config/config.yaml
+# 9cd2630; the equivalent settings now live in config/config.json
 # (data_dir, api_host, api_url) and ship to the container via the
-# config/ bind-mount in docker-compose.yml. See config/config.example.yaml
+# config/ bind-mount in docker-compose.yml. See config/config.example.json
 # for the canonical operator surface.
 EXPOSE 8077
 
@@ -246,11 +246,11 @@ FROM base AS production
 COPY entrypoint.sh /app/entrypoint.sh
 
 # central-deploy support: the mill now reads a SINGLE config file,
-# /app/config/config.yaml, which central-deploy writes into the
+# /app/config/config.json, which central-deploy writes into the
 # mill-config named volume (every non-secret knob plus a top-level
 # `secrets:` block). The deploy entrypoint just chmod 600's it and hands
 # it to the runtime user — no defaults-seeding or split step. See
-# deploy/docker-compose.yml and config/config.example.yaml.
+# deploy/docker-compose.yml and config/config.example.json.
 
 # Entrypoint runs as root, joins the host's docker.sock group, then
 # drops to mill via runuser. (No USER mill here.)
