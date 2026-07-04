@@ -4,6 +4,7 @@
   touches no ``.py`` files (doc-only, changelog-only, config-only PRs),
   ruff, mypy, and deptry are skipped, saving ~60-80s of wall-clock time
   per ticket.
+- Add prompt rule to implement agent: do not `explore` to confirm an empty `list_threads` result — proceed with the task and note the inability to reply in structured output.
 - Deps: add `robotsix-config` (pinned commit `d29de204`) as a dependency to unblock the config-standard migration (`33bf`/`da3e`) prerequisite gate; deptry-ignored until imported.
 - Pipeline: a ticket already satisfied on main (empty diff vs base — clean tree, no commits beyond base, no surviving edits, tests green) now terminates DONE instead of looping empty PRs in `blocked`. Real-diff failures still block. Added an operator escape hatch: `mark-done` now works from `blocked`/`rebasing`.
 - Fix `mill-socket-proxy` crash-loop: add `tmpfs: /run` for haproxy pidfile and patch the `docker-events` backend with required timeouts (`timeout connect`, `timeout http-request`, `timeout http-keep-alive`) for haproxy 3.x compatibility.
