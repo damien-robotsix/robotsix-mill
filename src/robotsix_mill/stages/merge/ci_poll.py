@@ -194,9 +194,7 @@ class CIPollMixin(_MergeStageBase):
             # — the actual code change is already on main.  This prevents
             # changelog-only no-op tickets from looping BLOCKED → resume
             # forever when the forge closes their empty-code PR.
-            return not git_ops.branch_has_substantive_diff(
-                repo_path, target, ref=ref
-            )
+            return not git_ops.branch_has_substantive_diff(repo_path, target, ref=ref)
         except Exception:  # noqa: BLE001 — fail safe: keep BLOCKED on any error
             return False
 

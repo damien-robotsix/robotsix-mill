@@ -442,6 +442,14 @@ class ImplementationLogicMixin(_ImplementStageBase):
                     next_action="return",
                     outcome=Outcome(State.DONE, f"no change needed — {short}"),
                 )
+            # Shared no-change summary — defined here so both the
+            # empty-diff block below and the ceremonial-only guard
+            # further down can reference it.
+            no_change_summary = summary or (
+                "Agent finished without producing any file edits and "
+                "without explanation. Check artifacts/implement_messages.json "
+                "for the full transcript."
+            )
             if (
                 not cls._any_repo_has_changes(
                     repo_dir, extra_roots, target, settings=settings
@@ -475,11 +483,6 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 # When NEITHER guard fires, the agent looked and made no
                 # (surviving) edits: the spec is already satisfied. Close
                 # DONE with a clear terminal note instead of looping.
-                no_change_summary = summary or (
-                    "Agent finished without producing any file edits and "
-                    "without explanation. Check artifacts/implement_messages.json "
-                    "for the full transcript."
-                )
                 # Guard (a): gitignored-edit detector. Real writes into a
                 # gitignored path (e.g. a manifest board whose ``.gitignore``
                 # carries ``/src/*`` for vcs-imported sub-repos) are
@@ -590,26 +593,27 @@ class ImplementationLogicMixin(_ImplementStageBase):
             # Only fires when the branch is NOT ahead of main (no commits
             # beyond origin/target) — if there are real commits on the
             # branch, the net diff must be evaluated, not just the WT.
-            if not resuming and not git_ops.branch_is_ahead_of_main(
-                repo_dir, target
-            ):
+            if not resuming and not git_ops.branch_is_ahead_of_main(repo_dir, target):
                 try:
                     diff_out = subprocess.run(
                         [
-                            "git", "-C", str(repo_dir),
-                            "diff", "--name-only", "HEAD",
+                            "git",
+                            "-C",
+                            str(repo_dir),
+                            "diff",
+                            "--name-only",
+                            "HEAD",
                         ],
                         capture_output=True,
                         text=True,
                     ).stdout
                 except Exception:
                     diff_out = ""
-                wt_files = [
-                    f for f in diff_out.strip().split("\n") if f
-                ] if diff_out else []
+                wt_files = (
+                    [f for f in diff_out.strip().split("\n") if f] if diff_out else []
+                )
                 substantive_wt = [
-                    f for f in wt_files
-                    if f not in git_ops.CEREMONIAL_FILES
+                    f for f in wt_files if f not in git_ops.CEREMONIAL_FILES
                 ]
                 if wt_files and not substantive_wt:
                     done_note = (
@@ -627,8 +631,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
                         extra_roots=extra_roots,
                     )
                     log.info(
-                        "%s: ceremonial-only WT changes — DONE "
-                        "(already satisfied)",
+                        "%s: ceremonial-only WT changes — DONE (already satisfied)",
                         ticket.id,
                     )
                     return _SinglePassResult(

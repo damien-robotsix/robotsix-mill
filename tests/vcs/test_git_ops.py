@@ -669,6 +669,118 @@ class TestBranchHasNetDiff:
 
 
 # ===========================================================================
+# 12a2. branch_has_substantive_diff — integration (real git)
+# ===========================================================================
+
+
+class TestBranchHasSubstantiveDiff:
+    def test_no_diff_returns_false(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        result = git_ops.branch_has_substantive_diff(dest)
+        assert result is False
+
+    def test_with_substantive_diff_returns_true(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("diff content")
+        git_ops.commit_all(dest, "add new.txt")
+        result = git_ops.branch_has_substantive_diff(dest)
+        assert result is True
+
+    def test_changelog_only_returns_false(self, tmp_path):
+        """A branch whose only diff is CHANGELOG.md is treated as empty
+        (the substantive change is already on main)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "CHANGELOG.md").write_text("## 0.0.0\n- entry\n")
+        git_ops.commit_all(dest, "changelog only")
+        result = git_ops.branch_has_substantive_diff(dest)
+        assert result is False
+
+    def test_changelog_and_code_returns_true(self, tmp_path):
+        """Mixed ceremonial + substantive diff is still substantive."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "CHANGELOG.md").write_text("## 0.0.0\n- entry\n")
+        (dest / "real_change.py").write_text("print(1)")
+        git_ops.commit_all(dest, "changelog + code")
+        result = git_ops.branch_has_substantive_diff(dest)
+        assert result is True
+
+    def test_explicit_ref(self, tmp_path):
+        """Optional ref arg checks a named branch, not HEAD."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("diff content")
+        git_ops.commit_all(dest, "add new.txt")
+        git_ops.checkout(dest, "main")
+        assert git_ops.branch_has_substantive_diff(dest, ref="HEAD") is False
+        assert git_ops.branch_has_substantive_diff(dest, ref="feature") is True
+
+
+# ===========================================================================
+# 12a3. branch_diff_files — integration (real git)
+# ===========================================================================
+
+
+class TestBranchDiffFiles:
+    def test_no_diff_returns_empty(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        files = git_ops.branch_diff_files(dest)
+        assert files == []
+
+    def test_with_diff_returns_files(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "a.txt").write_text("a")
+        (dest / "b.txt").write_text("b")
+        git_ops.commit_all(dest, "two files")
+        files = git_ops.branch_diff_files(dest)
+        assert sorted(files) == ["a.txt", "b.txt"]
+
+    def test_explicit_ref(self, tmp_path):
+        """Optional ref arg checks a named branch."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feat")
+        git_ops.commit_all(dest, "feat commit")
+        git_ops.checkout(dest, "main")
+        assert git_ops.branch_diff_files(dest, ref="HEAD") == []
+        assert "feat.txt" in (git_ops.branch_diff_files(dest, ref="feature") or [])
+
+
+# ===========================================================================
+# 12a4. CEREMONIAL_FILES — unit
+# ===========================================================================
+
+
+class TestCeremonialFiles:
+    def test_changelog_is_ceremonial(self):
+        assert "CHANGELOG.md" in git_ops.CEREMONIAL_FILES
+
+    def test_is_frozenset(self):
+        assert isinstance(git_ops.CEREMONIAL_FILES, frozenset)
+
+
+# ===========================================================================
 # 12b. branch_is_behind_main — integration (real git, custom target_branch)
 # ===========================================================================
 

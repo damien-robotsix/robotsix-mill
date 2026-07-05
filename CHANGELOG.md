@@ -13,6 +13,12 @@
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.
+- Detect no-op tickets (change already satisfied on main): the implement stage now
+  terminates ceremonial-only (CHANGELOG.md) working-tree changes as DONE instead of
+  opening empty PRs. The deliver and merge stages use `branch_has_substantive_diff`
+  to recognise changelog-only branches as already satisfied. Force-close
+  (mark-done) from BLOCKED/REBASING now also bypasses the changelog-duplicate
+  check, providing a reliable escape hatch for stuck no-op tickets. (mill: Detect no-op tickets (change already satisfied) and mark done instead of looping empty-diff PRs (20260704T204118Z-detect-no-op-tickets-change-already-sati-7bb0) [WIP])
 - Sandbox (deploy mode): re-establish the internal egress network and the
   `sandbox-proxy` attachment before **every** sandbox spawn instead of once
   per process. A deploy can recreate the `sandbox-proxy` sibling at any
