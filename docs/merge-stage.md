@@ -218,4 +218,4 @@ ADDRESSING_REVIEW                                      │
 
 - [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference
-- [docs/agents.md](agents.md) — agent catalog
+- [docs/agents/index.md](agents/index.md) — agent catalog

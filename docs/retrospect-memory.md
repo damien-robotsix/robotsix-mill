@@ -20,4 +20,4 @@ Configure via `MILL_RETROSPECT_MEMORY_PATH` (defaults to
 
 - [index.md](index.md) — documentation home
 - [docs/configuration.md](configuration.md) — full env-var reference
-- [docs/agents.md](agents.md) — agent catalog
+- [docs/agents/index.md](agents/index.md) — agent catalog

@@ -9,7 +9,7 @@ theme:
 
 nav:
   - Home: index.md
-  - Agent Communication Research: agent-communication-research.md
+  - Agent Communication Research: agents/communication-research.md
   - Configuration & Deployment:
       - Configuration reference: configuration.md
       - Observability: observability.md
@@ -23,21 +23,21 @@ nav:
       - Config audit: config-audit.md
       - "RFC: config v2": rfc-config-v2.md
   - Pipeline:
-      - Agent catalog: agents.md
+      - Agent catalog: agents/index.md
       - Approval gate: approval-gate.md
       - Dedup guard: dedup-guard.md
       - Merge stage: merge-stage.md
       - Epic dedup: epic-dedup.md
-      - "AGENT.md candidates": agent-md-candidates.md
+      - "AGENT.md candidates": agents/md-candidates.md
       - Scope triage: scope-triage.md
   - Agents & Internals:
-      - Audit agent: audit-agent.md
+      - Audit agent: agents/audit-agent.md
       - Blocked ticket recovery: blocked-ticket-recovery.md
       - Retrospect memory: retrospect-memory.md
       - Trace-health check: trace-health.md
-      - Diagnostic agent: diagnostic-agent.md
+      - Diagnostic agent: agents/diagnostic-agent.md
       - Expert YAML schema: expert-yaml-schema.md
-      - Agent YAML schema: agent-yaml-schema.md
+      - Agent YAML schema: agents/agent-yaml-schema.md
       - Meta board: meta-board.md
   - Operations:
       - Board operations: board-operations.md
@@ -55,7 +55,7 @@ nav:
   - Guides:
       - Adding a New Agent: guides/adding-a-new-agent.md
   - API Reference:
-      - Agents: reference/agents.md
+      - Agents: agents/reference.md
       - Core: reference/core.md
       - Runtime: reference/runtime.md
       - Stages: reference/stages.md

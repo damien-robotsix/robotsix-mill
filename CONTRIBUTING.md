@@ -105,7 +105,7 @@ Python module supplies the output model class and the entry function.
 ### YAML-first workflow (preferred for new agents)
 
 1. Create `agent_definitions/<name>.yaml` with the agent's fields
-   (see [`docs/agent-yaml-schema.md`](docs/agent-yaml-schema.md) for
+   (see [`docs/agents/agent-yaml-schema.md`](docs/agents/agent-yaml-schema.md) for
    the full reference, and `agent_definitions/refine.yaml` as the
    canonical example).
 
@@ -175,7 +175,7 @@ implementations (they are the simplest end-to-end examples):
      `tools`, `web`, `report_issue`, `output_type`, `module`, and `skills`.
    - See [`agent_definitions/refine.yaml`](agent_definitions/refine.yaml)
      for the canonical example and
-     [`docs/agent-yaml-schema.md`](docs/agent-yaml-schema.md) for the
+     [`docs/agents/agent-yaml-schema.md`](docs/agents/agent-yaml-schema.md) for the
      field reference.
 
 2. **Agent module** — `agents/<name>.py` (or `<module>.py` if different)

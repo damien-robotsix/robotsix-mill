@@ -69,7 +69,7 @@ system_prompt: |
 
 ### Schema reference
 
-The complete field reference lives at [Agent YAML Schema](../agent-yaml-schema.md).
+The complete field reference lives at [Agent YAML Schema](../agents/agent-yaml-schema.md).
 Key points for a periodic agent:
 
 | Field | Notes |

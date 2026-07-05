@@ -81,5 +81,5 @@ periodic:
 ## See also
 
 - [index.md](index.md) — documentation home
-- [docs/agents.md](agents.md) — agent catalog
+- [docs/agents/index.md](agents/index.md) — agent catalog
 - [docs/configuration.md](configuration.md) — full env-var reference

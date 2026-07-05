@@ -147,7 +147,7 @@ Routes live in
 
 ## See also
 
-- [index.md](index.md) — documentation home
-- [docs/board-operations.md](board-operations.md) — board UI and automated column
+- [index.md](../index.md) — documentation home
+- [docs/board-operations.md](../board-operations.md) — board UI and automated column
   transitions
-- [docs/agents.md](agents.md) — agent catalog (includes retrospect)
+- [agent catalog](index.md) — agent catalog (includes retrospect)

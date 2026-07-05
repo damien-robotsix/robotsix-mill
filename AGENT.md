@@ -133,7 +133,7 @@ are:
 
 Validation lives in `tests/agents/test_yaml_loader.py` — there is no
 Pydantic validator on the production `AgentDefinition` model. See
-`docs/agent-yaml-schema.md` for the full field reference.
+`docs/agents/agent-yaml-schema.md` for the full field reference.
 
 ## Meta-agent
 

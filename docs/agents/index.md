@@ -97,12 +97,12 @@ Shared modules used to build and equip agents.
 
 ## See also
 
-- [index.md](index.md) — documentation home
+- [index.md](../index.md) — documentation home
 - [agent-yaml-schema.md](agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
-- [expert-yaml-schema.md](expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
-- [docs/configuration.md](configuration.md) — full env-var reference (maps every model var to its agent)
-- [docs/audit-agent.md](audit-agent.md) — audit agent deep dive
-- [docs/trace-health.md](trace-health.md) — trace-health check deep dive
-- [docs/retrospect-memory.md](retrospect-memory.md) — retrospect memory ledger
-- [docs/merge-stage.md](merge-stage.md) — merge stage (rebase + CI-fix)
-- [docs/scope-triage.md](scope-triage.md) — scope-triage classifier (EXPAND / REJECT / ESCALATE verdicts and cleanup behavior)
+- [expert-yaml-schema.md](../expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
+- [docs/configuration.md](../configuration.md) — full env-var reference (maps every model var to its agent)
+- [audit-agent.md](audit-agent.md) — audit agent deep dive
+- [docs/trace-health.md](../trace-health.md) — trace-health check deep dive
+- [docs/retrospect-memory.md](../retrospect-memory.md) — retrospect memory ledger
+- [docs/merge-stage.md](../merge-stage.md) — merge stage (rebase + CI-fix)
+- [docs/scope-triage.md](../scope-triage.md) — scope-triage classifier (EXPAND / REJECT / ESCALATE verdicts and cleanup behavior)
