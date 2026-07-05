@@ -1595,9 +1595,9 @@ def test_trivial_scope_routes_to_cheap_model(ctx_factory, monkeypatch, tmp_path)
     # Cheap route: refining model is the subscription alias (sonnet).
     assert (
         refine_kwargs.get("refine_model")
-        == ctx.settings.refine_trivial_subscription_model
+        == "sonnet"
     ), (
-        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"Expected refine_model=\"sonnet\" "
         f"on cheap route, got {refine_kwargs.get('refine_model')!r}"
     )
     assert (
@@ -1824,9 +1824,9 @@ def test_findings_present_downgrades_opus_to_sonnet(ctx_factory, monkeypatch, tm
     _run_agent(ctx, t, tmp_path)
 
     assert refine_kwargs.get("refine_model") == (
-        ctx.settings.refine_subscription_model_findings
+        "sonnet"
     ), (
-        f"Expected refine_model={ctx.settings.refine_subscription_model_findings!r}, "
+        f"Expected refine_model=\"sonnet\", "
         f"got {refine_kwargs.get('refine_model')!r}"
     )
     assert refine_kwargs.get("refine_level") is None, (
@@ -1861,9 +1861,9 @@ def test_short_findings_keeps_opus(ctx_factory, monkeypatch, tmp_path):
     _run_agent(ctx, t, tmp_path)
 
     assert refine_kwargs.get("refine_model") == (
-        ctx.settings.refine_subscription_model_complex
+        "opus"
     ), (
-        f"Expected refine_model={ctx.settings.refine_subscription_model_complex!r}, "
+        f"Expected refine_model=\"opus\", "
         f"got {refine_kwargs.get('refine_model')!r}"
     )
 
@@ -1895,9 +1895,9 @@ def test_no_findings_keeps_opus(ctx_factory, monkeypatch, tmp_path):
     _run_agent(ctx, t, tmp_path)
 
     assert refine_kwargs.get("refine_model") == (
-        ctx.settings.refine_subscription_model_complex
+        "opus"
     ), (
-        f"Expected refine_model={ctx.settings.refine_subscription_model_complex!r}, "
+        f"Expected refine_model=\"opus\", "
         f"got {refine_kwargs.get('refine_model')!r}"
     )
 
@@ -1929,9 +1929,9 @@ def test_findings_downgrade_flag_off_keeps_opus(ctx_factory, monkeypatch, tmp_pa
     _run_agent(ctx, t, tmp_path)
 
     assert refine_kwargs.get("refine_model") == (
-        ctx.settings.refine_subscription_model_complex
+        "opus"
     ), (
-        f"Expected refine_model={ctx.settings.refine_subscription_model_complex!r} "
+        f"Expected refine_model=\"opus\" "
         f"(flag off), got {refine_kwargs.get('refine_model')!r}"
     )
 
@@ -1963,9 +1963,9 @@ def test_simple_complexity_unaffected_by_findings(ctx_factory, monkeypatch, tmp_
     _run_agent(ctx, t, tmp_path)
 
     assert refine_kwargs.get("refine_model") == (
-        ctx.settings.refine_subscription_model_default
+        "sonnet"
     ), (
-        f"Expected refine_model={ctx.settings.refine_subscription_model_default!r} "
+        f"Expected refine_model=\"sonnet\" "
         f"(simple path), got {refine_kwargs.get('refine_model')!r}"
     )
     assert refine_kwargs.get("request_limit_override") == (
@@ -2035,9 +2035,9 @@ def test_re_refine_counter_forces_cheap_after_threshold(
     # Forced-cheap route: refining model is the subscription alias.
     assert (
         refine_kwargs.get("refine_model")
-        == ctx.settings.refine_trivial_subscription_model
+        == "sonnet"
     ), (
-        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"Expected refine_model=\"sonnet\" "
         f"on forced-cheap route, got {refine_kwargs.get('refine_model')!r}"
     )
     assert refine_kwargs.get("request_limit_override") == max(
@@ -2139,9 +2139,9 @@ def test_re_refine_first_run_trivial_stays_cheap(ctx_factory, monkeypatch, tmp_p
     # Persisted trivial verdict → cheap route with subscription alias.
     assert (
         refine_kwargs.get("refine_model")
-        == ctx.settings.refine_trivial_subscription_model
+        == "sonnet"
     ), (
-        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"Expected refine_model=\"sonnet\" "
         f"from persisted trivial verdict, got {refine_kwargs.get('refine_model')!r}"
     )
     assert (
@@ -2983,9 +2983,9 @@ def test_trivial_scope_unchanged_by_tier_routing(ctx_factory, monkeypatch, tmp_p
     # Cheap route → sonnet on the subscription, not the tier-routing ladder.
     assert (
         refine_kwargs.get("refine_model")
-        == ctx.settings.refine_trivial_subscription_model
+        == "sonnet"
     ), (
-        f"Expected refine_model={ctx.settings.refine_trivial_subscription_model!r} "
+        f"Expected refine_model=\"sonnet\" "
         f"for trivial (subscription cheap route), "
         f"got {refine_kwargs.get('refine_model')!r}"
     )

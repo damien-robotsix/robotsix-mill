@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Replace plain model-name strings in config settings with llmio level ints: `web_knowledge_model` is now level `1` (was `"deepseek/deepseek-v4-flash"`); removed `refine_trivial_subscription_model`, `refine_subscription_model_default`, `refine_subscription_model_complex`, `refine_subscription_model_findings` string fields — subscription-tier routing now uses hardcoded sonnet/opus aliases internally. The cost profile is preserved; a follow-up llmio change is needed to add a sonnet level for full level-based resolution.
 - Move `docs/expert-yaml-schema.md` → `docs/agent-definitions/expert-yaml-schema.md`, updating all cross-references in README.md, docs/index.md, docs/agents/index.md, and mkdocs.yml; add `docs/agent-definitions/**/*` to the agent-definitions module in docs/modules.yaml.
 - Move dev-tooling docs (`ci-policy.md`, `deployment.md`, `reusable-workflow-callers.md`) from `docs/` to `docs/dev-tooling/`; update `mkdocs.yml` nav, cross-references, and module paths. (mill: Reorganize module dev-tooling: align to per-module layout (src/docs/tests) (20260705T234900Z-reorganize-module-dev-tooling-align-to-p-0030))
 - Move `docs/security.md` → `docs/sandbox/security.md` and update all cross-references (README, ARCHITECTURE, mkdocs.yml). Add `docs/sandbox/**/*` to sandbox module paths in `docs/modules.yaml`.
@@ -22,7 +23,7 @@
   restarted — 2026-07-05 incident, 169 tickets blocked. The attach is
   idempotent and costs two fast docker CLI calls per spawn.
 - Reorganized agent documentation under `docs/agents/`: moved 7 files (`agents.md`, `reference/agents.md`, `agent-communication-research.md`, `agent-md-candidates.md`, `agent-yaml-schema.md`, `audit-agent.md`, `diagnostic-agent.md`) into the new `docs/agents/` subdirectory; updated `mkdocs.yml` nav, `docs/modules.yaml`, and all cross-references.
-- Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
+- Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`. (mill: Config drift: model-name settings bypass llmio levels — migrate to level 1/2/3 per robotsix-standards (20260704T204119Z-config-drift-model-name-settings-bypass-cb1e) [WIP])
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`
 - Migration from `robotsix-yaml-config` → `robotsix-config`: dependency swapped, config layer rewritten to use stdlib `json` + pyyaml for overlay YAML, `JsonSettingsSource` replaces `YamlSettingsSource`, `config/config.example.json` committed (was `.yaml`), schema regeneration updated.
 - Diagnostic investigation: traced "interrupted by process restart" errors across 19 agent/board pairs to `RunRegistry` orphan reconciliation — identified OOM kills under combined mill + sandbox memory pressure as the most likely root cause, with deployment rollouts as a secondary contributor.

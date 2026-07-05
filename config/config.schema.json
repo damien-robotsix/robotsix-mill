@@ -1806,24 +1806,6 @@
           "title": "Refine Skip Llm On Impl Ready Spec",
           "type": "boolean"
         },
-        "refine_subscription_model_complex": {
-          "default": "opus",
-          "description": "Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
-          "title": "Refine Subscription Model Complex",
-          "type": "string"
-        },
-        "refine_subscription_model_default": {
-          "default": "sonnet",
-          "description": "Claude model alias for non-escalated level-3 refines (complexity=simple).",
-          "title": "Refine Subscription Model Default",
-          "type": "string"
-        },
-        "refine_subscription_model_findings": {
-          "default": "sonnet",
-          "description": "Claude model alias used when the findings-present downgrade fires.",
-          "title": "Refine Subscription Model Findings",
-          "type": "string"
-        },
         "refine_subscription_tier_routing_enabled": {
           "default": true,
           "description": "When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
@@ -1849,12 +1831,6 @@
           "description": "When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
           "title": "Refine Trivial Routing Enabled",
           "type": "boolean"
-        },
-        "refine_trivial_subscription_model": {
-          "default": "sonnet",
-          "description": "Claude model alias for trivial/forced-cheap refines on the subscription tier.",
-          "title": "Refine Trivial Subscription Model",
-          "type": "string"
         },
         "refine_usage_warning_threshold": {
           "default": 0.8,
@@ -2578,10 +2554,12 @@
           "type": "integer"
         },
         "web_knowledge_model": {
-          "default": "deepseek/deepseek-v4-flash",
-          "description": "Model alias for the web-knowledge gateway sub-agent.",
+          "default": 1,
+          "description": "Model level for the web-knowledge gateway sub-agent (1=flash, 2=pro, 3=subscription).",
+          "maximum": 3,
+          "minimum": 1,
           "title": "Web Knowledge Model",
-          "type": "string"
+          "type": "integer"
         },
         "web_knowledge_request_limit": {
           "default": 12,

@@ -474,11 +474,11 @@ class RefineAgentMixin:
             refine_model: str | None = None
             request_limit_override: int | None = None
             if _cheap_route:
-                refine_model = s.refine_trivial_subscription_model
+                refine_model = "sonnet"
                 request_limit_override = s.refine_request_limit_simple
             elif refine_level is None and s.refine_subscription_tier_routing_enabled:
                 if triage_complexity == "simple":
-                    refine_model = s.refine_subscription_model_default
+                    refine_model = "sonnet"
                     request_limit_override = s.refine_request_limit_simple
                 elif (
                     s.refine_findings_downgrade_enabled
@@ -486,10 +486,10 @@ class RefineAgentMixin:
                     and len(triage_findings.strip())
                     >= s.refine_findings_downgrade_min_chars
                 ):
-                    refine_model = s.refine_subscription_model_findings
+                    refine_model = "sonnet"
                     set_current_span_attribute("refine.findings_downgrade", True)
                 else:
-                    refine_model = s.refine_subscription_model_complex
+                    refine_model = "opus"
 
             # Dynamic limit: increase budget for large or complex specs.
             # Triggered when the draft exceeds the character threshold

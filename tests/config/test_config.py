@@ -421,8 +421,8 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     (
         "web_knowledge_model",
         "MILL_WEB_KNOWLEDGE_MODEL",
-        "deepseek/deepseek-v4-pro",
-        "deepseek/deepseek-v4-pro",
+        "1",
+        1,
     ),
     ("epic_dedup_lookback_days", "MILL_EPIC_DEDUP_LOOKBACK_DAYS", "14", 14),
     # --- survey agent ---
@@ -548,8 +548,8 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     (
         "web_knowledge_model",
         "MILL_WEB_KNOWLEDGE_MODEL",
-        "deepseek/deepseek-v4-pro",
-        "deepseek/deepseek-v4-pro",
+        "1",
+        1,
     ),
     # --- data_dir_gc ---
     ("data_dir_gc_periodic", "MILL_DATA_DIR_GC_PERIODIC", "0", False),

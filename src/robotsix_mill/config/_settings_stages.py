@@ -587,14 +587,6 @@ class _StagesSettings(BaseModel):
         ge=1,
         le=3,
     )
-    # Claude model alias used when a trivial/forced-cheap refine routes to
-    # the level-3 subscription.  ``sonnet`` is the cheapest alias already
-    # trusted by the ``"simple"`` path.  Only the Claude-SDK branch (level 3)
-    # consumes this; DeepSeek levels 1/2 ignore it.
-    refine_trivial_subscription_model: str = Field(
-        description="Claude model alias for trivial/forced-cheap refines on the subscription tier.",
-        default="sonnet",
-    )
     # When True (default), non-trivial level-3 refines route to a cheaper
     # Claude alias (sonnet) for "simple" tickets and keep Opus only for
     # "needs-exploration" tickets — all on the same claudeSDK subscription
@@ -603,24 +595,12 @@ class _StagesSettings(BaseModel):
         description="When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
         default=True,
     )
-    # Claude model alias for non-escalated level-3 refines (complexity="simple").
-    # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
-    refine_subscription_model_default: str = Field(
-        description="Claude model alias for non-escalated level-3 refines (complexity=simple).",
-        default="sonnet",
-    )
-    # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
-    # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
-    refine_subscription_model_complex: str = Field(
-        description="Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
-        default="opus",
-    )
     # When True (default), a non-trivial level-3 refine that WOULD route to
-    # Opus (complexity="needs-exploration") is downgraded to a cheaper Claude
-    # alias (refine_subscription_model_findings) when the triage stage already
-    # produced substantial exploration findings (root cause known). Opus is
-    # kept only when triage findings are absent or too short. Set False for a
-    # clean rollback to the prior simple/complex binary.
+    # Opus (complexity="needs-exploration") is downgraded to sonnet when the
+    # triage stage already produced substantial exploration findings (root
+    # cause known). Opus is kept only when triage findings are absent or too
+    # short. Set False for a clean rollback to the prior simple/complex
+    # binary.
     refine_findings_downgrade_enabled: bool = Field(
         description="When true, Opus refines with substantial triage findings downgrade to a cheaper model.",
         default=True,
@@ -632,13 +612,6 @@ class _StagesSettings(BaseModel):
         description="Minimum stripped-character length of triage findings for the Opus-to-cheaper downgrade.",
         default=150,
         ge=0,
-    )
-    # Claude model alias used when the findings-present downgrade fires.
-    # Defaults to sonnet (same tier the "simple" path already trusts). Only
-    # the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
-    refine_subscription_model_findings: str = Field(
-        description="Claude model alias used when the findings-present downgrade fires.",
-        default="sonnet",
     )
     # Maximum number of "changes requested" re-refine rounds before the
     # refine agent is forced to the cheap model (``refine_trivial_model_level``)

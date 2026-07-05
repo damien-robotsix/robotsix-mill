@@ -117,12 +117,14 @@ class _CoreSettings(BaseModel):
         default=12,
         description="Request budget for the web_knowledge sub-agent per consultation.",
     )
-    # Web-knowledge gateway sub-agent model. Defaults to the llmio
+    # Web-knowledge gateway sub-agent model level. Defaults to the llmio
     # tier-1 flash model; override to route this agent to a different
-    # model without changing the global tier defaults.
-    web_knowledge_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
-        description="Model alias for the web-knowledge gateway sub-agent.",
+    # level without changing the global tier defaults.
+    web_knowledge_model: int = Field(
+        default=1,
+        description="Model level for the web-knowledge gateway sub-agent (1=flash, 2=pro, 3=subscription).",
+        ge=1,
+        le=3,
     )
     # Per-pass request budget for the implement (coordinator) agent.
     # Default 500 — high enough that normal-sized tickets finish in a

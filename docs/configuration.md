@@ -600,13 +600,9 @@ refinement pass.
 |-----------|---------|---------|-------------|
 | `gates.refine_trivial_routing_enabled` | `MILL_REFINE_TRIVIAL_ROUTING_ENABLED` | `true` | Route trivial-scope tickets to a cheaper model instead of the full refinement model |
 | `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `3` | Model level for trivial-scope refines (3 = flat-cost Claude subscription; 1/2 = pay-per-token DeepSeek rollback) |
-| `gates.refine_trivial_subscription_model` | `MILL_REFINE_TRIVIAL_SUBSCRIPTION_MODEL` | `sonnet` | Claude alias for trivial/forced-cheap refines routed to the level-3 subscription |
 | `gates.refine_subscription_tier_routing_enabled` | `MILL_REFINE_SUBSCRIPTION_TIER_ROUTING_ENABLED` | `true` | Complexity-gated Claude alias routing for level-3 refines (set `false` for Opus-always rollback) |
-| `gates.refine_subscription_model_default` | `MILL_REFINE_SUBSCRIPTION_MODEL_DEFAULT` | `sonnet` | Claude alias for non-escalated (simple) level-3 refines |
-| `gates.refine_subscription_model_complex` | `MILL_REFINE_SUBSCRIPTION_MODEL_COMPLEX` | `opus` | Claude alias for escalated (needs-exploration) level-3 refines |
-| `gates.refine_findings_downgrade_enabled` | `MILL_REFINE_FINDINGS_DOWNGRADE_ENABLED` | `true` | Downgrade Opus → cheaper Claude alias when triage findings are substantial (root cause already known) |
+| `gates.refine_findings_downgrade_enabled` | `MILL_REFINE_FINDINGS_DOWNGRADE_ENABLED` | `true` | Downgrade Opus → sonnet when triage findings are substantial (root cause already known) |
 | `gates.refine_findings_downgrade_min_chars` | `MILL_REFINE_FINDINGS_DOWNGRADE_MIN_CHARS` | `150` | Minimum stripped-character length of triage findings for the Opus downgrade to fire |
-| `gates.refine_subscription_model_findings` | `MILL_REFINE_SUBSCRIPTION_MODEL_FINDINGS` | `sonnet` | Claude alias used when the findings-present downgrade fires |
 | `gates.max_re_refine_cycles_before_cheap` | `MILL_MAX_RE_REFINE_CYCLES_BEFORE_CHEAP` | `2` | Force cheap model after this many "changes requested" sendbacks; `0` disables |
 | — | `MILL_REFINE_DELTA_REUSE_ENABLED` | `true` | When re-entering refine after an operator sendback, reuse the prior refined description.md as the starting point instead of refining from scratch |
 
