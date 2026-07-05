@@ -78,7 +78,7 @@ consciously waived with a note.
 it installs from the committed `uv.lock` and fails the build if the lock
 is stale relative to `pyproject.toml`. The escape hatch is the automated
 `uv.lock` bump PR ([`deps-bump.yml`](../.github/workflows/deps-bump.yml));
-full rationale lives in [`dependencies.md`](dependencies.md).
+full rationale lives in [`dependencies.md`](deps/dependencies.md).
 
 ## See also
 

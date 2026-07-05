@@ -88,6 +88,7 @@ modules:
     paths:
       - src/robotsix_mill/deps/*.py
       - tests/deps/*.py
+      - docs/deps/**/*
     dependencies: [config]
 
   # -------------------------------------------------------------------
@@ -525,7 +526,7 @@ modules:
       Includes the module taxonomy and its schema.
     paths:
       - docs/*.md
-      - docs/modules.yaml
+      - docs/*.yaml
       - docs/design/**/*
       - docs/guides/**/*
       - docs/reference/**/*

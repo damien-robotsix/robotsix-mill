@@ -19,9 +19,10 @@ nav:
       - GitHub App / PAT: github-app.md
       - Security model: security.md
       - CI policy: ci-policy.md
-      - Dependency management: dependencies.md
       - Config audit: config-audit.md
       - "RFC: config v2": rfc-config-v2.md
+  - Deps:
+      - Dependency management: deps/dependencies.md
   - Pipeline:
       - Agent catalog: agents/index.md
       - Approval gate: approval-gate.md
