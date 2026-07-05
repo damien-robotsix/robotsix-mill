@@ -189,7 +189,14 @@ class CIPollMixin(_MergeStageBase):
         ref = branch if git_ops.branch_exists(repo_path, branch) else "HEAD"
         target = target_branch_for(ctx.settings, ctx.repo_config)
         try:
-            return not git_ops.branch_has_net_diff(repo_path, target, ref=ref)
+            # Use the substantive-diff variant: a branch whose only change
+            # is a ceremonial file (e.g. CHANGELOG.md) is treated as empty
+            # — the actual code change is already on main.  This prevents
+            # changelog-only no-op tickets from looping BLOCKED → resume
+            # forever when the forge closes their empty-code PR.
+            return not git_ops.branch_has_substantive_diff(
+                repo_path, target, ref=ref
+            )
         except Exception:  # noqa: BLE001 — fail safe: keep BLOCKED on any error
             return False
 

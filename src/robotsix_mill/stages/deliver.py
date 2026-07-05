@@ -689,7 +689,7 @@ class DeliverStage(Stage):
                 f"forge auth not configured for {repo_label}: {e}",
             )
 
-        # Guard: skip when the branch has no NET diff relative to
+        # Guard: skip when the branch has no SUBSTANTIVE diff vs
         # origin/main. This avoids a 422 "No commits between main and
         # branch" from GitHub. Two distinct cases both produce that 422:
         #   1. the branch carries no commits ahead of main at all
@@ -697,11 +697,14 @@ class DeliverStage(Stage):
         #   2. the branch carries a commit (ahead by commit count)
         #      whose net content is identical to main — e.g. main
         #      independently landed the same change, or the commit is
-        #      a no-op. ``branch_has_net_diff`` is what actually
-        #      matches the forge's own emptiness test.
+        #      a no-op.
+        # ``branch_has_substantive_diff`` matches the forge's emptiness
+        # test but excludes ceremonial files (e.g. CHANGELOG.md) so a
+        # changelog-only no-op ticket is silently terminal-DONE instead
+        # of opening an empty PR and looping.
         if not git_ops.branch_is_ahead_of_main(
             repo_dir, target
-        ) or not git_ops.branch_has_net_diff(repo_dir, target):
+        ) or not git_ops.branch_has_substantive_diff(repo_dir, target):
             return None, None
 
         # Cross-repo auto-fork: ensure the fork exists before pushing to

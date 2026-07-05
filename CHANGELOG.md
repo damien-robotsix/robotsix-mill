@@ -23,6 +23,7 @@
   idempotent and costs two fast docker CLI calls per spawn.
 - Reorganized agent documentation under `docs/agents/`: moved 7 files (`agents.md`, `reference/agents.md`, `agent-communication-research.md`, `agent-md-candidates.md`, `agent-yaml-schema.md`, `audit-agent.md`, `diagnostic-agent.md`) into the new `docs/agents/` subdirectory; updated `mkdocs.yml` nav, `docs/modules.yaml`, and all cross-references.
 - Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
+- pipeline: ceremonial-only (e.g. changelog) diff no longer causes no-op ticket loops — implement/deliver/merge stages now treat ceremonial-only changes as "already satisfied" and terminate DONE, and the mark-done escape hatch skips the changelog-duplicate check for force-closed BLOCKED/REBASING tickets
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`
 - Migration from `robotsix-yaml-config` → `robotsix-config`: dependency swapped, config layer rewritten to use stdlib `json` + pyyaml for overlay YAML, `JsonSettingsSource` replaces `YamlSettingsSource`, `config/config.example.json` committed (was `.yaml`), schema regeneration updated.
 - Diagnostic investigation: traced "interrupted by process restart" errors across 19 agent/board pairs to `RunRegistry` orphan reconciliation — identified OOM kills under combined mill + sandbox memory pressure as the most likely root cause, with deployment rollouts as a secondary contributor.

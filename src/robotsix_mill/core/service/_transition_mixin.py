@@ -502,28 +502,29 @@ class _TransitionMixin(_ServiceBase):
             if is_force_close:
                 reason = note if note.strip() else "operator mark-done"
                 note = f"[force-closed from {ticket.state}] {reason}"
-            # Refuse mark-done when duplicate changelog fragments
-            # exist on the ticket's branch.
             repo_dir = self.workspace(ticket).repo_dir
-            dupes = _check_changelog_duplicates(repo_dir, ticket_id)
-            if dupes:
-                raise TransitionError(
-                    f"{ticket_id}: cannot mark done — "
-                    f"duplicate changelog fragments on branch: "
-                    f"{', '.join(sorted(dupes))}"
-                )
             # Refuse mark-done when the ticket's branch hasn't been
             # merged to origin/main (best-effort — skipped when the
             # workspace clone or branch isn't available).
             #
             # Escape-hatch exemption: a deliberate operator force-close
-            # of a stuck BLOCKED/REBASING ticket bypasses the merge
-            # verification. These are exactly the states where a no-op
-            # ticket loops — its branch was never merged (there was
-            # nothing to merge), so the merge check would 409 forever
-            # and there would be no way to close the stuck ticket. The
-            # operator is explicitly deciding to terminate it.
+            # of a stuck BLOCKED/REBASING ticket bypasses BOTH the
+            # merge verification AND the changelog-duplicate check.
+            # These are exactly the states where a no-op ticket loops —
+            # its branch was never merged (there was nothing to merge),
+            # so the merge check would 409 forever and there would be
+            # no way to close the stuck ticket. The operator is
+            # explicitly deciding to terminate it.
             if not is_force_close:
+                # Refuse mark-done when duplicate changelog fragments
+                # exist on the ticket's branch.
+                dupes = _check_changelog_duplicates(repo_dir, ticket_id)
+                if dupes:
+                    raise TransitionError(
+                        f"{ticket_id}: cannot mark done — "
+                        f"duplicate changelog fragments on branch: "
+                        f"{', '.join(sorted(dupes))}"
+                    )
                 verify_merge_before_done(
                     ticket_id=ticket_id,
                     repo_dir=repo_dir,

@@ -753,6 +753,64 @@ def branch_has_net_diff(
     return True
 
 
+def branch_diff_files(
+    repo: Path, target_branch: str = "main", ref: str = "HEAD"
+) -> list[str] | None:
+    """Return the list of files changed between *ref* and ``origin/<target>``.
+
+    Uses the three-dot ``git diff --name-only`` semantic (compare *ref*
+    against the merge-base). Returns ``None`` on fetch or diff error
+    (fail-open: the caller treats None as "assume diff exists").
+
+    Fetches ``origin <target>`` first so the local ref is current.
+    """
+    try:
+        _git(repo, "fetch", "origin", target_branch)
+    except subprocess.CalledProcessError:
+        return None
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "diff",
+            "--name-only",
+            f"origin/{target_branch}...{ref}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    files = [f for f in result.stdout.strip().split("\n") if f]
+    return files
+
+
+# Files that are "ceremonial" — changes restricted to ONLY these files
+# signal a no-op ticket whose intent is already satisfied on main.
+CEREMONIAL_FILES: frozenset[str] = frozenset({"CHANGELOG.md"})
+
+
+def branch_has_substantive_diff(
+    repo: Path, target_branch: str = "main", ref: str = "HEAD"
+) -> bool:
+    """Return True when *ref* has a non-ceremonial content diff vs origin.
+
+    Like :func:`branch_has_net_diff` but excludes *ceremonial* files
+    (e.g. ``CHANGELOG.md``) from the emptiness test. A branch whose only
+    diff is a changelog entry is treated as empty — the substantive
+    change is already on main.
+
+    Fails safe (returns True) on any error, same as
+    :func:`branch_has_net_diff`.
+    """
+    files = branch_diff_files(repo, target_branch, ref)
+    if files is None:
+        return True  # error → assume diff exists
+    substantive = [f for f in files if f not in CEREMONIAL_FILES]
+    return len(substantive) > 0
+
+
 def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:
     """Return True when ``origin/main`` has commits not on HEAD.
 

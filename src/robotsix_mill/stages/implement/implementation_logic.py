@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 from ...agents import coding
@@ -577,6 +578,63 @@ class ImplementationLogicMixin(_ImplementStageBase):
                     next_action="return",
                     outcome=Outcome(State.DONE, done_note),
                 )
+            # --- ceremonial-only change guard ---
+            # We reach here when ``_any_repo_has_changes`` is True but the
+            # agent may have only modified ceremonial files (e.g. called
+            # ``insert_changelog_entry`` on a spec already satisfied on
+            # main).  Check whether the working-tree diff contains ANY
+            # non-ceremonial file; if not, the intent is already on main
+            # and we should terminate DONE instead of opening an empty PR
+            # that will be auto-closed and loop forever.
+            #
+            # Only fires when the branch is NOT ahead of main (no commits
+            # beyond origin/target) — if there are real commits on the
+            # branch, the net diff must be evaluated, not just the WT.
+            if not resuming and not git_ops.branch_is_ahead_of_main(
+                repo_dir, target
+            ):
+                try:
+                    diff_out = subprocess.run(
+                        [
+                            "git", "-C", str(repo_dir),
+                            "diff", "--name-only", "HEAD",
+                        ],
+                        capture_output=True,
+                        text=True,
+                    ).stdout
+                except Exception:
+                    diff_out = ""
+                wt_files = [
+                    f for f in diff_out.strip().split("\n") if f
+                ] if diff_out else []
+                substantive_wt = [
+                    f for f in wt_files
+                    if f not in git_ops.CEREMONIAL_FILES
+                ]
+                if wt_files and not substantive_wt:
+                    done_note = (
+                        "already satisfied — ceremonial-only working-tree "
+                        "changes (no substantive diff vs base)"
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        f"{done_note}\n\n{no_change_summary}",
+                        ok=True,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    log.info(
+                        "%s: ceremonial-only WT changes — DONE "
+                        "(already satisfied)",
+                        ticket.id,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(State.DONE, done_note),
+                    )
             # --- per-claimed-file edit-claim verification ---
             # We reach here only on a non-empty-diff proceed (the two
             # no-change branches above returned when
