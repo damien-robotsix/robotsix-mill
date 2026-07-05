@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`
 - Diagnostic investigation: traced "interrupted by process restart" errors across 19 agent/board pairs to `RunRegistry` orphan reconciliation — identified OOM kills under combined mill + sandbox memory pressure as the most likely root cause, with deployment rollouts as a secondary contributor.
 - Add `agent_references/betterleaks.md` with Betterleaks configuration reference (repo URL, hook id, version v1.6.0, baseline mode, config precedence, `.betterleaks.toml` format) to eliminate web research on future Betterleaks migrations.
 - Implement agent pre-flight checks are now scope-aware: when the diff
