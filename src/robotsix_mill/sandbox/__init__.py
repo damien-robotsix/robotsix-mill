@@ -63,11 +63,6 @@ class SandboxError(RuntimeError):
 # Every helper below is best-effort and never raises, and the call sites are
 # gated on ``DOCKER_HOST`` being set so the dev stack path is unchanged.
 
-# One-shot guard so :func:`run` establishes the egress network at most once
-# per process (only relevant in deploy mode — the dev stack's compose creates
-# the network up-front).
-_SANDBOX_NET_READY = False
-
 
 def ensure_sandbox_network(settings: Settings) -> bool:
     """Create the internal egress network and attach the egress proxy.
@@ -189,20 +184,6 @@ def resolve_data_volume(settings: Settings) -> None:
         "resolve_data_volume: no mount matched data_dir %s; leaving config unchanged",
         target,
     )
-
-
-def _ensure_sandbox_network_once(settings: Settings) -> None:
-    """Call :func:`ensure_sandbox_network` at most once per process.
-
-    Used by :func:`run` (deploy mode only) to establish the internal egress
-    network lazily on the first sandbox spawn. The flag is set only on
-    success, so a transient failure is retried on the next sandbox run.
-    """
-    global _SANDBOX_NET_READY
-    if _SANDBOX_NET_READY:
-        return
-    if ensure_sandbox_network(settings):
-        _SANDBOX_NET_READY = True
 
 
 def _truncate(out: str) -> str:
@@ -449,10 +430,14 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     # Deploy mode only (DOCKER_HOST points at central-deploy's socket-proxy):
     # central-deploy ignores the dev stack's `networks:` block, so the
     # internal egress network + proxy attachment must be established at
-    # runtime. The once-guard means this runs at most once per process; the
-    # dev stack (no DOCKER_HOST) skips it entirely and is unchanged.
+    # runtime. Runs before EVERY spawn (idempotent, two fast docker CLI
+    # calls): a deploy can recreate the sandbox-proxy sibling at any time,
+    # detaching it from the network — a once-per-process guard left all
+    # subsequent sandboxes without egress until the mill itself restarted
+    # (2026-07-05 incident: every test suite failed with pytest missing).
+    # The dev stack (no DOCKER_HOST) skips it entirely and is unchanged.
     if os.environ.get("DOCKER_HOST") and settings.sandbox_proxy_url:
-        _ensure_sandbox_network_once(settings)
+        ensure_sandbox_network(settings)
     # Load extra sandbox packages declared in the repo's config.
     extra_packages = load_extra_sandbox_packages(repo_dir)
     extra_prefix, needs_write_access = _build_extra_packages_prefix(extra_packages)
