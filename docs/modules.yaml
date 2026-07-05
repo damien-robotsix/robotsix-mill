@@ -526,7 +526,7 @@ modules:
       Includes the module taxonomy and its schema.
     paths:
       - docs/*.md
-      - docs/modules.yaml
+      - docs/*.yaml
       - docs/design/**/*
       - docs/guides/**/*
       - docs/reference/**/*
