@@ -601,7 +601,7 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
         repos={
             "repo-a": RepoConfig(
                 repo_id="repo-a",
-                board_id="ba",
+                
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -609,7 +609,7 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
             ),
             "repo-b": RepoConfig(
                 repo_id="repo-b",
-                board_id="bb",
+                
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -665,7 +665,7 @@ async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -1216,7 +1216,7 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
 
     fake_repo = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
+        
         langfuse_project_name="p",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -1989,7 +1989,7 @@ def test_max_inflight_prs_rejects_negative():
     with pytest.raises(ValueError):  # pydantic ValidationError
         RepoConfig(
             repo_id="r",
-            board_id="b",
+            
             langfuse_project_name="p",
             langfuse_public_key="pk",
             langfuse_secret_key="sk",
@@ -2003,7 +2003,7 @@ def test_max_inflight_prs_accepts_zero():
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2018,7 +2018,7 @@ def test_max_inflight_prs_defaults_to_3():
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2094,7 +2094,7 @@ async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id=service.board_id,
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2147,7 +2147,7 @@ async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id=service.board_id,
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2199,7 +2199,7 @@ async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id=service.board_id,
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2254,7 +2254,7 @@ async def test_cap_disabled_when_zero(ctx, service, monkeypatch):
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id=service.board_id,
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2309,7 +2309,7 @@ async def test_merge_pipeline_always_processed_at_cap(ctx, service, monkeypatch)
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id=service.board_id,
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2370,7 +2370,7 @@ async def test_cap_excludes_human_mr_approval_from_count(ctx, service, monkeypat
 
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id=service.board_id,
+        
         langfuse_project_name="p",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",
@@ -2575,7 +2575,7 @@ async def test_global_concurrency_cap_bounds_concurrent_stages(
         repos={
             "repo-a": RepoConfig(
                 repo_id="repo-a",
-                board_id=board_a,
+                
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
@@ -2583,7 +2583,7 @@ async def test_global_concurrency_cap_bounds_concurrent_stages(
             ),
             "repo-b": RepoConfig(
                 repo_id="repo-b",
-                board_id=board_b,
+                
                 langfuse_project_name="p",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",

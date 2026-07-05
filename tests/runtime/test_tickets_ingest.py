@@ -231,7 +231,7 @@ def test_ingest_rejects_auto_repo_when_flag_off(client, settings):
     # Add an auto-registered repo to the registry.
     auto_repo = RepoConfig(
         repo_id="auto-repo",
-        board_id="auto-board",
+        
         langfuse_project_name="",
         langfuse_public_key="",
         langfuse_secret_key="",
@@ -252,7 +252,7 @@ def test_ingest_accepts_auto_repo_when_flag_on(client, settings):
     runtime registration flag is on."""
     auto_repo = RepoConfig(
         repo_id="auto-repo-2",
-        board_id="auto-board-2",
+        
         langfuse_project_name="",
         langfuse_public_key="",
         langfuse_secret_key="",

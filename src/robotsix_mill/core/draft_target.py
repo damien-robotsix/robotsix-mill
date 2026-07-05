@@ -204,7 +204,7 @@ def resolve_mill_service(
             target_repo_id,
         )
         return None
-    if not rc.board_id:
+    if not rc.repo_id:
         log.warning(
             "%s: configured mill target %r has no board_id — caller "
             "should fall back to the current repo",
@@ -212,7 +212,7 @@ def resolve_mill_service(
             target_repo_id,
         )
         return None
-    return TicketService(settings, board_id=rc.board_id)
+    return TicketService(settings, board_id=rc.repo_id)
 
 
 # Known source-tree directory prefixes — paths starting with one of

@@ -1953,14 +1953,14 @@ def _multirepo_settings(tmp_path):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
+                
                 langfuse_project_name="t",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
             ),
             "robotsix-mill": RepoConfig(
                 repo_id="robotsix-mill",
-                board_id="mill-board",
+                
                 langfuse_project_name="mill",
                 langfuse_public_key="pk2",
                 langfuse_secret_key="sk2",

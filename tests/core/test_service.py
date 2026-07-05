@@ -2642,14 +2642,14 @@ def migrate_env(settings, service):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
+                
                 langfuse_project_name="proj-a",
                 langfuse_public_key="pk-a",
                 langfuse_secret_key="sk-a",
             ),
             "other-repo": RepoConfig(
                 repo_id="other-repo",
-                board_id="other-board",
+                
                 langfuse_project_name="proj-b",
                 langfuse_public_key="pk-b",
                 langfuse_secret_key="sk-b",

@@ -173,7 +173,7 @@ def ctx_factory(tmp_path, fake_sandbox):
             service=svc,
             repo_config=RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
+                
                 langfuse_project_name="test",
                 langfuse_public_key="pk-test",
                 langfuse_secret_key="sk-test",
@@ -2032,14 +2032,14 @@ def _multirepo_ctx(tmp_path):
         repos={
             "test-repo": RepoConfig(
                 repo_id="test-repo",
-                board_id="test-board",
+                
                 langfuse_project_name="t",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",
             ),
             "robotsix-mill": RepoConfig(
                 repo_id="robotsix-mill",
-                board_id="mill-board",
+                
                 langfuse_project_name="mill",
                 langfuse_public_key="pk2",
                 langfuse_secret_key="sk2",
@@ -2278,7 +2278,7 @@ def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
         repos={
             rid: RepoConfig(
                 repo_id=rid,
-                board_id="meta",
+                
                 langfuse_project_name=f"p-{rid}",
                 langfuse_public_key=f"pk-{rid}",
                 langfuse_secret_key=f"sk-{rid}",

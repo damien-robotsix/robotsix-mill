@@ -27,7 +27,7 @@ def _repo_cfg(
 ) -> RepoConfig:
     return RepoConfig(
         repo_id=repo_id,
-        board_id=board_id or repo_id,
+        
         langfuse_project_name=f"proj-{repo_id}",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

@@ -367,7 +367,7 @@ class CIFixStage(Stage):
         if s.ci_fix_max_identical_failures == 0:
             return None
 
-        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        repo_id = ctx.repo_config.repo_id if ctx.repo_config else ""
         current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
         artifacts = ctx.service.workspace(ticket).artifacts_dir
         fp_path = artifacts / _CI_FAILURE_FINGERPRINT
@@ -705,7 +705,7 @@ class CIFixStage(Stage):
                     failing_summary=failing_summary,
                     memory=memory_text,
                     ticket_id=ticket.id,
-                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                    board_id=ctx.repo_config.repo_id if ctx.repo_config else "",
                     target=target,
                     remote_url=remote_url,
                     token=token,
@@ -881,7 +881,7 @@ class CIFixStage(Stage):
 
         fingerprint = _ci_failure_fingerprint(
             failing_summary,
-            ctx.repo_config.board_id if ctx.repo_config else "",
+            ctx.repo_config.repo_id if ctx.repo_config else "",
         )
         outcome = dependency_fix.spawn_dependency_fix(
             ticket,

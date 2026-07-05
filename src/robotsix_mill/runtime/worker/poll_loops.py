@@ -47,7 +47,7 @@ class PollLoopsMixin(_WorkerBase):
         Falls back to the default registry for board-less ticks.
         """
         if repo_config is not None and self.run_registries:
-            return self.run_registries.get(repo_config.board_id, self.run_registry)
+            return self.run_registries.get(repo_config.repo_id, self.run_registry)
         return self.run_registry
 
     def _initial_delay(
@@ -511,7 +511,7 @@ class PollLoopsMixin(_WorkerBase):
         repo_label = rc.repo_id
 
         state_dir = settings.data_dir / rc.repo_id
-        service = TicketService(settings, board_id=rc.board_id)
+        service = TicketService(settings, board_id=rc.repo_id)
 
         state_dir.mkdir(parents=True, exist_ok=True)
         state_path = state_dir / "ci_monitor_state.json"
@@ -723,7 +723,7 @@ class PollLoopsMixin(_WorkerBase):
             fingerprint = _ci_draft_fingerprint(body, path=wf_path)
             prior = find_prior_matching_ticket(
                 service,
-                rc.board_id,
+                rc.repo_id,
                 target_files=[wf_path] if wf_path else [],
                 fingerprint_text=body,
                 settings=settings,
@@ -903,7 +903,7 @@ class PollLoopsMixin(_WorkerBase):
 
         created = 0
         if alerts:
-            service = TicketService(settings, board_id=rc.board_id)
+            service = TicketService(settings, board_id=rc.repo_id)
             for alert in alerts:
                 # Dedup key: ghsa_id+package is stable across alert renumbering
                 # (default-setup re-numbers alerts); fall back to the number.
@@ -1013,8 +1013,8 @@ class PollLoopsMixin(_WorkerBase):
                 boards.append(self.ctx.service.board_id)
             try:
                 for rc in get_repos_config().repos.values():
-                    if rc.board_id and rc.board_id not in boards:
-                        boards.append(rc.board_id)
+                    if rc.repo_id and rc.repo_id not in boards:
+                        boards.append(rc.repo_id)
             except Exception:
                 pass
 

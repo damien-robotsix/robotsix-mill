@@ -278,8 +278,8 @@ class _MigrateMixin(_ServiceBase):
         known: dict[str, str] = {"meta": "meta"}
         try:
             for rid, rc in get_repos_config().repos.items():
-                known[rid] = rc.board_id
-                known[rc.board_id] = rc.board_id
+                known[rid] = rc.repo_id
+                known[rc.repo_id] = rc.repo_id
         except Exception:
             # get_repos_config() reads the repo registry YAML; if it is
             # unavailable or malformed we continue with only the "meta"

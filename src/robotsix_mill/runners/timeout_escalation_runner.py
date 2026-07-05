@@ -38,8 +38,8 @@ def _boards_to_scan(settings: Settings) -> list[str]:
     # Registered repos from repos.yaml.
     try:
         for rc in get_repos_config().repos.values():
-            if rc.board_id and rc.board_id not in boards:
-                boards.append(rc.board_id)
+            if rc.repo_id and rc.repo_id not in boards:
+                boards.append(rc.repo_id)
     except Exception:
         pass
     # Walk subdirectories for any per-repo DB file not already covered

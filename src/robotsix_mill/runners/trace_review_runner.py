@@ -572,7 +572,7 @@ def run_trace_review_pass(
             "run_trace_review_pass: repo_config is required — "
             "configure at least one repo in config/repos.yaml."
         )
-    source_board_id = repo_config.board_id
+    source_board_id = repo_config.repo_id
     # Findings are agent-side improvements (mill code, mill prompts),
     # not application-repo work. Route every draft to the configured
     # target board when set; fall back to the source repo's board only
@@ -586,7 +586,7 @@ def run_trace_review_pass(
             registry = get_repos_config().repos
             target_rc = registry.get(settings.trace_review_target_repo_id)
             if target_rc is not None:
-                target_board_id = target_rc.board_id
+                target_board_id = target_rc.repo_id
                 target_repo_id = settings.trace_review_target_repo_id
             else:
                 log.warning(

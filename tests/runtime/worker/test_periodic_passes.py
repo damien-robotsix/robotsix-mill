@@ -30,7 +30,7 @@ def settings(tmp_path):
 def repo_config():
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
+        
         forge_remote_url="https://github.com/test/repo",
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",

@@ -668,7 +668,7 @@ def _repo_config():
 
     return RepoConfig(
         repo_id="robotsix-auto-mail",
-        board_id="auto-mail",
+        
         langfuse_project_name="auto-mail-project",
         langfuse_public_key="pk-repo",
         langfuse_secret_key="sk-repo",

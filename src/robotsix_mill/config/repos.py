@@ -11,6 +11,7 @@ here (which read the package attribute at call time).
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -58,10 +59,7 @@ class RepoConfig(BaseModel):
     monitor settings."""
 
     repo_id: str = Field(
-        description="Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml."
-    )
-    board_id: str = Field(
-        description="Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill')."
+        description="Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml. This IS the board identifier — the board maps 1:1 to the repo."
     )
     langfuse_project_name: str = Field(
         description="Langfuse project name for trace attribution (populated from global secrets)."
@@ -182,7 +180,7 @@ class RepoConfig(BaseModel):
     # global ``Settings.<name>_periodic`` switches remain as fleet-wide
     # kill-switches.
 
-    @field_validator("repo_id", "board_id")
+    @field_validator("repo_id")
     @classmethod
     def _validate_non_empty(cls, v: str) -> str:
         if not v.strip():
@@ -331,14 +329,32 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             if isinstance(repo_data, dict)
             else "config"
         )
+        # Legacy board_id compatibility:
+        # - board_id == repo_id → accept, warn, strip (every live config)
+        # - board_id != repo_id → hard error (never existed, prevent data loss)
+        legacy_board_id = (
+            repo_data.get("board_id", "") if isinstance(repo_data, dict) else ""
+        )
+        if legacy_board_id and legacy_board_id != repo_id:
+            from .loader import ConfigError
+
+            raise ConfigError(
+                f"Repo '{repo_id}' has board_id={legacy_board_id!r} which differs "
+                f"from repo_id={repo_id!r}. board_id has been removed — the board "
+                f"identifier is the repo_id. Remove the stray board_id from your config."
+            )
+        if legacy_board_id:
+            log = logging.getLogger("robotsix_mill.config")
+            log.info(
+                "Repo '%s': legacy board_id=%r ignored (board_id is now repo_id)",
+                repo_id,
+                legacy_board_id,
+            )
         # Langfuse is configured GLOBALLY (top-level ``langfuse`` block —
         # see _apply_global_langfuse), never per repo. Each repo starts
         # with empty langfuse fields and is populated from the global block.
         repos[repo_id] = RepoConfig(
             repo_id=repo_id,
-            board_id=repo_data.get("board_id", "")
-            if isinstance(repo_data, dict)
-            else "",
             langfuse_project_name="",
             langfuse_project_id="",
             langfuse_public_key="",
@@ -434,7 +450,6 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
         repos[repo_id] = cfg.model_copy(update=lf_fields)
     return RepoConfig(
         repo_id="meta",
-        board_id="meta",
         langfuse_project_name=project_name,
         langfuse_project_id=project_id,
         langfuse_public_key=pk,
@@ -545,4 +560,4 @@ def resolve_child_board_id(
         )
         return epic_board_id
 
-    return repos.repos[repo_id].board_id
+    return repos.repos[repo_id].repo_id

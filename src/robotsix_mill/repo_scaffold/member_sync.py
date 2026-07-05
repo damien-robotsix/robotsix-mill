@@ -224,7 +224,6 @@ def _member_entry(
 ) -> dict[str, Any]:
     """Build the repos overlay stanza for a detected member."""
     entry: dict[str, Any] = {
-        "board_id": repo_id,
         # Langfuse is configured globally (top-level ``langfuse`` block);
         # member repos inherit it automatically — no per-repo stanza.
         "forge_remote_url": member.url,

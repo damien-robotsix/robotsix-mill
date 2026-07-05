@@ -293,7 +293,7 @@ def apply_agent_side_effects(
         from . import orchestration as _orch
 
         memory_board_id = (
-            ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
+            ctx.repo_config.repo_id if ctx.repo_config else ticket.board_id
         )
         _orch._persist_refine_memory(s, memory_board_id, result.updated_memory)
 

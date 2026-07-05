@@ -14,7 +14,7 @@ def _reg(*repo_ids_with_url):
         repos={
             rid: RepoConfig(
                 repo_id=rid,
-                board_id=rid,
+                
                 langfuse_project_name=f"p-{rid}",
                 langfuse_public_key="pk",
                 langfuse_secret_key="sk",

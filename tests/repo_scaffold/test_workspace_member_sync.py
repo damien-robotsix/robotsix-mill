@@ -40,7 +40,7 @@ def _make_settings(tmp_path, **overrides):
 def _master_cfg(repo_id="ros2-workspace"):
     return RepoConfig(
         repo_id=repo_id,
-        board_id=repo_id,
+        
         langfuse_project_name=f"proj-{repo_id}",
         langfuse_public_key="pk-master",
         langfuse_secret_key="sk-master",

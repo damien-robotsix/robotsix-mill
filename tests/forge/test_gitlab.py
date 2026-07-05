@@ -208,7 +208,7 @@ def test_create_mr_target_honors_repo_working_branch(tmp_path, monkeypatch):
 
     rc = RepoConfig(
         repo_id="r",
-        board_id="b",
+        
         langfuse_project_name="r",
         langfuse_public_key="",
         langfuse_secret_key="",

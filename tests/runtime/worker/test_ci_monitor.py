@@ -50,7 +50,7 @@ def _ctx(tmp_path, repo_config=None, **env):
     if repo_config is None:
         repo_config = RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
+            
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -500,7 +500,7 @@ def test_monitor_skips_when_disabled_per_repo(tmp_path, monkeypatch):
         tmp_path,
         repo_config=RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
+            
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",

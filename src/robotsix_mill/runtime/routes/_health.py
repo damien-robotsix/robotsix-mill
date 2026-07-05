@@ -61,10 +61,10 @@ def _resolve_board_id(request: Request) -> str | None:
     single: str | None = request.app.state.single_repo_id
     if single is not None:
         rc = repos.repos[single]
-        return str(rc.board_id)
+        return str(rc.repo_id)
     if not repos.repos:
         return None
-    return str(next(iter(repos.repos.values())).board_id)
+    return str(next(iter(repos.repos.values())).repo_id)
 
 
 async def _check_database(settings: Settings, board_id: str) -> dict[str, Any]:
@@ -250,7 +250,7 @@ def list_repos(
     def _entry(rc: "RepoConfig") -> dict[str, str | None]:
         return {
             "repo_id": rc.repo_id,
-            "board_id": rc.board_id,
+            "board_id": rc.repo_id,
             "forge_remote_url": _public_forge_url(rc.forge_remote_url),
         }
 

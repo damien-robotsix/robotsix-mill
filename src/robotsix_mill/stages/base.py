@@ -41,14 +41,14 @@ class StageContext:
         """Resolve the board_id for ``settings.memory_file_for(...)``.
 
         ``repo_config`` is ``None`` for the synthetic meta board (not a
-        registered repo), so the old ``repo_config.board_id if repo_config
+        registered repo), so the old ``repo_config.repo_id if repo_config
         else ""`` crashed meta tickets with "memory_file_for: board_id is
         required" once the board-less memory fallback was removed. Fall back
         to the bound service board, then the ticket's own board (both are
         ``"meta"`` for a meta ticket).
         """
         return (
-            (self.repo_config.board_id if self.repo_config else "")
+            (self.repo_config.repo_id if self.repo_config else "")
             or self.service.board_id
             or ticket.board_id
         )

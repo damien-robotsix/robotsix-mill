@@ -2517,14 +2517,14 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
+                    
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
+                    
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",
@@ -2569,14 +2569,14 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
+                    
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
+                    
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",
@@ -2619,14 +2619,14 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
+                    
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
+                    
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",
@@ -2663,7 +2663,7 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
+                    
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
@@ -2693,14 +2693,14 @@ class TestCrossBoardChildren:
             repos={
                 "repo-a": RepoConfig(
                     repo_id="repo-a",
-                    board_id="board-a",
+                    
                     langfuse_project_name="a",
                     langfuse_public_key="pk-a",
                     langfuse_secret_key="sk-a",
                 ),
                 "repo-b": RepoConfig(
                     repo_id="repo-b",
-                    board_id="board-b",
+                    
                     langfuse_project_name="b",
                     langfuse_public_key="pk-b",
                     langfuse_secret_key="sk-b",

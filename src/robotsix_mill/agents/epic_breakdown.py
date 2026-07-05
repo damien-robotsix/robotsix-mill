@@ -107,7 +107,7 @@ def _build_child_repo_map(
         board_id = child_board_id(cid)
         repo_id: str | None = None
         for rid, rc in repos.repos.items():
-            if rc.board_id == board_id:
+            if rc.repo_id == board_id:
                 repo_id = rid
                 break
         if repo_id is not None:

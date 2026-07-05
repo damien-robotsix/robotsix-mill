@@ -28,7 +28,7 @@ from robotsix_mill.vcs import git_ops
 def _master_cfg():
     return RepoConfig(
         repo_id="ros2-workspace",
-        board_id="ros2-workspace",
+        
         langfuse_project_name="proj-ros2",
         langfuse_public_key="pk-master",
         langfuse_secret_key="sk-master",

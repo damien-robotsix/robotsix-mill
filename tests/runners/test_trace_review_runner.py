@@ -35,7 +35,7 @@ def _test_repo_config():
 
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
+        
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
@@ -1304,14 +1304,14 @@ class TestTargetRepoRouting:
             repos={
                 "source-repo": RepoConfig(
                     repo_id="source-repo",
-                    board_id="source-board",
+                    
                     langfuse_project_name="src",
                     langfuse_public_key="pk",
                     langfuse_secret_key="sk",
                 ),
                 "mill-repo": RepoConfig(
                     repo_id="mill-repo",
-                    board_id="mill-board",
+                    
                     langfuse_project_name="mill",
                     langfuse_public_key="pk2",
                     langfuse_secret_key="sk2",

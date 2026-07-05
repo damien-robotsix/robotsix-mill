@@ -43,7 +43,7 @@ def _settings(**overrides):
 def _repo():
     return RepoConfig(
         repo_id="test-owner/test-repo",
-        board_id="test-repo",
+        
         langfuse_project_name="proj-test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

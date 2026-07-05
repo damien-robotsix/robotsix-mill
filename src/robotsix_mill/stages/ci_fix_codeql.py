@@ -245,7 +245,7 @@ def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branc
             repo_dir=Path(repo_dir),
             alerts_json=json.dumps(eligible),
             ticket_id=ticket.id,
-            board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+            board_id=ctx.repo_config.repo_id if ctx.repo_config else "",
         )
     except Exception:  # noqa: BLE001 — best-effort
         log.warning("%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True)

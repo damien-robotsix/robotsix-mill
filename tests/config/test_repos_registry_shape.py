@@ -8,7 +8,7 @@ Regression for the onboard crash: a fresh onboard wrote
 serve path (``get_repos_config`` → ``load_repos_config``) iterated the
 mapping as if it were flat, treating the literal keys ``"meta"`` /
 ``"repos"`` as repo IDs and building ``RepoConfig(repo_id="repos",
-board_id="")`` → ``ValidationError`` → the process exited on every
+)`` → ``ValidationError`` → the process exited on every
 start.
 """
 

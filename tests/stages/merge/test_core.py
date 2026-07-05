@@ -36,7 +36,7 @@ def _ctx(tmp_path, **env):
         service=TicketService(s, board_id="test-board"),
         repo_config=RepoConfig(
             repo_id="test-repo",
-            board_id="test-board",
+            
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -877,7 +877,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
         service=base.service,
         repo_config=RepoConfig(
             repo_id="other-repo",
-            board_id="test-board",
+            
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
@@ -2821,7 +2821,7 @@ def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
         repos={
             rid: RepoConfig(
                 repo_id=rid,
-                board_id="meta",
+                
                 langfuse_project_name=f"p-{rid}",
                 langfuse_public_key=f"pk-{rid}",
                 langfuse_secret_key=f"sk-{rid}",
@@ -4319,7 +4319,7 @@ def test_cross_repo_merge_routes_to_upstream_pr(tmp_path, monkeypatch):
     # Replace the ctx repo_config with one carrying a cross_repo_target.
     rc = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
+        
         langfuse_project_name="test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

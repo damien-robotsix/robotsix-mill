@@ -459,7 +459,6 @@ def _append_repo_config(
     # repos.yaml); the new repo inherits it automatically — no per-repo
     # langfuse stanza is written.
     new_entry: dict[str, Any] = {
-        "board_id": repo_id,
         "forge_remote_url": repo_info.clone_url,
         # Per-repo `test_command` + `language(s)` are NOT configured here —
         # they live in the new repo's own .robotsix-mill/config.yaml (written

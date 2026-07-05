@@ -34,7 +34,7 @@ def _ctx(tmp_path, **env):
 
     repo_config = RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
+        
         langfuse_project_name="test",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",

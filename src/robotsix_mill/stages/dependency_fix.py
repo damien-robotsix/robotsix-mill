@@ -125,7 +125,7 @@ def spawn_dependency_fix(
     Returns a ``BLOCKED`` :class:`Outcome` whose note includes the fix
     ticket id and the auto-resume guarantee.
     """
-    board_id = ctx.repo_config.board_id if ctx.repo_config else None
+    board_id = ctx.repo_config.repo_id if ctx.repo_config else None
 
     # --- label-based dedup ---
     fix_id: str | None = None

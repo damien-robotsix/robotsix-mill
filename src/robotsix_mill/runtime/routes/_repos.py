@@ -38,7 +38,6 @@ class RepoRegistration(BaseModel):
 
     repo_id: str
     forge_remote_url: str
-    board_id: str | None = None  # defaults to repo_id
 
     @field_validator("repo_id")
     @classmethod
@@ -47,19 +46,11 @@ class RepoRegistration(BaseModel):
             raise ValueError("repo_id must not contain newlines or null bytes")
         return v
 
-    @field_validator("board_id")
-    @classmethod
-    def _validate_board_id(cls, v: str | None) -> str | None:
-        if v is not None and any(c in v for c in "\n\r\0"):
-            raise ValueError("board_id must not contain newlines or null bytes")
-        return v
-
 
 class RepoRegistrationResult(BaseModel):
     """Response body for POST /repos."""
 
     repo_id: str
-    board_id: str
     forge_remote_url: str | None
     registered: bool  # True = newly written, False = already existed
 
@@ -97,7 +88,7 @@ def register_repo(
             "Set allow_runtime_repo_registration=true in config to enable.",
         )
 
-    effective_board_id = body.board_id or body.repo_id
+    effective_board_id = body.repo_id
 
     # Idempotency: if the repo_id already exists in the registry,
     # return the existing entry with no file I/O.  This also guards
@@ -109,7 +100,6 @@ def register_repo(
         response.status_code = status.HTTP_200_OK
         return RepoRegistrationResult(
             repo_id=body.repo_id,
-            board_id=existing.board_id,
             forge_remote_url=existing.forge_remote_url,
             registered=False,
         )
@@ -139,7 +129,6 @@ def register_repo(
     data.setdefault("repos", {})
 
     data["repos"][body.repo_id] = {
-        "board_id": effective_board_id,
         "forge_remote_url": body.forge_remote_url,
         "_mill_source": "auto",
     }
@@ -172,7 +161,6 @@ def register_repo(
     if body.repo_id not in new_repos.repos:
         new_repos.repos[body.repo_id] = RepoConfig(
             repo_id=body.repo_id,
-            board_id=effective_board_id,
             forge_remote_url=body.forge_remote_url,
             langfuse_project_name="",
             langfuse_public_key="",
@@ -195,7 +183,6 @@ def register_repo(
 
     return RepoRegistrationResult(
         repo_id=body.repo_id,
-        board_id=effective_board_id,
         forge_remote_url=body.forge_remote_url,
         registered=True,
     )

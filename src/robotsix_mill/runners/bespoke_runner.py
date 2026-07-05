@@ -91,7 +91,7 @@ def run_bespoke_pass(
             "run_bespoke_pass: repo_config is required — "
             "configure at least one repo in config/repos.yaml."
         )
-    board_id = repo_config.board_id
+    board_id = repo_config.repo_id
     source_label = f"bespoke:{definition.name}"
 
     service = TicketService(settings, board_id=board_id)

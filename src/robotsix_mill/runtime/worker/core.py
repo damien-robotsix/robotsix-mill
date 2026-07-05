@@ -314,7 +314,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 return None
             repos = get_repos_config()
             for rc in repos.repos.values():
-                if rc.board_id == ticket.board_id:
+                if rc.repo_id == ticket.board_id:
                     return rc
             return None
         except Exception:
@@ -642,8 +642,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     boards.append(self.ctx.service.board_id)
                 try:
                     for rc in get_repos_config().repos.values():
-                        if rc.board_id and rc.board_id not in boards:
-                            boards.append(rc.board_id)
+                        if rc.repo_id and rc.repo_id not in boards:
+                            boards.append(rc.repo_id)
                 except Exception:
                     pass
                 for board_id in boards:
@@ -689,7 +689,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             self._global_semaphore = asyncio.Semaphore(cap)
             log.info("global concurrency cap: %d", cap)
             pool_sizes = [
-                (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
+                (rc.repo_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
             ]
             pool_sizes.append((self._DEFAULT_BOARD, 1))
             pool_sizes.append((self._META_BOARD, 1))
@@ -839,9 +839,9 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # on the bespoke master switch (that switch still gates legacy bespoke
         # files inside the supervisor).
         for rc in get_repos_config().repos.values():
-            if rc.board_id in self._periodic_supervisor_tasks:
+            if rc.repo_id in self._periodic_supervisor_tasks:
                 continue
-            self._periodic_supervisor_tasks[rc.board_id] = asyncio.create_task(
+            self._periodic_supervisor_tasks[rc.repo_id] = asyncio.create_task(
                 self._periodic_supervisor(rc)
             )
             log.info(
@@ -944,8 +944,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         boards: list[str] = [self._META_BOARD]
         try:
             for rc in get_repos_config().repos.values():
-                if rc.board_id and rc.board_id not in boards:
-                    boards.append(rc.board_id)
+                if rc.repo_id and rc.repo_id not in boards:
+                    boards.append(rc.repo_id)
         except Exception:
             pass
 

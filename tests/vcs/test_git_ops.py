@@ -1187,7 +1187,7 @@ class TestWorkingBranchRegression:
     def _repo_config(repo_id, *, working_branch, forge_remote_url=None):
         return RepoConfig(
             repo_id=repo_id,
-            board_id="meta",
+            
             langfuse_project_name=f"p-{repo_id}",
             langfuse_public_key=f"pk-{repo_id}",
             langfuse_secret_key=f"sk-{repo_id}",

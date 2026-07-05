@@ -127,7 +127,7 @@ def create_lifespan(
         # have schema available without lazy-init races.
         # Every ticket lives in a per-repo DB.
         for rc in repos.repos.values():
-            db.init_db(settings, rc.board_id)
+            db.init_db(settings, rc.repo_id)
 
         # Record process start time for health endpoint and restart
         # correlation in trace-review (incomplete traces ending near
@@ -149,7 +149,7 @@ def create_lifespan(
             # the service and worker have a backing store for periodic meta tasks.
             db.init_db(settings, Worker._META_BOARD)
         lead_board_id = (
-            repo_config.board_id if repo_config is not None else Worker._META_BOARD
+            repo_config.repo_id if repo_config is not None else Worker._META_BOARD
         )
         service = TicketService(settings, board_id=lead_board_id)
         broadcaster = BoardBroadcaster()
@@ -161,8 +161,8 @@ def create_lifespan(
         # Per-repo run registries — each repo's audit/health/etc. run
         # log lands in <data_dir>/<board_id>/runs.json.
         run_registries: dict[str, RunRegistry] = {
-            rc.board_id: RunRegistry(
-                settings.data_dir / rc.board_id / "runs.json",
+            rc.repo_id: RunRegistry(
+                settings.data_dir / rc.repo_id / "runs.json",
             )
             for rc in repos.repos.values()
         }

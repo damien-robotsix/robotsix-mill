@@ -119,7 +119,7 @@ def _file_repo_drafts(
         gap_id = _slugify_title(draft.title)
         body = _build_body_with_gap_id(draft.body, gap_id)
         try:
-            target_service = TicketService(settings, board_id=target_rc.board_id)
+            target_service = TicketService(settings, board_id=target_rc.repo_id)
             ticket = target_service.create(
                 title=draft.title,
                 description=body,
@@ -152,7 +152,7 @@ def _gather_meta_proposals(settings: Settings) -> str:
 
     # 2. Every registered repo board
     for repo_config in repos_config.repos.values():
-        service = TicketService(settings, board_id=repo_config.board_id)
+        service = TicketService(settings, board_id=repo_config.repo_id)
         for t in service.recent_proposals_for(SourceKind.META, limit=100):
             all_tickets[t.id] = t
 

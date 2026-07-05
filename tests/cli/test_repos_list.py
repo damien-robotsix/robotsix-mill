@@ -13,7 +13,7 @@ def _make_repo_config(repo_id: str, board_id: str, source: str) -> RepoConfig:
     """Build a minimal RepoConfig for testing."""
     return RepoConfig(
         repo_id=repo_id,
-        board_id=board_id,
+        
         langfuse_project_name="test-proj",
         langfuse_public_key="pk",
         langfuse_secret_key="sk",

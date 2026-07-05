@@ -48,7 +48,7 @@ def _make_repo_config(forge_remote_url):
 
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-repo",
+        
         forge_remote_url=forge_remote_url,
         langfuse_project_name="",
         langfuse_public_key="",

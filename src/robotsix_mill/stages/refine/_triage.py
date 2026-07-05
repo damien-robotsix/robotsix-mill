@@ -443,8 +443,8 @@ def triage_skip(
                 repos_config = get_repos_config()
                 known: dict[str, str] = {"meta": "meta"}
                 for rc in repos_config.repos.values():
-                    known[rc.repo_id] = rc.board_id
-                    known[rc.board_id] = rc.board_id
+                    known[rc.repo_id] = rc.repo_id
+                    known[rc.repo_id] = rc.repo_id
             except Exception:
                 log.warning(
                     "%s: could not load repos config for MIGRATE validation, "

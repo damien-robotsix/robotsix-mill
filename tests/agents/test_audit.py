@@ -19,7 +19,7 @@ def _test_repo_config():
 
     return RepoConfig(
         repo_id="test-repo",
-        board_id="test-board",
+        
         langfuse_project_name="test-project",
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
