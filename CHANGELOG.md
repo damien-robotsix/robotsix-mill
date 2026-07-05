@@ -8,6 +8,7 @@
   suites died with `pytest: command not found`) until the mill itself
   restarted — 2026-07-05 incident, 169 tickets blocked. The attach is
   idempotent and costs two fast docker CLI calls per spawn.
+- Add `triage_boilerplate` to the auto-approve sources set, skipping the expensive refine LLM pass for boilerplate response templates proposed by the triage-boilerplate periodic agent. These templates are static prose with no variable decisions or file paths to refine, so routing them directly from draft to implement avoids ~$0.003 and ~60 s of wasted inference per ticket.
 - Reorganized agent documentation under `docs/agents/`: moved 7 files (`agents.md`, `reference/agents.md`, `agent-communication-research.md`, `agent-md-candidates.md`, `agent-yaml-schema.md`, `audit-agent.md`, `diagnostic-agent.md`) into the new `docs/agents/` subdirectory; updated `mkdocs.yml` nav, `docs/modules.yaml`, and all cross-references.
 - Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`

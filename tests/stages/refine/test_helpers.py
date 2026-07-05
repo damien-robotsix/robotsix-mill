@@ -429,7 +429,7 @@ def test_build_summary_truncates_entry_list(tmp_path):
 
 def test_auto_approve_sources_is_module_level_constant():
     """_AUTO_APPROVE_SOURCES is importable from refine_module, is a set,
-    and contains exactly the seven expected source strings."""
+    and contains exactly the eight expected source strings."""
     sources = refine_module._AUTO_APPROVE_SOURCES
     assert isinstance(sources, set)
     expected = {
@@ -440,6 +440,7 @@ def test_auto_approve_sources_is_module_level_constant():
         "completeness_check",
         "module_curator",
         "copy_paste",
+        "triage_boilerplate",
     }
     assert sources == expected
 
