@@ -286,7 +286,7 @@ def _has_uv_sources(repo_dir: Path) -> bool:
 
 
 def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> str:
-    """Prepend a read-only-safe project install to *command*, if warranted.
+    """Prepend a best-effort project install to *command*, if warranted.
 
     Returns *command* unchanged unless ALL of:
 
@@ -302,6 +302,14 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     existing lockfile (no git resolution needed) so the sandbox's lack of
     GitHub credentials is NOT a problem.  Falls back to pip when ``uv`` is
     not on ``PATH`` or ``uv sync`` exits non-zero.
+
+    The install is BEST-EFFORT: if the egress proxy is unreachable (or
+    any other network failure occurs), the install command is skipped
+    and *command* runs against the image's baked-in packages.  This is
+    deliberate — the sandbox image already pre-installs test-gate
+    binaries (pytest, pytest-asyncio, pytest-cov) and the repo's
+    runtime deps SHOULD be baked into the image too.  A proxy failure
+    must not block the test gate from running.
 
     The install is made safe for the locked-down sandbox:
 
@@ -329,23 +337,27 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # equivalent and cannot resolve git-sourced dependencies declared there.
     # `--frozen` reads the existing lockfile (no git resolution needed) so
     # the sandbox's lack of GitHub credentials is NOT a problem.
+    # The install is best-effort: failure (e.g. unreachable proxy) is
+    # logged but does NOT block the test command — the image's baked-in
+    # packages are sufficient for the gate to run.
     if _has_uv_sources(repo_dir) and (repo_dir / "uv.lock").exists():
         uv = "uv sync --frozen --no-dev --quiet 2>&1"
         return (
-            f"(command -v uv >/dev/null 2>&1 && ({uv}) || "
-            f"(echo 'WARNING: uv not found, falling back to pip' >&2; "
-            f"({pip} '.[dev]' || {pip} .))) && " + command
+            f"( if command -v uv >/dev/null 2>&1; then "
+            f"({uv}) || {{ echo 'WARNING: uv sync failed, falling back to pip' >&2; "
+            f"({pip} '.[dev]' || {pip} .); }}; "
+            f"else echo 'WARNING: uv not found, falling back to pip' >&2; "
+            f"({pip} '.[dev]' || {pip} .); fi ) || "
+            f"echo 'WARNING: project install skipped (proxy/repo unreachable?); "
+            f"running gate with baked-in packages' && " + command
         )
 
     # No [tool.uv.sources] — pip path unchanged.
-    # Install the project WITH its dev/test extra so test-only deps the
-    # ticket adds (e.g. hypothesis) are importable in the gate — a plain
-    # `pip install .` pulls runtime deps only, so a new test dependency
-    # fails with ModuleNotFoundError. Try `.[dev]` (the convention across
-    # robotsix repos); fall back to a plain install for any repo that has
-    # no `dev` extra (pip would otherwise error), so this never regresses
-    # a previously-runnable gate.
-    return f"({pip} '.[dev]' || {pip} .) && " + command
+    # Same best-effort semantics: install failure is non-fatal.
+    return (
+        f"(({pip} '.[dev]' || {pip} .) || "
+        f"echo 'WARNING: pip install skipped (proxy unreachable?)') && " + command
+    )
 
 
 def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
