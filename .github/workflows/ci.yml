@@ -26,7 +26,7 @@ jobs:
       # every `uv sync`, so only the genuine `tracing` extra is listed here.
       install-extras: "tracing"
       cov-package: "robotsix_mill"
-      coverage-threshold: 70
+      coverage-threshold: 80
       pytest-args: -m "not docker"
       bandit-severity: "medium"
       mypy-advisory: true

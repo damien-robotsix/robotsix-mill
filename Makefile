@@ -17,7 +17,7 @@ install:
 	uv sync --frozen --extra tracing
 
 test: install
-	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
+	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=80
 
 .PHONY: format  ## Auto-format Python source files
 format: install

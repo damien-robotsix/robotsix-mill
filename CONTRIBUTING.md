@@ -8,7 +8,7 @@ Python **3.14** is required (see [`.python-version`](.python-version)).
 cp config/config.example.yaml config/config.yaml   # fill in secrets.openrouter_api_key at minimum
 make install                  # editable install into .venv with dev+tracing extras
 make dev                      # hot-reload server on http://127.0.0.1:8077
-make test                     # pytest with coverage (fail-under 70%)
+make test                     # pytest with coverage (fail-under 80%)
 ```
 
 Other `make` targets:
@@ -206,7 +206,7 @@ Tests live in `tests/` and mirror the source tree
 
 **Configuration** ([`pyproject.toml`](pyproject.toml)):
 - `asyncio_mode = "auto"` — no `@pytest.mark.asyncio` needed.
-- Coverage fail-under 70% (via `pytest-cov`).
+- Coverage fail-under 80% (via `pytest-cov`).
 - Run with `make test`.
 
 **Key fixtures** ([`tests/conftest.py`](tests/conftest.py)):
@@ -298,7 +298,7 @@ check.
 | [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
 | hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
-| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → **dependency audit** (CVE scan via `uv audit --frozen --preview` / `pip-audit` fallback — **hard gate**) → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
+| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → **dependency audit** (CVE scan via `uv audit --frozen --preview` / `pip-audit` fallback — **hard gate**) → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (80% cov) |
 | [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
 | [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/deps/dependencies.md) |
 | [`release.yml`](.github/workflows/release.yml) | Push to `main` | hadolint lint on all three Dockerfiles → build and publish Docker images to GHCR (`robotsix-mill`, `robotsix-mill-sandbox`, `robotsix-mill-sandbox-proxy`) via the shared reusable `docker-release.yml` workflow → smoke-test each published image (entrypoint reachable, agent definitions bundled, version readable). |
