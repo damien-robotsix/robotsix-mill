@@ -20,15 +20,15 @@ The fleet constraints that bias the evaluation are:
   philosophy — captured in [`AGENT.md`](../../AGENT.md)
   ("Optimize for a small, sharp, honest codebase … no speculative
   'enterprise-grade' abstractions") and operationalised by the pin+bump
-  dependency policy in [dependencies.md](../dependencies.md) — is to prefer
+  dependency policy in [dependencies.md](deps/dependencies.md) — is to prefer
   the standard library and a small number of well-justified shared
   libraries over heavyweight infrastructure. This is the principle the
   prospective **ADR 0001 (programming language / dependency posture)**
   would formalise; until that ADR lands, `AGENT.md` and
-  [dependencies.md](../dependencies.md) are the operative source.
+  [dependencies.md](deps/dependencies.md) are the operative source.
 - **Existing tooling.** The fleet already standardises model access,
   cost tracking, and OpenTelemetry tracing through the shared
-  `robotsix-llmio` library (see [dependencies.md](../dependencies.md)). A
+  `robotsix-llmio` library (see [dependencies.md](deps/dependencies.md)). A
   transport that composes cleanly with async Python and OTel is
   preferred.
 - **Deployment simplicity.** Services run as Docker Compose units
@@ -318,7 +318,7 @@ Justification against the fleet constraints:
   on the stack the fleet already runs (FastAPI/Starlette server,
   stdlib `urllib` / the existing `httpx` client, `websockets` if needed) —
   no new always-on stateful broker, consistent with the
-  `AGENT.md` / [dependencies.md](../dependencies.md) posture and the future
+  `AGENT.md` / [dependencies.md](deps/dependencies.md) posture and the future
   ADR 0001 it would formalise. A broker (Kafka especially) is rejected as
   the *default* precisely because it adds an operational service the epic
   does not yet need.

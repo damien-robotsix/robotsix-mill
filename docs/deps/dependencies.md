@@ -30,7 +30,7 @@ library repos):
    preceding `uv lock`. `--frozen` installs strictly from the committed
    lock and **fails the build if the lock is stale** relative to
    `pyproject.toml`. This is a hard CI **gate**, not advisory (see
-   [ci-policy.md](ci-policy.md)).
+   [ci-policy.md](../ci-policy.md)).
 
 3. **Bump.** A scheduled workflow
    ([`deps-bump-schedule.yml`](../.github/workflows/deps-bump-schedule.yml))

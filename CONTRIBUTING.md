@@ -40,7 +40,7 @@ regeneration), so `main` builds off pinned commits. The four
 `robotsix-*` shared libraries are git deps tracking `@main`; new commits
 advance into mill only through the automated `uv.lock` bump PR
 ([`deps-bump.yml`](.github/workflows/deps-bump.yml)). See
-[docs/dependencies.md](docs/dependencies.md) for the full pin + bump
+[docs/dependencies.md](docs/deps/dependencies.md) for the full pin + bump
 mechanism, trade-offs, and the CI-monitor heuristic.
 
 ## Project structure
@@ -300,7 +300,7 @@ check.
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → **dependency audit** (CVE scan via `uv audit --frozen --preview` / `pip-audit` fallback — **hard gate**) → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
 | [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
-| [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/dependencies.md) |
+| [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/deps/dependencies.md) |
 | [`release.yml`](.github/workflows/release.yml) | Push to `main` | hadolint lint on all three Dockerfiles → build and publish Docker images to GHCR (`robotsix-mill`, `robotsix-mill-sandbox`, `robotsix-mill-sandbox-proxy`) via the shared reusable `docker-release.yml` workflow → smoke-test each published image (entrypoint reachable, agent definitions bundled, version readable). |
 
 **Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
