@@ -524,7 +524,11 @@ modules:
       catalog, configuration, deployment, security, and design docs.
       Includes the module taxonomy and its schema.
     paths:
-      - docs/**/*
+      - docs/*.md
+      - docs/modules.yaml
+      - docs/design/**/*
+      - docs/guides/**/*
+      - docs/reference/**/*
       - mkdocs.yml
       - agent_references/**/*
     dependencies: []
