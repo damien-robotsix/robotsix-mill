@@ -8,6 +8,7 @@
   suites died with `pytest: command not found`) until the mill itself
   restarted — 2026-07-05 incident, 169 tickets blocked. The attach is
   idempotent and costs two fast docker CLI calls per spawn.
+- Fix ``insert_changelog_entry`` tool: when the ``## 0.0.0 (unreleased)`` section is missing from an existing CHANGELOG.md, insert it after the H1 header (or at end of file) instead of prepending at line 0, preventing content loss. Added agent prompt warning to read CHANGELOG.md before calling the tool. (mill: agent_limitation — The `insert_changelog_entry` tool (observation `e135a2bc2733cfa4`) overwrote the entire CH (20260704T180625Z-agent-limitation-the-insert-changelog-en-f8f3) [WIP])
 - Reorganized agent documentation under `docs/agents/`: moved 7 files (`agents.md`, `reference/agents.md`, `agent-communication-research.md`, `agent-md-candidates.md`, `agent-yaml-schema.md`, `audit-agent.md`, `diagnostic-agent.md`) into the new `docs/agents/` subdirectory; updated `mkdocs.yml` nav, `docs/modules.yaml`, and all cross-references.
 - Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`

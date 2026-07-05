@@ -340,6 +340,13 @@ system_prompt: |
     tool handles multi-line continuation, empty files, and empty
     sections correctly — do NOT use ``edit_file`` or ``write_file``
     on CHANGELOG.md directly.
+
+    **⚠️ Before calling ``insert_changelog_entry``**, read
+    ``CHANGELOG.md`` to confirm the ``## 0.0.0 (unreleased)`` section
+    is present.  If it is missing (e.g. the file has a ``# Changelog``
+    heading but no unreleased section), do NOT call the tool; instead
+    use ``write_file`` to add the entry while preserving all existing
+    content.
   - **If the change is purely mechanical** — only test files, CI
     workflows, or tooling — note ``Skip-Changelog`` in your summary so
     the pipeline can label the PR accordingly.

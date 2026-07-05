@@ -55,9 +55,19 @@ def _insert_changelog_entry(repo_dir: Path, entry_text: str) -> str:
 
     header_idx = _find_header_idx(lines)
     if header_idx is None:
-        lines.insert(0, f"{_HEADER}\n\n{entry_text}\n")
+        # No ## 0.0.0 (unreleased) section — insert after the first
+        # H1 header (# …), or at end of file if no H1 is found.
+        insert_at = len(lines)
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("# ") and not stripped.startswith("## "):
+                insert_at = i + 1
+                while insert_at < len(lines) and lines[insert_at].strip() == "":
+                    insert_at += 1
+                break
+        lines.insert(insert_at, f"{_HEADER}\n\n{entry_text}\n")
         changelog_path.write_text("".join(lines), encoding="utf-8")
-        return "changelog_insert: added header + entry at top"
+        return "changelog_insert: added header + entry after existing content"
 
     first_bullet_idx = _find_first_bullet(lines, header_idx + 1)
     if first_bullet_idx is None:

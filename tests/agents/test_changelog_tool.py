@@ -118,7 +118,44 @@ def test_adds_header_when_missing(tmp_path: Path):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text("# Old header\n\n- old entry\n")
     result = _insert_changelog_entry(tmp_path, "- **new**: entry")
-    assert "added header + entry" in result
+    assert "added header + entry after existing content" in result
     content = changelog.read_text()
-    assert content.startswith(f"{_HEADER}\n\n- **new**: entry\n")
+    assert content.startswith("# Old header\n\n")
+    assert f"{_HEADER}\n\n- **new**: entry\n" in content
     assert "old entry" in content
+
+
+def test_adds_header_after_h1_when_missing(tmp_path: Path):
+    """When file has an H1 but no unreleased section, insert after H1."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "# Changelog\n\n"
+        "<!-- towncrier release notes start -->\n\n"
+        "## 1.0.0 (2024-01-01)\n\n"
+        "- Feature A\n"
+        "- Feature B\n"
+    )
+    result = _insert_changelog_entry(tmp_path, "- **new**: entry")
+    assert "added header + entry after existing content" in result
+    content = changelog.read_text()
+    # New section should appear after the H1 header, before the towncrier comment
+    assert content.startswith("# Changelog\n\n")
+    idx = content.index(_HEADER)
+    assert idx < content.index("<!-- towncrier")
+    assert "- **new**: entry" in content
+    assert "Feature A" in content
+    assert "Feature B" in content
+
+
+def test_adds_header_at_end_when_no_h1(tmp_path: Path):
+    """When file has no H1 and no unreleased section, insert at end."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("Some random content\nwithout any headers.\n")
+    result = _insert_changelog_entry(tmp_path, "- **new**: entry")
+    assert "added header + entry after existing content" in result
+    content = changelog.read_text()
+    assert "Some random content" in content
+    assert "without any headers" in content
+    assert f"{_HEADER}\n\n- **new**: entry\n" in content
+    # The unreleased section should come after existing content
+    assert content.index("Some random") < content.index(_HEADER)
