@@ -1,5 +1,6 @@
 import pytest
-from robotsix_mill.cli import main, build_parser
+from robotsix_mill.cli import main
+from robotsix_mill.cli._parser import build_parser
 from robotsix_mill.core.states import State
 
 
@@ -266,7 +267,7 @@ def test_resume_blocked_failure(settings, service):
 
 def test_copy_paste_registered_in_runners():
     """The copy-paste pass is wired into the generic _RUNNERS dispatch table."""
-    from robotsix_mill.cli import _RUNNERS
+    from robotsix_mill.cli.admin import _RUNNERS
 
     entry = _RUNNERS["copy-paste"]
     assert entry["module"] == "runners.periodic_runner"
@@ -276,7 +277,7 @@ def test_copy_paste_registered_in_runners():
 
 def test_forge_parity_registered_in_runners():
     """The forge-parity pass is wired into the generic _RUNNERS dispatch table."""
-    from robotsix_mill.cli import _RUNNERS
+    from robotsix_mill.cli.admin import _RUNNERS
 
     entry = _RUNNERS["forge-parity"]
     assert entry["module"] == "runners.periodic_runner"
@@ -314,7 +315,7 @@ def test_forge_parity_cli_command(monkeypatch):
 
 def test_meta_registered_in_runners():
     """The meta pass is wired into the generic _RUNNERS dispatch table."""
-    from robotsix_mill.cli import _RUNNERS
+    from robotsix_mill.cli.admin import _RUNNERS
 
     entry = _RUNNERS["meta"]
     assert entry["module"] == "meta.runner"

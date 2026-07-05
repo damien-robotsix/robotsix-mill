@@ -12,6 +12,10 @@
 - Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`
 - Migration from `robotsix-yaml-config` → `robotsix-config`: dependency swapped, config layer rewritten to use stdlib `json` + pyyaml for overlay YAML, `JsonSettingsSource` replaces `YamlSettingsSource`, `config/config.example.json` committed (was `.yaml`), schema regeneration updated.
+- Split ``robotsix_mill.cli.__init__`` into a package with separate submodules:
+  ``_parser.py`` (``build_parser``), ``admin.py`` (``_RUNNERS`` and
+  ``_run_and_print``), leaving ``__init__.py`` thin with ``main()`` and shared
+  helpers only.
 - Diagnostic investigation: traced "interrupted by process restart" errors across 19 agent/board pairs to `RunRegistry` orphan reconciliation — identified OOM kills under combined mill + sandbox memory pressure as the most likely root cause, with deployment rollouts as a secondary contributor.
 - Add `agent_references/betterleaks.md` with Betterleaks configuration reference (repo URL, hook id, version v1.6.0, baseline mode, config precedence, `.betterleaks.toml` format) to eliminate web research on future Betterleaks migrations.
 - Implement agent pre-flight checks are now scope-aware: when the diff

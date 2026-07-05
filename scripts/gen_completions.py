@@ -27,7 +27,7 @@ if _src not in sys.path:
     sys.path.insert(0, _src)
 
 import shtab
-from robotsix_mill.cli import build_parser
+from robotsix_mill.cli._parser import build_parser
 
 OUT_DIR = os.path.join(_repo_root, "contrib", "completions")
 SHELLS = ("bash", "zsh")
