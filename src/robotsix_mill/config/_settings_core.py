@@ -756,7 +756,7 @@ class _CoreSettings(BaseModel):
     # Image the sandbox runs commands in — must contain the toolchain
     # MILL_TEST_COMMAND needs.
     sandbox_image: str = Field(
-        default="python:3.14-slim",
+        default="robotsix/mill-sandbox:latest",
         description="Docker image for the command sandbox.",
     )
     sandbox_memory: str = Field(

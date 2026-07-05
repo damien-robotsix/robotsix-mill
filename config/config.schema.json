@@ -2076,7 +2076,7 @@
           "title": "Sandbox Data Mount"
         },
         "sandbox_image": {
-          "default": "python:3.14-slim",
+          "default": "robotsix/mill-sandbox:latest",
           "description": "Docker image for the command sandbox.",
           "title": "Sandbox Image",
           "type": "string"
