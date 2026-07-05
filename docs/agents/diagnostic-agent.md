@@ -87,7 +87,7 @@ record.
 
 ## See also
 
-- [index.md](index.md) — documentation home
-- [docs/agents.md](agents.md) — agent catalog
-- [docs/trace-health.md](trace-health.md) — a sibling deterministic check
-- [docs/configuration.md](configuration.md) — full env-var reference
+- [index.md](../index.md) — documentation home
+- [agent catalog](index.md) — agent catalog
+- [docs/trace-health.md](../trace-health.md) — a sibling deterministic check
+- [docs/configuration.md](../configuration.md) — full env-var reference

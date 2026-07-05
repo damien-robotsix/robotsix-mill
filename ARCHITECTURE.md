@@ -105,7 +105,7 @@ This page is the map; the territory lives in [`docs/`](docs/):
   topology, the sibling-sandbox model, and the trust boundary.
 - [docs/configuration.md](docs/configuration.md) — full settings
   reference and YAML loading order.
-- [docs/agents.md](docs/agents.md) — the agent catalog.
+- [docs/agents/index.md](docs/agents/index.md) — the agent catalog.
 - [docs/approval-gate.md](docs/approval-gate.md) — the human approval
   gate after refine.
 - [docs/merge-stage.md](docs/merge-stage.md) — gate-check, auto-rebase,

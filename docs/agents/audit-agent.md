@@ -82,6 +82,6 @@ otherwise `<data_dir>/audit_memory.md`.
 
 ## See also
 
-- [index.md](index.md) — documentation home
-- [docs/agents.md](agents.md) — agent catalog
-- [docs/configuration.md](configuration.md) — full env-var reference
+- [index.md](../index.md) — documentation home
+- [agent catalog](index.md) — agent catalog
+- [docs/configuration.md](../configuration.md) — full env-var reference

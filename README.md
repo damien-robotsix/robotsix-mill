@@ -172,16 +172,16 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/github-app.md](docs/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
 - [docs/inquiry-to-task.md](docs/inquiry-to-task.md) — Convert an answered inquiry into an actionable task ticket
 - [docs/security.md](docs/security.md) — Security model
-- [docs/agents.md](docs/agents.md) — Full agent catalog
+- [docs/agents/index.md](docs/agents/index.md) — Full agent catalog
 - [docs/board-operations.md](docs/board-operations.md) — Board UI and automated column transitions
-- [docs/agent-yaml-schema.md](docs/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
+- [docs/agents/agent-yaml-schema.md](docs/agents/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
 - [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
-- [docs/agent-md-candidates.md](docs/agent-md-candidates.md) — Review and validate AGENT.md rule proposals from retrospect agent
+- [docs/agents/md-candidates.md](docs/agents/md-candidates.md) — Review and validate AGENT.md rule proposals from retrospect agent
 - [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
 - [docs/epic-dedup.md](docs/epic-dedup.md) — Advisory pre-filing dedup for epic-decomposition children
 - [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
-- [docs/audit-agent.md](docs/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
+- [docs/agents/audit-agent.md](docs/agents/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
 - [docs/blocked-ticket-recovery.md](docs/blocked-ticket-recovery.md) — Recovering from BLOCKED tickets
 - [docs/retrospect-memory.md](docs/retrospect-memory.md) — Retrospect agent's Markdown memory ledger
 - [docs/trace-health.md](docs/trace-health.md) — Deterministic check for unsessioned Langfuse traces

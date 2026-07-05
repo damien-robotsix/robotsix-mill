@@ -24,4 +24,4 @@ The CLI respects all workflow rules and ensures the transition is safe.
 
 ## Learning More
 
-See [docs/agents.md](agents.md) for the complete agent catalog and stage-by-stage lifecycle breakdown.
+See [docs/agents/index.md](agents/index.md) for the complete agent catalog and stage-by-stage lifecycle breakdown.
