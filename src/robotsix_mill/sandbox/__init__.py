@@ -63,6 +63,7 @@ class SandboxError(RuntimeError):
 # Every helper below is best-effort and never raises, and the call sites are
 # gated on ``DOCKER_HOST`` being set so the dev stack path is unchanged.
 
+
 def ensure_sandbox_network(settings: Settings) -> bool:
     """Create the internal egress network and attach the egress proxy.
 
