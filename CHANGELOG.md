@@ -13,6 +13,7 @@
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.
+- Decomposed `RetrospectStage.run()` (formerly 280 lines) into five focused private methods: `_verify_prs_and_collect_results`, `_run_retrospect_agent`, `_handle_memory_persistence`, `_apply_cross_repo_guards`, and `_spawn_result_tickets`.
 - Sandbox (deploy mode): re-establish the internal egress network and the
   `sandbox-proxy` attachment before **every** sandbox spawn instead of once
   per process. A deploy can recreate the `sandbox-proxy` sibling at any

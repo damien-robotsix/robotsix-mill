@@ -600,18 +600,13 @@ class RetrospectStage(Stage):
 
     # ------------------------------------------------------------------
 
-    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
-        """Run a retrospective over a DONE ticket's history, comments, and description; emit findings and optionally spawn follow-up draft tickets."""
-        s = ctx.settings
-        ws = ctx.service.workspace(ticket)
+    def _verify_prs_and_collect_results(self, ws, s: Settings) -> Outcome | None:
+        """Verify every PR listed in pr_urls.json is actually merged.
 
-        # Defensive multi-repo verification: the merge stage's
-        # aggregator already gated this — but a manual BLOCKED→DONE
-        # override could skip it.  When ``pr_urls.json`` exists,
-        # re-confirm every listed PR is actually merged before the
-        # retrospect agent runs.  Forge-call exceptions during this
-        # check do NOT block — transient retry is the merge stage's
-        # job, not retrospect's.
+        The merge stage's aggregator already gated this, but a manual
+        BLOCKED→DONE override could skip it.  Returns a BLOCKED Outcome
+        when any PR is unmerged, or None when all clear.
+        """
         from ..stages.merge import _load_pr_urls
 
         try:
@@ -621,28 +616,42 @@ class RetrospectStage(Stage):
                 State.BLOCKED,
                 f"pr_urls.json corrupted in retrospect — resumable: {e}",
             )
-        if pr_entries:
-            unmerged: list[str] = []
-            for entry in pr_entries:
-                try:
-                    rc = get_repo_config(entry["repo_id"])
-                except ConfigError:
-                    unmerged.append(f"{entry['repo_id']} (unknown repo)")
-                    continue
-                try:
-                    pr = get_forge(s, repo_config=rc).pr_status(
-                        source_branch=entry["branch"]
-                    )
-                except Exception:  # noqa: BLE001 — transient is merge's job
-                    continue
-                if pr is None or not pr.get("merged"):
-                    unmerged.append(f"{entry['repo_id']}: {entry['url']}")
-            if unmerged:
-                return Outcome(
-                    State.BLOCKED,
-                    f"retrospect refusing to close — {len(unmerged)} PR(s) "
-                    "not merged: " + "; ".join(unmerged),
+        if not pr_entries:
+            return None
+
+        unmerged: list[str] = []
+        for entry in pr_entries:
+            try:
+                rc = get_repo_config(entry["repo_id"])
+            except ConfigError:
+                unmerged.append(f"{entry['repo_id']} (unknown repo)")
+                continue
+            try:
+                pr = get_forge(s, repo_config=rc).pr_status(
+                    source_branch=entry["branch"]
                 )
+            except Exception:  # noqa: BLE001 — transient is merge's job
+                continue
+            if pr is None or not pr.get("merged"):
+                unmerged.append(f"{entry['repo_id']}: {entry['url']}")
+        if unmerged:
+            return Outcome(
+                State.BLOCKED,
+                f"retrospect refusing to close — {len(unmerged)} PR(s) "
+                "not merged: " + "; ".join(unmerged),
+            )
+        return None
+
+    def _run_retrospect_agent(
+        self, ticket: Ticket, ctx: StageContext, ws, lf, memory_file, repo_dir
+    ) -> RetrospectResult | Outcome:
+        """Gather inputs and invoke the retrospect agent.
+
+        Returns the RetrospectResult on success, or a CLOSED Outcome
+        (with a failure note) when the agent call itself fails
+        non-transiently.
+        """
+        s = ctx.settings
 
         history = ctx.service.history(ticket.id)
         history_text = "\n".join(
@@ -669,12 +678,6 @@ class RetrospectStage(Stage):
         ticket_summary = (
             f"id: {ticket.id}\ntitle: {ticket.title}\nbranch: {ticket.branch}\n\n{desc}"
         )
-        # Per-trace deep inspection is now handled by the periodical
-        # pipeline (trace_health_runner + expensive-item detector).
-        # The retrospect only receives the pre-computed session summary.
-        lf = langfuse_client.fetch_session_summary(
-            s, ticket.id, repo_config=ctx.repo_config
-        )
 
         # Retrieve epic context and sibling sub-issues so the agent can
         # cross-reference incomplete-work findings against the parent
@@ -697,9 +700,8 @@ class RetrospectStage(Stage):
         # Read current memory through the shared helper — returns "" on
         # missing/unreadable files and tail-truncates to max_memory_chars
         # (keeps the most-recent entries), matching every other stage.
-        from ..runners.pass_runner import load_memory, persist_memory
+        from ..runners.pass_runner import load_memory
 
-        memory_file = s.memory_file_for("retrospect", ctx.memory_board_id(ticket))
         memory_text = load_memory(memory_file, max_chars=s.max_memory_chars)
 
         # Verify prior proposals and prepend verified-state table.
@@ -721,7 +723,6 @@ class RetrospectStage(Stage):
         recent = ctx.service.recent_proposals_for(SourceKind.RETROSPECT, limit=100)
         rp_block = _format_recent_proposals(recent)
 
-        repo_dir = ws.repo_dir if ws.repo_dir.exists() else None
         try:
             res = retrospecting.run_retrospect_agent(
                 settings=s,
@@ -736,6 +737,7 @@ class RetrospectStage(Stage):
                 sibling_context=sibling_ctx,
                 repo_dir=repo_dir,
             )
+            return res
         except Exception as e:  # noqa: BLE001 — resumable, never lose the ticket
             log.exception("%s: retrospect agent failed", ticket.id)
             # Transient model blips get a fresh stage re-run via the
@@ -756,12 +758,16 @@ class RetrospectStage(Stage):
                 prune_clone(ws)
             return Outcome(State.CLOSED, f"retrospect failed — {e!r}")
 
-        # Resolve the memory document to persist across the three output
-        # paths (full rewrite / append-only delta / no change), stripping
-        # the ephemeral verified-state table if the agent copied it back in
-        # (it is injected fresh each run from the DB and must never accrete
-        # in the ledger).
-        from ..runners.pass_runner import strip_ephemeral_sections
+    def _handle_memory_persistence(
+        self, res: RetrospectResult, memory_file, ticket: Ticket, s: Settings
+    ) -> None:
+        """Persist the retrospect agent's memory edits or delta.
+
+        Handles three cases: full rewrite (updated_memory), targeted
+        edits (memory_edits), append-only delta (memory_delta), or no
+        change.  Logs advisory count-consistency warnings.
+        """
+        from ..runners.pass_runner import strip_ephemeral_sections, persist_memory
 
         if res.updated_memory:
             # Case 3: full rewrite (existing behavior — agent modified the ledger).
@@ -809,51 +815,65 @@ class RetrospectStage(Stage):
         if persisted:
             persist_memory(memory_file, persisted, max_chars=s.max_memory_chars)
 
-        # Guard against unverifiable cross-repo follow-ups: when the
-        # agent proposes a draft or follow-up whose body references
-        # source paths in a different repo (package root absent from
-        # the current clone), skip it — the agent cannot verify the
-        # consumer repo's current state from this workspace.
-        if repo_dir is not None:
-            cross_repo_notes: list[str] = []
+    def _apply_cross_repo_guards(
+        self, res: RetrospectResult, repo_dir, ticket: Ticket
+    ) -> None:
+        """Drop draft/follow-up proposals that reference code in a
+        different repo (unverifiable from the current workspace clone).
 
-            if (
-                res.follow_up_title
-                and res.follow_up_target == "current"
-                and has_unverifiable_cross_repo_refs(
-                    res.follow_up_title, res.follow_up_body, repo_dir
-                )
-            ):
-                cross_repo_notes.append(
-                    f"Skipped unverifiable cross-repo follow-up: "
-                    f"{res.follow_up_title}. The follow-up references "
-                    f"code in a different repo — consumer-side wiring "
-                    f"must be verified manually."
-                )
-                res.follow_up_title = None
-                res.follow_up_body = None
+        Modifies *res* in place — clears ``follow_up_title``/``body``
+        and ``draft_title``/``body`` when they reference a different
+        repo, and appends a note to ``res.findings``.
+        """
+        if repo_dir is None:
+            return
 
-            if (
-                res.draft_title
-                and res.draft_target == "current"
-                and has_unverifiable_cross_repo_refs(
-                    res.draft_title, res.draft_body, repo_dir
-                )
-            ):
-                cross_repo_notes.append(
-                    f"Skipped unverifiable cross-repo draft: {res.draft_title}"
-                )
-                res.draft_title = None
-                res.draft_body = None
-                res.propose_draft = False
+        cross_repo_notes: list[str] = []
 
-            if cross_repo_notes:
-                res.findings += "\n\n## Cross-repo guard\n\n" + "\n\n".join(
-                    cross_repo_notes
-                )
-                for note in cross_repo_notes:
-                    log.info("%s: %s", ticket.id, note)
+        if (
+            res.follow_up_title
+            and res.follow_up_target == "current"
+            and has_unverifiable_cross_repo_refs(
+                res.follow_up_title, res.follow_up_body, repo_dir
+            )
+        ):
+            cross_repo_notes.append(
+                f"Skipped unverifiable cross-repo follow-up: "
+                f"{res.follow_up_title}. The follow-up references "
+                f"code in a different repo — consumer-side wiring "
+                f"must be verified manually."
+            )
+            res.follow_up_title = None
+            res.follow_up_body = None
 
+        if (
+            res.draft_title
+            and res.draft_target == "current"
+            and has_unverifiable_cross_repo_refs(
+                res.draft_title, res.draft_body, repo_dir
+            )
+        ):
+            cross_repo_notes.append(
+                f"Skipped unverifiable cross-repo draft: {res.draft_title}"
+            )
+            res.draft_title = None
+            res.draft_body = None
+            res.propose_draft = False
+
+        if cross_repo_notes:
+            res.findings += "\n\n## Cross-repo guard\n\n" + "\n\n".join(
+                cross_repo_notes
+            )
+            for note in cross_repo_notes:
+                log.info("%s: %s", ticket.id, note)
+
+    def _spawn_result_tickets(
+        self, res: RetrospectResult, ticket: Ticket, s: Settings, ctx: StageContext, ws, lf
+    ) -> tuple[str | None, str | None]:
+        """Spawn draft/follow-up/AGENT.md tickets and write retrospect.md.
+
+        Returns ``(spawned_draft_id, follow_up_id)`` — each may be None.
+        """
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
         self._suppress_duplicate_agented_proposals(res, ticket, s, ctx)
@@ -869,10 +889,47 @@ class RetrospectStage(Stage):
             f"follow-up: {follow_up or '—'}\n\n{res.findings}\n",
             encoding="utf-8",
         )
+        return spawned, follow_up
 
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Run a retrospective over a DONE ticket's history, comments, and description; emit findings and optionally spawn follow-up draft tickets."""
+        s = ctx.settings
+        ws = ctx.service.workspace(ticket)
+
+        # 1. Verify PRs are merged.
+        outcome = self._verify_prs_and_collect_results(ws, s)
+        if outcome is not None:
+            return outcome
+
+        # 2. Pre-compute shared values.
+        lf = langfuse_client.fetch_session_summary(
+            s, ticket.id, repo_config=ctx.repo_config
+        )
+        memory_file = s.memory_file_for("retrospect", ctx.memory_board_id(ticket))
+        repo_dir = ws.repo_dir if ws.repo_dir.exists() else None
+
+        # 3. Run the retrospect agent.
+        result = self._run_retrospect_agent(
+            ticket, ctx, ws, lf, memory_file, repo_dir
+        )
+        if isinstance(result, Outcome):
+            return result
+        res = result
+
+        # 4. Persist memory edits.
+        self._handle_memory_persistence(res, memory_file, ticket, s)
+
+        # 5. Drop cross-repo proposals.
+        self._apply_cross_repo_guards(res, repo_dir, ticket)
+
+        # 6. Spawn tickets and write retrospect.md.
+        spawned, follow_up = self._spawn_result_tickets(res, ticket, s, ctx, ws, lf)
+
+        # 7. Clean up clone.
         if s.prune_clone_on_close:
             prune_clone(ws)
 
+        # 8. Build closing note.
         note = res.conclusion or "closed"
         if spawned:
             note = f"{note} — improvement draft {spawned}"
