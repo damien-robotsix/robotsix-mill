@@ -730,8 +730,8 @@
           "type": "boolean"
         },
         "allow_runtime_repo_registration": {
-          "default": false,
-          "description": "When true, allow POST /repos to hot-register repos at runtime. When false, only operator-configured repos are accepted.",
+          "default": true,
+          "description": "When true (default), allow POST /repos to hot-register repos at runtime and accept tickets for auto-registered repos. Set to false for lock-down deployments that want config-only repos.",
           "title": "Allow Runtime Repo Registration",
           "type": "boolean"
         },

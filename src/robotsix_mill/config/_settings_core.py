@@ -85,15 +85,12 @@ class _CoreSettings(BaseModel):
         ge=0,
         description="Hard cap on read_file calls per refine/triage agent run. Set to 0 to disable the cap.",
     )
-    # When true, the POST /repos API endpoint is allowed to hot-register
-    # repos at runtime. When false (default), only repos listed in the
-    # operator's shipped config (config/config.json) are accepted — runtime
-    # registration via the API is refused. Also controls whether tickets
-    # for auto-registered repos (source="auto") are accepted by
-    # POST /tickets and POST /tickets/ingest.
+    # When true (default), POST /repos, POST /tickets, and
+    # POST /tickets/ingest accept runtime-registered repos. Set to
+    # false for lock-down deployments that want config-only repos.
     allow_runtime_repo_registration: bool = Field(
-        default=False,
-        description="When true, allow POST /repos to hot-register repos at runtime. When false, only operator-configured repos are accepted.",
+        default=True,
+        description="When true (default), allow POST /repos to hot-register repos at runtime and accept tickets for auto-registered repos. Set to false for lock-down deployments that want config-only repos.",
     )
     # How long a cached web_knowledge .md file is considered fresh
     # (days). A consultation that hits a stale file is allowed to
