@@ -2640,15 +2640,15 @@ def migrate_env(settings, service):
 
     _cfg._repos_config = ReposRegistry(
         repos={
-            "test-repo": RepoConfig(
-                repo_id="test-repo",
+            "test-board": RepoConfig(
+                repo_id="test-board",
                 
                 langfuse_project_name="proj-a",
                 langfuse_public_key="pk-a",
                 langfuse_secret_key="sk-a",
             ),
-            "other-repo": RepoConfig(
-                repo_id="other-repo",
+            "other-board": RepoConfig(
+                repo_id="other-board",
                 
                 langfuse_project_name="proj-b",
                 langfuse_public_key="pk-b",
@@ -2707,7 +2707,7 @@ def test_migrate_accepts_repo_id_and_resets_block_state(migrate_env):
     t = service.create("Blocked elsewhere", "body")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="not actionable here")
-    migrated = service.migrate(t.id, "other-repo")
+    migrated = service.migrate(t.id, "other-board")
     assert migrated.board_id == "other-board"
     assert migrated.state is State.DRAFT
     assert migrated.blocked_from is None

@@ -109,7 +109,6 @@ def test_nested_registry_with_repo_loads(tmp_path, monkeypatch):
             "meta": None,
             "repos": {
                 "foo": {
-                    "board_id": "board-foo",
                     "forge_remote_url": "https://github.com/o/foo",
                 }
             },
@@ -117,7 +116,7 @@ def test_nested_registry_with_repo_loads(tmp_path, monkeypatch):
     )
     reg = load_repos_config()
     assert set(reg.repos) == {"foo"}
-    assert reg.repos["foo"].board_id == "board-foo"
+    assert reg.repos["foo"].repo_id == "foo"
 
 
 def test_legacy_flat_still_loads(tmp_path, monkeypatch):
@@ -127,21 +126,19 @@ def test_legacy_flat_still_loads(tmp_path, monkeypatch):
         monkeypatch,
         {
             "foo": {
-                "board_id": "board-foo",
                 "forge_remote_url": "https://github.com/o/foo",
             }
         },
     )
     reg = load_repos_config()
     assert set(reg.repos) == {"foo"}
-    assert reg.repos["foo"].board_id == "board-foo"
+    assert reg.repos["foo"].repo_id == "foo"
 
 
 def test_flat_and_nested_same_repo_are_equivalent(tmp_path, monkeypatch):
     """The flat and nested forms carrying the same repo produce equivalent
     registries."""
     repo = {
-        "board_id": "board-foo",
         "forge_remote_url": "https://github.com/o/foo",
         "max_concurrency": 2,
     }
