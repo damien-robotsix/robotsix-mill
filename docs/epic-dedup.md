@@ -76,4 +76,4 @@ The primitives live in `src/robotsix_mill/dedup.py`
 
 - [index.md](index.md) — documentation home
 - [dedup-guard.md](dedup-guard.md) — pre-refine duplicate / already-done check
-- [configuration.md](configuration.md) — full env-var reference
+- [configuration.md](config/configuration.md) — full env-var reference

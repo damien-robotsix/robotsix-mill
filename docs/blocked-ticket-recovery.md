@@ -142,4 +142,4 @@ absent — the board looks exactly as it does for a non-retrying ticket.
 ## See also
 
 - [index.md](index.md) — documentation home
-- [configuration.md](configuration.md) — `MILL_STAGE_RETRY_*` settings
+- [configuration.md](config/configuration.md) — `MILL_STAGE_RETRY_*` settings

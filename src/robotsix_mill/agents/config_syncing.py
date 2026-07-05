@@ -6,7 +6,7 @@ plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
 ``config/config.json`` (gitignored) is its real-valued counterpart.
 This agent cross-references the template against
 ``src/robotsix_mill/config.py`` (the Pydantic model that consumes it)
-and ``docs/configuration.md`` (when present) to catch drift: settings
+and ``docs/config/configuration.md`` (when present) to catch drift: settings
 declared in code but missing from the JSON template, JSON keys with no
 matching field, documented defaults that disagree with the model
 defaults, etc.
@@ -42,7 +42,7 @@ AUTHORITATIVE FILES (read these, in order):
   ``SECRET`` sentinel value).
 - ``config/repos.example.yaml`` — schema template for per-repo
   config (``RepoConfig`` fields).
-- ``docs/configuration.md`` — operator-facing documentation. When
+- ``docs/config/configuration.md`` — operator-facing documentation. When
   present, every documented option's default should match the
   model's actual default.
 
@@ -66,7 +66,7 @@ CLASSIFY FINDINGS:
 - **default-mismatch**: the JSON default disagrees with the model
   default (e.g. defaults file says ``test_requests: 8`` but the
   model field defaults to ``50``).
-- **doc-mismatch**: ``docs/configuration.md`` documents a knob with
+- **doc-mismatch**: ``docs/config/configuration.md`` documents a knob with
   a value that doesn't match the model default. Only flag when the
   doc explicitly states a number / string; narrative mentions are
   fine.
@@ -176,7 +176,7 @@ def run_config_sync_agent(
 ) -> ConfigSyncResult:
     """Run the config-sync configuration drift inspection pass.
 
-    Inspects ``config.py``, ``.env``, and ``docs/configuration.md``
+    Inspects ``config.py``, ``.env``, and ``docs/config/configuration.md``
     for missing, stale, and drifted settings and returns a structured
     ``ConfigSyncResult`` with draft tickets for newly-discovered gaps.
 

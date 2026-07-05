@@ -103,7 +103,7 @@ This page is the map; the territory lives in [`docs/`](docs/):
 
 - [docs/docker-architecture.md](docs/docker-architecture.md) — container
   topology, the sibling-sandbox model, and the trust boundary.
-- [docs/configuration.md](docs/configuration.md) — full settings
+- [docs/config/configuration.md](docs/config/configuration.md) — full settings
   reference and YAML loading order.
 - [docs/agents/index.md](docs/agents/index.md) — the agent catalog.
 - [docs/approval-gate.md](docs/approval-gate.md) — the human approval

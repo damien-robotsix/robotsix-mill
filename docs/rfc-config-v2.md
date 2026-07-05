@@ -5,12 +5,12 @@
 > + `secrets.yaml`). The mill has since consolidated to a SINGLE file —
 > `config/config.yaml` (else the committed `config/config.example.yaml`),
 > with secrets under a top-level `secrets:` block. See
-> `docs/configuration.md` for the current model. Kept for historical
+> `docs/config/configuration.md` for the current model. Kept for historical
 > rationale only.
 
 > **Status:** Draft — peer review pending
 > **Date:** 2026-05-23
-> **Supersedes:** `docs/config-audit.md` (analysis phase)
+> **Supersedes:** `docs/config/config-audit.md` (analysis phase)
 > **PoC template:** `config/config.example.yaml`
 
 ---
@@ -19,7 +19,7 @@
 
 The current configuration system (`src/robotsix_mill/config.py`) uses a flat
 `Settings(BaseSettings)` class with 115 env-var aliases loaded from `.env` +
-`secrets.env`.  A full-repo audit (`docs/config-audit.md`) identified seven
+`secrets.env`.  A full-repo audit (`docs/config/config-audit.md`) identified seven
 concrete problems:
 
 1. **Flat namespace** — 115 keys with no grouping beyond human comments in
@@ -47,7 +47,7 @@ concrete problems:
    overlay file exists.
 
 5. **Documentation drift** — 12 fields defined in `config.py` have no entry
-   in `docs/configuration.md`.  Documentation is manually maintained with no
+   in `docs/config/configuration.md`.  Documentation is manually maintained with no
    mechanical cross-check.  One default value (`MILL_EXPLORE_MODEL`) is wrong
    in both `.env` comments and docs — the code default is `-flash` but both
    say `-pro`.
@@ -692,7 +692,7 @@ in to YAML by creating `config/mill.local.yaml`.  Production can test the
 
 1. Remove `.env` and `secrets.env` loading from `Settings.model_config`.
 2. Delete `.env.deprecated` and `secrets.env.example`.
-3. Update `docs/configuration.md` to reflect the YAML schema (or replace it
+3. Update `docs/config/configuration.md` to reflect the YAML schema (or replace it
    with a generated reference — see §10).
 
 ### Migration script
@@ -730,17 +730,17 @@ untouched).
 
 ### 10.2 Generated reference
 
-Once implemented, `docs/configuration.md` is replaced by (or supplemented
+Once implemented, `docs/config/configuration.md` is replaced by (or supplemented
 with) a generated reference.  Two options:
 
 1. **Script-driven**: a `scripts/validate-config-docs` script that parses
-   `config/mill.defaults.yaml` and `docs/configuration.md`, comparing every
+   `config/mill.defaults.yaml` and `docs/config/configuration.md`, comparing every
    field.  Fails CI if they drift.  This is the lightweight option — the
    Markdown doc is still manually maintained but mechanically verified.
 
 2. **Fully generated**: a script that reads `config/mill.defaults.yaml` and
    the Pydantic model field metadata (descriptions, types, constraints) and
-   emits a complete `docs/configuration.md`.  This eliminates drift entirely
+   emits a complete `docs/config/configuration.md`.  This eliminates drift entirely
    but requires the generated Markdown to match the repo's documentation
    conventions.
 
@@ -752,7 +752,7 @@ implement and provides immediate drift protection.
 
 The `scripts/validate-config-docs` check runs in CI on every PR.  If a
 field is added to `config/mill.defaults.yaml` without a corresponding entry
-in `docs/configuration.md` (or vice versa), CI fails with a diff showing
+in `docs/config/configuration.md` (or vice versa), CI fails with a diff showing
 exactly what's missing.
 
 This check replaces the current manual documentation maintenance, which has

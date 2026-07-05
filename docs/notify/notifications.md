@@ -23,4 +23,4 @@ The four trigger states are defined in `notify.py:_TRIGGER_STATES`:
 ## See also
 
 - [index.md](index.md) — documentation home
-- [docs/configuration.md](configuration.md) — full env-var reference
+- [docs/config/configuration.md](config/configuration.md) — full env-var reference

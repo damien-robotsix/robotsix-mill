@@ -45,7 +45,7 @@ pragmatic security stance.
 ## Configuration
 
 Settings are managed through a YAML pipeline (see
-[docs/configuration.md](docs/configuration.md) for full details):
+[docs/config/configuration.md](docs/config/configuration.md) for full details):
 
 - **`config/config.yaml`** — THE single config file (gitignored): every
   non-secret knob plus a top-level `secrets:` block (API keys, tokens).
@@ -162,11 +162,11 @@ Running the pipeline needs Docker (agents run in disposable containers);
 `make test` works without it.
 
 Configuration loading order, multi-repo mode, and the full settings
-reference are covered in [docs/configuration.md](docs/configuration.md).
+reference are covered in [docs/config/configuration.md](docs/config/configuration.md).
 
 ## Documentation
 
-- [docs/configuration.md](docs/configuration.md) — Complete configuration reference (YAML schema, loading order, secrets)
+- [docs/config/configuration.md](docs/config/configuration.md) — Complete configuration reference (YAML schema, loading order, secrets)
 - [docs/dev-tooling/deployment.md](docs/dev-tooling/deployment.md) — Continuous deployment via GitHub Actions + Watchtower
 - [docs/docker-architecture.md](docs/docker-architecture.md) — Container topology & conceptual architecture
 - [docs/github-app.md](docs/github-app.md) — Delivery identity setup (PAT or GitHub App bot)

@@ -189,5 +189,5 @@ No separate detail fetch is required — the summary is available at list time.
 ### See also
 
 - [index.md](index.md) — documentation home
-- [docs/configuration.md](configuration.md) — full env-var reference
+- [docs/config/configuration.md](config/configuration.md) — full env-var reference
 - [docs/agents/index.md](agents/index.md) — agent catalog with model-var mapping

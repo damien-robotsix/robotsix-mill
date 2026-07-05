@@ -182,6 +182,6 @@ today.
 
 ## See also
 
-- [configuration.md](configuration.md) — full configuration reference,
+- [configuration.md](config/configuration.md) — full configuration reference,
   including the Repos registry and `.robotsix-mill/config.yaml` fields
 - [index.md](index.md) — documentation home

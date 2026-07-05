@@ -11,7 +11,7 @@ nav:
   - Home: index.md
   - Agent Communication Research: agents/communication-research.md
   - Configuration & Deployment:
-      - Configuration reference: configuration.md
+      - Configuration reference: config/configuration.md
       - Observability: observability.md
       - Continuous deployment: dev-tooling/deployment.md
       - Reusable-workflow callers: dev-tooling/reusable-workflow-callers.md
@@ -19,7 +19,7 @@ nav:
       - GitHub App / PAT: github-app.md
       - Security model: sandbox/security.md
       - CI policy: dev-tooling/ci-policy.md
-      - Config audit: config-audit.md
+      - Config audit: config/config-audit.md
       - "RFC: config v2": rfc-config-v2.md
   - Deps:
       - Dependency management: deps/dependencies.md

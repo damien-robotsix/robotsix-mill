@@ -5,11 +5,11 @@
 > committed `config/config.example.yaml`), with secrets under a top-level
 > `secrets:` block. The multi-file layout described below
 > (`mill.defaults.yaml` / `mill.local.yaml` / `mill.production.yaml` /
-> `secrets.yaml`) no longer exists. See `docs/configuration.md` for the
+> `secrets.yaml`) no longer exists. See `docs/config/configuration.md` for the
 > current model; this doc is kept for historical analysis only.
 
 > Generated from a full-repo survey of `config.py`, `config/config.example.yaml`,
-> `docs/configuration.md`, `Dockerfile`,
+> `docs/config/configuration.md`, `Dockerfile`,
 > `docker-compose.yml`, CI workflows, shell scripts, and all source files
 > that read config values.
 >
@@ -57,7 +57,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_MODEL` | `model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1 | All agent files via `Settings()` | Coordinator |
-| `MILL_EXPLORE_MODEL` | `explore_model` | `deepseek/deepseek-v4-flash` | `str` | Settings | non-sensitive | default | §1 | `stages/implement.py`, explore sub-agent | ⚠️ `docs/configuration.md` §1 states the wrong default (`deepseek/deepseek-v4-pro`); the code default is `-flash`. |
+| `MILL_EXPLORE_MODEL` | `explore_model` | `deepseek/deepseek-v4-flash` | `str` | Settings | non-sensitive | default | §1 | `stages/implement.py`, explore sub-agent | ⚠️ `docs/config/configuration.md` §1 states the wrong default (`deepseek/deepseek-v4-pro`); the code default is `-flash`. |
 | `MILL_TEST_MODEL` | `test_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1 | Test distillation sub-agent | |
 | `MILL_REFINE_MODEL` | `refine_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1 | `stages/refine.py` | |
 | `MILL_ANSWER_MODEL` | `answer_model` | `deepseek/deepseek-v4-pro` | `str` | Settings | non-sensitive | default | §1 | `stages/answer.py` | |
@@ -290,10 +290,10 @@ or genuinely non-Settings vars consumed only by tooling/CI (rows 1, 3, 4).
 
 ## 2. Cross-Reference Checks
 
-### 2.1  Vars present in `config.py` but missing from `docs/configuration.md`
+### 2.1  Vars present in `config.py` but missing from `docs/config/configuration.md`
 
 These 10 env vars are defined with `Field()` in `config.py` but have **no entry**
-in `docs/configuration.md`:
+in `docs/config/configuration.md`:
 
 | # | Env var | Python field | Default | In YAML? |
 |---|---------|-------------|---------|----------|
@@ -436,13 +436,13 @@ and prevent accidental exposure.
 ### 3.5  Documentation sync gap
 
 - **12 fields** defined in `config.py` are **completely absent** from
-  `docs/configuration.md` (see §2.1).
+  `docs/config/configuration.md` (see §2.1).
 - **4 fields** are in `config.py` but intentionally absent from
   `config/mill.defaults.yaml` (all are secrets):
   `OPENROUTER_API_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
   `LANGFUSE_PROJECT_ID`.
 - **Documentation is manually maintained** — no mechanical cross-check
-  between `config.py` and `docs/configuration.md` exists. A script or test that
+  between `config.py` and `docs/config/configuration.md` exists. A script or test that
   diffs the two would prevent drift.
 
 ### 3.6  Raw `os.environ` bypass
@@ -478,7 +478,7 @@ This audit was produced by:
    aliases + computed `@property` entries).
 2. Reading `config/mill.defaults.yaml` for all committed default values.
 3. Reading `config/secrets.example.yaml` for the credentials template.
-4. Cross-referencing every `Field` against `docs/configuration.md`'s 21
+4. Cross-referencing every `Field` against `docs/config/configuration.md`'s 21
    sections and non-prefixed table.
 5. Scanning `Dockerfile` for `ENV` directives, `docker-compose.yml` for
    `environment:` and variable substitution, `.github/workflows/ci.yml` for
