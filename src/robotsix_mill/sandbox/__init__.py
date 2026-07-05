@@ -49,6 +49,23 @@ class SandboxError(RuntimeError):
     from the command itself exiting non-zero."""
 
 
+class DaemonUnavailableError(SandboxError):
+    """Docker daemon is unreachable (503 or equivalent).
+
+    Raised by :func:`run` and :func:`fetch` when the daemon returns a
+    503 Service Unavailable or a similar transient-but-terminal
+    infrastructure signal.  Callers should treat this as *unrecoverable
+    for the duration of the current ticket run* — retrying will only
+    burn time and budget."""
+
+
+# Pattern matching Docker daemon 503 responses (HTML or plain-text).
+# "Error response from daemon: <html><body><h1>503 Service Unavailable</h1>"
+_DAEMON_UNAVAILABLE_RE = re.compile(
+    r"(?:503\s+Service\s+Unavailable)|(?:Error\s+response\s+from\s+daemon)", re.IGNORECASE
+)
+
+
 # Deploy-mode (central-deploy) helpers --------------------------------------
 #
 # Under central-deploy the mill talks to a REMOTE Docker daemon through the
@@ -566,7 +583,10 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
     # 125 == docker daemon/usage error (not the command's own exit code)
     if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {stderr.strip()[:300]}")
+        trimmed = stderr.strip()[:300]
+        if _DAEMON_UNAVAILABLE_RE.search(trimmed):
+            raise DaemonUnavailableError(f"docker daemon unavailable: {trimmed}")
+        raise SandboxError(f"docker run failed: {trimmed}")
     return r.returncode, _truncate(stdout + stderr)
 
 
@@ -629,7 +649,10 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
     body = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
 
     if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {stderr.strip()[:300]}")
+        trimmed = stderr.strip()[:300]
+        if _DAEMON_UNAVAILABLE_RE.search(trimmed):
+            raise DaemonUnavailableError(f"docker daemon unavailable: {trimmed}")
+        raise SandboxError(f"docker run failed: {trimmed}")
     if len(body) > settings.web_fetch_max_bytes:
         body = body[: settings.web_fetch_max_bytes] + "\n... [truncated]"
     if r.returncode != 0:

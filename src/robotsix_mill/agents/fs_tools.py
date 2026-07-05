@@ -962,6 +962,8 @@ def build_fs_tools(
                     settings=settings,
                     sandbox_image=sandbox_image,
                 )
+        except sandbox.DaemonUnavailableError as e:
+            return f"daemon_unavailable: {e}"
         except sandbox.SandboxError as e:
             return f"sandbox error: {e}"
         if not out.strip():

@@ -540,6 +540,12 @@ system_prompt: |
   - **`run_command` always executes from the repository root** — do
     NOT prefix commands with an absolute `cd` path. The tool docstring
     warns about this; follow it.
+  - **Infrastructure failures (`daemon_unavailable`).** If `run_command`
+    returns a result starting with `daemon_unavailable:`, the Docker
+    daemon backing the sandbox is unreachable. **Do NOT retry** — every
+    subsequent `run_command` call will fail the same way. Stop
+    immediately and include `daemon_unavailable` in your summary so the
+    pipeline can diagnose the infrastructure issue.
   - **Do not `explore` to confirm a `list_threads` result.** If
     `list_threads` returns an error or empty result indicating no active
     ticket session, do NOT call `explore` to double-check — you already

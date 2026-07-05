@@ -287,13 +287,30 @@ def test_docker_missing_raises_sandbox_error(tmp_path, monkeypatch):
 
 
 def test_docker_daemon_error_raises(tmp_path, monkeypatch):
-    s = _settings(tmp_path)
+    s = _settings(tmp_path, data_dir=str(tmp_path.parent))
 
     def fake_run(argv, **kw):
         return subprocess.CompletedProcess(argv, 125, stdout="", stderr=b"no daemon")
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     with pytest.raises(sandbox.SandboxError):
+        sandbox.run("true", repo_dir=tmp_path, settings=s)
+
+
+def test_docker_503_raises_daemon_unavailable_error(tmp_path, monkeypatch):
+    """Docker daemon 503 Service Unavailable → DaemonUnavailableError."""
+    s = _settings(tmp_path, data_dir=str(tmp_path.parent))
+
+    def fake_run(argv, **kw):
+        return subprocess.CompletedProcess(
+            argv,
+            125,
+            stdout="",
+            stderr=b"Error response from daemon: <html><body><h1>503 Service Unavailable</h1>",
+        )
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    with pytest.raises(sandbox.DaemonUnavailableError, match="docker daemon unavailable"):
         sandbox.run("true", repo_dir=tmp_path, settings=s)
 
 

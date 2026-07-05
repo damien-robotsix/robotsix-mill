@@ -21,6 +21,7 @@ from typing import Any, Callable, Literal, TypeVar
 from pydantic import BaseModel, model_validator
 
 from robotsix_mill._resources import agent_definitions_dir
+from .. import sandbox
 from ..config import Settings
 
 _T = TypeVar("_T")
@@ -445,6 +446,30 @@ def run_coordinator(
         # tool-result the model must continue from without its reasoning_content
         # — both 400 on the DeepSeek capable tier. pydantic-ai round-trips
         # reasoning natively when the history is left intact.
+
+        # Pre-flight sandbox health check: probe the Docker daemon once
+        # before the agent loop starts.  If the daemon is unreachable
+        # (503 Service Unavailable), short-circuit immediately — do not
+        # burn model tokens on a run that cannot execute any command.
+        try:
+            sandbox.run(
+                "echo hello",
+                repo_dir=repo_dir,
+                settings=settings,
+                sandbox_image=sandbox_image,
+            )
+        except sandbox.DaemonUnavailableError as e:
+            log.warning("implement: sandbox daemon unavailable, short-circuiting")
+            return ImplementResult(
+                summary=f"Sandbox daemon is unavailable: {e}. "
+                "Cannot run commands — stopping early to avoid burning "
+                "retries on an infrastructure failure."
+            )
+        except sandbox.SandboxError:
+            # Other sandbox errors (missing Docker CLI, repo not cloned
+            # yet, etc.) are NOT daemon-health issues — let the agent
+            # loop start and surface them as tool errors.
+            pass
 
         from .structured_output_guard import reprompt_if_unstructured
 
