@@ -1266,16 +1266,16 @@ def test_resolve_data_volume_never_raises(tmp_path, monkeypatch):
 
 
 def test_run_skips_network_setup_in_dev_mode(tmp_path, monkeypatch):
-    """Without DOCKER_HOST, run() never touches the network once-guard —
+    """Without DOCKER_HOST, run() never touches the egress network —
     the dev stack path is unchanged."""
     monkeypatch.delenv("DOCKER_HOST", raising=False)
-    monkeypatch.setattr(sandbox, "_SANDBOX_NET_READY", False)
     called = {"n": 0}
 
     def spy(settings):
         called["n"] += 1
+        return True
 
-    monkeypatch.setattr(sandbox, "_ensure_sandbox_network_once", spy)
+    monkeypatch.setattr(sandbox, "ensure_sandbox_network", spy)
     s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="http://p:8888")
     monkeypatch.setattr(
         sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
@@ -1289,17 +1289,20 @@ def test_run_skips_network_setup_in_dev_mode(tmp_path, monkeypatch):
     assert called["n"] == 0
 
 
-def test_run_triggers_network_setup_in_deploy_mode(tmp_path, monkeypatch):
-    """With DOCKER_HOST set and a proxy configured, run() invokes the
-    once-guard."""
+def test_run_reattaches_network_on_every_spawn_in_deploy_mode(tmp_path, monkeypatch):
+    """With DOCKER_HOST set and a proxy configured, run() re-establishes the
+    egress network before EVERY spawn — a deploy can recreate the
+    sandbox-proxy sibling (detaching it) at any time, so a once-per-process
+    guard would leave all later sandboxes without egress (2026-07-05
+    incident)."""
     monkeypatch.setenv("DOCKER_HOST", "tcp://mill-socket-proxy:2375")
-    monkeypatch.setattr(sandbox, "_SANDBOX_NET_READY", False)
     called = {"n": 0}
 
     def spy(settings):
         called["n"] += 1
+        return True
 
-    monkeypatch.setattr(sandbox, "_ensure_sandbox_network_once", spy)
+    monkeypatch.setattr(sandbox, "ensure_sandbox_network", spy)
     s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="http://p:8888")
     monkeypatch.setattr(
         sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
@@ -1311,26 +1314,5 @@ def test_run_triggers_network_setup_in_deploy_mode(tmp_path, monkeypatch):
     )
     sandbox.run("echo hi", repo_dir="/data/work/repo", settings=s)
     assert called["n"] == 1
-
-
-def test_ensure_sandbox_network_once_sets_flag_only_on_success(tmp_path, monkeypatch):
-    """The once-guard sets the flag only on success and never re-runs after."""
-    monkeypatch.setattr(sandbox, "_SANDBOX_NET_READY", False)
-    s = _settings(tmp_path, sandbox_proxy_url="http://p:8888")
-    results = iter([False, True])
-    runs = {"n": 0}
-
-    def fake_ensure(settings):
-        runs["n"] += 1
-        return next(results)
-
-    monkeypatch.setattr(sandbox, "ensure_sandbox_network", fake_ensure)
-    # First call fails → flag stays False, retried next time.
-    sandbox._ensure_sandbox_network_once(s)
-    assert sandbox._SANDBOX_NET_READY is False
-    # Second call succeeds → flag set.
-    sandbox._ensure_sandbox_network_once(s)
-    assert sandbox._SANDBOX_NET_READY is True
-    # Third call is a no-op (no further ensure invocation).
-    sandbox._ensure_sandbox_network_once(s)
-    assert runs["n"] == 2
+    sandbox.run("echo hi again", repo_dir="/data/work/repo", settings=s)
+    assert called["n"] == 2
