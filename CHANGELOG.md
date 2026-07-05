@@ -8,6 +8,7 @@
   suites died with `pytest: command not found`) until the mill itself
   restarted — 2026-07-05 incident, 169 tickets blocked. The attach is
   idempotent and costs two fast docker CLI calls per spawn.
+- Remove redundant ``pip:pytest`` and ``pip:pytest-asyncio`` from ``.robotsix-mill/config.yaml`` ``extra_sandbox_packages`` — these test-gate binaries are already baked into the sandbox image (``sandbox/Dockerfile``), and declaring them triggers a per-invocation ``pip install`` through the egress proxy that fails when the proxy is unreachable.
 - Reorganized agent documentation under `docs/agents/`: moved 7 files (`agents.md`, `reference/agents.md`, `agent-communication-research.md`, `agent-md-candidates.md`, `agent-yaml-schema.md`, `audit-agent.md`, `diagnostic-agent.md`) into the new `docs/agents/` subdirectory; updated `mkdocs.yml` nav, `docs/modules.yaml`, and all cross-references.
 - Move `docs/dependencies.md` → `docs/deps/dependencies.md`, add `docs/deps/**/*` to the deps module in `docs/modules.yaml`, and create a "Deps" nav section in `mkdocs.yml`.
 - Add test coverage for `ProblemDetail` (RFC 9457 error envelope) in `tests/runtime/test_errors.py`

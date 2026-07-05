@@ -1,12 +1,12 @@
 test_command: pytest -q
 languages: [python]
-# PEP 735 [dependency-groups] (the 70a0 migration) keep dev tooling out of
-# the wheel metadata BY DESIGN, so the sandbox's `pip install .` no longer
-# pulls pytest — declare the test-gate binaries explicitly (asyncio_mode is
-# "auto", so pytest-asyncio must come along).
-extra_sandbox_packages:
-  - pip:pytest
-  - pip:pytest-asyncio
+# Test-gate binaries (pytest, pytest-asyncio, pytest-cov) are already baked
+# into the sandbox image (sandbox/Dockerfile RUN pip install …) — no need to
+# re-install them at runtime via extra_sandbox_packages.  Declaring them here
+# triggers a per-invocation `pip install` through the egress proxy, which
+# fails when the proxy is unreachable and masks the image's pre-installed
+# binaries.  For repo-specific packages NOT in the sandbox image, use
+#   extra_sandbox_packages: [pip:<name>]
 # Path-scoped smoke gate: runs the API-level board smoke (Tier 1) AND the
 # headless-Chromium browser smoke (Tier 2) after unit tests pass, but only
 # when a ticket touches the board/runtime UI surface. The browser smoke is
