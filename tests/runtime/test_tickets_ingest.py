@@ -5,27 +5,16 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 from robotsix_mill.config import RepoConfig
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.runtime.api import create_app
 
 
 @pytest.fixture
 def service(settings) -> TicketService:
     """Return the board-scoped service for the test board."""
     return TicketService(settings, board_id="test-board")
-
-
-@pytest.fixture
-def client(settings, repos_registry):
-    """TestClient wired to the single-repo test app."""
-    with TestClient(
-        create_app(repos_registry, settings, single_repo_id="test-repo")
-    ) as c:
-        yield c
 
 
 def _ingest_payload(**overrides) -> dict:

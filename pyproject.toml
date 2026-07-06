@@ -52,13 +52,16 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13", "inline-snapshot>=0.34"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 
 [tool.uv]
 # `uv sync` pulls the dev group automatically, so CI/contributors don't need
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
+
+[tool.inline-snapshot]
+format-command = "ruff format --stdin-filename {filename}"
 
 [tool.uv.sources]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "73f2d555caa21de47a3732824d776e04719b3011" }

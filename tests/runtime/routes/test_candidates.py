@@ -39,14 +39,6 @@ _BLOCK2 = """\
 
 
 @pytest.fixture
-def client(settings, repos_registry):
-    with TestClient(
-        create_app(repos_registry, settings, single_repo_id="test-repo")
-    ) as c:
-        yield c
-
-
-@pytest.fixture
 def multi_repo_client(settings, two_repo_registry):
     # Multi-repo mode: no single_repo_id, so /candidates?repo_id=all
     # aggregates across every registered repo.
