@@ -35,7 +35,7 @@ nav:
       - Audit agent: agents/audit-agent.md
       - Blocked ticket recovery: blocked-ticket-recovery.md
       - Retrospect memory: retrospect-memory.md
-      - Trace-health check: trace-health.md
+      - Trace-health check: langfuse/trace-health.md
       - Diagnostic agent: agents/diagnostic-agent.md
       - Expert YAML schema: agent-definitions/expert-yaml-schema.md
       - Agent YAML schema: agents/agent-yaml-schema.md

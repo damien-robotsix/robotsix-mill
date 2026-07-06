@@ -184,7 +184,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/agents/audit-agent.md](docs/agents/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
 - [docs/blocked-ticket-recovery.md](docs/blocked-ticket-recovery.md) — Recovering from BLOCKED tickets
 - [docs/retrospect-memory.md](docs/retrospect-memory.md) — Retrospect agent's Markdown memory ledger
-- [docs/trace-health.md](docs/trace-health.md) — Deterministic check for unsessioned Langfuse traces
+- [docs/langfuse/trace-health.md](docs/langfuse/trace-health.md) — Deterministic check for unsessioned Langfuse traces
 - [docs/cost-and-resilience.md](docs/cost-and-resilience.md) — Per-ticket cost tracking & cost controls
 - [docs/notify/notifications.md](docs/notify/notifications.md) — ntfy.sh push notifications for human-attention states
 - [docs/core/ticket-provenance.md](docs/core/ticket-provenance.md) — How `source` tracks which actor created each ticket
