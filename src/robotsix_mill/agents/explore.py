@@ -91,6 +91,16 @@ SANDBOX GUARD — before making ANY tool call, classify the question:
   outside the repo checkout), do NOT make any tool call — reply
   immediately: "This requires external-library knowledge." The parent
   agent will resolve it via ``ask_web_knowledge``.
+- If the caller's question references an absolute path (e.g.
+  ``/workspace``, ``/repo``), do NOT trust it — start by checking
+  ``git remote -v`` or reading ``pyproject.toml`` (first 3 lines) to
+  confirm which repo you are in, and use repo-relative paths (``.``)
+  for all tool calls. Never issue a tool call with an absolute path
+  from the question until you have confirmed the repo root.
+- If a tool returns a sandbox-escape error (the message says "escapes
+  the repository"), do NOT retry the same absolute path in any
+  subsequent tool call in the same turn — immediately fall back to
+  the repo CWD (``.``).
 
 SCOPE DISCIPLINE — always follow these limits:
 - CHECK KNOWN CONTEXT FIRST: if the user message contains a "Known
