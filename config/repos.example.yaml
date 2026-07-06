@@ -34,11 +34,6 @@ repos:
       public_key: "pk-lf-..."
       secret_key: "sk-lf-..."
       base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
-    # langfuse_from: "master-repo-id"  # optional — inherit the master
-    #   repo's Langfuse project (whole workspace shares ONE project).
-    #   When set, OMIT the `langfuse:` block above: a repo with
-    #   `langfuse_from` MUST NOT carry its own keys. Set automatically
-    #   for auto-registered workspace members.
     # openrouter_api_key: ""      # optional — per-repo OpenRouter API
     #                             #   key override. When set, overrides
     #                             #   the global OPENROUTER_API_KEY for
