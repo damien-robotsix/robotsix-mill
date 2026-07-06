@@ -26,7 +26,7 @@ nav:
   - Pipeline:
       - Agent catalog: agents/index.md
       - Approval gate: approval-gate.md
-      - Dedup guard: dedup-guard.md
+      - Dedup guard: core/dedup-guard.md
       - Merge stage: merge-stage.md
       - Epic dedup: epic-dedup.md
       - "AGENT.md candidates": agents/md-candidates.md
@@ -44,11 +44,11 @@ nav:
       - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notifications.md
-      - Ticket provenance: ticket-provenance.md
-      - Workspace cleanup: workspace-cleanup.md
+      - Ticket provenance: core/ticket-provenance.md
+      - Workspace cleanup: core/workspace-cleanup.md
       - Orphaned-PR check: orphaned-pr-check.md
       - Pin bump: pin-bump.md
-      - Attaching screenshots: screenshots.md
+      - Attaching screenshots: core/screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
       - Forge architecture: design/forge-architecture.md

@@ -61,6 +61,7 @@ modules:
       - src/robotsix_mill/core/draft_target.py
       - src/robotsix_mill/core/repo_layout.py
       - src/robotsix_mill/core/tool_wrappers.py
+      - docs/core/**/*
       - tests/core/test_core_dedup.py
       - tests/core/test_db.py
       - tests/core/test_models.py
