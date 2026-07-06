@@ -488,6 +488,7 @@ modules:
     paths:
       - src/robotsix_mill/notify/__init__.py
       - tests/notify/test_notify.py
+      - docs/notify/**/*
     dependencies: [config, core]
 
   - id: autoupdate

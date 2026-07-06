@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Move `docs/security.md` → `docs/sandbox/security.md` and update all cross-references (README, ARCHITECTURE, mkdocs.yml). Add `docs/sandbox/**/*` to sandbox module paths in `docs/modules.yaml`.
+- Move notifications documentation from `docs/notifications.md` to `docs/notify/notifications.md`, aligning with the per-module doc layout.
 - Move `docs/meta-board.md` → `docs/meta/meta-board.md`; update cross-references in `AGENT.md`, `mkdocs.yml`, and meta module paths in `docs/modules.yaml`.
 - Move core module docs into per-module directory: `docs/dedup-guard.md`, `docs/ticket-provenance.md`, `docs/workspace-cleanup.md`, and `docs/screenshots.md` → `docs/core/`. Updated `mkdocs.yml` nav, `docs/modules.yaml` core module paths, and `README.md` cross-references.
 - Move runner documentation into per-module directory: `docs/orphaned-pr-check.md` → `docs/runners/orphaned-pr-check.md`, `docs/pin-bump.md` → `docs/runners/pin-bump.md` (aligns with source layout under `src/robotsix_mill/runners/`)
