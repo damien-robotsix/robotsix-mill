@@ -352,6 +352,7 @@ modules:
       - tests/stages/merge/test_review_revision.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - src/robotsix_mill/towncrier.py
+      - tests/stages/test_towncrier.py
       - tests/stages/test_implemented_repos.py
       - tests/stages/test_smoke_gate_browser.py
       - tests/stages/test_implementation_logic.py

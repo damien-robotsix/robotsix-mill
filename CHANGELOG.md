@@ -1,6 +1,8 @@
 ## 0.0.0 (unreleased)
 
 - Add unit tests for `ReviewRevisionMixin` covering both `_run_review_revision` (missing clone, artifact I/O, reconcile outcomes, retry counters, agent success/failure paths) and `_review_changes_requested_outcome` (feature flag, transient errors, empty comment/body synthesis, artifact persistence).
+- Add unit tests for `towncrier.py` fragment generation (12 tests covering TOML parsing, file I/O, dedup, error handling, and edge cases).
+- skip-changelog (test-only addition)
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.
