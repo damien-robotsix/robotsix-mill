@@ -11,7 +11,7 @@ methods on the assembled ``Worker`` override these declarations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, ParamSpec, TypeVar
 
 if TYPE_CHECKING:
     import asyncio
@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from ...config import RepoConfig
     from ...stages import StageContext
     from ..run_registry import RunRegistry
+
+    _P = ParamSpec("_P")
+    _R = TypeVar("_R")
 
 
 class _WorkerBase:
@@ -65,8 +68,8 @@ class _WorkerBase:
         ) -> None: ...
 
         async def _tracked_to_thread(
-            self, fn: object, *args: object, **kwargs: object
-        ) -> object: ...
+            self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs
+        ) -> _R: ...
 
         def _build_periodic_workflow_runner(self, wf: object) -> object: ...
 

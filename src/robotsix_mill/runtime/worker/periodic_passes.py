@@ -7,7 +7,7 @@ import random  # noqa: S311 — only used for startup jitter, not security-criti
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, ParamSpec, TypeVar
 
 from ...config import RepoConfig, Settings, get_repos_config, target_branch_for
 from .. import tracing
@@ -16,6 +16,9 @@ from ._base import _WorkerBase
 from .epic import _branch_is_stale
 
 log = logging.getLogger("robotsix_mill.worker")
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +293,9 @@ class PeriodicPassesMixin(_WorkerBase):
             except Exception:  # noqa: BLE001 — never let the poll die
                 log.exception("%s scheduler tick failed", label)
 
-    async def _tracked_to_thread(self, fn, *args, **kwargs):
+    async def _tracked_to_thread(
+        self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs
+    ) -> _R:
         """Run *fn* in the default thread pool, tracking the call so
         :meth:`stop` can wait for it before tearing the loop down.
 
@@ -589,7 +594,10 @@ class PeriodicPassesMixin(_WorkerBase):
             repos = get_repos_config()
             for repo_config in list(repos.repos.values()):
                 repo_label = repo_config.repo_id
-                try:
+
+                def _do_cleanup(
+                    repo_config: RepoConfig = repo_config, repo_label: str = repo_label
+                ) -> None:
                     forge = get_forge(settings, repo_config)
                     branches = forge.list_branches()
                     open_pr = forge.list_open_pr_branches()
@@ -617,6 +625,13 @@ class PeriodicPassesMixin(_WorkerBase):
                         repo_label,
                         deleted,
                     )
+
+                try:
+                    # forge.* calls are synchronous network I/O — offload so
+                    # a slow/stalled forge API call never blocks the event
+                    # loop (and every HTTP route mill serves) for its
+                    # duration.
+                    await self._tracked_to_thread(_do_cleanup)
                 except Exception:
                     log.exception(
                         "stale-branch cleanup failed for repo %s",
@@ -643,7 +658,12 @@ class PeriodicPassesMixin(_WorkerBase):
             repos = get_repos_config()
             for repo_config in list(repos.repos.values()):
                 try:
-                    result = run_orphaned_pr_check_pass(
+                    # run_orphaned_pr_check_pass does synchronous forge
+                    # (list/close PR) I/O — offload so a slow/stalled forge
+                    # call never blocks the event loop (and every HTTP route
+                    # mill serves) for its duration.
+                    result = await self._tracked_to_thread(
+                        run_orphaned_pr_check_pass,
                         repo_config=repo_config,
                     )
                     log.info(
@@ -799,7 +819,13 @@ class PeriodicPassesMixin(_WorkerBase):
             repos = get_repos_config()
             for repo_config in list(repos.repos.values()):
                 try:
-                    _ci_debt_recheck_pass(settings, repo_config)
+                    # _ci_debt_recheck_pass does synchronous forge (GitHub
+                    # API) and DB I/O — offload to a thread so a slow forge
+                    # call can never freeze the event loop (and with it,
+                    # every HTTP route mill serves) for its duration.
+                    await self._tracked_to_thread(
+                        _ci_debt_recheck_pass, settings, repo_config
+                    )
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -881,8 +907,15 @@ class PeriodicPassesMixin(_WorkerBase):
             # responsive when an operator commits a new YAML.
             while True:
                 try:
+                    # Clone/fetch (and token minting, which can itself call
+                    # the forge API) are synchronous network + subprocess
+                    # calls. Every branch below runs through
+                    # ``_tracked_to_thread`` so a slow or stalled forge never
+                    # blocks this event loop — and with it, every HTTP route
+                    # mill serves — for the duration of the call.
                     if forge_url and not (clone_dir / ".git").exists():
-                        try:
+
+                        def _do_clone() -> None:
                             clone_dir.parent.mkdir(
                                 parents=True,
                                 exist_ok=True,
@@ -893,13 +926,17 @@ class PeriodicPassesMixin(_WorkerBase):
                                 target,
                                 _clone_token(settings, repo_config),
                             )
+
+                        try:
+                            await self._tracked_to_thread(_do_clone)
                         except Exception:  # noqa: BLE001 — supervisor must survive
                             log.exception(
                                 "bespoke supervisor (%s): clone failed",
                                 board_id,
                             )
                     elif forge_url and (clone_dir / ".git").exists():
-                        try:
+
+                        def _do_fetch_and_reset() -> None:
                             git_ops.fetch(
                                 clone_dir,
                                 remote_url=forge_url,
@@ -922,6 +959,9 @@ class PeriodicPassesMixin(_WorkerBase):
                                 check=False,
                                 capture_output=True,
                             )
+
+                        try:
+                            await self._tracked_to_thread(_do_fetch_and_reset)
                         except Exception:  # noqa: BLE001
                             log.exception(
                                 "bespoke supervisor (%s): refresh failed",
