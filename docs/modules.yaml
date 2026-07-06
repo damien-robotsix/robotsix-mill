@@ -442,6 +442,7 @@ modules:
       - tests/sandbox/test_sandbox.py
       - tests/sandbox/test_sandbox_integration.py
       - sandbox/**/*
+      - docs/sandbox/**/*
     dependencies: [config]
 
   - id: cli

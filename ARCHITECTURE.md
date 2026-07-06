@@ -110,7 +110,7 @@ This page is the map; the territory lives in [`docs/`](docs/):
   gate after refine.
 - [docs/merge-stage.md](docs/merge-stage.md) — gate-check, auto-rebase,
   and auto-fix for merge-ready PRs.
-- [docs/security.md](docs/security.md) — the security model.
+- [docs/sandbox/security.md](docs/sandbox/security.md) — the security model.
 - [docs/design/](docs/design/) — focused design notes (e.g.
   [cost-indicators.md](docs/design/cost-indicators.md)).
 - [docs/modules.yaml](docs/modules.yaml) — the canonical module taxonomy
