@@ -232,6 +232,7 @@ modules:
       - src/robotsix_mill/runners/data_dir_gc/__init__.py
       - src/robotsix_mill/runners/data_dir_gc/orphans.py
       - src/robotsix_mill/runners/orphaned_pr_check.py
+      - docs/runners/**/*
       - src/robotsix_mill/runners/periodic_runner.py
       - src/robotsix_mill/runners/pin_bump_runner.py
       - src/robotsix_mill/runners/repo_description_sync_runner.py

@@ -46,8 +46,8 @@ nav:
       - Notifications: notifications.md
       - Ticket provenance: core/ticket-provenance.md
       - Workspace cleanup: core/workspace-cleanup.md
-      - Orphaned-PR check: orphaned-pr-check.md
-      - Pin bump: pin-bump.md
+      - Orphaned-PR check: runners/orphaned-pr-check.md
+      - Pin bump: runners/pin-bump.md
       - Attaching screenshots: core/screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
