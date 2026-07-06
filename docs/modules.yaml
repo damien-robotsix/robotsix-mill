@@ -413,6 +413,7 @@ modules:
       - tests/meta/test_triage.py
       - tests/meta/test_runner.py
       - tests/meta/test_meta_workspace.py
+      - docs/meta/**/*
     dependencies: [config, core, agents, forge, vcs, runners, runtime]
 
   # -------------------------------------------------------------------

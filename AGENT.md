@@ -147,7 +147,7 @@ all registered repositories, compares their codebases, and files:
   pattern another repo should adopt) on the target repo's own board.
 
 Registration steps:
-1. Add the `meta` stanza to `config/repos.yaml` (see `docs/meta-board.md`).
+1. Add the `meta` stanza to `config/repos.yaml` (see `docs/meta/meta-board.md`).
 2. Set `MILL_META_PERIODIC=true` (or `meta_periodic: true` in YAML config).
 3. Restart the worker — the daily pass begins on the next tick.
 
