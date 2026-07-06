@@ -171,7 +171,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/docker-architecture.md](docs/docker-architecture.md) — Container topology & conceptual architecture
 - [docs/github-app.md](docs/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
 - [docs/inquiry-to-task.md](docs/inquiry-to-task.md) — Convert an answered inquiry into an actionable task ticket
-- [docs/security.md](docs/security.md) — Security model
+- [docs/sandbox/security.md](docs/sandbox/security.md) — Security model
 - [docs/agents/index.md](docs/agents/index.md) — Full agent catalog
 - [docs/board-operations.md](docs/board-operations.md) — Board UI and automated column transitions
 - [docs/agents/agent-yaml-schema.md](docs/agents/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
