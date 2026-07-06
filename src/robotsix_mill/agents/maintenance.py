@@ -617,6 +617,11 @@ def run_maintenance_agent(  # noqa: C901 — clone-failure degrade branch + meta
             if ctx.settings.investigation_workspace is not None
             else (meta_root if meta_root is not None else ws.repo_dir)
         )
+        # _safe() in fs_tools raises "workspace repo directory does not
+        # exist" when the primary root is missing, even if extra_roots
+        # (e.g. clone_dir) are available.  Create the primary root so
+        # that clone_repo → read_file/list_dir/explore works end-to-end.
+        investigation_root.mkdir(parents=True, exist_ok=True)
 
         # Investigation tools can read the maintenance clone (clone_dir) AND
         # every meta repo clone (meta_extra_roots, empty for non-meta tickets).

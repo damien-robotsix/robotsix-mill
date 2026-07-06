@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Fix `clone_repo` → filesystem tool chain in the maintenance agent:
+  ensure the primary investigation root exists before building sandboxed
+  tools, so that `clone_repo` success is followed by usable `read_file` /
+  `list_dir` / `explore` instead of "workspace repo directory does not
+  exist" errors.
 - Move `docs/expert-yaml-schema.md` → `docs/agent-definitions/expert-yaml-schema.md`, updating all cross-references in README.md, docs/index.md, docs/agents/index.md, and mkdocs.yml; add `docs/agent-definitions/**/*` to the agent-definitions module in docs/modules.yaml.
 - Move dev-tooling docs (`ci-policy.md`, `deployment.md`, `reusable-workflow-callers.md`) from `docs/` to `docs/dev-tooling/`; update `mkdocs.yml` nav, cross-references, and module paths. (mill: Reorganize module dev-tooling: align to per-module layout (src/docs/tests) (20260705T234900Z-reorganize-module-dev-tooling-align-to-p-0030))
 - Move `docs/security.md` → `docs/sandbox/security.md` and update all cross-references (README, ARCHITECTURE, mkdocs.yml). Add `docs/sandbox/**/*` to sandbox module paths in `docs/modules.yaml`.
