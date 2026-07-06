@@ -139,6 +139,7 @@ modules:
       - tests/forge/test_github_dependabot.py
       - tests/forge/test_gitlab.py
       - tests/forge/test_http.py
+      - docs/forge/**/*
     dependencies: [config, vcs]
 
   # -------------------------------------------------------------------

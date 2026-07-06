@@ -16,7 +16,7 @@ nav:
       - Continuous deployment: deployment.md
       - Reusable-workflow callers: reusable-workflow-callers.md
       - Docker architecture: docker-architecture.md
-      - GitHub App / PAT: github-app.md
+      - GitHub App / PAT: forge/github-app.md
       - Security model: security.md
       - CI policy: ci-policy.md
       - Config audit: config-audit.md

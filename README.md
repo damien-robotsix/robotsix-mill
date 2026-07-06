@@ -169,7 +169,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/configuration.md](docs/configuration.md) — Complete configuration reference (YAML schema, loading order, secrets)
 - [docs/deployment.md](docs/deployment.md) — Continuous deployment via GitHub Actions + Watchtower
 - [docs/docker-architecture.md](docs/docker-architecture.md) — Container topology & conceptual architecture
-- [docs/github-app.md](docs/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
+- [docs/forge/github-app.md](docs/forge/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
 - [docs/inquiry-to-task.md](docs/inquiry-to-task.md) — Convert an answered inquiry into an actionable task ticket
 - [docs/security.md](docs/security.md) — Security model
 - [docs/agents/index.md](docs/agents/index.md) — Full agent catalog

@@ -172,7 +172,7 @@ compatibility with single-repo deployments.
 - The minted installation token lives only in the **mill** process,
   cached ~50 min, used for the git push + the PR API call. The
   implement agent runs in the separate `--network none` sandbox and
-  cannot read it (see [docker-architecture.md](docker-architecture.md)).
+  cannot read it (see [docker-architecture.md](../docker-architecture.md)).
 - `GITHUB_APP_PRIVATE_KEY*` and `FORGE_TOKEN` are secrets — keep them in
   the gitignored `config/config.yaml` `secrets:` block (or a mounted file); never commit them.
 - GitHub Enterprise: set `MILL_GITHUB_API_URL=https://<host>/api/v3`.
