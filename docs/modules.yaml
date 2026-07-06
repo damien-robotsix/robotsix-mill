@@ -550,6 +550,7 @@ modules:
       workflows), and static-analysis config.  Not part of the
       production runtime.
     paths:
+      - docs/dev-tooling/**/*
       - Makefile
       - Dockerfile
       - entrypoint.sh
