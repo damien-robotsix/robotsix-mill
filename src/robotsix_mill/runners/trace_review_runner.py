@@ -163,11 +163,15 @@ def _extract_trace_end_time(
     """
     raw = trace.get("endTime") or ""
     if observations:
-        sorted_obs = sorted(
-            observations,
-            key=lambda o: o.get("endTime") or o.get("startTime") or "",
-        )
-        raw = sorted_obs[-1].get("endTime") or raw
+        # Guard against non-dict observations (see trace_inspector.py
+        # _shrink_trace_data for the matching guard).
+        dict_obs = [o for o in observations if isinstance(o, dict)]
+        if dict_obs:
+            sorted_obs = sorted(
+                dict_obs,
+                key=lambda o: o.get("endTime") or o.get("startTime") or "",
+            )
+            raw = sorted_obs[-1].get("endTime") or raw
     raw = raw or trace.get("timestamp") or ""
     if not raw:
         return None
@@ -267,6 +271,10 @@ def _classify_trace(
     ask_user_calls = 0
     explore_runs = 0
     for o in observations:
+        # Guard against non-dict observations (see trace_inspector.py
+        # _shrink_trace_data for the matching guard).
+        if not isinstance(o, dict):
+            continue
         name = o.get("name") or ""
 
         # Count tool invocations.
@@ -364,7 +372,9 @@ def _classify_trace(
     # the GENERATION observations, the trace is incomplete only when the
     # latest one is not a "chat " completion (the synthesis step). Sort by
     # endTime so ordering is deterministic even when Langfuse reorders.
-    gen_obs = [o for o in observations if o.get("type") == "GENERATION"]
+    gen_obs = [
+        o for o in observations if isinstance(o, dict) and o.get("type") == "GENERATION"
+    ]
     if gen_obs:
         sorted_obs = sorted(
             gen_obs,

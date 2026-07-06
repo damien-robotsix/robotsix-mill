@@ -318,7 +318,11 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
             0,
         )
 
-    obs = trace.get("observations") or []
+    obs_raw = trace.get("observations") or []
+    # Guard against non-dict observations (e.g. a string returned by
+    # the Langfuse API in an error response).  Filter them out so
+    # downstream .items() / key-lookup calls don't raise AttributeError.
+    obs = [o for o in obs_raw if isinstance(o, dict)]
     obs_count = len(obs)
 
     if obs_count > 200:
