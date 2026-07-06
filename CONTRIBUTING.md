@@ -287,7 +287,7 @@ Commit messages keep the history readable and reviewable for contributors.
 ## CI overview
 
 The governing policy for every CI check is
-[docs/ci-policy.md](docs/ci-policy.md) — the **gate-or-remove**
+[docs/dev-tooling/ci-policy.md](docs/dev-tooling/ci-policy.md) — the **gate-or-remove**
 principle (every check must gate, be documented as accepted advisory,
 or be removed) plus a reviewer checklist for new checks. The per-check
 notes below remain the authoritative rationale for each individual

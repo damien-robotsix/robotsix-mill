@@ -81,7 +81,7 @@ under `src/`.
   accepted advisory policy (a comment in the config file/workflow
   **and** a note in `CONTRIBUTING.md`'s "CI overview"). A check that
   does neither must be removed — consult
-  [docs/ci-policy.md](docs/ci-policy.md) before adding any CI step.
+  [docs/dev-tooling/ci-policy.md](docs/dev-tooling/ci-policy.md) before adding any CI step.
 - Don't reintroduce a regression a test or this file already guards.
 
 ## Agent behavior

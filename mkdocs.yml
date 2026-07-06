@@ -13,12 +13,12 @@ nav:
   - Configuration & Deployment:
       - Configuration reference: configuration.md
       - Observability: observability.md
-      - Continuous deployment: deployment.md
-      - Reusable-workflow callers: reusable-workflow-callers.md
+      - Continuous deployment: dev-tooling/deployment.md
+      - Reusable-workflow callers: dev-tooling/reusable-workflow-callers.md
       - Docker architecture: docker-architecture.md
       - GitHub App / PAT: github-app.md
       - Security model: sandbox/security.md
-      - CI policy: ci-policy.md
+      - CI policy: dev-tooling/ci-policy.md
       - Config audit: config-audit.md
       - "RFC: config v2": rfc-config-v2.md
   - Deps:
