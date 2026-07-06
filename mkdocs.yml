@@ -37,7 +37,7 @@ nav:
       - Retrospect memory: retrospect-memory.md
       - Trace-health check: trace-health.md
       - Diagnostic agent: agents/diagnostic-agent.md
-      - Expert YAML schema: expert-yaml-schema.md
+      - Expert YAML schema: agent-definitions/expert-yaml-schema.md
       - Agent YAML schema: agents/agent-yaml-schema.md
       - Meta board: meta-board.md
   - Operations:

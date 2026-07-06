@@ -6,7 +6,7 @@ A self-contained LLM-driven ticket solver with a SQLite-backed management plane,
 
 - **[Agent catalog](agents/index.md)** — Every agent, grouped by pipeline / periodic / sub-agent, with YAML definition and Python module paths.
 - **[Agent YAML schema](agents/agent-yaml-schema.md)** — Field reference for `agent_definitions/*.yaml` files.
-- **[Expert YAML schema](expert-yaml-schema.md)** — Field reference for `expert_definitions/*.yaml` files.
+- **[Expert YAML schema](agent-definitions/expert-yaml-schema.md)** — Field reference for `expert_definitions/*.yaml` files.
 - **[Configuration & Deployment](configuration.md)** — Configure the service via YAML, deploy via Docker, and set up GitHub App / PAT authentication. See also the **[Configuration Audit](config-audit.md)** for a complete inventory of every config value.
 - **[Reusable-workflow callers](reusable-workflow-callers.md)** — Canonical `ci.yml` / `docs.yml` callers a member repo uses to consume mill's shared reusable workflows (correct cross-repo org + per-job permissions).
 - **[Pipeline](agents/index.md)** — Understand the agent catalog, approval gate, dedup guard (and the advisory **[epic-decomposition pre-filing dedup](epic-dedup.md)**), and merge stage.
