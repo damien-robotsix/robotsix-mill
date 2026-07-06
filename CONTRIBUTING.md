@@ -93,7 +93,7 @@ check (in `dedup.py`) flags a would-be child that duplicates either a
 recently shipped/in-flight ticket or an earlier sibling in the same
 batch. Overlaps are logged and annotated onto the child's body, but the
 child is **never dropped** — the check is advisory only. See
-[docs/epic-dedup.md](docs/epic-dedup.md) for the authoritative reference.
+[docs/stages/epic-dedup.md](docs/stages/epic-dedup.md) for the authoritative reference.
 
 ## How the agent pattern works
 

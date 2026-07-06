@@ -428,7 +428,7 @@ def test_real_review_yaml_has_max_tokens_cap():
 
 # Representative worst-case size of the retrospect runtime memory ledger.
 # This tracks the observed ~34K-char per-board ledger surfaced to the agent
-# at runtime — NOT the checked-in seed docs/retrospect-memory.md (~946 bytes),
+# at runtime — NOT the checked-in seed docs/stages/retrospect-memory.md (~946 bytes),
 # which is far too small to be representative. A full PATH-3 re-emit returns
 # this entire document in `updated_memory`, so the configured max_tokens must
 # be large enough to fit it plus the other structured fields.
