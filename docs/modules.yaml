@@ -516,6 +516,7 @@ modules:
       - agent_definitions/pipeline/*.yaml
       - expert_definitions/*.yaml
       - agent_definitions/language_instructions/*.md
+      - docs/agent-definitions/**/*
     dependencies: []
 
   - id: skills

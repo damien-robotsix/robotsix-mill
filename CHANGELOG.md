@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Move `docs/expert-yaml-schema.md` → `docs/agent-definitions/expert-yaml-schema.md`, updating all cross-references in README.md, docs/index.md, docs/agents/index.md, and mkdocs.yml; add `docs/agent-definitions/**/*` to the agent-definitions module in docs/modules.yaml.
 - Move `docs/security.md` → `docs/sandbox/security.md` and update all cross-references (README, ARCHITECTURE, mkdocs.yml). Add `docs/sandbox/**/*` to sandbox module paths in `docs/modules.yaml`.
 - Move `docs/meta-board.md` → `docs/meta/meta-board.md`; update cross-references in `AGENT.md`, `mkdocs.yml`, and meta module paths in `docs/modules.yaml`.
 - Move core module docs into per-module directory: `docs/dedup-guard.md`, `docs/ticket-provenance.md`, `docs/workspace-cleanup.md`, and `docs/screenshots.md` → `docs/core/`. Updated `mkdocs.yml` nav, `docs/modules.yaml` core module paths, and `README.md` cross-references.

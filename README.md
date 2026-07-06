@@ -175,7 +175,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/agents/index.md](docs/agents/index.md) — Full agent catalog
 - [docs/board-operations.md](docs/board-operations.md) — Board UI and automated column transitions
 - [docs/agents/agent-yaml-schema.md](docs/agents/agent-yaml-schema.md) — Field reference for `agent_definitions/*.yaml` files
-- [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
+- [docs/agent-definitions/expert-yaml-schema.md](docs/agent-definitions/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
 - [docs/agents/md-candidates.md](docs/agents/md-candidates.md) — Review and validate AGENT.md rule proposals from retrospect agent
 - [docs/core/dedup-guard.md](docs/core/dedup-guard.md) — Pre-refine duplicate / already-done check
