@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Move core module docs into per-module directory: `docs/dedup-guard.md`, `docs/ticket-provenance.md`, `docs/workspace-cleanup.md`, and `docs/screenshots.md` → `docs/core/`. Updated `mkdocs.yml` nav, `docs/modules.yaml` core module paths, and `README.md` cross-references.
+- Move runner documentation into per-module directory: `docs/orphaned-pr-check.md` → `docs/runners/orphaned-pr-check.md`, `docs/pin-bump.md` → `docs/runners/pin-bump.md` (aligns with source layout under `src/robotsix_mill/runners/`)
 - Add unit tests for `ReviewRevisionMixin` covering both `_run_review_revision` (missing clone, artifact I/O, reconcile outcomes, retry counters, agent success/failure paths) and `_review_changes_requested_outcome` (feature flag, transient errors, empty comment/body synthesis, artifact persistence).
 - Add unit tests for `towncrier.py` fragment generation (12 tests covering TOML parsing, file I/O, dedup, error handling, and edge cases).
 - skip-changelog (test-only addition)
