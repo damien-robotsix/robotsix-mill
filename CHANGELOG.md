@@ -13,6 +13,7 @@
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.
+- Refactor CLI: extract `_RUNNERS` registry into `_runners.py`, extract output formatting into `_output.py`, and deduplicate `repo_id` resolution in `_run_and_print` using the existing `_resolve_repo_id` helper.
 - Sandbox (deploy mode): re-establish the internal egress network and the
   `sandbox-proxy` attachment before **every** sandbox spawn instead of once
   per process. A deploy can recreate the `sandbox-proxy` sibling at any
