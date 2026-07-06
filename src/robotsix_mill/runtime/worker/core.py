@@ -421,7 +421,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         ticket_id, per_ticket_ctx, active_map=self._active
                     )
                 after = board_service.get(ticket_id)
-                self._check_progress(
+                # _check_progress calls session_cost/session_traces, which
+                # hit Langfuse via a synchronous httpx.Client (20s timeout).
+                # Called directly this would block the whole event loop —
+                # and every HTTP route mill serves — for up to 20s after
+                # every single ticket-stage completion. Offload to a thread.
+                await self._tracked_to_thread(
+                    self._check_progress,
                     ticket_id,
                     before_state,
                     after.state if after else None,
