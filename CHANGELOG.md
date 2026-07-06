@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- skip-changelog (test-only addition)
 - Remove misleading `langfuse_from` comment from `config/repos.example.yaml`. The
   key has no code support in `RepoConfig` or any loader; operators who copied
   it into their config were setting a silently-ignored key.

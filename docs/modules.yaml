@@ -35,6 +35,7 @@ modules:
       - tests/config/test_target_branch_for.py
       - tests/config/test_repos_source.py
       - tests/config/test_repos_registry_shape.py
+      - tests/config/test_secrets.py
     dependencies: []
 
   - id: core
