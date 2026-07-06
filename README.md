@@ -178,7 +178,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/expert-yaml-schema.md](docs/expert-yaml-schema.md) — Field reference for `expert_definitions/*.yaml` files
 - [docs/approval-gate.md](docs/approval-gate.md) — Human approval gate after refine
 - [docs/agents/md-candidates.md](docs/agents/md-candidates.md) — Review and validate AGENT.md rule proposals from retrospect agent
-- [docs/dedup-guard.md](docs/dedup-guard.md) — Pre-refine duplicate / already-done check
+- [docs/core/dedup-guard.md](docs/core/dedup-guard.md) — Pre-refine duplicate / already-done check
 - [docs/epic-dedup.md](docs/epic-dedup.md) — Advisory pre-filing dedup for epic-decomposition children
 - [docs/merge-stage.md](docs/merge-stage.md) — Gate-check, auto-rebase, and auto-fix for merge-ready PRs
 - [docs/agents/audit-agent.md](docs/agents/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
@@ -187,8 +187,8 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/trace-health.md](docs/trace-health.md) — Deterministic check for unsessioned Langfuse traces
 - [docs/cost-and-resilience.md](docs/cost-and-resilience.md) — Per-ticket cost tracking & cost controls
 - [docs/notifications.md](docs/notifications.md) — ntfy.sh push notifications for human-attention states
-- [docs/ticket-provenance.md](docs/ticket-provenance.md) — How `source` tracks which actor created each ticket
-- [docs/workspace-cleanup.md](docs/workspace-cleanup.md) — Automatic clone pruning on ticket close
+- [docs/core/ticket-provenance.md](docs/core/ticket-provenance.md) — How `source` tracks which actor created each ticket
+- [docs/core/workspace-cleanup.md](docs/core/workspace-cleanup.md) — Automatic clone pruning on ticket close
 - [docs/ci-policy.md](docs/ci-policy.md) — CI gate-or-remove policy & checklist for new checks
 - [docs/design/forge-architecture.md](docs/design/forge-architecture.md) — Forge abstraction design: GitHub + GitLab adapters, auth, and extension points
 
