@@ -186,7 +186,7 @@ reference are covered in [docs/configuration.md](docs/configuration.md).
 - [docs/retrospect-memory.md](docs/retrospect-memory.md) — Retrospect agent's Markdown memory ledger
 - [docs/trace-health.md](docs/trace-health.md) — Deterministic check for unsessioned Langfuse traces
 - [docs/cost-and-resilience.md](docs/cost-and-resilience.md) — Per-ticket cost tracking & cost controls
-- [docs/notifications.md](docs/notifications.md) — ntfy.sh push notifications for human-attention states
+- [docs/notify/notifications.md](docs/notify/notifications.md) — ntfy.sh push notifications for human-attention states
 - [docs/core/ticket-provenance.md](docs/core/ticket-provenance.md) — How `source` tracks which actor created each ticket
 - [docs/core/workspace-cleanup.md](docs/core/workspace-cleanup.md) — Automatic clone pruning on ticket close
 - [docs/ci-policy.md](docs/ci-policy.md) — CI gate-or-remove policy & checklist for new checks
