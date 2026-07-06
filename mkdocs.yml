@@ -39,7 +39,7 @@ nav:
       - Diagnostic agent: agents/diagnostic-agent.md
       - Expert YAML schema: expert-yaml-schema.md
       - Agent YAML schema: agents/agent-yaml-schema.md
-      - Meta board: meta-board.md
+      - Meta board: meta/meta-board.md
   - Operations:
       - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
