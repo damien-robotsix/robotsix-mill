@@ -44,7 +44,15 @@ def _uptime_payload(request: Request) -> dict[str, Any]:
 
 
 @router.get("/health")
-def health(request: Request) -> dict[str, Any]:
+async def health(request: Request) -> dict[str, Any]:
+    """Liveness probe — deliberately ``async def``.
+
+    A plain ``def`` route is dispatched through Starlette's shared
+    thread pool, which mill's agent pipeline saturates with long-running
+    ``asyncio.to_thread`` LLM calls under load. That starved this
+    zero-I/O handler for up to 25s, intermittently failing Docker's
+    own healthcheck and central-deploy's chat-skill probe.
+    """
     payload: dict[str, Any] = {"status": "alive"}
     payload.update(_uptime_payload(request))
     return payload

@@ -255,10 +255,17 @@ decision).
 
 
 @router.get("/chat-skill", response_class=PlainTextResponse)
-def chat_skill() -> PlainTextResponse:
+async def chat_skill() -> PlainTextResponse:
     """Return the chat-agent board skill as a SKILL.md document.
 
     The response is ``text/markdown`` with YAML frontmatter so the
     chat agent can consume it as a standard skill file.
+
+    ``async def`` is deliberate here even though the body does no I/O:
+    a plain ``def`` route is dispatched through Starlette's shared
+    thread pool, which mill's agent pipeline saturates with long-running
+    ``asyncio.to_thread`` LLM calls under load — starving this trivial
+    handler for tens of seconds and dropping mill out of the central-deploy
+    chat roster's skill probe (5s timeout).
     """
     return PlainTextResponse(_CHAT_SKILL_TEXT, media_type="text/markdown")
