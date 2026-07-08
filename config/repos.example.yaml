@@ -12,6 +12,17 @@
 # entry below.
 #
 # Override the file path with MILL_REPOS_FILE env var.
+#
+# NOTE: There is NO per-repo `langfuse:` block here.  Langfuse credentials
+# are configured in a SINGLE global secrets block (config.yaml → secrets:
+# → langfuse_public_key, langfuse_secret_key, …).  The loader
+# (repos.py:_apply_global_langfuse) hardcodes every repo's langfuse_* fields
+# to empty strings and then populates them uniformly from that global block.
+# A per-repo `langfuse:` block in this file would be silently ignored — it
+# is never read.  The one exception is the top-level `meta:` block (see the
+# end of this file), which IS read but its langfuse_* keys are also
+# overridden by the global block (the meta block is only used for
+# non-langfuse overrides like board_id).
 
 repos:
   example-repo:
@@ -27,13 +38,6 @@ repos:
     # working_branch: "main"      # optional — pinned branch that member repos
     #                             #   branch from and PR into (e.g. "lyrical").
     #                             #   Defaults to None → fork's default branch.
-    langfuse:
-      project_name: "example-repo"
-      # project_id: ""            # optional — explicit Langfuse project ID
-      #                           #   (distinct from project_name). Default "".
-      public_key: "pk-lf-..."
-      secret_key: "sk-lf-..."
-      base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
     # openrouter_api_key: ""      # optional — per-repo OpenRouter API
     #                             #   key override. When set, overrides
     #                             #   the global OPENROUTER_API_KEY for
