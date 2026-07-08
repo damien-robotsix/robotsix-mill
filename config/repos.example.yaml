@@ -16,6 +16,11 @@
 repos:
   example-repo:
     board_id: "example-board"
+    langfuse:
+      project_name: "example-repo"
+      public_key: "pk-lf-..."
+      secret_key: "sk-lf-..."
+      base_url: "https://cloud.langfuse.com"
     # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
     # deployed_log_folder: "/var/log/example-repo"  # optional — host path to
     #                             #   the live deployment's log directory. When
