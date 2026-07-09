@@ -290,6 +290,7 @@ _shtab_robotsix_mill_ticket_new_defaults_added=0
 
 _shtab_robotsix_mill_ticket_resume_blocked_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--note[operator justification, recorded as a comment\; also clears the implement stage\'s stale-spec guard when resuming into READY]:note:"
   ":id:"
 )
 
