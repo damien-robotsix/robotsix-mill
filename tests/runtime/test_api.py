@@ -686,6 +686,33 @@ def test_resume_blocked_from_done(client, service):
     assert data["state"] == State.DONE
 
 
+def test_resume_blocked_with_note_records_comment_and_clears_guard(client, service):
+    """POST /tickets/{id}/resume-blocked with a note comments on the
+    ticket and clears a stale artifacts/implement.md so the stale-spec
+    guard doesn't immediately re-block the retry."""
+    t = service.create("Resume with note via API")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+
+    ws = service.workspace(t)
+    stale = ws.artifacts_dir / "implement.md"
+    stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
+
+    r = client.post(
+        f"/tickets/{t.id}/resume-blocked",
+        json={"note": "retry — prior failure was a flake"},
+    )
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+    assert not stale.exists()
+
+    comments = client.get(f"/tickets/{t.id}/comments").json()
+    assert any(
+        c["body"] == "retry — prior failure was a flake" and c["author"] == "operator"
+        for c in comments
+    )
+
+
 def test_resume_blocked_missing_ticket_404(client):
     """POST /tickets/{id}/resume-blocked with bogus id returns 404."""
     r = client.post("/tickets/nonexistent/resume-blocked")

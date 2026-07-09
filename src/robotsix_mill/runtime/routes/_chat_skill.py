@@ -197,7 +197,7 @@ Marks a ticket `done` from any non-terminal state.  The `note` parameter is opti
 POST /tickets/<ticket-id>/resume-blocked
 ```
 
-Resumes a `blocked` ticket back to its originating state, or clears retry metadata from a retrying ticket.  No request body.  Returns 409 if the ticket is not blocked or retrying.
+Resumes a `blocked` ticket back to its originating state, or clears retry metadata from a retrying ticket.  Request body is optional: `{"note": "..."}`.  For a `blocked` ticket the note is recorded as a comment and, when resuming back into `ready`, also clears the implement stage's stale-spec guard — supply a justification note instead of re-blocking immediately when you want to force a retry on an unchanged spec.  Returns 409 if the ticket is not blocked or retrying.
 
 ---
 

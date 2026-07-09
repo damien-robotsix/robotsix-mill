@@ -15,6 +15,7 @@ from ..models import (
     Ticket,
 )
 from ..states import State, can_transition
+from ..workspace import Workspace
 from ._base import _ServiceBase
 from ._helpers import (
     TransitionError,
@@ -25,6 +26,21 @@ from ._helpers import (
 )
 
 log = logging.getLogger("robotsix_mill.service")
+
+
+def _clear_stale_implement_guard(ws: Workspace) -> None:
+    """Delete a stale ``implement.md`` so the stage's stale-respawn
+    guard (see ``phase_coordinator.preflight``) doesn't immediately
+    re-block a resumed ticket on its own unchanged-spec fingerprint.
+
+    Best-effort and silent when absent — an operator override note is
+    the explicit signal that a retry is wanted despite the guard.
+    """
+    try:
+        (ws.artifacts_dir / "implement.md").unlink()
+    except FileNotFoundError:
+        pass
+
 
 # A ticket auto-unblocks its ``unblocks`` targets when it reaches one of
 # these completion states (DONE = merged/auto-merged; CLOSED = retrospected;
@@ -306,11 +322,18 @@ class _TransitionMixin(_ServiceBase):
                     exc_info=True,
                 )
 
-    def resume_blocked(self, ticket_id: str) -> Ticket:
+    def resume_blocked(self, ticket_id: str, note: str = "") -> Ticket:
         """Resume a blocked ticket to the state it was blocked from.
 
         Reads ``ticket.blocked_from`` and transitions the ticket back to
         that state so only the failed stage is re-run.
+
+        When *note* is non-empty it is recorded as a comment on the
+        ticket and, if resuming back into READY, clears the implement
+        stage's stale-spec guard (``artifacts/implement.md``) — an
+        explicit operator justification is treated as sufficient reason
+        to retry even though the spec itself is unchanged, instead of
+        requiring manual workspace surgery to reset the guard.
         """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
@@ -335,17 +358,18 @@ class _TransitionMixin(_ServiceBase):
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
+            note = note.strip()
+            if note:
+                s.add(Comment(ticket_id=ticket_id, body=note, author="operator"))
             s.flush()
-            s.add(
-                _make_event(
-                    s,
-                    ticket_id=ticket_id,
-                    state=dst,
-                    note=f"resumed from blocked (was blocked from {dst.value})",
-                )
-            )
+            event_note = f"resumed from blocked (was blocked from {dst.value})"
+            if note:
+                event_note += f"; override: {note}"
+            s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=event_note))
             s.commit()
             s.refresh(ticket)
+            if note and dst is State.READY:
+                _clear_stale_implement_guard(self.workspace(ticket))
             if self._on_transition is not None:
                 self._on_transition(ticket)
             return ticket

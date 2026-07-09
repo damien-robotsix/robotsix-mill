@@ -640,6 +640,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="resume a blocked ticket back to the state it was blocked from",
     )
     p_resume.add_argument("id")
+    p_resume.add_argument(
+        "--note",
+        default="",
+        help="operator justification, recorded as a comment; also clears "
+        "the implement stage's stale-spec guard when resuming into READY",
+    )
 
     # --- audit command ---
     p_audit = sub.add_parser("audit", help="run an audit pass and emit gap drafts")
