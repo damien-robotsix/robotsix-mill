@@ -135,6 +135,7 @@ def mark_done(
 def resume_blocked(
     ticket_id: str,
     request: Request,
+    body: dict[str, str] = Body({}),
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
@@ -144,14 +145,21 @@ def resume_blocked(
     For BLOCKED tickets, transitions back to the originating state.
     For retrying tickets (retry_attempt > 0 in any non-BLOCKED state),
     clears the retry metadata and re-enqueues immediately.
+
+    Accepts an optional ``note`` in the JSON body. For a BLOCKED
+    ticket, the note is recorded as a comment and — when resuming back
+    into READY — clears the implement stage's stale-spec guard, so an
+    explicit operator justification lets the retry proceed instead of
+    immediately re-blocking on the unchanged-spec check.
     """
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
 
     if ticket.state is State.BLOCKED:
+        note = str(body.get("note", "") or "")
         try:
-            ticket = svc.resume_blocked(ticket_id)
+            ticket = svc.resume_blocked(ticket_id, note=note)
         except KeyError:
             raise HTTPException(404, "ticket not found") from None
     elif ticket.retry_attempt > 0:

@@ -99,7 +99,10 @@ def _ticket_approve(args: argparse.Namespace, settings: Settings) -> int:
 
 def _ticket_resume_blocked(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
-        r = c.post(f"/tickets/{args.id}/resume-blocked")
+        r = c.post(
+            f"/tickets/{args.id}/resume-blocked",
+            json={"note": getattr(args, "note", "") or ""},
+        )
         if r.is_success:
             data = r.json()
             print(f"ticket {data['id']} resumed — now in {data['state']}")

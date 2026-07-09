@@ -288,6 +288,48 @@ def test_resume_blocked_back_to_originating_state(service):
     assert "resumed from blocked" in (hist[-1].note or "")
 
 
+def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(service):
+    """resume_blocked(note=...) persists the note as a comment and, when
+    resuming back into READY, deletes a stale artifacts/implement.md so
+    the stale-respawn guard doesn't immediately re-block the retry."""
+    t = service.create("resume with note test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+
+    ws = service.workspace(t)
+    stale = ws.artifacts_dir / "implement.md"
+    stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
+
+    resumed = service.resume_blocked(t.id, note="retry — prior failure was a flake")
+    assert resumed.state is State.READY
+    assert not stale.exists()
+
+    comments = service.list_comments(t.id)
+    assert any(
+        c.body == "retry — prior failure was a flake" and c.author == "operator"
+        for c in comments
+    )
+    hist = service.history(t.id)
+    assert "override: retry — prior failure was a flake" in (hist[-1].note or "")
+
+
+def test_resume_blocked_without_note_leaves_implement_guard_untouched(service):
+    """resume_blocked with no note does not touch artifacts/implement.md —
+    the guard-clearing behavior is opt-in via an explicit note."""
+    t = service.create("resume without note test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+
+    ws = service.workspace(t)
+    stale = ws.artifacts_dir / "implement.md"
+    stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
+
+    resumed = service.resume_blocked(t.id)
+    assert resumed.state is State.READY
+    assert stale.exists()
+    assert service.list_comments(t.id) == []
+
+
 def test_resume_blocked_after_retrospect_failure(service):
     """Full scenario: DONE → BLOCKED → resume → DONE → CLOSED.
     This simulates a retrospect failure and proves the ticket can be
