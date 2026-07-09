@@ -479,6 +479,7 @@ modules:
       - src/robotsix_mill/langfuse/client.py
       - tests/langfuse/test_langfuse_client.py
       - tests/langfuse/test_trace_health.py
+      - docs/langfuse/**/*
     dependencies: [config]
 
   - id: notify

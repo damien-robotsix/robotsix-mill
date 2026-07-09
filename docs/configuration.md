@@ -281,7 +281,7 @@ repos:
   is a deployment-specific host path, it lives in the operator's central
   config — **not** the managed repo's committed
   `.robotsix-mill/config.yaml` (the repo-owned key is deprecated and
-  ignored). See [observability.md](observability.md) for the full story.
+  ignored). See [observability.md](langfuse/observability.md) for the full story.
 
 ### Set up secrets
 
@@ -1125,7 +1125,7 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 ## See also
 
 - [index.md](index.md) — documentation home
-- [observability.md](observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
+- [observability.md](langfuse/observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
 - [deployment.md](deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
 - [`config/config.example.json`](../config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)

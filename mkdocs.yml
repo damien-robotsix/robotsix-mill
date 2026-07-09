@@ -12,7 +12,7 @@ nav:
   - Agent Communication Research: agents/communication-research.md
   - Configuration & Deployment:
       - Configuration reference: configuration.md
-      - Observability: observability.md
+      - Observability: langfuse/observability.md
       - Continuous deployment: dev-tooling/deployment.md
       - Reusable-workflow callers: dev-tooling/reusable-workflow-callers.md
       - Docker architecture: docker-architecture.md
@@ -35,7 +35,8 @@ nav:
       - Audit agent: agents/audit-agent.md
       - Blocked ticket recovery: blocked-ticket-recovery.md
       - Retrospect memory: retrospect-memory.md
-      - Trace-health check: trace-health.md
+      - Trace-health check: langfuse/trace-health.md
+      - Langfuse observability: langfuse/observability.md
       - Diagnostic agent: agents/diagnostic-agent.md
       - Expert YAML schema: agent-definitions/expert-yaml-schema.md
       - Agent YAML schema: agents/agent-yaml-schema.md
