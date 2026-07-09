@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove duplicate `CHANGELOG.md` entry from `docs/modules.yaml` `project-root` module paths.
 - **feat:** `POST /tickets/{id}/resume-blocked` accepts an optional `{"note": "..."}` body. The note is recorded as an `operator`-authored comment and, when resuming a BLOCKED ticket back into READY, clears a stale `artifacts/implement.md` so an explicit operator justification lets the retry proceed instead of immediately re-blocking on the implement stage's unchanged-spec guard. `robotsix-mill ticket resume-blocked <id>` gained a matching `--note` flag.
 - **fix:** config/repos.example.yaml — remove misleading per-repo `langfuse:` blocks (per-repo Langfuse config is silently ignored by the loader; Langfuse is configured globally only). Add explanatory comment near the `repos:` section header.
 - Move `docs/expert-yaml-schema.md` → `docs/agent-definitions/expert-yaml-schema.md`, updating all cross-references in README.md, docs/index.md, docs/agents/index.md, and mkdocs.yml; add `docs/agent-definitions/**/*` to the agent-definitions module in docs/modules.yaml.

@@ -603,7 +603,6 @@ modules:
       - LICENSE
       - SECURITY.md
       - AGENT.md
-      - CHANGELOG.md
       - .gitignore
       - .git-blame-ignore-revs
     dependencies: []
