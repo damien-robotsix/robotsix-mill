@@ -502,6 +502,7 @@ modules:
     paths:
       - src/robotsix_mill/autoupdate/**/*.py
       - tests/autoupdate/**/*.py
+      - docs/autoupdate/**/*
     dependencies: []
 
   # -------------------------------------------------------------------
