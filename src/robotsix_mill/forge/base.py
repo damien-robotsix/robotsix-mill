@@ -319,6 +319,22 @@ class Forge(ABC):
         """
         return []
 
+    def enable_vulnerability_alerts(self) -> bool:
+        """Enable Dependabot vulnerability alerts for the repo.
+
+        Concrete (not abstract) with a ``False`` default — only GitHub
+        implements this capability.  Other forges inherit the no-op.
+        """
+        return False
+
+    def enable_automated_security_fixes(self) -> bool:
+        """Enable Dependabot automated security fixes for the repo.
+
+        Concrete (not abstract) with a ``False`` default — only GitHub
+        implements this capability.  Other forges inherit the no-op.
+        """
+        return False
+
     def update_branch(self, *, source_branch: str) -> dict:
         """Merge the PR's base branch into the PR branch (server-side) so its
         CI re-runs against the current base tip. Default: unsupported no-op."""

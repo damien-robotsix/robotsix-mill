@@ -1,4 +1,5 @@
-"""GitHub Dependabot vulnerability-alert mixin — alert listing.
+"""GitHub Dependabot vulnerability-alert mixin — alert listing and
+feature toggles.
 
 Split from ``github.py``.  Defines ``GitHubForgeDependabotMixin`` that
 ``GitHubForge`` inherits from.
@@ -68,6 +69,65 @@ class GitHubForgeDependabotMixin:
                 break  # last page
 
         return out
+
+    # ------------------------------------------------------------------
+    # Feature toggles
+    # ------------------------------------------------------------------
+
+    def enable_vulnerability_alerts(self) -> bool:
+        """Enable Dependabot vulnerability alerts for the repo.
+
+        Calls ``PUT /repos/{owner}/{repo}/vulnerability-alerts``.
+        GitHub returns 204 No Content on success.
+
+        Returns ``True`` on success (204), ``False`` on any failure
+        (404 = repo not found, 403 = insufficient permissions, network
+        error, etc.).  Must NEVER raise — catch all API-level failures
+        and return ``False``.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        try:
+            r = self._http.put(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/vulnerability-alerts"
+            )
+            r.raise_for_status()
+            return True
+        except Exception:  # noqa: BLE001 — best-effort
+            return False
+
+    def enable_automated_security_fixes(self) -> bool:
+        """Enable Dependabot automated security fixes for the repo.
+
+        Calls ``PUT /repos/{owner}/{repo}/automated-security-fixes``.
+        GitHub returns 204 No Content on success.
+
+        Returns ``True`` on success (204), ``False`` on any failure
+        (404 = repo not found, 403 = insufficient permissions, network
+        error, etc.).  Must NEVER raise — catch all API-level failures
+        and return ``False``.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        try:
+            r = self._http.put(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/automated-security-fixes"
+            )
+            r.raise_for_status()
+            return True
+        except Exception:  # noqa: BLE001 — best-effort
+            return False
+
+    def ensure_dependency_graph_enabled(self) -> dict[str, bool]:
+        """Enable all repo features that require the Dependency Graph.
+
+        Enables Dependabot vulnerability alerts and automated security
+        fixes (both implicitly require the Dependency Graph to be
+        active).  Returns a ``dict`` mapping each feature name to its
+        success status so callers can distinguish partial failures.
+        """
+        return {
+            "vulnerability_alerts": self.enable_vulnerability_alerts(),
+            "automated_security_fixes": self.enable_automated_security_fixes(),
+        }
 
 
 def _normalize_alert(a: dict[str, Any]) -> dict[str, Any]:

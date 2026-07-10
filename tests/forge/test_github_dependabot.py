@@ -142,3 +142,85 @@ def test_list_dependabot_alerts_paginates(tmp_path, monkeypatch):
     alerts = forge.list_dependabot_alerts()
     assert len(alerts) == 101
     assert alerts[-1]["package"] == "tail"
+
+
+# ---------------------------------------------------------------------------
+# Feature-toggle tests
+# ---------------------------------------------------------------------------
+
+
+def test_enable_vulnerability_alerts_success(tmp_path, monkeypatch):
+    """PUT returns 204 No Content → True."""
+    forge = _forge(tmp_path)
+
+    def fake_put(path):
+        assert "vulnerability-alerts" in path
+        return _resp(204, {})
+
+    monkeypatch.setattr(forge._http, "put", fake_put)
+    assert forge.enable_vulnerability_alerts() is True
+
+
+def test_enable_vulnerability_alerts_failure(tmp_path, monkeypatch):
+    """PUT returns 404 → False (never raises)."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge._http, "put", lambda path: _resp(404, {}))
+    assert forge.enable_vulnerability_alerts() is False
+
+
+def test_enable_vulnerability_alerts_transport_error(tmp_path, monkeypatch):
+    """A raised transport error degrades to False — best-effort."""
+    forge = _forge(tmp_path)
+
+    def boom(path):
+        raise real_httpx.ConnectError("boom")
+
+    monkeypatch.setattr(forge._http, "put", boom)
+    assert forge.enable_vulnerability_alerts() is False
+
+
+def test_enable_automated_security_fixes_success(tmp_path, monkeypatch):
+    """PUT returns 204 No Content → True."""
+    forge = _forge(tmp_path)
+
+    def fake_put(path):
+        assert "automated-security-fixes" in path
+        return _resp(204, {})
+
+    monkeypatch.setattr(forge._http, "put", fake_put)
+    assert forge.enable_automated_security_fixes() is True
+
+
+def test_enable_automated_security_fixes_failure(tmp_path, monkeypatch):
+    """PUT returns 403 → False (never raises)."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge._http, "put", lambda path: _resp(403, {}))
+    assert forge.enable_automated_security_fixes() is False
+
+
+def test_ensure_dependency_graph_enabled_all_succeed(tmp_path, monkeypatch):
+    """Both features succeed → both True."""
+    forge = _forge(tmp_path)
+    monkeypatch.setattr(forge._http, "put", lambda path: _resp(204, {}))
+    result = forge.ensure_dependency_graph_enabled()
+    assert result == {
+        "vulnerability_alerts": True,
+        "automated_security_fixes": True,
+    }
+
+
+def test_ensure_dependency_graph_enabled_partial(tmp_path, monkeypatch):
+    """One feature fails, one succeeds → partial dict."""
+    forge = _forge(tmp_path)
+
+    def fake_put(path):
+        if "vulnerability-alerts" in path:
+            return _resp(204, {})
+        return _resp(403, {})
+
+    monkeypatch.setattr(forge._http, "put", fake_put)
+    result = forge.ensure_dependency_graph_enabled()
+    assert result == {
+        "vulnerability_alerts": True,
+        "automated_security_fixes": False,
+    }
