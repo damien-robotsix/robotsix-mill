@@ -22,9 +22,11 @@ once all deployments have transitioned.
 
 from __future__ import annotations
 
+import functools
 import logging
+import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import sqlite3
 
@@ -34,6 +36,65 @@ from sqlmodel import Session, SQLModel, create_engine
 from ..config import Settings
 
 log = logging.getLogger("robotsix_mill.db")
+
+# Patterns in sqlite3.OperationalError messages that indicate disk
+# exhaustion or a transient lock — distinct from schema errors.
+_DB_FULL_MESSAGES: tuple[str, ...] = (
+    "disk is full",
+    "database or disk is full",
+    "database is locked",
+)
+
+
+class DiskFullError(RuntimeError):
+    """Raised when a DB operation fails due to disk exhaustion.
+
+    The message includes the current disk usage stats when available.
+    """
+
+
+def _is_db_full_error(exc: sqlite3.OperationalError) -> bool:
+    """Return ``True`` when *exc* matches a disk-full or lock pattern."""
+    msg = str(exc).lower()
+    return any(pat in msg for pat in _DB_FULL_MESSAGES)
+
+
+def _log_disk_full(
+    settings: Settings, board_id: str, exc: sqlite3.OperationalError
+) -> None:
+    """Log a warning with the error and current disk usage stats."""
+    try:
+        usage = shutil.disk_usage(settings.data_dir)
+        log.warning(
+            "Disk-full error on board %r: %s. Disk usage: total=%d, used=%d, free=%d",
+            board_id,
+            exc,
+            usage.total,
+            usage.used,
+            usage.free,
+        )
+    except Exception:
+        log.warning(
+            "Disk-full error on board %r: %s",
+            board_id,
+            exc,
+        )
+
+
+def _reclaim_disk_space(settings: Settings, board_id: str) -> None:
+    """Emergency VACUUM to reclaim free pages from the per-board DB.
+
+    VACUUM cannot run inside a transaction, so we use a raw connection
+    outside of any SQLModel session.
+    """
+    try:
+        engine = get_engine(settings, board_id)
+        with engine.connect() as conn:
+            conn.exec_driver_sql("VACUUM")
+        log.info("Emergency VACUUM on board %r completed", board_id)
+    except Exception:
+        log.warning("Emergency VACUUM on board %r failed", board_id, exc_info=True)
+
 
 # Per-board engine cache.
 _engines: dict[str, Engine] = {}
@@ -231,7 +292,11 @@ def init_db(settings: Settings, board_id: str) -> None:
         with engine.begin() as conn:
             conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
     except sqlite3.OperationalError:
-        pass
+        log.warning(
+            "init_db: kind-normalization UPDATE failed — "
+            "this is harmless when the ticket table does not exist yet",
+            exc_info=True,
+        )
     _initialized.add(board_id)
 
 
@@ -241,10 +306,142 @@ def session(settings: Settings, board_id: str) -> Session:
     Lazily initializes the per-board schema on first access — so a
     fresh repo's DB is created on its first session() call without
     requiring an explicit init_db() at startup.
+
+    Every session returned by this function has its ``commit()`` and
+    ``flush()`` methods wrapped with disk-full retry logic: on the
+    first ``OperationalError`` matching a disk-full or lock pattern an
+    emergency VACUUM is attempted and the operation is retried once.
+    On a second failure a :class:`DiskFullError` is raised with the
+    current disk usage in the message.
     """
     if board_id not in _initialized:
         init_db(settings, board_id)
-    return Session(get_engine(settings, board_id))
+    s = Session(get_engine(settings, board_id))
+    _install_disk_full_retry(s, settings, board_id)
+    return s
+
+
+def _install_disk_full_retry(s: Session, settings: Settings, board_id: str) -> None:
+    """Monkey-patch *s* so ``commit()`` and ``flush()`` retry once on
+    disk-full errors after an emergency VACUUM."""
+    s.commit = _make_safe_commit(s.commit, settings, board_id)  # type: ignore[method-assign]
+    s.flush = _make_safe_flush(s.flush, settings, board_id)  # type: ignore[method-assign]
+
+
+def _make_safe_commit(orig_commit: Any, settings: Settings, board_id: str) -> Any:
+    def _safe_commit() -> None:
+        _retry_db_op(orig_commit, settings, board_id)
+
+    return _safe_commit
+
+
+def _make_safe_flush(orig_flush: Any, settings: Settings, board_id: str) -> Any:
+    def _safe_flush(*args: Any, **kwargs: Any) -> None:
+        _retry_db_op(lambda: orig_flush(*args, **kwargs), settings, board_id)
+
+    return _safe_flush
+
+
+def _retry_db_op(op: Any, settings: Settings, board_id: str) -> None:
+    """Call *op*; on disk-full OperationalError, VACUUM and retry once."""
+    try:
+        op()
+    except sqlite3.OperationalError as e:
+        if not _is_db_full_error(e):
+            raise
+        _log_disk_full(settings, board_id, e)
+        _reclaim_disk_space(settings, board_id)
+        try:
+            op()
+        except sqlite3.OperationalError as e2:
+            if not _is_db_full_error(e2):
+                raise
+            _raise_disk_full(settings, e2)
+
+
+def _raise_disk_full(settings: Settings, exc: sqlite3.OperationalError) -> None:
+    """Raise :class:`DiskFullError` with current disk usage in the message."""
+    try:
+        usage = shutil.disk_usage(settings.data_dir)
+        raise DiskFullError(
+            f"DB operation failed after VACUUM retry: {exc}. "
+            f"Disk total={usage.total}, used={usage.used}, free={usage.free}"
+        ) from exc
+    except Exception:
+        raise DiskFullError(f"DB operation failed after VACUUM retry: {exc}") from exc
+
+
+class retry_on_db_full:
+    """Context manager and decorator that catches disk-full
+    ``sqlite3.OperationalError``, runs an emergency VACUUM, and
+    retries the wrapped operation once.
+
+    .. note::
+
+       Every :class:`sqlmodel.Session` returned by :func:`session`
+       already has this protection installed on its ``commit()`` and
+       ``flush()`` methods — this utility is only needed for code that
+       bypasses :func:`session` (raw-engine or bare-connection calls).
+
+    **Context manager**::
+
+        with retry_on_db_full(settings, board_id):
+            conn.exec_driver_sql("VACUUM")
+
+    **Decorator**::
+
+        @retry_on_db_full(settings, board_id)
+        def my_db_operation():
+            ...
+    """
+
+    def __init__(self, settings: Settings, board_id: str) -> None:
+        self._settings = settings
+        self._board_id = board_id
+
+    def __enter__(self) -> retry_on_db_full:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> Literal[False]:
+        if exc_type is None:
+            return False
+        if exc_type is not sqlite3.OperationalError:
+            return False
+        if exc_val is None:
+            return False
+        if not isinstance(exc_val, sqlite3.OperationalError):
+            return False
+        if not _is_db_full_error(exc_val):
+            return False
+        _log_disk_full(self._settings, self._board_id, exc_val)
+        _reclaim_disk_space(self._settings, self._board_id)
+        # Re-raise so the caller can retry the with-block body.
+        _raise_disk_full(self._settings, exc_val)
+        return False
+
+    def __call__(self, func):  # type: ignore[no-untyped-def]
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return func(*args, **kwargs)
+            except sqlite3.OperationalError as e:
+                if not _is_db_full_error(e):
+                    raise
+                _log_disk_full(self._settings, self._board_id, e)
+                _reclaim_disk_space(self._settings, self._board_id)
+                try:
+                    return func(*args, **kwargs)
+                except sqlite3.OperationalError as e2:
+                    if not _is_db_full_error(e2):
+                        raise
+                    _raise_disk_full(self._settings, e2)
+
+        return wrapper
 
 
 def reset_engine() -> None:

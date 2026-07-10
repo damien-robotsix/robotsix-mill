@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import time
 from collections.abc import Coroutine
 from datetime import datetime, timezone
@@ -55,6 +56,21 @@ async def health(request: Request) -> dict[str, Any]:
     """
     payload: dict[str, Any] = {"status": "alive"}
     payload.update(_uptime_payload(request))
+
+    # Disk usage on the data directory — cheap, no I/O stall risk.
+    settings: Settings = request.app.state.settings
+    try:
+        usage = shutil.disk_usage(settings.data_dir)
+        payload["disk"] = {
+            "total_bytes": usage.total,
+            "used_bytes": usage.used,
+            "free_bytes": usage.free,
+        }
+        if usage.total > 0:
+            payload["disk"]["used_pct"] = round(usage.used / usage.total * 100, 1)
+    except Exception:
+        pass
+
     return payload
 
 

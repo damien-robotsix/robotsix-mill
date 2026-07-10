@@ -3,6 +3,7 @@
 - Update CI overview table in `CONTRIBUTING.md`: remove stale `docker-publish.yml` references, correct `ci.yml` row to describe actual steps, and update Trivy section to reference the shared reusable `docker-release.yml` workflow.
 - Security audit: replace `pip-audit` with `uv audit --frozen` for dependency CVE scanning (4–10× faster, no separate install step). SBOM generation now uses `uv audit --output-format json`.
 - Register `robotsix-chat-mobile` as a tracked repo/board in the committed config example (`config/config.example.json`), with `board_id: robotsix-chat-mobile` and `forge_remote_url: https://github.com/damien-robotsix/robotsix-chat-mobile`.
+- Add `DiskFullError` and `retry_on_db_full` (context manager + decorator) to `db.py`. Every `session().commit()` and `session().flush()` call is now automatically protected: on `sqlite3.OperationalError` matching disk-full or lock patterns, an emergency VACUUM is attempted and the operation retried once. On double failure a `DiskFullError` (subclass of `RuntimeError`) is raised with current disk usage in the message. The `/health` endpoint now includes `disk` usage stats (`total_bytes`, `used_bytes`, `free_bytes`, `used_pct`).
 - Create `docs/cli/usage.md` with a comprehensive CLI command reference.
   Add `docs/cli/**/*` to the `cli` module's paths in `docs/modules.yaml`
   and add cross-references from `approval-gate.md`,

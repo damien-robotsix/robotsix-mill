@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from sqlmodel import Session, col, select
+
+from sqlalchemy import exc as sa_exc
 
 from .. import db
 from ..models import (
@@ -209,7 +212,13 @@ class _MigrateMixin(_ServiceBase):
                         )
                     )
                 s2.commit()
-        except Exception:
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            sa_exc.SQLAlchemyError,
+            sqlite3.OperationalError,
+        ):
             # Roll workspace dirs back to the source board.
             for src_ws, dst_ws, moved in ws_moves:
                 if moved:
@@ -408,7 +417,13 @@ class _MigrateMixin(_ServiceBase):
                     )
                 )
                 s.commit()
-        except Exception:
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            sa_exc.SQLAlchemyError,
+            sqlite3.OperationalError,
+        ):
             # Roll the workspace back so the source board stays intact.
             if ws_moved:
                 shutil.move(str(dst_ws), str(src_ws))
