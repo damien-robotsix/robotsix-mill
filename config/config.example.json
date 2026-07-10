@@ -307,5 +307,10 @@
     "openrouter_api_key": "SECRET",
     "openrouter_management_key": "SECRET"
   },
-  "repos": {}
+  "repos": {
+    "robotsix-chat-mobile": {
+      "board_id": "robotsix-chat-mobile",
+      "forge_remote_url": "https://github.com/damien-robotsix/robotsix-chat-mobile"
+    }
+  }
 }
