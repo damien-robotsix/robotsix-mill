@@ -3318,7 +3318,7 @@ def test_triage_skip_skips_full_refine(ctx, service, monkeypatch):
     monkeypatch.setattr(refining, "run_refine_agent", fake_refine)
 
     t = service.create(
-        "Update README", "Change the version badge in `docs/README.md` line 5."
+        "Update README", "Change the version badge in `src/main.py` line 5."
     )
     out = RefineStage().run(t, ctx)
 
