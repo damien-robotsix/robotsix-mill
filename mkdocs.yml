@@ -51,6 +51,7 @@ nav:
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notify/notifications.md
       - Ticket provenance: core/ticket-provenance.md
+      - VCS (git) module: vcs/README.md
       - Workspace cleanup: core/workspace-cleanup.md
       - Orphaned-PR check: runners/orphaned-pr-check.md
       - Pin bump: runners/pin-bump.md
