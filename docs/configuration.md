@@ -1125,6 +1125,7 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 ## See also
 
 - [index.md](index.md) — documentation home
+- [cli/usage.md](cli/usage.md) — full CLI command reference
 - [observability.md](langfuse/observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
 - [deployment.md](deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source

@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Create `docs/cli/usage.md` with a comprehensive CLI command reference.
+  Add `docs/cli/**/*` to the `cli` module's paths in `docs/modules.yaml`
+  and add cross-references from `approval-gate.md`,
+  `blocked-ticket-recovery.md`, and `configuration.md`.
 - Fix two function-signature inaccuracies in `docs/vcs/README.md`: `fetch()` now shows the keyword-only `*` delimiter, and `branch_has_net_diff()` now shows the correct parameter names and description.
 - Add `docs/autoupdate/index.md` documenting the autoupdate CLI, flock-based
   locking, git fetch/merge/restart lifecycle, deployed-SHA recording, and

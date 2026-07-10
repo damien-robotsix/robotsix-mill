@@ -66,6 +66,8 @@ nav:
       - GitLab backend: forge/gitlab.md
       - CI monitoring: forge/ci-monitoring.md
       - Code scanning: forge/code-scanning.md
+  - CLI:
+      - Usage: cli/usage.md
   - Guides:
       - Adding a New Agent: guides/adding-a-new-agent.md
   - API Reference:

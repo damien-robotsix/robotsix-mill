@@ -103,5 +103,5 @@ break the others.
 ## See also
 
 - [index.md](index.md) — documentation home
-- [docs/configuration.md](configuration.md) — full env-var reference
-eference
+- [cli/usage.md](cli/usage.md) — full CLI command reference
+- [configuration.md](configuration.md) — full env-var reference

@@ -457,6 +457,7 @@ modules:
     paths:
       - src/robotsix_mill/cli/**/*.py
       - contrib/completions/*
+      - docs/cli/**/*
       - tests/cli/test_cli.py
       - tests/cli/test_repos_list.py
       - tests/cli/test_screenshot_cli.py
