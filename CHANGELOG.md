@@ -3,6 +3,7 @@
 - Reorganize runtime documentation into a per-module `docs/runtime/` directory:
   moved board operations and API reference, added worker/routes/tracing/run-registry
   docs, and updated cross-references.
+- docs(vcs): fix material inaccuracies in `docs/vcs/README.md` — corrected `post_push_check` signature (added missing `target` param) and return values (`PASS`/`NOT_LANDED`/`FOREIGN_DIVERGENCE`/`UNAVAILABLE`), removed phantom `force=False` from `push_with_lease`, added note about `post_push_check` callers (merge/review-revision stages); also fixed `reconcile_with_remote_pr` param order, `diff_base`, `try_rebase_onto`, `ls_remote_sha` signatures and `branch_ancestry` return dict keys
 - Add `docs/vcs/README.md` documenting the vcs module's git CLI wrappers (clone, branch, commit, push, inspection, recovery). Registers `docs/vcs/**/*` in `docs/modules.yaml` under the vcs module.
 - Remove duplicate `CHANGELOG.md` entry from `docs/modules.yaml` `project-root` module paths.
 - **feat:** `POST /tickets/{id}/resume-blocked` accepts an optional `{"note": "..."}` body. The note is recorded as an `operator`-authored comment and, when resuming a BLOCKED ticket back into READY, clears a stale `artifacts/implement.md` so an explicit operator justification lets the retry proceed instead of immediately re-blocking on the implement stage's unchanged-spec guard. `robotsix-mill ticket resume-blocked <id>` gained a matching `--note` flag.
