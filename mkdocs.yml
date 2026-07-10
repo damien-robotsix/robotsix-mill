@@ -41,8 +41,13 @@ nav:
       - Expert YAML schema: agent-definitions/expert-yaml-schema.md
       - Agent YAML schema: agents/agent-yaml-schema.md
       - Meta board: meta/meta-board.md
+  - Runtime:
+      - Worker: runtime/worker.md
+      - API routes: runtime/routes.md
+      - Board: runtime/board.md
+      - Tracing: runtime/tracing.md
+      - Run registry: runtime/run-registry.md
   - Operations:
-      - Board operations: board-operations.md
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notify/notifications.md
       - Ticket provenance: core/ticket-provenance.md
@@ -59,7 +64,7 @@ nav:
   - API Reference:
       - Agents: agents/reference.md
       - Core: reference/core.md
-      - Runtime: reference/runtime.md
+      - Runtime: runtime/reference.md
       - Stages: reference/stages.md
 
 plugins:

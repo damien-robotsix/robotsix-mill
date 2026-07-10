@@ -45,6 +45,8 @@ emit ticket ─▶ API inserts row + enqueues ─▶ worker chains stages
   run in parallel (one ticket's stages stay ordered; a dedupe set stops
   the same ticket running twice). No cron, no polling (except merge
   check).
+  See [docs/runtime/worker.md](runtime/worker.md) for the full worker
+  architecture.
 - **Delivery:** pluggable forge adapter (GitHub / GitLab), invoked only
   by the `deliver` stage.
 - **Tracing:** optional Langfuse; a no-op unless per-repo Langfuse credentials are configured in `config/repos.yaml`. On SIGTERM/SIGINT the worker flushes any pending trace spans before exiting so cost/latency data is not lost.
