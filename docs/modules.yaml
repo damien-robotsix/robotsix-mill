@@ -108,6 +108,7 @@ modules:
       - tests/vcs/__init__.py
       - tests/vcs/test_clone_all_repos.py
       - tests/vcs/test_git_ops.py
+      - docs/vcs/**/*
     dependencies: []
 
   - id: forge
