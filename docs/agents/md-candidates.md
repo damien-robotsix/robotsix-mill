@@ -148,6 +148,6 @@ Routes live in
 ## See also
 
 - [index.md](../index.md) — documentation home
-- [docs/board-operations.md](../board-operations.md) — board UI and automated column
+- [docs/runtime/board.md](../runtime/board.md) — board UI and automated column
   transitions
 - [agent catalog](index.md) — agent catalog (includes retrospect)

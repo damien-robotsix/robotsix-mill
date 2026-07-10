@@ -172,6 +172,7 @@ modules:
       - src/robotsix_mill/runtime/run_registry.py
       - src/robotsix_mill/runtime/stage_retry.py
       - src/robotsix_mill/runtime/static/*
+      - docs/runtime/**/*
       - tests/runtime/test_api.py
       - tests/runtime/test_broadcaster.py
       - tests/runtime/test_cost_warm.py
