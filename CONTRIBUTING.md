@@ -295,15 +295,13 @@ check.
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`docker-publish.yml`](.github/workflows/docker-publish.yml) | Push to `main` | hadolint lint → build Docker image → Trivy CRITICAL scan → push to Docker Hub with SBOM + SLSA attestation |
-| hadolint gate (in `docker-publish.yml`) | (within `docker-publish.yml` push) | `hadolint/hadolint-action@v3.3.0` with `failure-threshold: warning` |
 | [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
-| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | `uv sync --frozen` (committed-lock gate — fails on a stale `uv.lock`) → deptry → **dependency audit** (CVE scan via `uv audit --frozen --preview` / `pip-audit` fallback — **hard gate**) → module taxonomy → Ruff → mypy `--strict` (advisory) → Bandit MEDIUM+ (advisory; see `[tool.bandit]`) → pytest (70% cov) |
+| [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | Python CI via shared reusable (lint → type-check → format → test with 70% cov, Bandit MEDIUM+ advisory, mypy `--strict` advisory via baseline ratchet) → deptry → module taxonomy + file registration → Vulture dead-code check → config sync + schema validation → workflow pinning + permissions audit → shell completions check |
 | [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
 | [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/deps/dependencies.md) |
 | [`release.yml`](.github/workflows/release.yml) | Push to `main` | hadolint lint on all three Dockerfiles → build and publish Docker images to GHCR (`robotsix-mill`, `robotsix-mill-sandbox`, `robotsix-mill-sandbox-proxy`) via the shared reusable `docker-release.yml` workflow → smoke-test each published image (entrypoint reachable, agent definitions bundled, version readable). |
 
-**Note on the hadolint gate in `docker-publish.yml`:** hadolint runs with
+**Note on the hadolint gate in `release.yml`:** hadolint runs with
 `failure-threshold: warning` on every push to `main`. Warnings are
 visible in CI annotations and logs but do **not** block the pipeline.
 This is a deliberate, documented advisory policy: the warning-level
@@ -371,8 +369,9 @@ flags and comments — there is intentionally no separate
 
 ### Trivy vulnerability scanning
 
-The `docker-publish.yml` workflow runs two separate Trivy steps against
-the built Docker image:
+Trivy vulnerability scanning runs as part of the shared reusable
+`docker-release.yml` workflow (called by `release.yml`) against each
+built Docker image:
 
 **Gate (blocking)** — Only **CRITICAL** CVEs with an available fix
 (`ignore-unfixed: true`) fail the pipeline. HIGH, MEDIUM, and LOW

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Update CI overview table in `CONTRIBUTING.md`: remove stale `docker-publish.yml` references, correct `ci.yml` row to describe actual steps, and update Trivy section to reference the shared reusable `docker-release.yml` workflow.
 - Register `robotsix-chat-mobile` as a tracked repo/board in the committed config example (`config/config.example.json`), with `board_id: robotsix-chat-mobile` and `forge_remote_url: https://github.com/damien-robotsix/robotsix-chat-mobile`.
 - Create `docs/cli/usage.md` with a comprehensive CLI command reference.
   Add `docs/cli/**/*` to the `cli` module's paths in `docs/modules.yaml`
