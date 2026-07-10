@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix stale `forge/gitlab.py` path references in the `forge_parity` agent definition, updated to `forge/gitlab/core.py` after the GitLab adapter was refactored into a package.
 - Update CI overview table in `CONTRIBUTING.md`: remove stale `docker-publish.yml` references, correct `ci.yml` row to describe actual steps, and update Trivy section to reference the shared reusable `docker-release.yml` workflow.
 - Security audit: replace `pip-audit` with `uv audit --frozen` for dependency CVE scanning (4–10× faster, no separate install step). SBOM generation now uses `uv audit --output-format json`.
 - Register `robotsix-chat-mobile` as a tracked repo/board in the committed config example (`config/config.example.json`), with `board_id: robotsix-chat-mobile` and `forge_remote_url: https://github.com/damien-robotsix/robotsix-chat-mobile`.
