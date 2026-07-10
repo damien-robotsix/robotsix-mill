@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Add `docs/autoupdate/index.md` documenting the autoupdate CLI, flock-based
+  locking, git fetch/merge/restart lifecycle, deployed-SHA recording, and
+  the `dev/mill-autoupdate.sh` wrapper.
 - Reorganize runtime documentation into a per-module `docs/runtime/` directory:
   moved board operations and API reference, added worker/routes/tracing/run-registry
   docs, and updated cross-references.

@@ -14,6 +14,7 @@ nav:
       - Configuration reference: configuration.md
       - Observability: langfuse/observability.md
       - Continuous deployment: dev-tooling/deployment.md
+      - Autoupdate: autoupdate/index.md
       - Reusable-workflow callers: dev-tooling/reusable-workflow-callers.md
       - Docker architecture: docker-architecture.md
       - GitHub App / PAT: github-app.md
