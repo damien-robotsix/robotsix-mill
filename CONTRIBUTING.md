@@ -84,7 +84,7 @@ Here's how the key directories relate:
 The full architecture is covered in [README.md](README.md). For Docker
 setup and GitHub App delivery identity, see
 [docs/docker-architecture.md](docs/docker-architecture.md) and
-[docs/github-app.md](docs/github-app.md).
+[docs/forge/github-app.md](docs/forge/github-app.md).
 
 ### Epic-decomposition pre-filing dedup
 

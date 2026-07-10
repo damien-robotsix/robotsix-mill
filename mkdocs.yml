@@ -16,7 +16,6 @@ nav:
       - Continuous deployment: dev-tooling/deployment.md
       - Reusable-workflow callers: dev-tooling/reusable-workflow-callers.md
       - Docker architecture: docker-architecture.md
-      - GitHub App / PAT: github-app.md
       - Security model: sandbox/security.md
       - CI policy: dev-tooling/ci-policy.md
       - Config audit: config-audit.md
@@ -58,8 +57,14 @@ nav:
       - Attaching screenshots: core/screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
-      - Forge architecture: design/forge-architecture.md
       - Worker Process Split (ADR): design/worker-process-split.md
+  - Forge:
+      - Overview: forge/architecture.md
+      - GitHub App setup: forge/github-app.md
+      - Authentication: forge/auth.md
+      - GitLab backend: forge/gitlab.md
+      - CI monitoring: forge/ci-monitoring.md
+      - Code scanning: forge/code-scanning.md
   - Guides:
       - Adding a New Agent: guides/adding-a-new-agent.md
   - API Reference:

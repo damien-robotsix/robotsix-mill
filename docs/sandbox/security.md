@@ -24,4 +24,4 @@ execution is isolated from the mill process:
 
 - [index.md](index.md) — documentation home
 - [docs/docker-architecture.md](docker-architecture.md) — container topology
-- [docs/github-app.md](github-app.md) — delivery identity setup
+- [docs/forge/github-app.md](../forge/github-app.md) — delivery identity setup
