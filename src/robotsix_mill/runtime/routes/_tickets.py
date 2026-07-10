@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import mimetypes
@@ -315,6 +316,70 @@ def get_description(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     return {"description": svc.workspace(ticket).read_description()}
+
+
+def _compute_spec_fingerprint(ticket: Ticket, svc: TicketService) -> str:
+    """Compute the spec fingerprint for *ticket* matching the formula
+    used by the implement stage's stale re-spawn guard.
+
+    Returns ``""`` when there is no description.
+    """
+    effective = svc.workspace(ticket).read_description() or ""
+    if not effective:
+        return ""
+    if ticket.parent_id:
+        epic_ctx = svc.get_epic_context(ticket)
+        if epic_ctx:
+            effective = epic_ctx + "\n\n" + effective
+    return hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+
+
+@router.put("/tickets/{ticket_id}/description")
+def update_description(
+    ticket_id: str,
+    body: dict[str, object] = Body(...),
+    svc: TicketService = Depends(get_service),
+) -> dict[str, str]:
+    """Update a ticket's Markdown description (``PUT /tickets/{ticket_id}/description``).
+
+    Replaces the stored description and recomputes the spec fingerprint
+    so the implement-stage fingerprint guard allows a fresh attempt.
+    Refused for terminal tickets (CLOSED, EPIC_CLOSED, ANSWERED).
+
+    Body: ``{"description": "...", "author": "..."}`` (author defaults
+    to ``"api"``). Returns ``{"description": "...",
+    "old_fingerprint": "...", "new_fingerprint": "..."}``.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    if ticket.state in _LIST_TERMINAL_STATES:
+        raise HTTPException(400, "cannot update description of a terminal ticket")
+
+    new_description = body.get("description", "")
+    if not isinstance(new_description, str):
+        raise HTTPException(400, "description must be a string")
+
+    author = body.get("author", "api")
+    if not isinstance(author, str) or not author.strip():
+        author = "api"
+
+    old_fp = _compute_spec_fingerprint(ticket, svc)
+
+    new_hash = svc.workspace(ticket).write_description(new_description)
+    svc.set_content_hash(ticket_id, new_hash)
+
+    new_fp = _compute_spec_fingerprint(ticket, svc)
+
+    note = f"spec updated by {author} (fingerprint: {old_fp} → {new_fp})"
+    svc.add_history_note(ticket_id, note)
+
+    return {
+        "description": new_description,
+        "old_fingerprint": old_fp,
+        "new_fingerprint": new_fp,
+    }
 
 
 # Supported screenshot image media types (content-type → canonical).

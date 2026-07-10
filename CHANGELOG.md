@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Added `PUT /tickets/{id}/description` endpoint to update a ticket's spec from the API. Replaces the stored Markdown description, recomputes the spec fingerprint so the implement-stage fingerprint guard allows a fresh attempt, and records a history note (old/new fingerprint, author) for auditability. Refused for terminal tickets (CLOSED, EPIC_CLOSED, ANSWERED).
 - Update CI overview table in `CONTRIBUTING.md`: remove stale `docker-publish.yml` references, correct `ci.yml` row to describe actual steps, and update Trivy section to reference the shared reusable `docker-release.yml` workflow.
 - Security audit: replace `pip-audit` with `uv audit --frozen` for dependency CVE scanning (4–10× faster, no separate install step). SBOM generation now uses `uv audit --output-format json`.
 - Register `robotsix-chat-mobile` as a tracked repo/board in the committed config example (`config/config.example.json`), with `board_id: robotsix-chat-mobile` and `forge_remote_url: https://github.com/damien-robotsix/robotsix-chat-mobile`.

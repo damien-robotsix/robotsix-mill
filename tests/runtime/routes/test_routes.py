@@ -1470,3 +1470,113 @@ def test_chat_skill_returns_markdown(client):
     assert "POST /tickets/ingest" in body
     assert "robotsix-chat" in body
     assert "Safety rules" in body
+
+
+# -- PUT /tickets/{id}/description --------------------------------------
+
+
+def test_update_description_happy_path(client, service):
+    """PUT /tickets/{id}/description replaces the description and
+    records a history note with old/new fingerprints."""
+    t = service.create("Desc update test", "original spec")
+    old_desc = service.workspace(t).read_description()
+    assert old_desc == "original spec"
+
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "updated spec", "author": "test-agent"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["description"] == "updated spec"
+    assert "old_fingerprint" in data
+    assert "new_fingerprint" in data
+    assert data["old_fingerprint"] != data["new_fingerprint"]
+
+    # Verify the description was actually written to disk.
+    new_desc = service.workspace(t).read_description()
+    assert new_desc == "updated spec"
+
+    # Verify a history note was recorded.
+    history = service.history(t.id)
+    notes = [e.note for e in history if e.note]
+    assert any("spec updated by test-agent" in n for n in notes)
+    assert any("fingerprint:" in n for n in notes)
+
+
+def test_update_description_default_author(client, service):
+    """PUT /tickets/{id}/description without author defaults to 'api'."""
+    t = service.create("No author", "desc")
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "new desc"},
+    )
+    assert r.status_code == 200
+    history = service.history(t.id)
+    notes = [e.note for e in history if e.note]
+    assert any("spec updated by api" in n for n in notes)
+
+
+def test_update_description_404(client):
+    """PUT /tickets/{nonexistent}/description returns 404."""
+    r = client.put(
+        "/tickets/nonexistent/description",
+        json={"description": "x"},
+    )
+    assert r.status_code == 404
+
+
+def test_update_description_rejects_terminal(client, service):
+    """PUT /tickets/{id}/description returns 400 for a CLOSED ticket."""
+    t = service.create("Terminal test", "desc")
+    service.transition(t.id, State.DONE)
+    service.transition(t.id, State.CLOSED)
+
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "should fail"},
+    )
+    assert r.status_code == 400
+
+
+def test_update_description_allowed_when_blocked(client, service):
+    """PUT /tickets/{id}/description is allowed for a BLOCKED ticket
+    (non-terminal state)."""
+    t = service.create("Blocked test", "desc")
+    service.transition(t.id, State.BLOCKED)
+
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "unblock me"},
+    )
+    assert r.status_code == 200
+    assert r.json()["description"] == "unblock me"
+
+
+def test_update_description_fingerprint_changes(client, service):
+    """The spec fingerprint changes when the description changes,
+    which is what unblocks the implement-stage stale-guard."""
+    t = service.create("Fingerprint test", "spec v1")
+    fp1_resp = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "spec v2"},
+    )
+    fp1 = fp1_resp.json()["new_fingerprint"]
+
+    fp2_resp = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "spec v3"},
+    )
+    fp2 = fp2_resp.json()["new_fingerprint"]
+
+    assert fp1 != fp2, "fingerprint should change when description changes"
+
+
+def test_update_description_rejects_non_string(client, service):
+    """PUT /tickets/{id}/description returns 400 when description is not a string."""
+    t = service.create("Bad body", "desc")
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": 123},
+    )
+    assert r.status_code == 400
