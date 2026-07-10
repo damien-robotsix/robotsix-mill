@@ -1027,3 +1027,168 @@ def test_triage_skip_refine_decision_returns_none(ctx_factory, tmp_path):
 
     # With auto_approve_enabled=False and REFINE, falls through
     assert result is None
+
+
+# ===========================================================================
+# _is_doc_only_draft
+# ===========================================================================
+
+
+def test_is_doc_only_draft_empty_draft():
+    """An empty draft has no file paths, so returns False."""
+    assert _triage._is_doc_only_draft("") is False
+
+
+def test_is_doc_only_draft_no_paths():
+    """A draft with no backtick-delimited file paths returns False."""
+    assert (
+        _triage._is_doc_only_draft("Just some prose with no file references.") is False
+    )
+
+
+def test_is_doc_only_draft_docs_md_only():
+    """All paths under docs/ → doc-only."""
+    draft = "Update `docs/modules.yaml` and `docs/agents/agent-yaml-schema.md`."
+    assert _triage._is_doc_only_draft(draft) is True
+
+
+def test_is_doc_only_draft_md_files_anywhere():
+    """.md files anywhere in the tree are doc-only."""
+    draft = "Update `README.md` and `CHANGELOG.md` at the repo root."
+    assert _triage._is_doc_only_draft(draft) is True
+
+
+def test_is_doc_only_draft_mixed_docs_and_md():
+    """Mix of docs/ paths and .md files is doc-only."""
+    draft = "Update `docs/foo.md` and `CONTRIBUTING.md`."
+    assert _triage._is_doc_only_draft(draft) is True
+
+
+def test_is_doc_only_draft_py_file_disqualifies():
+    """A single .py file disqualifies the draft from doc-only."""
+    draft = "Update `docs/readme.md` and `src/foo.py`."
+    assert _triage._is_doc_only_draft(draft) is False
+
+
+def test_is_doc_only_draft_yaml_config_disqualifies():
+    """A .yaml config file disqualifies the draft."""
+    draft = "Update `docs/config.md` and `config/config.yaml`."
+    assert _triage._is_doc_only_draft(draft) is False
+
+
+def test_is_doc_only_draft_js_file_disqualifies():
+    """A .js file disqualifies the draft."""
+    draft = "Edit `docs/api.md` and `src/static/app.js`."
+    assert _triage._is_doc_only_draft(draft) is False
+
+
+def test_is_doc_only_draft_unknown_extension_returns_false():
+    """A path with an unrecognised extension returns False (safe default)."""
+    draft = "Update `other/something.xyzzy`."
+    assert _triage._is_doc_only_draft(draft) is False
+
+
+def test_is_doc_only_draft_no_extension_under_docs():
+    """Paths under docs/ without extension are still doc-only."""
+    draft = "Update `docs/Dockerfile` (a docs dir file without extension)."
+    # _DOC_PATH_RE requires a dot+extension, so "docs/Dockerfile" won't match
+    # and the function returns False (no paths found).
+    # This tests the regex constraint — Dockerfile has no extension.
+    assert _triage._is_doc_only_draft(draft) is False
+
+
+def test_is_doc_only_draft_code_file_inside_docs():
+    """A .py file under docs/ is NOT disqualified — docs/ prefix wins."""
+    # While unusual, a .py file under docs/ (e.g. a Sphinx conf.py) is
+    # still documentation infrastructure.
+    draft = "Update `docs/conf.py`."
+    assert _triage._is_doc_only_draft(draft) is True
+
+
+def test_is_doc_only_draft_only_code_files():
+    """All paths are code files → not doc-only."""
+    draft = "Edit `src/foo.py` and `tests/test_bar.py`."
+    assert _triage._is_doc_only_draft(draft) is False
+
+
+# ===========================================================================
+# triage_skip — doc-only short-circuit
+# ===========================================================================
+
+
+def test_triage_skip_doc_only_short_circuits(ctx_factory, tmp_path):
+    """When the draft contains only doc-only paths, skip triage + refine."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    draft = "Update `docs/modules.yaml` with new module entries."
+
+    triage_refine_called = []
+
+    def _fake_triage_refine(**kw):
+        triage_refine_called.append(1)
+        return _mock_triage_result("REFINE", "should not be called")
+
+    with patch.object(_triage.refining, "triage_refine", _fake_triage_refine):
+        with patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved:
+            with patch.object(_reconcile, "write_file_map"):
+                result = _triage.triage_skip(
+                    ctx,
+                    t,
+                    draft,
+                    None,
+                    None,
+                    t.title,
+                    ws,
+                    ctx.settings,
+                    None,
+                )
+
+    assert result is not None
+    assert not triage_refine_called, "triage_refine should NOT be called"
+    base_note = mock_resolved.call_args.args[3]
+    assert "Documentation-only" in base_note
+    assert "skipped triage + refine" in base_note
+
+
+def test_triage_skip_doc_only_with_code_file_falls_through(ctx_factory, tmp_path):
+    """When the draft contains a code file path, doc-only check doesn't trigger."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    draft = "Update `docs/readme.md` and `src/foo.py`."
+
+    with patch.object(
+        _triage.refining,
+        "triage_refine",
+        return_value=_mock_triage_result("REFINE", "needs refinement"),
+    ):
+        with patch.object(_reconcile, "persist_triage_complexity"):
+            result = _triage.triage_skip(
+                ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+            )
+
+    # Falls through to normal triage (REFINE → None)
+    assert result is None
+
+
+def test_triage_skip_doc_only_no_paths_falls_through(ctx_factory, tmp_path):
+    """When the draft has no file paths, doc-only check doesn't trigger."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    draft = "Add documentation for the new feature."
+
+    with patch.object(
+        _triage.refining,
+        "triage_refine",
+        return_value=_mock_triage_result("REFINE", "needs refinement"),
+    ):
+        with patch.object(_reconcile, "persist_triage_complexity"):
+            result = _triage.triage_skip(
+                ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+            )
+
+    assert result is None
