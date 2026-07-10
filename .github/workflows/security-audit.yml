@@ -29,25 +29,13 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install project + tracing extras
-        run: uv sync --locked --extra tracing
-
-      - name: Install pip-audit
-        run: uv pip install "pip-audit[cyclonedx]>=2.5.6"
-
-      - name: Audit installed packages
+      - name: Audit dependencies
         run: |
-          uv run pip-audit \
-            --path . \
-            --vulnerability-service pypi \
-            --ignore-vuln PYSEC-2025-183 \
-            --ignore-vuln MAL-2026-4750
-        env:
           # PYSEC-2025-183 (pyjwt): "weak encryption" advisory disputed
           # by the supplier — the algorithm strength is determined by
           # the *key* the caller supplies, not by pyjwt itself. No fix
           # version is published (the "Fix Versions" column is empty
-          # in pip-audit's output). pyjwt is a direct dependency
+          # in the advisory database). pyjwt is a direct dependency
           # (pyjwt[crypto]>=2 in pyproject.toml) and also transitive
           # via langfuse (tracing extra). mill calls jwt.encode()
           # directly with RS256 in forge/auth.py to mint GitHub App
@@ -64,15 +52,16 @@ jobs:
           # is never installed & the malicious dep is never pulled.
           # Advisory has since been withdrawn from the OSV database
           # (2026); retained for documentation.
-          GHA_PIP_AUDIT_INTERNAL_BE_CAREFUL_ALLOW_FAILURE: false
+          uv audit --frozen \
+            --ignore PYSEC-2025-183 \
+            --ignore MAL-2026-4750
 
-      - name: Generate SBOM (CycloneDX)
+      - name: Generate SBOM
         if: always()
         run: |
-          uv run pip-audit \
-            --path . \
-            --format cyclonedx-json \
-            --output sbom.json || true
+          uv audit --frozen \
+            --output-format json \
+            > sbom.json || true
 
       - name: Upload SBOM artifact
         if: always()
