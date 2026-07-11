@@ -1,4 +1,4 @@
-"""Unit tests for ``robotsix_mill.autoupdate``.
+"""Unit tests for ``robotsix_mill.dev_tooling.autoupdate``.
 
 Uses ``pytest`` + ``monkeypatch`` for mocking.  No ``unittest.mock``.
 Tests never make real network calls or shell out to real ``git`` / ``docker``.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import robotsix_mill.autoupdate as au
+import robotsix_mill.dev_tooling.autoupdate as au
 
 
 # ---------------------------------------------------------------------------

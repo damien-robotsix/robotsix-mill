@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- Consolidate `autoupdate` module into `dev-tooling`: move source to
+  `src/robotsix_mill/dev_tooling/autoupdate/`, tests to
+  `tests/dev-tooling/autoupdate/`, and docs to
+  `docs/dev-tooling/autoupdate/`.  Update console_scripts entry point
+  and remove the standalone `autoupdate` module entry from
+  `docs/modules.yaml`.
 - Update CI overview table in `CONTRIBUTING.md`: remove stale `docker-publish.yml` references, correct `ci.yml` row to describe actual steps, and update Trivy section to reference the shared reusable `docker-release.yml` workflow.
 - Security audit: replace `pip-audit` with `uv audit --frozen` for dependency CVE scanning (4–10× faster, no separate install step). SBOM generation now uses `uv audit --output-format json`.
 - Register `robotsix-chat-mobile` as a tracked repo/board in the committed config example (`config/config.example.json`), with `board_id: robotsix-chat-mobile` and `forge_remote_url: https://github.com/damien-robotsix/robotsix-chat-mobile`.
