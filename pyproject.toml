@@ -68,7 +68,7 @@ robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", 
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
-robotsix-autoupdate = "robotsix_mill.autoupdate:main"
+robotsix-autoupdate = "robotsix_mill.dev_tooling.autoupdate:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill"]
@@ -156,7 +156,7 @@ max-complexity = 10
 "tests/runtime/test_worker.py" = ["C901"]
 "tests/runtime/test_api.py" = ["C901"]
 "tests/cli/test_cli.py" = ["C901"]
-"tests/autoupdate/test_autoupdate.py" = ["C901"]
+"tests/dev-tooling/autoupdate/test_autoupdate.py" = ["C901"]
 # --- src/ legacy hot spots --------------------------------------------------
 # Cross-module re-exports of periodic_runner helpers. Each *_runner
 # stub re-exports ``_clone_token`` etc. so the worker can import them
@@ -242,7 +242,7 @@ max-complexity = 10
 "src/robotsix_mill/runtime/stage_retry.py" = ["S311"]
 "src/robotsix_mill/sandbox/__init__.py" = ["S108", "S603", "S607"]
 "src/robotsix_mill/vcs/git_ops.py" = ["S603", "S607"]
-"src/robotsix_mill/autoupdate/__init__.py" = ["S108", "S602", "S603", "S607", "C901"]
+"src/robotsix_mill/dev_tooling/autoupdate/__init__.py" = ["S108", "S602", "S603", "S607", "C901"]
 # Meta's deterministic ground-truth blocks shell out to read-only
 # ``git grep`` over the repo clones (fixed argv, no shell, no untrusted
 # input) — same safe git-subprocess pattern as git_ops above.

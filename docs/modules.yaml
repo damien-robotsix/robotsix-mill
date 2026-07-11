@@ -496,18 +496,6 @@ modules:
       - docs/notify/**/*
     dependencies: [config, core]
 
-  - id: autoupdate
-    description: >-
-      Shared autoupdate CLI for robotsix-* Docker Compose services.
-      Stdlib-only orchestrator that handles flock, git fetch, merge,
-      docker compose build/up, and deployed-SHA recording.  Consumed by
-      thin bash wrappers in ``dev/``.
-    paths:
-      - src/robotsix_mill/autoupdate/**/*.py
-      - tests/autoupdate/**/*.py
-      - docs/autoupdate/**/*
-    dependencies: []
-
   # -------------------------------------------------------------------
   # Agent definitions, skills, experts, docs
   # -------------------------------------------------------------------
@@ -557,6 +545,7 @@ modules:
       production runtime.
     paths:
       - docs/dev-tooling/**/*
+      - src/robotsix_mill/dev_tooling/**/*.py
       - Makefile
       - Dockerfile
       - entrypoint.sh
@@ -586,6 +575,7 @@ modules:
       - tests/dev-tooling/test_docs_nav.py
       - tests/dev-tooling/test_modules_yaml_paths.py
       - tests/dev-tooling/test_check_config_sync.py
+      - tests/dev-tooling/autoupdate/**/*.py
       - alembic.ini
       - alembic/env.py
       - alembic/script.py.mako
