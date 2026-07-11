@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `UV_MALWARE_CHECK=1` to all CI workflows that run `uv` commands (ci.yml, security-audit.yml, release.yml, dependency-review.yml), enabling uv's install-time malicious-package scanning as a complementary layer to `uv audit`.
 - Consolidate `autoupdate` module into `dev-tooling`: move source to
   `src/robotsix_mill/dev_tooling/autoupdate/`, tests to
   `tests/dev-tooling/autoupdate/`, and docs to

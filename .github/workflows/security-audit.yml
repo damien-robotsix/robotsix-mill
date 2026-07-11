@@ -16,6 +16,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  UV_MALWARE_CHECK: "1"
+
 jobs:
   audit:
     runs-on: ubuntu-latest
