@@ -6,6 +6,7 @@
   (`.py`, `.ts`, `.js`, `.yaml`, `.yml`).  Doc-only tickets are
   auto-approved deterministically with a templated verdict
   ("Documentation-only change; no code review needed").
+- Fix stale ``forge/gitlab.py`` path references in the forge_parity periodic agent prompt; now points to ``forge/gitlab/core.py`` after the monolithic adapter was split into a package.
 - Added `docs/repo-scaffold/index.md` documenting the repo creation workflow and workspace member sync, and registered the docs path in `docs/modules.yaml`.
 - Remove stale `reply_to_thread`/`close_thread` error-recovery guidance from `retrospect.yaml` system prompt (both tools are disabled for this agent).
 - Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,
