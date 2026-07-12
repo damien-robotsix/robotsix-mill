@@ -20,6 +20,7 @@ from .github_ci import GitHubForgeCIMixin
 from .github_code_scanning import GitHubForgeCodeScanningMixin
 from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
+from .github_security import GitHubForgeSecurityMixin
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +83,7 @@ class GitHubForge(
     GitHubForgeCIMixin,
     GitHubForgeCodeScanningMixin,
     GitHubForgeDependabotMixin,
+    GitHubForgeSecurityMixin,
     Forge,
 ):
     """GitHub adapter — opens PRs, queries checks/reviews/files, merges,

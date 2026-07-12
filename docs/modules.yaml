@@ -126,6 +126,7 @@ modules:
       - src/robotsix_mill/forge/github_ci.py
       - src/robotsix_mill/forge/github_code_scanning.py
       - src/robotsix_mill/forge/github_dependabot.py
+      - src/robotsix_mill/forge/github_security.py
       - src/robotsix_mill/forge/gitlab/__init__.py
       - src/robotsix_mill/forge/gitlab/core.py
       - src/robotsix_mill/forge/gitlab/ci.py
@@ -139,6 +140,7 @@ modules:
       - tests/forge/test_forge_base.py
       - tests/forge/test_github.py
       - tests/forge/test_github_dependabot.py
+      - tests/forge/test_github_security.py
       - tests/forge/test_gitlab.py
       - tests/forge/test_http.py
       - docs/forge/**/*
