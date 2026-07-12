@@ -23,6 +23,7 @@ from fastapi import (
 
 from ...core.models import (
     TicketCreate,
+    TicketDescriptionUpdate,
     TicketEvent,
     TicketKind,
     TicketMigrate,
@@ -393,6 +394,44 @@ def get_description(
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     return {"description": svc.workspace(ticket).read_description()}
+
+
+@router.put("/tickets/{ticket_id}/description")
+def update_description(
+    ticket_id: str,
+    body: TicketDescriptionUpdate,
+    svc=Depends(get_service),
+) -> dict:
+    """Update a ticket's spec description (``PUT /tickets/{ticket_id}/description``).
+
+    Replaces the ticket's ``description.md``, recomputes the spec
+    fingerprint so the implement stage's stale-respawn guard allows a
+    fresh attempt, and records a history event with old/new fingerprint
+    and author.
+
+    Body: ``{"description": "<new spec>", "reset_fingerprint_guard": false, "author": "operator"}``.
+
+    Raises 404 when the ticket does not exist, 409 when the ticket is
+    in a terminal state (CLOSED, ANSWERED, EPIC_CLOSED, DONE).
+    """
+    if svc.get(ticket_id) is None:
+        raise HTTPException(404, "ticket not found")
+    try:
+        event = svc.update_description(
+            ticket_id,
+            body.description,
+            reset_fingerprint_guard=body.reset_fingerprint_guard,
+            author=body.author,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    ticket = svc.get(ticket_id)
+    return {
+        "ticket_id": ticket_id,
+        "content_hash": ticket.content_hash,
+        "fingerprint_reset": body.reset_fingerprint_guard,
+        "event_id": event.id,
+    }
 
 
 # Supported screenshot image media types (content-type → canonical).

@@ -45,6 +45,7 @@
 - trace_inspector: guard against string entries in observations that crash `_shrink_trace_data` with `'str' object has no attribute 'items'`. Non-dict observation entries are now skipped in both the >200 and <=200 obs_count paths. (mill: Fix trace_review 'str object has no attribute items' crash in shared trace-review logic (20260712T120733Z-fix-trace-review-str-object-has-no-attri-43cf) [WIP])
 - Added `docs/repo-scaffold/index.md` documenting the repo creation workflow and workspace member sync, and registered the docs path in `docs/modules.yaml`.
 - Remove stale `reply_to_thread`/`close_thread` error-recovery guidance from `retrospect.yaml` system prompt (both tools are disabled for this agent).
+- Add ``PUT /tickets/{id}/description`` endpoint to update a ticket's spec description, recompute the specification fingerprint, and record an audit trail history event. Includes an optional ``reset_fingerprint_guard`` flag to clear the stale-respawn guard for unchanged-spec retries.
 - Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,
   `merge-stage.md`, `scope-triage.md`, `retrospect-memory.md`,
   `blocked-ticket-recovery.md`, and `reference/stages.md` into the new directory,

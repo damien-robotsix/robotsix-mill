@@ -281,6 +281,14 @@ class TicketMigrate(SQLModel):
     note: str | None = None
 
 
+class TicketDescriptionUpdate(SQLModel):
+    """API request shape for updating a ticket's spec description."""
+
+    description: str
+    reset_fingerprint_guard: bool = False
+    author: str = "operator"
+
+
 class TicketRead(SQLModel):
     """API response shape for reading a ticket, including computed fields like unmet_deps and PR URL."""
 
