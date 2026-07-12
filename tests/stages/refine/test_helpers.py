@@ -838,3 +838,73 @@ def test_verify_claim_importable_from_refine_module():
 
     assert callable(vc)
     assert vc("no refs here", [], Path("/tmp/does-not-exist")) is True
+
+
+# ---------------------------------------------------------------------------
+# _is_doc_only_change
+# ---------------------------------------------------------------------------
+
+
+class TestIsDocOnlyChange:
+    """Tests for the :func:`_is_doc_only_change` heuristic."""
+
+    def test_docs_dir_only(self):
+        draft = "Update `docs/guide.md` and `docs/foo/bar.md`"
+        assert refine_module._is_doc_only_change(draft) is True
+
+    def test_md_files(self):
+        draft = "Fix a typo in `README.md` and `CHANGELOG.md`"
+        assert refine_module._is_doc_only_change(draft) is True
+
+    def test_docs_and_md_mixed(self):
+        draft = "Add `docs/new-page.md` and update `CONTRIBUTING.md`"
+        assert refine_module._is_doc_only_change(draft) is True
+
+    def test_py_file_not_doc_only(self):
+        draft = "Fix `src/robotsix_mill/core.py` import"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_js_file_not_doc_only(self):
+        draft = "Update `src/static/board.js` event handler"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_ts_file_not_doc_only(self):
+        draft = "Refactor `src/app/main.ts`"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_yaml_file_not_doc_only(self):
+        draft = "Change `config/settings.yaml` defaults"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_yml_file_not_doc_only(self):
+        draft = "Update `.github/workflows/ci.yml`"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_mixed_code_and_docs_not_doc_only(self):
+        draft = "Update `docs/guide.md` and `src/main.py`"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_no_file_paths_not_doc_only(self):
+        draft = "Fix the bug in the widget loader"
+        assert refine_module._is_doc_only_change(draft) is False
+
+    def test_empty_draft_not_doc_only(self):
+        assert refine_module._is_doc_only_change("") is False
+
+    def test_title_included_in_check(self):
+        draft = "Update the thing"
+        title = "Fix `docs/setup.md` instructions"
+        assert refine_module._is_doc_only_change(draft, title=title) is True
+
+    def test_title_with_code_file_not_doc_only(self):
+        draft = "Update the thing"
+        title = "Fix `src/core.py` import"
+        assert refine_module._is_doc_only_change(draft, title=title) is False
+
+    def test_changelog_md_is_doc_only(self):
+        draft = "Update `CHANGELOG.md` with release notes"
+        assert refine_module._is_doc_only_change(draft) is True
+
+    def test_unknown_extension_not_doc_only(self):
+        draft = "Update `assets/logo.png`"
+        assert refine_module._is_doc_only_change(draft) is False
