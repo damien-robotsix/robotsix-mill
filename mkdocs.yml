@@ -19,6 +19,7 @@ nav:
       - Docker architecture: docker-architecture.md
       - Security model: sandbox/security.md
       - CI policy: dev-tooling/ci-policy.md
+      - Repo scaffold: repo-scaffold/index.md
       - Config audit: config-audit.md
       - "RFC: config v2": rfc-config-v2.md
   - Deps:
