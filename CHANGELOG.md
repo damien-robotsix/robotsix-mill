@@ -75,6 +75,7 @@
   `agent_definitions/pipeline/*.yaml` and `agent_definitions/*.yaml`.
 - Move config docs (`configuration.md`, `config-audit.md`, `rfc-config-v2.md`) from `docs/` into `docs/config/` to align with per-module docs layout; update all cross-references.
 - Server-side short-ID resolution: any `{ticket_id}` route now accepts an unambiguous 4-char (or longer) trailing suffix. Returns 404 on no match and 409 on ambiguous suffix.
+- Rename `agent_definitions/tester.yaml` to `agent_definitions/run_tests.yaml` to align the filename with the declared `name: run_tests`.
 - Add `UV_MALWARE_CHECK=1` to all CI workflows that run `uv` commands (ci.yml, security-audit.yml, release.yml, dependency-review.yml), enabling uv's install-time malicious-package scanning as a complementary layer to `uv audit`.
 - Consolidate `autoupdate` module into `dev-tooling`: move source to
   `src/robotsix_mill/dev_tooling/autoupdate/`, tests to

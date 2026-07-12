@@ -444,7 +444,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
-    # tester.yaml declares level 2 → DeepSeek pro via llmio tier defaults.
+    # run_tests.yaml declares level 2 → DeepSeek pro via llmio tier defaults.
     assert cap["model"] == "deepseek/deepseek-v4-pro" and cap["got_output"]
     assert cap["name"] == "run_tests"
 
