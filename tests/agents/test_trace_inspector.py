@@ -1024,3 +1024,48 @@ class TestShrinkTraceData:
         parsed = json.loads(shrunk)
         assert parsed["observations"][0]["input"] == "hello"
         assert parsed["observations"][0]["output"] == "world"
+
+    def test_string_observations_in_large_trace_are_skipped(self):
+        """When obs_count > 200, string entries in observations are
+        skipped instead of raising 'str' object has no attribute 'items'."""
+        obs = [
+            {
+                "id": f"obs-{i}",
+                "type": "GENERATION",
+                "level": "DEFAULT",
+                "name": "test",
+            }
+            for i in range(200)
+        ]
+        # Insert string entries that would crash on .items()
+        obs.append("bare-string-obs")
+        obs.append("another-bare-string")
+        trace = {"id": "t-str-large", "observations": obs}
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        # 202 total entries, 2 are strings → filtered out
+        assert count == 202
+        parsed = json.loads(shrunk)
+        # Only the 200 dict entries survive
+        assert len(parsed["observations"]) == 200
+        for o in parsed["observations"]:
+            assert isinstance(o, dict)
+
+    def test_string_observations_in_small_trace_are_skipped(self):
+        """When obs_count <= 200, string entries in observations are
+        skipped instead of raising TypeError on item assignment."""
+        trace = {
+            "id": "t-str-small",
+            "observations": [
+                {"id": "obs-1", "input": "hello", "output": "world"},
+                "bare-string-obs",
+                {"id": "obs-2", "input": "foo", "output": "bar"},
+            ],
+        }
+        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        assert count == 3
+        parsed = json.loads(shrunk)
+        assert len(parsed["observations"]) == 3
+        # Dict entries are preserved, string entry passes through untouched
+        assert parsed["observations"][0]["id"] == "obs-1"
+        assert parsed["observations"][1] == "bare-string-obs"
+        assert parsed["observations"][2]["id"] == "obs-2"
