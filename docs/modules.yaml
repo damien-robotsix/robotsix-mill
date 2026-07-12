@@ -435,6 +435,7 @@ modules:
       - src/robotsix_mill/repo_scaffold/**/*.py
       - tests/repo_scaffold/test_repo_scaffold.py
       - tests/repo_scaffold/test_workspace_member_sync.py
+      - docs/repo-scaffold/**/*
     dependencies: [config, forge, vcs]
 
   - id: sandbox
