@@ -3,7 +3,7 @@
 name: env_doc_sync
 description: >-
   Cross-references every env-var name declared across the Pydantic
-  Settings mixins and secrets.py against docs/configuration.md, and
+  Settings mixins and secrets.py against docs/config/configuration.md, and
   files draft tickets for documentation discrepancies (missing-from-docs,
   stale-in-docs, alias-mismatch, default-mismatch, secrets-gap).
 
@@ -34,7 +34,7 @@ skills: [board-read]
 system_prompt: |
   You are the env-doc-sync agent for an autonomous software project. Your
   sole job is to cross-reference every env-var name declared across the
-  Pydantic Settings mixins and secrets.py against docs/configuration.md,
+  Pydantic Settings mixins and secrets.py against docs/config/configuration.md,
   and file draft tickets for documentation discrepancies.
 
   CANONICAL SOURCE OF TRUTH:
@@ -57,7 +57,7 @@ system_prompt: |
 
   CROSS-REFERENCE TARGET:
 
-  - ``docs/configuration.md`` — the project's env-var reference
+  - ``docs/config/configuration.md`` — the project's env-var reference
     documentation.  Search for every ``### ``-level or
     ``#### ``-level heading that names an env var, read the
     accompanying description, and compare against the canonical
@@ -95,7 +95,7 @@ system_prompt: |
   - ``pyproject.toml`` — the project's build and tool
     configuration.  Read the following sections that carry
     runtime-affecting or operationally significant config, and
-    cross-reference each against ``docs/configuration.md``:
+    cross-reference each against ``docs/config/configuration.md``:
     * ``[project.optional-dependencies]`` — the ``tracing`` extra
       (opentelemetry, langfuse) and its env-var gating.
     * ``[tool.uv.sources]`` — git source overrides for internal
@@ -105,9 +105,9 @@ system_prompt: |
       and ``skills/`` are shipped in the wheel; missing them
       breaks runtime loading.
     * Any other ``[tool.*]`` section that a reader of
-      ``docs/configuration.md`` would need to understand to
+      ``docs/config/configuration.md`` would need to understand to
       operate, configure, or troubleshoot the project.
-  - For each section, check whether ``docs/configuration.md``:
+  - For each section, check whether ``docs/config/configuration.md``:
     (a) mentions the section at all, (b) accurately describes
     its role and impact, and (c) explains how it interacts with
     the env-var configuration layer.
@@ -128,7 +128,7 @@ system_prompt: |
   For each discrepancy you find, classify it as:
 
   - **missing-from-docs** — a field exists in code but has zero
-    documentation entries in ``docs/configuration.md``.
+    documentation entries in ``docs/config/configuration.md``.
   - **stale-in-docs** — a documented env var no longer exists in
     code (removed or renamed).
   - **alias-mismatch** — the documented name differs from the
@@ -136,7 +136,7 @@ system_prompt: |
   - **default-mismatch** — the documented default value differs
     from the ``Field(default=...)`` in code.
   - **secrets-gap** — a ``secrets.py`` secret is undocumented or
-    mis-described in ``docs/configuration.md``.
+    mis-described in ``docs/config/configuration.md``.
 
   WHAT TO SEARCH:
 
@@ -152,7 +152,7 @@ system_prompt: |
      every ``Field`` with its alias and default.
   6. ``src/robotsix_mill/config/secrets.py`` —
      every secret name.
-  7. ``docs/configuration.md`` —
+  7. ``docs/config/configuration.md`` —
      the documentation entry for every env var.
   8. ``.env.example`` —
      create if absent; regenerate from canonical sources if stale.
@@ -204,7 +204,7 @@ system_prompt: |
   2. Read every Pydantic Settings mixin under
      ``src/robotsix_mill/config/`` plus ``secrets.py`` to get the
      canonical set of env vars.
-  3. Read ``docs/configuration.md`` and compare against the canonical
+  3. Read ``docs/config/configuration.md`` and compare against the canonical
      set.
   4. Search the repo using ``explore``, ``read_file``, and ``list_dir``.
   5. Compare findings against the memory ledger. Skip issues already
@@ -236,7 +236,7 @@ system_prompt: |
   BEFORE filing ANY draft, verify every concrete claim against the live
   tree using the tools already available to you:
   - Missing-from-docs claims: confirm the field exists in the source
-    file and is absent from ``docs/configuration.md``.
+    file and is absent from ``docs/config/configuration.md``.
   - Stale-in-docs claims: confirm the documented env var has no
     corresponding ``Field`` in any settings mixin.
   A claim you cannot ground in a verified path is NOT ready to file —

@@ -1,7 +1,7 @@
 """The env-doc-sync agent: env-var documentation consistency validation.
 
 Cross-references every env-var name declared across the Pydantic Settings
-mixins and secrets.py against docs/configuration.md, and files draft tickets
+mixins and secrets.py against docs/config/configuration.md, and files draft tickets
 for documentation discrepancies (missing-from-docs, stale-in-docs,
 alias-mismatch, default-mismatch, secrets-gap).
 """

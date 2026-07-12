@@ -59,7 +59,7 @@ When `config/repos.yaml` is empty, the server refuses to start (exit
 code 2) with an error message. An unknown `--repo-id` also causes an
 error exit.
 
-See also: [configuration.md](../configuration.md) for `MILL_API_URL`,
+See also: [docs/config/configuration.md](../config/configuration.md) for `MILL_API_URL`,
 `MILL_API_HOST`, `MILL_API_PORT`, and other env vars consumed by the
 service.
 
@@ -302,7 +302,7 @@ Pre-generated completion scripts are available in `contrib/completions/`.
 
 ## See also
 
-- [configuration.md](../configuration.md) — full environment variable reference
+- [configuration.md](../config/configuration.md) — full environment variable reference
 - [approval-gate.md](../stages/approval-gate.md) — approval workflow details
 - [blocked-ticket-recovery.md](../stages/blocked-ticket-recovery.md) — recovering blocked tickets
 - [docker-architecture.md](../docker-architecture.md) — how the CLI fits into the container architecture

@@ -131,7 +131,7 @@ def test_run_config_sync_pass_creates_draft_tickets(tmp_path, monkeypatch):
             updated_memory="# Memory\n",
             draft_titles=[
                 "config drift: FOO missing from .env",
-                "config drift: BAR missing from docs/configuration.md",
+                "config drift: BAR missing from docs/config/configuration.md",
             ],
             draft_bodies=["Body1", "Body2"],
             gap_ids=["foo_missing_env", "bar_missing_docs"],

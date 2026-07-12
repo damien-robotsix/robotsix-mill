@@ -27,7 +27,7 @@ Observability has two independent configuration surfaces.
 Each repo's Langfuse project is declared under its entry's `langfuse:`
 block in the operator-managed `config/repos.yaml`. This table mirrors
 the *Field reference* in
-[configuration.md → Repos registry](configuration.md#repos-registry)
+[configuration.md → Repos registry](../config/configuration.md#repos-registry)
 so the two stay consistent:
 
 | YAML key | Required | Default | Description |
@@ -182,6 +182,6 @@ today.
 
 ## See also
 
-- [configuration.md](configuration.md) — full configuration reference,
+- [docs/config/configuration.md](config/configuration.md) — full configuration reference,
   including the Repos registry and `.robotsix-mill/config.yaml` fields
 - [index.md](index.md) — documentation home

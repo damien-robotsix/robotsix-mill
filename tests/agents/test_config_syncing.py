@@ -21,7 +21,7 @@ def test_config_sync_system_prompt_covers_key_dimensions():
         "config.py",
         "config.example.json",
         "repos.example.yaml",
-        "docs/configuration.md",
+        "docs/config/configuration.md",
         "missing-from-json",
         "stale-json-key",
         "default-mismatch",

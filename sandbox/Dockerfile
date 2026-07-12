@@ -48,7 +48,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # Image-size impact: Chromium + its shared libraries add roughly ~300 MB
 # to the sandbox image. That is under the ~500 MB threshold, so the
 # browser is baked into this single dedicated image — no opt-in variant
-# is needed (see docs/configuration.md, sandbox.image entry).
+# is needed (see docs/config/configuration.md, sandbox.image entry).
 #
 # PLAYWRIGHT_BROWSERS_PATH pins the browser cache to a fixed, world-
 # readable system path OUTSIDE any user $HOME. `playwright install` runs
