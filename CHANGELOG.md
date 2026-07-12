@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,
+  `merge-stage.md`, `scope-triage.md`, `retrospect-memory.md`,
+  `blocked-ticket-recovery.md`, and `reference/stages.md` into the new directory,
+  update `docs/modules.yaml` stages module paths, and fix all cross-references
+  in `README.md`, `ARCHITECTURE.md`, `docs/agents/index.md`, `docs/cli/usage.md`,
+  `docs/vcs/README.md`, and `mkdocs.yml`.
 - Add `UV_MALWARE_CHECK=1` to all CI workflows that run `uv` commands (ci.yml, security-audit.yml, release.yml, dependency-review.yml), enabling uv's install-time malicious-package scanning as a complementary layer to `uv audit`.
 - Consolidate `autoupdate` module into `dev-tooling`: move source to
   `src/robotsix_mill/dev_tooling/autoupdate/`, tests to

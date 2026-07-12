@@ -361,6 +361,7 @@ modules:
       - tests/stages/test_implemented_repos.py
       - tests/stages/test_smoke_gate_browser.py
       - tests/stages/test_implementation_logic.py
+      - docs/stages/**/*
     dependencies: [config, core, forge, vcs, agents, runners, langfuse, runtime, hooks]
 
   # -------------------------------------------------------------------

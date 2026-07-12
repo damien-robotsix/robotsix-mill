@@ -137,7 +137,7 @@ enabled by default (`MILL_REQUIRE_APPROVAL=true`).
 robotsix-mill ticket approve 20250331T142030Z-fix-auth-timeout-a3f2
 ```
 
-See also: [approval-gate.md](../approval-gate.md) for details on the
+See also: [approval-gate.md](../stages/approval-gate.md) for details on the
 approval workflow.
 
 ### `robotsix-mill ticket resume-blocked <id>`
@@ -155,7 +155,7 @@ robotsix-mill ticket resume-blocked 20250331T142030Z-fix-auth-timeout-a3f2 \
   --note "spurious network timeout; ticket should retry fine"
 ```
 
-See also: [blocked-ticket-recovery.md](../blocked-ticket-recovery.md)
+See also: [blocked-ticket-recovery.md](../stages/blocked-ticket-recovery.md)
 for the full recovery workflow.
 
 > **Note:** `mark-done` and `transition` are available via the HTTP API
@@ -303,7 +303,7 @@ Pre-generated completion scripts are available in `contrib/completions/`.
 ## See also
 
 - [configuration.md](../configuration.md) — full environment variable reference
-- [approval-gate.md](../approval-gate.md) — approval workflow details
-- [blocked-ticket-recovery.md](../blocked-ticket-recovery.md) — recovering blocked tickets
+- [approval-gate.md](../stages/approval-gate.md) — approval workflow details
+- [blocked-ticket-recovery.md](../stages/blocked-ticket-recovery.md) — recovering blocked tickets
 - [docker-architecture.md](../docker-architecture.md) — how the CLI fits into the container architecture
 - [index.md](../index.md) — documentation home

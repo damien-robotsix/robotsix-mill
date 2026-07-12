@@ -25,16 +25,16 @@ nav:
       - Dependency management: deps/dependencies.md
   - Pipeline:
       - Agent catalog: agents/index.md
-      - Approval gate: approval-gate.md
+      - Approval gate: stages/approval-gate.md
       - Dedup guard: core/dedup-guard.md
-      - Merge stage: merge-stage.md
+      - Merge stage: stages/merge-stage.md
       - Epic dedup: epic-dedup.md
       - "AGENT.md candidates": agents/md-candidates.md
-      - Scope triage: scope-triage.md
+      - Scope triage: stages/scope-triage.md
   - Agents & Internals:
       - Audit agent: agents/audit-agent.md
-      - Blocked ticket recovery: blocked-ticket-recovery.md
-      - Retrospect memory: retrospect-memory.md
+      - Blocked ticket recovery: stages/blocked-ticket-recovery.md
+      - Retrospect memory: stages/retrospect-memory.md
       - Trace-health check: langfuse/trace-health.md
       - Langfuse observability: langfuse/observability.md
       - Diagnostic agent: agents/diagnostic-agent.md
@@ -74,7 +74,7 @@ nav:
       - Agents: agents/reference.md
       - Core: reference/core.md
       - Runtime: runtime/reference.md
-      - Stages: reference/stages.md
+      - Stages: stages/reference.md
 
 plugins:
   - mkdocstrings:

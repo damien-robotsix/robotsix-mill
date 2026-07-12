@@ -106,9 +106,9 @@ This page is the map; the territory lives in [`docs/`](docs/):
 - [docs/configuration.md](docs/configuration.md) — full settings
   reference and YAML loading order.
 - [docs/agents/index.md](docs/agents/index.md) — the agent catalog.
-- [docs/approval-gate.md](docs/approval-gate.md) — the human approval
+- [docs/stages/approval-gate.md](docs/stages/approval-gate.md) — the human approval
   gate after refine.
-- [docs/merge-stage.md](docs/merge-stage.md) — gate-check, auto-rebase,
+- [docs/stages/merge-stage.md](docs/stages/merge-stage.md) — gate-check, auto-rebase,
   and auto-fix for merge-ready PRs.
 - [docs/sandbox/security.md](docs/sandbox/security.md) — the security model.
 - [docs/design/](docs/design/) — focused design notes (e.g.
