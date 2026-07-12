@@ -41,6 +41,7 @@ from ..deps import (
     get_settings,
     get_worker,
     maybe_enqueue,
+    resolve_ticket_id,
 )
 from ._repo_helpers import _resolve_board_id
 
@@ -356,6 +357,7 @@ def get_ticket(
     Returns the fully enriched ``TicketRead`` (with cost and PR link).
     Raises 404 when the ticket does not exist.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -373,6 +375,7 @@ def get_history(
     Returns the ordered list of ``TicketEvent`` rows.  Raises 404 when
     the ticket does not exist.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     if svc.get(ticket_id) is None:
         raise HTTPException(404, "ticket not found")
     return svc.history(ticket_id)
@@ -389,6 +392,7 @@ def get_description(
     Returns ``{"description": "..."}``.  Raises 404 when the ticket
     does not exist.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -420,6 +424,7 @@ async def upload_screenshot(
     input). Rejects non-image uploads with 400 and unknown tickets with
     404. The filename is reduced to its basename to prevent traversal.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -460,6 +465,7 @@ def get_retrospect(
     board surface what retrospect actually wrote — without this the
     DONE -> CLOSED transition looks like it happened with no
     reflection, even when retrospect did run and write real analysis."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -503,6 +509,7 @@ def list_artifacts(
     ...]}`` sorted by mtime ascending. Used by the board UI's drawer
     to surface each agent's output — pre-v1 the implement / refine /
     retrospect markdowns only existed on disk."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -545,6 +552,7 @@ def get_artifact(
     files directly under the ticket's ``artifacts_dir``. Binary files
     return decoded-with-replace text since the drawer renders
     markdown / JSON; a hex viewer can be added later if needed."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     if "/" in name or ".." in name or name.startswith("."):
         raise HTTPException(400, "invalid artifact name")
     ticket = svc.get(ticket_id)
@@ -567,6 +575,7 @@ def delete_ticket(
 ) -> None:
     """Hard-delete a ticket (row + history + workspace). Irreversible.
     404 if it doesn't exist."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     if not svc.delete(ticket_id):
         raise HTTPException(404, "ticket not found")
     log.info("Deleted ticket %r (agent: robotsix-chat)", ticket_id)
@@ -588,6 +597,7 @@ def transition(
     Returns the enriched ``TicketRead``.  Raises 404 when the ticket
     does not exist.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         ticket = svc.transition(ticket_id, body.state, body.note)
     except KeyError:
@@ -612,6 +622,7 @@ def migrate_ticket(
     different repo). The migrated ticket lands in DRAFT on the target
     board so its refine stage re-triages it there.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     repos = request.app.state.repos
     board_id = _resolve_board_id(body.repo_id, repos)
     try:
@@ -639,6 +650,7 @@ def set_unblocks(
     Each listed ticket that is BLOCKED at that point is transitioned
     BLOCKED -> DRAFT. Cross-board safe. Returns the updated solver ticket.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     raw = body.get("ticket_ids", [])
     if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
         raise HTTPException(400, "ticket_ids must be a list of strings")
@@ -666,6 +678,7 @@ def approve_ticket(
     to the epic as a best-effort side effect.  Returns 404 when the
     ticket does not exist.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         ticket = svc.transition(ticket_id, State.READY, note="approved by human")
     except KeyError:

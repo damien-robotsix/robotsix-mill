@@ -14,6 +14,7 @@ from ..deps import (
     get_settings,
     get_worker,
     maybe_enqueue,
+    resolve_ticket_id,
 )
 from ._tickets import _repo_config_for_ticket
 
@@ -33,6 +34,7 @@ def request_changes(
 ) -> dict:
     """Add a comment AND transition from human_issue_approval back to draft
     in one atomic operation."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         comment, ticket = svc.request_changes(ticket_id, body.body, author=body.author)
     except KeyError:
@@ -59,6 +61,7 @@ def set_priority(
     Body: ``{"priority": true|false}``.  Re-enqueues the ticket so the
     priority change is reflected in the next consumer pop.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     priority = bool(body.get("priority", False))
     try:
         changed_ids = svc.set_priority(ticket_id, priority)
@@ -92,6 +95,7 @@ def redraft(
 ) -> dict:
     """Redraft a ticket from any active state back to DRAFT with an
     optional comment."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         comment, ticket = svc.redraft(
             ticket_id, body.body or "", author=body.author or "user"
@@ -121,6 +125,7 @@ def mark_done(
     when the ticket is unknown, and 409 when the ticket is already in
     a terminal state or an epic.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         raw_note = body.get("note", "")
         note = str(raw_note) if raw_note else ""
@@ -152,6 +157,7 @@ def resume_blocked(
     explicit operator justification lets the retry proceed instead of
     immediately re-blocking on the unchanged-spec check.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -201,6 +207,7 @@ def cost_breakdown(
     renderHistoryHtml matches the entries to history events by inferred
     agent name + nearest-in-time-≤ pairing.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")

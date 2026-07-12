@@ -15,6 +15,7 @@ from ..deps import (
     get_run_registry,
     get_service,
     get_settings,
+    resolve_ticket_id,
 )
 from ._tickets import _repo_config_for_ticket
 
@@ -97,6 +98,7 @@ def abandon_epic(
 
     Returns 422 when the ticket is not in ``EPIC_OPEN`` state.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
@@ -123,6 +125,7 @@ def list_children(
     settings=Depends(get_settings),
 ) -> list[TicketRead]:
     """Return all tickets whose ``parent_id`` equals *ticket_id*."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     parent = svc.get(ticket_id)
     if parent is None:
         raise HTTPException(404, "ticket not found")
@@ -155,6 +158,7 @@ def generate_children(  # noqa: C901
     Returns ``400`` if the ticket is not an epic.  Returns ``404`` if
     the ticket does not exist.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")

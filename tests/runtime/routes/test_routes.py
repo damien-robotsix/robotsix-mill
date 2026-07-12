@@ -1470,3 +1470,57 @@ def test_chat_skill_returns_markdown(client):
     assert "POST /tickets/ingest" in body
     assert "robotsix-chat" in body
     assert "Safety rules" in body
+
+
+# --- short-ID resolution via routes ------------------------------------
+
+
+def test_short_id_resolution_get_ticket(client, service):
+    """GET /tickets/<suffix> resolves a 4-char suffix to the full ticket."""
+    t = service.create("short ID test")
+    suffix = t.id[-4:]
+    r = client.get(f"/tickets/{suffix}")
+    assert r.status_code == 200
+    assert r.json()["id"] == t.id
+
+
+def test_short_id_resolution_404(client, service):
+    """GET /tickets/<nonexistent-suffix> returns 404."""
+    r = client.get("/tickets/nonexistent-abcd")
+    assert r.status_code == 404
+
+
+def test_short_id_resolution_409_ambiguous(client, service):
+    """GET /tickets/<ambiguous-suffix> returns 409."""
+    from robotsix_mill.core import db as db_mod
+    from robotsix_mill.core.models import Ticket, TicketKind
+
+    shared = "abcd"
+    id1 = f"20250101T000000Z-ambig-one-{shared}"
+    id2 = f"20250101T000001Z-ambig-two-{shared}"
+
+    with db_mod.session(service.settings, service.board_id) as s:
+        for tid in (id1, id2):
+            s.add(
+                Ticket(
+                    id=tid,
+                    title="ambiguous route test",
+                    state=State.DRAFT,
+                    kind=TicketKind.TASK,
+                    source="user",
+                    workspace_path="",
+                )
+            )
+        s.commit()
+
+    r = client.get(f"/tickets/{shared}")
+    assert r.status_code == 409
+
+
+def test_short_id_resolution_longer_suffix(client, service):
+    """GET /tickets/<long-suffix> resolves with >4 chars."""
+    t = service.create("long suffix test")
+    suffix = t.id[-8:]
+    r = client.get(f"/tickets/{suffix}")
+    assert r.status_code == 200
+    assert r.json()["id"] == t.id

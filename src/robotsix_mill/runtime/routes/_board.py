@@ -20,6 +20,7 @@ from ..deps import (
     get_settings,
     get_worker,
     maybe_enqueue,
+    resolve_ticket_id,
 )
 
 # Terminal states excluded from default board listings — matches the
@@ -146,6 +147,7 @@ def board_move(
     form (JSON_HYDRATION mode).  Translates to a ticket state
     transition.
     """
+    card_id = resolve_ticket_id(card_id, svc)
     try:
         ticket = svc.transition(card_id, target_status, None)
     except KeyError:

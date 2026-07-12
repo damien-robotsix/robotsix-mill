@@ -20,7 +20,7 @@ from ..models import (
 )
 from ..states import ASK_USER_MARKER, State
 from ._base import _ServiceBase
-from ._helpers import _get_ticket, _parse_depends_on_str
+from ._helpers import AmbiguousTicketId, _get_ticket, _parse_depends_on_str
 
 if TYPE_CHECKING:
     from ...config import RepoConfig
@@ -57,6 +57,29 @@ class _QueryMixin(_ServiceBase):
         # without this fallback.
         ticket, _ = self._get_anywhere(ticket_id)
         return ticket
+
+    def resolve_by_suffix(self, suffix: str) -> str | None:
+        """Return the full ticket ID whose id ends with *suffix*.
+
+        Searches every configured board.  Returns ``None`` when no
+        ticket matches, and raises :class:`AmbiguousTicketId` when
+        more than one ticket matches.
+        """
+        candidates = self._collect_candidate_boards(caller_name="resolve_by_suffix")
+        matches: list[str] = []
+        for board_id in candidates:
+            with db.session(self.settings, board_id) as s:
+                stmt = select(Ticket).where(Ticket.id.endswith(suffix))
+                for ticket in s.exec(stmt).all():
+                    if ticket.id not in matches:
+                        matches.append(ticket.id)
+        if not matches:
+            return None
+        if len(matches) > 1:
+            raise AmbiguousTicketId(
+                f"Ambiguous suffix '{suffix}': matches {len(matches)} tickets"
+            )
+        return matches[0]
 
     def _get_anywhere(self, ticket_id: str) -> tuple[Ticket | None, list[str]]:
         """Search every per-repo DB for *ticket_id*. Ticket IDs are

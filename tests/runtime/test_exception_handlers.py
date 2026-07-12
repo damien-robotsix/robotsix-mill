@@ -14,9 +14,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from pytest import LogCaptureFixture
 
-from robotsix_mill.core.service import TransitionError
+from robotsix_mill.core.service import AmbiguousTicketId, TransitionError
 from robotsix_mill.forge.base import NotConfiguredError
 from robotsix_mill.runtime.exception_handlers import (
+    ambiguous_ticket_id_handler,
     catchall_handler,
     not_configured_error_handler,
     request_validation_error_handler,
@@ -27,6 +28,7 @@ from robotsix_mill.runtime.exception_handlers import (
 def _app() -> FastAPI:
     app = FastAPI()
     app.add_exception_handler(TransitionError, transition_error_handler)
+    app.add_exception_handler(AmbiguousTicketId, ambiguous_ticket_id_handler)
     app.add_exception_handler(NotConfiguredError, not_configured_error_handler)
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     app.add_exception_handler(Exception, catchall_handler)
@@ -34,6 +36,10 @@ def _app() -> FastAPI:
     @app.get("/transition")
     def _transition() -> dict:
         raise TransitionError("bad transition")
+
+    @app.get("/ambiguous")
+    def _ambiguous() -> dict:
+        raise AmbiguousTicketId("Ambiguous suffix 'abcd': matches 3 tickets")
 
     @app.get("/not-configured")
     def _not_configured() -> dict:
@@ -116,3 +122,13 @@ def test_request_validation_error_maps_to_422() -> None:
     errors = body.get("errors")
     assert isinstance(errors, list)
     assert len(errors) > 0
+
+
+def test_ambiguous_ticket_id_maps_to_409() -> None:
+    client = TestClient(_app())
+    resp = client.get("/ambiguous")
+    assert resp.status_code == 409
+    assert_problem_content_type(resp)
+    assert_problem_details(
+        resp.json(), 409, "Conflict", "Ambiguous suffix 'abcd': matches 3 tickets"
+    )

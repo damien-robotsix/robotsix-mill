@@ -29,7 +29,7 @@ from ..workspace import Workspace
 from ._comments import _CommentMixin
 from ._create_mixin import _CreateMixin
 from ._delete_mixin import _DeleteMixin
-from ._helpers import TransitionError
+from ._helpers import AmbiguousTicketId, TransitionError
 from ._helpers import _event_hash as _event_hash
 from ._helpers import _make_event as _make_event
 from ._helpers import _parse_depends_on_str as _parse_depends_on_str
@@ -42,7 +42,7 @@ from ._migrate_mixin import _MigrateMixin
 from ._queries import _QueryMixin
 from ._transition_mixin import _TransitionMixin
 
-__all__ = ["TicketService", "TransitionError"]
+__all__ = ["TicketService", "TransitionError", "AmbiguousTicketId"]
 
 
 class TicketService(
