@@ -85,5 +85,5 @@ needed.
 ## See also
 
 - [index.md](../index.md) — documentation home
-- [docs/blocked-ticket-recovery.md](../blocked-ticket-recovery.md) — vcs-imported sub-repo guard
+- [docs/blocked-ticket-recovery.md](../stages/blocked-ticket-recovery.md) — vcs-imported sub-repo guard
 - [docs/configuration.md](../configuration.md) — vcs-related configuration settings

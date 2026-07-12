@@ -103,6 +103,6 @@ Shared modules used to build and equip agents.
 - [docs/configuration.md](../configuration.md) — full env-var reference (maps every model var to its agent)
 - [audit-agent.md](audit-agent.md) — audit agent deep dive
 - [docs/trace-health.md](../langfuse/trace-health.md) — trace-health check deep dive
-- [docs/retrospect-memory.md](../retrospect-memory.md) — retrospect memory ledger
-- [docs/merge-stage.md](../merge-stage.md) — merge stage (rebase + CI-fix)
-- [docs/scope-triage.md](../scope-triage.md) — scope-triage classifier (EXPAND / REJECT / ESCALATE verdicts and cleanup behavior)
+- [docs/retrospect-memory.md](../stages/retrospect-memory.md) — retrospect memory ledger
+- [docs/merge-stage.md](../stages/merge-stage.md) — merge stage (rebase + CI-fix)
+- [docs/scope-triage.md](../stages/scope-triage.md) — scope-triage classifier (EXPAND / REJECT / ESCALATE verdicts and cleanup behavior)
