@@ -61,7 +61,10 @@ router = APIRouter(tags=["Tickets"])
 # polls within a few seconds into one computation keeps the API responsive.
 # Keyed by (state, include_closed, repo_id); guarded by a single lock so a
 # burst of cache-miss pollers triggers ONE compute, not N concurrent ones.
-_LIST_CACHE: dict[tuple[str | None, bool, str], tuple[float, list[TicketRead]]] = {}
+_LIST_CACHE: dict[
+    tuple[str | None, bool, str, int, int | None, str, str],
+    tuple[float, list[TicketRead]],
+] = {}
 _LIST_CACHE_LOCK = threading.Lock()
 
 
@@ -133,6 +136,10 @@ def list_tickets(
     state: State | None = None,
     include_closed: bool = False,
     repo_id: str | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+    sort_by: str = "created_at",
+    created_after: str | None = None,
     request: Request = None,
     svc=Depends(get_service),
     settings=Depends(get_settings),
@@ -157,6 +164,18 @@ def list_tickets(
     precedence over the default exclusion — the terminal state is
     removed from the exclusion set so the explicit filter works as
     expected.
+
+    Pagination:
+      *offset* — rows to skip (default 0).  *limit* — max rows to
+      return (``None`` = unbounded / all rows).
+
+    Sorting:
+      *sort_by* — one of ``created_at``, ``updated_at``, ``title``,
+      ``state``, ``priority``, ``kind`` (default ``created_at``).
+
+    Filtering:
+      *created_after* — ISO-8601 UTC datetime string; only tickets
+      created strictly after this instant are returned.
     """
     # The board polls this every 5s. Both expensive enrichments are
     # downgraded for the list:
@@ -178,7 +197,15 @@ def list_tickets(
     # lock across the compute so a burst of simultaneous pollers triggers
     # exactly one all-board query instead of one per request.
     ttl = settings.board_list_cache_ttl_seconds
-    cache_key = (state.value if state else None, include_closed, repo_id or "all")
+    cache_key = (
+        state.value if state else None,
+        include_closed,
+        repo_id or "all",
+        offset,
+        limit,
+        sort_by,
+        created_after or "",
+    )
     if ttl and ttl > 0.0:
         hit = _LIST_CACHE.get(cache_key)
         if hit is not None and (time.monotonic() - hit[0]) < ttl:
@@ -188,12 +215,32 @@ def list_tickets(
             if hit is not None and (time.monotonic() - hit[0]) < ttl:
                 return hit[1]
             result = _list_tickets_compute(
-                background, state, include_closed, repo_id, request, svc, settings
+                background,
+                state,
+                include_closed,
+                repo_id,
+                offset,
+                limit,
+                sort_by,
+                created_after,
+                request,
+                svc,
+                settings,
             )
             _LIST_CACHE[cache_key] = (time.monotonic(), result)
             return result
     return _list_tickets_compute(
-        background, state, include_closed, repo_id, request, svc, settings
+        background,
+        state,
+        include_closed,
+        repo_id,
+        offset,
+        limit,
+        sort_by,
+        created_after,
+        request,
+        svc,
+        settings,
     )
 
 
@@ -202,6 +249,10 @@ def _list_tickets_compute(
     state: State | None,
     include_closed: bool,
     repo_id: str | None,
+    offset: int,
+    limit: int | None,
+    sort_by: str,
+    created_after: str | None,
     request: Request,
     svc: TicketService,
     settings: Settings,
@@ -222,6 +273,18 @@ def _list_tickets_compute(
         if not exclude:
             exclude = None
 
+    # Parse created_after from ISO-8601 string to UTC datetime.
+    created_after_dt: datetime | None = None
+    if created_after:
+        try:
+            created_after_dt = datetime.fromisoformat(created_after)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"created_after must be an ISO-8601 datetime string, "
+                f"got {created_after!r}",
+            ) from None
+
     # With per-repo DBs the default svc only sees its own board's
     # tickets. Build a list of services to query: one per repo when
     # repo_id is omitted or "all", else just the requested repo.
@@ -240,10 +303,25 @@ def _list_tickets_compute(
         # extraction proposals are never silently hidden.
         services.append(_TicketService(settings, board_id="meta"))
 
+    # When offset/limit/sort is in play across multiple boards we can't
+    # trivially merge and re-slice — each board query is independent.
+    # Apply offset+limit+sort per-board and concatenate; callers needing
+    # cross-board ordering should use a single board filter (repo_id).
     tickets: list[Ticket] = []
     for s in services:
         try:
-            tickets.extend(s.list(state=state, exclude_states=exclude))
+            tickets.extend(
+                s.list(
+                    state=state,
+                    exclude_states=exclude,
+                    offset=offset,
+                    limit=limit,
+                    sort_by=sort_by,
+                    created_after=created_after_dt,
+                )
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception:
             log.exception("list_tickets: failed to query board %r", s.board_id)
 

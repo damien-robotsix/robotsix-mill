@@ -4,6 +4,7 @@
   data-loss bug where 6 GitHub API methods silently returned at most 100 items
   (branches, PRs, reviews, comments, files, labels).  The new helper integrates
   with the existing 401-retry pattern and is reused by all 9 paginated methods.
+- GET /tickets: add `offset`, `limit`, `sort_by`, and `created_after` query params for pagination, sorting, and time-based filtering. Defaults preserve backward-compatible behavior.
 - Sandbox spawn: retry on transient container-wait EOF. When `docker run` exits 125 with "unexpected EOF" in stderr (the socket-proxy haproxy severing a long-lived wait stream), the sandbox now cleans up any leaked container and retries up to 3 times. Non-EOF 125 errors still raise immediately (genuine daemon/config errors). This is defense-in-depth on top of the deploy-compose haproxy timeout fix.
 - deploy compose: raise the socket-proxy's hardcoded haproxy `timeout client/server` from 10m to 4h. The 10m default severed the docker-wait stream of any sandbox run longer than 10 minutes ("error waiting for container: unexpected EOF"), the root cause of the 2026-07-10..12 intermittent sandbox outages. The tecnativa image exposes no TIMEOUT_* env knobs, so the processed config is patched via sed like the existing docker-events fix.
 - Clear implement fingerprint guard on transient failures: when a transient infrastructure error kills an implement run, `_handle_stage_error` now deletes `artifacts/implement.md` before scheduling the retry, preventing permanent "spec unchanged since last implement attempt" blocks.
@@ -40,7 +41,7 @@
   ("Documentation-only change; no code review needed").
 - Fix stale ``forge/gitlab.py`` path references in the forge_parity periodic agent prompt; now points to ``forge/gitlab/core.py`` after the monolithic adapter was split into a package.
 - Skip ``TestEditsFormatterReverted`` tests when ``ruff`` is not installed (base/production container)
-- Remove dead backward-compat aliases `load_yaml_config` and `load_secrets_yaml` from `config/loader.py` (no callers remain).
+- Remove dead backward-compat aliases `load_yaml_config` and `load_secrets_yaml` from `config/loader.py` (no callers remain). (mill: Add pagination (offset/limit) + sort/filter to GET /tickets and widen chat truncation (20260712T120553Z-add-pagination-offset-limit-sort-filter-01fd) [WIP])
 - Added `docs/repo-scaffold/index.md` documenting the repo creation workflow and workspace member sync, and registered the docs path in `docs/modules.yaml`.
 - Remove stale `reply_to_thread`/`close_thread` error-recovery guidance from `retrospect.yaml` system prompt (both tools are disabled for this agent).
 - Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,
