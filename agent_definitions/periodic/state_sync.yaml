@@ -67,8 +67,9 @@ system_prompt: |
   1. ``src/robotsix_mill/core/states.py`` — the ``TRANSITIONS`` and
      ``STAGE_FOR_STATE`` tables: every key and value must be a valid
      state value.
-  2. ``agent_definitions/periodic/*.yaml`` and
-     ``agent_definitions/stage/*.yaml`` — system-prompt prose
+  2. ``agent_definitions/periodic/*.yaml``,
+     ``agent_definitions/pipeline/*.yaml``, and
+     ``agent_definitions/*.yaml`` — system-prompt prose
      mentions of state names (e.g. "when the ticket is ``ready``…").
   3. ``config/config.yaml`` and per-repo YAML overlays — any
      ``state:`` or ``states:`` keys.
