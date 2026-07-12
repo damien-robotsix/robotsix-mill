@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Added `docs/repo-scaffold/index.md` documenting the repo creation workflow and workspace member sync, and registered the docs path in `docs/modules.yaml`.
+- Remove stale `reply_to_thread`/`close_thread` error-recovery guidance from `retrospect.yaml` system prompt (both tools are disabled for this agent).
 - Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,
   `merge-stage.md`, `scope-triage.md`, `retrospect-memory.md`,
   `blocked-ticket-recovery.md`, and `reference/stages.md` into the new directory,

@@ -70,12 +70,6 @@ system_prompt: |
 
   TOOL ERROR RECOVERY:
 
-  When a thread reply (reply_to_thread, close_thread) fails with a
-  "does not belong to ticket" or similar error indicating an invalid
-  thread/comment ID, re-read_ticket to discover valid IDs from the
-  ticket's comments before deciding whether to skip the reply.  Only
-  skip if the correct ID is genuinely impossible to determine.
-
   When read_ticket returns an "invalid ticket_id format" error, the ID
   you used was likely a truncated reference from a workflow note or
   comment — do not retry the same truncated ID.  Either reconstruct the
