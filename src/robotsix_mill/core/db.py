@@ -23,6 +23,9 @@ once all deployments have transitioned.
 from __future__ import annotations
 
 import logging
+import re
+import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +44,136 @@ _engines: dict[str, Engine] = {}
 # Tracks which boards have had init_db() called so we can lazily
 # materialize schema on first access for a fresh repo.
 _initialized: set[str] = set()
+
+# ---------------------------------------------------------------------------
+# Disk-full defence: retry-on-disk-full context manager
+# ---------------------------------------------------------------------------
+
+# Regex matching SQLite error messages that signal a disk-full or
+# disk-contention condition worth retrying after a VACUUM / GC pass.
+_DISK_FULL_RE = re.compile(r"disk is full|database or disk is full|database is locked")
+
+
+class DiskFullError(RuntimeError):
+    """Raised when a DB operation fails with a disk-full condition even
+    after an emergency VACUUM + retry pass."""
+
+    def __init__(
+        self, message: str, disk_stats: dict[str, float] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.disk_stats = disk_stats or {}
+
+
+def _is_disk_full(exc: sqlite3.OperationalError) -> bool:
+    """Return ``True`` when *exc* matches a known disk-full or lock condition."""
+    return bool(_DISK_FULL_RE.search(str(exc)))
+
+
+def _get_disk_usage(path: Path) -> dict[str, float]:
+    """Return ``{total_gb, used_gb, free_gb}`` for the filesystem at *path*."""
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return {}
+    return {
+        "total_gb": round(usage.total / (1024**3), 2),
+        "used_gb": round(usage.used / (1024**3), 2),
+        "free_gb": round(usage.free / (1024**3), 2),
+    }
+
+
+def _emergency_vacuum(settings: Settings, board_id: str) -> None:
+    """Run a lightweight VACUUM on *board_id*'s database to reclaim
+    freed pages, plus a WAL checkpoint to truncate the write-ahead log.
+
+    Opens a fresh, short-lived session — the affected session may have
+    an in-flight transaction that cannot VACUUM itself.
+    """
+    from sqlmodel import text
+
+    with session(settings, board_id) as s:
+        s.execute(text("VACUUM"))
+        s.commit()
+
+
+def _retry_op(
+    settings: Settings,
+    board_id: str,
+    fn: Any,
+    op_name: str,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Call *fn(*args, **kwargs)* once; on a disk-full error run an
+    emergency VACUUM and retry once.  Re-raises as :class:`DiskFullError`
+    when the retry also fails."""
+    try:
+        return fn(*args, **kwargs)
+    except sqlite3.OperationalError as exc:
+        if not _is_disk_full(exc):
+            raise
+        db_path = _db_path(settings, board_id)
+        disk_stats = _get_disk_usage(db_path)
+        log.warning(
+            "db %s: disk-full on %s — free=%.2f GB, emergency VACUUM + retry",
+            board_id,
+            op_name,
+            disk_stats.get("free_gb", -1),
+        )
+        try:
+            _emergency_vacuum(settings, board_id)
+        except Exception as vac_exc:
+            log.warning("db %s: emergency VACUUM failed: %s", board_id, vac_exc)
+        try:
+            return fn(*args, **kwargs)
+        except sqlite3.OperationalError as exc2:
+            if not _is_disk_full(exc2):
+                raise
+            db_path2 = _db_path(settings, board_id)
+            disk_stats2 = _get_disk_usage(db_path2)
+            raise DiskFullError(
+                f"db {board_id}: {op_name} failed after VACUUM retry — "
+                f"free={disk_stats2.get('free_gb', -1):.2f} GB"
+            ) from exc2
+
+
+class _RetrySession:
+    """Thin wrapper around a :class:`Session` that retries ``commit()``
+    and ``flush()`` on disk-full errors."""
+
+    def __init__(self, session: Session, settings: Settings, board_id: str) -> None:
+        self._session = session
+        self._settings = settings
+        self._board_id = board_id
+
+    def commit(self) -> None:
+        _retry_op(self._settings, self._board_id, self._session.commit, "commit")
+
+    def flush(self) -> None:
+        _retry_op(self._settings, self._board_id, self._session.flush, "flush")
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session, name)
+
+
+@contextmanager
+def retry_on_db_full(settings: Settings, board_id: str):  # type: ignore[no-untyped-def]
+    """Context manager yielding a session whose ``commit()`` and ``flush()``
+    are wrapped with disk-full retry + emergency VACUUM.
+
+    Use as a drop-in replacement for ``db.session()`` at sites that
+    call ``commit()`` or ``flush()``::
+
+        with retry_on_db_full(settings, board_id) as s:
+            s.add(ticket)
+            s.commit()  # auto-retried on disk-full
+    """
+    with session(settings, board_id) as s:
+        yield _RetrySession(s, settings, board_id)
+
+
+# ---------------------------------------------------------------------------
 
 
 def _db_path(settings: Settings, board_id: str) -> Path:
@@ -338,7 +471,7 @@ def persist_memory_db(
     if max_chars is not None and len(text) > max_chars:
         text = tail_keep(text, max_chars, label=f"memory ({name})")
 
-    with session(settings, board_id) as s:
+    with retry_on_db_full(settings, board_id) as s:
         row = s.exec(
             select(Memory).where(Memory.board_id == board_id, Memory.name == name)
         ).first()

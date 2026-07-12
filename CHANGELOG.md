@@ -63,6 +63,7 @@
 - Add ``PUT /tickets/{id}/description`` endpoint to update a ticket's spec description, recompute the specification fingerprint, and record an audit trail history event. Includes an optional ``reset_fingerprint_guard`` flag to clear the stale-respawn guard for unchanged-spec retries.
 - Implement spec-fingerprint guard now distinguishes spec-determined outcomes from transient environmental aborts. Env-error circuit breaker (e.g. disk-full, sandbox command not found) no longer persists a fingerprint, so the stale-respawn guard won't falsely block re-implementation after the transient cause is resolved. Normal spec-determined BLOCKED outcomes continue to be guarded.
   Added `POST /tickets/{id}/reset-fingerprint` endpoint to clear a persisted fingerprint without filesystem access.
+- Add `retry_on_db_full` context manager in `core/db.py` that catches disk-full/locked SQLite errors, runs an emergency VACUUM, retries once, and raises `DiskFullError` on failure. Wrap all service-mixin commit/flush sites and `persist_memory_db` with it. Expose disk usage on `/health` for proactive detection. (mill: Add retry/degradation handling for sqlite3 disk-full OperationalError across DB write paths (20260712T120728Z-add-retry-degradation-handling-for-sqlit-3188) [WIP])
 - Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,
   `merge-stage.md`, `scope-triage.md`, `retrospect-memory.md`,
   `blocked-ticket-recovery.md`, and `reference/stages.md` into the new directory,

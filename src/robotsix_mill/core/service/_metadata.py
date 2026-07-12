@@ -18,6 +18,7 @@ import json
 from datetime import datetime, timezone
 
 from .. import db
+from ..db import retry_on_db_full
 from ..models import Ticket, TicketEvent, TicketKind
 from ..states import State
 from ._base import _ServiceBase
@@ -43,7 +44,7 @@ class _MetadataMixin(_ServiceBase):
         dropped. Returns the updated ticket; raises ``KeyError`` if unknown.
         """
         cleaned = [t for t in dict.fromkeys(target_ids) if t and t != ticket_id]
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.unblocks = json.dumps(cleaned) if cleaned else None
             ticket.updated_at = datetime.now(timezone.utc)
@@ -60,7 +61,7 @@ class _MetadataMixin(_ServiceBase):
         Returns the updated ticket; raises ``KeyError`` if unknown.
         """
         cleaned: list[str] = list(dict.fromkeys(labels))
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.labels = json.dumps(cleaned) if cleaned else None
             ticket.updated_at = datetime.now(timezone.utc)
@@ -85,7 +86,7 @@ class _MetadataMixin(_ServiceBase):
         caller can re-enqueue each one.
         """
         changed: list[str] = []
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             new_value = bool(priority)
             if ticket.priority != new_value:
@@ -101,7 +102,7 @@ class _MetadataMixin(_ServiceBase):
         # Propagate to every descendant. _all_descendants walks the
         # parent_id graph and is cycle-safe.
         for descendant in self._all_descendants(ticket_id):
-            with db.session(self.settings, self._board_for(descendant.id)) as s:
+            with retry_on_db_full(self.settings, self._board_for(descendant.id)) as s:
                 d = s.get(Ticket, descendant.id)
                 if d is None or d.priority == bool(priority):
                     continue
@@ -119,7 +120,7 @@ class _MetadataMixin(_ServiceBase):
 
         Raises :class:`KeyError` if the ticket does not exist.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.branch = branch
             ticket.updated_at = datetime.now(timezone.utc)
@@ -129,7 +130,7 @@ class _MetadataMixin(_ServiceBase):
     def set_parent(self, ticket_id: str, parent_id: str) -> None:
         """Link a spawned ticket to the ticket it originated from
         (e.g. a retrospect improvement draft -> the reviewed ticket)."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.parent_id = parent_id
             ticket.updated_at = datetime.now(timezone.utc)
@@ -139,7 +140,7 @@ class _MetadataMixin(_ServiceBase):
     def set_title(self, ticket_id: str, title: str) -> None:
         """Update the title of a ticket. Raises :class:`KeyError` if
         the ticket does not exist."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.title = title
             ticket.updated_at = datetime.now(timezone.utc)
@@ -149,7 +150,7 @@ class _MetadataMixin(_ServiceBase):
     def set_content_hash(self, ticket_id: str, content_hash: str) -> None:
         """Keep the DB pointer in sync after a stage rewrites the
         file-canonical description (so it isn't seen as an external edit)."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.content_hash = content_hash
             ticket.updated_at = datetime.now(timezone.utc)
@@ -167,7 +168,7 @@ class _MetadataMixin(_ServiceBase):
         No-op for tickets already kind=epic. Raises ``KeyError`` for
         unknown ids.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.kind == TicketKind.EPIC:
                 return
@@ -178,7 +179,7 @@ class _MetadataMixin(_ServiceBase):
 
     def set_review_rounds(self, ticket_id: str, value: int) -> None:
         """Set the ``review_rounds`` counter on *ticket_id*."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.review_rounds = value
             ticket.updated_at = datetime.now(timezone.utc)
@@ -191,7 +192,7 @@ class _MetadataMixin(_ServiceBase):
         Tracks total implement passes across all review rounds
         (ticket lifetime).  Used by the implement↔review convergence
         backstop."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.implement_cycles = value
             ticket.updated_at = datetime.now(timezone.utc)
@@ -205,7 +206,7 @@ class _MetadataMixin(_ServiceBase):
         refine convergence backstop — when this reaches
         ``max_refine_passes_per_ticket`` without convergence, the
         ticket is escalated to BLOCKED."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.refine_passes = value
             ticket.updated_at = datetime.now(timezone.utc)
@@ -216,7 +217,7 @@ class _MetadataMixin(_ServiceBase):
         """Record the hash of the description.md produced by the most recent
         refine pass.  Compared against subsequent passes to detect
         convergence (unchanged output → the refine loop has stabilised)."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.refine_output_hash = output_hash
             ticket.updated_at = datetime.now(timezone.utc)
@@ -230,7 +231,7 @@ class _MetadataMixin(_ServiceBase):
         if ticket_id in depends_on_ids:
             raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
         raw = json.dumps(depends_on_ids) if depends_on_ids else None
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.depends_on = raw
             ticket.updated_at = datetime.now(timezone.utc)

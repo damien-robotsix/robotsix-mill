@@ -7,7 +7,7 @@ from typing import cast
 
 from sqlmodel import col, select
 
-from .. import db
+from ..db import retry_on_db_full
 from ..models import (
     Comment,
     Ticket,
@@ -34,7 +34,7 @@ class _MaintenanceMixin(_ServiceBase):
         if max_archived <= 0:
             return
 
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             stmt = (
                 select(Ticket)
                 .where(Ticket.state.in_(list(self._ARCHIVABLE_STATES)))
@@ -70,7 +70,7 @@ class _MaintenanceMixin(_ServiceBase):
         if max_events <= 0:
             return 0
 
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             all_events = s.exec(
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
@@ -117,7 +117,7 @@ class _MaintenanceMixin(_ServiceBase):
         if max_comments <= 0:
             return 0
 
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             all_comments = s.exec(
                 select(Comment)
                 .where(Comment.ticket_id == ticket_id)
@@ -201,7 +201,7 @@ class _MaintenanceMixin(_ServiceBase):
         }
 
         # 1. Count terminal tickets before purge, then run it.
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             before = s.exec(
                 select(Ticket).where(
                     col(Ticket.state).in_(list(self._ARCHIVABLE_STATES))
@@ -209,7 +209,7 @@ class _MaintenanceMixin(_ServiceBase):
             ).all()
         before_count = len(before)
         self._maybe_purge_archived()
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             after = s.exec(
                 select(Ticket).where(
                     col(Ticket.state).in_(list(self._ARCHIVABLE_STATES))
@@ -218,7 +218,7 @@ class _MaintenanceMixin(_ServiceBase):
         result["archived_purged"] = before_count - len(after)
 
         # 2. Event cap for ALL non-terminal tickets.
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             active_ids = s.exec(
                 select(Ticket.id).where(
                     col(Ticket.state).notin_(list(self._ARCHIVABLE_STATES))
@@ -234,7 +234,7 @@ class _MaintenanceMixin(_ServiceBase):
                 result["comments_pruned"] += pruned_c
 
         # 3. Reclaim freed pages and truncate the WAL file.
-        with db.session(self.settings, self.board_id) as s:
+        with retry_on_db_full(self.settings, self.board_id) as s:
             s.connection().exec_driver_sql("PRAGMA optimize")
             s.connection().exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
             s.commit()

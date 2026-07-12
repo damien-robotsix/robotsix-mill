@@ -11,6 +11,7 @@ from typing import Any
 from sqlmodel import Session, col, select
 
 from .. import db
+from ..db import retry_on_db_full
 from ..models import (
     Comment,
     Ticket,
@@ -151,7 +152,7 @@ class _MigrateMixin(_ServiceBase):
         # 5. Insert every ticket into the target DB (parent-before-child).
         global_id_map: dict[int, int] = {}
         try:
-            with db.session(self.settings, dst_board) as s2:
+            with retry_on_db_full(self.settings, dst_board) as s2:
                 for t in subtree:
                     snap = snapshots[t.id]
                     td = snap["ticket"]
@@ -220,7 +221,7 @@ class _MigrateMixin(_ServiceBase):
             raise
 
         # 6. Delete every ticket from the source DB (reverse order).
-        with db.session(self.settings, src_board) as s3:
+        with retry_on_db_full(self.settings, src_board) as s3:
             for t in reversed(subtree):
                 for comment in s3.exec(
                     select(Comment).where(Comment.ticket_id == t.id)
@@ -364,7 +365,7 @@ class _MigrateMixin(_ServiceBase):
 
         # --- insert into the target DB ---
         try:
-            with db.session(self.settings, dst_board) as s:
+            with retry_on_db_full(self.settings, dst_board) as s:
                 ticket_data.update(
                     state=State.DRAFT,
                     board_id=dst_board,
@@ -417,7 +418,7 @@ class _MigrateMixin(_ServiceBase):
             raise
 
         # --- remove from the source DB (the target copy is committed) ---
-        with db.session(self.settings, src_board) as s:
+        with retry_on_db_full(self.settings, src_board) as s:
             for comment in s.exec(
                 select(Comment).where(Comment.ticket_id == ticket_id)
             ).all():

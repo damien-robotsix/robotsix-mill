@@ -9,6 +9,7 @@ from secrets import token_hex
 from sqlmodel import Session, select
 
 from .. import db
+from ..db import retry_on_db_full
 from ..models import (
     Comment,
     SourceKind,
@@ -146,7 +147,7 @@ class _CreateMixin(_ServiceBase):
                     inherited_priority = True
                     break
                 cur = p.parent_id
-        with db.session(self.settings, effective_board) as s:
+        with retry_on_db_full(self.settings, effective_board) as s:
             ticket = Ticket(
                 id=ticket_id,
                 title=title,
@@ -203,7 +204,7 @@ class _CreateMixin(_ServiceBase):
         ``note`` describing what the agent concluded. The hash chain
         is extended like any other event.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             s.add(
                 _make_event(
@@ -241,7 +242,7 @@ class _CreateMixin(_ServiceBase):
         loop). The thread is closed-with-record (not deleted), so the question
         text is preserved in history.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             open_threads = self._has_open_ask_user_threads(ticket_id, s)
             now = datetime.now(timezone.utc)
             for c in open_threads:
@@ -265,7 +266,7 @@ class _CreateMixin(_ServiceBase):
         note, not a transition. Hash chain stays intact: the next real
         transition's ``prev_hash`` correctly points at this entry.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             event = _make_event(s, ticket_id=ticket_id, state=ticket.state, note=note)
             s.add(event)

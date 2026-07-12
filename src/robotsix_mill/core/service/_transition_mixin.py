@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-from .. import db
+from ..db import retry_on_db_full
 from ..models import (
     Comment,
     Ticket,
@@ -228,7 +228,7 @@ class _TransitionMixin(_ServiceBase):
         :class:`State.CLOSED`, or :class:`State.ERRORED` — are rejected
         when the ticket has any open ``[ASK_USER]`` comment threads.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             blocked_from = State(ticket.blocked_from) if ticket.blocked_from else None
             paused_from = State(ticket.paused_from) if ticket.paused_from else None
@@ -335,7 +335,7 @@ class _TransitionMixin(_ServiceBase):
         to retry even though the spec itself is unchanged, instead of
         requiring manual workspace surgery to reset the guard.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.state is not State.BLOCKED:
                 raise TransitionError(
@@ -394,7 +394,7 @@ class _TransitionMixin(_ServiceBase):
 
         Does NOT create a ``TicketEvent`` — the workflow state hasn't changed.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.retry_attempt = retry_attempt
             ticket.last_transient_error = last_transient_error
@@ -414,7 +414,7 @@ class _TransitionMixin(_ServiceBase):
         ``KeyError`` if the ticket does not exist, ``TransitionError``
         if it is not in ``human_issue_approval``.
         """
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.state is not State.HUMAN_ISSUE_APPROVAL:
                 raise TransitionError(
@@ -454,7 +454,7 @@ class _TransitionMixin(_ServiceBase):
             board = self._board_for(ticket_id)
         except ValueError:
             board = self.board_id or ""
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.state in _NON_CLOSEABLE:
                 raise TransitionError(
@@ -517,7 +517,7 @@ class _TransitionMixin(_ServiceBase):
             board = self._board_for(ticket_id)
         except ValueError:
             board = self.board_id or ""
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.state in _NON_MARK_DONEABLE:
                 raise TransitionError(
