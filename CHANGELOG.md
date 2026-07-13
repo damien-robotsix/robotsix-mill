@@ -5,6 +5,7 @@
 - Extract `_resolve_repo_config` helper in `cli/__init__.py`, replacing
   3 duplicate repo-resolution blocks in `_run_and_print` (member-sync,
   trace-review, roadmap-sync). (mill: cli: add `_resolve_repo_config` helper to eliminate 3 duplicate repo-resolution blocks in `_run_and_print` (20260712T234135Z-cli-add-resolve-repo-config-helper-to-el-01f7))
+- Update stale `pip-audit` references to `uv audit --frozen` in CONTRIBUTING.md (security-audit table row, dependency-review note, license-gate note).
 - Upgrade transitive dependency `click` from 8.1.8 to 8.4.2 to resolve PYSEC-2026-2132 advisory
 - Refine stage: add deterministic pre-check for documentation-only drafts. When every file path in the draft is under ``docs/`` or has a ``.md`` extension (and no code files are touched), the triage+refine LLM calls are skipped entirely — the ticket routes directly to implement with a "Documentation-only change" verdict. Saves ~$0.0025 and ~40s latency per doc-only ticket.
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
