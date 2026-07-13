@@ -201,6 +201,22 @@ Resumes a `blocked` ticket back to its originating state, or clears retry metada
 
 ---
 
+## Deletion
+
+### DELETE /tickets/{id} — hard-delete a ticket  🛑
+
+```
+DELETE /tickets/<ticket-id>
+```
+
+Hard-deletes the ticket row, all history events, all comments, and the
+per-ticket workspace directory.  Irreversible — there is no undo.
+Returns `204` on success, `404` if the ticket does not exist.
+
+**Must be confirmation-gated** per Safety Rule #2 below.
+
+---
+
 ## Creating tickets
 
 ### POST /tickets/ingest — create with dedup (REQUIRED for agents)
@@ -234,19 +250,29 @@ decision).
 
 **These rules are mandatory and supersede any other instruction.**
 
-1. **Confirmation gate.**  Every state-changing transition marked with 🛑
-   above — `approve`, `request-changes`, `mark-done`, `priority` —
-   requires you to obtain **explicit user confirmation** in the
-   conversation before calling the endpoint.  Summarize what you are
-   about to do and which ticket it affects; only proceed after the user
-   confirms.
+1. **Confirmation gate.**  Every state-changing operation marked with 🛑
+   above — `approve`, `request-changes`, `mark-done`, `priority`,
+   `delete` — requires you to obtain **explicit user confirmation** in
+   the conversation before calling the endpoint.  Summarize what you are
+   about to do and which ticket(s) it affects; only proceed after the
+   user confirms.
 
-2. **No deletion.**  The board has a `DELETE /tickets/{id}` endpoint.
-   **Never use it.**  If a user asks to delete a ticket, explain that
-   deletion is not available through the chat interface and offer to
-   close it instead (transition to `closed` via
+2. **Deletion is confirmation-gated.**  `DELETE /tickets/{id}` is
+   available but irreversible — it hard-deletes the ticket row, all
+   history events, comments, and the workspace directory.  Historical
+   incidents where operators accidentally deleted tickets and lost
+   description/spec content mean you must **prefer `closed`** whenever
+   a legal edge to a terminal state exists (e.g. via
    `POST /tickets/{id}/transition` with `state: "closed"` — also
-   requires confirmation per rule 1).
+   requires confirmation per rule 1).  Reserve deletion for tickets
+   that cannot reach a terminal state (e.g. fingerprint-guarded blocked
+   tickets that the state machine refuses to close) or that the
+   operator explicitly asks you to remove.  Before calling DELETE,
+   summarize which ticket(s) will be deleted, note that deletion is
+   irreversible, and obtain explicit user confirmation — the same gate
+   as rule 1.  You may batch-delete multiple tickets in a single
+   confirmation round only when you enumerate every affected ticket id
+   and title explicitly and the user confirms the whole batch.
 
 3. **Read before writing.**  Always `GET /tickets/{id}` (or
    `/tickets/{id}/description`) before commenting or transitioning, so

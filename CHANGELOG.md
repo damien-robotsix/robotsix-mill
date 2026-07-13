@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Chat skill (`/chat-skill`): replace absolute "No deletion" rule with confirmation-gated DELETE support, including a historical rationale note preferring `closed` when a legal edge exists and reserving deletion for fingerprint-guarded blocked tickets or operator-requested removals.
 - Add self-documenting `help` target to Makefile (`make` or `make help` lists all targets with descriptions via `##` comments)
 - Update stale `forge/gitlab.py` references to `forge/gitlab/core.py` in agent prompts, docs, config, and remove dead flake8 ignore entry; regenerate `mypy-baseline-test.txt`.)
 - Add exhaustive security-sink scan step to implement agent system prompt: before pushing, the agent must identify every location in the diff where user-controlled data reaches a CodeQL-sensitive sink (URL, filesystem path, log call, etc.) and apply the same sanitization pattern consistently across all sinks, preferring structurally sound approaches (`httpx.URL.copy_with()`, `pathlib.Path.resolve()`, structured logging) over reactive string guards.
