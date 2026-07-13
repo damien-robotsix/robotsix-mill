@@ -13,8 +13,7 @@ from typing import Any
 
 from .._http import _ApiClient
 from ..auth import gitlab_token
-from ..base import BranchInfo, Forge, NotConfiguredError, RepoInfo
-from ..github import _parse_iso_utc
+from ..base import BranchInfo, Forge, NotConfiguredError, RepoInfo, _parse_iso_utc
 from ._pagination import _paginated_get
 from .ci import GitLabForgeCIMixin
 from .code_scanning import GitLabForgeCodeScanningMixin
