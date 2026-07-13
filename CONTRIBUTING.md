@@ -11,13 +11,7 @@ make dev                      # hot-reload server on http://127.0.0.1:8077
 make test                     # pytest with coverage (fail-under 70%)
 ```
 
-Other `make` targets:
-
-| Target   | Description |
-|----------|-------------|
-| `serve`  | Production-style server (YAML config + `config/secrets.yaml`, data in `.mill-data`) |
-| `docker` | `docker compose up -d --build` |
-| `clean`  | Remove `.venv`, `.mill-data`, `.pytest_cache`, and all `__pycache__` dirs |
+All `make` targets are self-documented — run `make` (or `make help`) to list every target with its description.
 
 Install pre-commit hooks (Ruff, mypy, Bandit):
 
