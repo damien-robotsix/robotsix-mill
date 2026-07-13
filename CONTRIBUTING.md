@@ -295,7 +295,7 @@ check.
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `pip-audit` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
+| [`security-audit.yml`](.github/workflows/security-audit.yml) | Push/PR to `main`, weekly cron | `uv audit --frozen` (CVEs) + `pip-licenses` (license allowlist gate) on installed dependencies |
 | [`ci.yml`](.github/workflows/ci.yml) | Push/PR to `main` | Python CI via shared reusable (lint → type-check → format → test with 70% cov, Bandit MEDIUM+ advisory, mypy `--strict` advisory via baseline ratchet) → deptry → module taxonomy + file registration → Vulture dead-code check → config sync + schema validation → workflow pinning + permissions audit → shell completions check |
 | [`dependency-review.yml`](.github/workflows/dependency-review.yml) | PR to any branch | `actions/dependency-review-action@v5.0.0` with `fail-on-severity: moderate` — analyzes the *delta* of dependency manifests (e.g. `pyproject.toml`, `uv.lock`) between the PR and its base branch, blocking on new or upgraded dependencies that introduce vulnerabilities rated moderate or higher |
 | [`deps-bump.yml`](.github/workflows/deps-bump.yml) | Weekly cron + manual | `uv lock --upgrade` → opens a PR refreshing `uv.lock` (shared-lib `@main` bumps), gated by `ci.yml` on the PR — see [docs/dependencies.md](docs/deps/dependencies.md) |
@@ -336,7 +336,7 @@ becomes empty the ratchet step can be replaced with a direct
 
 **Note on the dependency review gate in `dependency-review.yml`:**
 `actions/dependency-review-action` runs on every PR with
-`fail-on-severity: moderate`. Unlike `pip-audit` (which scans the
+`fail-on-severity: moderate`. Unlike `uv audit --frozen` (which scans the
 *entire* installed dependency tree), this check analyzes only the
 *delta*: it compares the PR's dependency manifests (`pyproject.toml`,
 `uv.lock`) against the base branch's manifests. PRs that add a new
@@ -363,7 +363,7 @@ format defeats the allowlist (e.g. `tiktoken`, which ships the full MIT
 license text as its `License` field with no Trove classifier, so
 `--from=mixed` emits the whole blob instead of a short token); each
 suppression carries an inline justification in the workflow, the same
-pattern as pip-audit's `--ignore-vuln`. Policy lives entirely in the workflow's CLI
+pattern as `uv audit --frozen`'s `--ignore-vuln`. Policy lives entirely in the workflow's CLI
 flags and comments — there is intentionally no separate
 `.licenserc`/`.scancode` config file.
 
