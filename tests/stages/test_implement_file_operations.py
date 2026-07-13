@@ -17,8 +17,6 @@ import subprocess
 import pytest
 from types import SimpleNamespace
 
-import pytest
-
 from robotsix_mill.config import ConfigError, CrossRepoTarget, RepoConfig, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
