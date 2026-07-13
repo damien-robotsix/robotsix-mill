@@ -491,6 +491,7 @@ def delete_ticket(
     404 if it doesn't exist."""
     if not svc.delete(ticket_id):
         raise HTTPException(404, "ticket not found")
+    log.info("Deleted ticket %s (agent: robotsix-chat)", ticket_id)
 
 
 @router.post("/tickets/{ticket_id}/transition", response_model=TicketRead)
