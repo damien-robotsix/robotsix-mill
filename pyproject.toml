@@ -207,7 +207,6 @@ max-complexity = 10
 "src/robotsix_mill/forge/github_pr.py" = ["C901", "S110"]
 "src/robotsix_mill/forge/github_ci.py" = ["C901", "S110"]
 "src/robotsix_mill/forge/github_code_scanning.py" = ["C901", "S110"]
-"src/robotsix_mill/forge/gitlab.py" = ["C901"]
 "src/robotsix_mill/core/service/*.py" = ["F821", "C901", "S110", "S603", "S607"]
 "src/robotsix_mill/runners/pass_runner.py" = ["C901"]
 "src/robotsix_mill/agents/coding.py" = ["C901"]

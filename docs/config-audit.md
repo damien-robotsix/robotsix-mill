@@ -124,7 +124,7 @@ other code depends on.
 | `FORGE_TARGET_BRANCH` | `forge_target_branch` | `main` | `str` | Settings | non-sensitive | default | Non-prefixed | `forge/base.py` | |
 | `FORGE_AUTH` | `forge_auth` | `token` | `Literal["token","app"]` | Settings | non-sensitive | default | Non-prefixed | `forge/auth.py` | |
 | `MILL_GITHUB_API_URL` | `github_api_url` | `https://api.github.com` | `str` | Settings | identifying | default | §19 | `forge/github.py` | For GitHub Enterprise |
-| `MILL_GITLAB_API_URL` | `gitlab_api_url` | `https://gitlab.com/api/v4` | `str` | Settings | identifying | default | **missing** | `forge/gitlab.py` | ⚠️ Undocumented |
+| `MILL_GITLAB_API_URL` | `gitlab_api_url` | `https://gitlab.com/api/v4` | `str` | Settings | identifying | default | **missing** | `forge/gitlab/core.py` | ⚠️ Undocumented |
 
 ### 1.7  Implement stage
 
