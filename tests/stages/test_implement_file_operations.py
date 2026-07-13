@@ -11,8 +11,11 @@ and ``tmp_path`` workspaces, per repo convention.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from types import SimpleNamespace
+
+import pytest
 
 from robotsix_mill.config import ConfigError, CrossRepoTarget, RepoConfig, Settings
 from robotsix_mill.core import db
@@ -839,6 +842,7 @@ def _porcelain(repo) -> str:
 
 
 class TestEditsFormatterReverted:
+    @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff not installed")
     def test_formatter_reverted_edit_is_noop_true(self, tmp_path):
         """The c356 case: parenthesising ``except A, B:`` is reverted by
         ruff format on a 3.14 target → no net change → True (safe no-op)."""
