@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from robotsix_mill.towncrier import maybe_generate_towncrier_fragment
+from robotsix_mill.stages.towncrier import maybe_generate_towncrier_fragment
 
 
 # -- No pyproject.toml -------------------------------------------------

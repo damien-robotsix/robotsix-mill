@@ -950,7 +950,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     )
         # Commit primary repo (always — regardless of extra_roots).
         if git_ops.has_changes(repo_dir):
-            from ...towncrier import maybe_generate_towncrier_fragment
+            from ..towncrier import maybe_generate_towncrier_fragment
 
             maybe_generate_towncrier_fragment(repo_dir, ticket.id, ticket.title)
             git_ops.commit_all(repo_dir, commit_message)
@@ -960,7 +960,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 if repo_path == repo_dir:
                     continue
                 if git_ops.has_changes(repo_path):
-                    from ...towncrier import maybe_generate_towncrier_fragment
+                    from ..towncrier import maybe_generate_towncrier_fragment
 
                     maybe_generate_towncrier_fragment(
                         repo_path, ticket.id, ticket.title
