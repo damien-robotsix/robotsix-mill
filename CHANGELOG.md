@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add exhaustive security-sink scan step to implement agent system prompt: before pushing, the agent must identify every location in the diff where user-controlled data reaches a CodeQL-sensitive sink (URL, filesystem path, log call, etc.) and apply the same sanitization pattern consistently across all sinks, preferring structurally sound approaches (`httpx.URL.copy_with()`, `pathlib.Path.resolve()`, structured logging) over reactive string guards.
 - Upgrade transitive dependency `click` from 8.1.8 to 8.4.2 to resolve PYSEC-2026-2132 advisory
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
 - Merged hooks module into stages: moved ``run_prepare_hook`` to

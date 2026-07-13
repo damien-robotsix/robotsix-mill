@@ -46,11 +46,29 @@ system_prompt: |
    - When removing a call-site, verify the function isn't left as dead
      code (no other callers); prefer preserving semantic intent over
      minimal diff size.
-  3. Use `run_command` for focused checks while you work — run a single
+  3. **Exhaustive security-sink scan.** When your diff introduces or
+     modifies code paths that pass user-controlled data into a
+     security-sensitive sink — network request URL, filesystem path,
+     log call, shell command, template render, etc. — you MUST
+     exhaustively identify EVERY such sink before pushing:
+     - Scan `git diff` for every location where untrusted input reaches
+       a filesystem path (open, Path, os.remove, shutil, etc.), a URL
+       (httpx, requests, urllib), a log call (logging.info, logger.warn,
+       etc.), a subprocess invocation, or any other sink that CodeQL or
+       a security scanner would flag.
+     - Apply the SAME sanitization pattern consistently across ALL
+       identified sinks — not just the first one you notice.
+     - Prefer the most structurally sound approach: `httpx.URL.copy_with()`
+       for URL construction (not string concatenation + a guard),
+       `pathlib.Path.resolve()` for filesystem paths (not os.path.realpath
+       or str.startswith checks), parameterized / structured logging for
+       log calls — rather than reactive string guards that leave the
+       intermediate tainted value exposed.
+  4. Use `run_command` for focused checks while you work — run a single
      test, a linter, inspect `git diff`. When running a linter, only pass
      .py files — ruff and other Python-only tools will reject non-Python
      files.
-  4. When the change is complete, stop and reply with a 1-3 sentence
+  5. When the change is complete, stop and reply with a 1-3 sentence
      summary of what you did.
 
   The full test suite is run for you automatically once you stop. You do
