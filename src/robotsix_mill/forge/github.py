@@ -14,8 +14,6 @@ all three mixins), shared helpers, and repo-CRUD operations
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
-
 from ._http import _ApiClient
 from .base import Forge, NotConfiguredError, RepoInfo
 from .github_ci import GitHubForgeCIMixin
@@ -34,24 +32,6 @@ _REMOTE_RE = re.compile(
 
 # GitHub's hard cap on a repository description (POST /user|orgs/.../repos).
 _MAX_REPO_DESCRIPTION = 350
-
-
-def _parse_iso_utc(value: str | None) -> datetime:
-    """Parse an ISO-8601 timestamp into a timezone-aware UTC datetime.
-
-    Accepts a trailing ``Z`` (GitHub's UTC marker). Naive timestamps are
-    assumed UTC; aware ones are converted to UTC. Returns the Unix epoch
-    (UTC) when *value* is missing or unparseable.
-    """
-    if not value:
-        return datetime.fromtimestamp(0, tz=timezone.utc)
-    try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return datetime.fromtimestamp(0, tz=timezone.utc)
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def _build_headers(token: str) -> dict:
