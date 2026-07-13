@@ -1818,3 +1818,87 @@ def test_advisory_dedup_draft_without_leading_blank_line_after_block(
     assert not isinstance(out, Outcome)
     assert "Possible duplicate of" not in out
     assert "The real draft body" in out
+
+
+# ===========================================================================
+# _run_doc_only_gate
+# ===========================================================================
+
+
+def test_doc_only_gate_disabled_when_auto_approve_off(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=False)
+    body = "Update `docs/guide.md` with setup instructions"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+    assert out is None
+
+
+def test_doc_only_gate_docs_only_returns_ready(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=True)
+    body = "Update `docs/guide.md` with setup instructions"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+    assert out is not None
+    assert out.next_state is State.READY
+    assert "Documentation-only change" in out.note
+
+
+def test_doc_only_gate_code_file_returns_none(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=True)
+    body = "Fix `src/robotsix_mill/core.py` import"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+    assert out is None
+
+
+def test_doc_only_gate_no_file_paths_returns_none(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=True)
+    body = "Fix the widget loader retry logic"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+    assert out is None
+
+
+def test_doc_only_gate_changelog_is_doc_only(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=True)
+    body = "Update `CHANGELOG.md` with the 0.1.0 release notes"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+    assert out is not None
+    assert out.next_state is State.READY
+
+
+def test_doc_only_gate_writes_artifacts(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=True)
+    body = "Fix typo in `README.md`"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+
+    draft_original = ws.artifacts_dir / "draft-original.md"
+    assert draft_original.exists()
+    assert "README.md" in draft_original.read_text()
+
+    file_map = ws.artifacts_dir / "file_map.json"
+    assert file_map.exists()
+
+
+def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
+    ctx = ctx_factory(auto_approve_enabled=True)
+    body = "Update `docs/api.md` and fix `src/api.py` handler"
+    t = _ticket(ctx, body=body)
+    ws = ctx.service.workspace(t)
+
+    out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
+    assert out is None

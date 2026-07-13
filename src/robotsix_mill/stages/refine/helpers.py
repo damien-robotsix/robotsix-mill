@@ -46,6 +46,44 @@ log = logging.getLogger("robotsix_mill.stages.refine")
 
 UNMERGED_BRANCH_PREFIX = "Implementation exists on branch"
 
+# -- doc-only change detection ------------------------------------------
+
+# Regex that matches file paths in backtick-wrapped text.  More
+# permissive than _triage.py's _PATH_RE (which requires a /) — we
+# also accept root-level paths like ``README.md`` and ``CHANGELOG.md``
+# because documentation tickets often mention root-level .md files.
+_DOC_ONLY_PATH_RE = re.compile(r"`([^`]*\.[a-zA-Z]{1,10})`")
+
+# Extensions that signal a code/config change (not doc-only).
+_CODE_EXTENSIONS: frozenset[str] = frozenset({".py", ".ts", ".js", ".yaml", ".yml"})
+
+
+def _is_doc_only_change(draft: str, title: str = "") -> bool:
+    """Return True if *draft* describes a documentation-only change.
+
+    Considers a change doc-only when every file path extracted from the
+    draft is a Markdown or docs path (``docs/**``, ``*.md``,
+    ``CHANGELOG.md``) and no code/config file (``.py``, ``.ts``,
+    ``.js``, ``.yaml``, ``.yml``) is mentioned.
+    """
+    text = f"{title}\n\n{draft}" if title else draft
+    paths = _DOC_ONLY_PATH_RE.findall(text)
+    if not paths:
+        return False
+
+    for p in paths:
+        # Fast rejection: any code extension → not doc-only.
+        for ext in _CODE_EXTENSIONS:
+            if p.endswith(ext):
+                return False
+        # Acceptable doc paths: docs/ tree or .md extension anywhere.
+        if p.startswith("docs/") or p.endswith(".md"):
+            continue
+        # Anything else (no recognised doc pattern) → ambiguous, not doc-only.
+        return False
+
+    return True
+
 
 def _load_refine_memory(s: Settings, memory_board_id: str) -> str:
     """Load the refine memory ledger from the DB-backed store.

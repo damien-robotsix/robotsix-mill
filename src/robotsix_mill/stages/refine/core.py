@@ -155,6 +155,15 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, misrouted, ws, input_hash
             )
 
+        # Phase 2.15: doc-only gate — deterministic check that skips
+        # the multi-LLM refine analysis when a draft touches only
+        # documentation files.  Runs before any LLM-invoking gate.
+        doc_only = RefineStage._run_doc_only_gate(ctx, ticket, draft, title, ws, s)
+        if doc_only is not None:
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, doc_only, ws, input_hash
+            )
+
         # Phase 2.2: triage classifier — a single cheap LLM call that
         # classifies the draft as SKIP / NO_CHANGE / MAINTENANCE /
         # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,

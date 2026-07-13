@@ -25,6 +25,7 @@ from ...core.draft_target import (
 )
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
+from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from ...core.dedup import _extract_paths, _scope_paths
 
@@ -1000,4 +1001,45 @@ class RefineGatesMixin:
             State.DONE,
             f"{REFINE_MILL_MISROUTE_PREFIX} {new.id}: draft names mill "
             f"paths absent from this checkout ({', '.join(absent)})",
+        )
+
+    @staticmethod
+    def _run_doc_only_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        title: str,
+        ws: Workspace,
+        s: Settings,
+    ) -> Outcome | None:
+        """Deterministic doc-only gate — skip refine for documentation-only changes.
+
+        When *auto_approve_enabled* and every file path extracted from
+        the draft is a docs/Markdown path (``docs/**``, ``*.md``,
+        ``CHANGELOG.md``) with no code/config files (``.py``, ``.ts``,
+        ``.js``, ``.yaml``, ``.yml``), short-circuit directly to READY
+        with a templated verdict — no LLM calls.  Returns ``None``
+        when the draft is not doc-only or *auto_approve_enabled* is off
+        (fall through to normal refine).
+        """
+        if not s.auto_approve_enabled:
+            return None
+
+        from .helpers import _is_doc_only_change
+        from . import _reconcile
+
+        if not _is_doc_only_change(draft, title):
+            return None
+
+        # Mirror the artifact writes from _triage_outcome for
+        # traceability (draft-original.md + empty file_map.json).
+        (ws.artifacts_dir / "draft-original.md").write_text(
+            draft if draft else "(title-only ticket, no body provided)",
+            encoding="utf-8",
+        )
+        _reconcile.write_file_map(ws, [], only_if_absent=True)
+
+        return Outcome(
+            State.READY,
+            "Documentation-only change; no code review needed",
         )
