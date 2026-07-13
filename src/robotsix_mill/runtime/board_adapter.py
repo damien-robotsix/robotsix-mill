@@ -33,7 +33,6 @@ _COLUMNS: list[tuple[str, str]] = [
     ("addressing_review", "Addressing Review"),
     ("rebasing", "Rebasing"),
     ("fixing_ci", "Fixing CI"),
-    ("maintenance", "Maintenance"),
     ("done", "Done"),
     ("closed", "Closed"),
     ("epic_closed", "Epic Closed"),

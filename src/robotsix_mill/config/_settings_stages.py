@@ -252,14 +252,6 @@ class _StagesSettings(BaseModel):
         description="When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
         default=True,
     )
-    # When True (default), a maintenance-triage check runs during refine
-    # to detect operational-action drafts (create repo, fork repo,
-    # investigate) and route them directly to the MAINTENANCE state,
-    # bypassing the full refine→implement pipeline.
-    maintenance_triage_enabled: bool = Field(
-        description="When true, operational-action drafts route directly to MAINTENANCE.",
-        default=True,
-    )
     # When True (default), the cheap advisory-dedup-verification gate runs
     # after the inflight-advisory phase and before the expensive refine
     # agent. It resolves any carried ``Possible duplicate of <id>`` advisory

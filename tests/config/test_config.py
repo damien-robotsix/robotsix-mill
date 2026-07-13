@@ -143,12 +143,6 @@ def test_default_audit_requests():
     assert s.audit_request_limit == 80
 
 
-def test_default_maintenance_requests():
-    """maintenance_request_limit defaults to 100."""
-    s = Settings()
-    assert s.maintenance_request_limit == 100
-
-
 def test_default_doc_requests():
     """doc_request_limit defaults to 32 (raised from 16 to prevent
     UsageLimitExceeded on feature-sized tickets)."""
@@ -276,7 +270,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("coordinator_request_limit", "MILL_PER_PASS_REQUEST_BUDGET", "42", 42),
     ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
-    ("maintenance_request_limit", "MILL_MAINTENANCE_REQUEST_LIMIT", "33", 33),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
     # --- retry / backoff ---
     # --- stage retry ---

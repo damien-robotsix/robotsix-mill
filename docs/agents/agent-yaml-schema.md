@@ -85,7 +85,7 @@ Which class of agent this is:
 
 - **`pipeline`** — an agent invoked as a stage in the ticket-processing
   pipeline (refine, implement, review, triage, document, retrospect,
-  dedup, epic_breakdown, obsolescence, auto-approve, maintenance,
+  dedup, epic_breakdown, obsolescence, auto-approve,
   scope_triage, spec-review, tester, doc_classifier,
   pipeline/meta_triage).
 - **`periodic`** — an agent run on a schedule or as a background task

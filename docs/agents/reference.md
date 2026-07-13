@@ -87,7 +87,6 @@
 
 ::: robotsix_mill.agents.list_threads
 
-::: robotsix_mill.agents.maintenance
 
 ::: robotsix_mill.agents.module_curator
 

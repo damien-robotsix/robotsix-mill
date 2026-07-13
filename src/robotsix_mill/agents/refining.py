@@ -500,23 +500,6 @@ def triage_refine(
     return result.output
 
 
-def _classify_maintenance_draft(title: str, draft: str) -> str | None:
-    """Return an action-type string if *title* / *draft* signals a
-    maintenance request, or ``None`` otherwise.
-
-    Deterministic keyword heuristic — no LLM call.  Case-insensitive.
-    Called in phase 0 of the unified triage (before workspace clone).
-    """
-    title_lower = title.lower()
-    draft_lower = draft.lower()
-
-    if "create repo" in title_lower or "create repo" in draft_lower:
-        return "create_repo"
-    if "fork repo" in title_lower or "fork repo" in draft_lower:
-        return "fork_repo"
-    return None
-
-
 def triage_auto_approve(
     *,
     settings: Settings,

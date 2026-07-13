@@ -489,5 +489,3 @@ class TestPeriodicSupervisorWorkflows:
         assert callable(worker._build_periodic_workflow_runner(llm))
         sched = SimpleNamespace(kind="schedule_only", name="trace_review")
         assert callable(worker._build_periodic_workflow_runner(sched))
-        maint = SimpleNamespace(kind="maintenance", name="langfuse_cleanup")
-        assert worker._build_periodic_workflow_runner(maint) is None

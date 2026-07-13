@@ -36,7 +36,6 @@ class _MigrateMixin(_ServiceBase):
         State.READY,
         State.BLOCKED,
         State.ERRORED,
-        State.MAINTENANCE,
     }
 
     _MIGRATABLE_EPIC_STATES: set[State] = _MIGRATABLE_STATES | {

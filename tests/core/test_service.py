@@ -185,17 +185,6 @@ def test_state_machine_edges():
     # READY → DONE: implement-stage ``no_change_needed`` bypass.
     assert can_transition(State.READY, State.DONE)
 
-    # MAINTENANCE state transitions
-    assert can_transition(State.DRAFT, State.MAINTENANCE)
-    assert can_transition(State.MAINTENANCE, State.DONE)
-    assert can_transition(State.MAINTENANCE, State.BLOCKED)
-    assert can_transition(State.MAINTENANCE, State.ERRORED)
-    assert can_transition(State.MAINTENANCE, State.AWAITING_USER_REPLY)
-    # MAINTENANCE can also redirect to DRAFT or READY when investigation
-    # reveals the ticket actually needs code implementation.
-    assert can_transition(State.MAINTENANCE, State.DRAFT)
-    assert can_transition(State.MAINTENANCE, State.READY)
-
 
 # --- BLOCKED resume path ---
 

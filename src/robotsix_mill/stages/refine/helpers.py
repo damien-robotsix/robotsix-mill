@@ -128,7 +128,6 @@ REFINE_PROGRESS_STATES = frozenset(
         State.HUMAN_MR_APPROVAL,
         State.IMPLEMENT_COMPLETE,
         State.WAITING_AUTO_MERGE,
-        State.MAINTENANCE,
         State.REBASING,
         State.FIXING_CI,
         State.ADDRESSING_REVIEW,

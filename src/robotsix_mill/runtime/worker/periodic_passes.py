@@ -847,8 +847,7 @@ class PeriodicPassesMixin(_WorkerBase):
         - ``<clone>/.robotsix-mill/periodic/<name>.yaml`` (the unified
           per-repo periodic-workflow path): presence enables the workflow;
           it partial-merges over the built-in of the same name. ``llm_agent``
-          and ``schedule_only`` kinds are scheduled here; ``maintenance`` is
-          handled by the global poll loops; brand-new ``bespoke`` workflows
+          and ``schedule_only`` kinds are scheduled here; brand-new ``bespoke`` workflows
           via this dir are deferred to the legacy bespoke path below.
         - ``<clone>/.robotsix-mill/agents/<name>.yaml`` (legacy bespoke path,
           gated on ``settings.bespoke_periodic``): brand-new repo agents.
@@ -1038,8 +1037,6 @@ class PeriodicPassesMixin(_WorkerBase):
                                 board_id,
                                 wf.name,
                             )
-                        # maintenance kind: handled by the global poll loops.
-
                     # (b) Legacy bespoke definitions (gated on the master switch).
                     if settings.bespoke_periodic:
                         for defn in load_bespoke_definitions(clone_dir):

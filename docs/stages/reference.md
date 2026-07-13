@@ -20,8 +20,6 @@
 
 ::: robotsix_mill.stages.document
 
-::: robotsix_mill.stages.maintenance
-
 ::: robotsix_mill.stages.pause
 
 ::: robotsix_mill.stages.review
