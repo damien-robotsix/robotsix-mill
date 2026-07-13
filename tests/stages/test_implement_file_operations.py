@@ -850,6 +850,7 @@ class TestEditsFormatterReverted:
         ``tests/runtime/routes/test_board_*_js.py`` for ``node``."""
         if shutil.which("ruff") is None:
             import pytest
+
             pytest.skip("ruff not on PATH — skipping formatter-reverted tests")
 
     @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff not installed")
