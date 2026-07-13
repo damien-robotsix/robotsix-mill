@@ -27,7 +27,7 @@ from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
-from .implement._shared import _is_config_only_change
+from .implement._shared import _is_config_only_change, _is_rename_only_change
 from .refine.helpers import verify_claim
 
 log = logging.getLogger("robotsix_mill.stages.review")
@@ -704,7 +704,10 @@ class ReviewStage(Stage):
         config_only: bool = (
             _is_config_only_change(repo_dir, target_branch) if in_review else False
         )
-        level: int | None = 1 if in_review and config_only else None
+        rename_only: bool = (
+            _is_rename_only_change(repo_dir, target_branch) if in_review else False
+        )
+        level: int | None = 1 if in_review and (config_only or rename_only) else None
 
         # Run the blind review agent.
         try:
