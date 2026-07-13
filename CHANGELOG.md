@@ -9,6 +9,7 @@
 - deploy compose: raise the socket-proxy's hardcoded haproxy `timeout client/server` from 10m to 4h. The 10m default severed the docker-wait stream of any sandbox run longer than 10 minutes ("error waiting for container: unexpected EOF"), the root cause of the 2026-07-10..12 intermittent sandbox outages. The tecnativa image exposes no TIMEOUT_* env knobs, so the processed config is patched via sed like the existing docker-events fix.
 - Clear implement fingerprint guard on transient failures: when a transient infrastructure error kills an implement run, `_handle_stage_error` now deletes `artifacts/implement.md` before scheduling the retry, preventing permanent "spec unchanged since last implement attempt" blocks.
 - Chat skill (`/chat-skill`): replace absolute "No deletion" rule with confirmation-gated DELETE support, including a historical rationale note preferring `closed` when a legal edge exists and reserving deletion for fingerprint-guarded blocked tickets or operator-requested removals.
+- Register `inspect_cost` tool with `ToolRegistry` so it is discoverable by prompt consistency guards and planning stages. (mill: Register the inspect_cost tool with ToolRegistry (sibling-pattern gap) (20260712T121103Z-register-the-inspect-cost-tool-with-tool-a8af) [WIP])
 - Add self-documenting `help` target to Makefile (`make` or `make help` lists all targets with descriptions via `##` comments)
 - Update stale `forge/gitlab.py` references to `forge/gitlab/core.py` in agent prompts, docs, config, and remove dead flake8 ignore entry; regenerate `mypy-baseline-test.txt`.)
 - Review stage now short-circuits rename-only PRs to the cheap level-1 model,
@@ -27,7 +28,7 @@
     detected violations as questions/flags in the spec
   * Degrades gracefully — when the fetch fails, the spec is marked "standards context unavailable"
   * Acceptance criterion: a commitizen/scm-release spec is flagged as conflicting with the
-    documented towncrier + shared auto-release pattern
+    documented towncrier + shared auto-release pattern (mill: Register the inspect_cost tool with ToolRegistry (sibling-pattern gap) (20260712T121103Z-register-the-inspect-cost-tool-with-tool-a8af) [WIP])
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
 - Merged hooks module into stages: moved ``run_prepare_hook`` to
   ``src/robotsix_mill/stages/hooks.py``, moved tests to

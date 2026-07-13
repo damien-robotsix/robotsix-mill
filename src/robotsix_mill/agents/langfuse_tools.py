@@ -320,6 +320,22 @@ def make_cost_inspect_tool(
 
         return "\n".join(lines)
 
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="inspect_cost",
+            description=(
+                "Inspect the per-trace cost breakdown for a ticket/session. "
+                "Returns a compact structured summary: session total cost, "
+                "per-trace list with name/cost/model/timestamp, and flags "
+                "discrepancies between per-trace and session totals."
+            ),
+            category="reporting",
+            parameters={"session_id": "str"},
+        )
+    )
+
     return inspect_cost
 
 
