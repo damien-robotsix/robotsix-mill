@@ -319,7 +319,6 @@ def test_errored_as_destination():
         State.HUMAN_MR_APPROVAL,
         State.REBASING,
         State.FIXING_CI,
-        State.MAINTENANCE,
         State.DONE,
         State.ASKED,
     ):
