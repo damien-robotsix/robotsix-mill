@@ -130,7 +130,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         # --- prepare hook: let the repo run custom setup after clone,
         # before any agent executes ---
         if repo_dir is not None:
-            from ...hooks import run_prepare_hook
+            from ..hooks import run_prepare_hook
 
             hook_error = run_prepare_hook(repo_dir, ticket.id, ws.dir)
             if hook_error is not None:

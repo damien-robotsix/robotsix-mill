@@ -4964,7 +4964,7 @@ def test_prepare_hook_failure_blocks_before_prerequisite_gate(
         _spy_prereq,
     )
 
-    from robotsix_mill import hooks as hooks_mod
+    from robotsix_mill.stages import hooks as hooks_mod
 
     monkeypatch.setattr(
         hooks_mod,

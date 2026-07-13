@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Merged hooks module into stages: moved ``run_prepare_hook`` to
+  ``src/robotsix_mill/stages/hooks.py``, moved tests to
+  ``tests/stages/test_hooks.py``, updated all import sites, and
+  removed the standalone hooks module from ``docs/modules.yaml``.
 - Refine stage: add doc-only gate that skips the multi-LLM refine
   analysis when a draft touches only documentation files
   (`docs/**`, `*.md`, `CHANGELOG.md`) and no code/config files
