@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from types import SimpleNamespace
 
 import pytest
+from types import SimpleNamespace
 
 from robotsix_mill.config import ConfigError, CrossRepoTarget, RepoConfig, Settings
 from robotsix_mill.core import db
@@ -841,6 +841,10 @@ def _porcelain(repo) -> str:
     ).stdout
 
 
+@pytest.mark.skipif(
+    shutil.which("ruff") is None,
+    reason="ruff format not available in this environment",
+)
 class TestEditsFormatterReverted:
     @staticmethod
     def _skip_if_no_ruff():

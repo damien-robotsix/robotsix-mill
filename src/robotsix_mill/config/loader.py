@@ -282,13 +282,7 @@ def load_repos_json(file_path: str | None = None) -> dict[str, object]:
 
 
 # ---------------------------------------------------------------------------
-#  Backward-compatible aliases
+#  Backward-compatible alias
 # ---------------------------------------------------------------------------
 
-# These names were the public API before the JSON migration. Keep them
-# as aliases so any remaining callers don't break immediately — they
-# can be cleaned up in a follow-up.
-
-load_yaml_config = load_config
-load_secrets_yaml = load_secrets_json
 load_repos_yaml = load_repos_json
