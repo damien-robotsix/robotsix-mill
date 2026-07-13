@@ -15,6 +15,14 @@
 - Update stale `pip-audit` references to `uv audit --frozen` in CONTRIBUTING.md (security-audit table row, dependency-review note, license-gate note).
 - Upgrade transitive dependency `click` from 8.1.8 to 8.4.2 to resolve PYSEC-2026-2132 advisory
 - Refine stage: add deterministic pre-check for documentation-only drafts. When every file path in the draft is under ``docs/`` or has a ``.md`` extension (and no code files are touched), the triage+refine LLM calls are skipped entirely — the ticket routes directly to implement with a "Documentation-only change" verdict. Saves ~$0.0025 and ~40s latency per doc-only ticket.
+- **Refine agent** now receives robotsix-standards content as read-only context during spec drafting
+  * Pre-fetch of key standards pages (repo-baseline, README) with 72h file-based cache
+  * Injected before the title/draft sections in the user prompt
+  * The refine agent runs an internal conformance check before finalization and surfaces
+    detected violations as questions/flags in the spec
+  * Degrades gracefully — when the fetch fails, the spec is marked "standards context unavailable"
+  * Acceptance criterion: a commitizen/scm-release spec is flagged as conflicting with the
+    documented towncrier + shared auto-release pattern
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
 - Merged hooks module into stages: moved ``run_prepare_hook`` to
   ``src/robotsix_mill/stages/hooks.py``, moved tests to

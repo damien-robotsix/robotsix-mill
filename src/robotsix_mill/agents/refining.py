@@ -857,6 +857,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     refine_model: str | None = None,
     request_limit_override: int | None = None,
     triage_findings: str | None = None,
+    standards_context: str = "",
 ) -> RefineResult:
     """Return a structured ``RefineResult``. When ``repo_dir`` is given
     the agent grounds the spec in that local clone via explore/
@@ -874,6 +875,12 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
     ``pydantic_ai.BinaryContent`` block so the agent can *see* it. On
     the non-vision default (DeepSeek) path the images are not attached;
     a short text note tells the agent they exist instead.
+
+    ``standards_context`` — pre-fetched robotsix-standards content
+    injected as read-only context so the agent can cross-check its
+    spec against fleet-wide conventions (versioning/release, repo
+    lifecycle, API patterns).  When empty (fetch failure) the agent is
+    told to note "standards context unavailable" in the spec.
 
     Raises ``RuntimeError`` if no OpenRouter key is configured.
 
@@ -1110,6 +1117,20 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
             + "\n\nYou may also call `query_app_logs` with keywords drawn "
             "from the ticket and a recency window (`since_hours`) to pull "
             "relevant log excerpts instead of reading whole files.\n\n"
+        )
+    if standards_context:
+        user_prompt += (
+            "## robotsix-standards (read-only reference)\n\n"
+            "The following is the current robotsix-standards content "
+            "relevant to this repo's domain.  Cross-check your spec "
+            "against it before finalizing (see system-prompt "
+            "instructions for conformance checking).\n\n" + standards_context + "\n\n"
+        )
+    else:
+        user_prompt += (
+            "## robotsix-standards\n\n"
+            "**Standards context unavailable** — the fetch failed.  "
+            "Note this in the spec.\n\n"
         )
     if _re_refine_epic:
         user_prompt += f"{_re_refine_epic}\n\n"
