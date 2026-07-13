@@ -842,8 +842,20 @@ def _porcelain(repo) -> str:
 
 
 class TestEditsFormatterReverted:
+    @staticmethod
+    def _skip_if_no_ruff():
+        """Skip these tests when ``ruff`` is not on PATH — the formatter
+        no-op detection can't work without it, and the test env doesn't
+        always install dev deps.  Matches the pattern in
+        ``tests/runtime/routes/test_board_*_js.py`` for ``node``."""
+        if shutil.which("ruff") is None:
+            import pytest
+
+            pytest.skip("ruff not on PATH — skipping formatter-reverted tests")
+
     @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff not installed")
     def test_formatter_reverted_edit_is_noop_true(self, tmp_path):
+        self._skip_if_no_ruff()
         """The c356 case: parenthesising ``except A, B:`` is reverted by
         ruff format on a 3.14 target → no net change → True (safe no-op)."""
         repo = _init_git_repo(
@@ -866,6 +878,7 @@ class TestEditsFormatterReverted:
         assert _porcelain(repo) == ""
 
     def test_surviving_change_is_lost_work_false(self, tmp_path):
+        self._skip_if_no_ruff()
         """A real semantic edit that ruff keeps → diff survives → False
         (work-loss case: must BLOCK)."""
         repo = _init_git_repo(
@@ -887,6 +900,7 @@ class TestEditsFormatterReverted:
         assert _porcelain(repo) == ""
 
     def test_unreplayable_kind_fails_closed_none(self, tmp_path):
+        self._skip_if_no_ruff()
         repo = _init_git_repo(
             tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
         )
@@ -895,6 +909,7 @@ class TestEditsFormatterReverted:
         assert _porcelain(repo) == ""
 
     def test_path_outside_clone_fails_closed_none(self, tmp_path):
+        self._skip_if_no_ruff()
         repo = _init_git_repo(
             tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
         )
@@ -909,6 +924,7 @@ class TestEditsFormatterReverted:
         assert FileOperationsMixin._edits_formatter_reverted(repo, msgs) is None
 
     def test_no_replayable_edits_fails_closed_none(self, tmp_path):
+        self._skip_if_no_ruff()
         repo = _init_git_repo(
             tmp_path, {"pyproject.toml": _PY314_PYPROJECT, "m.py": _CLEAN_PEP758}
         )
