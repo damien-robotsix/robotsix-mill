@@ -87,6 +87,9 @@ class State(StrEnum):
     EPIC_CLOSED = "epic_closed"  # epic closed (terminal)
 
 
+#: Terminal/resolved states shared across dedup and poll sites.
+DONE_OR_CLOSED: frozenset[State] = frozenset({State.CLOSED, State.DONE})
+
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {

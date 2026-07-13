@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from ...config import RepoConfig, get_repos_config, target_branch_for
 from ...core.dedup import _ci_draft_fingerprint, find_prior_matching_ticket
 from ...core.models import Comment, SourceKind, Ticket
+from ...core.states import State
 from ..run_registry import RunRegistry
 
 if TYPE_CHECKING:
@@ -477,7 +478,7 @@ class PollLoopsMixin(_WorkerBase):
         for t in existing:
             if t.source != SourceKind.CI:
                 continue
-            if t.state.value in ("closed", "done"):
+            if t.state.value in (State.CLOSED.value, State.DONE.value):
                 continue
             body_text = service.workspace(t).read_description() or ""
             if wf_marker in body_text and branch_marker in body_text:

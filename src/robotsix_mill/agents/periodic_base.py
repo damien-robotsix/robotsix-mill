@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
+from ..core.states import State
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def _count_active_proposals(recent_proposals: str) -> int:
         # Lines look like:  [state_value] ticket_id | title
         if line.startswith("[") and "] " in line:
             state = line[1:].split("]", 1)[0].strip()
-            if state not in ("done", "closed"):
+            if state not in (State.DONE.value, State.CLOSED.value):
                 active += 1
     return active
 

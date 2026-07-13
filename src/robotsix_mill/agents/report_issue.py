@@ -19,13 +19,9 @@ from __future__ import annotations
 from ..config import Settings
 from ..core.models import SourceKind
 from ..core.service import TicketService
+from ..core.states import DONE_OR_CLOSED
 from ..core.text_noop import is_completion_announcement, is_noop_report
 from ..runtime import tracing as _tracing
-
-# Tickets in these states are "done with"; an identical title may be
-# filed again (e.g. a regression of a previously-fixed issue). Any
-# other state means it's still pending — don't duplicate it.
-_DONE_WITH = {"closed", "done"}
 
 _CATEGORIES = (
     "missing-tool",
@@ -58,7 +54,7 @@ def _check_duplicate(title: str, service: TicketService) -> str | None:
     """Return a duplicate notice if *title* matches a non-terminal ticket."""
     norm = title.casefold()
     for t in service.list():
-        if t.title.strip().casefold() == norm and t.state.value not in _DONE_WITH:
+        if t.title.strip().casefold() == norm and t.state not in DONE_OR_CLOSED:
             return (
                 f"report_issue: already filed as {t.id} "
                 f"(state={t.state.value}) — not duplicating"

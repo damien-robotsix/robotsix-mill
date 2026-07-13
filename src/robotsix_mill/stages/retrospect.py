@@ -20,7 +20,7 @@ from ..agents.retrospecting import MemoryEdit, RetrospectResult
 from ..config import Settings, get_repo_config
 from ..config import ConfigError
 from ..core.models import SourceKind, Ticket
-from ..core.states import State
+from ..core.states import DONE_OR_CLOSED, State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
@@ -30,11 +30,6 @@ from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
 
-
-# States that count as "done with" for dedup purposes — ticket titles
-# that match an existing ticket in one of these states are considered
-# already resolved/filed and won't block re-filing.
-_DONE_WITH = {"closed", "done"}
 
 # Word-to-number mapping for parsing count claims like "Eleven tickets".
 _WORD_TO_NUM: dict[str, int] = {
@@ -374,7 +369,7 @@ class RetrospectStage(Stage):
         # against mill's own backlog.
         norm = follow_up_title.casefold()
         for t in target_service.list():
-            if t.title.strip().casefold() == norm and t.state.value not in _DONE_WITH:
+            if t.title.strip().casefold() == norm and t.state not in DONE_OR_CLOSED:
                 log.info(
                     "%s: retrospect follow-up already filed as %s (state=%s) — not duplicating",
                     ticket.id,
@@ -524,7 +519,7 @@ class RetrospectStage(Stage):
                     t
                     for t in target_service.list()
                     if t.title.strip().casefold() == norm
-                    and t.state.value not in _DONE_WITH
+                    and t.state not in DONE_OR_CLOSED
                 ),
                 None,
             )
