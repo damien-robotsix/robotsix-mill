@@ -187,7 +187,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
     },
 }
 
-
 def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
     """Dynamically import and run a subcommand's runner, then print results."""
     entry = _RUNNERS[cmd]
