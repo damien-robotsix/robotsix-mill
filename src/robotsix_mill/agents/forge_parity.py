@@ -1,7 +1,7 @@
 """The forge-parity agent: detects drift between forge adapter implementations.
 
 Reads ``forge/base.py`` to enumerate the ``Forge`` ABC's public methods,
-compares coverage across ``forge/github.py`` and ``forge/gitlab.py``,
+compares coverage across ``forge/github.py`` and ``forge/gitlab/core.py``,
 flags single-adapter overrides and divergent implementations, and files
 at most 3 draft tickets per pass.
 
@@ -28,7 +28,7 @@ run_forge_parity_agent = make_agent_runner(
     definition_name="forge_parity",
     prompt_tail=(
         "Read forge/base.py to enumerate the Forge ABC methods, then "
-        "compare forge/github.py and forge/gitlab.py for coverage and "
+        "compare forge/github.py and forge/gitlab/core.py for coverage and "
         "divergence. Use detect_duplication to measure structural "
         "similarity for methods overridden by both adapters. File at "
         "most 3 draft tickets for confirmed drift."

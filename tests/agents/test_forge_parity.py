@@ -149,7 +149,7 @@ def test_run_forge_parity_agent_prompt_tail(settings, fake_periodic):
     run_forge_parity_agent(settings=settings)
     assert fake_periodic["kwargs"]["prompt_tail"] == (
         "Read forge/base.py to enumerate the Forge ABC methods, then "
-        "compare forge/github.py and forge/gitlab.py for coverage and "
+        "compare forge/github.py and forge/gitlab/core.py for coverage and "
         "divergence. Use detect_duplication to measure structural "
         "similarity for methods overridden by both adapters. File at "
         "most 3 draft tickets for confirmed drift."

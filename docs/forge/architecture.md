@@ -222,7 +222,7 @@ and reused; a repo with real content raises a `RuntimeError`.
 
 ## 3. GitLab implementation
 
-**Module:** `src/robotsix_mill/forge/gitlab.py`  
+**Module:** `src/robotsix_mill/forge/gitlab/core.py`  
 **Class:** `GitLabForge(Forge)`
 
 ### 3.1 Remote URL → project path
