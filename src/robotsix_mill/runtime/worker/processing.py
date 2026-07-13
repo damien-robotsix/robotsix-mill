@@ -134,6 +134,24 @@ async def _handle_stage_error(
         "retry.reason", f"{classification}: {type(error).__name__}: {error!s}"[:300]
     )
     if classification == "transient":
+        # --- Clear stale implement fingerprint guard ---
+        # When a transient infrastructure failure kills an implement run,
+        # _finalize(ok=False) has already written the spec-fingerprint
+        # guard to artifacts/implement.md. Delete it so the retry doesn't
+        # hard-block on "spec unchanged since last implement attempt".
+        if stage_name == "implement":
+            try:
+                ticket_obj = ctx.service.get(ticket_id)
+                if ticket_obj is not None:
+                    implement_md = (
+                        ctx.service.workspace(ticket_obj).artifacts_dir / "implement.md"
+                    )
+                    implement_md.unlink(missing_ok=True)
+            except Exception:
+                log.exception(
+                    "%s: failed to clear implement fingerprint guard", ticket_id
+                )
+
         ticket = ctx.service.get(ticket_id)
         if ticket is None:
             return

@@ -1016,6 +1016,83 @@ async def test_transient_exhausted_blocks(ctx, service, monkeypatch):
     assert "ReadTimeout" in note
 
 
+async def test_handle_stage_error_clears_implement_fingerprint_on_transient(
+    ctx, service, monkeypatch
+):
+    """When _handle_stage_error classifies an error as transient and the
+    failed stage is 'implement', it must delete artifacts/implement.md
+    so the retry doesn't hard-block on 'spec unchanged since last
+    implement attempt'."""
+    import httpx
+
+    from robotsix_mill.runtime.worker.processing import _handle_stage_error
+
+    t = service.create("implement-fingerprint-test")
+    ws = ctx.service.workspace(t)
+    implement_md = ws.artifacts_dir / "implement.md"
+    implement_md.write_text("spec-fingerprint-guard\n")
+    assert implement_md.exists()
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.classify_stage_error",
+        lambda exc: "transient",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.is_network_down_error",
+        lambda exc: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.stage_retry.compute_retry_delay",
+        lambda attempt, base, cap: 0.001,
+    )
+
+    await _handle_stage_error(
+        t.id, ctx, "implement", httpx.ConnectError("connection refused"), None
+    )
+
+    assert not implement_md.exists(), (
+        "implement.md must be deleted when a transient error kills an implement run"
+    )
+
+
+async def test_handle_stage_error_preserves_refine_artifacts_on_transient(
+    ctx, service, monkeypatch
+):
+    """When _handle_stage_error classifies a transient error on a
+    non-implement stage (refine), it must NOT delete artifacts —
+    the fingerprint guard cleanup is scoped to the implement stage only."""
+    import httpx
+
+    from robotsix_mill.runtime.worker.processing import _handle_stage_error
+
+    t = service.create("refine-transient-test")
+    ws = ctx.service.workspace(t)
+    refine_artifact = ws.artifacts_dir / "some-artifact.md"
+    refine_artifact.write_text("refine data\n")
+    assert refine_artifact.exists()
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.classify_stage_error",
+        lambda exc: "transient",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.transient_errors.is_network_down_error",
+        lambda exc: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.stage_retry.compute_retry_delay",
+        lambda attempt, base, cap: 0.001,
+    )
+
+    await _handle_stage_error(
+        t.id, ctx, "refine", httpx.ConnectError("connection refused"), None
+    )
+
+    assert refine_artifact.exists(), (
+        "non-implement artifacts must NOT be deleted on transient error"
+    )
+
+
 # --- periodic pass root span tests -------------------------------------
 
 
