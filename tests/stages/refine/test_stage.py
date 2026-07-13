@@ -2911,7 +2911,7 @@ def test_prepare_hook_failure_blocks_before_freshness_gate(
     # Ensure the fake repo dir exists.
     (tmp_path / "repo").mkdir(exist_ok=True)
 
-    from robotsix_mill import hooks as hooks_mod
+    from robotsix_mill.stages import hooks as hooks_mod
 
     monkeypatch.setattr(
         hooks_mod,

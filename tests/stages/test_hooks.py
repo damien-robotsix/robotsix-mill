@@ -1,11 +1,11 @@
-"""Tests for ``src/robotsix_mill/hooks/__init__.py``."""
+"""Tests for ``src/robotsix_mill/stages/hooks.py``."""
 
 import stat
 from pathlib import Path
 
 import pytest
 
-from robotsix_mill.hooks import run_prepare_hook
+from robotsix_mill.stages.hooks import run_prepare_hook
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ def test_script_timeout_returns_error(tmp_path: Path):
     # Use a tiny script that won't finish within the real test timeout
     # but we can't actually wait 300 s.  Monkeypatch the timeout to 0.1 s.
     _write_script(repo_dir, "#!/bin/sh\nsleep 10\n")
-    import robotsix_mill.hooks as hooks_mod
+    import robotsix_mill.stages.hooks as hooks_mod
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(hooks_mod, "TIMEOUT_SECONDS", 1)

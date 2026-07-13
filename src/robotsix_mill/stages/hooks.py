@@ -20,7 +20,7 @@ import stat
 import subprocess
 from pathlib import Path
 
-log = logging.getLogger("robotsix_mill.hooks")
+log = logging.getLogger("robotsix_mill.stages.hooks")
 
 PREPARE_SCRIPT = ".robotsix-mill/prepare"
 TIMEOUT_SECONDS = 300
