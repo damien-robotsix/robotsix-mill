@@ -65,6 +65,24 @@ def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
     return mergeable_state in (None, "clean", "unstable")
 
 
+def _ci_green_but_blocked(conclusion: str | None, pr: dict[str, Any]) -> bool:
+    """Return True when CI is green but ``mergeable_state`` is ``"blocked"``.
+
+    This is the merge-queue / branch-protection signal: all required checks
+    passed (``conclusion == "success"``) but the forge still refuses direct
+    merge — typically because a merge queue is required.  Unlike the
+    transient ``"blocked"`` that appears while checks are settling (which
+    ``_ci_truly_green`` correctly rejects), this combination means CI is
+    done and the block is structural.
+
+    Callers should treat this as "green enough to proceed" — the merge
+    attempt itself may need to enqueue rather than directly merge.
+    """
+    if conclusion != "success":
+        return False
+    return pr.get("mergeable_state") == "blocked"
+
+
 def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
     """Read ``pr_urls.json``.
 

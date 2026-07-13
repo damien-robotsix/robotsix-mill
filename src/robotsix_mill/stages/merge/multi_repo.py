@@ -19,6 +19,7 @@ from ...forge import get_forge
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
+    _ci_green_but_blocked,
     _ci_truly_green,
     _read_counter,
     _repo_config_for_entry,
@@ -140,7 +141,9 @@ class MultiRepoMixin(_MergeStageBase):
             conclusion = (ci or {}).get("conclusion")
             if conclusion == "failure":
                 statuses.append({**base, "status": "failing_ci"})
-            elif _ci_truly_green(conclusion, pr):
+            elif _ci_truly_green(conclusion, pr) or _ci_green_but_blocked(
+                conclusion, pr
+            ):
                 # Reset per-repo ci-fix cycle counter when CI turns green.
                 cycle_path = (
                     ctx.service.workspace(ticket).artifacts_dir

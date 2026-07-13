@@ -22,6 +22,7 @@ from ._shared import (
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
+    _ci_green_but_blocked,
     _ci_truly_green,
     _duplicate_changelog_fragments,
     _is_pr_check_run,
@@ -378,6 +379,23 @@ class CIPollMixin(_MergeStageBase):
                 "CI checks green and PR is mergeable — awaiting human merge approval",
             )
 
+        if _ci_green_but_blocked(conclusion, pr):
+            # CI is green but the forge reports mergeable_state="blocked" —
+            # this is the merge-queue signal: all required checks passed but
+            # a merge queue (or other structural branch protection) prevents
+            # direct merge.  Promote to HUMAN_MR_APPROVAL so the auto-merge
+            # path can attempt to enqueue.
+            log.info(
+                "%s: CI green but mergeable_state=blocked (likely merge queue) "
+                "→ HUMAN_MR_APPROVAL",
+                ticket.id,
+            )
+            return Outcome(
+                State.HUMAN_MR_APPROVAL,
+                "CI checks green but PR is blocked (merge queue?) — "
+                "awaiting human merge approval or auto-merge enqueue",
+            )
+
         # pending, None, or a premature success (conclusion success but
         # mergeable_state not yet promotable) — keep waiting. Log the precise
         # blocking reason so future stalls are diagnosable.
@@ -545,9 +563,14 @@ class CIPollMixin(_MergeStageBase):
         # success, pending, or None — evaluate auto-merge eligibility.
         eligible, eligibility_reason = self._auto_merge_eligible(ticket, ctx)
 
-        if _ci_truly_green(conclusion, pr):
+        ci_green = _ci_truly_green(conclusion, pr)
+        ci_blocked = _ci_green_but_blocked(conclusion, pr)
+        if ci_green or ci_blocked:
             if eligible:
-                # CI green + eligible → auto-merge now.
+                # CI green (or green-but-merge-queue-blocked) + eligible →
+                # auto-merge now.  The forge layer handles merge-queue
+                # enqueue transparently when needed.
+                merge_label = "auto-merged" if ci_green else "auto-merge (enqueue)"
                 feature_tip_sha = pr.get("sha", "")
                 result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
                     source_branch=branch
@@ -559,35 +582,50 @@ class CIPollMixin(_MergeStageBase):
                         repo_dir, feature_tip_sha, ticket.id, target
                     ):
                         log.warning(
-                            "%s: auto-merge reported success but commit %s is not an "
+                            "%s: %s reported success but commit %s is not an "
                             "ancestor of origin/%s — falling back to HUMAN_MR_APPROVAL",
                             ticket.id,
+                            merge_label,
                             feature_tip_sha[:8] if feature_tip_sha else "(none)",
                             target,
                         )
                         return Outcome(
                             State.HUMAN_MR_APPROVAL,
-                            "auto-merge reported success but merge not confirmed on origin/%s"
-                            % target,
+                            "%s reported success but merge not confirmed on origin/%s"
+                            % (merge_label, target),
                         )
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"
                     ).write_text(
-                        f"auto-merged: {pr.get('url', '')}\n",
+                        f"{merge_label}: {pr.get('url', '')}\n",
                         encoding="utf-8",
                     )
                     self._cleanup_branch_on_done(ticket, ctx, branch)
-                    log.info("%s: auto-merged → done", ticket.id)
+                    log.info("%s: %s → done", ticket.id, merge_label)
                     return Outcome(
                         State.DONE,
-                        f"auto-merged: {pr.get('url', '')}",
+                        f"{merge_label}: {pr.get('url', '')}",
+                    )
+                if result.get("enqueued"):
+                    # Merge-queue enqueue succeeded — poll until the queue
+                    # processes the PR.  Don't treat this as a failure.
+                    log.info(
+                        "%s: %s enqueued: %s — polling via WAITING_AUTO_MERGE",
+                        ticket.id,
+                        merge_label,
+                        result.get("reason", ""),
+                    )
+                    return Outcome(
+                        State.WAITING_AUTO_MERGE,
+                        f"enqueued: {result.get('reason', '')}",
                     )
                 # Forge rejected the merge.
                 reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
                 self._maybe_comment(ticket, ctx, reason_text)
                 log.warning(
-                    "%s: auto-merge failed: %s — falling back to human",
+                    "%s: %s failed: %s — falling back to human",
                     ticket.id,
+                    merge_label,
                     result.get("reason", "unknown"),
                 )
                 return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
@@ -721,13 +759,17 @@ class CIPollMixin(_MergeStageBase):
             self._maybe_comment(ticket, ctx, "CI failed — falling back to gate check")
             return Outcome(State.IMPLEMENT_COMPLETE, "CI failed; gates no longer pass")
 
-        if _ci_truly_green(conclusion, pr):
-            # CI is green AND the forge's combined view is clean — attempt
-            # auto-merge. Gating on _ci_truly_green (not bare conclusion)
-            # prevents merging on a premature green: after a force-push the
-            # fast checks can report success before the slow required gate
-            # starts, with mergeable_state still "blocked"/"behind" — merging
-            # then would redden the target branch.
+        ci_green = _ci_truly_green(conclusion, pr)
+        ci_blocked = _ci_green_but_blocked(conclusion, pr)
+        if ci_green or ci_blocked:
+            # CI is green (or green-but-merge-queue-blocked) — attempt
+            # auto-merge. Gating on _ci_truly_green / _ci_green_but_blocked
+            # (not bare conclusion) prevents merging on a premature green:
+            # after a force-push the fast checks can report success before
+            # the slow required gate starts, with mergeable_state still
+            # "blocked"/"behind" — merging then would redden the target
+            # branch.
+            merge_label = "auto-merged" if ci_green else "auto-merge (enqueue)"
             feature_tip_sha = pr.get("sha", "")  # capture before merge
             result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
                 source_branch=branch
@@ -739,32 +781,48 @@ class CIPollMixin(_MergeStageBase):
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"
                     ).write_text(
-                        f"auto-merged: {pr.get('url', '')}\n",
+                        f"{merge_label}: {pr.get('url', '')}\n",
                         encoding="utf-8",
                     )
                     self._cleanup_branch_on_done(ticket, ctx, branch)
-                    log.info("%s: auto-merged → done", ticket.id)
+                    log.info("%s: %s → done", ticket.id, merge_label)
                     return Outcome(
                         State.DONE,
-                        f"auto-merged: {pr.get('url', '')}",
+                        f"{merge_label}: {pr.get('url', '')}",
                     )
                 log.warning(
-                    "%s: auto-merge reported success but commit %s is not an "
+                    "%s: %s reported success but commit %s is not an "
                     "ancestor of origin/%s — falling back to IMPLEMENT_COMPLETE",
                     ticket.id,
+                    merge_label,
                     feature_tip_sha[:8] if feature_tip_sha else "(none)",
                     target,
                 )
                 return Outcome(
                     State.IMPLEMENT_COMPLETE,
-                    f"auto-merge reported success but merge not confirmed on origin/{target}: {pr.get('url', '')}",
+                    f"{merge_label} reported success but merge not confirmed on "
+                    f"origin/{target}: {pr.get('url', '')}",
+                )
+            if result.get("enqueued"):
+                # Merge-queue enqueue succeeded — poll until the queue
+                # processes the PR.  Don't treat this as a failure.
+                log.info(
+                    "%s: %s enqueued: %s — polling via WAITING_AUTO_MERGE",
+                    ticket.id,
+                    merge_label,
+                    result.get("reason", ""),
+                )
+                return Outcome(
+                    State.WAITING_AUTO_MERGE,
+                    f"enqueued: {result.get('reason', '')}",
                 )
             # Forge rejected the merge.
             reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
             self._maybe_comment(ticket, ctx, reason_text)
             log.warning(
-                "%s: auto-merge failed: %s — falling back to human",
+                "%s: %s failed: %s — falling back to human",
                 ticket.id,
+                merge_label,
                 result.get("reason", "unknown"),
             )
             return Outcome(State.HUMAN_MR_APPROVAL, reason_text)

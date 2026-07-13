@@ -632,15 +632,34 @@ def test_ci_truly_green_helper():
     assert _ci_truly_green(None, {}) is False
 
 
-def test_premature_green_does_not_promote(tmp_path, monkeypatch):
-    """conclusion=success but mergeable_state=blocked must NOT promote to
-    HUMAN_MR_APPROVAL — it re-polls from IMPLEMENT_COMPLETE instead."""
+def test_ci_green_but_blocked_helper():
+    """_ci_green_but_blocked returns True only for success + 'blocked'."""
+    from robotsix_mill.stages.merge._shared import _ci_green_but_blocked
+
+    # Exactly "blocked" → True.
+    assert _ci_green_but_blocked("success", {"mergeable_state": "blocked"}) is True
+    # Other states → False.
+    assert _ci_green_but_blocked("success", {"mergeable_state": "clean"}) is False
+    assert _ci_green_but_blocked("success", {"mergeable_state": "unstable"}) is False
+    assert _ci_green_but_blocked("success", {"mergeable_state": "behind"}) is False
+    assert _ci_green_but_blocked("success", {"mergeable_state": "unknown"}) is False
+    assert _ci_green_but_blocked("success", {"mergeable_state": None}) is False
+    assert _ci_green_but_blocked("success", {}) is False
+    # Non-success conclusion → False.
+    assert _ci_green_but_blocked("failure", {"mergeable_state": "blocked"}) is False
+    assert _ci_green_but_blocked("pending", {"mergeable_state": "blocked"}) is False
+    assert _ci_green_but_blocked(None, {"mergeable_state": "blocked"}) is False
+
+
+def test_blocked_green_promotes_to_human_approval(tmp_path, monkeypatch):
+    """mergeable_state=blocked + conclusion=success promotes to
+    HUMAN_MR_APPROVAL — the merge-queue / branch-protection signal."""
     ctx = _gh(tmp_path)
     _ci_premature_green(monkeypatch, mergeable_state="blocked")
 
     t = _implement_complete(ctx)
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
 def test_clean_green_still_promotes(tmp_path, monkeypatch):
@@ -689,9 +708,38 @@ def test_unstable_green_promotes(tmp_path, monkeypatch):
 
 
 def test_blocked_behind_unknown_still_wait(tmp_path, monkeypatch):
-    """mergeable_state in (blocked, behind, unknown) with success conclusion
-    still waits — premature-green guard remains intact."""
-    for ms in ("blocked", "behind", "unknown"):
+    """mergeable_state=blocked with green CI promotes (merge-queue signal);
+    behind/unknown still wait (transient)."""
+    # "blocked" + success → promotes to HUMAN_MR_APPROVAL (merge-queue path).
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "blocked",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+        },
+    )
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL, (
+        "blocked + green CI should promote (merge-queue signal)"
+    )
+
+    # "behind" and "unknown" still wait — transient states.
+    for ms in ("behind", "unknown"):
         ctx = _gh(tmp_path)
         monkeypatch.setattr(
             github.GitHubForge,
@@ -713,7 +761,6 @@ def test_blocked_behind_unknown_still_wait(tmp_path, monkeypatch):
                 "pending": [],
             },
         )
-
         t = _implement_complete(ctx)
         out = MergeStage().run(t, ctx)
         assert out.next_state is State.IMPLEMENT_COMPLETE, f"state={ms} should wait"
@@ -1321,3 +1368,154 @@ def test_tracker_ticket_merged_pr_blocks(tmp_path, monkeypatch):
     outcome = MergeStage()._poll_implement_complete(t, ctx)
     assert outcome.next_state is State.BLOCKED
     assert "merged" in outcome.note.lower()
+
+
+# === Merge-queue enqueue polling ==========================================
+
+
+def _human_mr_approval(ctx):
+    """Create a ticket in HUMAN_MR_APPROVAL state."""
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def _waiting_auto_merge(ctx):
+    """Create a ticket in WAITING_AUTO_MERGE state."""
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.WAITING_AUTO_MERGE,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def _write_review_artifact(ctx, ticket):
+    """Write a review.md with auto_merge_eligible: true."""
+    art_dir = ctx.service.workspace(ticket).artifacts_dir
+    art_dir.mkdir(parents=True, exist_ok=True)
+    (art_dir / "review.md").write_text(
+        "verdict: APPROVE\nauto_merge_eligible: true\n", encoding="utf-8"
+    )
+
+
+def _ci_green_blocked(monkeypatch):
+    """Patch forge: open PR, green CI, mergeable_state='blocked'."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://gh/o/r/pull/1",
+            "mergeable": True,
+            "mergeable_state": "blocked",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+        },
+    )
+
+
+def test_enqueued_result_transitions_to_waiting_auto_merge(tmp_path, monkeypatch):
+    """When merge_pr returns enqueued (not merged, not failed), transition
+    to WAITING_AUTO_MERGE instead of HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    _ci_green_blocked(monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "reason": "enqueued: added to merge queue",
+            "enqueued": True,
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert "enqueued" in out.note.lower()
+
+
+def test_enqueued_result_in_waiting_auto_merge_keeps_polling(tmp_path, monkeypatch):
+    """When merge_pr returns enqueued from WAITING_AUTO_MERGE, keep polling
+    instead of falling back to human."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    _ci_green_blocked(monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "reason": "enqueued: still in merge queue",
+            "enqueued": True,
+        },
+    )
+
+    t = _waiting_auto_merge(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert "enqueued" in out.note.lower()
+
+
+def test_enqueued_result_eventually_merges(tmp_path, monkeypatch):
+    """When merge_pr returns merged after being enqueued, transition to DONE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    _ci_green_blocked(monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {
+            "merged": True,
+            "reason": "merged via queue",
+        },
+    )
+
+    t = _waiting_auto_merge(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+
+
+def test_merge_failure_without_enqueued_still_falls_back(tmp_path, monkeypatch):
+    """When merge_pr returns a genuine failure (no enqueued key), fall back
+    to HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    _ci_green_blocked(monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "reason": "branch protection blocks merge",
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert "forge merge failed" in out.note.lower()

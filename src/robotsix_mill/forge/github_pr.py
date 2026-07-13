@@ -487,8 +487,26 @@ class GitHubForgePRMixin:
                 json={"merge_method": "squash"},
             )
             if r.status_code == 200:
-                return {"merged": True, "reason": "merged"}
+                body = r.json()
+                # When merge queue is enabled, GitHub may return 200 with
+                # merged=False and a message indicating the PR was enqueued.
+                if body.get("merged"):
+                    return {"merged": True, "reason": "merged"}
+                msg = body.get("message", "")
+                if "queue" in msg.lower() or "enqueue" in msg.lower():
+                    return {
+                        "merged": False,
+                        "reason": f"enqueued: {msg[:200]}",
+                        "enqueued": True,
+                    }
+                return {"merged": False, "reason": f"unexpected 200: {msg[:200]}"}
             if r.status_code == 405:
+                msg = (r.json().get("message", "") if r.text else "").lower()
+                # Merge queue required — try enqueueing instead.
+                if "merge queue" in msg or "merge queue" in (r.text or "").lower():
+                    return self._enqueue_pr(
+                        owner=owner, repo=repo, pull_number=pull_number
+                    )
                 return {
                     "merged": False,
                     "reason": "merge not allowed (branch protection?)",
@@ -498,6 +516,44 @@ class GitHubForgePRMixin:
             return {
                 "merged": False,
                 "reason": f"HTTP {r.status_code}: {r.text[:200]}",
+            }
+        except Exception as e:
+            return {"merged": False, "reason": str(e)}
+
+    def _enqueue_pr(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> dict:
+        """Add a PR to the merge queue when direct merge is blocked."""
+        try:
+            # The merge endpoint with the same parameters triggers enqueue
+            # when a merge queue is configured.  Some GitHub versions accept
+            # the standard merge call; others need explicit queue parameters.
+            r = self._http.put(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
+                json={"merge_method": "squash"},
+            )
+            if r.status_code == 200:
+                body = r.json()
+                if body.get("merged"):
+                    return {"merged": True, "reason": "merged via queue"}
+                msg = body.get("message", "")
+                return {
+                    "merged": False,
+                    "reason": f"enqueued: {msg[:200]}",
+                    "enqueued": True,
+                }
+            if r.status_code == 405:
+                return {
+                    "merged": False,
+                    "reason": "merge queue enqueue not allowed (branch protection?)",
+                }
+            return {
+                "merged": False,
+                "reason": f"enqueue HTTP {r.status_code}: {r.text[:200]}",
             }
         except Exception as e:
             return {"merged": False, "reason": str(e)}

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- **Merge stage**: recognise `mergeable_state=blocked` with all-CI-green as a merge-queue signal rather than a transient state, allowing promotion from `IMPLEMENT_COMPLETE` to `HUMAN_MR_APPROVAL` and auto-merge enqueue attempts. The forge layer's `_merge_pr` now detects merge-queue 405 responses and retries with enqueue parameters. Enqueued-but-not-yet-merged PRs transition to `WAITING_AUTO_MERGE` for polling instead of falling back to human approval.
 - Fix stale ``context.config`` reference in ``alembic/env.py`` — the
   module-level ``config = context.config`` binding could become stale
   when Alembic cached ``env.py`` across multiple migrations, causing
