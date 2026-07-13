@@ -26,6 +26,7 @@ import sys
 import httpx
 
 from ..config import Settings
+from ..config.repos import RepoConfig
 from ..core.states import State
 
 
@@ -212,85 +213,22 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 max_traces=settings.langfuse_cleanup_max_traces,
             )
         elif cmd == "member-sync":
-            from ..runtime.tracing import make_session_id
-            from ..config import get_repos_config
-
-            session_id = make_session_id(cmd)
-            repos = get_repos_config()
-            repo_id = getattr(args, "repo_id", None)
-            if repo_id is None:
-                if len(repos.repos) == 1:
-                    rc = next(iter(repos.repos.values()))
-                else:
-                    print(
-                        "member-sync: --repo-id is required (multiple repos "
-                        f"configured). Known repos: {sorted(repos.repos.keys())}",
-                        file=sys.stderr,
-                    )
-                    return 2
-            elif repo_id not in repos.repos:
-                print(
-                    f"member-sync: unknown repo '{repo_id}'. "
-                    f"Known repos: {sorted(repos.repos.keys())}",
-                    file=sys.stderr,
-                )
-                return 2
-            else:
-                rc = repos.repos[repo_id]
+            resolved = _resolve_repo_config(args, cmd)
+            if isinstance(resolved, int):
+                return resolved
+            rc, session_id = resolved
             result = func(session_id=session_id, repo_config=rc)
         elif cmd == "trace-review":
-            from ..runtime.tracing import make_session_id
-            from ..config import get_repos_config
-
-            session_id = make_session_id(cmd)
-            repos = get_repos_config()
-            repo_id = getattr(args, "repo_id", None)
-            if repo_id is None:
-                if len(repos.repos) == 1:
-                    rc = next(iter(repos.repos.values()))
-                else:
-                    print(
-                        "trace-review: --repo-id is required (multiple repos "
-                        f"configured). Known repos: {sorted(repos.repos.keys())}",
-                        file=sys.stderr,
-                    )
-                    return 2
-            elif repo_id not in repos.repos:
-                print(
-                    f"trace-review: unknown repo '{repo_id}'. "
-                    f"Known repos: {sorted(repos.repos.keys())}",
-                    file=sys.stderr,
-                )
-                return 2
-            else:
-                rc = repos.repos[repo_id]
+            resolved = _resolve_repo_config(args, cmd)
+            if isinstance(resolved, int):
+                return resolved
+            rc, session_id = resolved
             result = func(session_id=session_id, repo_config=rc)
         elif cmd == "roadmap-sync":
-            from ..runtime.tracing import make_session_id
-            from ..config import get_repos_config
-
-            session_id = make_session_id(cmd)
-            repos = get_repos_config()
-            repo_id = getattr(args, "repo_id", None)
-            if repo_id is None:
-                if len(repos.repos) == 1:
-                    rc = next(iter(repos.repos.values()))
-                else:
-                    print(
-                        "roadmap-sync: --repo-id is required (multiple repos "
-                        f"configured). Known repos: {sorted(repos.repos.keys())}",
-                        file=sys.stderr,
-                    )
-                    return 2
-            elif repo_id not in repos.repos:
-                print(
-                    f"roadmap-sync: unknown repo '{repo_id}'. "
-                    f"Known repos: {sorted(repos.repos.keys())}",
-                    file=sys.stderr,
-                )
-                return 2
-            else:
-                rc = repos.repos[repo_id]
+            resolved = _resolve_repo_config(args, cmd)
+            if isinstance(resolved, int):
+                return resolved
+            rc, session_id = resolved
             result = func(session_id=session_id, repo_config=rc)
         elif cmd == "meta":
             from ..runtime.tracing import make_session_id
@@ -528,6 +466,44 @@ def _read_body_from_args(args: argparse.Namespace) -> str:
         with open(args.description_file, encoding="utf-8") as f:
             return f.read()
     return ""
+
+
+def _resolve_repo_config(
+    args: argparse.Namespace, cmd: str
+) -> tuple[RepoConfig, str] | int:
+    """Resolve a RepoConfig + session_id for commands that need both.
+
+    Returns ``(repo_config, session_id)`` on success, or an ``int``
+    exit code on failure (caller should ``return`` it).
+    """
+    from ..runtime.tracing import make_session_id
+    from ..config import get_repos_config
+
+    session_id = make_session_id(cmd)
+    repos = get_repos_config()
+    repo_id: str | None = getattr(args, "repo_id", None)
+
+    if repo_id is None:
+        if len(repos.repos) == 1:
+            rc = next(iter(repos.repos.values()))
+        else:
+            print(
+                f"{cmd}: --repo-id is required (multiple repos "
+                f"configured). Known repos: {sorted(repos.repos.keys())}",
+                file=sys.stderr,
+            )
+            return 2
+    elif repo_id not in repos.repos:
+        print(
+            f"{cmd}: unknown repo '{repo_id}'. "
+            f"Known repos: {sorted(repos.repos.keys())}",
+            file=sys.stderr,
+        )
+        return 2
+    else:
+        rc = repos.repos[repo_id]
+
+    return rc, session_id
 
 
 def _resolve_repo_id(
