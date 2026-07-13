@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+
+import pytest
 from types import SimpleNamespace
 
 import pytest
@@ -841,6 +843,10 @@ def _porcelain(repo) -> str:
     ).stdout
 
 
+@pytest.mark.skipif(
+    shutil.which("ruff") is None,
+    reason="ruff format not available in this environment",
+)
 class TestEditsFormatterReverted:
     @staticmethod
     def _skip_if_no_ruff():
