@@ -41,6 +41,55 @@ _MIGRATE_NOTE_PREFIX = "migrated from board "
 # :func:`_count_code_block_lines` to count lines inside code fences.
 _CODE_FENCE_RE = re.compile(r"^\s*```")
 
+# File extensions that indicate a source-code change (not documentation).
+# Used by :func:`_is_doc_only_draft` to disqualify a draft from the
+# doc-only fast-path when any touched file has one of these extensions.
+_CODE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".py",
+        ".ts",
+        ".js",
+        ".jsx",
+        ".tsx",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".cfg",
+        ".ini",
+        ".json",
+        ".css",
+        ".scss",
+        ".less",
+        ".html",
+        ".htm",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".go",
+        ".rs",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".cs",
+        ".rb",
+        ".php",
+        ".swift",
+        ".kt",
+        ".scala",
+        ".r",
+        ".m",
+        ".sql",
+    }
+)
+
+# Broader regex than _PATH_RE (which requires a '/'): matches any
+# backtick-delimited token that looks like a filename with extension.
+# Used by :func:`_is_doc_only_draft` to find file paths in draft text
+# for documentation-only classification.
+_DOC_PATH_RE = re.compile(r"`([^`]+\.[a-zA-Z]{1,10})`")
+
 
 def _count_code_block_lines(text: str) -> int:
     """Return the number of lines inside fenced code blocks in *text*.
@@ -63,6 +112,35 @@ def _count_code_block_lines(text: str) -> int:
         elif depth > 0:
             count += 1
     return count
+
+
+def _is_doc_only_draft(draft: str) -> bool:
+    """Return ``True`` when every file path in *draft* is documentation-only.
+
+    Extracts backtick-delimited file paths from the draft text and
+    classifies each as doc-only (under ``docs/``, ``.md`` extension,
+    or ``CHANGELOG.md``) or a code file (any known code extension).
+    Returns ``False`` when no paths are found or when any path is a
+    code file — the caller should fall through to normal triage.
+    """
+    paths = _DOC_PATH_RE.findall(draft)
+    if not paths:
+        return False
+    for path in paths:
+        # docs/ directory — always doc-only
+        if path.startswith("docs/"):
+            continue
+        # .md files anywhere in the tree are doc-only
+        if path.endswith(".md"):
+            continue
+        # Known code extension — not doc-only
+        for ext in _CODE_EXTENSIONS:
+            if path.endswith(ext):
+                return False
+        # Unknown extension or no recognised pattern — can't classify
+        # as doc-only; err on the side of full triage.
+        return False
+    return True
 
 
 def _triage_outcome(
@@ -320,6 +398,28 @@ def triage_skip(
     """
     if not (s.refine_triage_enabled and not reviewer_comments):
         return None
+
+    # Deterministic pre-check: documentation-only change.
+    # When every file path in the draft is under docs/ or is a .md
+    # file (and no code files are touched), skip the LLM triage and
+    # route directly to implement.  Documentation changes don't
+    # benefit from multi-LLM analysis — the spec is self-evident.
+    if _is_doc_only_draft(draft):
+        log.info(
+            "%s: doc-only draft detected — skipping triage + refine",
+            ticket.id,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            "Documentation-only change; no code review needed — "
+            "auto-approving (skipped triage + refine)",
+            source=ticket.source,
+            triage_note="triage SKIP: doc-only",
+            extract_paths_from_draft=True,
+        )
 
     # Deterministic pre-check: when a prior refine pass already
     # issued a SKIP verdict for this ticket (recorded in the state
