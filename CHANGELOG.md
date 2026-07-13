@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Upgrade transitive dependency `click` from 8.1.8 to 8.4.2 to resolve PYSEC-2026-2132 advisory
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
 - Merged hooks module into stages: moved ``run_prepare_hook`` to
   ``src/robotsix_mill/stages/hooks.py``, moved tests to
