@@ -59,7 +59,6 @@ modules:
       - src/robotsix_mill/core/text_noop.py
       - src/robotsix_mill/core/duration.py
       - src/robotsix_mill/core/dedup.py
-      - src/robotsix_mill/core/draft_target.py
       - src/robotsix_mill/core/repo_layout.py
       - src/robotsix_mill/core/tool_wrappers.py
       - docs/core/**/*
@@ -77,7 +76,6 @@ modules:
       - tests/core/test_prune_clone.py
       - tests/core/test_workspace.py
       - tests/core/test_workspace_screenshots.py
-      - tests/core/test_draft_target.py
       - tests/core/test_repo_layout.py
       - tests/core/test_tool_wrappers.py
       - tests/core/test_delta_context.py

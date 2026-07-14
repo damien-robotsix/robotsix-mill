@@ -104,16 +104,6 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, stale, ws, input_hash
             )
 
-        # Phase 2.1: mill-misroute gate — detect drafts that name
-        # mill-specific source paths absent from this checkout and
-        # redirect them to the mill maintenance board.  Deterministic,
-        # no LLM; runs before the first LLM-invoking gate.
-        misrouted = RefineStage._run_mill_misroute_gate(ctx, ticket, draft, repo_dir, s)
-        if misrouted is not None:
-            return RefineStage._guard_implementation_done(
-                ctx, ticket, misrouted, ws, input_hash
-            )
-
         # Phase 2.15: doc-only gate — deterministic check that skips
         # the multi-LLM refine analysis when a draft touches only
         # documentation files.  Runs before any LLM-invoking gate.
@@ -124,7 +114,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             )
 
         # Phase 2.2: triage classifier — a single cheap LLM call that
-        # classifies the draft as SKIP / NO_CHANGE / MAINTENANCE /
+        # classifies the draft as SKIP / NO_CHANGE / REFINE.
         # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,
         # dedup) so tickets that are already satisfied on disk
         # (NO_CHANGE) or already-precise specs (SKIP) short-circuit

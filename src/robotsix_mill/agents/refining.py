@@ -175,7 +175,7 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
-    decision: Literal["REFINE", "SKIP", "MAINTENANCE", "NO_CHANGE", "MIGRATE"]
+    decision: Literal["REFINE", "SKIP", "NO_CHANGE", "MIGRATE"]
     reason: str
     target_board: str | None = Field(
         default=None,
@@ -194,7 +194,7 @@ class TriageResult(BaseModel):
             "work from read_file/list_dir/run_command alone. "
             "'needs-exploration' (or None for backward compat) means "
             "full explore/parallel_explore tools should be provided. "
-            "When decision is SKIP or MAINTENANCE this field is ignored."
+            "When decision is SKIP this field is ignored."
         ),
     )
     trivial_scope: bool | None = Field(

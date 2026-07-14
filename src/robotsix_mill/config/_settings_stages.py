@@ -287,14 +287,6 @@ class _StagesSettings(BaseModel):
     )
     # When True (default), a deterministic pre-refine gate detects
     # drafts that reference mill-specific source paths
-    # (``src/robotsix_mill/``, ``agent_definitions/``, ...) absent
-    # from the current checkout and redirects them to the mill
-    # maintenance board before any LLM budget is spent.  Set False
-    # to opt out and let refine proceed locally.
-    refine_mill_misroute_gate_enabled: bool = Field(
-        description="When true, drafts referencing mill-specific paths absent from checkout are redirected to the mill board.",
-        default=True,
-    )
     # When True, a deterministic pre-implement gate verifies that
     # external symbol/import prerequisites the spec declares in a
     # ``## Prerequisites`` / ````prereq```` block are satisfiable in the

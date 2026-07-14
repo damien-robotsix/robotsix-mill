@@ -22,14 +22,11 @@ DEDUP_DUPLICATE_PREFIX: str = "duplicate of "
 DEDUP_ALREADY_DONE_PREFIX: str = "already implemented in "
 FRESHNESS_STALE_PREFIX: str = "stale or invalid finding"
 OBSOLESCENCE_GAP_PREFIX: str = "obsolete — gap already resolved"
-REFINE_MILL_MISROUTE_PREFIX: str = "redirected to mill board"
-REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX: str = "filed mill consumer follow-up"
 NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
     DEDUP_DUPLICATE_PREFIX,
     DEDUP_ALREADY_DONE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
-    REFINE_MILL_MISROUTE_PREFIX,
 )
 
 # File extensions that are likely binary — should be skipped during

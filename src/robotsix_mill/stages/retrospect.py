@@ -24,11 +24,6 @@ from ..core.states import State
 from ..core.text_noop import is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
-from ..core.draft_target import (
-    has_unverifiable_cross_repo_refs,
-    looks_like_mill_internal,
-    resolve_mill_service,
-)
 from ..forge import get_forge
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
@@ -332,26 +327,7 @@ class RetrospectStage(Stage):
         body = res.draft_body
         if res.draft_gap_id:
             body += f"\n\n<!-- retrospect-gap-id: {res.draft_gap_id} -->"
-        # Safety net: override ``"current"`` → ``"mill"`` when the
-        # draft's title+body names mill internals. See
-        # looks_like_mill_internal docstring for the rationale.
-        draft_target = res.draft_target
-        if draft_target == "current" and looks_like_mill_internal(
-            res.draft_title, body
-        ):
-            log.info(
-                "%s: retrospect draft_target auto-corrected current→mill "
-                "(draft body names mill-internal symbols)",
-                ticket.id,
-            )
-            draft_target = "mill"
-        if draft_target == "mill":
-            target_service = (
-                resolve_mill_service(settings, ctx.service, caller_label="retrospect")
-                or ctx.service
-            )
-        else:
-            target_service = ctx.service
+        target_service = ctx.service
         draft = target_service.create(
             res.draft_title,
             body,
@@ -388,25 +364,7 @@ class RetrospectStage(Stage):
         follow_up_title = res.follow_up_title.strip()
         follow_up_body = res.follow_up_body
 
-        # Same auto-correction as the draft path: a follow-up that
-        # names mill internals belongs on the mill board.
-        follow_up_target = res.follow_up_target
-        if follow_up_target == "current" and looks_like_mill_internal(
-            follow_up_title, follow_up_body
-        ):
-            log.info(
-                "%s: retrospect follow_up_target auto-corrected "
-                "current→mill (body names mill-internal symbols)",
-                ticket.id,
-            )
-            follow_up_target = "mill"
-        if follow_up_target == "mill":
-            target_service = (
-                resolve_mill_service(settings, ctx.service, caller_label="retrospect")
-                or ctx.service
-            )
-        else:
-            target_service = ctx.service
+        target_service = ctx.service
 
         # Dedup: skip if an open (non-closed, non-done) ticket with the
         # same case-insensitive title already exists ON THE TARGET
@@ -531,8 +489,7 @@ class RetrospectStage(Stage):
         if not proposals:
             return []
 
-        # File on the originating repo's board only — proposals are
-        # board-scoped via ctx; no looks_like_mill_internal routing.
+        # File on the originating repo's board only.
         target_service = ctx.service
         spawned: list[str] = []
         for prop in proposals:
@@ -808,51 +765,6 @@ class RetrospectStage(Stage):
 
         if persisted:
             persist_memory(memory_file, persisted, max_chars=s.max_memory_chars)
-
-        # Guard against unverifiable cross-repo follow-ups: when the
-        # agent proposes a draft or follow-up whose body references
-        # source paths in a different repo (package root absent from
-        # the current clone), skip it — the agent cannot verify the
-        # consumer repo's current state from this workspace.
-        if repo_dir is not None:
-            cross_repo_notes: list[str] = []
-
-            if (
-                res.follow_up_title
-                and res.follow_up_target == "current"
-                and has_unverifiable_cross_repo_refs(
-                    res.follow_up_title, res.follow_up_body, repo_dir
-                )
-            ):
-                cross_repo_notes.append(
-                    f"Skipped unverifiable cross-repo follow-up: "
-                    f"{res.follow_up_title}. The follow-up references "
-                    f"code in a different repo — consumer-side wiring "
-                    f"must be verified manually."
-                )
-                res.follow_up_title = None
-                res.follow_up_body = None
-
-            if (
-                res.draft_title
-                and res.draft_target == "current"
-                and has_unverifiable_cross_repo_refs(
-                    res.draft_title, res.draft_body, repo_dir
-                )
-            ):
-                cross_repo_notes.append(
-                    f"Skipped unverifiable cross-repo draft: {res.draft_title}"
-                )
-                res.draft_title = None
-                res.draft_body = None
-                res.propose_draft = False
-
-            if cross_repo_notes:
-                res.findings += "\n\n## Cross-repo guard\n\n" + "\n\n".join(
-                    cross_repo_notes
-                )
-                for note in cross_repo_notes:
-                    log.info("%s: %s", ticket.id, note)
 
         spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
         follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)

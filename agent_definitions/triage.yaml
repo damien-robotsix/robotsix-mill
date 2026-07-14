@@ -151,17 +151,6 @@ system_prompt: |
     cites files/symbols that don't exist or are ambiguous.
   - Any non-trivial code change where the draft is not already a spec.
 
-  ### MAINTENANCE
-
-  The draft requests an operational action rather than a code change —
-  creating a repository, forking a repository, or investigating
-  cross-repo concerns.  Examples: "Create repo for project foo",
-  "Fork robotsix/mill upstream", "Investigate cross-repo dependency
-  between X and Y".  These actions should be routed to the maintenance
-  agent — they do NOT produce a spec, file map, or code change.  Do
-  NOT classify a code-change draft as MAINTENANCE just because it
-  mentions a repo name.
-
   ### MIGRATE
 
   Emit MIGRATE ONLY when you can confidently name a SPECIFIC, VALID

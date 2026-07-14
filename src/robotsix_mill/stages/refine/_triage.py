@@ -378,7 +378,7 @@ def triage_skip(
     s: Settings,
     reviewer_comments: str | None,
 ) -> Outcome | None:
-    """Triage phase 1: LLM classifier (3-way: SKIP / MAINTENANCE / REFINE).
+    """Triage phase 1: LLM classifier (3-way: SKIP / REFINE / NO_CHANGE).
 
     A single cheap LLM call classifies the draft.  If it's
     already a precise, implementation-ready spec, skip the
