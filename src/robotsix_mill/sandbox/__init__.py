@@ -548,26 +548,49 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     image = sandbox_image or settings.sandbox_image
     argv += ["--entrypoint", "sh", image, "-lc", effective_command]
 
-    try:
-        r = subprocess.run(
-            argv,
-            capture_output=True,
-            text=False,
-            timeout=settings.command_timeout,
-        )
-    except FileNotFoundError as e:
-        raise SandboxError("docker CLI not found in the mill image") from e
-    except subprocess.TimeoutExpired:
-        # the `docker run` client was killed; force-remove the container
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=False)
-        return 124, f"command timed out after {settings.command_timeout}s"
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            r = subprocess.run(
+                argv,
+                capture_output=True,
+                text=False,
+                timeout=settings.command_timeout,
+            )
+        except FileNotFoundError as e:
+            raise SandboxError("docker CLI not found in the mill image") from e
+        except subprocess.TimeoutExpired:
+            # the `docker run` client was killed; force-remove the container
+            subprocess.run(
+                ["docker", "rm", "-f", name], capture_output=True, text=False
+            )
+            return 124, f"command timed out after {settings.command_timeout}s"
 
-    stdout = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
-    stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
-    # 125 == docker daemon/usage error (not the command's own exit code)
-    if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {stderr.strip()[:300]}")
-    return r.returncode, _truncate(stdout + stderr)
+        stdout = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
+        stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
+        # 125 == docker daemon/usage error (not the command's own exit code)
+        if r.returncode == 125:
+            eof_msg = stderr.strip()
+            if "unexpected EOF" in eof_msg and attempt < max_attempts:
+                log.warning(
+                    "sandbox spawn attempt %d/%d: docker wait stream EOF "
+                    "(socket-proxy timeout likely); retrying...",
+                    attempt,
+                    max_attempts,
+                )
+                # Clean up any container that may have leaked
+                subprocess.run(
+                    ["docker", "rm", "-f", name],
+                    capture_output=True,
+                    text=False,
+                )
+                continue
+            raise SandboxError(f"docker run failed: {eof_msg[:300]}")
+        return r.returncode, _truncate(stdout + stderr)
+    # Should not be reachable — the last attempt either returns or raises
+    # above (non-125 → return; 125 non-EOF → raise; 125 EOF on last
+    # attempt → raise).  Included as a safety net.
+    raise SandboxError("docker run failed: unexpected EOF after all retries")
 
 
 def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
