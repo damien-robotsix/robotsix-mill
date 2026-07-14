@@ -4,6 +4,7 @@
 - Add `agent_references/module-shadowing.md`: document the Python module-shadowing
   hazard when creating a subdirectory alongside a single-file module, with the
   canonical workaround (underscore-prefixed file alongside the module).
+- Add five documented-but-missing settings to the `"settings"` block of `config/config.example.json`: `db_maintenance_periodic`, `db_maintenance_interval_seconds`, `deliver_max_identical_blocks`, `max_events_per_ticket`, and `ticket_state_cycle_limit`.
 - `security_posture` agent: instruct to ask focused single-topic `ask_web_knowledge` questions to avoid `UsageLimitExceeded` when the web-knowledge sub-agent's request budget (12 turns) is exhausted by broad multi-framework queries.
 - Fix auto-resume bug: when multiple tickets are parked on the same CI-fix dependency ticket (via label-based dedup), the `unblocks` list is now merged instead of overwritten, so all parked tickets auto-resume when the fix completes — not just the last one parked.
 - Add `run_command` loop-detection guard: exact duplicate commands and repeated grep against the same file are refused with a synthesis prompt, preventing explore sub-agent spin-loops observed in trace review.)
