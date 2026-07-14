@@ -25,4 +25,4 @@ Implemented in `agents/dedup.py:run_dedup_check`.
 ## See also
 
 - [index.md](index.md) — documentation home
-- [docs/config/configuration.md](config/configuration.md) — full env-var reference
+- [docs/config/configuration.md](../config/configuration.md) — full env-var reference
