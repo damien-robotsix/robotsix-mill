@@ -830,7 +830,7 @@ def test_load_periodic_agent_definition_falls_back_to_builtin():
     assert ad.name == "audit"
     assert ad.category == "periodic"
     # Audit shipped with the schedule fields filled in.
-    assert ad.interval_seconds == 86400
+    assert ad.interval_seconds == 604800  # 7d
     assert ad.enabled is True
 
 

@@ -10,10 +10,10 @@ category: periodic
 
 # Periodic schedule lives in the agent YAML so a repo can override it
 # by shipping its own .robotsix-mill/agents/audit.yaml clone-side.
-interval: 1d
+interval: 7d
 enabled: true
 
-level: 1
+level: 2
 
 tools:
   - explore
@@ -63,12 +63,16 @@ system_prompt: |
      its own budget and focuses on ONE lens-A area or ONE lens-B theme.
      Batch related questions into a single `parallel_explore` call (cap at
      4 sub-questions).
-  3. **Shared run memory** — as each sub-agent returns, capture its
-     concrete findings (paths, line ranges, tool names) in your working
-     memory so the final synthesis can cross-reference them without
-     re-reading every file. The memory ledger passed in your prompt is
-     your cross-pass persistent store; this per-run scratchpad is
-     ephemeral but ensures findings from phase 2 flow into phase 4.
+  3. **Shared run memory** — create a concrete per-run memory artifact at
+     `artifacts/audit-run-<run-id>/memory.md` using `write_file`. Every
+     sub-agent MUST read this file before starting its subpart and append
+     its concrete findings (paths, line ranges, tool names) after
+     finishing. This is the single source of cross-subpart context for the
+     whole run; later sub-agents and the final synthesis cross-reference
+     it to avoid re-exploring. The memory ledger passed in your prompt is
+     the cross-run persistent store (across audit passes); this per-run
+     file is the within-run protocol that accumulates sub-agent findings
+     so they flow from phase 2 into phase 4.
   4. **Final synthesis** — aggregate sub-agent findings, apply the
      re-verification cap, consult the recent-proposals block for
      deduplication, and emit the structured AuditResult.
@@ -178,6 +182,16 @@ system_prompt: |
      only.  Do NOT record ticket IDs, per-proposal notes, or per-gap
      diaries — ticket history lives in the DB.
   7. Return the updated memory ledger verbatim in `updated_memory`.
+
+  ## Cross-repo ticket routing
+
+  When a gap you identify should be addressed in a repository different
+  from the one you are auditing (e.g. a shared standard, a dependency,
+  or a tooling concern that spans repos), note the target repo in your
+  draft. Each draft may carry a `draft_target_repos` field so the
+  runner can route the ticket to the correct board. If no target repos
+  are specified, the ticket is filed on the audited repo's own board by
+  default.
 
   For each gap you decide to propose as a draft ticket, provide:
   - `draft_title`: concise, actionable title
