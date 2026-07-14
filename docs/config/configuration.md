@@ -479,7 +479,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.max_implement_review_cycles` | `MILL_MAX_IMPLEMENT_REVIEW_CYCLES` | `10` | Backstop ceiling on total implement passes per ticket across all review rounds; `0` disables |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
-
 | `gates.refine_advisory_dedup_enabled` | `MILL_REFINE_ADVISORY_DEDUP_ENABLED` | `true` | Cheap advisory-dedup-verification gate: resolves carried `Possible duplicate of <id>` advisory with a single cheapest-tier `run_dedup_check` |
 | `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
 | `gates.obsolescence_gate_enabled` | `MILL_OBSOLESCENCE_GATE_ENABLED` | `false` | Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in) |
@@ -492,7 +491,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.pr_summary_enabled` | `MILL_PR_SUMMARY_ENABLED` | `false` | Generate structured PR body from diff via cheap LLM (opt-in) |
 | `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 | `gates.reviewer_agreement_gate_enabled` | `MILL_REVIEWER_AGREEMENT_GATE_ENABLED` | `true` | Pre-Opus guard: when a reviewer's sendback feedback already agrees with the draft's no-change-needed conclusion, the pipeline short-circuits to DONE, skipping the expensive Opus refine agent. Requires `refine_triage_enabled=true`. |
-| `gates.refine_mill_misroute_gate_enabled` | `MILL_REFINE_MILL_MISROUTE_GATE_ENABLED` | `true` | Deterministic pre-refine gate: detects drafts referencing mill-specific source paths absent from the current checkout and redirects them to the mill maintenance board before any LLM budget is spent. |
 | `ci.codeql_fp_triage_enabled` | `MILL_CODEQL_FP_TRIAGE_ENABLED` | `true` | When enabled, ci_fix may invoke a conservative sub-agent at the hard cycle ceiling to dismiss high-conviction CodeQL false positives, unblocking the ticket |
 
 ### 8. Forge

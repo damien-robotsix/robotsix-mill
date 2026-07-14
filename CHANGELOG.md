@@ -28,6 +28,7 @@
 - Extract shared `_reconcile_with_remote_pr` helper in `stages/merge/_shared.py`, deduplicating the `ReconcileResult.DIVERGED`/`UNAVAILABLE` error-handling block across `rebase.py`, `review_revision.py`, `ci_fix_mixin.py`, and `multi_repo.py`.
 - Extract `_iter_terminal_candidates` generator from duplicated candidate-iteration + terminal-close-time filtering shared by `_prune_board_workspaces` and `_prune_board_terminal_clones` in `data_dir_gc/orphans.py`.
 - Fix worker queue deadlock: priority READY/DRAFT tickets no longer block merge-pipeline (IMPLEMENT_COMPLETE) tickets when the in-flight PR cap is saturated. The defer path now demotes the priority rank of cap-deferred tickets so the merge-poll tickets behind them get a chance to drain cap slots.
+- Remove the ticket-based maintenance flow entirely: delete the maintenance agent, stage, and `MAINTENANCE` state, along with all refine-stage triage routing to it. Maintenance is now performed by an external agent calling mill's API directly.
 - Fix stale ``context.config`` reference in ``alembic/env.py`` — the
   module-level ``config = context.config`` binding could become stale
   when Alembic cached ``env.py`` across multiple migrations, causing

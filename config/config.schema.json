@@ -554,20 +554,6 @@
           "title": "Mill Coordinator Timeout Seconds",
           "type": "integer"
         },
-        "MILL_INVESTIGATION_WORKSPACE": {
-          "anyOf": [
-            {
-              "format": "path",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Path to a directory of repo clones for cross-repo investigation by the maintenance agent.",
-          "title": "Mill Investigation Workspace"
-        },
         "MILL_LINT_ON_EDIT": {
           "default": true,
           "description": "When true, pre-write Python syntax check on write_file/edit_file calls.",
@@ -1314,19 +1300,6 @@
           "title": "Low Credit Threshold Usd",
           "type": "number"
         },
-        "maintenance_request_limit": {
-          "default": 100,
-          "description": "Per-call request cap for the maintenance agent's tool loop.",
-          "minimum": 1,
-          "title": "Maintenance Request Limit",
-          "type": "integer"
-        },
-        "maintenance_triage_enabled": {
-          "default": true,
-          "description": "When true, operational-action drafts route directly to MAINTENANCE.",
-          "title": "Maintenance Triage Enabled",
-          "type": "boolean"
-        },
         "max_archived_tickets": {
           "default": 40,
           "description": "Maximum terminal-state tickets to retain. 0 disables purging.",
@@ -1692,12 +1665,6 @@
           "default": null,
           "description": "Path to the refine agent's Markdown memory ledger. When unset, derives from data_dir/board/refine_memory.md.",
           "title": "Refine Memory Path"
-        },
-        "refine_mill_misroute_gate_enabled": {
-          "default": true,
-          "description": "When true, drafts referencing mill-specific paths absent from checkout are redirected to the mill board.",
-          "title": "Refine Mill Misroute Gate Enabled",
-          "type": "boolean"
         },
         "refine_prescriptive_spec_code_lines_threshold": {
           "default": 50,
