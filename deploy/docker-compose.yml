@@ -110,6 +110,13 @@ services:
         # non-root user, and haproxy exits fatally when it cannot write the
         # pidfile. Foreground master mode (-W -db) does not need one.
         sed -i '/^[[:space:]]*pidfile/d' /tmp/haproxy.cfg
+        # Raise the image's hardcoded 10m client/server timeouts: haproxy
+        # severs the docker-wait stream of any sandbox run longer than 10
+        # minutes ("error waiting for container: unexpected EOF" — the
+        # 2026-07-12 intermittent sandbox outage). The implement stage
+        # allows runs up to 2h; 4h gives headroom. The image exposes no
+        # TIMEOUT_* env knobs, so patch the processed config like above.
+        sed -i 's/timeout client 10m/timeout client 4h/;s/timeout server 10m/timeout server 4h/' /tmp/haproxy.cfg
         exec haproxy -W -db -f /tmp/haproxy.cfg
     environment:
       # Grant exactly the API surface the sandbox CLI calls:
