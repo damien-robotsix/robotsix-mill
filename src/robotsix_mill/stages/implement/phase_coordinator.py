@@ -122,15 +122,21 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     "Delete artifacts/implement_spawn_count in the "
                     "workspace to reset.",
                 )
-            spawn_count += 1
-            try:
-                counter_path.write_text(str(spawn_count), encoding="utf-8")
-            except OSError:
-                log.warning(
-                    "%s: failed to write implement_spawn_count",
-                    ticket.id,
-                    exc_info=True,
-                )
+            # Only increment on genuine re-spawns, not transient
+            # infrastructure retries.  Transient failures (sandbox EOF,
+            # OOM, etc.) must not burn the ticket's spawn budget —
+            # otherwise a single flaky runner can permanently deadlock
+            # a ticket against the spawn limit.
+            if ticket.retry_attempt == 0:
+                spawn_count += 1
+                try:
+                    counter_path.write_text(str(spawn_count), encoding="utf-8")
+                except OSError:
+                    log.warning(
+                        "%s: failed to write implement_spawn_count",
+                        ticket.id,
+                        exc_info=True,
+                    )
 
         # 3. Ticket-lifetime implement-cycle cap: catch the runaway
         #    implement↔review loop before we clone or open a trace.

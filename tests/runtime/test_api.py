@@ -688,8 +688,9 @@ def test_resume_blocked_from_done(client, service):
 
 def test_resume_blocked_with_note_records_comment_and_clears_guard(client, service):
     """POST /tickets/{id}/resume-blocked with a note comments on the
-    ticket and clears a stale artifacts/implement.md so the stale-spec
-    guard doesn't immediately re-block the retry."""
+    ticket and clears a stale artifacts/implement.md and
+    artifacts/implement_spawn_count so the guards don't immediately
+    re-block the retry."""
     t = service.create("Resume with note via API")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -697,6 +698,8 @@ def test_resume_blocked_with_note_records_comment_and_clears_guard(client, servi
     ws = service.workspace(t)
     stale = ws.artifacts_dir / "implement.md"
     stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
 
     r = client.post(
         f"/tickets/{t.id}/resume-blocked",
@@ -705,6 +708,7 @@ def test_resume_blocked_with_note_records_comment_and_clears_guard(client, servi
     assert r.status_code == 200
     assert r.json()["state"] == State.READY
     assert not stale.exists()
+    assert not spawn_counter.exists()
 
     comments = client.get(f"/tickets/{t.id}/comments").json()
     assert any(

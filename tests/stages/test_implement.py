@@ -5324,7 +5324,9 @@ def test_spawn_counter_blocks_after_limit(ctx_factory, tmp_path, monkeypatch):
 
 
 def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
-    """Each preflight call increments the spawn counter file."""
+    """Each preflight call increments the spawn counter file only when
+    retry_attempt == 0 (genuine re-spawn). Transient retries must not
+    burn spawn slots."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -5345,7 +5347,8 @@ def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
 
     monkeypatch.setattr(coding, "run_implement_agent", _agent)
 
-    # First invocation: preflight increments counter from 0 to 1.
+    # First invocation: preflight increments counter from 0 to 1
+    # (retry_attempt == 0 → genuine re-spawn).
     pre1 = ImplementStage().preflight(t, ctx)
     assert pre1 is None, "preflight should proceed"
 
@@ -5369,6 +5372,25 @@ def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
     out2 = ImplementStage().run(t, ctx)
     assert out2.next_state is State.DOCUMENTING
 
+    assert counter_path.read_text(encoding="utf-8").strip() == "2"
+
+    # --- transient retry: counter must NOT increment ---
+    ctx.service.transition(t.id, State.BLOCKED, "test reset")
+    ctx.service.transition(t.id, State.READY, "test reset")
+    # Simulate a transient retry by setting retry_attempt > 0.
+    ctx.service.set_retry_state(
+        t.id,
+        retry_attempt=2,
+        last_transient_error="sandbox EOF",
+        next_retry_at=None,
+    )
+    t = ctx.service.get(t.id)
+    assert t.retry_attempt == 2
+
+    pre3 = ImplementStage().preflight(t, ctx)
+    assert pre3 is None, "preflight should still proceed on retry"
+
+    # Counter must still be 2 — transient retry does NOT burn a spawn slot.
     assert counter_path.read_text(encoding="utf-8").strip() == "2"
 
 

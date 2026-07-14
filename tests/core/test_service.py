@@ -291,8 +291,9 @@ def test_resume_blocked_back_to_originating_state(service):
 
 def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(service):
     """resume_blocked(note=...) persists the note as a comment and, when
-    resuming back into READY, deletes a stale artifacts/implement.md so
-    the stale-respawn guard doesn't immediately re-block the retry."""
+    resuming back into READY, deletes a stale artifacts/implement.md and
+    artifacts/implement_spawn_count so neither guard immediately re-blocks
+    the retry."""
     t = service.create("resume with note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -300,10 +301,13 @@ def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(ser
     ws = service.workspace(t)
     stale = ws.artifacts_dir / "implement.md"
     stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
 
     resumed = service.resume_blocked(t.id, note="retry — prior failure was a flake")
     assert resumed.state is State.READY
     assert not stale.exists()
+    assert not spawn_counter.exists()
 
     comments = service.list_comments(t.id)
     assert any(
@@ -315,8 +319,9 @@ def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(ser
 
 
 def test_resume_blocked_without_note_leaves_implement_guard_untouched(service):
-    """resume_blocked with no note does not touch artifacts/implement.md —
-    the guard-clearing behavior is opt-in via an explicit note."""
+    """resume_blocked with no note does not touch artifacts/implement.md or
+    artifacts/implement_spawn_count — the guard-clearing behavior is opt-in
+    via an explicit note."""
     t = service.create("resume without note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -324,10 +329,13 @@ def test_resume_blocked_without_note_leaves_implement_guard_untouched(service):
     ws = service.workspace(t)
     stale = ws.artifacts_dir / "implement.md"
     stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("5", encoding="utf-8")
 
     resumed = service.resume_blocked(t.id)
     assert resumed.state is State.READY
     assert stale.exists()
+    assert spawn_counter.exists()
     assert service.list_comments(t.id) == []
 
 
