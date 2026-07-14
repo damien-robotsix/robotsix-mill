@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from sqlmodel import select
 
-from .. import db
+from ..db import retry_on_db_full
 from ..models import (
     Comment,
     Ticket,
@@ -39,7 +39,7 @@ class _DeleteMixin(_ServiceBase):
         None and the worker treats it as a vanished ticket and stops.
         """
         board = self._board_for(ticket_id)
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 return False
@@ -104,7 +104,7 @@ class _DeleteMixin(_ServiceBase):
             State.EPIC_CLOSED,
             State.EPIC_OPEN,
         }
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.state in _NON_REDRAFTABLE:
                 raise TransitionError(

@@ -55,6 +55,12 @@ async def health(request: Request) -> dict[str, Any]:
     """
     payload: dict[str, Any] = {"status": "alive"}
     payload.update(_uptime_payload(request))
+    # Surface disk usage of the data directory so operators can
+    # detect a filling disk before the pipeline hits it.
+    from ...core.db import _get_disk_usage
+
+    settings: Settings = request.app.state.settings
+    payload["disk_usage"] = _get_disk_usage(settings.data_dir)
     return payload
 
 

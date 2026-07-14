@@ -19,6 +19,7 @@ from sqlmodel import select
 
 from ...config import Settings
 from ...core import db
+from ...core.db import retry_on_db_full
 from ...core.models import Comment, Ticket, TicketEvent, _now
 from ...core.states import State
 
@@ -439,7 +440,7 @@ def _cascade_delete_ticket(settings: Settings, board_id: str, ticket_id: str) ->
     Deletes ``TicketEvent`` and ``Comment`` rows referencing *ticket_id*,
     then the ``Ticket`` itself — mirrors ``TicketService.delete``.
     """
-    with db.session(settings, board_id) as s:
+    with retry_on_db_full(settings, board_id) as s:
         for ev in s.exec(
             select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
         ).all():
@@ -491,7 +492,7 @@ def _purge_board_archived_rows(
 
     # 2. Reclaim disk space freed by the deletes.
     if deleted:
-        with db.session(settings, board_id) as s:
+        with retry_on_db_full(settings, board_id) as s:
             s.execute(text("VACUUM"))
             s.commit()
         log.info(

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlmodel import select
 
 from .. import db
+from ..db import retry_on_db_full
 from ..models import Comment, Ticket, TicketEvent
 from ..states import ASK_USER_MARKER, State
 from ._base import _ServiceBase
@@ -32,7 +33,7 @@ class _CommentMixin(_ServiceBase):
         When *parent_id* is given, validates that the parent Comment
         exists and belongs to the same ticket, raising ``ValueError``
         otherwise."""
-        with db.session(self.settings, self._board_for(ticket_id)) as s:
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             _get_ticket(s, ticket_id)
             if parent_id is not None:
                 parent = s.get(Comment, parent_id)
@@ -137,7 +138,7 @@ class _CommentMixin(_ServiceBase):
         comment on a collision.
         """
         board = self._board_for_comment(comment_id, ticket_id)
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             comment = s.get(Comment, comment_id)
             if comment is None:
                 raise KeyError(f"comment {comment_id} not found")
@@ -156,7 +157,7 @@ class _CommentMixin(_ServiceBase):
         # session) so the commit above is visible.
         self._maybe_resume_awaiting_user_reply(ticket_id, board)
 
-        return comment
+        return comment  # type: ignore[no-any-return]  # session wrapped via _RetrySession
 
     def _maybe_resume_awaiting_user_reply(
         self,
@@ -166,7 +167,7 @@ class _CommentMixin(_ServiceBase):
         """If *ticket_id* is in ``AWAITING_USER_REPLY`` and every
         top-level ``[ASK_USER]`` comment thread on it is closed,
         transition the ticket back to its ``paused_from`` state."""
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None or ticket.state is not State.AWAITING_USER_REPLY:
                 return
@@ -252,7 +253,7 @@ class _CommentMixin(_ServiceBase):
         """Reopen a closed top-level comment thread.  Raises
         ``KeyError`` if the comment does not exist, ``ValueError`` if
         it is a reply (non-NULL parent_id) or is not currently closed."""
-        with db.session(
+        with retry_on_db_full(
             self.settings, self._board_for_comment(comment_id, ticket_id)
         ) as s:
             comment = s.get(Comment, comment_id)
@@ -266,4 +267,4 @@ class _CommentMixin(_ServiceBase):
             s.add(comment)
             s.commit()
             s.refresh(comment)
-            return comment
+            return comment  # type: ignore[no-any-return]  # session wrapped via _RetrySession
