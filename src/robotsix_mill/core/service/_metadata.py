@@ -13,13 +13,24 @@ exactly as before via the mixin MRO.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 
 from .. import db
-from ..models import Ticket, TicketKind
+from ..models import Ticket, TicketEvent, TicketKind
+from ..states import State
 from ._base import _ServiceBase
-from ._helpers import _get_ticket
+from ._helpers import _get_ticket, TransitionError
+
+# States that are considered terminal — the spec cannot be updated
+# once a ticket reaches one of these.
+_TERMINAL_FOR_DESCRIPTION_UPDATE: set[State] = {
+    State.CLOSED,
+    State.ANSWERED,
+    State.EPIC_CLOSED,
+    State.DONE,
+}
 
 
 class _MetadataMixin(_ServiceBase):
@@ -225,3 +236,80 @@ class _MetadataMixin(_ServiceBase):
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
             s.commit()
+
+    # ------------------------------------------------------------------
+    # update_description — spec amendment for fingerprint-guard recovery
+    # ------------------------------------------------------------------
+
+    def _compute_spec_fingerprint(self, ticket: Ticket) -> str:
+        """Compute the effective spec fingerprint for *ticket*.
+
+        Matches the fingerprint computation in the implement stage's
+        preflight guard and ``_write_implement_result``: SHA-256 of
+        (epic context + ``\n\n`` + description), truncated to 16 hex
+        chars.
+        """
+        ws = self.workspace(ticket)
+        effective = ws.read_description() or ""
+        if ticket.parent_id:
+            epic_ctx = self.get_epic_context(ticket)
+            if epic_ctx:
+                effective = epic_ctx + "\n\n" + effective
+        return hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+
+    def update_description(
+        self,
+        ticket_id: str,
+        description: str,
+        *,
+        reset_fingerprint_guard: bool = False,
+        author: str = "operator",
+    ) -> TicketEvent:
+        """Replace a ticket's spec description and recompute its fingerprint.
+
+        Writes *description* to the workspace's ``description.md``,
+        updates the DB ``content_hash``, and records a history event
+        with the old and new spec fingerprints for auditability.
+
+        When *reset_fingerprint_guard* is ``True``, also deletes the
+        implement stage's ``artifacts/implement.md`` (if present) so
+        the stale-respawn guard in ``phase_coordinator.preflight``
+        won't block a re-attempt on the unchanged spec — the explicit
+        reset is treated as an operator override.
+
+        Raises :class:`KeyError` if the ticket does not exist,
+        :class:`TransitionError` if it is in a terminal state
+        (CLOSED, ANSWERED, EPIC_CLOSED, DONE).
+        """
+        board = self._board_for(ticket_id)
+        with db.session(self.settings, board) as s:
+            ticket = _get_ticket(s, ticket_id)
+            if ticket.state in _TERMINAL_FOR_DESCRIPTION_UPDATE:
+                raise TransitionError(
+                    f"{ticket_id}: cannot update description — "
+                    f"state {ticket.state} is terminal"
+                )
+        # Compute the old fingerprint BEFORE writing the new description.
+        old_fp = self._compute_spec_fingerprint(ticket)
+        ws = self.workspace(ticket)
+        ticket.content_hash = ws.write_description(description)
+        # Compute the new fingerprint AFTER writing.
+        new_fp = self._compute_spec_fingerprint(ticket)
+        # Persist the content_hash update.
+        with db.session(self.settings, board) as s:
+            t = _get_ticket(s, ticket_id)
+            t.content_hash = ticket.content_hash
+            t.updated_at = datetime.now(timezone.utc)
+            s.add(t)
+            s.commit()
+        # Optionally clear the stale implement guard.
+        if reset_fingerprint_guard:
+            try:
+                (ws.artifacts_dir / "implement.md").unlink()
+            except FileNotFoundError:
+                pass
+        # Record the history event.
+        note = f"[{author}] spec update: fingerprint {old_fp} → {new_fp}"
+        if reset_fingerprint_guard:
+            note += "; fingerprint-guard reset"
+        return self.add_history_note(ticket_id, note)

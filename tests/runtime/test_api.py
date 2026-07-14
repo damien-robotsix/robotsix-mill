@@ -2785,3 +2785,122 @@ class TestCrossBoardChildren:
         finally:
             _cfg._repos_config = None
             db.reset_engine()
+
+
+# --- PUT /tickets/{id}/description ---
+
+
+def test_update_description_success(client, service):
+    """PUT /tickets/{id}/description updates the spec and returns new content_hash."""
+    t = service.create("Initial title", description="Old spec body")
+    old_hash = t.content_hash
+
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "New spec body", "author": "test-agent"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ticket_id"] == t.id
+    assert data["fingerprint_reset"] is False
+    assert "event_id" in data
+    # content_hash should have changed.
+    assert data["content_hash"] != old_hash
+
+    # Verify the description was actually updated.
+    desc = client.get(f"/tickets/{t.id}/description").json()
+    assert desc["description"] == "New spec body"
+
+
+def test_update_description_404(client):
+    """PUT /tickets/{id}/description with nonexistent ticket returns 404."""
+    r = client.put(
+        "/tickets/nonexistent/description",
+        json={"description": "whatever"},
+    )
+    assert r.status_code == 404
+
+
+def test_update_description_terminal_409(client, service):
+    """PUT /tickets/{id}/description on a terminal-state ticket returns 409."""
+    t = service.create("Done ticket", description="body")
+    service.transition(t.id, State.DONE, note="done")
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "new body"},
+    )
+    assert r.status_code == 409
+
+
+def test_update_description_records_history(client, service):
+    """PUT /tickets/{id}/description records a history event with old/new fingerprint."""
+    t = service.create("History ticket", description="Initial description")
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "Updated description", "author": "auditor"},
+    )
+    assert r.status_code == 200
+
+    # Check history for the fingerprint transition note.
+    history = client.get(f"/tickets/{t.id}/history").json()
+    notes = [e["note"] for e in history]
+    fingerprint_entry = [n for n in notes if "spec update: fingerprint" in n]
+    assert len(fingerprint_entry) == 1, f"Expected one fingerprint note, got: {notes}"
+    assert "[auditor]" in fingerprint_entry[0]
+    assert "→" in fingerprint_entry[0]
+
+
+def test_update_description_reset_fingerprint_guard(client, service):
+    """PUT /tickets/{id}/description with reset_fingerprint_guard=True succeeds."""
+    t = service.create("Reset ticket", description="body")
+    r = client.put(
+        f"/tickets/{t.id}/description",
+        json={
+            "description": "body",
+            "reset_fingerprint_guard": True,
+            "author": "operator",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fingerprint_reset"] is True
+
+    # History note should mention fingerprint-guard reset.
+    history = client.get(f"/tickets/{t.id}/history").json()
+    notes = [e["note"] for e in history]
+    reset_notes = [n for n in notes if "fingerprint-guard reset" in n]
+    assert len(reset_notes) == 1
+
+
+def test_update_description_fingerprint_changes_on_update(client, service):
+    """Updating the spec description changes the computed fingerprint."""
+    t = service.create("FP ticket", description="Spec A")
+
+    # Get the first fingerprint from the history when we update.
+    r1 = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "Spec B", "author": "test"},
+    )
+    assert r1.status_code == 200
+
+    history = client.get(f"/tickets/{t.id}/history").json()
+    notes = [e["note"] for e in history]
+    fp_notes = [n for n in notes if "spec update: fingerprint" in n]
+    assert len(fp_notes) == 1
+
+    # Update again with a different spec.
+    r2 = client.put(
+        f"/tickets/{t.id}/description",
+        json={"description": "Spec C", "author": "test"},
+    )
+    assert r2.status_code == 200
+
+    history = client.get(f"/tickets/{t.id}/history").json()
+    notes = [e["note"] for e in history]
+    fp_notes = [n for n in notes if "spec update: fingerprint" in n]
+    assert len(fp_notes) == 2
+
+    # The two fingerprint transitions should be different.
+    fp1_note = fp_notes[0]
+    fp2_note = fp_notes[1]
+    assert fp1_note != fp2_note

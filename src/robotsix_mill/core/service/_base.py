@@ -81,6 +81,9 @@ class _ServiceBase:
         def delete(self, ticket_id: str) -> bool:
             pass
 
+        def get_epic_context(self, ticket: Ticket) -> str:
+            pass
+
     # --- board discovery ---
 
     def _collect_candidate_boards(
