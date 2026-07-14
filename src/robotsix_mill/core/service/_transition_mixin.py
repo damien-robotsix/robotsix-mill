@@ -370,6 +370,15 @@ class _TransitionMixin(_ServiceBase):
             s.refresh(ticket)
             if note and dst is State.READY:
                 _clear_stale_implement_guard(self.workspace(ticket))
+                # Also clear the implement spawn counter so a resumed
+                # ticket doesn't immediately re-hit the spawn limit.
+                try:
+                    (
+                        self.workspace(ticket).artifacts_dir
+                        / "implement_spawn_count"
+                    ).unlink()
+                except FileNotFoundError:
+                    pass
             if self._on_transition is not None:
                 self._on_transition(ticket)
             return ticket

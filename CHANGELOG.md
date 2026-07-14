@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix implement spawn-limit deadlock: `resume_blocked` now clears `implement_spawn_count` alongside `implement.md` so resumed tickets don't immediately re-block on the spawn limit; transient infra failures (sandbox EOF, OOM, etc.) no longer burn spawn slots — the counter only increments on genuine re-spawns (`retry_attempt == 0`).
 - Add `agent_references/module-shadowing.md`: document the Python module-shadowing
   hazard when creating a subdirectory alongside a single-file module, with the
   canonical workaround (underscore-prefixed file alongside the module).
