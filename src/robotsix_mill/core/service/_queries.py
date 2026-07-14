@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlmodel import select
@@ -77,22 +78,59 @@ class _QueryMixin(_ServiceBase):
                     return ticket, candidates
         return None, candidates
 
+    # Fields that are safe to use as ``sort_by`` values — caller-supplied
+    # strings that map directly to Ticket column attributes.  Kept as a
+    # frozenset to reject unsupported fields before they reach the query.
+    _SORTABLE_FIELDS: frozenset[str] = frozenset(
+        {"created_at", "updated_at", "title", "state", "priority", "kind"}
+    )
+
     def list(
         self,
         state: State | None = None,
         exclude_states: Iterable[State] | None = None,
+        *,
+        offset: int = 0,
+        limit: int | None = None,
+        sort_by: str = "created_at",
+        created_after: datetime | None = None,
     ) -> list[Ticket]:
         """List tickets, optionally filtered by *state* or excluding
         *exclude_states* (e.g. terminal CLOSED/DONE for a fast board).
 
-        Results are ordered by ``created_at`` ascending.
+        Pagination:
+          *offset* — rows to skip (default 0).
+          *limit*  — max rows to return (``None`` = unbounded).
+
+        Sorting:
+          *sort_by* — column name from ``_SORTABLE_FIELDS`` (default
+          ``"created_at"``).  Raises ``ValueError`` for unsupported
+          fields.
+
+        Filtering:
+          *created_after* — only return tickets whose ``created_at`` is
+          strictly after this UTC datetime.
+
+        Results are ordered by *sort_by* ascending.
         """
+        if sort_by not in self._SORTABLE_FIELDS:
+            raise ValueError(
+                f"sort_by must be one of {sorted(self._SORTABLE_FIELDS)}, "
+                f"got {sort_by!r}"
+            )
+        order_col: object = getattr(Ticket, sort_by)
         with db.session(self.settings, self.board_id) as s:
-            stmt = select(Ticket).order_by(Ticket.created_at)
+            stmt = select(Ticket).order_by(order_col)  # type: ignore[arg-type]
             if state is not None:
                 stmt = stmt.where(Ticket.state == state)
             if exclude_states:
                 stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
+            if created_after is not None:
+                stmt = stmt.where(Ticket.created_at > created_after)
+            if offset:
+                stmt = stmt.offset(offset)
+            if limit is not None:
+                stmt = stmt.limit(limit)
             tickets = list(s.exec(stmt).all())
         for t in tickets:
             self._resolve_board_id(t)

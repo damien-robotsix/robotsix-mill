@@ -38,13 +38,17 @@ use `http://localhost:8077` as the base.
 ### GET /tickets — list tickets
 
 ```
-GET /tickets?state=<state>&include_closed=<bool>&repo_id=<repo_id>
+GET /tickets?state=<state>&include_closed=<bool>&repo_id=<repo_id>&offset=<int>&limit=<int>&sort_by=<field>&created_after=<iso-datetime>
 ```
 
 Query parameters (all optional):
 - `state` — filter by a single `State` value (e.g. `draft`, `ready`, `blocked`).
 - `include_closed` — `true` to include terminal (closed) tickets; defaults to `false`.
 - `repo_id` — restrict to a single repo; omit or pass `all` for every registered board.
+- `offset` — rows to skip for pagination (default 0).
+- `limit` — maximum rows to return (default unbounded).
+- `sort_by` — column to sort by: `created_at` (default), `updated_at`, `title`, `state`, `priority`, `kind`.
+- `created_after` — ISO-8601 UTC datetime (e.g. `2026-07-01T00:00:00Z`); only return tickets created strictly after this instant.
 
 Returns a JSON array of `TicketRead` objects (id, title, state, kind, source, priority, board_id, created_at, updated_at, …).
 
