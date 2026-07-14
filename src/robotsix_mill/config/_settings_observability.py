@@ -57,37 +57,3 @@ class _ObservabilitySettings(BaseModel):
         default=None,
         description="Path to the CI-fix agent's structured pattern memory (JSON). When unset, derives from data_dir/ci_patterns.json.",
     )
-
-    # --- tracing (optional) ---
-    langfuse_base_url: str | None = Field(
-        default=None,
-        alias="LANGFUSE_BASE_URL",
-        description="Langfuse instance base URL for LLM observability. Unset disables tracing.",
-    )
-    langfuse_public_key: str | None = Field(
-        default=None,
-        alias="LANGFUSE_PUBLIC_KEY",
-        description="Langfuse public key for LLM observability tracing.",
-    )
-    langfuse_secret_key: str | None = Field(
-        default=None,
-        alias="LANGFUSE_SECRET_KEY",
-        description="Langfuse secret key for LLM observability tracing.",
-    )
-    langfuse_project_id: str | None = Field(
-        default=None,
-        alias="LANGFUSE_PROJECT_ID",
-        description="Langfuse project ID for trace attribution.",
-    )
-
-    # --- notifications (optional) ---
-    ntfy_url: str | None = Field(
-        default=None,
-        alias="NTFY_URL",
-        description="ntfy server URL for push notifications.",
-    )
-    ntfy_token: str | None = Field(
-        default=None,
-        alias="NTFY_TOKEN",
-        description="ntfy access token for authenticated push notifications.",
-    )
