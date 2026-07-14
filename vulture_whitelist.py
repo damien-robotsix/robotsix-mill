@@ -214,6 +214,10 @@ chat_skill
 # POST /tickets/ingest handler — invoked via @router.post decorator, not
 # by direct Python call. Tested via HTTP TestClient.
 ingest_ticket
+# POST /tickets/{ticket_id}/reset-fingerprint handler — invoked via
+# @router.post decorator, not by direct Python call. Tested via HTTP
+# TestClient.
+reset_fingerprint
 # TicketIngestResult.deduped — pydantic response-model field, read only
 # via serialization (and by API clients), never by name in src/.
 deduped

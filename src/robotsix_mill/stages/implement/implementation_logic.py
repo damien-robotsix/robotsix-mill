@@ -148,23 +148,13 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 )
             )
         except AgentRunError as e:
-            cls._finalize(
-                ctx,
-                ticket,
-                repo_dir,
-                branch,
-                f"agent error: {e}",
-                ok=False,
-                extra_roots=extra_roots,
-            )
             # If the original cause is a transient infra failure
-            # (OpenRouter timeout, 5xx, 429), re-raise the typed cause
-            # so the worker's classify_stage_error picks it up and
-            # schedules a retry-with-backoff via set_retry_state.
-            # Without this, every transient OpenRouter blip became a
-            # hard-BLOCK that needed manual unblock (seen on ticket
-            # 3106 on 2026-05-28: 4-min run, OpenRouter timeout,
-            # ~hours of human attention to unstick).
+            # (OpenRouter timeout, 5xx, 429, disk-full, …), re-raise
+            # the typed cause so the worker's classify_stage_error
+            # picks it up and schedules a retry-with-backoff via
+            # set_retry_state.  Do NOT call _finalize first — that
+            # would persist a spec fingerprint and poison the next
+            # pass with a false "spec unchanged" block.
             if e.cause is not None:
                 from ...runtime.transient_errors import (
                     classify_stage_error,
@@ -180,6 +170,18 @@ class ImplementationLogicMixin(_ImplementStageBase):
 
                 if classify_stage_error(e.cause) == "transient":
                     raise e.cause from e
+            # Non-transient agent error — record the outcome (spec-
+            # determined dead-end) so the fingerprint guard can block
+            # a re-spawn with an unchanged spec.
+            cls._finalize(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                f"agent error: {e}",
+                ok=False,
+                extra_roots=extra_roots,
+            )
             return _AgentRunOutcome(
                 failure=_SinglePassResult(
                     next_action="return",

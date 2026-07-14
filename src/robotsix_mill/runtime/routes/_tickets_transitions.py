@@ -6,7 +6,9 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
+from ...config import Settings
 from ...core.models import CommentCreate, TicketRead
+from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
 from ..deps import (
     enrich_ticket_read,
@@ -16,6 +18,7 @@ from ..deps import (
     maybe_enqueue,
     resolve_ticket_id,
 )
+from ..worker import Worker
 from ._tickets import _repo_config_for_ticket
 
 log = logging.getLogger(__name__)
@@ -180,6 +183,41 @@ def resume_blocked(
         raise HTTPException(
             409, f"ticket is not blocked or retrying (currently {ticket.state})"
         )
+
+    maybe_enqueue(ticket, worker)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
+@router.post("/tickets/{ticket_id}/reset-fingerprint", response_model=TicketRead)
+def reset_fingerprint(
+    ticket_id: str,
+    request: Request,
+    svc: TicketService = Depends(get_service),
+    worker: Worker = Depends(get_worker),
+    settings: Settings = Depends(get_settings),
+) -> TicketRead:
+    """Clear the implement spec-fingerprint for a ticket.
+
+    Deletes ``artifacts/implement.md`` from the ticket's workspace so
+    the next implement pass is not blocked by the stale-respawn guard.
+    Use when a prior implement attempt was blocked by a transient
+    environmental failure and the guard is preventing a re-run even
+    though the spec hasn't changed.
+    """
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    ws = svc.workspace(ticket)
+    implement_md = ws.artifacts_dir / "implement.md"
+    try:
+        implement_md.unlink(missing_ok=True)
+    except OSError:
+        raise HTTPException(
+            500,
+            "failed to delete implement.md — check filesystem permissions",
+        ) from None
 
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
