@@ -337,6 +337,40 @@ class Forge(ABC):
         """
         return []
 
+    def enable_vulnerability_alerts(self) -> bool:
+        """Enable Dependabot vulnerability alerts on the repo.
+
+        Concrete (not abstract) with a ``False`` default — this is a
+        GitHub feature, so non-GitHub forges inherit the no-op.
+
+        Returns ``True`` on success, ``False`` on any failure.
+        Must NEVER raise.
+        """
+        return False
+
+    def enable_automated_security_fixes(self) -> bool:
+        """Enable automated security fixes (Dependabot auto-fix PRs) on the repo.
+
+        Concrete (not abstract) with a ``False`` default — this is a
+        GitHub feature, so non-GitHub forges inherit the no-op.
+
+        Returns ``True`` on success, ``False`` on any failure.
+        Must NEVER raise.
+        """
+        return False
+
+    def ensure_dependency_graph_enabled(self) -> bool:
+        """Enable the dependency graph + vulnerability alerts on the repo.
+
+        There is no direct REST endpoint for the Dependency Graph — it
+        enables implicitly when vulnerability alerts are turned on.
+        Default delegates to :meth:`enable_vulnerability_alerts`.
+
+        Returns ``True`` on success, ``False`` on any failure.
+        Must NEVER raise.
+        """
+        return self.enable_vulnerability_alerts()
+
     def update_branch(self, *, source_branch: str) -> dict:
         """Merge the PR's base branch into the PR branch (server-side) so its
         CI re-runs against the current base tip. Default: unsupported no-op."""

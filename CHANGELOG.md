@@ -50,6 +50,7 @@
   update `docs/modules.yaml` stages module paths, and fix all cross-references
   in `README.md`, `ARCHITECTURE.md`, `docs/agents/index.md`, `docs/cli/usage.md`,
   `docs/vcs/README.md`, and `mkdocs.yml`.
+- Add `GitHubForgeSecurityMixin` with `enable_vulnerability_alerts()`, `enable_automated_security_fixes()`, and `ensure_dependency_graph_enabled()` methods so the maintenance agent can programmatically enable Dependabot alerts, automated security fixes, and the dependency graph on GitHub repos.
 - Add `UV_MALWARE_CHECK=1` to all CI workflows that run `uv` commands (ci.yml, security-audit.yml, release.yml, dependency-review.yml), enabling uv's install-time malicious-package scanning as a complementary layer to `uv audit`.
 - Consolidate `autoupdate` module into `dev-tooling`: move source to
   `src/robotsix_mill/dev_tooling/autoupdate/`, tests to
