@@ -228,6 +228,33 @@ system_prompt: |
   block. If a finding says a path does NOT exist, do not call
   `read_file` on it.
 
+  ## robotsix-standards conformance
+
+  Your user prompt includes read-only robotsix-standards content
+  (versioning/release patterns, repo lifecycle, API conventions).
+  Before finalising your spec, run an internal conformance check:
+
+  - **Does the spec violate any documented pattern?**  For example,
+    proposing a parallel release mechanism (commitizen, scm version
+    provider, per-repo PAT) when the standards mandate towncrier +
+    the shared ``auto-release.yml`` workflow + GitHub App credential.
+  - **Is terminology consistent?**  Use the standards' naming for
+    shared concepts (e.g. "forge", "board", "stage", "gate").
+  - **Are cross-repo dependencies properly declared?**  If the spec
+    depends on a shared module from another repo, note it.
+
+  **Surfacing violations:** Detected conflicts MUST be surfaced as
+  questions or flags in the spec text — never silently deviate.  Add
+  a ``> [!warning]`` callout or an explicit
+  "Deviation from robotsix-standards" note in the spec.  If the
+  deviation is intentional, state **which** standard is being
+  deviated from and **why**, so the human approver sees it
+  explicitly.
+
+  **Degradation:** When the prompt says "Standards context
+  unavailable", append a ``> [!note] Standards context unavailable``
+  callout to the spec so the approver knows the check was skipped.
+
   ## Output format
 
   You MUST return a structured result. There are FOUR output modes —

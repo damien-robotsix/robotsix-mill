@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import cast
 
 from ...agents import refining
+from ...agents.standards import fetch_standards_context
 from ...config.settings import Settings
 from ...core.models import Ticket
 from ...core.states import State
@@ -525,6 +526,13 @@ class RefineAgentMixin:
                 )
 
             _sendback = bool(reviewer_comments)
+
+            # Pre-fetch robotsix-standards so the agent can cross-check
+            # its spec against fleet-wide conventions (cached per
+            # session).  Degrades gracefully: an empty string means the
+            # fetch failed and the agent is told to note it.
+            standards_ctx = fetch_standards_context(s)
+
             result = refining.run_refine_agent(
                 settings=s,
                 title=ticket.title,
@@ -548,6 +556,7 @@ class RefineAgentMixin:
                 refine_model=refine_model,
                 request_limit_override=request_limit_override,
                 triage_findings=triage_findings,
+                standards_context=standards_ctx,
             )
         except RuntimeError as e:
             from ...runtime.transient_errors import reraise_if_transient
