@@ -27,20 +27,31 @@ from sqlmodel import SQLModel
 from robotsix_mill.core import models  # noqa: F401
 
 # Alembic Config object (reads alembic.ini).
-config = context.config
+# **Do not** read ``context.config`` at module level — Alembic may
+# cache ``env.py`` in ``sys.modules``, making the variable stale on
+# subsequent ``upgrade()`` / ``stamp()`` calls (different boards,
+# different tests).  Every function that needs the config must
+# read ``context.config`` directly.
 
 # Set up Python logging from the config file section (optional).
 # Save the root logger's handlers before fileConfig replaces them
 # (alembic.ini [logger_root] sets handlers=console, which nukes any
 # pre-existing handlers such as pytest caplog).  Restore them after
 # so both the alembic console handler and any prior handlers coexist.
-if config.config_file_name is not None:
+if context.config.config_file_name is not None:
     import logging
 
     _root = logging.getLogger()
     _saved_handlers = list(_root.handlers)
     try:
-        fileConfig(config.config_file_name, disable_existing_loggers=False)
+        fileConfig(context.config.config_file_name, disable_existing_loggers=False)
+    except KeyError:
+        # The alembic.ini may reference a logger in [loggers] keys
+        # without a corresponding [logger_<name>] section (e.g.
+        # the "alembic" key left over from the upstream template).
+        # fileConfig raises KeyError on the missing section; the
+        # migration itself does not depend on the logging config.
+        pass
     finally:
         for h in _saved_handlers:
             if h not in _root.handlers:
@@ -56,7 +67,7 @@ def run_migrations_offline() -> None:
     Used by ``alembic upgrade --sql`` to produce a SQL script without
     connecting to a database.
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = context.config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -81,7 +92,7 @@ def run_migrations_online() -> None:
     from sqlalchemy import create_engine
 
     connectable = create_engine(
-        config.get_main_option("sqlalchemy.url"),
+        context.config.get_main_option("sqlalchemy.url"),
     )
 
     with connectable.connect() as connection:

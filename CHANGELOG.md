@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Fix stale ``context.config`` reference in ``alembic/env.py`` — the
+  module-level ``config = context.config`` binding could become stale
+  when Alembic cached ``env.py`` across multiple migrations, causing
+  ``context.configure()`` to use the wrong database URL and triggering
+  a ``KeyError`` in Alembic's proxy cleanup
 - Fix implement spawn-limit deadlock: `resume_blocked` now clears `implement_spawn_count` alongside `implement.md` so resumed tickets don't immediately re-block on the spawn limit; transient infra failures (sandbox EOF, OOM, etc.) no longer burn spawn slots — the counter only increments on genuine re-spawns (`retry_attempt == 0`).
 - Add `agent_references/module-shadowing.md`: document the Python module-shadowing
   hazard when creating a subdirectory alongside a single-file module, with the
