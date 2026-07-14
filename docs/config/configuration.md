@@ -281,7 +281,7 @@ repos:
   is a deployment-specific host path, it lives in the operator's central
   config — **not** the managed repo's committed
   `.robotsix-mill/config.yaml` (the repo-owned key is deprecated and
-  ignored). See [observability.md](langfuse/observability.md) for the full story.
+  ignored). See [observability.md](../langfuse/observability.md) for the full story.
 
 ### Set up secrets
 
@@ -458,7 +458,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.memory.dedup_lookback_days` | `MILL_DEDUP_LOOKBACK_DAYS` | `7` | Days back to consider closed tickets as dup candidates |
-| `epic_dedup_lookback_days` | `MILL_EPIC_DEDUP_LOOKBACK_DAYS` | `7` | Recency window (days) for the epic-decomposition pre-filing dedup recent-ticket check (see [epic-dedup.md](epic-dedup.md)) |
+| `epic_dedup_lookback_days` | `MILL_EPIC_DEDUP_LOOKBACK_DAYS` | `7` | Recency window (days) for the epic-decomposition pre-filing dedup recent-ticket check (see [epic-dedup.md](../epic-dedup.md)) |
 | `core.limits.dedup_skip_on_no_overlap` | `MILL_DEDUP_SKIP_ON_NO_OVERLAP` | `true` | Skip dedup LLM call when draft shares no token overlap with any candidate — saves cost in the "clearly unrelated" case |
 | `core.limits.dedup_candidate_body_max_chars` | `MILL_DEDUP_CANDIDATE_BODY_MAX_CHARS` | `4000` | Cap each candidate body fed to dedup prompt; ≤0 disables truncation |
 
@@ -646,7 +646,7 @@ Additional fields:
 | `periodic.bespoke_discovery_interval_seconds` | `MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS` | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |
-| `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](agents/diagnostic-agent.md) |
+| `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](../agents/diagnostic-agent.md) |
 | `periodic.langfuse_cleanup.max_traces` | `MILL_LANGFUSE_CLEANUP_MAX_TRACES` | `5000` | Max traces retained in the shared workspace Langfuse project when `langfuse_cleanup_periodic` is enabled; oldest traces are deleted to stay under this cap. Centralized (global-only) — one pass per interval, not per-repo. |
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
 | `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board. |
@@ -1124,9 +1124,9 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 
 ## See also
 
-- [index.md](index.md) — documentation home
-- [cli/usage.md](cli/usage.md) — full CLI command reference
-- [observability.md](langfuse/observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
-- [deployment.md](deployment.md) — continuous deployment guide
+- [index.md](../index.md) — documentation home
+- [cli/usage.md](../cli/usage.md) — full CLI command reference
+- [observability.md](../langfuse/observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
+- [deployment.md](../dev-tooling/deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
-- [`config/config.example.json`](../config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)
+- [`config/config.example.json`](../../config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)
