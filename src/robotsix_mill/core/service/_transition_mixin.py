@@ -374,11 +374,10 @@ class _TransitionMixin(_ServiceBase):
                 # ticket doesn't immediately re-hit the spawn limit.
                 try:
                     (
-                        self.workspace(ticket).artifacts_dir
-                        / "implement_spawn_count"
+                        self.workspace(ticket).artifacts_dir / "implement_spawn_count"
                     ).unlink()
                 except FileNotFoundError:
-                    pass
+                    pass  # best-effort cleanup; file may not exist
             if self._on_transition is not None:
                 self._on_transition(ticket)
             return ticket
