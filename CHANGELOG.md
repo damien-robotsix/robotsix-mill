@@ -42,6 +42,7 @@
 - Fix stale ``forge/gitlab.py`` path references in the forge_parity periodic agent prompt; now points to ``forge/gitlab/core.py`` after the monolithic adapter was split into a package.
 - Skip ``TestEditsFormatterReverted`` tests when ``ruff`` is not installed (base/production container)
 - Remove dead backward-compat aliases `load_yaml_config` and `load_secrets_yaml` from `config/loader.py` (no callers remain). (mill: Add pagination (offset/limit) + sort/filter to GET /tickets and widen chat truncation (20260712T120553Z-add-pagination-offset-limit-sort-filter-01fd) [WIP])
+- trace_inspector: guard against string entries in observations that crash `_shrink_trace_data` with `'str' object has no attribute 'items'`. Non-dict observation entries are now skipped in both the >200 and <=200 obs_count paths. (mill: Fix trace_review 'str object has no attribute items' crash in shared trace-review logic (20260712T120733Z-fix-trace-review-str-object-has-no-attri-43cf) [WIP])
 - Added `docs/repo-scaffold/index.md` documenting the repo creation workflow and workspace member sync, and registered the docs path in `docs/modules.yaml`.
 - Remove stale `reply_to_thread`/`close_thread` error-recovery guidance from `retrospect.yaml` system prompt (both tools are disabled for this agent).
 - Reorganize stage documentation into `docs/stages/`: move `approval-gate.md`,

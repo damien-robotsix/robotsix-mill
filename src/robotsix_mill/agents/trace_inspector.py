@@ -346,6 +346,7 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
         trace["observations"] = [
             {k: v for k, v in o.items() if k in _KEEP_FIELDS and v is not None}
             for o in obs
+            if isinstance(o, dict)
         ]
         shrunk = _json.dumps(trace, default=str)
         if len(shrunk) <= max_chars:
@@ -358,6 +359,8 @@ def _shrink_trace_data(trace_data: str, max_chars: int = 400_000) -> tuple[str, 
         )
 
     for o in obs:
+        if not isinstance(o, dict):
+            continue
         for k in ("input", "output", "metadata"):
             if k in o and o[k] is not None:
                 o[k] = _trim(o[k])
