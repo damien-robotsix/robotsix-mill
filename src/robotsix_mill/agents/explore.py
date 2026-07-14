@@ -152,6 +152,12 @@ SCOPE DISCIPLINE — always follow these limits:
   path with a slight pattern variation. Instead, list-dir the parent
   directory first to confirm the path and any adjacent files actually
   exist.
+- STOP WHEN YOU HAVE ENOUGH: once you have gathered information that
+  answers the user's question — even if partial — return your answer
+  immediately. Do NOT run extra grep/read_file commands to confirm,
+  cross-check, or explore alternative patterns on the same file. A
+  concise answer with the best path/symbol you found is better than
+  exhaustive verification that wastes turns.
 - USE LIMIT + OFFSET ON read_file: never read a whole large file
   when you already know the line range. ``read_file`` accepts
   ``offset:`` and ``limit:`` arguments — pass them whenever grep
