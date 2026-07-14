@@ -1322,7 +1322,7 @@ def test_list_pr_reviews_empty_response(tmp_path, monkeypatch):
 
 
 def test_list_pr_reviews_http_error(tmp_path, monkeypatch):
-    """Non-2xx from reviews endpoint → raise_for_status propagates."""
+    """Non-2xx from reviews endpoint → returns [] gracefully (paginated)."""
     list_resp = [{"number": 7}]
     detail_resp = {
         "number": 7,
@@ -1340,8 +1340,70 @@ def test_list_pr_reviews_http_error(tmp_path, monkeypatch):
     _mock_httpx(monkeypatch, get_map=get_map)
 
     forge = _forge(tmp_path)
-    with pytest.raises(real_httpx.HTTPStatusError):
-        forge.list_pr_reviews(source_branch="feature/x")
+    assert forge.list_pr_reviews(source_branch="feature/x") == []
+
+
+def test_list_pr_reviews_multi_page(tmp_path, monkeypatch):
+    """More than 100 reviews → all pages are fetched (bug fix)."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    page1 = [
+        {
+            "id": i,
+            "user": {"login": f"user{i}"},
+            "submitted_at": "2025-01-15T12:00:00Z",
+            "body": f"review {i}",
+        }
+        for i in range(100)
+    ]
+    page2 = [
+        {
+            "id": 200,
+            "user": {"login": "last"},
+            "submitted_at": "2025-01-16T12:00:00Z",
+            "body": "final",
+        }
+    ]
+
+    import httpx as real_httpx_module
+
+    class MultiPageClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "reviews" in url:
+                page = (params or {}).get("page", 1)
+                if page == 2:
+                    return _make_response(200, page2)
+                return _make_response(200, page1)
+            if "repos/o/r/pulls/7" in url:
+                return _make_response(200, detail_resp)
+            if "repos/o/r/pulls" in url:
+                return _make_response(200, list_resp)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx_module, "Client", MultiPageClient)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_reviews(source_branch="feature/x")
+    assert len(result) == 101
+    assert result[0]["id"] == 0
+    assert result[-1]["id"] == 200
+    assert result[-1]["author"] == "last"
 
 
 # ---------------------------------------------------------------------------
@@ -1445,7 +1507,7 @@ def test_list_review_comments_empty_response(tmp_path, monkeypatch):
 
 
 def test_list_review_comments_http_error(tmp_path, monkeypatch):
-    """Non-2xx from review-comments endpoint → raise_for_status propagates."""
+    """Non-2xx from review-comments endpoint → returns [] gracefully (paginated)."""
     list_resp = [{"number": 7}]
     detail_resp = {
         "number": 7,
@@ -1463,8 +1525,76 @@ def test_list_review_comments_http_error(tmp_path, monkeypatch):
     _mock_httpx(monkeypatch, get_map=get_map)
 
     forge = _forge(tmp_path)
-    with pytest.raises(real_httpx.HTTPStatusError):
-        forge.list_review_comments(source_branch="feature/x")
+    assert forge.list_review_comments(source_branch="feature/x") == []
+
+
+def test_list_review_comments_multi_page(tmp_path, monkeypatch):
+    """More than 100 review comments → all pages are fetched (bug fix)."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    page1 = [
+        {
+            "id": i,
+            "user": {"login": f"user{i}"},
+            "created_at": "2025-01-15T12:00:00Z",
+            "body": f"comment {i}",
+            "path": f"src/file_{i}.py",
+            "line": i,
+            "diff_hunk": "@@ ... @@",
+        }
+        for i in range(100)
+    ]
+    page2 = [
+        {
+            "id": 200,
+            "user": {"login": "last"},
+            "created_at": "2025-01-16T12:00:00Z",
+            "body": "final",
+            "path": "src/last.py",
+            "line": 42,
+            "diff_hunk": "@@ ... @@",
+        }
+    ]
+
+    import httpx as real_httpx_module
+
+    class MultiPageClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "comments" in url:
+                page = (params or {}).get("page", 1)
+                if page == 2:
+                    return _make_response(200, page2)
+                return _make_response(200, page1)
+            if "repos/o/r/pulls/7" in url:
+                return _make_response(200, detail_resp)
+            if "repos/o/r/pulls" in url:
+                return _make_response(200, list_resp)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx_module, "Client", MultiPageClient)
+
+    forge = _forge(tmp_path)
+    result = forge.list_review_comments(source_branch="feature/x")
+    assert len(result) == 101
+    assert result[0]["id"] == 0
+    assert result[-1]["id"] == 200
+    assert result[-1]["author"] == "last"
 
 
 # ---------------------------------------------------------------------------
@@ -1587,6 +1717,71 @@ def test_pr_files_empty_files(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     files = forge._pr_files(owner="o", repo="r", pull_number=7)
     assert files == []
+
+
+def test_pr_files_multi_page(tmp_path, monkeypatch):
+    """More than 100 files → all pages are fetched (bug fix)."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    # 101 files across 2 pages
+    page1 = [
+        {
+            "filename": f"src/file_{i}.py",
+            "status": "modified",
+            "additions": i,
+            "deletions": 0,
+        }
+        for i in range(100)
+    ]
+    page2 = [
+        {"filename": "src/last.py", "status": "added", "additions": 10, "deletions": 0}
+    ]
+    get_map = {
+        "repos/o/r/pulls/7/files": _make_response(200, page1),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    # Mock retrying_client to return page2 on second GET with page=2
+    import httpx as real_httpx_module
+
+    class MultiPageClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            if "files" in url:
+                page = (params or {}).get("page", 1)
+                if page == 2:
+                    return _make_response(200, page2)
+                return _make_response(200, page1)
+            if "repos/o/r/pulls/7" in url and "files" not in url:
+                return _make_response(200, detail_resp)
+            if "repos/o/r/pulls" in url and "files" not in url and "7" not in url:
+                return _make_response(200, list_resp)
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx_module, "Client", MultiPageClient)
+
+    files = forge._pr_files(owner="o", repo="r", pull_number=7)
+    assert len(files) == 101
+    assert files[0]["path"] == "src/file_0.py"
+    assert files[-1]["path"] == "src/last.py"
 
 
 # ---------------------------------------------------------------------------
@@ -3451,6 +3646,78 @@ def test__pr_review_status_inline_comment_original_line_fallback(tmp_path, monke
     assert inline[0]["line"] == 55
 
 
+def test__pr_review_status_multi_page(tmp_path, monkeypatch):
+    """More than 100 reviews/comments → all pages are fetched (bug fix)."""
+    reviews_page1 = [
+        {"id": i, "state": "APPROVED", "body": f"LGTM {i}"} for i in range(100)
+    ]
+    reviews_page2 = [{"id": 200, "state": "APPROVED", "body": "final approval"}]
+    comments_page1 = [
+        {
+            "id": i,
+            "user": {"login": f"user{i}"},
+            "created_at": "2025-01-15T12:00:00Z",
+            "body": f"nit {i}",
+            "path": f"src/file_{i}.py",
+            "line": i,
+            "diff_hunk": "@@ ... @@",
+            "pull_request_review_id": 0,
+        }
+        for i in range(100)
+    ]
+    comments_page2 = [
+        {
+            "id": 300,
+            "user": {"login": "last"},
+            "created_at": "2025-01-16T12:00:00Z",
+            "body": "last comment",
+            "path": "src/last.py",
+            "line": 99,
+            "diff_hunk": "@@ ... @@",
+            "pull_request_review_id": 200,
+        }
+    ]
+
+    import httpx as real_httpx_module
+
+    class MultiPageClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            page = (params or {}).get("page", 1)
+            if "reviews" in url:
+                if page == 2:
+                    return _make_response(200, reviews_page2)
+                return _make_response(200, reviews_page1)
+            if "comments" in url:
+                if page == 2:
+                    return _make_response(200, comments_page2)
+                return _make_response(200, comments_page1)
+            if "files" in url:
+                return _make_response(200, [])
+            return _make_response(404, [], "")
+
+    monkeypatch.setattr(real_httpx_module, "Client", MultiPageClient)
+
+    forge = _forge(tmp_path)
+    result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
+
+    assert result["state"] == "APPROVED"
+    assert result["files"] == []
+    # 101 review body comments + 101 inline comments = 202 total
+    assert len(result["comments"]) == 202
+    review_bodies = [c for c in result["comments"] if c["path"] == ""]
+    assert len(review_bodies) == 101
+    assert review_bodies[-1]["body"] == "final approval"
+
+
 # ---------------------------------------------------------------------------
 # _parse_iso_utc
 # ---------------------------------------------------------------------------
@@ -4078,6 +4345,66 @@ def test_list_open_prs_skips_pr_without_ref(tmp_path, monkeypatch):
     result = forge.list_open_prs()
     assert len(result) == 1
     assert result[0]["branch"] == "feature/b"
+
+
+# ---------------------------------------------------------------------------
+# get_pr_labels / _get_pr_labels
+# ---------------------------------------------------------------------------
+
+
+def test_get_pr_labels_multi_page(tmp_path, monkeypatch):
+    """More than 100 labels → all pages are fetched (bug fix)."""
+    page1 = [{"name": f"label-{i}"} for i in range(100)]
+    page2 = [{"name": "label-last"}]
+
+    import httpx as real_httpx_module
+
+    class MultiPageClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            page = (params or {}).get("page", 1)
+            if page == 2:
+                return _make_response(200, page2)
+            return _make_response(200, page1)
+
+    monkeypatch.setattr(real_httpx_module, "Client", MultiPageClient)
+
+    forge = _forge(tmp_path)
+    labels = forge.get_pr_labels(pr_number=7)
+    assert len(labels) == 101
+    assert labels[0] == "label-0"
+    assert labels[-1] == "label-last"
+
+
+def test_get_pr_labels_exception_returns_empty(tmp_path, monkeypatch):
+    """API error → returns [] gracefully."""
+    import httpx as real_httpx_module
+
+    class ErrorClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return _make_response(500, {}, "boom")
+
+    monkeypatch.setattr(real_httpx_module, "Client", ErrorClient)
+
+    forge = _forge(tmp_path)
+    assert forge.get_pr_labels(pr_number=7) == []
 
 
 # ---------------------------------------------------------------------------

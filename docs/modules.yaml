@@ -131,6 +131,7 @@ modules:
       - src/robotsix_mill/forge/gitlab/ci.py
       - src/robotsix_mill/forge/gitlab/code_scanning.py
       - src/robotsix_mill/forge/gitlab/dependabot.py
+      - src/robotsix_mill/forge/_github_pagination.py
       - src/robotsix_mill/forge/gitlab/_pagination.py
       - src/robotsix_mill/forge/_http.py
       - src/robotsix_mill/forge/_log_utils.py
