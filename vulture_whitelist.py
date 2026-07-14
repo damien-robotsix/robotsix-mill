@@ -175,6 +175,11 @@ regenerate_headers
 # from tests/ (vulture only scans src/, not tests/).  Vulture flags it at
 # 60% confidence.
 invalidate_and_backoff
+# enable_automated_security_fixes, ensure_dependency_graph_enabled — new
+# Forge/security-mixin methods; callers are in a future PR (maintenance-agent
+# enablement). Vulture (60% confidence) flags them.
+enable_automated_security_fixes
+ensure_dependency_graph_enabled
 
 # -- deps --------------------------------------------------------------------
 # internal_repo_ids — parameter of parse_internal_git_pins(); documented in
