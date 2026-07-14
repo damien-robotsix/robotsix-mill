@@ -558,6 +558,7 @@ modules:
       - renovate.json
       - .github/**/*
       - .jscpd.json
+      - lychee.toml
       - .python-version
       - .trivyignore
       - .secrets.baseline
