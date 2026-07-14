@@ -138,9 +138,15 @@ class _FinalizeRecorder:
         ok,
         reference_files=None,
         extra_roots=None,
+        transient=False,
     ):
         self.calls.append(
-            {"summary": summary, "ok": ok, "reference_files": reference_files}
+            {
+                "summary": summary,
+                "ok": ok,
+                "reference_files": reference_files,
+                "transient": transient,
+            }
         )
 
 
@@ -322,6 +328,55 @@ def test_loop_empty_diag_does_not_trip_triple_repeat(
     # Exhaustion fallback — NOT the identical-diagnosis short-circuit.
     assert out.note == "implement loop exhausted — resumable"
     assert fin.calls[0]["ok"] is False
+
+
+def test_env_error_short_circuit_marks_transient(ctx_factory, tmp_path, monkeypatch):
+    """The env-error repeat circuit breaker passes ``transient=True`` to
+    ``_finalize`` so no spec fingerprint is persisted — a subsequent pass
+    re-runs implement instead of being blocked by the stale-respawn guard."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    settings = SimpleNamespace(max_fix_iterations=8)
+    env_diag = f"{ENV_ERROR_PREFIX} command not found in sandbox: 'yamllint'"
+    results = [
+        _SinglePassResult(next_action="retry", feedback=env_diag),
+        _SinglePassResult(next_action="retry", feedback=env_diag),
+    ]
+    rec, fin = _setup_loop(monkeypatch, results)
+
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
+
+    assert len(rec.calls) == 2
+    assert out.next_state is State.BLOCKED
+    assert len(fin.calls) == 1
+    assert fin.calls[0]["ok"] is False
+    assert fin.calls[0]["transient"] is True
+
+
+def test_triple_repeat_short_circuit_not_transient(ctx_factory, tmp_path, monkeypatch):
+    """The triple-repeat (non-env) circuit breaker passes
+    ``transient=False`` (the default) — it IS a spec-determined dead-end
+    and should persist a fingerprint so the guard can block re-spawns
+    with an unchanged spec."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    settings = SimpleNamespace(max_fix_iterations=8)
+    diag = "test_foo assertion failed: expected 1 got 2"
+    ic_with_diag = _ic(feedback=diag)
+    results = [
+        _SinglePassResult(next_action="retry", feedback=None, ic=ic_with_diag)
+        for _ in range(3)
+    ]
+    rec, fin = _setup_loop(monkeypatch, results)
+
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
+
+    assert len(rec.calls) == 3
+    assert out.next_state is State.BLOCKED
+    assert len(fin.calls) == 1
+    assert fin.calls[0]["ok"] is False
+    # transient defaults to False — spec-determined, fingerprint recorded.
+    assert fin.calls[0]["transient"] is False
 
 
 # --- 2. _load_implement_context: artifact/context loading -----------------

@@ -726,6 +726,53 @@ def test_resume_blocked_wrong_state_409(client, service):
     assert r.status_code == 409
 
 
+# --- reset-fingerprint endpoint tests ---
+
+
+def test_reset_fingerprint_success(client, service):
+    """POST /tickets/{id}/reset-fingerprint clears implement.md."""
+    t = service.create("Reset fingerprint")
+    service.transition(t.id, State.READY)
+
+    ws = service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test\n"
+        "spec-fingerprint: abc123\n"
+        "\nblocked\n",
+        encoding="utf-8",
+    )
+    assert (ws.artifacts_dir / "implement.md").exists()
+
+    r = client.post(f"/tickets/{t.id}/reset-fingerprint")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == t.id
+    assert not (ws.artifacts_dir / "implement.md").exists()
+
+
+def test_reset_fingerprint_missing_ticket_404(client):
+    """POST /tickets/{id}/reset-fingerprint with bogus id returns 404."""
+    r = client.post("/tickets/nonexistent/reset-fingerprint")
+    assert r.status_code == 404
+
+
+def test_reset_fingerprint_no_implement_md_is_idempotent(client, service):
+    """POST /tickets/{id}/reset-fingerprint when no implement.md exists
+    is a no-op and returns 200."""
+    t = service.create("No fingerprint yet")
+    service.transition(t.id, State.READY)
+
+    ws = service.workspace(t)
+    assert not (ws.artifacts_dir / "implement.md").exists()
+
+    r = client.post(f"/tickets/{t.id}/reset-fingerprint")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == t.id
+
+
 # --- BLOCKED manual override via transition endpoint ---
 
 

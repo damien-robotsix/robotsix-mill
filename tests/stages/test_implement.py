@@ -5665,6 +5665,133 @@ def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeyp
     assert "spec-fingerprint:" in content
 
 
+def test_transient_agent_error_does_not_persist_fingerprint(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the implement agent raises AgentRunError with a transient
+    cause (simulating a network blip), _finalize must NOT be called,
+    so no fingerprint is persisted.  The next pass must re-implement
+    normally instead of hitting the stale-re-spawn guard."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Transient blip", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    from robotsix_mill.agents.coding import AgentRunError
+
+    # Simulate a transient error: AgentRunError wrapping an
+    # httpx.ConnectError (classified as transient by
+    # classify_stage_error).
+    cause = None
+    try:
+        import httpx
+
+        cause = httpx.ConnectError("Connection refused")
+    except ImportError:
+        cause = ConnectionError("Connection refused")
+
+    def _agent_transient(*, repo_dir, spec, **kwargs):
+        raise AgentRunError("transient blip", messages=[], cause=cause)
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent_transient)
+
+    # The implement stage should raise the transient cause, NOT
+    # return a normal Outcome.
+    with pytest.raises(Exception):  # noqa: B017
+        ImplementStage().run(t, ctx)
+
+    # implement.md must NOT exist (or must not have a fingerprint)
+    # because _finalize was never called for this transient error.
+    ws = ctx.service.workspace(t)
+    implement_md = ws.artifacts_dir / "implement.md"
+    if implement_md.exists():
+        content = implement_md.read_text(encoding="utf-8")
+        assert "spec-fingerprint:" not in content, (
+            "transient error must not persist a spec fingerprint"
+        )
+
+
+def test_spec_determined_error_persists_fingerprint(ctx_factory, tmp_path, monkeypatch):
+    """When the implement agent raises AgentRunError with a NON-transient
+    cause (a genuine spec/logic dead-end), _finalize IS called and the
+    fingerprint IS persisted so the stale-re-spawn guard can block a
+    re-run with an unchanged spec."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Hard error", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    from robotsix_mill.agents.coding import AgentRunError
+
+    # A ValueError is NOT classified as transient — it's a spec-level
+    # dead-end (the agent couldn't make sense of the spec).
+    cause = ValueError("cannot parse specification")
+
+    def _agent_fatal(*, repo_dir, spec, **kwargs):
+        raise AgentRunError("fatal spec error", messages=[], cause=cause)
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent_fatal)
+
+    out = ImplementStage().run(t, ctx)
+    # Non-transient → BLOCKED outcome with fingerprint persisted.
+    assert out.next_state is State.BLOCKED
+
+    ws = ctx.service.workspace(t)
+    implement_md = ws.artifacts_dir / "implement.md"
+    assert implement_md.exists(), "spec-determined error must write implement.md"
+    content = implement_md.read_text(encoding="utf-8")
+    assert "spec-fingerprint:" in content, (
+        "spec-determined error must persist a spec fingerprint"
+    )
+    assert "BLOCKED — resumable" in content
+
+
+def test_stale_respawn_guard_allows_after_transient(ctx_factory, tmp_path, monkeypatch):
+    """When implement.md has no fingerprint (written by a pre-fix
+    transient attempt, or the fingerprint was omitted), preflight
+    must NOT block — it must allow the re-spawn."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Transient resume", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    # Write implement.md with BLOCKED status but NO fingerprint line
+    # (simulating a transient-failure artifact from before the fix
+    # was applied, or a fresh transient attempt).
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        "\nno changes produced (transient abort)\n",
+        encoding="utf-8",
+    )
+
+    # Preflight should NOT block — no fingerprint means transient.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow when fingerprint is absent, got: {out}"
+
+
 def test_stuck_no_diff_passes_aborts_loop(ctx_factory, tmp_path, monkeypatch):
     """After N consecutive passes with no file edits, the loop aborts
     with a 'stuck' BLOCKED instead of exhausting max_fix_iterations."""
@@ -5794,3 +5921,90 @@ def test_stuck_cumulative_tool_calls_aborts_loop(ctx_factory, tmp_path, monkeypa
     assert "cumulative tool calls" in out.note.lower()
     # 30 calls/pass, cap at 50 → fires on second pass.
     assert call_count[0] <= 3
+
+
+# --- transient fingerprint guard -------------------------------------------
+
+
+def test_transient_header_skips_fingerprint_guard(ctx_factory, tmp_path, monkeypatch):
+    """When implement.md records a TRANSIENT outcome, preflight must NOT
+    block — the transient abort was environmental, not spec-determined."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Transient ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Write implement.md with "TRANSIENT — retryable" header and NO
+    # spec-fingerprint line — simulating an env-error short-circuit.
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (TRANSIENT — retryable)\n"
+        "branch: test-branch\n"
+        "\nenvironment failure not fixable by code edits\n",
+        encoding="utf-8",
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, (
+        f"preflight must allow when last outcome was TRANSIENT, got: {out}"
+    )
+
+
+def test_spec_determined_blocked_persists_fingerprint_and_guards(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A spec-determined BLOCKED writes the fingerprint, and an unchanged-
+    spec re-spawn is correctly guarded."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Blocked spec-determined", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Run an implement pass that produces NO changes → _finalize writes
+    # implement.md with "BLOCKED — resumable" + spec-fingerprint.
+    def _agent_noop(*, repo_dir, spec, **kwargs):
+        return ("did nothing", [], "", None, None, True, "nothing to do")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent_noop)
+
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.DONE  # no_change_needed → DONE
+
+    # Reset ticket to READY to simulate a re-spawn.
+    ctx.service.transition(t.id, State.BLOCKED, "test reset")
+    ctx.service.transition(t.id, State.READY, "test reset")
+    t = ctx.service.get(t.id)
+
+    # Write implement.md with "BLOCKED — resumable" + matching fingerprint.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    # Preflight should block — spec-determined, fingerprint matches.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spec-determined" in out.note.lower()
+    assert fp in out.note
