@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._github_pagination import _paginated_get
 from .base import BranchInfo, _parse_iso_utc
 
 
@@ -388,14 +389,12 @@ class GitHubForgePRMixin:
         return self._get_pr_labels(owner=owner, repo=repo, pr_number=pr_number)
 
     def _get_pr_labels(self, *, owner: str, repo: str, pr_number: int) -> list[str]:
-        try:
-            r = self._http.get(  # type: ignore[attr-defined]
-                f"/repos/{owner}/{repo}/issues/{pr_number}/labels"
-            )
-            r.raise_for_status()
-            return [label["name"] for label in r.json()]
-        except Exception:
-            return []
+        return _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/issues/{pr_number}/labels",
+            item_fn=lambda label: label["name"],
+            fallback=[],
+        )
 
     def get_authenticated_user_login(self) -> str:
         """Return the login of the GitHub user/app associated with the current token.
@@ -463,24 +462,17 @@ class GitHubForgePRMixin:
         repo: str,
         pull_number: int,
     ) -> list[dict]:
-        try:
-            r = self._http.get(  # type: ignore[attr-defined]
-                f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
-                params={"per_page": 100},
-            )
-            r.raise_for_status()
-            items = r.json()
-        except Exception:
-            return []
-        return [
-            {
+        return _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
+            item_fn=lambda item: {
                 "path": item["filename"],
                 "status": item.get("status", "modified"),
                 "additions": item.get("additions", 0),
                 "deletions": item.get("deletions", 0),
-            }
-            for item in items
-        ]
+            },
+            fallback=[],
+        )
 
     def _merge_pr(
         self,
@@ -596,86 +588,31 @@ class GitHubForgePRMixin:
             return False
 
     def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
-        out: list[BranchInfo] = []
-        try:
-            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
-                on_retry=out.clear
-            ):
-                url = f"{api}/repos/{owner}/{repo}/branches"
-                page = 1
-                hit_401 = False
-                while True:
-                    r = c.get(
-                        url,
-                        headers=headers,
-                        params={"per_page": 100, "page": page},
-                    )
-                    if r.status_code == 401:
-                        hit_401 = True
-                        break
-                    r.raise_for_status()
-                    items = r.json()
-                    for b in items:
-                        date = (
-                            ((b.get("commit") or {}).get("commit") or {}).get(
-                                "committer"
-                            )
-                            or {}
-                        ).get("date")
-                        out.append(
-                            BranchInfo(
-                                name=b["name"],
-                                last_commit_at=_parse_iso_utc(date),
-                                is_protected=bool(b.get("protected")),
-                            )
-                        )
-                    if len(items) < 100:
-                        break
-                    page += 1
-                if hit_401:
-                    continue
-                break
-        except Exception:
-            return []
-        return out
+        return _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/branches",
+            item_fn=lambda b: BranchInfo(
+                name=b["name"],
+                last_commit_at=_parse_iso_utc(
+                    (
+                        ((b.get("commit") or {}).get("commit") or {}).get("committer")
+                        or {}
+                    ).get("date")
+                ),
+                is_protected=bool(b.get("protected")),
+            ),
+            fallback=[],
+        )
 
     def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
-        out: set[str] = set()
-        try:
-            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
-                on_retry=out.clear
-            ):
-                url = f"{api}/repos/{owner}/{repo}/pulls"
-                page = 1
-                hit_401 = False
-                while True:
-                    r = c.get(
-                        url,
-                        headers=headers,
-                        params={
-                            "state": "open",
-                            "per_page": 100,
-                            "page": page,
-                        },
-                    )
-                    if r.status_code == 401:
-                        hit_401 = True
-                        break
-                    r.raise_for_status()
-                    items = r.json()
-                    for pr in items:
-                        ref = (pr.get("head") or {}).get("ref")
-                        if ref:
-                            out.add(ref)
-                    if len(items) < 100:
-                        break
-                    page += 1
-                if hit_401:
-                    continue
-                break
-        except Exception:
-            return set()
-        return out
+        result = _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/pulls",
+            params={"state": "open"},
+            item_fn=lambda pr: (pr.get("head") or {}).get("ref", ""),
+            fallback=[],
+        )
+        return {ref for ref in result if ref}
 
     def _list_open_prs(self, *, owner: str, repo: str) -> list[dict]:
         """Return per-PR metadata dicts for all open PRs.
@@ -683,54 +620,33 @@ class GitHubForgePRMixin:
         Each dict carries: ``branch`` (head ref), ``author_login``,
         ``number`` (PR number), ``url`` (html_url), and ``title``.
 
-        Uses the same pagination and 401-retry logic as _list_open_pr_branches().
+        Uses :func:`_paginated_get` for pagination and 401-retry.
         Returns [] on any failure (MUST NOT raise).
         """
-        out: list[dict] = []
-        try:
-            for _retry, c, api, headers in self._http.retrying_client(  # type: ignore[attr-defined]
-                on_retry=out.clear
-            ):
-                url = f"{api}/repos/{owner}/{repo}/pulls"
-                page = 1
-                hit_401 = False
-                while True:
-                    r = c.get(
-                        url,
-                        headers=headers,
-                        params={
-                            "state": "open",
-                            "per_page": 100,
-                            "page": page,
-                        },
-                    )
-                    if r.status_code == 401:
-                        hit_401 = True
-                        break
-                    r.raise_for_status()
-                    items = r.json()
-                    for pr in items:
-                        ref = (pr.get("head") or {}).get("ref")
-                        author = (pr.get("user") or {}).get("login", "")
-                        if ref:
-                            out.append(
-                                {
-                                    "branch": ref,
-                                    "author_login": author,
-                                    "number": pr.get("number"),
-                                    "url": pr.get("html_url", ""),
-                                    "title": pr.get("title", ""),
-                                }
-                            )
-                    if len(items) < 100:
-                        break
-                    page += 1
-                if hit_401:
-                    continue
-                break
-        except Exception:
-            return []
-        return out
+        result = _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/pulls",
+            params={"state": "open"},
+            item_fn=lambda pr: (
+                (pr.get("head") or {}).get("ref"),
+                (pr.get("user") or {}).get("login", ""),
+                pr.get("number"),
+                pr.get("html_url", ""),
+                pr.get("title", ""),
+            ),
+            fallback=[],
+        )
+        return [
+            {
+                "branch": ref,
+                "author_login": author,
+                "number": number,
+                "url": url,
+                "title": title,
+            }
+            for ref, author, number, url, title in result
+            if ref
+        ]
 
     def _get_authenticated_user_login(self) -> str:
         with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
@@ -746,21 +662,17 @@ class GitHubForgePRMixin:
         repo: str,
         pull_number: int,
     ) -> list[dict]:
-        r = self._http.get(  # type: ignore[attr-defined]
+        return _paginated_get(
+            self._http,  # type: ignore[attr-defined]
             f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-            params={"per_page": 100},
-        )
-        r.raise_for_status()
-        items = r.json()
-        return [
-            {
+            item_fn=lambda item: {
                 "id": item["id"],
                 "author": (item.get("user") or {}).get("login", ""),
                 "created_at": item.get("submitted_at", ""),
                 "body": item.get("body") or "",
-            }
-            for item in items
-        ]
+            },
+            fallback=[],
+        )
 
     def _list_review_comments(
         self,
@@ -769,14 +681,10 @@ class GitHubForgePRMixin:
         repo: str,
         pull_number: int,
     ) -> list[dict]:
-        r = self._http.get(  # type: ignore[attr-defined]
+        return _paginated_get(
+            self._http,  # type: ignore[attr-defined]
             f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
-            params={"per_page": 100},
-        )
-        r.raise_for_status()
-        items = r.json()
-        return [
-            {
+            item_fn=lambda item: {
                 "id": item["id"],
                 "author": (item.get("user") or {}).get("login", ""),
                 "created_at": item.get("created_at", ""),
@@ -784,9 +692,9 @@ class GitHubForgePRMixin:
                 "file_path": item.get("path", ""),
                 "line": item.get("line") or item.get("original_line"),
                 "diff_hunk": item.get("diff_hunk", ""),
-            }
-            for item in items
-        ]
+            },
+            fallback=[],
+        )
 
     def _pr_review_status(
         self,
@@ -795,42 +703,26 @@ class GitHubForgePRMixin:
         repo: str,
         pull_number: int,
     ) -> dict:
-        # Defensive init: the context-manager body sets these on every
-        # non-exception path, but a double-401 (exhausting all retries)
-        # exits the block without assigning them — initialise so the
-        # analysis is clean without changing behaviour.
-        reviews_raw: list[Any] = []
-        comments_raw: list[Any] = []
-        files: list[Any] = []
-        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
-            # 1. Fetch reviews (includes state field that list_pr_reviews drops).
-            r = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-                headers=headers,
-                params={"per_page": 100},
-            )
-            if r.status_code == 401:
-                continue
-            r.raise_for_status()
-            reviews_raw = r.json()
-
-            # 2. Fetch inline review comments.
-            r2 = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
-                headers=headers,
-                params={"per_page": 100},
-            )
-            if r2.status_code == 401:
-                continue
-            r2.raise_for_status()
-            comments_raw = r2.json()
-
-            # 3. Fetch changed files.
-            files = self._pr_files(
-                owner=owner,
-                repo=repo,
-                pull_number=pull_number,
-            )
+        # Fetch reviews (raw dicts — need state field that _list_pr_reviews
+        # drops) and inline comments with full pagination.  Each call
+        # independently retries on 401 via _paginated_get's retrying_client.
+        reviews_raw: list[Any] = _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+            item_fn=lambda x: x,
+            fallback=[],
+        )
+        comments_raw: list[Any] = _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+            item_fn=lambda x: x,
+            fallback=[],
+        )
+        files = self._pr_files(
+            owner=owner,
+            repo=repo,
+            pull_number=pull_number,
+        )
 
         # Determine aggregate review state from the latest non-dismissed
         # review.  GitHub returns reviews oldest-first; iterate reversed.

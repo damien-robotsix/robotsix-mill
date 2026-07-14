@@ -93,7 +93,6 @@ src/robotsix_mill/forge/github_pr.py:0: error: Returning Any from function decla
 src/robotsix_mill/forge/github_pr.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/github_pr.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/github_pr.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/forge/github_pr.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/gitlab/ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/gitlab/ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/forge/gitlab/ci.py:0: error: Missing type arguments for generic type "dict"  [type-arg]

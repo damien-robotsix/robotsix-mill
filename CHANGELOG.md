@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Extract ``_paginated_get`` helper to ``forge/_github_pagination.py``, fixing a
+  data-loss bug where 6 GitHub API methods silently returned at most 100 items
+  (branches, PRs, reviews, comments, files, labels).  The new helper integrates
+  with the existing 401-retry pattern and is reused by all 9 paginated methods.
 - Sandbox spawn: retry on transient container-wait EOF. When `docker run` exits 125 with "unexpected EOF" in stderr (the socket-proxy haproxy severing a long-lived wait stream), the sandbox now cleans up any leaked container and retries up to 3 times. Non-EOF 125 errors still raise immediately (genuine daemon/config errors). This is defense-in-depth on top of the deploy-compose haproxy timeout fix.
 - deploy compose: raise the socket-proxy's hardcoded haproxy `timeout client/server` from 10m to 4h. The 10m default severed the docker-wait stream of any sandbox run longer than 10 minutes ("error waiting for container: unexpected EOF"), the root cause of the 2026-07-10..12 intermittent sandbox outages. The tecnativa image exposes no TIMEOUT_* env knobs, so the processed config is patched via sed like the existing docker-events fix.
 - Clear implement fingerprint guard on transient failures: when a transient infrastructure error kills an implement run, `_handle_stage_error` now deletes `artifacts/implement.md` before scheduling the retry, preventing permanent "spec unchanged since last implement attempt" blocks.
