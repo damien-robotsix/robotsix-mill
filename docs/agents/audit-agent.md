@@ -1,9 +1,9 @@
 # Audit agent
 
-The audit agent is a **frontier orchestrator** that runs at the highest
-capability tier (level 3) and coordinates a team of sub-agent explorers
-to perform a deep, structured audit of the repository. It supersedes
-the v1 single-pass meta-audit and the v2 web-research-only model.
+The audit agent is a **frontier orchestrator** that runs at level 2
+and coordinates a team of sub-agent explorers to perform a deep,
+structured audit of the repository. It supersedes the v1 single-pass
+meta-audit and the v2 web-research-only model.
 
 ## How it works
 
@@ -73,8 +73,8 @@ otherwise `<data_dir>/audit_memory.md`.
 
 ## Important notes
 
-- The audit orchestrator runs at level 3 (highest capability tier) and
-  spawns sub-agents at levels 1–3 depending on subpart complexity.
+- The audit orchestrator runs at level 2 and spawns sub-agents at
+  levels 1–2 depending on subpart complexity.
 - Sub-agent runs are each traceable in Langfuse (named spans/traces per
   subpart).
 - The orchestrator uses `write_file` to maintain the shared run memory
