@@ -28,6 +28,7 @@ class FakeService:
         note_failures: set[str] | None = None,
         recent_tickets_data: list[SimpleNamespace] | None = None,
         existing_labels: list[str] | None = None,
+        existing_unblocks: list[str] | None = None,
     ) -> None:
         self.proposals = proposals or []
         self.created_id = created_id
@@ -39,6 +40,7 @@ class FakeService:
         self.set_labels_calls: list[tuple[str, list[str]]] = []
         self.recent_tickets_data = recent_tickets_data or []
         self._existing_labels = existing_labels
+        self._existing_unblocks = existing_unblocks
 
     def recent_proposals_for(self, source, limit=100):
         return self.proposals
@@ -51,11 +53,17 @@ class FakeService:
         return SimpleNamespace(id=self.created_id)
 
     def get(self, ticket_id):
-        if self._existing_labels is not None:
-            return SimpleNamespace(
-                id=ticket_id, labels=json.dumps(self._existing_labels)
-            )
-        return SimpleNamespace(id=ticket_id, labels=None)
+        labels = (
+            json.dumps(self._existing_labels)
+            if self._existing_labels is not None
+            else None
+        )
+        unblocks = (
+            json.dumps(self._existing_unblocks)
+            if self._existing_unblocks is not None
+            else None
+        )
+        return SimpleNamespace(id=ticket_id, labels=labels, unblocks=unblocks)
 
     def set_labels(self, ticket_id, labels):
         self.set_labels_calls.append((ticket_id, labels))
@@ -363,3 +371,83 @@ def test_label_dedup_falls_back_to_title_when_no_label_match() -> None:
     # Title-based dedup reuses the existing title match.
     assert service.create_calls == []
     assert service.depends_on_calls == [("orig-1", ["fix-title"])]
+
+
+# ---------------------------------------------------------------------------
+# unblocks merge — multiple tickets parked on the same fix
+# ---------------------------------------------------------------------------
+
+
+def test_unblocks_merge_across_multiple_parkings() -> None:
+    """When a second ticket is parked on the same fix ticket (via dedup),
+    its id is appended to the existing unblocks list — not replacing it."""
+    # The fix ticket already has "parked-1" in its unblocks.
+    service = FakeService(
+        created_id="fix-shared",
+        existing_unblocks=["parked-1"],
+    )
+
+    ticket = SimpleNamespace(id="parked-2")
+    spawn_dependency_fix(
+        ticket,
+        _ctx(service),
+        title="fix shared",
+        description="shared fix",
+        source_kind=SourceKind.CI_FIX_DEPENDENCY,
+        block_reason_prefix="shared failure",
+    )
+
+    # unblocks should contain both tickets.
+    assert len(service.unblocks_calls) == 1
+    _tid, targets = service.unblocks_calls[0]
+    assert _tid == "fix-shared"
+    assert "parked-1" in targets
+    assert "parked-2" in targets
+    assert len(targets) == 2
+
+
+def test_unblocks_merge_handles_malformed_existing() -> None:
+    """Corrupted (non-JSON, non-list) existing unblocks are treated as
+    empty and the new ticket id is still written."""
+    service = FakeService(
+        created_id="fix-shared",
+        existing_unblocks="not-json",  # type: ignore[arg-type] — test input
+    )
+
+    ticket = SimpleNamespace(id="parked-1")
+    spawn_dependency_fix(
+        ticket,
+        _ctx(service),
+        title="fix shared",
+        description="shared fix",
+        source_kind=SourceKind.CI_FIX_DEPENDENCY,
+        block_reason_prefix="shared failure",
+    )
+
+    # Should have recovered and written just the new ticket.
+    assert len(service.unblocks_calls) == 1
+    _tid, targets = service.unblocks_calls[0]
+    assert targets == ["parked-1"]
+
+
+def test_unblocks_merge_skips_self_reference() -> None:
+    """If the existing unblocks list somehow contains the fix ticket's own
+    id, it is filtered out before merging."""
+    service = FakeService(
+        created_id="fix-shared",
+        existing_unblocks=["fix-shared", "parked-1"],
+    )
+
+    ticket = SimpleNamespace(id="parked-2")
+    spawn_dependency_fix(
+        ticket,
+        _ctx(service),
+        title="fix shared",
+        description="shared fix",
+        source_kind=SourceKind.CI_FIX_DEPENDENCY,
+        block_reason_prefix="shared failure",
+    )
+
+    _tid, targets = service.unblocks_calls[0]
+    assert "fix-shared" not in targets
+    assert targets == ["parked-1", "parked-2"]

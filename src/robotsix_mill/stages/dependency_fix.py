@@ -151,7 +151,23 @@ def spawn_dependency_fix(
     # Wire both directions: original depends on fix; fix auto-unblocks
     # original when it reaches DONE.
     ctx.service.set_depends_on(ticket.id, [fix_id])
-    ctx.service.set_unblocks(fix_id, [ticket.id])
+
+    # Merge with any existing unblocks so that every ticket parked on
+    # the same fix ticket is auto-resumed when it completes — not just
+    # the last caller to wire through spawn_dependency_fix.
+    fix = ctx.service.get(fix_id)
+    existing_unblocks: list[str] = []
+    if fix is not None and fix.unblocks:
+        try:
+            parsed = json.loads(fix.unblocks)
+            if isinstance(parsed, list):
+                existing_unblocks = [
+                    t for t in parsed if isinstance(t, str) and t != fix_id
+                ]
+        except json.JSONDecodeError, TypeError:
+            pass
+    all_unblocks = existing_unblocks + [ticket.id]
+    ctx.service.set_unblocks(fix_id, all_unblocks)
 
     # Link the two tickets via history notes (best-effort).
     try:
