@@ -24,7 +24,8 @@ def _paginated_get(
     params: dict[str, Any] | None = None,
     item_fn: Callable[[dict[str, Any]], T],
     fallback: R,
-) -> list[T] | R: ...
+) -> list[T] | R:
+    pass
 
 
 @overload
@@ -34,7 +35,8 @@ def _paginated_get(
     *,
     params: dict[str, Any] | None = None,
     item_fn: Callable[[dict[str, Any]], T],
-) -> list[T]: ...
+) -> list[T]:
+    pass
 
 
 def _paginated_get(
