@@ -337,6 +337,12 @@ def build_fs_tools(
     # for that path during this agent run.
     _served_reads: dict[str, list[tuple[int, int | None]]] = {}
 
+    # Per-build command history for run_command loop detection.
+    # Tracks every command string executed so we can refuse exact
+    # duplicates and detect when the agent is spinning on grep
+    # commands against the same file.
+    _command_history: list[str] = []
+
     def _check_read_file_cap() -> str | None:
         """Return an error string if the read_file cap is exceeded,
         or None if the call should proceed."""
@@ -949,6 +955,52 @@ def build_fs_tools(
         when ``.git`` is absent).  Prefer this over exhaustive
         ``read_file`` loops — it finds the files that matter in one
         command so you can then ``read_file`` only those."""
+        # -- loop guard: refuse exact duplicates and repeated grep on   --
+        # -- the same file (the agent is spinning instead of answering). --
+        if command in _command_history:
+            return (
+                f"REFUSED (do NOT retry): you already ran this exact "
+                f"command ({command!r}) earlier in this session. "
+                f"Synthesise from the output you already received "
+                f"(scroll back in the conversation history) instead "
+                f"of re-running it."
+            )
+        _LOOP_FILE_THRESHOLD = 3
+        _LOOP_TOTAL_MIN = 4
+        if len(_command_history) >= _LOOP_TOTAL_MIN:
+            # Extract file paths from all grep commands in history.
+            def _file_of(cmd: str) -> str | None:
+                parts = cmd.strip().split()
+                for p in reversed(parts):
+                    if p.startswith("-"):
+                        continue
+                    if "/" in p or (p.startswith(".") and len(p) > 1):
+                        return p
+                    if "." in p and not p.startswith("."):
+                        return p
+                return None
+
+            grep_targets = [
+                t
+                for c in _command_history
+                if ("grep" in c or "git grep" in c) and (t := _file_of(c)) is not None
+            ]
+            # If ≥ threshold grep commands target the same file, refuse.
+            if grep_targets:
+                from collections import Counter
+
+                most_common = Counter(grep_targets).most_common(1)[0]
+                if most_common[1] >= _LOOP_FILE_THRESHOLD:
+                    _command_history.append(command)
+                    return (
+                        f"REFUSED (do NOT retry): you have already run "
+                        f"{most_common[1]} grep commands against "
+                        f"{most_common[0]!r}. You have enough information "
+                        f"to answer — synthesise what you've learned "
+                        f"and return your answer now. Do NOT issue "
+                        f"more grep commands on the same file."
+                    )
+        _command_history.append(command)
         if not root.exists():
             return (
                 "error: workspace repo directory does not exist — "

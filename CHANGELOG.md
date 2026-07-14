@@ -5,6 +5,7 @@
   canonical workaround (underscore-prefixed file alongside the module).
 - `security_posture` agent: instruct to ask focused single-topic `ask_web_knowledge` questions to avoid `UsageLimitExceeded` when the web-knowledge sub-agent's request budget (12 turns) is exhausted by broad multi-framework queries.
 - Fix auto-resume bug: when multiple tickets are parked on the same CI-fix dependency ticket (via label-based dedup), the `unblocks` list is now merged instead of overwritten, so all parked tickets auto-resume when the fix completes — not just the last one parked.
+- Add `run_command` loop-detection guard: exact duplicate commands and repeated grep against the same file are refused with a synthesis prompt, preventing explore sub-agent spin-loops observed in trace review.)
 - Add credential-free URL validation to `POST /repos` (rejects URLs with userinfo like `token@host`).
 - Extract ``_paginated_get`` helper to ``forge/_github_pagination.py``, fixing a
   data-loss bug where 6 GitHub API methods silently returned at most 100 items

@@ -956,6 +956,75 @@ class TestRunCommand:
         result = tools["run_command"]("failing-command")
         assert result == "The command failed with exit code 2 and produced no output."
 
+    # -- run_command loop-detection tests ----------------------------------
+
+    def test_refuses_exact_duplicate_command(self, tmp_path, settings, fake_sandbox):
+        """Running the exact same command twice returns a REFUSED string."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result1 = tools["run_command"]("echo hello")
+        assert result1 == "exit=0\nhello\n"
+        result2 = tools["run_command"]("echo hello")
+        assert "REFUSED" in result2
+        assert "already ran this exact command" in result2
+
+    def test_refuses_grep_loop_same_file(self, tmp_path, settings, fake_sandbox):
+        """After 4+ total commands and 3+ grep commands on the same file,
+        the next grep on that file is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        # 3 grep commands on the same file.
+        tools["run_command"]("grep -n 'def foo' src/foo.py")
+        tools["run_command"]("grep -n 'def bar' src/foo.py")
+        tools["run_command"]("grep -n 'class Qux' src/foo.py")
+        # A non-grep command to push total ≥ 4.
+        tools["run_command"]("echo hello")
+        # 4th grep on same file triggers the counter-based guard.
+        result = tools["run_command"]("grep -n 'class Baz' src/foo.py")
+        assert "REFUSED" in result
+        assert "grep commands against" in result
+        assert "src/foo.py" in result
+
+    def test_grep_loop_different_files_allowed(self, tmp_path, settings, fake_sandbox):
+        """Grep commands on different files are not refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        tools["run_command"]("echo one")
+        tools["run_command"]("echo two")
+        tools["run_command"]("grep -n 'def foo' src/a.py")
+        tools["run_command"]("grep -n 'def bar' src/b.py")
+        result = tools["run_command"]("grep -n 'class Baz' src/c.py")
+        assert "REFUSED" not in result
+
+    def test_non_grep_commands_do_not_trigger_loop(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """Non-grep commands (echo, ls, etc.) don't trigger the file-loop guard."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        for i in range(7):
+            result = tools["run_command"](f"echo run{i}")
+            assert "REFUSED" not in result
+
+    def test_loop_guard_only_after_threshold(self, tmp_path, settings, fake_sandbox):
+        """The loop guard only activates after >= 5 total commands."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        # Only 3 grep commands on same file, total < 5 — no refusal.
+        tools["run_command"]("grep -n 'def foo' src/foo.py")
+        tools["run_command"]("grep -n 'def bar' src/foo.py")
+        result = tools["run_command"]("grep -n 'class Baz' src/foo.py")
+        assert "REFUSED" not in result
+
 
 # ===================================================================
 # Error-return semantics (the defining invariant)
