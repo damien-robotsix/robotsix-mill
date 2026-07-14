@@ -1,0 +1,26 @@
+# lychee configuration
+# https://github.com/lycheeverse/lychee/blob/master/config/default.toml
+
+# Exclude common false positives that can't be validated via HTTP
+[exclude]
+path = [
+  "docs/forge/github-app.md",  # GitHub App URLs are user-specific
+]
+url = [
+  # Localhost URLs in agent-config example docs
+  "^http://localhost:",
+  # Langfuse console URLs (require authentication)
+  "cloud\.langfuse\.com",
+]
+
+# Cache valid responses to avoid hammering servers on repeated runs
+[cache]
+# Cache file location
+path = ".lychee-cache"
+# Cache duration in seconds (24 hours)
+duration = 86400
+
+# Timeout per URL request
+[request]
+timeout = 30
+max_concurrency = 8

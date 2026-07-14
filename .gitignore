@@ -35,3 +35,5 @@ docker-compose.override.yml
 actionlint
 # Sandbox workspace clones of external repos
 .work/
+# lychee link-checker cache
+.lychee-cache/
