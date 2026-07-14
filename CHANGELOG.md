@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix worker queue deadlock: priority READY/DRAFT tickets no longer block merge-pipeline (IMPLEMENT_COMPLETE) tickets when the in-flight PR cap is saturated. The defer path now demotes the priority rank of cap-deferred tickets so the merge-poll tickets behind them get a chance to drain cap slots.
 - Fix stale ``context.config`` reference in ``alembic/env.py`` — the
   module-level ``config = context.config`` binding could become stale
   when Alembic cached ``env.py`` across multiple migrations, causing
