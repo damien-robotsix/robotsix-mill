@@ -6,7 +6,7 @@ that were previously defined inside ``create_app()``.
 
 from __future__ import annotations
 
-from fastapi import Query, Request
+from fastapi import HTTPException, Query, Request
 
 from ..config import RepoConfig, ReposRegistry, Settings
 from ..core.models import Ticket, TicketRead
@@ -21,6 +21,22 @@ from .worker import Worker
 def get_service(request: Request) -> TicketService:
     """Return the ``TicketService`` stored on app state during lifespan startup."""
     return request.app.state.service
+
+
+def resolve_ticket_id(ticket_id: str, svc: TicketService) -> str:
+    """Resolve *ticket_id* — try exact match first, then suffix resolution.
+
+    Returns the full ticket ID on success.  Raises ``HTTPException(404)``
+    when no ticket matches, and lets :class:`AmbiguousTicketId` propagate
+    (caught by the registered exception handler → 409) when the suffix is
+    ambiguous.
+    """
+    if svc.get(ticket_id) is not None:
+        return ticket_id
+    resolved = svc.resolve_by_suffix(ticket_id)
+    if resolved is None:
+        raise HTTPException(404, "ticket not found")
+    return resolved
 
 
 def get_worker(request: Request) -> Worker:

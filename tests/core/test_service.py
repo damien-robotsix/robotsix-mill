@@ -3,6 +3,7 @@ import json
 import pytest
 
 from robotsix_mill.core.service import (
+    AmbiguousTicketId,
     TicketService,
     TransitionError,
     _event_hash,
@@ -3370,3 +3371,63 @@ def test_close_tracker_raises_on_terminal_states(service):
     _close_epic(service, t4)
     with pytest.raises(TransitionError):
         service.close_tracker(t4.id)
+
+
+# --- resolve_by_suffix -------------------------------------------------
+
+
+def test_resolve_by_suffix_exact_match(service):
+    """resolve_by_suffix returns the full ID when exactly one ticket ends with suffix."""
+    t = service.create("suffix test ticket")
+    suffix = t.id[-4:]
+    result = service.resolve_by_suffix(suffix)
+    assert result == t.id
+
+
+def test_resolve_by_suffix_no_match(service):
+    """resolve_by_suffix returns None when no ticket ID ends with the suffix."""
+    result = service.resolve_by_suffix("nonexistent-suffix-zzzz")
+    assert result is None
+
+
+def test_resolve_by_suffix_ambiguous(service):
+    """resolve_by_suffix raises AmbiguousTicketId when multiple tickets share suffix."""
+    from robotsix_mill.core import db as db_mod
+    from robotsix_mill.core.models import Ticket
+
+    # Create two tickets with known IDs that share the same 4-char suffix.
+    shared_suffix = "abcd"
+    id1 = f"20250101T000000Z-ticket-one-{shared_suffix}"
+    id2 = f"20250101T000001Z-ticket-two-{shared_suffix}"
+
+    with db_mod.session(service.settings, service.board_id) as s:
+        for tid in (id1, id2):
+            s.add(
+                Ticket(
+                    id=tid,
+                    title="ambiguous test",
+                    state=State.DRAFT,
+                    kind=TicketKind.TASK,
+                    source="user",
+                    workspace_path="",
+                )
+            )
+        s.commit()
+
+    with pytest.raises(AmbiguousTicketId):
+        service.resolve_by_suffix(shared_suffix)
+
+
+def test_resolve_by_suffix_longer_than_four_chars(service):
+    """resolve_by_suffix works with suffixes longer than 4 chars."""
+    t = service.create("longer suffix test")
+    suffix = t.id[-8:]  # 8 chars
+    result = service.resolve_by_suffix(suffix)
+    assert result == t.id
+
+
+def test_resolve_by_suffix_exact_full_id(service):
+    """resolve_by_suffix works when the suffix is the full ticket ID."""
+    t = service.create("full id suffix test")
+    result = service.resolve_by_suffix(t.id)
+    assert result == t.id

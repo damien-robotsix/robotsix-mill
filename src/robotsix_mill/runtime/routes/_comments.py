@@ -8,7 +8,7 @@ import threading
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...core.models import Comment, CommentCreate, TicketKind
-from ..deps import get_service, get_settings
+from ..deps import get_service, get_settings, resolve_ticket_id
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ def add_comment(
     created.  Non-epic tickets are unaffected — the comment is simply
     persisted.
     """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         comment = svc.add_comment(
             ticket_id, body.body, author=body.author, parent_id=body.parent_id
@@ -70,6 +71,7 @@ def list_comments(
     svc=Depends(get_service),
 ) -> list[Comment]:
     """List all comments for a ticket, ordered oldest-first."""
+    ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         return svc.list_comments(ticket_id)
     except KeyError:

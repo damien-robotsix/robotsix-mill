@@ -288,3 +288,7 @@ def verify_merge_before_done(
 
 class TransitionError(RuntimeError):
     """Requested state transition is not allowed by the state machine."""
+
+
+class AmbiguousTicketId(Exception):
+    """Multiple tickets matched the given short-ID suffix."""

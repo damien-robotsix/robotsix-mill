@@ -15,9 +15,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 
 from ..config import ReposRegistry, Settings
-from ..core.service import TransitionError
+from ..core.service import AmbiguousTicketId, TransitionError
 from ..forge.base import NotConfiguredError
 from .exception_handlers import (
+    ambiguous_ticket_id_handler,
     catchall_handler,
     not_configured_error_handler,
     request_validation_error_handler,
@@ -92,6 +93,7 @@ def create_app(
     # handlers before the catch-all so the parent ``Exception`` handler
     # only sees genuinely unexpected errors.
     app.add_exception_handler(TransitionError, transition_error_handler)
+    app.add_exception_handler(AmbiguousTicketId, ambiguous_ticket_id_handler)  # type: ignore[arg-type]
     app.add_exception_handler(NotConfiguredError, not_configured_error_handler)
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     app.add_exception_handler(Exception, catchall_handler)

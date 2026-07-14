@@ -10,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from ..core.service import TransitionError
+from ..core.service import AmbiguousTicketId, TransitionError
 from ..forge.base import NotConfiguredError
 from .errors import ProblemDetail
 from .tracing import get_current_trace_id
@@ -18,6 +18,21 @@ from .tracing import get_current_trace_id
 
 async def transition_error_handler(
     request: Request, exc: TransitionError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content=ProblemDetail(
+            title="Conflict",
+            status=409,
+            detail=str(exc),
+            trace_id=get_current_trace_id(),
+        ).model_dump(),
+        media_type="application/problem+json",
+    )
+
+
+async def ambiguous_ticket_id_handler(
+    request: Request, exc: AmbiguousTicketId
 ) -> JSONResponse:
     return JSONResponse(
         status_code=409,
