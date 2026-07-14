@@ -180,6 +180,26 @@ def test_register_rejected_when_flag_off(client, settings):
     assert "disabled" in r.json()["detail"]
 
 
+def test_register_rejects_credential_url(client):
+    """POST /repos with a forge_remote_url containing credentials → 422."""
+    payload = {
+        "repo_id": "bad-url-repo",
+        "forge_remote_url": "https://token:x-oauth-basic@github.com/x/y",
+    }
+    r = client.post("/repos", json=payload)
+    assert r.status_code == 422
+
+
+def test_register_accepts_ssh_url(client):
+    """POST /repos with an ssh-style URL (no hostname in urlsplit) → 201."""
+    payload = {
+        "repo_id": "ssh-repo",
+        "forge_remote_url": "git@github.com:owner/repo.git",
+    }
+    r = client.post("/repos", json=payload)
+    assert r.status_code == 201
+
+
 def test_deregister_auto_repo(client, settings):
     """DELETE /repos/{id} for an auto-registered repo → 204, repo removed."""
     settings.allow_runtime_repo_registration = True
