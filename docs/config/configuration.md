@@ -623,7 +623,7 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
 `completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
-`state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`.
+`state_sync`, `env_doc_sync`, `db_maintenance`, `sandbox_reaper`, `repo_description_sync`, `security_posture`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
@@ -835,8 +835,8 @@ Configure via environment variables or YAML paths under
 
 #### Env-var-only periodic agents
 
-`bc_check` and `completeness_check` enabled and interval
-fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`)
+`bc_check`, `completeness_check`, `repo_description_sync`, and `security_posture` enabled and interval
+fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`, `periodic.repo_description_sync.*`, `periodic.security_posture.*`)
 and as environment variables:
 
 | Env var | Default | Description |
@@ -850,6 +850,11 @@ and as environment variables:
 | `MILL_STATE_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between state-sync passes |
 | `MILL_ENV_DOC_SYNC_PERIODIC` | `true` | Enable periodic env-doc-sync passes |
 | `MILL_ENV_DOC_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-doc-sync passes |
+| `MILL_REPO_DESCRIPTION_SYNC_PERIODIC` | `true` | Enable periodic repo-description-sync passes |
+| `MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between repo-description-sync passes |
+| `MILL_SECURITY_POSTURE_PERIODIC` | `true` | Enable periodic security-posture passes |
+| `MILL_SECURITY_POSTURE_INTERVAL_SECONDS` | `604800` | Seconds between security-posture passes |
+| `MILL_SECURITY_POSTURE_REQUEST_LIMIT` | `80` | Per-call request cap for the security-posture agent |
 
 #### Stale branch cleanup, timeout escalation, dependabot ingest, module curator
 
