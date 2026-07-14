@@ -47,6 +47,19 @@ class RepoRegistration(BaseModel):
             raise ValueError("repo_id must not contain newlines or null bytes")
         return v
 
+    @field_validator("forge_remote_url")
+    @classmethod
+    def _validate_credential_free_url(cls, v: str) -> str:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(v)
+        if parts.hostname is not None and (parts.username or parts.password):
+            raise ValueError(
+                "forge_remote_url must not contain credentials "
+                "(userinfo like 'token@host' or 'user:pass@host')"
+            )
+        return v
+
     @field_validator("board_id")
     @classmethod
     def _validate_board_id(cls, v: str | None) -> str | None:
