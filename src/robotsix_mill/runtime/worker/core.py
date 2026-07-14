@@ -213,6 +213,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # processed by two workers at once (the merge poll, emit, and
         # requeue can all enqueue the same id).
         self._pending: set[str] = set()
+        # Tickets whose priority_rank was temporarily demoted because
+        # they hit the in-flight PR cap.  When such a ticket is popped
+        # the pop-time priority correction must be skipped — the
+        # demotion was intentional, not stale state.  Cleared when the
+        # ticket is actually processed (cap check passed) or when an
+        # explicit priority flip calls requeue_with_current_priority.
+        self._cap_deferred: set[str] = set()
         # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
         self._active: dict[str, dict] = {}
         # Global semaphore capping total concurrently-running stages across
@@ -298,6 +305,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         so duplicates are tolerated, not double-processed.
         """
         self._pending.discard(ticket_id)
+        self._cap_deferred.discard(ticket_id)
         self.enqueue(ticket_id)
 
     def _repo_config_for_ticket(self, ticket_id: str) -> RepoConfig | None:
@@ -354,7 +362,12 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 if before is not None:
                     cur_prio = 0 if getattr(before, "priority", False) else 1
                     cur_stage = self._stage_rank(before)
-                    if (cur_prio, cur_stage) != (popped_prio, popped_stage):
+                    if ticket_id in self._cap_deferred:
+                        # Priority rank was intentionally demoted by a
+                        # prior cap deferral — skip correction so the
+                        # demotion isn't immediately undone.
+                        pass
+                    elif (cur_prio, cur_stage) != (popped_prio, popped_stage):
                         log.debug(
                             "%s: popped (prio=%d, stage=%d) but current "
                             "(prio=%d, stage=%d); re-enqueuing at correct rank",
@@ -393,7 +406,21 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                             ticket_id,
                         )
                         self._pending.discard(ticket_id)
-                        self.enqueue(ticket_id)
+                        # Demote the priority rank so this ticket sorts
+                        # behind non-priority merge-pipeline work
+                        # (IMPLEMENT_COMPLETE etc.).  Without this a
+                        # priority READY/DRAFT ticket deadlocks the board
+                        # when the cap is saturated — priority dominates
+                        # stage_rank, so it always sits at the queue head
+                        # and the merge-poll tickets behind it never get
+                        # a chance to drain a cap slot.
+                        demoted_prio = max(1, popped_prio)
+                        self._enqueue_seq += 1
+                        self._pending.add(ticket_id)
+                        self._cap_deferred.add(ticket_id)
+                        queue.put_nowait(
+                            (demoted_prio, popped_stage, self._enqueue_seq, ticket_id)
+                        )
                         await asyncio.sleep(15)
                         # NOTE: do NOT call queue.task_done() here. `continue`
                         # still runs the `finally` block below, which calls
@@ -404,6 +431,12 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         # board consumer. Every cap-gated board that deferred a
                         # ticket lost its consumer this way (silent board stall).
                         continue
+
+                # The ticket passed the in-flight cap check (or isn't
+                # cap-gated).  Clear any prior cap-deferral demotion so
+                # the next enqueue (e.g. requeue from merge poll) uses
+                # its real priority rank.
+                self._cap_deferred.discard(ticket_id)
 
                 # --- Global concurrency cap ---
                 if self._global_semaphore is not None:

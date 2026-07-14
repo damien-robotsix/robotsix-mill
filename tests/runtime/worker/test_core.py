@@ -3090,3 +3090,103 @@ async def test_poll_stage_exempt_from_ceiling(ctx, service, monkeypatch):
     assert len(merge_calls) == 10, (
         f"untraced stage should run all 10 times, got {len(merge_calls)}"
     )
+
+
+# --- cap deferral demotes priority to prevent deadlock ---------------
+
+
+async def test_cap_deferral_demotes_priority_ready_so_merge_pipeline_proceeds(
+    ctx,
+    service,
+    monkeypatch,
+):
+    """Regression: a priority READY ticket at the queue head must not
+    deadlock the board when the in-flight PR cap is saturated.
+
+    Without the demotion, the priority READY ticket is always popped
+    first (priority_rank dominates stage_rank), deferred, re-enqueued
+    at the same rank, and re-popped forever — merge-pipeline tickets
+    (IMPLEMENT_COMPLETE) behind it never get a chance to drain cap
+    slots.
+    """
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime.worker.core import Worker, _count_inflight_prs
+
+    rc = RepoConfig(
+        repo_id="test-repo",
+        board_id=service.board_id,
+        langfuse_project_name="p",
+        langfuse_public_key="pk",
+        langfuse_secret_key="sk",
+        max_concurrency=1,
+        max_inflight_prs=1,
+    )
+    fake_repos = ReposRegistry(repos={"test-repo": rc})
+    import robotsix_mill.config as _cfg
+
+    _cfg._repos_config = fake_repos
+
+    # One in-flight DELIVERABLE ticket saturates the cap.
+    inflight = service.create("in-flight pr")
+    for st in (State.READY, State.DELIVERABLE):
+        service.transition(inflight.id, st)
+    assert service.get(inflight.id).state is State.DELIVERABLE
+    assert _count_inflight_prs(service) == 1
+
+    # A priority READY ticket — would normally sit at the queue head.
+    prio_ready = service.create("priority ready")
+    service.transition(prio_ready.id, State.READY)
+    service.set_priority(prio_ready.id, True)
+
+    # An IMPLEMENT_COMPLETE ticket (merge pipeline) — must still be
+    # processed even though it's behind the priority READY ticket.
+    merge_ticket = service.create("merge poll")
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        service.transition(merge_ticket.id, st)
+    assert service.get(merge_ticket.id).state is State.IMPLEMENT_COMPLETE
+
+    w = Worker(ctx)
+    # Enqueue the priority READY first (it lands at queue head), then
+    # the merge-pipeline ticket behind it.
+    w.enqueue(prio_ready.id)
+    w.enqueue(merge_ticket.id)
+
+    invoked: list[str] = []
+
+    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+        invoked.append(ticket_id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket",
+        fake_process_ticket,
+    )
+
+    # Run the consumer long enough for both tickets to be popped.
+    # The cap-defer path calls asyncio.sleep(15) — patch it to a
+    # tiny delay so the consumer doesn't block during the test.
+    original_sleep = asyncio.sleep
+
+    async def tiny_sleep(delay, *args, **kwargs):
+        if delay == 15:
+            delay = 0.0
+        return await original_sleep(delay, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "sleep", tiny_sleep)
+
+    task = asyncio.create_task(w._run(service.board_id))
+    await asyncio.sleep(0.15)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert merge_ticket.id in invoked, (
+        "IMPLEMENT_COMPLETE (merge-pipeline) ticket must be processed "
+        "even when a priority READY ticket sits at the queue head "
+        "and the in-flight PR cap is saturated"
+    )
+    # The priority READY ticket may or may not have been dispatched
+    # (cap was saturated), but the merge ticket must have been.
+    # Also verify the priority READY landed in _cap_deferred.
+    assert prio_ready.id in w._cap_deferred, (
+        "priority READY ticket deferred at cap must be tracked in _cap_deferred"
+    )
