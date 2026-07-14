@@ -17,7 +17,6 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from .. import db
 from ..db import retry_on_db_full
 from ..models import Ticket, TicketEvent, TicketKind
 from ..states import State
@@ -283,7 +282,7 @@ class _MetadataMixin(_ServiceBase):
         (CLOSED, ANSWERED, EPIC_CLOSED, DONE).
         """
         board = self._board_for(ticket_id)
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             ticket = _get_ticket(s, ticket_id)
             if ticket.state in _TERMINAL_FOR_DESCRIPTION_UPDATE:
                 raise TransitionError(
@@ -297,7 +296,7 @@ class _MetadataMixin(_ServiceBase):
         # Compute the new fingerprint AFTER writing.
         new_fp = self._compute_spec_fingerprint(ticket)
         # Persist the content_hash update.
-        with db.session(self.settings, board) as s:
+        with retry_on_db_full(self.settings, board) as s:
             t = _get_ticket(s, ticket_id)
             t.content_hash = ticket.content_hash
             t.updated_at = datetime.now(timezone.utc)
