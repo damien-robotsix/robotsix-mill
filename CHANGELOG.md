@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- `security_posture` agent: instruct to ask focused single-topic `ask_web_knowledge` questions to avoid `UsageLimitExceeded` when the web-knowledge sub-agent's request budget (12 turns) is exhausted by broad multi-framework queries.
 - Add credential-free URL validation to `POST /repos` (rejects URLs with userinfo like `token@host`).
 - Extract ``_paginated_get`` helper to ``forge/_github_pagination.py``, fixing a
   data-loss bug where 6 GitHub API methods silently returned at most 100 items
