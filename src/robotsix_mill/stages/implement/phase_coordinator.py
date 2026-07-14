@@ -178,11 +178,12 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 if stored_fp and stored_fp == current_fp:
                     return Outcome(
                         State.BLOCKED,
-                        "spec unchanged since last implement attempt "
+                        "spec unchanged since last spec-determined "
+                        "implement attempt "
                         f"(fingerprint {current_fp}) — "
                         "re-implementing would produce the same "
-                        "result.  Update the specification or delete "
-                        "artifacts/implement.md to reset.",
+                        "result.  Update the specification or use "
+                        "the reset-fingerprint endpoint to clear.",
                     )
 
         return None
@@ -765,11 +766,29 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 and diag_history[-2] == diag
                 and diag_history[-3] == diag
             )
-            if env_repeat or triple_repeat:
+            if env_repeat:
                 note = (
                     "environment failure not fixable by code edits — "
                     f"{diag[:200]} (short-circuited after {attempt} "
                     "cycle(s) of identical diagnosis)"
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=False,
+                    reference_files=ic.reference_files,
+                    extra_roots=extra_roots,
+                    transient=True,
+                )
+                return Outcome(State.BLOCKED, note)
+            if triple_repeat:
+                note = (
+                    f"identical diagnosis repeated {len(diag_history)} "
+                    f"times — {diag[:200]} (short-circuited after "
+                    f"{attempt} cycle(s))"
                 )
                 cls._finalize(
                     ctx,
@@ -817,6 +836,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         ok: bool,
         reference_files: list[str] | None = None,
         extra_roots: list[Path] | None = None,
+        transient: bool = False,
     ) -> None:
         ws = ctx.service.workspace(ticket)
         # Compute the effective spec fingerprint for the stale
@@ -829,12 +849,23 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             epic_ctx = ctx.service.get_epic_context(ticket)
             if epic_ctx:
                 effective = epic_ctx + "\n\n" + effective
-        fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+
+        if transient:
+            # Transient/environmental abort — do NOT persist a spec
+            # fingerprint.  Writing one would poison the next pass
+            # with a false "spec unchanged" block even though the
+            # prior attempt did not reach a spec-determined outcome.
+            header = "TRANSIENT — retryable"
+            fp_line = ""
+        elif ok:
+            header = "passed"
+            fp_line = f"spec-fingerprint: {hashlib.sha256(effective.encode('utf-8')).hexdigest()[:16]}\n"
+        else:
+            header = "BLOCKED — resumable"
+            fp_line = f"spec-fingerprint: {hashlib.sha256(effective.encode('utf-8')).hexdigest()[:16]}\n"
+
         (ws.artifacts_dir / "implement.md").write_text(
-            f"# Implement ({'passed' if ok else 'BLOCKED — resumable'})\n"
-            f"branch: {branch}\n"
-            f"spec-fingerprint: {fp}\n"
-            f"\n{summary}\n",
+            f"# Implement ({header})\nbranch: {branch}\n{fp_line}\n{summary}\n",
             encoding="utf-8",
         )
         # Persist agent-curated reference_files (paths-only) for retry
