@@ -488,7 +488,7 @@ def _distill_failure(
 
     from pydantic_ai.usage import UsageLimits
 
-    definition = load_agent_definition(agent_definitions_dir() / "tester.yaml")
+    definition = load_agent_definition(agent_definitions_dir() / "run_tests.yaml")
 
     all_fs = build_fs_tools(repo_dir, settings)
     ro_fs_tools = [

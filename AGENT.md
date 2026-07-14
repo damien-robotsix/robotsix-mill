@@ -107,7 +107,7 @@ are:
   `document.yaml`, `retrospect.yaml`, `dedup.yaml`,
   `epic_breakdown.yaml`, `obsolescence.yaml`, `auto-approve.yaml`,
   `doc_classifier.yaml`, `maintenance.yaml`, `scope_triage.yaml`,
-  `spec-review.yaml`, `tester.yaml`, `pipeline/meta_triage.yaml`).
+  `spec-review.yaml`, `run_tests.yaml`, `pipeline/meta_triage.yaml`).
 
 - **`periodic`** — background scheduled agents, almost always under
   `agent_definitions/periodic/` (e.g. `periodic/audit.yaml`,
