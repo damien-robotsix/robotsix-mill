@@ -122,3 +122,26 @@ def test_adds_header_when_missing(tmp_path: Path):
     content = changelog.read_text()
     assert content.startswith(f"{_HEADER}\n\n- **new**: entry\n")
     assert "old entry" in content
+
+
+def test_preserves_all_prior_entries(tmp_path: Path):
+    """Regression: after an insert, every pre-existing entry must survive."""
+    prior_entries = [
+        "- **first**: entry one\n",
+        "- **second**: entry two\n",
+        "- **third**: multi-line\n  continuation a\n  continuation b\n",
+        "- **fourth**: entry four\n",
+        "- **fifth**: entry five\n",
+    ]
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(f"{_HEADER}\n\n" + "".join(prior_entries))
+
+    result = _insert_changelog_entry(tmp_path, "- **new**: entry")
+    assert "inserted entry before existing top entry" in result
+
+    content = changelog.read_text()
+    # New entry is present
+    assert "- **new**: entry" in content
+    # Every prior entry survives intact
+    for entry_text in prior_entries:
+        assert entry_text in content, f"Missing prior entry: {entry_text!r}"
