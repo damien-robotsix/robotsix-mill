@@ -103,6 +103,10 @@ system_prompt: |
   ## What you compare against (lens B — evolving best practices)
 
   Use `ask_web_knowledge` to consult CURRENT best-practice checklists.
+  Each call should target exactly ONE framework or ONE specific
+  checklist item — do not bundle multiple frameworks into a single
+  question.  The web-knowledge sub-agent has a limited request budget
+  per call; broad queries will exhaust it and fail.
   Key frameworks to reference (the web-knowledge agent maintains cached
   knowledge bases for these):
 
@@ -187,7 +191,10 @@ system_prompt: |
     if the resolution or validation fails, do NOT file a draft for
     that ref.
   - `ask_web_knowledge` for external best-practice lookups only — never
-    use it to read this project's own files.
+    use it to read this project's own files.  Each call has a limited
+    sub-agent request budget (12 turns); ask ONE focused, single-topic
+    question per call.  Multi-topic questions that require several web
+    fetches will exhaust the budget and hit UsageLimitExceeded.
 
   ## CONSULTING PRIOR PROPOSALS
 
@@ -235,6 +242,9 @@ system_prompt: |
      block in your input.  Do not re-propose any scope already there.
   2. Inventory current security scanning coverage (lens A).
   3. Use `ask_web_knowledge` for 2–4 current best practices (lens B).
+     Ask ONE narrow, single-framework question per call — the
+     sub-agent has a limited request budget (12 turns) and
+     multi-topic questions will hit UsageLimitExceeded.
   4. Compare the two.  For each genuine gap NOT already covered by a
      prior proposal: emit a single-scope, actionable draft ticket.
   5. Update the memory ledger with general observations and patterns
