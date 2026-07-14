@@ -54,6 +54,7 @@
 - Fix stale search path in `state_sync` periodic agent: replace
   non-existent `agent_definitions/stage/*.yaml` with
   `agent_definitions/pipeline/*.yaml` and `agent_definitions/*.yaml`.
+- Move config docs (`configuration.md`, `config-audit.md`, `rfc-config-v2.md`) from `docs/` into `docs/config/` to align with per-module docs layout; update all cross-references.
 - Add `UV_MALWARE_CHECK=1` to all CI workflows that run `uv` commands (ci.yml, security-audit.yml, release.yml, dependency-review.yml), enabling uv's install-time malicious-package scanning as a complementary layer to `uv audit`.
 - Consolidate `autoupdate` module into `dev-tooling`: move source to
   `src/robotsix_mill/dev_tooling/autoupdate/`, tests to
@@ -161,8 +162,8 @@
 - Rename `/health/live` to `/health` (round-4 standard): liveness endpoint now returns `{"status": "alive"}` at `/health`, old route removed. Updated Docker HEALTHCHECK, deploy-compose healthcheck override, smoke script, vulture whitelist, and design doc.
 - Fix CSS class name mismatch for `data_dir_gc` source: rename `.src-data-dir-audit` to `.src-data-dir-gc` and add missing `AGENT_COLORS` entry.
 - Extract `_collect_candidate_boards()` to `_ServiceBase`, deduplicating the cross-board discovery algorithm that was copy-pasted across `_get_anywhere()`, `list_children_across_boards()`, and `_board_for_comment()`.
-- Update "Add a new setting" and "Config drift prevention" sections of `docs/configuration.md` to describe the current JSON-based config mechanism instead of the removed `_YAML_PATH_TO_ALIAS` / YAML-path mapping (the config file is `config/config.example.json`, and `JsonSettingsSource` matches alias keys automatically).
-- Update `docs/configuration.md` to correctly describe the JSON config format
+- Update "Add a new setting" and "Config drift prevention" sections of `docs/config/configuration.md` to describe the current JSON-based config mechanism instead of the removed `_YAML_PATH_TO_ALIAS` / YAML-path mapping (the config file is `config/config.example.json`, and `JsonSettingsSource` matches alias keys automatically).
+- Update `docs/config/configuration.md` to correctly describe the JSON config format
   (not YAML): fix file extensions, convert code examples to JSON with flat
   alias keys, add a note explaining that "YAML path" column entries are
   conceptual dotted paths while actual JSON keys are flat aliases, and
@@ -284,13 +285,13 @@
   (``config/config.yaml``, container paths, template files, compose
   files) from triggering mill redirects.
 - Consolidate GitHub 401 retry boilerplate: add `invalidate_and_backoff()` to `forge/auth.py`, replace ~14 duplicated `invalidate_github_token()` + `time.sleep(2)` sites across `github.py`, `github_ci.py`, and `github_pr.py`, and delete the standalone `_retry_after_401()` method.
-- Extend `env_doc_sync` periodic agent to also create/maintain `.env.example` from canonical Pydantic settings + secrets, and cross-reference runtime-affecting `pyproject.toml` sections against `docs/configuration.md`.
+- Extend `env_doc_sync` periodic agent to also create/maintain `.env.example` from canonical Pydantic settings + secrets, and cross-reference runtime-affecting `pyproject.toml` sections against `docs/config/configuration.md`.
 - Add missing `SourceKind.LANGFUSE_CLEANUP` enum member, `SOURCE_CLASS` JS map entry, and `.src-langfuse-cleanup` CSS rule for board card styling of langfuse-cleanup runs.
 - Add `robotsix-mill meta` CLI command for running the meta pass (extraction + alignment across all repos)
-- Document `periodic.triage_boilerplate` in `docs/configuration.md` Section 12 (Periodic agents).
+- Document `periodic.triage_boilerplate` in `docs/config/configuration.md` Section 12 (Periodic agents).
 - `robotsix-mill repos list` now shows a ``SOURCE`` column (``config`` or ``auto``) so operators can distinguish hand-configured repos from auto-registered overlay entries.
-- Add missing `track_foreign_prs` row to the orphaned_pr_check table in `docs/configuration.md`.
-- Document `core.limits.refine_dynamic_limit_*` and `core.limits.refine_usage_warning_threshold` fields in the Request limits section of `docs/configuration.md`
+- Add missing `track_foreign_prs` row to the orphaned_pr_check table in `docs/config/configuration.md`.
+- Document `core.limits.refine_dynamic_limit_*` and `core.limits.refine_usage_warning_threshold` fields in the Request limits section of `docs/config/configuration.md`
 - Remove the deprecated standalone `config/repos.yaml` fallback: repos are now read exclusively from the `repos:` key of `config/config.yaml` (the `MILL_REPOS_FILE` override used by the test suite is unchanged). Operators still using the standalone file must move its `repos:` block into `config/config.yaml`.
 - Machine-owned repos overlay: auto-registrations (repo-scaffold and workspace member-sync) now write to ``<service.data_dir>/registered_repos.yaml`` instead of ``config/repos.yaml``. The overlay is merged with the operator ``repos:`` block at load time; operator entries win on repo-id conflict. ``RepoConfig.source`` discriminates ``"config"`` (operator) from ``"auto"`` (overlay) entries. ``MILL_REPOS_FILE`` overrides both read and write; the legacy ``config/repos.yaml`` fallback (when neither ``repos:`` nor overlay exist) is unchanged.
 - Fix Docker build failure: add missing `COPY skills/ ./skills/` in builder stage so hatchling's `force-include` for `skills/` resolves at wheel-build time.
@@ -338,7 +339,7 @@
 - `_verify_merge_ancestor`: add content-level fallback when `git merge-base --is-ancestor` fails — diffs the feature commit against the target branch and checks whether changed files on the target branch contain the ticket ID. Catches squash and rebase merges where the log message does not mention the ticket.
 - Fix two dead references to `runners.security_posture_runner` (consolidated into `runners.periodic_runner`), preventing runtime import failures in the CLI and HTTP pass routes.
 - Extend `_triage_outcome` with optional `state` parameter, refactor 8 inline triage sites to use the shared helper
-- Fix `board_manager.max_concurrent` documented default in `docs/configuration.md` from `3` to `1`, matching the Pydantic model default.
+- Fix `board_manager.max_concurrent` documented default in `docs/config/configuration.md` from `3` to `1`, matching the Pydantic model default.
 - Extract `_retry_after_401()` helper in `GitHubForgePRMixin`, centralizing
   the 401 token-invalidation + backoff boilerplate that was duplicated across
   `_create_pr`, `_get_pr`, `_list_branches`, `_list_open_pr_branches`,

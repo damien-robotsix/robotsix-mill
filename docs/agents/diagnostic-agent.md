@@ -90,4 +90,4 @@ record.
 - [index.md](../index.md) — documentation home
 - [agent catalog](index.md) — agent catalog
 - [docs/trace-health.md](../langfuse/trace-health.md) — a sibling deterministic check
-- [docs/configuration.md](../configuration.md) — full env-var reference
+- [docs/config/configuration.md](../config/configuration.md) — full env-var reference

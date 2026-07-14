@@ -11,7 +11,7 @@ nav:
   - Home: index.md
   - Agent Communication Research: agents/communication-research.md
   - Configuration & Deployment:
-      - Configuration reference: configuration.md
+      - Configuration reference: config/configuration.md
       - Observability: langfuse/observability.md
       - Continuous deployment: dev-tooling/deployment.md
       - Autoupdate: dev-tooling/autoupdate/index.md
@@ -20,8 +20,8 @@ nav:
       - Security model: sandbox/security.md
       - CI policy: dev-tooling/ci-policy.md
       - Repo scaffold: repo-scaffold/index.md
-      - Config audit: config-audit.md
-      - "RFC: config v2": rfc-config-v2.md
+      - Config audit: config/config-audit.md
+      - "RFC: config v2": config/rfc-config-v2.md
   - Deps:
       - Dependency management: deps/dependencies.md
   - Pipeline:

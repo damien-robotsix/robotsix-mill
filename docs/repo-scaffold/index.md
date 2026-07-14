@@ -155,4 +155,4 @@ Example: `"src/zeta/pkg"` → `"src-zeta-pkg"`.
 - [index.md](../index.md) — documentation home
 - [docs/forge/architecture.md](../forge/architecture.md) — forge adapter design
 - [docs/vcs/README.md](../vcs/README.md) — `git_ops` CLI wrappers
-- [docs/configuration.md](../configuration.md) — full env-var reference
+- [docs/config/configuration.md](../config/configuration.md) — full env-var reference

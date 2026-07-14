@@ -337,7 +337,7 @@ env_doc_sync_pass = _make_background_pass(
     docstring="""Kick off an env-doc-sync pass in the BACKGROUND and return at once.
 
     The env-doc-sync agent cross-references env-var declarations in the
-    Settings mixins against docs/configuration.md. New draft tickets appear
+    Settings mixins against docs/config/configuration.md. New draft tickets appear
     on the board when it finishes.""",
 )
 router.post("/env-doc-sync", status_code=202)(env_doc_sync_pass)
