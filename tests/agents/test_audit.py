@@ -60,13 +60,17 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
         "synchronization",
     ):
         assert kw in p, f"audit prompt missing maintainability cue: {kw}"
-    # Equal-weight framing, not tooling-only.
-    assert "two complementary lenses" in p
+    # Equal-weight framing — the two-lens mandate must be present.
+    assert "two lenses" in p
+    # Orchestrator-specific framing must be present.
+    assert "frontier orchestrator" in p, "audit prompt missing orchestrator role"
+    assert "sub-agent" in p, "audit prompt missing sub-agent fan-out"
+    assert "shared run memory" in p, "audit prompt missing shared run memory protocol"
     # Mill-isms must NOT appear in the shipped YAML — they belong in
     # the per-repo overlay for mill, not in the generic core.
     assert "default mechanism rule" not in p, (
         "DEFAULT MECHANISM RULE leaked back into shipped YAML; it should "
-        "live in <data_dir>/robotsix-mill/agent_overlays/audit.md instead."
+        "live in .robotsix-mill/periodic/audit.yaml instead."
     )
     for mill_only in ("trace-health", "rebase/ci-fix", "ci-fix"):
         assert mill_only not in p, (
@@ -77,9 +81,6 @@ def test_audit_prompt_covers_codebase_health_and_tooling():
     # Post-explore re-verification guardrails (compact checklist).
     assert "re-verification cap" in p, "audit prompt missing re-verification cap bullet"
     assert "≤ 3 total" in p, "audit prompt missing re-verification cap (≤ 3 total)"
-
-    # parallel_explore fan-out guidance is now covered by the compact
-    # tool-selection checklist (batch sub-questions; cap at 4).
 
 
 def test_mill_ships_an_audit_overlay():
@@ -113,7 +114,7 @@ def test_mill_ships_an_audit_overlay():
 
 def test_run_audit_agent_wires_workflow_caller_audit(monkeypatch):
     """run_audit_agent forwards include_workflow_caller_audit=True (and the
-    jscpd flag) through to run_periodic_agent."""
+    jscpd, write_file flags) through to run_periodic_agent."""
     captured: dict = {}
 
     def fake_run_periodic(**kwargs):
@@ -129,6 +130,7 @@ def test_run_audit_agent_wires_workflow_caller_audit(monkeypatch):
     kw = captured["kwargs"]
     assert kw["include_workflow_caller_audit"] is True
     assert kw["include_jscpd"] is True
+    assert kw["include_write_file"] is True
 
 
 def test_audit_agent_result_model():

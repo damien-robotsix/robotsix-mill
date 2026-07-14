@@ -32,11 +32,12 @@ def _audit_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
 
 run_audit_agent = make_agent_runner(
     definition_name="audit",
-    prompt_tail="Perform the audit and return your result.",
+    prompt_tail="Perform the orchestrated audit and return your result.",
     max_gaps=MAX_GAPS,
     include_forge_url=True,
     include_jscpd=True,
     include_workflow_caller_audit=True,
     include_run_command=True,
+    include_write_file=True,
     dynamic_kwargs_fn=_audit_dynamic_kwargs,
 )
