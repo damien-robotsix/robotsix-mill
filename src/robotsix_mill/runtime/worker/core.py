@@ -164,7 +164,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._enqueue_seq = 0
         # pool of consumer tasks — populated by start(), one or more
         # per repo per its max_concurrency.
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: dict[str, list[asyncio.Task]] = {}
         self._poll_task: asyncio.Task | None = None
         self._audit_task: asyncio.Task | None = None
         self._trace_health_task: asyncio.Task | None = None
@@ -733,8 +733,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             pool_sizes.append((self._DEFAULT_BOARD, 1))
             pool_sizes.append((self._META_BOARD, 1))
             for board_id, n in pool_sizes:
+                self._tasks[board_id] = []
                 for _ in range(n):
-                    self._tasks.append(asyncio.create_task(self._run(board_id)))
+                    self._tasks[board_id].append(
+                        asyncio.create_task(self._run(board_id))
+                    )
             log.info(
                 "worker pool started: %s",
                 ", ".join(f"{bid or '<default>'}={n}" for bid, n in pool_sizes),
@@ -889,6 +892,48 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 self.ctx.settings.bespoke_discovery_interval_seconds,
             )
 
+    async def reconcile_consumers(self) -> None:
+        """Spawn consumer tasks for newly registered repos and cancel
+        consumers for deregistered ones.
+
+        Called from POST /repos and DELETE /repos/{repo_id} so that
+        runtime-registered boards are picked up immediately — without
+        this a board registered after ``start()`` gets a queue (via the
+        reconcile sweep's lazy ``_queue_for``) but no consumer tasks,
+        and tickets sit in DRAFT forever.
+        """
+        repos = get_repos_config()
+        current_boards = set(self._tasks.keys())
+        desired_boards = {rc.board_id for rc in repos.repos.values()}
+        desired_boards.add(self._DEFAULT_BOARD)
+        desired_boards.add(self._META_BOARD)
+
+        for board_id in sorted(desired_boards - current_boards):
+            n = 1
+            for rc in repos.repos.values():
+                if rc.board_id == board_id:
+                    n = max(1, rc.max_concurrency)
+                    break
+            self._tasks[board_id] = []
+            for _ in range(n):
+                self._tasks[board_id].append(asyncio.create_task(self._run(board_id)))
+            log.info(
+                "reconcile: spawned %d consumer(s) for board %r",
+                n,
+                board_id,
+            )
+
+        for board_id in sorted(current_boards - desired_boards):
+            tasks = self._tasks.pop(board_id, [])
+            for t in tasks:
+                t.cancel()
+            self.queues.pop(board_id, None)
+            log.info(
+                "reconcile: cancelled %d consumer(s) for deregistered board %r",
+                len(tasks),
+                board_id,
+            )
+
     async def stop(self) -> None:
         # Wait for periodic passes that are mid-run (survey, audit,
         # health, …) to finish before tearing the loops down. Without
@@ -914,7 +959,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     grace,
                     sum(1 for t in inflight if not t.done()),
                 )
-        tasks = list(self._tasks)
+        tasks = [t for tasks_list in self._tasks.values() for t in tasks_list]
         for attr in (
             "_poll_task",
             "_audit_task",
@@ -959,7 +1004,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 await t
             except asyncio.CancelledError:
                 pass
-        self._tasks = []
+        self._tasks = {}
         tracing.flush_tracing()
 
     def requeue_unfinished(self) -> None:

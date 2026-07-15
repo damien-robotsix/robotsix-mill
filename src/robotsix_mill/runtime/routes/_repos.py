@@ -82,7 +82,7 @@ class RepoRegistrationResult(BaseModel):
     status_code=status.HTTP_201_CREATED,
     response_model=RepoRegistrationResult,
 )
-def register_repo(
+async def register_repo(  # noqa: C901
     body: RepoRegistration,
     request: Request,
     response: Response,
@@ -206,6 +206,12 @@ def register_repo(
         _sanitize_log_value(effective_board_id),
     )
 
+    # Reconcile the worker consumer pool so the new board's tickets
+    # are picked up without a mill restart.
+    worker = request.app.state.worker
+    if worker is not None:
+        await worker.reconcile_consumers()
+
     return RepoRegistrationResult(
         repo_id=body.repo_id,
         board_id=effective_board_id,
@@ -218,7 +224,7 @@ def register_repo(
     "/repos/{repo_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def deregister_repo(
+async def deregister_repo(
     repo_id: str,
     request: Request,
     settings: Settings = Depends(get_settings),
@@ -275,3 +281,9 @@ def deregister_repo(
         "Deregistered repo %r via runtime overlay",
         _sanitize_log_value(repo_id),
     )
+
+    # Reconcile the worker consumer pool so consumers for the removed
+    # board are cancelled immediately.
+    worker = request.app.state.worker
+    if worker is not None:
+        await worker.reconcile_consumers()
