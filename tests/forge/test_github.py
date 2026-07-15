@@ -41,11 +41,13 @@ def _settings(tmp_path, **kw):
     kw.setdefault("FORGE_KIND", "github")
     kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
     kw.setdefault("FORGE_TOKEN", "tok")
-    s = Settings(**kw)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = kw.get("FORGE_TOKEN")
     if ft is not None:
         _set_secrets(forge_token=ft)
+    # FORGE_TOKEN is now a Secrets-only field; pop before Settings()
+    kw.pop("FORGE_TOKEN", None)
+    s = Settings(**kw)
     return s
 
 
@@ -2868,10 +2870,11 @@ def _app_settings(tmp_path, **kw):
     kw.setdefault("FORGE_KIND", "github")
     kw.setdefault("FORGE_AUTH", "app")
     kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
-    # Settings model itself holds github_app_id / github_app_private_key
-    # (not just Secrets), so pass them through.
+    # Settings model itself holds github_app_id (not github_app_private_key,
+    # which lives only in Secrets).
     kw.setdefault("GITHUB_APP_ID", "123")
-    kw.setdefault("GITHUB_APP_PRIVATE_KEY", "KEY")
+    # GITHUB_APP_PRIVATE_KEY is now a Secrets-only field; pop before Settings()
+    kw.pop("GITHUB_APP_PRIVATE_KEY", None)
     return Settings(**kw)
 
 

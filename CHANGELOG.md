@@ -2,6 +2,12 @@
 
 - Add unit tests for `delta_context.py` trimming functions (`trim_spec_for_retry`, `trim_draft_for_re_refine`) covering short specs, paragraph-boundary truncation, line-boundary fallback, no-newline fallback, and custom max_chars
 - `web_knowledge` sub-agent: add budget-aware early-termination guidance in system prompt (reserve last 2 requests for final answer) and return a distinct error message on `UsageLimitExceeded` so callers can avoid retrying the same question. Implement agent system prompt now explicitly warns against retrying `ask_web_knowledge` on budget exhaustion.
+- Fix ~30+ tests broken by the removal of credential fields from Settings:
+  test helpers that passed `OPENROUTER_API_KEY`, `FORGE_TOKEN`, or
+  `GITHUB_APP_PRIVATE_KEY` to `Settings(**env)` now pop those keys first
+  (they are Secrets-only fields and `Settings` has `extra="forbid"`).
+  Also update a stale docstring comment in `settings.py`.
+- Remove dead credential fields (`openrouter_api_key`, `forge_token`, `github_app_private_key`) from `_CoreSettings`. These were never consumed from Settings — all runtime consumption goes through `Secrets`. Removes shadowing risk where env vars would populate Settings fields that were silently ignored.
 - Add `## ask_web_knowledge` guidance to the implement agent system prompt,
   advising the sub-agent to check local sources before web-searching and
   noting its 8-request budget constraint.

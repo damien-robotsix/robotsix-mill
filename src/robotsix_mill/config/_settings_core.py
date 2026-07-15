@@ -13,12 +13,6 @@ from pydantic import BaseModel, Field
 
 
 class _CoreSettings(BaseModel):
-    # --- core ---
-    openrouter_api_key: str | None = Field(
-        default=None,
-        alias="OPENROUTER_API_KEY",
-        description="API key for OpenRouter model access. Required for LLM inference.",
-    )
     # Per-agent model selection is driven by each agent definition's
     # ``level: 1|2|3`` field, resolved to a (transport, model) by
     # ``build_agent`` via llmio's tier defaults. Transient 429/5xx/timeouts
@@ -30,6 +24,11 @@ class _CoreSettings(BaseModel):
     # ``build_agent`` via llmio's baked tier defaults — L1 DeepSeek flash,
     # L2 DeepSeek pro, L3 Claude Opus). There is no global backend toggle.
     #
+    openrouter_api_key: str | None = Field(
+        default=None,
+        alias="OPENROUTER_API_KEY",
+    )
+
     # Process-wide cap on how many Claude Agent SDK runs may execute at once.
     # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
     # (worker startup contention) can stall a run. A global semaphore (see
@@ -600,15 +599,14 @@ class _CoreSettings(BaseModel):
         alias="FORGE_REMOTE_URL",
         description="Git remote URL of the forge repository.",
     )
-    forge_token: str | None = Field(
-        default=None,
-        alias="FORGE_TOKEN",
-        description="Personal access token for forge API access (PR creation, push, merge).",
-    )
     forge_target_branch: str = Field(
         default="main",
         alias="FORGE_TARGET_BRANCH",
         description="Default target branch for PRs.",
+    )
+    forge_token: str | None = Field(
+        default=None,
+        alias="FORGE_TOKEN",
     )
     # token  = use FORGE_TOKEN (PAT) directly.
     # app    = mint a short-lived GitHub App installation token so the
@@ -626,7 +624,6 @@ class _CoreSettings(BaseModel):
     github_app_private_key: str | None = Field(
         default=None,
         alias="GITHUB_APP_PRIVATE_KEY",
-        description="GitHub App private key (PEM string).",
     )
     github_app_private_key_path: str | None = Field(
         default=None,

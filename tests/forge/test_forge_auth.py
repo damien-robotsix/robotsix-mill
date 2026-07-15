@@ -16,7 +16,6 @@ def _set_secrets(**kw):
 
 def S(tmp_path, **e):
     e.setdefault("data_dir", str(tmp_path))
-    s = Settings(**e)
     # Mirror secret fields into Secrets so get_secrets() works
     secrets_kw = {}
     for key in (
@@ -30,6 +29,11 @@ def S(tmp_path, **e):
             secrets_kw[key] = val
     if secrets_kw:
         _set_secrets(**secrets_kw)
+    # FORGE_TOKEN and GITHUB_APP_PRIVATE_KEY are now Secrets-only fields;
+    # pop before Settings()
+    e.pop("FORGE_TOKEN", None)
+    e.pop("GITHUB_APP_PRIVATE_KEY", None)
+    s = Settings(**e)
     return s
 
 

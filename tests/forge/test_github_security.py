@@ -23,6 +23,8 @@ def _forge(tmp_path, **kw):
     kw.setdefault("FORGE_KIND", "github")
     kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
     kw.setdefault("FORGE_TOKEN", "tok")
+    # FORGE_TOKEN is now a Secrets-only field; pop before Settings()
+    kw.pop("FORGE_TOKEN", None)
     s = Settings(**kw)
     _set_secrets(forge_token="tok")
     return GitHubForge(s)
