@@ -380,11 +380,24 @@ see at a glance which files need re-checking.
 4. Stop. Your final reply to the caller is your answer, not a
    transcript of how you found it.
 
-## Hard rules
+## Budget — you have {request_limit} model requests
 
+You have exactly **{request_limit} model requests** for this entire
+consult — that includes reading files, web-searching, web-fetching,
+writing updates, and producing your final answer. It is a hard cap:
+when you hit it your answer is lost and the caller gets nothing.
+
+Plan your turns accordingly:
+- Reserve the **last 2 requests** for producing your final answer.
+  If you've spent {request_limit_minus_2} requests and haven't
+  started writing your answer yet, **stop researching immediately**
+  and produce the best answer you can from what you already know.
 - ONE web search per consult is the typical case. Multiple searches
   are fine if they're for distinctly different sub-topics; never
   search just to double-check a fact you already wrote down.
+
+## Hard rules
+
 - NEVER answer from training-data memory alone if you can't ground
   the answer in cache or fresh web info — say so briefly and stop.
 - When you WRITE a file, ALWAYS ask yourself: "did I verify this
@@ -585,6 +598,7 @@ async def run_web_knowledge(
 
     # Lazy: keep the test suite hermetic, the core import-light.
     from pydantic_ai import Agent
+    from pydantic_ai.exceptions import UsageLimitExceeded
     from pydantic_ai.usage import UsageLimits
 
     from .base import _aclose_async_client, build_openrouter_model
@@ -593,12 +607,15 @@ async def run_web_knowledge(
     model, client = build_openrouter_model(settings.web_knowledge_model)
 
     index = _build_index(settings)
+    request_limit = settings.web_knowledge_request_limit
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT_TEMPLATE.format(
             index=index,
             stale_days=settings.web_knowledge_stale_days,
             cache_ttl_hours=settings.web_knowledge_cache_ttl_hours,
+            request_limit=request_limit,
+            request_limit_minus_2=max(1, request_limit - 2),
         ),
         output_type=str,
         tools=_make_tools(settings),
@@ -614,6 +631,14 @@ async def run_web_knowledge(
                 what="web_knowledge",
             )
         return str(result.output)
+    except UsageLimitExceeded as e:
+        log.warning("web_knowledge budget exhausted: %s", e)
+        return (
+            "web_knowledge budget exhausted: the sub-agent ran out of "
+            f"model requests (limit {request_limit}). "
+            "Do NOT retry the same question — use a fallback approach "
+            "(consult_expert or local research) instead."
+        )
     except Exception as e:  # noqa: BLE001 — degrade
         log.warning("web_knowledge failed: %s", e)
         return f"web_knowledge failed: {e}"

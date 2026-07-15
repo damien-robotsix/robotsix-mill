@@ -523,6 +523,15 @@ class _FakeFailingAgent(_FakeAgent):
         raise RuntimeError("model exploded")
 
 
+class _FakeBudgetExhaustedAgent(_FakeAgent):
+    async def run(self, question, *, usage_limits=None):
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        raise UsageLimitExceeded(
+            "The next request would exceed the request_limit of 12"
+        )
+
+
 def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
     """Replace the lazy Agent import + the level-1 model seam with stubs
     so ``run_web_knowledge`` builds nothing real."""
@@ -623,6 +632,19 @@ class TestRunWebKnowledge:
         out = asyncio.run(run_web_knowledge(settings=s, question="q"))
         assert out.startswith("web_knowledge failed:")
         assert "model exploded" in out
+
+    def test_budget_exhaustion_returns_distinct_message(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """When the sub-agent hits ``UsageLimitExceeded``, the error
+        message signals budget exhaustion (not a generic failure) so
+        the caller can avoid retrying the same question."""
+        secrets_set(openrouter_api_key="k")
+        _patch_agent_chain(monkeypatch, agent_cls=_FakeBudgetExhaustedAgent)
+        s = _settings(tmp_path)
+        out = asyncio.run(run_web_knowledge(settings=s, question="q"))
+        assert out.startswith("web_knowledge budget exhausted:")
+        assert "Do NOT retry" in out
 
     def test_finally_block_closes_http_client_on_success(
         self, tmp_path, secrets_set, monkeypatch
