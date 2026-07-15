@@ -961,17 +961,22 @@ class TestCallWithTimeout:
         class FakeExecutor:
             def __init__(self, max_workers=1):
                 pass
+
             def submit(self, fn):
                 class _Future:
                     def result(self, timeout=None):
                         return fn()
+
                     def cancel(self):
                         pass
+
                 return _Future()
+
             def shutdown(self, wait=True):
                 shutdown_calls.append(wait)
 
         import concurrent.futures
+
         original = concurrent.futures.ThreadPoolExecutor
         concurrent.futures.ThreadPoolExecutor = FakeExecutor
         try:
@@ -999,6 +1004,7 @@ class TestCallWithTimeout:
                 super().shutdown(wait=wait)
 
         import robotsix_mill.agents.coordinating as _mod
+
         original_executor = concurrent.futures.ThreadPoolExecutor
         concurrent.futures.ThreadPoolExecutor = InstrumentedExecutor
         try:
@@ -1017,17 +1023,17 @@ class TestCallWithTimeout:
 
 
 # ---------------------------------------------------------------------------
-# implement_progress_timeout — implement stage watchdog
+# implement_pass_timeout — implement stage pass cap
 # ---------------------------------------------------------------------------
 
 
-class TestImplementProgressTimeout:
-    """Tests for implement_progress_timeout setting."""
+class TestImplementPassTimeout:
+    """Tests for implement_pass_timeout setting."""
 
-    def test_implement_progress_timeout_default(self):
-        """implement_progress_timeout defaults to 300 seconds."""
+    def test_implement_pass_timeout_default(self):
+        """implement_pass_timeout defaults to 300 seconds."""
         s = Settings()
-        assert s.implement_progress_timeout == 300
+        assert s.implement_pass_timeout == 300
 
     def test_sandbox_op_timeout_default(self):
         """sandbox_op_timeout defaults to 300 seconds."""

@@ -1054,9 +1054,11 @@ class _StagesSettings(BaseModel):
         ge=0,
         alias="MILL_SANDBOX_OP_TIMEOUT",
     )
-    implement_progress_timeout: int = Field(
-        description="Progress watchdog timeout (seconds) for the implement stage. The run is killed after this many seconds of NO progress (no observations/tool-results/tokens). 0 disables.",
+    implement_pass_timeout: int = Field(
+        description="Flat wall-clock cap (seconds) per implement agent pass. "
+        "The pass is killed after this many seconds regardless of progress. "
+        "0 disables.",
         default=300,
         ge=0,
-        alias="MILL_IMPLEMENT_PROGRESS_TIMEOUT",
+        alias="MILL_IMPLEMENT_PASS_TIMEOUT",
     )

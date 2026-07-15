@@ -457,17 +457,14 @@ def run_coordinator(
         # --- per-stage timeout resolution ---
         # Hierarchy (strongest first):
         #   1. coordinator_timeout_overrides[stage_name]  (explicit per-stage)
-        #   2. implement_progress_timeout                  (implement-stage watchdog)
-        #   3. coordinator_timeout_seconds                 (global fallback)
+        #   2. coordinator_timeout_seconds                 (global fallback)
+        # NOTE: implement_pass_timeout is applied at the stage-runner
+        # level in processing.py, not here — it wraps the FULL stage
+        # (scope-triage, rebase, sandbox setup/teardown) rather than
+        # just the inner agent call.
         _pass_timeout = settings.coordinator_timeout_overrides.get(
             stage_name, settings.coordinator_timeout_seconds
         )
-        if (
-            stage_name == "implement"
-            and settings.implement_progress_timeout > 0
-            and stage_name not in settings.coordinator_timeout_overrides
-        ):
-            _pass_timeout = settings.implement_progress_timeout
 
         result = _call_with_timeout(
             lambda: run_agent(
