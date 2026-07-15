@@ -51,6 +51,11 @@ docs-build: install  ## Build static docs site into site/
 	uv sync --frozen --group docs
 	$(BIN)/mkdocs build
 
+docs-link-check: install  ## Check docs for broken links (requires lychee)
+	uv sync --frozen --group docs
+	$(BIN)/mkdocs build
+	lychee --config lychee.toml --no-progress docs/
+
 clean:  ## Remove venv, data dirs, and cache files
 	rm -rf $(VENV) .mill-data .pytest_cache
 	find . -name __pycache__ -type d -exec rm -rf {} +

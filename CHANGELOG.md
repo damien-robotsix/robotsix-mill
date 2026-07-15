@@ -24,6 +24,8 @@
   a ``KeyError`` in Alembic's proxy cleanup
 - Fix implement spawn-limit deadlock: `resume_blocked` now clears `implement_spawn_count` alongside `implement.md` so resumed tickets don't immediately re-block on the spawn limit; transient infra failures (sandbox EOF, OOM, etc.) no longer burn spawn slots — the counter only increments on genuine re-spawns (`retry_attempt == 0`).
 - Add six missing Pydantic `Settings` fields to `config/config.example.json` and `docs/config/configuration.md`: `refine_delta_reuse_enabled`, `repo_description_sync_periodic`, `repo_description_sync_interval_seconds`, `security_posture_periodic`, `security_posture_interval_seconds`, `security_posture_request_limit`.
+- Add `lychee` dead-link checking: pre-commit hook, `lychee.toml` config,
+  `make docs-link-check` target, and `.lychee-cache/` gitignore entry.
 - Add `agent_references/module-shadowing.md`: document the Python module-shadowing
   hazard when creating a subdirectory alongside a single-file module, with the
   canonical workaround (underscore-prefixed file alongside the module).

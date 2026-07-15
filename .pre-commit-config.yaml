@@ -58,6 +58,13 @@ repos:
     rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # frozen: v1.7.12
     hooks:
       - id: actionlint
+  - repo: https://github.com/lycheeverse/lychee
+    rev: v0.18.1
+    hooks:
+      - id: lychee
+        args: ["--config", "lychee.toml", "--no-progress"]
+        files: ^docs/\.md$
+        types: [markdown]
   - repo: local
     hooks:
       - id: validate-module-taxonomy
