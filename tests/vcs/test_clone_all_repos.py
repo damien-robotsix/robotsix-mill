@@ -237,6 +237,164 @@ class TestCloneAllRepos:
             assert (expected / ".git").is_dir()
         assert len(call_args) == 3
 
+    def test_empty_repo_bootstrapped(self, settings: Settings, monkeypatch):
+        """A clone failure due to missing remote branch triggers bootstrap."""
+        reg = ReposRegistry(
+            repos={
+                "empty": _repo("empty", forge_remote_url="https://gh.com/e.git"),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.github_token",
+            lambda _settings, repo_config: "tok",
+        )
+        # Pretend the remote has no branches so bootstrap is attempted.
+        monkeypatch.setattr(
+            "robotsix_mill.vcs._remote_has_branches",
+            lambda url, token: False,
+        )
+
+        clone_call_count = 0
+
+        def _fake_clone(remote_url, dest, branch, token):
+            nonlocal clone_call_count
+            clone_call_count += 1
+            raise subprocess.CalledProcessError(
+                128,
+                ["git", "clone"],
+                stderr="fatal: Remote branch main not found in upstream origin",
+            )
+
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+
+        init_calls = []
+        commit_calls = []
+        push_calls = []
+
+        def _fake_init_repo(dest, branch):
+            init_calls.append((str(dest), branch))
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / ".git").mkdir()
+
+        def _fake_commit_all(repo, message):
+            commit_calls.append((str(repo), message))
+
+        def _fake_push(repo, branch, remote_url, token):
+            push_calls.append((str(repo), branch, remote_url, token))
+
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.init_repo", _fake_init_repo)
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.commit_all", _fake_commit_all)
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.push", _fake_push)
+
+        result = clone_all_repos(settings)
+
+        assert clone_call_count == 1
+        assert set(result.keys()) == {"empty"}
+        assert len(init_calls) == 1
+        assert len(commit_calls) == 1
+        assert commit_calls[0][1] == "Initial bootstrap commit"
+        assert len(push_calls) == 1
+        assert push_calls[0][1] == "main"
+        assert push_calls[0][2] == "https://gh.com/e.git"
+
+    def test_bootstrap_failure_logs_error(
+        self, settings: Settings, caplog, monkeypatch
+    ):
+        """When bootstrap fails, an ERROR is logged (not just WARNING)."""
+        import logging
+
+        caplog.set_level(logging.ERROR)
+
+        reg = ReposRegistry(
+            repos={
+                "empty": _repo("empty", forge_remote_url="https://gh.com/e.git"),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.github_token",
+            lambda _settings, repo_config: "tok",
+        )
+        # Pretend the remote has no branches so bootstrap is attempted.
+        monkeypatch.setattr(
+            "robotsix_mill.vcs._remote_has_branches",
+            lambda url, token: False,
+        )
+
+        def _fake_clone(remote_url, dest, branch, token):
+            raise subprocess.CalledProcessError(
+                128,
+                ["git", "clone"],
+                stderr="fatal: Remote branch main not found in upstream origin",
+            )
+
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+
+        def _failing_push(repo, branch, remote_url, token):
+            raise subprocess.CalledProcessError(
+                128,
+                ["git", "push"],
+                stderr="remote: Permission denied",
+            )
+
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.push", _failing_push)
+
+        # init + commit succeed
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.init_repo",
+            lambda dest, branch: dest.mkdir(parents=True, exist_ok=True),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.commit_all",
+            lambda repo, message: None,
+        )
+
+        result = clone_all_repos(settings)
+
+        assert result == {}
+        errors = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(errors) >= 1
+        assert any("failed to bootstrap" in msg for msg in errors)
+        assert any("empty" in msg for msg in errors)
+
+    def test_non_empty_clone_failure_still_logs_warning(
+        self, settings: Settings, caplog, monkeypatch
+    ):
+        """A clone failure NOT caused by empty repo still logs WARNING."""
+        import logging
+
+        caplog.set_level(logging.WARNING)
+
+        reg = ReposRegistry(
+            repos={
+                "bad": _repo("bad", forge_remote_url="https://gh.com/bad.git"),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.github_token",
+            lambda _settings, repo_config: "tok",
+        )
+
+        def _fake_clone(remote_url, dest, branch, token):
+            raise subprocess.CalledProcessError(
+                128,
+                ["git", "clone"],
+                stderr="fatal: repository 'https://gh.com/bad.git' not found",
+            )
+
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+
+        result = clone_all_repos(settings)
+
+        assert result == {}
+        warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("clone failed" in msg for msg in warnings)
+        # No bootstrap was attempted
+        errors = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert not any("bootstrap" in msg.lower() for msg in errors)
+
     def test_existing_per_repo_workspaces_untouched(
         self, settings: Settings, monkeypatch
     ):
