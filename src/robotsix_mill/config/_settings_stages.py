@@ -1048,3 +1048,15 @@ class _StagesSettings(BaseModel):
         description="Maximum traces to retain in the Langfuse project during cleanup.",
         default=5000,
     )
+    sandbox_op_timeout: int = Field(
+        description="Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
+        default=300,
+        ge=0,
+        alias="MILL_SANDBOX_OP_TIMEOUT",
+    )
+    implement_progress_timeout: int = Field(
+        description="Progress watchdog timeout (seconds) for the implement stage. The run is killed after this many seconds of NO progress (no observations/tool-results/tokens). 0 disables.",
+        default=300,
+        ge=0,
+        alias="MILL_IMPLEMENT_PROGRESS_TIMEOUT",
+    )

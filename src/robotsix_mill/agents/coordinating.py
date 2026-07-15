@@ -164,14 +164,20 @@ def _call_with_timeout(
     the agent pass exceeds its wall-clock budget.  The abandoned thread
     will eventually complete (or be cleaned up at process exit); the
     stage retries with a fresh agent context on the next pass.
+
+    ``shutdown(wait=False)`` ensures the watchdog TimeoutError propagates
+    immediately instead of blocking on hung threads at context-manager exit.
     """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
         future = executor.submit(fn)
         try:
             return future.result(timeout=timeout_seconds)
         except concurrent.futures.TimeoutError:
             future.cancel()
             raise TimeoutError(f"{what} timed out after {timeout_seconds}s") from None
+    finally:
+        executor.shutdown(wait=False)
 
 
 def run_coordinator(
@@ -448,6 +454,21 @@ def run_coordinator(
 
         from .structured_output_guard import reprompt_if_unstructured
 
+        # --- per-stage timeout resolution ---
+        # Hierarchy (strongest first):
+        #   1. coordinator_timeout_overrides[stage_name]  (explicit per-stage)
+        #   2. implement_progress_timeout                  (implement-stage watchdog)
+        #   3. coordinator_timeout_seconds                 (global fallback)
+        _pass_timeout = settings.coordinator_timeout_overrides.get(
+            stage_name, settings.coordinator_timeout_seconds
+        )
+        if (
+            stage_name == "implement"
+            and settings.implement_progress_timeout > 0
+            and stage_name not in settings.coordinator_timeout_overrides
+        ):
+            _pass_timeout = settings.implement_progress_timeout
+
         result = _call_with_timeout(
             lambda: run_agent(
                 agent,
@@ -458,9 +479,7 @@ def run_coordinator(
                 ),
                 what="implement",
             ),
-            timeout_seconds=settings.coordinator_timeout_overrides.get(
-                stage_name, settings.coordinator_timeout_seconds
-            ),
+            timeout_seconds=_pass_timeout,
             what="implement agent",
         )
         result = reprompt_if_unstructured(

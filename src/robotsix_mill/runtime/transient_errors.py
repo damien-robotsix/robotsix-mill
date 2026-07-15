@@ -13,6 +13,8 @@ import time
 
 import httpx
 
+from robotsix_mill.sandbox import SandboxError
+
 try:
     import openai
 except ImportError:  # pragma: no cover
@@ -327,6 +329,8 @@ def _check_one_transient(exc: BaseException) -> bool:
     if _is_transient_called_process_error(exc):
         return True
     if isinstance(exc, TimeoutError):
+        return True
+    if isinstance(exc, SandboxError):
         return True
     if _is_transient_message(exc):
         return True

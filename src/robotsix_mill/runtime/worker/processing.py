@@ -14,6 +14,7 @@ from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
 from .. import tracing
 from ..tracing import langfuse_trace_url
+from ...sandbox import reap_orphan_sandboxes
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
 
 log = logging.getLogger("robotsix_mill.worker")
@@ -133,6 +134,19 @@ async def _handle_stage_error(
     tracing.set_current_span_attribute(
         "retry.reason", f"{classification}: {type(error).__name__}: {error!s}"[:300]
     )
+    if isinstance(error, TimeoutError):
+        tracing.set_current_span_attribute("error.subtype", "timeout_inner")
+        # --- reap orphan sandboxes on any timeout ---
+        # A sandbox exec that triggered the timeout may still be running as
+        # an orphaned container. Best-effort reaping here closes the
+        # resource leak and ensures trace latency reflects the kill time.
+        try:
+            reaped = reap_orphan_sandboxes()
+            if reaped:
+                tracing.set_current_span_attribute("sandbox.orphans_reaped", str(reaped))
+                log.warning("reaped %d orphan sandbox(es) after timeout", reaped)
+        except Exception:
+            log.warning("failed to reap orphan sandboxes after timeout", exc_info=True)
     if classification == "transient":
         # --- Clear stale implement fingerprint guard ---
         # When a transient infrastructure failure kills an implement run,

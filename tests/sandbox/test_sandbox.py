@@ -1316,3 +1316,63 @@ def test_run_reattaches_network_on_every_spawn_in_deploy_mode(tmp_path, monkeypa
     assert called["n"] == 1
     sandbox.run("echo hi again", repo_dir="/data/work/repo", settings=s)
     assert called["n"] == 2
+
+
+# ── sandbox_op_timeout ───────────────────────────────────────────────
+
+
+def test_sandbox_op_timeout_default_300():
+    """sandbox_op_timeout defaults to 300 seconds (per the stall-hardening spec)."""
+    s = Settings()
+    assert s.sandbox_op_timeout == 300
+
+
+def test_sandbox_op_timeout_used_in_run(monkeypatch, tmp_path):
+    """sandbox.run() uses sandbox_op_timeout (300s) for the subprocess timeout,
+    not the legacy command_timeout (1800s)."""
+    s = Settings()
+    s.sandbox_op_timeout = 42  # distinctive value
+    s.command_timeout = 1800  # legacy fallback
+
+    captured_timeout = None
+
+    def fake_run(argv, **kwargs):
+        nonlocal captured_timeout
+        captured_timeout = kwargs.get("timeout")
+        # Return a success so we don't hit retry logic.
+        # sandbox expects text=False (bytes stdout/stderr).
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # Must patch _repo_mount to avoid real docker mounts
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"]
+    )
+
+    sandbox.run("echo hello", repo_dir=tmp_path, settings=s)
+
+    assert captured_timeout == 42, f"Expected sandbox_op_timeout=42, got {captured_timeout}"
+
+
+def test_sandbox_op_timeout_zero_falls_back_to_command_timeout(monkeypatch, tmp_path):
+    """When sandbox_op_timeout is 0, sandbox.run() falls back to command_timeout."""
+    s = Settings()
+    s.sandbox_op_timeout = 0
+    s.command_timeout = 99  # distinctive fallback value
+
+    captured_timeout = None
+
+    def fake_run(argv, **kwargs):
+        nonlocal captured_timeout
+        captured_timeout = kwargs.get("timeout")
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"]
+    )
+
+    sandbox.run("echo hello", repo_dir=tmp_path, settings=s)
+
+    assert captured_timeout == 99, f"Expected command_timeout=99, got {captured_timeout}"

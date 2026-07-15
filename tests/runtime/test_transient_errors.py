@@ -550,3 +550,31 @@ def test_network_available_true_when_host_resolves(monkeypatch):
     monkeypatch.setattr(te, "_probe_cache", {"at": float("-inf"), "ok": False})
     monkeypatch.setattr("socket.getaddrinfo", lambda host, port: [("ok",)])
     assert te.network_available("github.com", cache_seconds=300.0) is True
+
+
+# ---------------------------------------------------------------------------
+# SandboxError transient classification — docker "unexpected EOF" and
+# similar infra failures must be transient so the stage retries instead
+# of hard-BLOCKing.  See ticket 20260715T070655Z (implement stage stall
+# hardening).
+# ---------------------------------------------------------------------------
+
+
+def test_sandbox_error_is_transient():
+    """SandboxError (docker unexpected EOF, daemon errors) is transient."""
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+    from robotsix_mill.sandbox import SandboxError
+
+    exc = SandboxError("docker run failed: unexpected EOF")
+    assert classify_stage_error(exc) == "transient"
+
+
+def test_sandbox_error_transient_in_cause_chain():
+    """SandboxError nested in a cause chain is still transient."""
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+    from robotsix_mill.sandbox import SandboxError
+
+    inner = SandboxError("docker daemon error")
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = inner
+    assert classify_stage_error(outer) == "transient"

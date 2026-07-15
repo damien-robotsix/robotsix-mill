@@ -548,6 +548,15 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
     image = sandbox_image or settings.sandbox_image
     argv += ["--entrypoint", "sh", image, "-lc", effective_command]
 
+    # Per-op timeout: use the dedicated sandbox_op_timeout when set,
+    # falling back to the legacy command_timeout (1800s).  A single
+    # hung docker exec must fast-fail in ~5 min (default 300s) instead
+    # of silently draining the stage budget for 30 min.
+    op_timeout = (
+        settings.sandbox_op_timeout
+        if settings.sandbox_op_timeout > 0
+        else settings.command_timeout
+    )
     max_attempts = 3
     for attempt in range(1, max_attempts + 1):
         try:
@@ -555,7 +564,7 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
                 argv,
                 capture_output=True,
                 text=False,
-                timeout=settings.command_timeout,
+                timeout=op_timeout,
             )
         except FileNotFoundError as e:
             raise SandboxError("docker CLI not found in the mill image") from e
@@ -564,7 +573,7 @@ def run(  # noqa: C901 — extra-packages loading adds one branch; tightly-coupl
             subprocess.run(
                 ["docker", "rm", "-f", name], capture_output=True, text=False
             )
-            return 124, f"command timed out after {settings.command_timeout}s"
+            return 124, f"command timed out after {op_timeout}s"
 
         stdout = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
         stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
