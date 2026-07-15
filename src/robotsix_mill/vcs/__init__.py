@@ -25,8 +25,8 @@ def _remote_has_branches(remote_url: str, token: str | None) -> bool:
     attempt a bootstrap when it cannot verify emptiness.
     """
     try:
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 — remote_url from repo config, token from env
+            [  # noqa: S607 — git is on PATH
                 "git",
                 "ls-remote",
                 "--quiet",
@@ -124,9 +124,7 @@ def clone_all_repos(settings) -> dict[str, Path]:
                 # branches at all).  Otherwise the repo already has a
                 # different default branch (e.g. "lyrical" instead of
                 # "main") and we must not silently overwrite it.
-                if not _remote_has_branches(
-                    repo_config.forge_remote_url, token
-                ):
+                if not _remote_has_branches(repo_config.forge_remote_url, token):
                     log.info(
                         "clone_all_repos: remote has no branches for %r "
                         "— attempting bootstrap",
@@ -147,8 +145,7 @@ def clone_all_repos(settings) -> dict[str, Path]:
                         )
                     except Exception as bootstrap_err:
                         log.error(
-                            "clone_all_repos: failed to bootstrap empty "
-                            "repo %r: %s",
+                            "clone_all_repos: failed to bootstrap empty repo %r: %s",
                             repo_id,
                             bootstrap_err,
                         )
