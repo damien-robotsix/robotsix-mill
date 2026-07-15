@@ -412,11 +412,8 @@ class TestFetchTraceDetail:
     def test_returns_none_when_unconfigured(self):
         from robotsix_mill.langfuse.client import fetch_trace_detail
 
-        settings = Settings(
-            langfuse_base_url=None,
-            langfuse_public_key=None,
-            langfuse_secret_key=None,
-        )
+        _set_secrets()  # all langfuse fields default to None → tracing_enabled False
+        settings = Settings()
         assert fetch_trace_detail(settings, "any-id") is None
 
 

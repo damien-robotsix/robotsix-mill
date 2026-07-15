@@ -14,6 +14,7 @@
   (they are Secrets-only fields and `Settings` has `extra="forbid"`).
   Also update a stale docstring comment in `settings.py`.
 - Remove dead credential fields (`openrouter_api_key`, `forge_token`, `github_app_private_key`) from `_CoreSettings`. These were never consumed from Settings — all runtime consumption goes through `Secrets`. Removes shadowing risk where env vars would populate Settings fields that were silently ignored.
+- Remove 6 dead `langfuse_*`/`ntfy_*` Field declarations from `_ObservabilitySettings` and their stale entries from `config/config.schema.json`'s settings section. Consumers read these values from `Secrets`/`RepoConfig`; the Settings fields were never read, creating a silent source-of-truth conflict.
 - Add `## ask_web_knowledge` guidance to the implement agent system prompt,
   advising the sub-agent to check local sources before web-searching and
   noting its 8-request budget constraint.

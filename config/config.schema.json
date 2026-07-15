@@ -540,58 +540,6 @@
           "description": "Path to GitHub App private key PEM file.",
           "title": "Github App Private Key Path"
         },
-        "LANGFUSE_BASE_URL": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse instance base URL for LLM observability. Unset disables tracing.",
-          "title": "Langfuse Base Url"
-        },
-        "LANGFUSE_PROJECT_ID": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse project ID for trace attribution.",
-          "title": "Langfuse Project Id"
-        },
-        "LANGFUSE_PUBLIC_KEY": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse public key for LLM observability tracing.",
-          "title": "Langfuse Public Key"
-        },
-        "LANGFUSE_SECRET_KEY": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse secret key for LLM observability tracing.",
-          "title": "Langfuse Secret Key"
-        },
         "MILL_CLAUDE_MAX_CONCURRENCY": {
           "default": 4,
           "description": "Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
@@ -675,32 +623,6 @@
           "minimum": 0,
           "title": "Mill Scope Triage Max Files",
           "type": "integer"
-        },
-        "NTFY_TOKEN": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "ntfy access token for authenticated push notifications.",
-          "title": "Ntfy Token"
-        },
-        "NTFY_URL": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "ntfy server URL for push notifications.",
-          "title": "Ntfy Url"
         },
         "OPENROUTER_API_KEY": {
           "anyOf": [
