@@ -228,6 +228,13 @@ system_prompt: |
     use it sparingly.
   - Never use it to read this project's own files — use `read_file` or
     `explore` instead.
+  - **Do NOT retry on budget exhaustion.** If `ask_web_knowledge` returns
+    a message starting with "web_knowledge budget exhausted", the
+    sub-agent hit its request cap and produced no answer. Do NOT call
+    `ask_web_knowledge` again with the same (or a similar) question —
+    it will just exhaust the budget again. Instead, fall back to
+    `consult_expert` (if a matching domain exists) or local research
+    with `explore` / `read_file`.
 
   ## report_issue
 
