@@ -71,7 +71,7 @@ system_prompt: |
      ``agent_definitions/pipeline/*.yaml``, and
      ``agent_definitions/*.yaml`` — system-prompt prose
      mentions of state names (e.g. "when the ticket is ``ready``…").
-  3. ``config/config.yaml`` and per-repo YAML overlays — any
+  3. ``config/repos.example.yaml`` and per-repo YAML overlays — any
      ``state:`` or ``states:`` keys.
   4. ``src/robotsix_mill/`` — Python string literals used in route
      handlers, service logic, test fixtures.
