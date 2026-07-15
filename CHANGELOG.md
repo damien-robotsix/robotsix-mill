@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix dead lychee pre-commit hook: the `files` regex `^docs/\.md$` only matched a literal `.md` file under `docs/`, never firing on actual markdown files. Changed to `^docs/.*\.md$` so the hook runs on all documentation markdown files.
 - Runtime repo registration and deregistration now reconcile the worker
   consumer pool immediately: POST /repos spawns consumer tasks for the new
   board so tickets reach refine without a mill restart, and DELETE
