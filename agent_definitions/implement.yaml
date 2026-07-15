@@ -211,6 +211,24 @@ system_prompt: |
   The `python-backend` expert covers all Python source under
   `src/robotsix_mill/`.
 
+  ## ask_web_knowledge
+
+  You have access to an `ask_web_knowledge(question)` tool for external
+  library APIs, framework docs, version details, standards, or best
+  practices that are NOT in the repo. The sub-agent has only **8 request
+  budget** per call — use it sparingly.
+
+  - Before forming your search strategy, first check whether the answer is
+    trivially derivable from known conventions, the robotsix-mill source
+    code at its default location, or the existing repo patterns. If the
+    schema doubt is about `robotsix-mill` internal periodic config format,
+    prefer a single targeted web_fetch of the relevant source file (e.g.
+    the mill's internal agent definitions directory) over open-ended
+    web_search + fetch cycles. The sub-agent has only 8 request budget —
+    use it sparingly.
+  - Never use it to read this project's own files — use `read_file` or
+    `explore` instead.
+
   ## report_issue
 
   You have a `report_issue` tool for filing draft tickets. Use it when
