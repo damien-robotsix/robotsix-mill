@@ -63,7 +63,7 @@ repos:
     hooks:
       - id: lychee
         args: ["--config", "lychee.toml", "--no-progress"]
-        files: ^docs/\.md$
+        files: ^docs/.*\.md$
         types: [markdown]
   - repo: local
     hooks:
