@@ -908,7 +908,7 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
         level_uses_claude,
         claude_sdk_supports_inline_image,
     )
-    from .retry import run_agent
+    from .retry import _is_claude_sdk_degenerate_result, run_agent
 
     definition = load_agent_definition(agent_definitions_dir() / "refine.yaml")
 
@@ -1310,6 +1310,16 @@ def run_refine_agent(  # noqa: C901 — continuation guard + pre-output/quota ch
             output.new_messages = result.new_messages_json()
         except AttributeError:
             output.new_messages = None
+    except Exception as e:
+        if _is_claude_sdk_degenerate_result(e):
+            log.warning(
+                "Claude SDK degenerate 'success' result in refine agent — "
+                "treating as successful run with no changes: %s",
+                e,
+            )
+            output = RefineResult()
+        else:
+            raise
     finally:
         _safe_close(agent)
     return output

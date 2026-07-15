@@ -320,15 +320,11 @@ def reraise_if_transient(exc: BaseException) -> None:
 
 def _check_one_transient(exc: BaseException) -> bool:
     """Return True when *exc* matches any known transient-error classifier."""
-    from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
-
     if _is_transient_httpx(exc):
         return True
     if _is_transient_openai(exc):
         return True
     if _is_transient_called_process_error(exc):
-        return True
-    if _is_claude_sdk_degenerate_result(exc):
         return True
     if isinstance(exc, TimeoutError):
         return True

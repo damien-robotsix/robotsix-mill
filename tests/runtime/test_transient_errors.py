@@ -358,19 +358,20 @@ def test_classify_fatal_plain_400():
 
 
 def test_classify_claude_sdk_degenerate_success_is_transient():
-    """The ``error result: success`` message is transient at the stage level."""
+    """The ``error result: success`` message is NOT transient at the stage level
+    — it is deterministic and handled by the refine runner instead."""
     assert (
         classify_stage_error(Exception("Claude Code returned an error result: success"))
-        == "transient"
+        == "fatal"
     )
 
 
 def test_classify_claude_sdk_degenerate_success_in_cause_chain():
-    """The degenerate result in a cause chain is still transient."""
+    """The degenerate result in a cause chain is NOT transient."""
     inner = Exception("Claude Code returned an error result: success")
     outer = RuntimeError("agent run failed")
     outer.__cause__ = inner
-    assert classify_stage_error(outer) == "transient"
+    assert classify_stage_error(outer) == "fatal"
 
 
 # ---------------------------------------------------------------------------

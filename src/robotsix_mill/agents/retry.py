@@ -47,10 +47,15 @@ def _is_claude_sdk_degenerate_result(exc: BaseException) -> bool:
     That erases the ``ProcessError`` type, so ``_is_claude_sdk_transient`` (which
     matches by exception TYPE NAME) cannot see it. A string match on the message
     is the only mechanism left — mirroring the library's string-based
-    ``is_claude_sdk_turn_limit`` approach. We walk the cause/context chain
-    (bounded) and match narrowly on the ``...: success`` contradiction only, so a
-    genuine ``error_during_execution`` / ``error_max_turns`` result still surfaces
-    as non-transient."""
+    ``is_claude_sdk_turn_limit`` approach.
+
+    This detector is NOT used for retry/transient classification — observed
+    behaviour shows the degenerate result is deterministic for a given input (a
+    fresh run on the same input produces the same result).  Instead, the refine
+    runner catches it at the agent-output level and treats it as a successful
+    empty result, since ``subtype="success"`` and an empty errors list indicate
+    the CLI completed normally and the error envelope is a false positive.
+    """
     seen: set[int] = set()
     cur: BaseException | None = exc
     for _ in range(10):
@@ -75,17 +80,12 @@ def is_transient(exc: BaseException) -> bool:
     CLI hiccup or query timeout skipped local retry entirely.
 
     The degenerate Claude SDK ``success`` result (``is_error=True`` with
-    ``subtype='success'``) was historically treated as a structural
-    misconfiguration and fast-failed, but observed behaviour shows it is
-    transient — a fresh run on the same input succeeds normally at similar
-    cost, so retrying it is cheaper than blocking and re-running the whole
-    stage."""
+    ``subtype='success'``) is explicitly excluded — it is deterministic for a
+    given input. The refine runner catches it at the agent-output level and
+    treats it as a successful empty result.
+    """
     if _is_claude_sdk_degenerate_result(exc):
-        log.warning(
-            "Claude SDK degenerate 'success' result detected — "
-            "retrying (transient in practice)"
-        )
-        return True
+        return False
     return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
 
 
