@@ -343,6 +343,18 @@ see at a glance which files need re-checking.
 
 ## Procedure
 
+0. **Pre-flight: before you search, ask "where does this answer live?"**
+   If the question is about a specific file format, schema, or
+   convention owned by a known project (e.g. a robotsix-mill YAML
+   config, a fleet repo convention), craft a precise ``web_search``
+   query that targets the canonical source — think "raw content of
+   robotsix-mill periodic agent YAML schema" rather than "how do I
+   configure periodic agents".  One targeted search that lands on
+   the right file costs 1 request; an open-ended research loop that
+   explores related tangents can cost 5–10.  The same applies when
+   the answer is almost certainly in a well-known reference page
+   (e.g. Python stdlib docs for ``imaplib`` timeout behaviour).
+
 1. Look at the index. Decide what's already relevant:
    - If a library file exists for the topic AND it is NOT marked
      ``[STALE]`` AND its ``verified_at`` is present AND recent

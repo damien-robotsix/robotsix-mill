@@ -3,6 +3,7 @@
 - Add `## ask_web_knowledge` guidance to the implement agent system prompt,
   advising the sub-agent to check local sources before web-searching and
   noting its 8-request budget constraint.
+- Add pre-flight heuristic to the ``ask_web_knowledge`` sub-agent prompt encouraging targeted searches against known canonical sources before launching open-ended research loops, reducing wasted web-search budget on questions answerable from a single known reference file.
 - Remove stale `_settings_board_agent.py` reference from the env_doc_sync agent's CANONICAL SOURCE OF TRUTH and WHAT TO SEARCH lists; board/agent-level env vars live in `_settings_core.py`.
 - Extract `_parse_new_messages()` helper in `short_circuit_verify.py` to eliminate duplicated JSON-parse-and-iterate-messages boilerplate across four functions (`run_invoked_edit_tools`, `run_claimed_edited_rawpaths`, `run_claimed_edited_paths`, `extract_replayable_edits`).
 - Extract shared `_reconcile_with_remote_pr` helper in `stages/merge/_shared.py`, deduplicating the `ReconcileResult.DIVERGED`/`UNAVAILABLE` error-handling block across `rebase.py`, `review_revision.py`, `ci_fix_mixin.py`, and `multi_repo.py`.
