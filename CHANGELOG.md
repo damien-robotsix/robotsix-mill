@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add unit tests for `delta_context.py` trimming functions (`trim_spec_for_retry`, `trim_draft_for_re_refine`) covering short specs, paragraph-boundary truncation, line-boundary fallback, no-newline fallback, and custom max_chars
 - `web_knowledge` sub-agent: add budget-aware early-termination guidance in system prompt (reserve last 2 requests for final answer) and return a distinct error message on `UsageLimitExceeded` so callers can avoid retrying the same question. Implement agent system prompt now explicitly warns against retrying `ask_web_knowledge` on budget exhaustion.
 - Add `## ask_web_knowledge` guidance to the implement agent system prompt,
   advising the sub-agent to check local sources before web-searching and

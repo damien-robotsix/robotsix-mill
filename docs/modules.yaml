@@ -80,6 +80,7 @@ modules:
       - tests/core/test_draft_target.py
       - tests/core/test_repo_layout.py
       - tests/core/test_tool_wrappers.py
+      - tests/core/test_delta_context.py
     dependencies: [config]
 
   - id: deps
