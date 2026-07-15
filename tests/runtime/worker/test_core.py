@@ -625,11 +625,13 @@ async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
     w = Worker(ctx)
     w.start()
     try:
-        # repo-a: 2 + repo-b: 1 + default: 1 + meta: 1 = 5 tasks
-        assert len(w._tasks) == 5
+        # repo-a: 2 + repo-b: 1 + default: 1 + meta: 1 = 5 tasks across 4 boards
+        total = sum(len(tasks) for tasks in w._tasks.values())
+        assert total == 5
+        assert set(w._tasks.keys()) == {"ba", "bb", "", "meta"}
     finally:
         await w.stop()
-    assert w._tasks == []
+    assert w._tasks == {}
 
 
 async def test_pool_runs_tickets_in_parallel(ctx, service, monkeypatch):
@@ -3190,3 +3192,166 @@ async def test_cap_deferral_demotes_priority_ready_so_merge_pipeline_proceeds(
     assert prio_ready.id in w._cap_deferred, (
         "priority READY ticket deferred at cap must be tracked in _cap_deferred"
     )
+
+
+async def test_reconcile_consumers_spawns_for_runtime_registered_board(
+    ctx, service, monkeypatch
+):
+    """A board registered via POST /repos after Worker.start() must get
+    consumer tasks so its tickets are picked up without a restart.
+
+    Regression: runtime-registered repos got queues (lazy _queue_for)
+    but no consumer tasks — tickets sat in DRAFT forever.
+    """
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    board_a = ctx.repo_config.board_id if ctx.repo_config else "board-a"
+
+    initial_repos = ReposRegistry(
+        repos={
+            "repo-a": RepoConfig(
+                repo_id="repo-a",
+                board_id=board_a,
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=1,
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: initial_repos,
+    )
+
+    w = Worker(ctx)
+    w.start()
+    try:
+        # Before reconcile: only board_a has consumers.
+        assert set(w._tasks.keys()) == {board_a, "", "meta"}
+
+        # Simulate a runtime registration: add repo-b to the config.
+        board_b = "board-b"
+        updated_repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id=board_a,
+                    langfuse_project_name="p",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                    max_concurrency=1,
+                ),
+                "repo-b": RepoConfig(
+                    repo_id="repo-b",
+                    board_id=board_b,
+                    langfuse_project_name="p",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                    max_concurrency=2,
+                ),
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.core.get_repos_config",
+            lambda: updated_repos,
+        )
+
+        # Reconcile: should spawn 2 consumers for board-b.
+        await w.reconcile_consumers()
+        assert board_b in w._tasks
+        assert len(w._tasks[board_b]) == 2
+
+        # Now enqueue a ticket on the newly registered board and verify
+        # it gets consumed (state transitions out of DRAFT).
+        from robotsix_mill.stages import Outcome
+
+        class FastRefine(Stage):
+            name = "refine"
+            input_state = State.DRAFT
+
+            def run(self, _t, _c):
+                return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined")
+
+        monkeypatch.setitem(registry.STAGES, "refine", FastRefine())
+
+        t = service.create("runtime-registered ticket", board_id=board_b)
+        assert t.state is State.DRAFT
+
+        w.enqueue(t.id)
+        await asyncio.wait_for(w.queue_join(), timeout=10)
+
+        # The ticket should have been consumed and transitioned.
+        # HUMAN_ISSUE_APPROVAL is a terminal state — proves the
+        # consumer ran without chaining into a failing implement stage.
+        refreshed = service.get(t.id)
+        assert refreshed.state is State.HUMAN_ISSUE_APPROVAL, (
+            f"Expected HUMAN_ISSUE_APPROVAL, got {refreshed.state} — "
+            "ticket on runtime-registered board was not consumed"
+        )
+    finally:
+        await w.stop()
+
+
+async def test_reconcile_consumers_cancels_for_deregistered_board(ctx, monkeypatch):
+    """Deregistering a repo must cancel its consumer tasks so they
+    don't leak."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    board_a = ctx.repo_config.board_id if ctx.repo_config else "board-a"
+    board_b = "board-b"
+
+    initial_repos = ReposRegistry(
+        repos={
+            "repo-a": RepoConfig(
+                repo_id="repo-a",
+                board_id=board_a,
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=1,
+            ),
+            "repo-b": RepoConfig(
+                repo_id="repo-b",
+                board_id=board_b,
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=1,
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: initial_repos,
+    )
+
+    w = Worker(ctx)
+    w.start()
+    try:
+        assert board_b in w._tasks
+
+        # Simulate deregistration: remove repo-b.
+        slim_repos = ReposRegistry(
+            repos={
+                "repo-a": RepoConfig(
+                    repo_id="repo-a",
+                    board_id=board_a,
+                    langfuse_project_name="p",
+                    langfuse_public_key="pk",
+                    langfuse_secret_key="sk",
+                    max_concurrency=1,
+                ),
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.core.get_repos_config",
+            lambda: slim_repos,
+        )
+
+        await w.reconcile_consumers()
+        assert board_b not in w._tasks
+        # Queue should also be cleaned up.
+        assert board_b not in w.queues
+    finally:
+        await w.stop()

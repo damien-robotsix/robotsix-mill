@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Runtime repo registration and deregistration now reconcile the worker
+  consumer pool immediately: POST /repos spawns consumer tasks for the new
+  board so tickets reach refine without a mill restart, and DELETE
+  /repos/{repo_id} cancels consumers so they don't leak.
 - `clone_all_repos` now auto-bootstraps empty remote repos: when a clone fails because the remote has no default branch, mill creates a minimal README, commits it, and force-pushes so subsequent clones succeed. Bootstrap failures log at ERROR instead of the prior silent WARNING.
 - Add unit tests for `delta_context.py` trimming functions (`trim_spec_for_retry`, `trim_draft_for_re_refine`) covering short specs, paragraph-boundary truncation, line-boundary fallback, no-newline fallback, and custom max_chars
 - Add `robotsix_mill.core.delta_context` to the core API reference (`docs/reference/core.md`).

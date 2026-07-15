@@ -206,7 +206,9 @@ def worker_status(worker: "Worker" = Depends(get_worker)) -> dict[str, object]:
     dead per-board consumer is why a ``ready`` ticket on that board would
     never be popped). Read-only.
     """
-    tasks = list(getattr(worker, "_tasks", []))
+    tasks = [
+        t for tasks_list in getattr(worker, "_tasks", {}).values() for t in tasks_list
+    ]
     dead: list[dict[str, str]] = []
     for t in tasks:
         if t.done() and not t.cancelled():
