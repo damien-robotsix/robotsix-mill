@@ -288,7 +288,7 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
 
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="sk-fake")
-    settings = Settings(OPENROUTER_API_KEY="sk-fake")
+    settings = Settings()
     # Use a minimal system prompt to avoid the prompt→tool consistency
     # check. The real refine.yaml prompt references `` `parallel_explore( ``,
     # which triggers a build-time error when tools=[] because other tests

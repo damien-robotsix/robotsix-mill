@@ -35,6 +35,8 @@ def _settings(tmp_path, **env):
         import robotsix_mill.config as _cfg
 
         _cfg._secrets = Secrets(openrouter_api_key=key)
+    # OPENROUTER_API_KEY is now a Secrets-only field; pop before Settings()
+    env.pop("OPENROUTER_API_KEY", None)
     return Settings(**env)
 
 

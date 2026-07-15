@@ -1974,7 +1974,7 @@ def test_langfuse_tools_present_when_repo_dir_given(tmp_path, monkeypatch):
 
     _cfg._reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="k")
-    settings = Settings(data_dir=str(tmp_path), OPENROUTER_API_KEY="k")
+    settings = Settings(data_dir=str(tmp_path))
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -2046,7 +2046,7 @@ def test_langfuse_inspect_trace_absent_when_repo_dir_none(tmp_path, monkeypatch)
 
     _cfg._reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="k")
-    settings = Settings(data_dir=str(tmp_path), OPENROUTER_API_KEY="k")
+    settings = Settings(data_dir=str(tmp_path))
 
     captured: dict = {}
 

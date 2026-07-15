@@ -6,8 +6,10 @@ JSON-file sourcing, env-var aliases, and cross-field validators.
 All fields are sourced from ``os.environ`` and a single JSON config
 file (``config/config.json`` or the committed
 ``config/config.example.json`` template).  Conventional keys like
-``OPENROUTER_API_KEY`` or ``LANGFUSE_*`` are unprefixed to remain
-compatible with the reference projects.  Mill-specific settings use
+``LANGFUSE_*`` are unprefixed to remain compatible with the reference
+projects.  Secret credentials (``OPENROUTER_API_KEY``, ``FORGE_TOKEN``,
+etc.) live in :class:`~robotsix_mill.config.Secrets`, not in
+``Settings``.  Mill-specific settings use
 the ``MILL_`` / ``FORGE_`` prefix convention and declare explicit
 ``Field(alias=...)`` values.
 """

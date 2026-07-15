@@ -14,7 +14,7 @@ def _s(tmp_path):
 
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="k")
-    return Settings(data_dir=str(tmp_path), OPENROUTER_API_KEY="k")
+    return Settings(data_dir=str(tmp_path))
 
 
 @pytest.fixture

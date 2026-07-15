@@ -34,11 +34,13 @@ def _settings(tmp_path, **kw):
     kw.setdefault("FORGE_KIND", "gitlab")
     kw.setdefault("FORGE_REMOTE_URL", "https://gitlab.com/ns/project.git")
     kw.setdefault("FORGE_TOKEN", "glpat-token")
-    s = Settings(**kw)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = kw.get("FORGE_TOKEN")
     if ft is not None:
         _set_secrets(forge_token=ft)
+    # FORGE_TOKEN is now a Secrets-only field; pop before Settings()
+    kw.pop("FORGE_TOKEN", None)
+    s = Settings(**kw)
     return s
 
 

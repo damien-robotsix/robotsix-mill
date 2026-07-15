@@ -500,7 +500,6 @@
             }
           ],
           "default": null,
-          "description": "Personal access token for forge API access (PR creation, push, merge).",
           "title": "Forge Token"
         },
         "GITHUB_APP_ID": {
@@ -526,7 +525,6 @@
             }
           ],
           "default": null,
-          "description": "GitHub App private key (PEM string).",
           "title": "Github App Private Key"
         },
         "GITHUB_APP_PRIVATE_KEY_PATH": {
@@ -714,7 +712,6 @@
             }
           ],
           "default": null,
-          "description": "API key for OpenRouter model access. Required for LLM inference.",
           "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {

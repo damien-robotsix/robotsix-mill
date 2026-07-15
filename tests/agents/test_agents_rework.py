@@ -20,6 +20,8 @@ def _settings(tmp_path, **env):
 
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key=env.get("OPENROUTER_API_KEY", "k"))
+    # OPENROUTER_API_KEY is now a Secrets-only field; pop before Settings()
+    env.pop("OPENROUTER_API_KEY", None)
     return Settings(**env)
 
 

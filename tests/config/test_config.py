@@ -272,8 +272,6 @@ def test_default_language_instructions_dir():
 # For str|None / Path|None: distinctive non-None string.
 
 ALIAS_CASES: list[tuple[str, str, str, object]] = [
-    # --- core / api key ---
-    ("openrouter_api_key", "OPENROUTER_API_KEY", "sk-test", "sk-test"),
     # --- request limits ---
     ("coordinator_request_limit", "MILL_PER_PASS_REQUEST_BUDGET", "42", 42),
     ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
