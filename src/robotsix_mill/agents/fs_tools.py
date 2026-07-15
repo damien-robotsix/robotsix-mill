@@ -980,22 +980,27 @@ def build_fs_tools(
                         return p
                 return None
 
-            grep_targets = [
-                t
-                for c in _command_history
-                if ("grep" in c or "git grep" in c) and (t := _file_of(c)) is not None
-            ]
-            # If ≥ threshold grep commands target the same file, refuse.
-            if grep_targets:
-                from collections import Counter
-
-                most_common = Counter(grep_targets).most_common(1)[0]
-                if most_common[1] >= _LOOP_FILE_THRESHOLD:
+            # Only a grep command can trip the file-loop guard, and only
+            # against the file it itself targets — non-grep commands (and
+            # greps on other files) must never be refused by it.
+            current_target = (
+                _file_of(command)
+                if ("grep" in command or "git grep" in command)
+                else None
+            )
+            if current_target is not None:
+                prior_greps = sum(
+                    1
+                    for c in _command_history
+                    if ("grep" in c or "git grep" in c)
+                    and _file_of(c) == current_target
+                )
+                if prior_greps >= _LOOP_FILE_THRESHOLD:
                     _command_history.append(command)
                     return (
                         f"REFUSED (do NOT retry): you have already run "
-                        f"{most_common[1]} grep commands against "
-                        f"{most_common[0]!r}. You have enough information "
+                        f"{prior_greps} grep commands against "
+                        f"{current_target!r}. You have enough information "
                         f"to answer — synthesise what you've learned "
                         f"and return your answer now. Do NOT issue "
                         f"more grep commands on the same file."
