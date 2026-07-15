@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -241,6 +242,41 @@ def _terminal_close_times(
     return terminal_ids, close_times
 
 
+def _iter_terminal_candidates(
+    settings: Settings,
+    board_id: str,
+    now: datetime,
+    age_threshold_seconds: int,
+) -> Iterator[tuple[str, Path, datetime]]:
+    """Yield ``(name, path, close_time)`` for each workspace dir whose
+    ticket is terminal AND past the age threshold.
+
+    This is the shared candidate-iteration + terminal-close-time
+    filtering extracted from :func:`_prune_board_workspaces` and
+    :func:`_prune_board_terminal_clones`.
+    """
+    workspaces_dir = settings.workspaces_dir_for(board_id)
+    if not workspaces_dir.exists():
+        return
+
+    candidates = _workspace_candidates(workspaces_dir)
+    if not candidates:
+        return
+
+    candidate_ids = [name for name, _ in candidates]
+    terminal_ids, close_times = _terminal_close_times(settings, board_id, candidate_ids)
+
+    for name, path in candidates:
+        if name not in terminal_ids:
+            continue
+        close_time = close_times.get(name) or _close_time_from_ticket_id(name)
+        if close_time is None:
+            continue
+        if (now - close_time).total_seconds() < age_threshold_seconds:
+            continue
+        yield name, path, close_time
+
+
 def _prune_board_workspaces(
     settings: Settings,
     board_id: str,
@@ -255,26 +291,10 @@ def _prune_board_workspaces(
     is present AND in a terminal state AND its close time is at least
     *age_threshold_seconds* old. Returns the number of dirs removed.
     """
-    workspaces_dir = settings.workspaces_dir_for(board_id)
-    if not workspaces_dir.exists():
-        return 0
-
-    candidates = _workspace_candidates(workspaces_dir)
-    if not candidates:
-        return 0
-
-    candidate_ids = [name for name, _ in candidates]
-    terminal_ids, close_times = _terminal_close_times(settings, board_id, candidate_ids)
-
     removed = 0
-    for name, path in candidates:
-        if name not in terminal_ids:
-            continue
-        close_time = close_times.get(name) or _close_time_from_ticket_id(name)
-        if close_time is None:
-            continue
-        if (now - close_time).total_seconds() < age_threshold_seconds:
-            continue
+    for name, path, _ in _iter_terminal_candidates(
+        settings, board_id, now, age_threshold_seconds
+    ):
         shutil.rmtree(path, ignore_errors=True)
         if not path.exists():
             removed += 1
@@ -356,26 +376,10 @@ def _prune_board_terminal_clones(
     ``repo/`` / ``repos/`` clone dirs, preserving the rest of the
     workspace. Returns the number of clone dirs removed.
     """
-    workspaces_dir = settings.workspaces_dir_for(board_id)
-    if not workspaces_dir.exists():
-        return 0
-
-    candidates = _workspace_candidates(workspaces_dir)
-    if not candidates:
-        return 0
-
-    candidate_ids = [name for name, _ in candidates]
-    terminal_ids, close_times = _terminal_close_times(settings, board_id, candidate_ids)
-
     removed = 0
-    for name, path in candidates:
-        if name not in terminal_ids:
-            continue
-        close_time = close_times.get(name) or _close_time_from_ticket_id(name)
-        if close_time is None:
-            continue
-        if (now - close_time).total_seconds() < age_threshold_seconds:
-            continue
+    for name, path, _ in _iter_terminal_candidates(
+        settings, board_id, now, age_threshold_seconds
+    ):
         removed += _remove_workspace_clones(board_id, name, path)
     if removed:
         log.info(
