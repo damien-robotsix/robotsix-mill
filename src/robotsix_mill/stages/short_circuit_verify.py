@@ -30,6 +30,42 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+
+def _parse_new_messages(
+    new_messages: bytes | str | None,
+    *,
+    fail_open: bool = True,
+    log_prefix: str = "",
+) -> list[dict[str, Any]] | None:
+    """Parse *new_messages* as a JSON list of message dicts.
+
+    Returns the parsed list on success. On failure:
+
+    - *fail_open=True* (default): logs a warning and returns ``[]`` —
+      the caller should proceed as if no messages were present. Used by
+      the ``run_*`` scanners.
+    - *fail_open=False*: logs a warning and returns ``None`` —
+      the caller should fail closed (BLOCK). Used by
+      :func:`extract_replayable_edits`.
+
+    Empty *new_messages* always returns ``[]`` regardless of *fail_open*.
+    """
+    if not new_messages:
+        return []
+    try:
+        messages = json.loads(new_messages)
+    except json.JSONDecodeError, TypeError, ValueError:
+        log.warning(
+            "%s: invalid messages JSON; %s",
+            log_prefix,
+            "assuming no edits" if fail_open else "failing closed",
+        )
+        return [] if fail_open else None
+    if not isinstance(messages, list):
+        return [] if fail_open else None
+    return messages
+
+
 # Tools whose invocation asserts a file mutation. Command-runner tools
 # (``run_command`` / ``Bash``) are intentionally absent — they read as often as
 # they write, so their mere presence is not a reliable edit claim and would
@@ -61,14 +97,10 @@ def run_invoked_edit_tools(new_messages: bytes | str | None) -> list[str]:
     Malformed or empty input yields ``[]`` (fail-open: never invent a
     contradiction from a parse error — that would wrongly BLOCK good runs).
     """
-    if not new_messages:
-        return []
-    try:
-        messages = json.loads(new_messages)
-    except json.JSONDecodeError, TypeError, ValueError:
-        log.warning("run_invoked_edit_tools: invalid messages JSON; assuming no edits")
-        return []
-    if not isinstance(messages, list):
+    messages = _parse_new_messages(
+        new_messages, fail_open=True, log_prefix="run_invoked_edit_tools"
+    )
+    if not messages:
         return []
     found: list[str] = []
     for msg in messages:
@@ -131,16 +163,10 @@ def run_claimed_edited_rawpaths(new_messages: bytes | str | None) -> list[str]:
     Used by the gitignored-edit detector, which needs the real location to
     ask ``git check-ignore``. Fail-open on malformed input, like every
     scanner here."""
-    if not new_messages:
-        return []
-    try:
-        messages = json.loads(new_messages)
-    except json.JSONDecodeError, TypeError, ValueError:
-        log.warning(
-            "run_claimed_edited_rawpaths: invalid messages JSON; assuming no edits"
-        )
-        return []
-    if not isinstance(messages, list):
+    messages = _parse_new_messages(
+        new_messages, fail_open=True, log_prefix="run_claimed_edited_rawpaths"
+    )
+    if not messages:
         return []
     found: list[str] = []
     seen: set[str] = set()
@@ -177,16 +203,10 @@ def run_claimed_edited_paths(new_messages: bytes | str | None) -> list[str]:
     :func:`run_invoked_edit_tools`: the offending entry is skipped (or ``[]``
     is returned). A parse error must never manufacture a contradiction.
     """
-    if not new_messages:
-        return []
-    try:
-        messages = json.loads(new_messages)
-    except json.JSONDecodeError, TypeError, ValueError:
-        log.warning(
-            "run_claimed_edited_paths: invalid messages JSON; assuming no edits"
-        )
-        return []
-    if not isinstance(messages, list):
+    messages = _parse_new_messages(
+        new_messages, fail_open=True, log_prefix="run_claimed_edited_paths"
+    )
+    if not messages:
         return []
     found: list[str] = []
     seen: set[str] = set()
@@ -292,15 +312,13 @@ def extract_replayable_edits(  # noqa: C901 — flat per-tool arg dispatch; bran
     Returns ``[]`` when no edit tool was invoked at all (no contradiction to
     resolve). Fail-closed: malformed top-level JSON yields ``None``.
     """
-    if not new_messages:
+    messages = _parse_new_messages(
+        new_messages, fail_open=False, log_prefix="extract_replayable_edits"
+    )
+    if messages is None:
+        return None
+    if not messages:
         return []
-    try:
-        messages = json.loads(new_messages)
-    except json.JSONDecodeError, TypeError, ValueError:
-        log.warning("extract_replayable_edits: invalid messages JSON; failing closed")
-        return None
-    if not isinstance(messages, list):
-        return None
     ops: list[dict[str, str]] = []
     for msg in messages:
         if not isinstance(msg, dict):
