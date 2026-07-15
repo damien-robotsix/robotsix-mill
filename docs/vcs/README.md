@@ -15,6 +15,7 @@ needed.
 | Function | Purpose |
 |---|---|
 | `clone(remote_url, dest, branch, token)` | Shallow-clone a single branch into a workspace directory. Accepts an optional auth token for private repos. |
+| `clone_all_repos(settings)` | Clone every registered repo that has a `forge_remote_url` into `settings.data_dir/meta/workspace/<repo_id>/repo`. Best-effort: one failure does not block others. **Auto-bootstraps empty repos:** when a clone fails because the remote has no default branch, mill creates a minimal README, commits it, and force-pushes an initial branch so subsequent clones succeed. Bootstrap failures are logged at ERROR level (not silently swallowed). |
 | `init_repo(dest, branch)` | Initialise an empty git repository (used for greenfield repos created by the mill). |
 
 ## Branch operations
