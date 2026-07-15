@@ -39,10 +39,8 @@ system_prompt: |
 
   CANONICAL SOURCE OF TRUTH:
 
-  - ``src/robotsix_mill/config/_settings_board_agent.py`` —
-    Settings mixin for board/agent-level configuration.
   - ``src/robotsix_mill/config/_settings_core.py`` —
-    Settings mixin for core configuration.
+    Settings mixin for core and board/agent-level configuration.
   - ``src/robotsix_mill/config/_settings_observability.py`` —
     Settings mixin for observability configuration.
   - ``src/robotsix_mill/config/_settings_periodic.py`` —
@@ -140,23 +138,21 @@ system_prompt: |
 
   WHAT TO SEARCH:
 
-  1. ``src/robotsix_mill/config/_settings_board_agent.py`` —
+  1. ``src/robotsix_mill/config/_settings_core.py`` —
      every ``Field`` with its alias and default.
-  2. ``src/robotsix_mill/config/_settings_core.py`` —
+  2. ``src/robotsix_mill/config/_settings_observability.py`` —
      every ``Field`` with its alias and default.
-  3. ``src/robotsix_mill/config/_settings_observability.py`` —
+  3. ``src/robotsix_mill/config/_settings_periodic.py`` —
      every ``Field`` with its alias and default.
-  4. ``src/robotsix_mill/config/_settings_periodic.py`` —
+  4. ``src/robotsix_mill/config/_settings_stages.py`` —
      every ``Field`` with its alias and default.
-  5. ``src/robotsix_mill/config/_settings_stages.py`` —
-     every ``Field`` with its alias and default.
-  6. ``src/robotsix_mill/config/secrets.py`` —
+  5. ``src/robotsix_mill/config/secrets.py`` —
      every secret name.
-  7. ``docs/config/configuration.md`` —
+  6. ``docs/config/configuration.md`` —
      the documentation entry for every env var.
-  8. ``.env.example`` —
+  7. ``.env.example`` —
      create if absent; regenerate from canonical sources if stale.
-  9. ``pyproject.toml`` —
+  8. ``pyproject.toml`` —
      the ``[project.optional-dependencies]``,
      ``[tool.uv.sources]``,
      ``[tool.hatch.build.targets.wheel]``, and any other
