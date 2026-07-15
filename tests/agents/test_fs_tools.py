@@ -1013,6 +1013,41 @@ class TestRunCommand:
             result = tools["run_command"](f"echo run{i}")
             assert "REFUSED" not in result
 
+    def test_non_grep_commands_allowed_after_grep_loop(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """Once 3+ greps hit the same file, non-grep commands must still run.
+
+        Regression test: the guard used to refuse *every* subsequent
+        command (git commit, echo, ...) once the grep threshold was
+        reached, permanently bricking the session."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        tools["run_command"]("grep -n 'def foo' src/foo.py")
+        tools["run_command"]("grep -n 'def bar' src/foo.py")
+        tools["run_command"]("grep -n 'class Qux' src/foo.py")
+        tools["run_command"]("echo hello")
+        for cmd in ("git commit -m 'fix'", "git push", "ls -la", "echo done"):
+            result = tools["run_command"](cmd)
+            assert "REFUSED" not in result, cmd
+
+    def test_grep_other_file_allowed_after_grep_loop(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """3+ greps on one file must not block greps on a different file."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        tools["run_command"]("grep -n 'def foo' src/foo.py")
+        tools["run_command"]("grep -n 'def bar' src/foo.py")
+        tools["run_command"]("grep -n 'class Qux' src/foo.py")
+        tools["run_command"]("echo hello")
+        result = tools["run_command"]("grep -n 'class Baz' src/other.py")
+        assert "REFUSED" not in result
+
     def test_loop_guard_only_after_threshold(self, tmp_path, settings, fake_sandbox):
         """The loop guard only activates after >= 5 total commands."""
         root = tmp_path / "repo"
