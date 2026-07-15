@@ -21,6 +21,7 @@ from ._base import _MergeStageBase
 from ._shared import (
     _ci_truly_green,
     _read_counter,
+    _reconcile_with_remote_pr,
     _repo_config_for_entry,
     _write_counter,
     log,
@@ -258,27 +259,11 @@ class MultiRepoMixin(_MergeStageBase):
 
                 # Reconcile with remote PR branch first so the rebase
                 # agent sees any foreign commits.
-                reconciled = _facade.git_ops.reconcile_with_remote_pr(
-                    Path(repo_dir), remote_url, branch, token
+                blocked = _reconcile_with_remote_pr(
+                    _facade, repo_dir, remote_url, branch, token, ticket.id, repo_id
                 )
-                if reconciled is _facade.git_ops.ReconcileResult.DIVERGED:
-                    return Outcome(
-                        State.BLOCKED,
-                        f"{repo_id}: PR branch diverged from the workspace clone (a human "
-                        f"likely pushed to it) — manual reconciliation required. "
-                        f"The mill refuses to force-push: push_with_lease cannot "
-                        f"protect this case (reconcile already fetched the foreign "
-                        f"commit into the lease ref), so it would silently "
-                        f"overwrite that commit.",
-                    )
-                if reconciled is _facade.git_ops.ReconcileResult.UNAVAILABLE:
-                    log.warning(
-                        "%s: %s: could not reach the remote PR branch to "
-                        "reconcile — proceeding; push_with_lease backstops a "
-                        "stale push",
-                        ticket.id,
-                        repo_id,
-                    )
+                if blocked is not None:
+                    return blocked
 
                 _facade.git_ops.fetch(
                     Path(repo_dir),

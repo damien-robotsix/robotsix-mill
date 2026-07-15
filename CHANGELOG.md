@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Extract `_parse_new_messages()` helper in `short_circuit_verify.py` to eliminate duplicated JSON-parse-and-iterate-messages boilerplate across four functions (`run_invoked_edit_tools`, `run_claimed_edited_rawpaths`, `run_claimed_edited_paths`, `extract_replayable_edits`).
+- Extract shared `_reconcile_with_remote_pr` helper in `stages/merge/_shared.py`, deduplicating the `ReconcileResult.DIVERGED`/`UNAVAILABLE` error-handling block across `rebase.py`, `review_revision.py`, `ci_fix_mixin.py`, and `multi_repo.py`.
 - Fix worker queue deadlock: priority READY/DRAFT tickets no longer block merge-pipeline (IMPLEMENT_COMPLETE) tickets when the in-flight PR cap is saturated. The defer path now demotes the priority rank of cap-deferred tickets so the merge-poll tickets behind them get a chance to drain cap slots.
 - Fix stale ``context.config`` reference in ``alembic/env.py`` — the
   module-level ``config = context.config`` binding could become stale

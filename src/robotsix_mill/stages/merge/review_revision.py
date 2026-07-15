@@ -22,6 +22,7 @@ from ._base import _MergeStageBase
 from ._shared import (
     _REV_REV_COUNTER,
     _read_counter,
+    _reconcile_with_remote_pr,
     _write_counter,
     log,
 )
@@ -100,25 +101,11 @@ class ReviewRevisionMixin(_MergeStageBase):
                 # sees any foreign commits.
                 remote_url = _facade._resolve_remote_url(s, ctx.repo_config)
                 token = _facade.github_token(s, repo_config=ctx.repo_config)
-                reconciled = _facade.git_ops.reconcile_with_remote_pr(
-                    Path(repo_dir), remote_url, branch, token
+                blocked = _reconcile_with_remote_pr(
+                    _facade, repo_dir, remote_url, branch, token, ticket.id
                 )
-                if reconciled is _facade.git_ops.ReconcileResult.DIVERGED:
-                    return Outcome(
-                        State.BLOCKED,
-                        "PR branch diverged from the workspace clone (a human likely pushed to "
-                        "it) — manual reconciliation required. The mill refuses to "
-                        "force-push here: push_with_lease cannot protect this case "
-                        "because reconcile's own fetch already advanced the tracking "
-                        "ref to the foreign commit, so a lease push would pass its "
-                        "compare-and-swap and SILENTLY OVERWRITE that commit.",
-                    )
-                if reconciled is _facade.git_ops.ReconcileResult.UNAVAILABLE:
-                    log.warning(
-                        "%s: could not reach the remote PR branch to reconcile "
-                        "— proceeding; push_with_lease backstops a stale push",
-                        ticket.id,
-                    )
+                if blocked is not None:
+                    return blocked
 
                 review_revision_memory_path = s.memory_file_for(
                     "review_revision", ctx.memory_board_id(ticket)
