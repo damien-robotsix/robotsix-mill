@@ -21,13 +21,63 @@ from pathlib import Path
 from typing import Any
 
 from ...config import ConfigError, RepoConfig, get_repo_config
+from ...core.states import State
 from ...core.workspace import (
     read_counter as _read_counter,
     write_counter as _write_counter,
 )
 from ...vcs import git_ops
+from ..base import Outcome
 
-__all__ = ["_read_counter", "_write_counter"]
+
+def _reconcile_with_remote_pr(
+    facade: Any,
+    repo_dir: str,
+    remote_url: str,
+    branch: str,
+    token: str | None,
+    ticket_id: str,
+    repo_id: str | None = None,
+) -> Outcome | None:
+    """Shared reconcile guard: call ``reconcile_with_remote_pr`` and handle results.
+
+    Returns ``Outcome(State.BLOCKED, ...)`` on DIVERGED, logs a warning
+    on UNAVAILABLE and returns ``None`` (caller proceeds), and returns
+    ``None`` on SYNCED (fall through).  When *repo_id* is provided, it is
+    prepended to both the DIVERGED message and the UNAVAILABLE log line
+    so the multi-repo callers get per-repo attribution.
+    """
+    reconciled = facade.git_ops.reconcile_with_remote_pr(
+        Path(repo_dir), remote_url, branch, token
+    )
+    if reconciled is facade.git_ops.ReconcileResult.DIVERGED:
+        msg = (
+            "PR branch diverged from the workspace clone (a human likely pushed to "
+            "it) — manual reconciliation required. The mill refuses to "
+            "force-push here: push_with_lease cannot protect this case "
+            "because reconcile's own fetch already advanced the tracking "
+            "ref to the foreign commit, so a lease push would pass its "
+            "compare-and-swap and SILENTLY OVERWRITE that commit."
+        )
+        return Outcome(State.BLOCKED, f"{repo_id}: {msg}" if repo_id else msg)
+    if reconciled is facade.git_ops.ReconcileResult.UNAVAILABLE:
+        if repo_id:
+            log.warning(
+                "%s: %s: could not reach the remote PR branch to reconcile "
+                "— proceeding; push_with_lease backstops a stale push",
+                ticket_id,
+                repo_id,
+            )
+        else:
+            log.warning(
+                "%s: could not reach the remote PR branch to reconcile "
+                "— proceeding; push_with_lease backstops a stale push",
+                ticket_id,
+            )
+    return None
+
+
+__all__ = ["_read_counter", "_reconcile_with_remote_pr", "_write_counter"]
 
 log = logging.getLogger("robotsix_mill.stages.merge")
 
