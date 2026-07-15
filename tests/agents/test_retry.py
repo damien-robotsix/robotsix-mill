@@ -70,7 +70,8 @@ def test_is_transient_claude_sdk_degenerate_success():
     transient — observed behaviour shows it is deterministic for a given
     input.  The refine runner catches it at the agent-output level instead."""
     assert (
-        is_transient(Exception("Claude Code returned an error result: success")) is False
+        is_transient(Exception("Claude Code returned an error result: success"))
+        is False
     )
     inner = Exception("Claude Code returned an error result: success")
     wrapped = RuntimeError("agent run failed")
