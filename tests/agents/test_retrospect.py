@@ -1426,5 +1426,3 @@ def test_guard_does_not_fire_when_langfuse_present(tmp_path, monkeypatch):
     )
     assert isinstance(out, RetrospectResult)
     assert calls, "the agent path must be taken when Langfuse data is present"
-
-

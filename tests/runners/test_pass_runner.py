@@ -2021,9 +2021,6 @@ def test_repo_specific_draft_stays_on_audited_board(tmp_path):
         db.reset_engine()
 
 
-
-
-
 # --- strip_ephemeral_sections (memory ledger hygiene) --------------
 
 
