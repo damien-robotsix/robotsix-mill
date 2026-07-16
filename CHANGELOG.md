@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Adopt Hatchling's path-based versioning: `__init__.py` is now the single source of truth for the package version, with `pyproject.toml` reading it via `[tool.hatch.version] path` instead of a duplicate `version` string.
 - Add `frontend_sync_periodic` and `frontend_sync_interval_seconds` Settings fields, matching the pattern of all other periodic passes so operators can disable or tune the frontend-sync pass.
 - Periodic agents (survey, audit, health, etc.) now support an optional
   `fallback_level` that builds a second agent at a different model tier,

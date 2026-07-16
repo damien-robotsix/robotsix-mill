@@ -1634,7 +1634,6 @@ openrouter = [
 
 [[package]]
 name = "robotsix-mill"
-version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -1692,14 +1691,14 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
     { name = "prometheus-fastapi-instrumentator", specifier = ">=8" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pydantic-ai-slim", extras = ["openrouter", "openai"], specifier = ">=1.0" },
+    { name = "pydantic-ai-slim", extras = ["openai", "openrouter"], specifier = ">=1.0" },
     { name = "pydantic-settings", specifier = ">=2" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2" },
     { name = "pypdf", specifier = ">=5" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17" },
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config?rev=d29de204db62910f062456e5055fc2fe232e04a9" },
-    { name = "robotsix-llmio", extras = ["openrouter", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=73f2d555caa21de47a3732824d776e04719b3011" },
+    { name = "robotsix-llmio", extras = ["claude-sdk", "openrouter"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=73f2d555caa21de47a3732824d776e04719b3011" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
