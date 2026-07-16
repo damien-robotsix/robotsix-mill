@@ -24,7 +24,11 @@ from typing import Any, Awaitable, Callable, TypeVar
 from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_transient as _is_claude_sdk_transient,
 )
-from robotsix_llmio.core import call_with_retry as _lib_call_with_retry
+from robotsix_llmio.core import (
+    acall_with_retry_and_fallback,
+    call_with_retry as _lib_call_with_retry,
+    call_with_retry_and_fallback,
+)
 from robotsix_llmio.core import constants as _constants
 from robotsix_llmio.core import is_rate_limited
 from robotsix_llmio.core.retry import _status
@@ -204,9 +208,26 @@ async def acall_with_retry(
     running event loop, rather than calling ``asyncio.run`` (illegal inside the
     Claude SDK's already-running loop).
 
+    When *fallback_fn* is provided, the primary is retried locally first.  Only
+    when local retries are exhausted does the fallback run, itself through a
+    fresh retry session.  This guards against persistent provider-side outages
+    (e.g. DeepSeek 503 on OpenRouter) by falling back to a different model.
+
     After a successful run, per-step usage data is recorded on the current OTel
     span (same contract as :func:`run_agent`).
     """
+    if fallback_fn is not None:
+        result = await acall_with_retry_and_fallback(
+            fn,
+            fallback_fn,
+            what=what,
+            sleep=sleep,
+            is_transient_primary=is_transient,
+            is_transient_fallback=is_transient,
+        )
+        _try_record_step_usage(result)
+        return result
+
     attempts = max(0, _constants.TRANSIENT_RETRIES)
     using_fallback = False
     retry_count = 0
@@ -260,6 +281,7 @@ def run_agent(
     agent: Any,
     make_run: Callable[[Any], T],
     *,
+    fallback_fn: Callable[[], T] | None = None,
     what: str = "model call",
     sleep: Callable[[float], None] = time.sleep,
 ) -> T:
@@ -267,8 +289,14 @@ def run_agent(
 
     *make_run* takes a handle and performs the actual run, e.g.
     ``lambda h: h.run_sync(prompt, message_history=hist, usage_limits=limits)``.
-    The transport is fixed by the agent's level (no cross-backend fallback);
-    transient errors retry on the same handle.
+    The transport is fixed by the agent's level; transient errors retry on the
+    same handle.
+
+    When *fallback_fn* is provided, the primary agent is retried locally
+    first (same transient/backoff schedule).  Only when local retries are
+    exhausted does the fallback run, itself through a fresh retry session.
+    This guards against persistent provider-side outages (e.g. DeepSeek 503
+    on OpenRouter) by falling back to a different model.
 
     After a successful run, per-step usage data (token counts, model name,
     request count, tool calls, and retry info) is recorded as a span
@@ -279,7 +307,7 @@ def run_agent(
     retry_count = 0
     last_reason = ""
 
-    def _tracking_wrapper() -> T:
+    def _primary() -> T:
         nonlocal retry_count, last_reason
         try:
             return make_run(agent)
@@ -289,12 +317,22 @@ def run_agent(
                 last_reason = f"{type(e).__name__}: {e!s}"[:200]
             raise
 
-    result = _lib_call_with_retry(
-        _tracking_wrapper,
-        what=what,
-        sleep=sleep,
-        is_transient_fn=is_transient,
-    )
+    if fallback_fn is not None:
+        result = call_with_retry_and_fallback(
+            _primary,
+            fallback_fn,
+            what=what,
+            sleep=sleep,
+            is_transient_primary=is_transient,
+            is_transient_fallback=is_transient,
+        )
+    else:
+        result = _lib_call_with_retry(
+            _primary,
+            what=what,
+            sleep=sleep,
+            is_transient_fn=is_transient,
+        )
 
     # Record per-step usage as a span attribute when the result is a
     # pydantic-ai AgentRunResult (has .usage() and .all_messages()).
