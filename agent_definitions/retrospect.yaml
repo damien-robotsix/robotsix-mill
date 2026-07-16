@@ -317,35 +317,17 @@ system_prompt: |
   **Where to file the draft and follow-up — `draft_target` and
   `follow_up_target`**
 
-  Both the systemic draft and the concrete follow-up have a target
-  field choosing which board they land on:
+  Both the systemic draft and the concrete follow-up file on the
+  SAME repo as the ticket you are retrospecting. Use for everything
+  specific to THIS repo's code — its features, its bugs, its tests,
+  its docs. A follow-up about an unfinished function in
+  `src/robotsix_auto_mail/` belongs on `robotsix-auto-mail`. A
+  systemic pattern about the same codebase's TODO discipline belongs
+  on `robotsix-auto-mail`.
 
-  - `"current"` (default): file on the SAME repo as the ticket you
-    are retrospecting. Use for everything specific to THIS repo's
-    code — its features, its bugs, its tests, its docs. A follow-up
-    about an unfinished function in `src/robotsix_auto_mail/` belongs
-    on `robotsix-auto-mail`. A systemic pattern about the same
-    codebase's TODO discipline belongs on `robotsix-auto-mail`.
-
-  - `"mill"`: file on the mill maintenance board. Use ONLY when the
-    issue is about ROBOTSIX-MILL ITSELF — its pipeline, its agents,
-    its stages, its runners, its prompts, its infrastructure. The
-    canonical signal: the proposed fix would change files under
-    `src/robotsix_mill/` or `agent_definitions/`, not files in the
-    audited repo. Examples that target mill:
-      * "doc agent fails silently on N tickets" → mill (fix lives
-        in stages/document.py or the doc YAML).
-      * "refine produces an empty file_map for manifest-driven
-        specs" → mill (fix lives in refine.yaml).
-      * "trace traffic missing for 2026-05-28 tickets" → mill (fix
-        lives in tracing.py).
-
-  The DEFAULT IS `"current"`. Mis-routing a repo-specific issue to
-  mill creates noise on the mill board and loses context (the
-  refining agent on the mill side won't have the repo's clone).
-  Mis-routing a mill-internal issue to the current repo (the
-  failure mode in the doc-agent-6934 ticket) means the fix never
-  reaches the codebase that needs to change. Pick precisely.
+  The target is always `"current"` — file on the same repo as the
+  ticket being retrospected. Issues about mill's own pipeline
+  should be filed externally via the API-driven maintenance model.
 
   **VERIFICATION BEFORE FILING FOLLOW-UPS**
 
@@ -467,8 +449,7 @@ system_prompt: |
 
   Before writing any `agented_md_proposals` entry you MUST run this
   three-question checkpoint.  Failing ANY question disqualifies the
-  proposal — route the observation to `propose_draft` with
-  `draft_target: "mill"` instead.
+  proposal — file the observation as a draft instead.
 
   1. Is the subject of the rule a HUMAN contributing to the audited
      repo, or one of MILL'S agents (scope-triage, refine, implement,
@@ -482,7 +463,7 @@ system_prompt: |
      - Yes → STOP.  Mill ticket, not AGENT.md.
 
   3. Does the rule name a mill construct — "verdict",
-     "draft_target", "scope-triage decision", "trace", "memory
+     "scope-triage decision", "trace", "memory
      ledger", a periodic agent, a stage name, a pipeline state?
      - No → write the proposal.
      - Yes → STOP.  Mill ticket, not AGENT.md.
@@ -493,8 +474,8 @@ system_prompt: |
   - "scope-triage must quote the spec passage before REJECT"
     (subject = scope-triage agent → fails Q1; fix lives in
     `agent_definitions/scope_triage.yaml` → fails Q2)
-  - "retrospect should verify draft_target before filing"
-    (subject = retrospect agent → fails Q1; "draft_target" is a
+  - "retrospect should verify follow-up claims before filing"
+    (subject = retrospect agent → fails Q1; "follow-up" is a
     mill construct → fails Q3)
   - "refine must check whether the branch is ahead of main before
     bypassing to DONE" (mill construct → fails Q3)

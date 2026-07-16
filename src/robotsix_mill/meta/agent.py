@@ -83,7 +83,7 @@ class MetaAgentResult(BaseModel):
 
 # Periodic kinds a repo can opt into via a presence file (excludes the
 # cross-repo/global-only ones like meta / timeout_escalation / trace_health).
-_PER_REPO_PERIODIC_KINDS = frozenset({"llm_agent", "schedule_only", "maintenance"})
+_PER_REPO_PERIODIC_KINDS = frozenset({"llm_agent", "schedule_only"})
 
 
 def _available_periodic_catalog() -> str:
@@ -93,7 +93,7 @@ def _available_periodic_catalog() -> str:
     Names come from the periodic_loader kind map (single source of truth);
     descriptions are read from each ``agent_definitions/periodic/<name>.yaml``
     when present, else a generic fallback for the prompt-less schedule/
-    maintenance tasks.
+    schedule tasks.
     """
     from ..agents.periodic_loader import _BUILTIN_KINDS
 
@@ -110,7 +110,7 @@ def _available_periodic_catalog() -> str:
                 desc = str(raw.get("description") or "").strip().split("\n")[0].strip()
             except Exception:  # noqa: BLE001 — best-effort catalogue
                 desc = ""
-        lines.append(f"- `{name}`: {desc or '(periodic schedule/maintenance task)'}")
+        lines.append(f"- `{name}`: {desc or '(periodic schedule task)'}")
     lines.append("")
     lines.append(
         "**Rule**: the names above are the ONLY valid built-in periodic names. "

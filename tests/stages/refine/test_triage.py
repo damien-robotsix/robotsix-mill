@@ -18,7 +18,7 @@ from robotsix_mill.agents.refining import (
     TriageResult,
 )
 from robotsix_mill.core import db
-from robotsix_mill.core.models import SourceKind, TicketKind
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
@@ -736,50 +736,6 @@ def test_triage_skip_triage_refine_exception_returns_none(ctx_factory, tmp_path)
             ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
         )
 
-    assert result is None
-
-
-def test_triage_skip_maintenance_decision(ctx_factory, tmp_path):
-    """MAINTENANCE decision routes to MAINTENANCE state."""
-    ctx = ctx_factory(maintenance_triage_enabled=True)
-    t = _ticket(ctx, source=SourceKind.USER)
-    ws = ctx.service.workspace(t)
-
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("MAINTENANCE", "restart the worker"),
-    ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            result = _triage.triage_skip(
-                ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
-            )
-
-    assert result is not None
-    assert result.next_state == State.MAINTENANCE
-    assert "maintenance triage (LLM)" in result.note
-    assert (ws.artifacts_dir / "draft-original.md").exists()
-
-
-def test_triage_skip_maintenance_ci_source_falls_through(ctx_factory, tmp_path):
-    """CI source skips MAINTENANCE routing, falls through to full refine."""
-    ctx = ctx_factory(maintenance_triage_enabled=True)
-    t = _ticket(ctx, source=SourceKind.CI)
-    ws = ctx.service.workspace(t)
-
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("MAINTENANCE", "restart"),
-    ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            result = _triage.triage_skip(
-                ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
-            )
-
-    # CI-source maintenance falls through past MAINTENANCE check;
-    # with auto_approve_enabled=False, no mechanical fast-path triggers,
-    # so it falls through to `return None`.
     assert result is None
 
 

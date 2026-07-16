@@ -45,7 +45,7 @@ _shtab_robotsix_mill_pos_0_choices=('serve' 'repos' 'ticket' 'audit' 'trace-heal
 _shtab_robotsix_mill___print_completion_choices=('bash' 'zsh' 'tcsh')
 _shtab_robotsix_mill_repos_pos_0_choices=('list')
 _shtab_robotsix_mill_ticket_pos_0_choices=('new' 'list' 'show' 'approve' 'resume-blocked')
-_shtab_robotsix_mill_ticket_list___state_choices=('draft' 'human_issue_approval' 'ready' 'documenting' 'code_review' 'deliverable' 'human_mr_approval' 'implement_complete' 'waiting_auto_merge' 'maintenance' 'rebasing' 'fixing_ci' 'addressing_review' 'done' 'closed' 'errored' 'blocked' 'asked' 'answered' 'awaiting_user_reply' 'epic_open' 'epic_closed')
+_shtab_robotsix_mill_ticket_list___state_choices=('draft' 'human_issue_approval' 'ready' 'documenting' 'code_review' 'deliverable' 'human_mr_approval' 'implement_complete' 'waiting_auto_merge' 'rebasing' 'fixing_ci' 'addressing_review' 'done' 'closed' 'errored' 'blocked' 'asked' 'answered' 'awaiting_user_reply' 'epic_open' 'epic_closed')
 _shtab_robotsix_mill_epic_pos_0_choices=('new')
 
 _shtab_robotsix_mill_pos_0_nargs=A...

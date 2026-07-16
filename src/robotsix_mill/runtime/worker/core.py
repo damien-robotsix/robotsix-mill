@@ -120,7 +120,6 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         State.HUMAN_MR_APPROVAL: 7,  # merge polling (no-LLM)
         State.WAITING_AUTO_MERGE: 8,  # merge polling (no-LLM)
         State.IMPLEMENT_COMPLETE: 9,  # merge polling (no-LLM)
-        State.MAINTENANCE: 10,  # one agent run, usually terminal — drain like work-in-flight
         State.READY: 11,  # implement — fresh code work
         State.DRAFT: 12,  # refine — earliest stage
         State.ASKED: 13,  # answer — inquiry side-channel

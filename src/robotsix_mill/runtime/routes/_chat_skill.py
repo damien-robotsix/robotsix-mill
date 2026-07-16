@@ -166,7 +166,7 @@ Content-Type: application/json
 }
 ```
 
-`state` must be a valid `State` value: `draft`, `ready`, `blocked`, `done`, `closed`, `human_issue_approval`, `code_review`, `deliverable`, `human_mr_approval`, `implement_complete`, `waiting_auto_merge`, `documenting`, `rebasin`, `fixing_ci`, `addressing_review`, `maintenance`, `epic_open`, `epic_closed`, `errored`, `asked`, `answered`, `awaiting_user_reply`.  The transition must be legal per the board's state machine — invalid edges return 409.
+`state` must be a valid `State` value: `draft`, `ready`, `blocked`, `done`, `closed`, `human_issue_approval`, `code_review`, `deliverable`, `human_mr_approval`, `implement_complete`, `waiting_auto_merge`, `documenting`, `rebasin`, `fixing_ci`, `addressing_review`, `epic_open`, `epic_closed`, `errored`, `asked`, `answered`, `awaiting_user_reply`.  The transition must be legal per the board's state machine — invalid edges return 409.
 
 ### POST /tickets/{id}/approve — approve a ticket  🛑
 

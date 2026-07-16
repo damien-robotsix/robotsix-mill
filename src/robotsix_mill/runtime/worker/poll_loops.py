@@ -26,7 +26,7 @@ log = logging.getLogger("robotsix_mill.worker")
 # CI monitor log-fetch resilience. A transient fetch failure (e.g. a
 # ConnectError) must not produce an empty draft: an empty failure draft
 # strips the error text triage relies on, which has misrouted real code
-# bugs to the read-only maintenance agent. Instead we retry within the
+# bugs to a diagnostic agent. Instead we retry within the
 # poll, then DEFER to the next poll cycle (without marking the commit
 # seen) so a later poll can capture the real logs. Only after the failure
 # has survived ``_CI_LOG_FETCH_MAX_DEFERRALS`` poll cycles do we file the

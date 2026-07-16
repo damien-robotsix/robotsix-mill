@@ -50,12 +50,8 @@ was blocked *from* is recorded. You can recover in three ways:
   board and lands it in `DRAFT` there, so that board's refine stage
   re-triages it with the right repo context. Repo-specific state is
   reset (branch, `repo/` clone, cached `baseline_check.json`).
-  Allowed from `draft`/`ready`/`blocked`/`errored`/`maintenance`;
-  epics and parent-linked tickets are rejected. The maintenance agent
-  uses the same path automatically (`migrate_to_board` in its result)
-  when an investigation concludes the change belongs to another
-  registered repo — instead of blocking the ticket on a board where it
-  can never be implemented.
+  Allowed from `draft`/`ready`/`blocked`/`errored`;
+  epics and parent-linked tickets are rejected.
 
 No raw database editing is ever needed to recover a blocked ticket.
 

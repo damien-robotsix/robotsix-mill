@@ -27,7 +27,6 @@ from ..core.states import State
 from ..core.text_utils import tail_keep
 from ..core.workspace import Workspace
 from ..core.dedup import _extract_paths, annotate_child_body, find_inflight_overlap
-from ..core.draft_target import looks_like_mill_internal, resolve_mill_service
 
 log = logging.getLogger("robotsix_mill.pass_runner")
 
@@ -715,27 +714,8 @@ def run_agent_pass(
         # Append gap-id marker if available.
         if i < len(gap_ids) and gap_ids[i]:
             body += f"\n\n<!-- {source_label}-gap-id: {gap_ids[i]} -->"
-        # Mill-internal routing: if the draft names mill-internal
-        # symbols, file on the mill maintenance board instead of the
-        # audited repo's board — same heuristic the retrospect stage
-        # uses (see ``draft_target.looks_like_mill_internal``). A
-        # misconfigured mill target (unset / unknown repo) falls back
-        # to the audited board so a draft is never lost.
-        target_service = service
-        if looks_like_mill_internal(title, body):
-            mill_svc = resolve_mill_service(
-                settings, service, caller_label=str(source_label)
-            )
-            if mill_svc is not None:
-                log.info(
-                    "%s: draft routed to mill board (mill-internal "
-                    "symbols detected): %s",
-                    source_label,
-                    title,
-                )
-                target_service = mill_svc
         try:
-            ticket = target_service.create(
+            ticket = service.create(
                 title,
                 body,
                 source=source_label,

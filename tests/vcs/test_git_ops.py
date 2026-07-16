@@ -979,7 +979,7 @@ class TestCloneErrorRedaction:
     def test_clone_failure_never_leaks_token(self, tmp_path):
         """A failed authed clone re-raises CalledProcessError with the
         token scrubbed from cmd/output/stderr — its repr lands in ticket
-        notes and Langfuse traces (live leak: maintenance clone_repo)."""
+        notes and Langfuse traces (live leak: clone_repo)."""
         # Nothing listens on port 9 → fails fast, fully offline.
         with pytest.raises(subprocess.CalledProcessError) as ei:
             git_ops.clone(

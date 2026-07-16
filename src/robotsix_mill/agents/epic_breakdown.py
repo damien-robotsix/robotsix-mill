@@ -35,9 +35,8 @@ _SYSPROMPT_PATH = agent_definitions_dir() / "epic_breakdown.yaml"
 SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt"]
 
 # A decomposition child is an *init-repo* action when it creates /
-# initializes a brand-new repository (the maintenance ``create_repo``
-# step that registers the repo in ``config/repos.yaml``).  Matches
-# "create repo[sitory]" and "initialize/initialise/scaffold/bootstrap/
+# initializes a brand-new repository (the repo creation step that
+# registers the repo in ``config/repos.yaml``).  Matches
 # set up … repository" — e.g. "Initialize communication system
 # repository".
 _INIT_REPO_RE = re.compile(

@@ -77,6 +77,11 @@ run_state_sync_agent
 parameters
 web_fetch_budget
 correct_form
+# draft_target, follow_up_target — RetrospectResult pydantic fields reduced
+# to Literal["current"] when the ticket-based maintenance flow was removed;
+# still valid model fields consumed by retrospect callers (vulture 60%).
+draft_target
+follow_up_target
 
 # -- cli ---------------------------------------------------------------------
 returncode_on_failure
@@ -142,6 +147,11 @@ ci_patterns_file
 get_field_value
 
 # -- core --------------------------------------------------------------------
+# resolve_under_src — called from tests only; vulture cannot trace test calls.
+resolve_under_src
+# paths_excluding_out_of_scope — callers removed when ticket-based maintenance
+# flow was retired; kept as reusable dedup utility.
+paths_excluding_out_of_scope
 _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorator
 DATA_DIR_GC
 LANGFUSE_CLEANUP
@@ -161,6 +171,9 @@ unmet_deps
 CommentRead
 
 # -- forge -------------------------------------------------------------------
+# html_url — dataclass field on RepoInfo accessed via attribute access;
+# vulture (60% confidence) cannot trace dataclass field reads.
+html_url
 list_pr_reviews
 list_review_comments
 close_pr
@@ -227,6 +240,9 @@ todo_drafts_created
 MARKERS
 
 # -- repo_scaffold -----------------------------------------------------------
+# run_repo_scaffold — callers removed when ticket-based maintenance flow
+# was retired; kept as reusable scaffold utility.
+run_repo_scaffold
 
 # -- deploy-server ------------------------------------------------------------
 # Pydantic model fields (DeploySettings) — accessed via string-based

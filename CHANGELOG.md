@@ -28,6 +28,7 @@
 - Extract shared `_reconcile_with_remote_pr` helper in `stages/merge/_shared.py`, deduplicating the `ReconcileResult.DIVERGED`/`UNAVAILABLE` error-handling block across `rebase.py`, `review_revision.py`, `ci_fix_mixin.py`, and `multi_repo.py`.
 - Extract `_iter_terminal_candidates` generator from duplicated candidate-iteration + terminal-close-time filtering shared by `_prune_board_workspaces` and `_prune_board_terminal_clones` in `data_dir_gc/orphans.py`.
 - Fix worker queue deadlock: priority READY/DRAFT tickets no longer block merge-pipeline (IMPLEMENT_COMPLETE) tickets when the in-flight PR cap is saturated. The defer path now demotes the priority rank of cap-deferred tickets so the merge-poll tickets behind them get a chance to drain cap slots.
+- Remove the ticket-based maintenance flow entirely: delete the maintenance agent (`agents/maintenance.py`), stage (`stages/maintenance.py`), `MAINTENANCE` state, `core/draft_target.py`, refine-stage triage routing, mill-misroute gate, and all associated configuration. Maintenance is now performed by an external agent calling mill's API directly; gaps surface as immediate API errors instead of stuck tickets. Updated docs throughout (agent schema, stage/agent references, config docs, repo-scaffold, blocked-ticket recovery, chat skill state list).
 - Fix stale ``context.config`` reference in ``alembic/env.py`` — the
   module-level ``config = context.config`` binding could become stale
   when Alembic cached ``env.py`` across multiple migrations, causing
@@ -45,6 +46,7 @@
 - Fix auto-resume bug: when multiple tickets are parked on the same CI-fix dependency ticket (via label-based dedup), the `unblocks` list is now merged instead of overwritten, so all parked tickets auto-resume when the fix completes — not just the last one parked.
 - Add `run_command` loop-detection guard: exact duplicate commands and repeated grep against the same file are refused with a synthesis prompt, preventing explore sub-agent spin-loops observed in trace review.)
 - Add credential-free URL validation to `POST /repos` (rejects URLs with userinfo like `token@host`).
+- Removed ticket-based maintenance flow (maintenance agent, stage, `MAINTENANCE` state, `core/draft_target.py`, `_run_mill_misroute_gate`, MAINTENANCE triage classification). Maintenance is now performed by an external agent calling the API directly; gaps surface as immediate API errors instead of stuck tickets.
 - Extract ``_paginated_get`` helper to ``forge/_github_pagination.py``, fixing a
   data-loss bug where 6 GitHub API methods silently returned at most 100 items
   (branches, PRs, reviews, comments, files, labels).  The new helper integrates
@@ -55,6 +57,7 @@
 - Clear implement fingerprint guard on transient failures: when a transient infrastructure error kills an implement run, `_handle_stage_error` now deletes `artifacts/implement.md` before scheduling the retry, preventing permanent "spec unchanged since last implement attempt" blocks.
 - Chat skill (`/chat-skill`): replace absolute "No deletion" rule with confirmation-gated DELETE support, including a historical rationale note preferring `closed` when a legal edge exists and reserving deletion for fingerprint-guarded blocked tickets or operator-requested removals.
 - Register `inspect_cost` tool with `ToolRegistry` so it is discoverable by prompt consistency guards and planning stages.
+- Remove the ticket-based maintenance flow entirely: delete the maintenance agent, stage, and `MAINTENANCE` state, along with all refine-stage triage routing to it. Maintenance is now performed by an external agent calling mill's API directly. (mill: Remove ticket-based maintenance flow; replace with external API-driven maintenance (20260712T120915Z-remove-ticket-based-maintenance-flow-rep-f25b) [WIP])
 - Add self-documenting `help` target to Makefile (`make` or `make help` lists all targets with descriptions via `##` comments)
 - Update stale `forge/gitlab.py` references to `forge/gitlab/core.py` in agent prompts, docs, config, and remove dead flake8 ignore entry; regenerate `mypy-baseline-test.txt`.)
 - Review stage now short-circuits rename-only PRs to the cheap level-1 model,

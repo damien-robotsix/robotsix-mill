@@ -84,7 +84,6 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         # -- Fields with no JSON entry (yet) — listed here so the
         #    invariant passes at HEAD; each should eventually gain a
         #    JSON entry or be explicitly documented as env-only --
-        "investigation_workspace",
         "refine_delta_reuse_enabled",
         "trace_review_max_inspector_runs_per_pass",
         "max_events_per_ticket",

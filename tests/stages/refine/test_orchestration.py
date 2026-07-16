@@ -908,11 +908,6 @@ def test_reviewer_agreement_guard_exception_falls_through(
     assert out.note.startswith("refined")
 
 
-# ===========================================================================
-# _triage_skip — MAINTENANCE + SKIP path-extraction
-# ===========================================================================
-
-
 def test_triage_no_change_verdict_returns_done(ctx_factory, monkeypatch, tmp_path):
     ctx = ctx_factory()
     t = _ticket(ctx)
@@ -985,48 +980,6 @@ def test_triage_presence_file_regression(ctx_factory, monkeypatch, tmp_path):
     assert out.next_state not in (State.DONE, State.CLOSED)
     assert out.note.startswith("triage SKIP")
     assert calls == []  # full refine agent never invoked
-
-
-def test_triage_maintenance_routes_to_maintenance(ctx_factory, monkeypatch, tmp_path):
-    ctx = ctx_factory(maintenance_triage_enabled=True)
-    t = _ticket(ctx)
-    calls = _spy_refine(
-        monkeypatch,
-        triage_refine=_mock_triage(decision="MAINTENANCE", reason="restart the worker"),
-    )
-
-    out = _run_agent(ctx, t, tmp_path, draft="Please restart the deploy.")
-
-    assert out.next_state is State.MAINTENANCE
-    assert out.note.startswith("maintenance triage (LLM):")
-    assert calls == []  # full refine agent never ran
-    ws = ctx.service.workspace(t)
-    assert (ws.artifacts_dir / "draft-original.md").exists()
-
-
-def test_triage_maintenance_ci_source_falls_through_to_refine(
-    ctx_factory, monkeypatch, tmp_path
-):
-    """A CI-failure ticket (source == ci) is NEVER routed to the read-only
-    maintenance agent even when triage says MAINTENANCE — CI failures are
-    code/config fixes the maintenance agent cannot make. It must fall
-    through to the full refine agent instead (regression: GHCR
-    docker-release `packages: write` tickets mis-triaged to MAINTENANCE
-    and dead-ended in a 'needs a human' block)."""
-    ctx = ctx_factory(maintenance_triage_enabled=True)
-    t = _ticket(ctx, source=SourceKind.CI)
-    calls = _spy_refine(
-        monkeypatch,
-        triage_refine=_mock_triage(
-            decision="MAINTENANCE", reason="looks like an ops permissions issue"
-        ),
-    )
-
-    out = _run_agent(ctx, t, tmp_path, draft="CI failure: Release image on main.")
-
-    assert out.next_state is not State.MAINTENANCE
-    assert not out.note.startswith("maintenance triage (LLM):")
-    assert calls != []  # full refine agent DID run for the CI ticket
 
 
 def test_triage_skip_extracts_backtick_paths(ctx_factory, monkeypatch, tmp_path):
@@ -2690,11 +2643,9 @@ def test_short_circuit_empty_draft_falls_through(ctx_factory, monkeypatch, tmp_p
     assert len(calls) == 1
 
 
-def test_short_circuit_routes_to_implement_not_done_or_maintenance(
-    ctx_factory, monkeypatch, tmp_path
-):
+def test_short_circuit_routes_to_implement_not_done(ctx_factory, monkeypatch, tmp_path):
     """The short-circuited outcome MUST route toward implement
-    (READY / HUMAN_ISSUE_APPROVAL), never to DONE or MAINTENANCE."""
+    (READY / HUMAN_ISSUE_APPROVAL), never to DONE or CLOSED."""
     ctx = ctx_factory()
     t = _ticket(ctx)
     _spy_refine(monkeypatch)
@@ -2703,7 +2654,7 @@ def test_short_circuit_routes_to_implement_not_done_or_maintenance(
 
     out = _run_agent(ctx, t, tmp_path, draft=draft)
 
-    assert out.next_state not in (State.DONE, State.MAINTENANCE, State.CLOSED)
+    assert out.next_state not in (State.DONE, State.CLOSED)
     assert out.next_state in (State.READY, State.HUMAN_ISSUE_APPROVAL)
 
 

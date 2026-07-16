@@ -745,7 +745,6 @@ def test_report_issue_consistency(monkeypatch):
         "dedup",
         "obsolescence",
         "review_revision",
-        "maintenance",
     }
 
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:

@@ -59,7 +59,6 @@ modules:
       - src/robotsix_mill/core/text_noop.py
       - src/robotsix_mill/core/duration.py
       - src/robotsix_mill/core/dedup.py
-      - src/robotsix_mill/core/draft_target.py
       - src/robotsix_mill/core/repo_layout.py
       - src/robotsix_mill/core/tool_wrappers.py
       - docs/core/**/*
@@ -77,7 +76,6 @@ modules:
       - tests/core/test_prune_clone.py
       - tests/core/test_workspace.py
       - tests/core/test_workspace_screenshots.py
-      - tests/core/test_draft_target.py
       - tests/core/test_repo_layout.py
       - tests/core/test_tool_wrappers.py
       - tests/core/test_delta_context.py
@@ -291,7 +289,6 @@ modules:
       - src/robotsix_mill/stages/implement/validation.py
       - src/robotsix_mill/stages/implement/implementation_logic.py
       - src/robotsix_mill/stages/implement/file_operations.py
-      - src/robotsix_mill/stages/maintenance.py
       - src/robotsix_mill/stages/deliver.py
       - src/robotsix_mill/stages/document.py
       - src/robotsix_mill/stages/review.py
@@ -333,7 +330,6 @@ modules:
       - tests/stages/test_implement_package_dag.py
       - tests/stages/implement/test_shared.py
       - tests/stages/implement/__init__.py
-      - tests/stages/test_maintenance.py
       - tests/stages/test_deliver.py
       - tests/stages/test_document.py
       - tests/stages/test_review.py

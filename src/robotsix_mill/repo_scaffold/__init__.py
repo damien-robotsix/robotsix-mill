@@ -1,10 +1,8 @@
-"""Workflow that scaffolds brand-new repositories created via the
-maintenance agent's ``create_repo`` tool.
+"""Workflow that scaffolds brand-new repositories.
 
-The maintenance agent calls :func:`run_repo_scaffold` with the creation
-params and the raw ticket description.  This module scaffolds an initial
-commit, appends a ``RepoConfig`` entry to the machine-owned overlay, and
-files a build-out ticket on the new repo's board.
+This module scaffolds an initial commit, appends a ``RepoConfig``
+entry to the machine-owned overlay, and files a build-out ticket
+on the new repo's board.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Triage skip logic for the refine stage.
 
-Pre-agent classification: detects maintenance / no-change / skip /
+Pre-agent classification: detects no-change / skip /
 migrate decisions, split-child fast-path, and sendback re-entry
 detection.  Runs before the expensive Opus refine agent so tickets
 that don't need refinement can short-circuit early.
@@ -14,7 +14,7 @@ from typing import Any
 
 from ...agents import refining
 from ...config.settings import Settings
-from ...core.models import SourceKind, Ticket, TicketKind
+from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -363,7 +363,7 @@ def split_child_fast_path(
 
 
 # ---------------------------------------------------------------------------
-# phase: triage skip / maintenance
+# phase: triage skip
 # ---------------------------------------------------------------------------
 
 
@@ -378,13 +378,11 @@ def triage_skip(
     s: Settings,
     reviewer_comments: str | None,
 ) -> Outcome | None:
-    """Triage phase 1: LLM classifier (3-way: SKIP / MAINTENANCE / REFINE).
+    """Triage phase 1: LLM classifier (3-way: SKIP / REFINE / NO_CHANGE).
 
     A single cheap LLM call classifies the draft.  If it's
     already a precise, implementation-ready spec, skip the
-    expensive refine agent entirely.  If it's a maintenance
-    (operational) request the keyword classifier missed, route
-    to MAINTENANCE.  ONLY run when:
+    expensive refine agent entirely.  ONLY run when:
     - the feature flag is enabled, AND
     - no reviewer sendback (human-flagged changes always refine).
 
@@ -485,19 +483,6 @@ def triage_skip(
         )
         _reconcile.persist_triage_complexity(ws, triage)
 
-        if (
-            triage.decision == "MAINTENANCE"
-            and s.maintenance_triage_enabled
-            and ticket.source != SourceKind.CI
-        ):
-            return _triage_outcome(
-                ctx,
-                ws,
-                draft,
-                ticket.id,
-                f"maintenance triage (LLM): {triage.reason} — {title}",
-                state=State.MAINTENANCE,
-            )
         if triage.decision == "NO_CHANGE":
             short_reason = triage.reason[:400] + (
                 "…" if len(triage.reason) > 400 else ""

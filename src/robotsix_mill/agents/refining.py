@@ -175,7 +175,7 @@ SYSTEM_PROMPT: str = _yaml.safe_load(_SYSPROMPT_PATH.read_text())["system_prompt
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
-    decision: Literal["REFINE", "SKIP", "MAINTENANCE", "NO_CHANGE", "MIGRATE"]
+    decision: Literal["REFINE", "SKIP", "NO_CHANGE", "MIGRATE"]
     reason: str
     target_board: str | None = Field(
         default=None,
@@ -194,7 +194,7 @@ class TriageResult(BaseModel):
             "work from read_file/list_dir/run_command alone. "
             "'needs-exploration' (or None for backward compat) means "
             "full explore/parallel_explore tools should be provided. "
-            "When decision is SKIP or MAINTENANCE this field is ignored."
+            "When decision is SKIP this field is ignored."
         ),
     )
     trivial_scope: bool | None = Field(
@@ -498,23 +498,6 @@ def triage_refine(
     finally:
         _safe_close(agent)
     return result.output
-
-
-def _classify_maintenance_draft(title: str, draft: str) -> str | None:
-    """Return an action-type string if *title* / *draft* signals a
-    maintenance request, or ``None`` otherwise.
-
-    Deterministic keyword heuristic — no LLM call.  Case-insensitive.
-    Called in phase 0 of the unified triage (before workspace clone).
-    """
-    title_lower = title.lower()
-    draft_lower = draft.lower()
-
-    if "create repo" in title_lower or "create repo" in draft_lower:
-        return "create_repo"
-    if "fork repo" in title_lower or "fork repo" in draft_lower:
-        return "fork_repo"
-    return None
 
 
 def triage_auto_approve(

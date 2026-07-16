@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...agents import refining
 from ...config import target_branch_for
 from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
-from ...core.models import SourceKind, Ticket, TicketKind
+from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
 from ...forge.auth import github_token
@@ -67,46 +66,6 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             )
             return cached
 
-        # --- triage phase 0: maintenance keyword check (before clone) ---
-        # Deterministic, no LLM, no workspace.  When the draft requests
-        # a create-repo, fork-repo, or cross-repo investigation, route
-        # directly to MAINTENANCE — skip the clone + full triage.
-        # Skip keyword maintenance triage for CI-created tickets (workflow
-        # failure reports are never operator maintenance requests) and for
-        # empty drafts (no text to match against). The LLM-triage path
-        # already guards SourceKind.CI at _triage.py L390.
-        _skip_keyword_triage = (
-            ticket.source == SourceKind.CI or not (draft or "").strip()
-        )
-        if s.maintenance_triage_enabled and not _skip_keyword_triage:
-            action = refining._classify_maintenance_draft(title, draft)
-            if action is not None:
-                # Preserve the original draft as an artifact for
-                # traceability (mirrors the triage-SKIP and normal-refine
-                # paths).
-                (ws.artifacts_dir / "draft-original.md").write_text(
-                    draft if draft else "(title-only ticket, no body provided)",
-                    encoding="utf-8",
-                )
-                # Tag the ticket with a maintenance:$action label so the
-                # maintenance stage can optionally dispatch on action type
-                # without re-parsing the draft.
-                try:
-                    ctx.service.set_labels(ticket.id, [f"maintenance:{action}"])
-                except Exception:
-                    log.warning(
-                        "%s: set_labels failed for maintenance triage — "
-                        "continuing anyway",
-                        ticket.id,
-                        exc_info=True,
-                    )
-                return Outcome(
-                    State.MAINTENANCE,
-                    f"maintenance triage: routed to MAINTENANCE "
-                    f"(action={action}) — {title}",
-                )
-        # --- end triage phase 0 ---
-
         # Phase 1: build the workspace. A meta-board ticket is cross-repo:
         # a triage agent picks the required registered repos and we clone
         # those into a multi-repo workspace (repo_dir = first, extra_roots =
@@ -145,16 +104,6 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, stale, ws, input_hash
             )
 
-        # Phase 2.1: mill-misroute gate — detect drafts that name
-        # mill-specific source paths absent from this checkout and
-        # redirect them to the mill maintenance board.  Deterministic,
-        # no LLM; runs before the first LLM-invoking gate.
-        misrouted = RefineStage._run_mill_misroute_gate(ctx, ticket, draft, repo_dir, s)
-        if misrouted is not None:
-            return RefineStage._guard_implementation_done(
-                ctx, ticket, misrouted, ws, input_hash
-            )
-
         # Phase 2.15: doc-only gate — deterministic check that skips
         # the multi-LLM refine analysis when a draft touches only
         # documentation files.  Runs before any LLM-invoking gate.
@@ -165,7 +114,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             )
 
         # Phase 2.2: triage classifier — a single cheap LLM call that
-        # classifies the draft as SKIP / NO_CHANGE / MAINTENANCE /
+        # classifies the draft as SKIP / NO_CHANGE / REFINE.
         # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,
         # dedup) so tickets that are already satisfied on disk
         # (NO_CHANGE) or already-precise specs (SKIP) short-circuit

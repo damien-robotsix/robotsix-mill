@@ -18,11 +18,6 @@ from pathlib import Path
 from ...agents import dedup, freshness, obsolescence
 from ...config import Settings
 from ...core.datetime_utils import _as_utc
-from ...core.draft_target import (
-    referenced_local_deliverable_paths,
-    referenced_mill_paths_absent,
-    resolve_mill_service,
-)
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -36,8 +31,6 @@ from .helpers import (
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OBSOLESCENCE_GAP_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
-    REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX,
-    REFINE_MILL_MISROUTE_PREFIX,
     REFINE_PROGRESS_STATES,
     _advisory_candidate_id,
     _build_candidates_block,
@@ -841,167 +834,6 @@ class RefineGatesMixin:
             result.get("reason", ""),
         )
         return None
-
-    @staticmethod
-    def _run_mill_misroute_gate(
-        ctx: StageContext,
-        ticket: Ticket,
-        draft: str,
-        repo_dir: Path | None,
-        s: Settings,
-    ) -> Outcome | None:
-        """Detect a draft naming mill-specific source paths absent from
-        the current checkout and either redirect it to the mill
-        maintenance board (when there is no local deliverable) or keep
-        it on the current board and best-effort file a consumer
-        follow-up ticket (when a primary deliverable lives on the
-        current checkout).
-
-        Runs before any LLM-invoking gate; purely deterministic
-        (filesystem ``.exists()`` checks against the cloned working
-        tree).  Returns ``Outcome(State.DONE, …)`` when a full redirect
-        is confirmed, or ``None`` to proceed with refine.
-        """
-        if not s.refine_mill_misroute_gate_enabled:
-            return None
-
-        absent = referenced_mill_paths_absent(ticket.title, draft, repo_dir)
-        if not absent:
-            return None
-
-        # Confidence threshold: when the repo-local codebase clearly
-        # exists (has pyproject.toml, src/, or tests/), a single absent
-        # mill-prefixed path is more likely a false positive (a
-        # conceptual/spec-descriptive path, or a stray mention) than a
-        # signal to redirect the entire ticket.  Require ≥2 absent
-        # paths before redirecting.
-        if repo_dir is not None and len(absent) == 1:
-            _indicators = ("pyproject.toml", "src", "tests")
-            if any((repo_dir / p).exists() for p in _indicators):
-                log.info(
-                    "%s: only 1 absent mill path (%s) — below "
-                    "confidence threshold of 2 for a repo that clearly "
-                    "exists; proceeding with refine on current board",
-                    ticket.id,
-                    absent[0],
-                )
-                return None
-
-        # Check whether the ticket has a primary deliverable on the
-        # current checkout — if so, keep it here and best-effort file a
-        # consumer follow-up on the mill board instead of redirecting
-        # the whole ticket.
-        local = referenced_local_deliverable_paths(ticket.title, draft, repo_dir)
-        if local:
-            log.info(
-                "%s: draft references absent mill paths (%s) but has a "
-                "local deliverable on this checkout (%s) — keeping on "
-                "current board",
-                ticket.id,
-                ", ".join(absent),
-                ", ".join(local),
-            )
-            # Best-effort: file a consumer follow-up on the mill board.
-            try:
-                mill_svc = resolve_mill_service(s, ctx.service, caller_label="refine")
-            except Exception:
-                log.debug(
-                    "%s: resolve_mill_service raised during follow-up — "
-                    "skipping consumer follow-up",
-                    ticket.id,
-                    exc_info=True,
-                )
-                mill_svc = None
-
-            if mill_svc is not None and mill_svc.board_id != ctx.service.board_id:
-                followup_title = f"Consumer migration for: {ticket.title}"
-                followup_body = (
-                    f"Consumer follow-up for ticket {ticket.id} "
-                    f"({ticket.title}).\n\n"
-                    f"The primary deliverable lives on another checkout; "
-                    f"this ticket tracks the consumer-side migration.\n\n"
-                    f"Absent mill consumer paths:\n"
-                    + "\n".join(f"- `{p}`" for p in absent)
-                    + f"\n\n{REFINE_MILL_CONSUMER_FOLLOWUP_PREFIX} "
-                    f"for {ticket.id}"
-                )
-                try:
-                    mill_svc.create(
-                        followup_title,
-                        followup_body,
-                        source=ticket.source,
-                        origin_session=ticket.origin_session,
-                    )
-                    log.info(
-                        "%s: filed mill consumer follow-up for absent paths: %s",
-                        ticket.id,
-                        ", ".join(absent),
-                    )
-                except Exception:
-                    log.info(
-                        "%s: failed to create consumer follow-up on mill "
-                        "board — proceeding with refine on current board",
-                        ticket.id,
-                        exc_info=True,
-                    )
-            else:
-                log.debug(
-                    "%s: mill board not available or same as current — "
-                    "skipping consumer follow-up",
-                    ticket.id,
-                )
-            return None
-
-        # No local deliverable — the whole actionable scope is mill
-        # work absent here.  Preserve the existing full-redirect
-        # behaviour.
-        try:
-            mill_svc = resolve_mill_service(s, ctx.service, caller_label="refine")
-        except Exception:
-            log.warning(
-                "%s: resolve_mill_service raised — proceeding with refine",
-                ticket.id,
-                exc_info=True,
-            )
-            return None
-
-        if mill_svc is None:
-            log.warning(
-                "%s: mill board not configured — cannot redirect; "
-                "proceeding with refine",
-                ticket.id,
-            )
-            return None
-
-        if mill_svc.board_id == ctx.service.board_id:
-            # Already on the mill board — nothing to redirect.
-            log.debug(
-                "%s: already on the mill board (%s) — proceeding with refine",
-                ticket.id,
-                mill_svc.board_id,
-            )
-            return None
-
-        try:
-            new = mill_svc.create(
-                ticket.title,
-                draft,
-                source=ticket.source,
-                origin_session=ticket.origin_session,
-            )
-        except Exception:
-            log.warning(
-                "%s: failed to create draft on mill board — proceeding with refine",
-                ticket.id,
-                exc_info=True,
-            )
-            return None
-
-        return Outcome(
-            State.DONE,
-            f"{REFINE_MILL_MISROUTE_PREFIX} {new.id}: draft names mill "
-            f"paths absent from this checkout ({', '.join(absent)})",
-        )
 
     @staticmethod
     def _run_doc_only_gate(

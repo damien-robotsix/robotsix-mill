@@ -12,8 +12,7 @@ checks happen — agents, gates, and the draft-routing heuristic.
 
 Imports are deliberately minimal (``pathlib`` only) so the module is
 safe to import from ``core/``, ``agents/``, and ``stages/`` without
-circular-import risk, mirroring the discipline noted at the top of
-:mod:`robotsix_mill.core.draft_target`.
+circular-import risk.
 """
 
 from __future__ import annotations

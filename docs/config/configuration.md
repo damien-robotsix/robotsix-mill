@@ -373,8 +373,6 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | `core.claude_max_concurrency` | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Process-wide cap on concurrent Claude SDK runs (each spawns a `claude` CLI subprocess) |
 | `core.claude_sdk_vision_enabled` | `MILL_CLAUDE_SDK_VISION_ENABLED` | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
-| `core.investigation_workspace` | `MILL_INVESTIGATION_WORKSPACE` | `None` | Path to a directory containing clones of registered repos for cross-repo investigation by the maintenance agent. When set, the agent's read-only tools are scoped to this directory. When None, falls back to the ticket's own workspace repo_dir. |
-
 ### 2. Request limits
 
 | YAML path | Env var | Default | Description |
@@ -396,7 +394,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.refine_web_fetch_max_calls` | — | `5` | (config-file-only) Max real (cache-miss) `web_fetch` calls across one whole refine trace (cross-consult) |
 | `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (config-file-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
 | `core.limits.refine_web_search_max_calls` | — | `5` | (config-file-only) Max `web_search` calls across one whole refine trace (cross-consult) |
-| `core.limits.maintenance_requests` | `MILL_MAINTENANCE_REQUEST_LIMIT` | `100` | Per-call request cap for the maintenance agent |
 | `core.limits.audit_requests` | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the periodic audit agent |
 | `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `32` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
@@ -482,7 +479,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.max_implement_review_cycles` | `MILL_MAX_IMPLEMENT_REVIEW_CYCLES` | `10` | Backstop ceiling on total implement passes per ticket across all review rounds; `0` disables |
 | `gates.refine_triage_enabled` | `MILL_REFINE_TRIAGE_ENABLED` | `true` | Cheap triage before full refine (skip if precise) |
-| `gates.maintenance_triage_enabled` | `MILL_MAINTENANCE_TRIAGE_ENABLED` | `true` | Cheap triage before a full maintenance pass |
 | `gates.refine_advisory_dedup_enabled` | `MILL_REFINE_ADVISORY_DEDUP_ENABLED` | `true` | Cheap advisory-dedup-verification gate: resolves carried `Possible duplicate of <id>` advisory with a single cheapest-tier `run_dedup_check` |
 | `gates.freshness_gate_enabled` | `MILL_FRESHNESS_GATE_ENABLED` | `false` | Pre-refine freshness check: verify cited evidence paths exist on HEAD |
 | `gates.obsolescence_gate_enabled` | `MILL_OBSOLESCENCE_GATE_ENABLED` | `false` | Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in) |
@@ -495,7 +491,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `gates.pr_summary_enabled` | `MILL_PR_SUMMARY_ENABLED` | `false` | Generate structured PR body from diff via cheap LLM (opt-in) |
 | `gates.comments_after_body` | `MILL_COMMENTS_AFTER_BODY` | `false` | Render description.md before comments in ticket detail drawer |
 | `gates.reviewer_agreement_gate_enabled` | `MILL_REVIEWER_AGREEMENT_GATE_ENABLED` | `true` | Pre-Opus guard: when a reviewer's sendback feedback already agrees with the draft's no-change-needed conclusion, the pipeline short-circuits to DONE, skipping the expensive Opus refine agent. Requires `refine_triage_enabled=true`. |
-| `gates.refine_mill_misroute_gate_enabled` | `MILL_REFINE_MILL_MISROUTE_GATE_ENABLED` | `true` | Deterministic pre-refine gate: detects drafts referencing mill-specific source paths absent from the current checkout and redirects them to the mill maintenance board before any LLM budget is spent. |
 | `ci.codeql_fp_triage_enabled` | `MILL_CODEQL_FP_TRIAGE_ENABLED` | `true` | When enabled, ci_fix may invoke a conservative sub-agent at the hard cycle ceiling to dismiss high-conviction CodeQL false positives, unblocking the ticket |
 
 ### 8. Forge

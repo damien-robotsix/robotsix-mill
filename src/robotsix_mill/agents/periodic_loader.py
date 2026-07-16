@@ -234,7 +234,7 @@ class ResolvedPeriodicWorkflow:
     name: str
     kind: str  # one of the _BUILTIN_KINDS values, or "bespoke"
     # The fully-resolved agent definition for ``llm_agent``/``bespoke``;
-    # ``None`` for ``schedule_only``/``maintenance`` (no prompt).
+    # ``None`` for ``schedule_only`` (no prompt).
     definition: AgentDefinition | None
     interval_seconds: int | None  # file override; None → caller's default
     enabled: bool  # presence implies True unless the file sets enabled: false
@@ -346,7 +346,7 @@ def resolve_periodic_workflow(
             definition = _merge_over_builtin(_builtin_definition(pwf.name), pwf)
         elif kind == "bespoke":
             definition = _bespoke_definition(pwf)
-        # schedule_only / maintenance carry no prompt; definition stays None.
+        # schedule_only carries no prompt; definition stays None.
     except (FileNotFoundError, ValidationError, ValueError) as exc:
         log.warning(
             "periodic workflow %s: resolution failed — skipping (%s)", path, exc

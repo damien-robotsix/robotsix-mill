@@ -1951,8 +1951,8 @@ def test_stage_rank_covers_every_pipeline_state():
 
     A missing entry silently falls to _DEFAULT_STAGE_RANK (99) and is
     starved indefinitely on a busy board — every newly arriving draft or
-    ready outranks it forever. Live case: MAINTENANCE was absent, so four
-    resumed maintenance tickets sat 75+ minutes with zero pickup while
+    ready outranks it forever. Live case: REBASING was once absent, so
+    blocked rebase tickets sat 75+ minutes with zero pickup while
     later-created drafts refined ahead of them.
     """
     from robotsix_mill.core.states import STAGE_FOR_STATE

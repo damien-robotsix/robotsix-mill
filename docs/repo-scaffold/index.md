@@ -13,7 +13,7 @@ a `RepoConfig` entry to the machine-owned repos overlay.
 ## 1. Repo creation workflow (`run_repo_scaffold`)
 
 When a meta-board ticket carries a `new-repo` extraction marker, the
-maintenance agent calls `run_repo_scaffold()` with creation parameters and
+external maintenance API calls `run_repo_scaffold()` with creation parameters and
 the raw ticket description.
 
 **Entry point:** `src/robotsix_mill/repo_scaffold/__init__.py`

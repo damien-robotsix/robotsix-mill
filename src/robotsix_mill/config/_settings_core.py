@@ -333,7 +333,7 @@ class _CoreSettings(BaseModel):
     # has its own 100-call budget), so the top-level refine loop should
     # rarely exceed a few dozen tool calls.  80 sits above the old
     # implicit pydantic-ai default of 50 — intentionally, because broad
-    # scaffolding and maintenance tickets (forge integration,
+    # scaffolding tickets (forge integration,
     # agent-definition build-out) empirically need more top-level calls
     # even with good delegation (refine runs saturated 40, then 60 —
     # ticket 5353 — despite the delegate-to-explore prompt bias);
@@ -354,20 +354,6 @@ class _CoreSettings(BaseModel):
         default=40,
         ge=1,
         description="Per-call request cap for non-escalated (simple/sonnet) refine runs.",
-    )
-    # Per-call cap for the maintenance agent's tool loop. Maintenance
-    # tickets are operational one-offs (clone + inspect + post
-    # findings); like refine, deep search is delegated to explore. An
-    # EXPLICIT cap so exhaustion is a documented knob, not the implicit
-    # pydantic-ai default of 50 that blocked the data-dir audit tickets
-    # with an opaque "Fatal: UsageLimitExceeded: … request_limit of 50".
-    # Bumped from 60 → 100 to give headroom for investigation-heavy
-    # tickets so the agent doesn't exhaust its budget on git history
-    # searches when read_file + explore would be faster.
-    maintenance_request_limit: int = Field(
-        default=100,
-        ge=1,
-        description="Per-call request cap for the maintenance agent's tool loop.",
     )
     # Per-call cap for the dedup check — the agent reads candidate
     # ticket bodies to verify matches, so allow a slightly larger
@@ -548,19 +534,6 @@ class _CoreSettings(BaseModel):
     data_dir: Path = Field(
         default=Path(".data"),
         description="Local data directory. In container, always /data.",
-    )
-
-    # Path to a directory containing clones of registered repos for
-    # cross-repo investigation by the maintenance agent.  When set, the
-    # agent's read-only tools (read_file, list_dir, run_command, explore,
-    # parallel_explore) are scoped to this directory.  When None, the
-    # agent falls back to the ticket's own workspace repo_dir.
-    # Configurable via MILL_INVESTIGATION_WORKSPACE env var or
-    # config/config.json.
-    investigation_workspace: Path | None = Field(
-        default=None,
-        alias="MILL_INVESTIGATION_WORKSPACE",
-        description="Path to a directory of repo clones for cross-repo investigation by the maintenance agent.",
     )
 
     # Default repo ID for legacy tickets that lack a board_id.

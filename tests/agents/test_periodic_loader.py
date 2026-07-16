@@ -124,7 +124,7 @@ def test_malformed_interval_skipped(tmp_path):
     assert pl.resolve_periodic_workflow(p) is None
 
 
-# --- schedule_only / maintenance: no prompt ---------------------------------
+# --- schedule_only: no prompt ---------------------------------
 
 
 def test_schedule_only_has_no_definition(tmp_path):
