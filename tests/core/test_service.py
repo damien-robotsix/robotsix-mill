@@ -307,10 +307,13 @@ def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(ser
     assert "override: retry — prior failure was a flake" in (hist[-1].note or "")
 
 
-def test_resume_blocked_without_note_leaves_implement_guard_untouched(service):
-    """resume_blocked with no note does not touch artifacts/implement.md or
-    artifacts/implement_spawn_count — the guard-clearing behavior is opt-in
-    via an explicit note."""
+def test_resume_blocked_without_note_clears_spawn_counter_but_not_implement_guard(
+    service,
+):
+    """resume_blocked with no note still clears artifacts/implement_spawn_count
+    (an explicit operator resume IS the human inspection the block asked for)
+    but leaves the stale-spec guard (artifacts/implement.md) untouched — that
+    guard still requires an explicit note."""
     t = service.create("resume without note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -324,7 +327,7 @@ def test_resume_blocked_without_note_leaves_implement_guard_untouched(service):
     resumed = service.resume_blocked(t.id)
     assert resumed.state is State.READY
     assert stale.exists()
-    assert spawn_counter.exists()
+    assert not spawn_counter.exists()
     assert service.list_comments(t.id) == []
 
 
