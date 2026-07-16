@@ -29,6 +29,10 @@ docker-compose.override.yml
 # to <clone>/artifacts/board.png and moves it out to the workspace; this
 # ignore is defence-in-depth so a lingering copy is never staged.
 /artifacts/board.png
+# Audit frontier-orchestrator per-run memory artifacts. Written by
+# the audit periodic agent at runtime (via write_file tool); never
+# commit these.
+/artifacts/audit-run-*
 # Stray pip-install output file accidentally committed (see ticket 20260621T173905Z)
 =8
 # actionlint binary downloaded by security-audit.yml at runtime

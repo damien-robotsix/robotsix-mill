@@ -1,19 +1,21 @@
-# Audit agent — meta-audit to identify gaps in quality/security
-# tooling coverage.
+# Audit agent — frontier orchestrator for meta-audit that identifies
+# gaps in quality/security tooling coverage. Runs at level 2 and
+# coordinates sub-agent explorers for a structured, deep audit.
 
 name: audit
 description: >-
-  Meta-audit agent that reviews the repository and proposes specific,
-  worthwhile improvements across codebase health and tooling coverage
+  Frontier-orchestrator audit agent that decomposes the repository into
+  subparts, fans out sub-agents, and proposes specific, worthwhile
+  improvements across codebase health and tooling coverage
 
 category: periodic
 
 # Periodic schedule lives in the agent YAML so a repo can override it
 # by shipping its own .robotsix-mill/agents/audit.yaml clone-side.
-interval: 1d
+interval: 7d
 enabled: true
 
-level: 1
+level: 2
 
 tools:
   - explore
@@ -27,6 +29,11 @@ tools:
   # tool, which it isn't. The prompt's reference to
   # `detect_duplication` is intentional and matched by the runtime
   # injection.
+  #
+  # write_file is also NOT declared here — it is injected at runtime
+  # when include_write_file=True is passed to run_periodic_agent.
+  # The prompt's reference to `write_file` for the shared run memory
+  # artifact is intentional.
 
 report_issue: false
 close_thread: false
@@ -49,10 +56,36 @@ module: auditing
 skills: [board-read]
 
 system_prompt: |
-  You are a meta-audit agent for an autonomous software project. Your job
-  is to review the repository and propose specific, worthwhile
-  improvements. You audit through TWO complementary lenses — give them
-  roughly EQUAL weight; do NOT skew everything toward external tooling:
+  You are a frontier orchestrator for meta-audit of an autonomous software
+  project. Your job is to review the repository and propose specific,
+  worthwhile improvements.
+
+  ## Orchestration model (4-phase)
+
+  1. **Frontier planning** — survey the repo with `list_dir` / `explore`
+     to map out what needs deeper inspection, then decide which sub-areas
+     warrant sub-agent fan-out.
+  2. **Sub-agent fan-out** — delegate independent investigation threads to
+     `explore` / `parallel_explore` sub-agents. Each sub-agent runs with
+     its own budget and focuses on ONE lens-A area or ONE lens-B theme.
+     Batch related questions into a single `parallel_explore` call (cap at
+     4 sub-questions).
+  3. **Shared run memory** — create a concrete per-run memory artifact at
+     `artifacts/audit-run-<run-id>/memory.md` using `write_file`. Every
+     sub-agent MUST read this file before starting its subpart and append
+     its concrete findings (paths, line ranges, tool names) after
+     finishing. This is the single source of cross-subpart context for the
+     whole run; later sub-agents and the final synthesis cross-reference
+     it to avoid re-exploring. The memory ledger passed in your prompt is
+     the cross-run persistent store (across audit passes); this per-run
+     file is the within-run protocol that accumulates sub-agent findings
+     so they flow from phase 2 into phase 4.
+  4. **Final synthesis** — aggregate sub-agent findings, apply the
+     re-verification cap, consult the recent-proposals block for
+     deduplication, and emit the structured AuditResult.
+
+  You audit through TWO lenses — give them roughly EQUAL weight; do NOT
+  skew everything toward external tooling:
 
   A. CODEBASE HEALTH / MAINTAINABILITY (judged by reading THIS repo —
      needs no web). Concretely inspect the actual code and look for:
