@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -14,6 +15,7 @@ from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
 from .. import tracing
 from ..tracing import langfuse_trace_url
+from ...sandbox import reap_orphan_sandboxes
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
 
 log = logging.getLogger("robotsix_mill.worker")
@@ -133,6 +135,23 @@ async def _handle_stage_error(
     tracing.set_current_span_attribute(
         "retry.reason", f"{classification}: {type(error).__name__}: {error!s}"[:300]
     )
+    if isinstance(error, TimeoutError):
+        tracing.set_current_span_attribute("error.subtype", "timeout_inner")
+        # --- reap orphan sandboxes on any timeout ---
+        # A sandbox exec that triggered the timeout may still be running as
+        # an orphaned container. Best-effort reaping here closes the
+        # resource leak and ensures trace latency reflects the kill time.
+        try:
+            reaped = reap_orphan_sandboxes(
+                max_age_seconds=2 * ctx.settings.sandbox_op_timeout
+            )
+            if reaped:
+                tracing.set_current_span_attribute(
+                    "sandbox.orphans_reaped", str(reaped)
+                )
+                log.warning("reaped %d orphan sandbox(es) after timeout", reaped)
+        except Exception:
+            log.warning("failed to reap orphan sandboxes after timeout", exc_info=True)
     if classification == "transient":
         # --- Clear stale implement fingerprint guard ---
         # When a transient infrastructure failure kills an implement run,
@@ -477,13 +496,40 @@ async def _process_ticket_inner(
                         "stage": stage_name,
                         "started_at": datetime.now(timezone.utc).isoformat(),
                     }
-                timeout = ctx.settings.stage_timeout_overrides.get(
+                _stage_timeout = ctx.settings.stage_timeout_overrides.get(
                     stage_name, ctx.settings.stage_timeout_seconds
                 )
                 coro = asyncio.to_thread(stage.run, ticket, ctx)
+                # --- progress heartbeat ---
+                # Emit periodic heartbeat logs so stalled stages are
+                # distinguishable from long-but-progressing runs.
+                _heartbeat_task: asyncio.Task[None] | None = None
+                if _stage_timeout > 0:
+                    _hb_interval = max(15, _stage_timeout // 6)
+
+                    async def _heartbeat(
+                        _ticket_id: str = ticket_id,
+                        _stage: str = stage_name,
+                        _timeout: int = _stage_timeout,
+                        _interval: int = _hb_interval,
+                    ) -> None:
+                        start = time.monotonic()
+                        while True:
+                            await asyncio.sleep(_interval)
+                            elapsed = time.monotonic() - start
+                            log.info(
+                                "heartbeat: %s still running for %s "
+                                "(%.0fs elapsed, timeout=%ds)",
+                                _stage,
+                                _ticket_id,
+                                elapsed,
+                                _timeout,
+                            )
+
+                    _heartbeat_task = asyncio.create_task(_heartbeat())
                 try:
-                    if timeout > 0:
-                        deadline = asyncio.timeout(timeout)
+                    if _stage_timeout > 0:
+                        deadline = asyncio.timeout(_stage_timeout)
                         try:
                             async with deadline:
                                 outcome = await coro
@@ -496,6 +542,8 @@ async def _process_ticket_inner(
                     else:
                         outcome = await coro
                 finally:
+                    if _heartbeat_task is not None:
+                        _heartbeat_task.cancel()
                     if active_map is not None:
                         active_map.pop(ticket_id, None)
                 # Attach the outcome to the root span — visible at the
@@ -506,22 +554,66 @@ async def _process_ticket_inner(
                         "outcome.next_state", outcome.next_state.value
                     )
             except _StageDeadlineExceeded:
-                timeout = ctx.settings.stage_timeout_overrides.get(
-                    stage_name, ctx.settings.stage_timeout_seconds
-                )
+                # --- implement stage: transient retry, not immediate block ---
+                # The stage_timeout_seconds wraps the full stage (scope-triage,
+                # rebase, sandbox setup/teardown, agent call). When it fires,
+                # treat it as a transient infrastructure stall — retry with
+                # backoff rather than hard-blocking.
+                # NOTE: the progress-reset watchdog (implement_pass_timeout)
+                # lives inside run_coordinator and kills only the agent call,
+                # not the full stage.
+                if stage_name == "implement":
+                    log.error(
+                        "STALL: %s implement stage timed out after %ds — "
+                        "no progress (heartbeat stopped); retrying as transient",
+                        ticket_id,
+                        _stage_timeout,
+                    )
+                    if root_io is not None:
+                        root_io.set_attribute("error.classification", "transient")
+                        root_io.set_attribute(
+                            "error.timeout_seconds", str(_stage_timeout)
+                        )
+                        root_io.set_output(
+                            {
+                                "error": (
+                                    f"implement stage timed out after "
+                                    f"{_stage_timeout}s (stall)"
+                                ),
+                                "next_state": ticket.state.value,
+                            }
+                        )
+                    await _handle_stage_error(
+                        ticket_id,
+                        ctx,
+                        stage_name,
+                        TimeoutError(
+                            f"implement stage timed out after {_stage_timeout}s"
+                        ),
+                        trace_id,
+                    )
+                    # Set stall subtype AFTER _handle_stage_error so it
+                    # survives the "timeout_inner" default written inside
+                    # that function for generic TimeoutError cases.
+                    if root_io is not None:
+                        root_io.set_attribute("error.subtype", "stall")
+                    return
+                # --- all other stages: hard block ---
                 log.error(
                     "%s: %s timed out after %ds — escalating to BLOCKED",
                     stage_name,
                     ticket_id,
-                    timeout,
+                    _stage_timeout,
                 )
-                note = f"stage {stage_name} timed out after {timeout}s"[:200]
+                note = f"stage {stage_name} timed out after {_stage_timeout}s"[:200]
                 if root_io is not None:
                     root_io.set_attribute("error.classification", "timeout")
-                    root_io.set_attribute("error.timeout_seconds", str(timeout))
+                    root_io.set_attribute("error.timeout_seconds", str(_stage_timeout))
                     root_io.set_output(
                         {
-                            "error": f"stage {stage_name} timed out after {timeout}s",
+                            "error": (
+                                f"stage {stage_name} timed out after {_stage_timeout}s"
+                            ),
                             "next_state": "BLOCKED",
                         }
                     )

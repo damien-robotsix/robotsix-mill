@@ -940,3 +940,246 @@ class TestRunCoordinator:
         # run_coordinator, which reads fresh. There's no stale cache path
         # because the artifact is paths-only with no content key.
         assert tr.content == "original content"
+
+
+# ---------------------------------------------------------------------------
+# _call_with_timeout — watchdog timeout propagation
+# ---------------------------------------------------------------------------
+
+
+class TestCallWithTimeout:
+    """Tests for ``_call_with_timeout`` shutdown behaviour."""
+
+    def test_shutdown_uses_wait_false(self, monkeypatch):
+        """_call_with_timeout must call executor.shutdown(wait=False) so
+        the watchdog TimeoutError propagates immediately instead of
+        blocking on hung threads at executor exit."""
+        from robotsix_mill.agents.coordinating import _call_with_timeout
+
+        shutdown_calls = []
+
+        class FakeExecutor:
+            def __init__(self, max_workers=1):
+                pass
+
+            def submit(self, fn):
+                class _Future:
+                    def result(self, timeout=None):
+                        return fn()
+
+                    def cancel(self):
+                        pass
+
+                return _Future()
+
+            def shutdown(self, wait=True):
+                shutdown_calls.append(wait)
+
+        import concurrent.futures
+
+        original = concurrent.futures.ThreadPoolExecutor
+        concurrent.futures.ThreadPoolExecutor = FakeExecutor
+        try:
+            result = _call_with_timeout(lambda: 42, timeout_seconds=10)
+        finally:
+            concurrent.futures.ThreadPoolExecutor = original
+
+        assert result == 42
+        assert shutdown_calls == [False], (
+            f"Expected shutdown(wait=False), got {shutdown_calls}"
+        )
+
+    def test_timeout_raises_with_shutdown_wait_false(self):
+        """When the function times out, _call_with_timeout raises
+        TimeoutError and still calls shutdown(wait=False)."""
+        import concurrent.futures
+        import time
+
+        # Use a real executor but with a function that sleeps past the timeout
+        called_shutdown = {"wait": None}
+
+        class InstrumentedExecutor(concurrent.futures.ThreadPoolExecutor):
+            def shutdown(self, wait=True):
+                called_shutdown["wait"] = wait
+                super().shutdown(wait=wait)
+
+        import robotsix_mill.agents.coordinating as _mod
+
+        original_executor = concurrent.futures.ThreadPoolExecutor
+        concurrent.futures.ThreadPoolExecutor = InstrumentedExecutor
+        try:
+            with pytest.raises(TimeoutError):
+                _mod._call_with_timeout(
+                    lambda: time.sleep(0.2),
+                    timeout_seconds=0.05,
+                    what="test op",
+                )
+        finally:
+            concurrent.futures.ThreadPoolExecutor = original_executor
+
+        assert called_shutdown["wait"] is False, (
+            f"Expected shutdown(wait=False), got {called_shutdown}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# implement_pass_timeout — implement stage pass cap
+# ---------------------------------------------------------------------------
+
+
+class TestImplementPassTimeout:
+    """Tests for implement_pass_timeout setting."""
+
+    def test_implement_pass_timeout_default(self):
+        """implement_pass_timeout defaults to 300 seconds."""
+        s = Settings()
+        assert s.implement_pass_timeout == 300
+
+    def test_sandbox_op_timeout_default(self):
+        """sandbox_op_timeout defaults to 300 seconds."""
+        s = Settings()
+        assert s.sandbox_op_timeout == 300
+
+
+# ---------------------------------------------------------------------------
+# progress-reset watchdog — _call_with_progress_watchdog
+# ---------------------------------------------------------------------------
+
+
+class TestProgressWatchdog:
+    """Tests for _call_with_progress_watchdog and tool wrapping."""
+
+    def test_progress_resets_deadline(self):
+        """Each progress_event.set() resets the deadline, allowing a
+        long-running function to survive past the initial timeout."""
+        import threading
+        import time
+        from robotsix_mill.agents.coordinating import (
+            _call_with_progress_watchdog,
+        )
+
+        ev = threading.Event()
+        started = threading.Event()
+        done = threading.Event()
+
+        def _slow_with_progress():
+            started.set()
+            # Simulate 4 rounds of "work" with progress between rounds
+            for _ in range(4):
+                time.sleep(0.15)  # each round > poll_interval
+                ev.set()  # signal progress
+            done.set()
+            return "ok"
+
+        result = _call_with_progress_watchdog(
+            _slow_with_progress,
+            timeout_seconds=0.25,  # > one round, < total without progress
+            progress_event=ev,
+            poll_interval=0.05,
+        )
+        assert result == "ok"
+        assert done.is_set()
+
+    def test_no_progress_raises_timeout_error(self):
+        """When progress_event is never set, the watchdog raises
+        TimeoutError after timeout_seconds elapse."""
+        import threading
+        import time
+        from robotsix_mill.agents.coordinating import (
+            _call_with_progress_watchdog,
+        )
+
+        ev = threading.Event()
+
+        def _hung():
+            time.sleep(1.0)
+            return "never"
+
+        with pytest.raises(TimeoutError, match="no progress"):
+            _call_with_progress_watchdog(
+                _hung,
+                timeout_seconds=0.1,
+                progress_event=ev,
+                poll_interval=0.02,
+            )
+
+    def test_shutdown_uses_wait_false(self):
+        """_call_with_progress_watchdog always calls shutdown(wait=False)."""
+        import concurrent.futures
+        import threading
+        from robotsix_mill.agents.coordinating import (
+            _call_with_progress_watchdog,
+        )
+
+        shutdown_calls: list = []
+        _RealFuture = concurrent.futures.Future
+
+        class FakeExecutor:
+            def __init__(self, max_workers=1):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def submit(self, fn, *a, **kw):
+                fut = _RealFuture()
+                fut.set_result(fn())
+                return fut
+
+            def shutdown(self, wait=True):
+                shutdown_calls.append(wait)
+
+        import concurrent.futures as _cf
+
+        original = _cf.ThreadPoolExecutor
+        _cf.ThreadPoolExecutor = FakeExecutor
+        try:
+            ev = threading.Event()
+            _call_with_progress_watchdog(
+                lambda: 42, timeout_seconds=10, progress_event=ev
+            )
+        finally:
+            _cf.ThreadPoolExecutor = original
+
+        assert shutdown_calls == [False], (
+            f"Expected shutdown(wait=False), got {shutdown_calls}"
+        )
+
+    def test_wrap_tools_signals_progress_event(self):
+        """_wrap_tools_with_progress wraps callables so they set the
+        progress_event on every invocation."""
+        import threading
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_progress,
+        )
+
+        ev = threading.Event()
+        called = []
+
+        def orig_tool(x):
+            called.append(x)
+            return x * 2
+
+        wrapped = _wrap_tools_with_progress([orig_tool], ev)
+        assert len(wrapped) == 1
+
+        result = wrapped[0](3)
+        assert result == 6
+        assert called == [3]
+        assert ev.is_set(), "progress_event must be set after tool call"
+
+    def test_wrap_tools_skips_non_callables(self):
+        """Non-callable entries pass through _wrap_tools_with_progress
+        unchanged."""
+        import threading
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_progress,
+        )
+
+        ev = threading.Event()
+        obj = object()
+        wrapped = _wrap_tools_with_progress([obj], ev)
+        assert wrapped[0] is obj

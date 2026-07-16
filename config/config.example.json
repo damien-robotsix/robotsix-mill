@@ -219,6 +219,8 @@
     "sandbox_readonly": true,
     "sandbox_reaper_interval_seconds": 3600,
     "sandbox_reaper_periodic": true,
+    "sandbox_op_timeout": 300,
+    "implement_pass_timeout": 300,
     "scope_triage_enabled": true,
     "scope_triage_max_files": 50,
     "security_posture_interval_seconds": 604800,

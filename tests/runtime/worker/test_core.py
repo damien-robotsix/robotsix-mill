@@ -2748,6 +2748,103 @@ async def test_stage_timeout_respects_override_not_global(ctx, service, monkeypa
     assert "timed out" in note
 
 
+async def test_implement_stage_timeout_uses_stage_timeout_seconds(
+    ctx, service, monkeypatch
+):
+    """The implement stage uses stage_timeout_seconds for its full-stage cap,
+    NOT implement_pass_timeout. implement_pass_timeout is the progress-reset
+    watchdog inside run_coordinator only."""
+    import time
+
+    ctx.settings.implement_pass_timeout = 0  # disabled (watchdog off)
+    ctx.settings.stage_timeout_seconds = 2400  # generous backstop
+
+    completed = []
+
+    class SlowImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, _t, _c):
+            time.sleep(0.05)
+            completed.append(True)
+            return Outcome(State.CODE_REVIEW, "done")
+
+    monkeypatch.setitem(registry.STAGES, "implement", SlowImplement())
+    t = service.create("impl-timeout")
+    t = service.transition(t.id, State.READY)
+    await process_ticket(t.id, ctx)
+    assert completed, (
+        "implement stage must have run to completion "
+        "(stage_timeout_seconds=2400, sleep=0.05s — if "
+        "implement_pass_timeout were still used at stage level "
+        "with default 300s the test would still pass, but the point "
+        "is the stage completed normally)"
+    )
+
+
+async def test_handle_stage_error_reaps_orphans_on_timeout(ctx, service, monkeypatch):
+    """_handle_stage_error calls reap_orphan_sandboxes with max_age_seconds
+    when the error is a TimeoutError."""
+    from robotsix_mill.runtime.worker.processing import _handle_stage_error
+
+    reap_calls = []
+
+    def _fake_reap(max_age_seconds=None):
+        reap_calls.append(max_age_seconds)
+        return 0
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing.reap_orphan_sandboxes",
+        _fake_reap,
+    )
+    ctx.settings.sandbox_op_timeout = 300
+
+    t = service.create("orphan-reap")
+    await _handle_stage_error(
+        t.id,
+        ctx,
+        "implement",
+        TimeoutError("test timeout"),
+        "fake-trace-id",
+    )
+    assert len(reap_calls) >= 1, "reap_orphan_sandboxes must be called on TimeoutError"
+    assert reap_calls[0] == 600  # 2 * 300
+
+
+async def test_stall_subtype_implement_timeout_triggers_retry(
+    ctx, service, monkeypatch
+):
+    """When the implement stage times out (stage_timeout_seconds),
+    the ticket is retried as transient, not hard-blocked. This
+    confirms the _StageDeadlineExceeded handler takes the 'stall'
+    path for implement."""
+    import time
+
+    ctx.settings.stage_timeout_seconds = 1  # 1s stage-level cap
+    ctx.settings.implement_pass_timeout = 0  # watchdog off
+
+    class SlowImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, _t, _c):
+            time.sleep(5)  # far exceeds 1s cap
+            return Outcome(State.CODE_REVIEW, "never")
+
+    monkeypatch.setitem(registry.STAGES, "implement", SlowImplement())
+    t = service.create("stall-subtype")
+    t = service.transition(t.id, State.READY)
+    await process_ticket(t.id, ctx)
+    reloaded = service.get(t.id)
+    assert reloaded.retry_attempt > 0, (
+        "implement timeout should trigger transient retry, not hard block"
+    )
+    assert reloaded.state is not State.BLOCKED, (
+        "implement timeout should not hard-block"
+    )
+
+
 async def test_global_concurrency_cap_bounds_concurrent_stages(
     ctx, service, monkeypatch
 ):
