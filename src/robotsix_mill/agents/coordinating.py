@@ -184,21 +184,21 @@ def _call_with_timeout(
 
 
 def _wrap_tools_with_progress(
-    tools: list,
+    tools: list[Any],
     progress_event: threading.Event,
-) -> list:
+) -> list[Any]:
     """Wrap each callable tool to set *progress_event* on every invocation.
 
     The event is set BEFORE the original tool executes, so even a hung
     or long-running tool doesn't prevent the watchdog from observing
     forward motion. Non-callable entries pass through unchanged.
     """
-    wrapped: list = []
+    wrapped: list[Any] = []
     for t in tools:
         if callable(t):
 
             @functools.wraps(t)
-            def _progress_wrapper(*args, _original=t, **kwargs):
+            def _progress_wrapper(*args: Any, _original: Any = t, **kwargs: Any) -> Any:
                 progress_event.set()
                 return _original(*args, **kwargs)
 
@@ -297,7 +297,7 @@ def run_coordinator(
     # Pre-seed fs_tools cache and build synthetic message_history when
     # reference files are provided (first invocation only, not a retry).
     pre_seeded: dict[str, str] | None = None
-    final_message_history: list | None = message_history
+    final_message_history: list[Any] | None = message_history
 
     # Paths-only list (relative ``rf["path"]`` strings) of the reference
     # files the parent pre-seeds into its own context. Forwarded to the
@@ -372,7 +372,7 @@ def run_coordinator(
     if settings.implement_pass_timeout > 0:
         _progress_event = threading.Event()
 
-    _all_tools: list = [
+    _all_tools: list[Any] = [
         make_explore_tool(
             settings,
             repo_dir,
