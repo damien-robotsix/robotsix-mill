@@ -5434,6 +5434,68 @@ def test_spawn_counter_disabled_when_set_to_zero(ctx_factory, tmp_path, monkeypa
     assert agent_called, "agent must be invoked when counter is disabled"
 
 
+def test_spawn_counter_blocked_note_includes_summary_tail(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spawn limit is reached, the BLOCKED outcome note
+    includes the tail of artifacts/implement_summary.md so the operator
+    sees the genuine failure cause."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Spawn cap with summary", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    summary = (
+        "## Implement result\n\n"
+        "The agent failed because of a level-3 Claude SDK error:\n"
+        "RunContext tools are not available in this environment.\n"
+        "Try upgrading the SDK or using a different model tier.\n"
+    )
+    (ws.artifacts_dir / "implement_summary.md").write_text(summary, encoding="utf-8")
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spawn limit reached" in out.note.lower()
+    assert "Last attempt summary tail:" in out.note
+    assert "RunContext tools are not available" in out.note
+
+
+def test_spawn_counter_blocked_note_no_summary_when_file_missing(ctx_factory, tmp_path):
+    """When implement_summary.md does not exist, the BLOCKED note
+    does not include a summary tail section."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Spawn cap no summary", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    # No implement_summary.md written.
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spawn limit reached" in out.note.lower()
+    assert "Last attempt summary tail:" not in out.note
+
+
 # --- epic context in preflight spec check --------------------------------
 
 

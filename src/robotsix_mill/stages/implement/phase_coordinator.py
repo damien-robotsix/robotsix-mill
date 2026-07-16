@@ -114,14 +114,27 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 except (ValueError, OSError):  # fmt: skip
                     spawn_count = 0
             if spawn_count >= spawn_limit:
-                return Outcome(
-                    State.BLOCKED,
+                note = (
                     f"implement spawn limit reached "
                     f"({spawn_count}/{spawn_limit}) — "
                     "escalating to BLOCKED for human inspection.  "
                     "Delete artifacts/implement_spawn_count in the "
-                    "workspace to reset.",
+                    "workspace to reset."
                 )
+                # Append the tail of the last implement summary so the
+                # operator sees the genuine failure cause instead of only
+                # the generic limit message.
+                summary_path = ws.artifacts_dir / "implement_summary.md"
+                if summary_path.exists():
+                    try:
+                        summary_text = summary_path.read_text(encoding="utf-8")
+                    except OSError, UnicodeDecodeError:
+                        summary_text = ""
+                    if summary_text:
+                        tail = summary_text[-500:].strip()
+                        if tail:
+                            note += f"\n\nLast attempt summary tail:\n{tail}"
+                return Outcome(State.BLOCKED, note)
             # Only increment on genuine re-spawns, not transient
             # infrastructure retries.  Transient failures (sandbox EOF,
             # OOM, etc.) must not burn the ticket's spawn budget —
