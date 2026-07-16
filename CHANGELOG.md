@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- **Trace-count circuit breaker: per-ticket baseline on resume.** When an operator resumes a ticket blocked by the trace-count circuit breaker, the current trace count is captured as a baseline (`pre_redraft_trace_count`) and the ticket is not re-blocked for pre-resume traces. Only new traces accumulated after resume count toward the `max_traces_per_ticket` cap, so the guard stays effective without requiring a fleet-wide limit change.
 - Adopt Hatchling's path-based versioning: `__init__.py` is now the single source of truth for the package version, with `pyproject.toml` reading it via `[tool.hatch.version] path` instead of a duplicate `version` string.
 - Add `frontend_sync_periodic` and `frontend_sync_interval_seconds` Settings fields, matching the pattern of all other periodic passes so operators can disable or tune the frontend-sync pass.
 - Fix alembic proxy registry race (``KeyError: 'config'`` in ``_remove_proxy``) during concurrent ``init_db`` calls by serializing alembic migrations with a per-board ``threading.Lock``, and by moving the ``context.config`` logging setup in ``alembic/env.py`` out of module level into a function called inside the active migration context.

@@ -166,6 +166,13 @@ class Ticket(SQLModel, table=True):
     # redraft restarts the cost limit at zero while the full total
     # (including pre-redraft spend) stays available for display.
     pre_redraft_cost_usd: float = Field(default=0.0)
+    # snapshot of the full Langfuse session trace count captured at the
+    # last operator resume of a trace-circuit-breaker block.  Subtracted
+    # from the live session trace count to yield the effective trace
+    # count used for the per-ticket trace-count limit, so a resume
+    # restarts the trace limit at zero while all traces stay in
+    # Langfuse.  A sentinel of -1 means "set baseline on next poll."
+    pre_redraft_trace_count: int = Field(default=0)
     # Count of consecutive REQUEST_CHANGES verdicts inside the current
     # review session.  Reset on APPROVE or when the cap is hit; persists
     # across the CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW loop.
@@ -304,6 +311,7 @@ class TicketRead(SQLModel):
     origin_session_url: str | None
     cost_usd: float
     pre_redraft_cost_usd: float = 0.0
+    pre_redraft_trace_count: int = 0
     cumulative_cost: float | None = None
     depends_on: str | None
     unmet_deps: list[str]

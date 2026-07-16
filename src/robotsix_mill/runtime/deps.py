@@ -382,6 +382,7 @@ def enrich_ticket_read(
         ),
         cost_usd=ticket.cost_usd,
         pre_redraft_cost_usd=ticket.pre_redraft_cost_usd,
+        pre_redraft_trace_count=getattr(ticket, "pre_redraft_trace_count", 0),
         cumulative_cost=cumulative,
         depends_on=ticket.depends_on,
         unmet_deps=service.unmet_dependencies(ticket),
