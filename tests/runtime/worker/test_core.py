@@ -362,6 +362,135 @@ def test_circuit_breaker_none_traces_noop(ctx, service, monkeypatch):
     assert service.get(t.id).state is State.READY
 
 
+def test_circuit_breaker_trace_baseline_sentinel_sets_and_skips(
+    ctx,
+    service,
+    monkeypatch,
+):
+    """When ``pre_redraft_trace_count == -1`` (sentinel after
+    resume-blocked), the next poll captures the current trace count as
+    the baseline and skips the block — pre-resume traces are forgiven."""
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+
+    ctx.settings.max_traces_per_ticket = 5
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    # 8 traces — above the cap of 5.
+    fake_traces = [{"cost": 0.0, "model": ""} for _ in range(8)]
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: fake_traces,
+    )
+
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+
+    # Set sentinel on the ticket (simulating resume-blocked).
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t.id)
+        row.pre_redraft_trace_count = -1
+        s.add(row)
+        s.commit()
+
+    w = Worker(ctx)
+    # First poll: sentinel present → baseline set to 8, block skipped.
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+    # Baseline should now be 8.
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t.id)
+        assert row.pre_redraft_trace_count == 8
+
+    # Second poll: effective = 8 - 8 = 0 → under cap, no block.
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+
+
+def test_circuit_breaker_trace_baseline_blocks_new_traces(
+    ctx,
+    service,
+    monkeypatch,
+):
+    """After the baseline is set, NEW traces above the cap still block."""
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+
+    ctx.settings.max_traces_per_ticket = 5
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    # Baseline of 3: 3 old traces already forgiven.
+    # New session total of 10 means effective = 10 - 3 = 7 > 5 → BLOCK.
+    fake_traces = [{"cost": 0.0, "model": ""} for _ in range(10)]
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: fake_traces,
+    )
+
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t.id)
+        row.pre_redraft_trace_count = 3
+        s.add(row)
+        s.commit()
+
+    w = Worker(ctx)
+    # Effective = 10 - 3 = 7 > 5 → BLOCKED.
+    w._check_progress(t.id, State.READY, State.READY)
+    blocked = service.get(t.id)
+    assert blocked.state is State.BLOCKED
+    assert "Circuit breaker tripped" in service.history(t.id)[-1].note
+    assert "effective traces" in service.history(t.id)[-1].note
+
+
+def test_circuit_breaker_trace_baseline_at_cap_not_blocked(
+    ctx,
+    service,
+    monkeypatch,
+):
+    """When effective traces == cap (not >), no block. The > is strict."""
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.models import Ticket as _Ticket
+
+    ctx.settings.max_traces_per_ticket = 5
+    ctx.settings.max_openrouter_marginal_usd_per_ticket = 0.0
+
+    # Baseline 5, total 10 → effective = 5, exactly at cap → NOT blocked.
+    fake_traces = [{"cost": 0.0, "model": ""} for _ in range(10)]
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.session_traces",
+        lambda *a, **k: fake_traces,
+    )
+
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+
+    with _db.session(service.settings, service.board_id) as s:
+        row = s.get(_Ticket, t.id)
+        row.pre_redraft_trace_count = 5
+        s.add(row)
+        s.commit()
+
+    w = Worker(ctx)
+    w._check_progress(t.id, State.READY, State.READY)
+    assert service.get(t.id).state is State.READY
+
+
+def test_circuit_breaker_resume_blocked_sets_sentinel(service):
+    """``resume_blocked`` sets ``pre_redraft_trace_count = -1`` on the
+    ticket so the next worker poll captures the baseline."""
+    t = service.create("x")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="Circuit breaker tripped")
+    assert service.get(t.id).state is State.BLOCKED
+
+    ticket = service.resume_blocked(t.id, note="operator override")
+    assert ticket.state is State.READY
+    assert ticket.pre_redraft_trace_count == -1
+
+
 def test_no_progress_guard_exempts_poll_stage(ctx, service):
     """human_mr_approval (merge, traced=False) legitimately waits on an open PR
     across many poll cycles — it must NEVER be auto-blocked."""

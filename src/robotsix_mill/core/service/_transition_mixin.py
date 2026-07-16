@@ -355,6 +355,7 @@ class _TransitionMixin(_ServiceBase):
             ticket.retry_attempt = 0
             ticket.last_transient_error = None
             ticket.next_retry_at = None
+            ticket.pre_redraft_trace_count = -1  # sentinel: set baseline on next poll
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)

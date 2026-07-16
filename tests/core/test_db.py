@@ -213,6 +213,7 @@ def test_init_db_migration_preserves_existing_data(tmp_path: Path):
         "unblocks",
         "labels",
         "pre_redraft_cost_usd",
+        "pre_redraft_trace_count",
         "implement_cycles",
         "refine_passes",
         "refine_output_hash",
@@ -236,6 +237,7 @@ def test_init_db_migration_preserves_existing_data(tmp_path: Path):
     assert "unblocks" in ticket_cols
     assert "labels" in ticket_cols
     assert "pre_redraft_cost_usd" in ticket_cols
+    assert "pre_redraft_trace_count" in ticket_cols
     assert "implement_cycles" in ticket_cols
     assert "refine_passes" in ticket_cols
     assert "refine_output_hash" in ticket_cols

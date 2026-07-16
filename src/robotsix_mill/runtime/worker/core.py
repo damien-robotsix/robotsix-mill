@@ -564,22 +564,43 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             )
             if traces is not None:
                 n = len(traces)
+                # Sentinel -1 means "set baseline on next poll" — an
+                # operator just resumed this ticket.  Capture the current
+                # trace count as the baseline so pre-resume traces are
+                # excluded from the cap, then skip the block.
+                trace_baseline = (
+                    getattr(ticket, "pre_redraft_trace_count", 0)
+                    if ticket is not None
+                    else 0
+                )
+                if trace_baseline == -1:
+                    self.ctx.service.set_pre_redraft_trace_count(ticket_id, n)
+                    # After setting the baseline, effective count is
+                    # n - n == 0 — well under any cap, so skip the
+                    # breaker for this poll.  Still compute OpenRouter
+                    # cost for the note below (informational only).
+                effective_n = max(0, n - trace_baseline) if trace_baseline > 0 else n
                 openrouter_cost = sum(
                     t["cost"]
                     for t in traces
                     if "openrouter" in (t.get("model") or "").lower()
                 )
-                if (
+                if trace_baseline == -1:
+                    # Baseline just set — skip blocking on this poll.
+                    pass
+                elif (
                     self.ctx.settings.max_traces_per_ticket > 0
-                    and n > self.ctx.settings.max_traces_per_ticket
+                    and effective_n > self.ctx.settings.max_traces_per_ticket
                 ) or (
                     self.ctx.settings.max_openrouter_marginal_usd_per_ticket > 0.0
                     and openrouter_cost
                     > self.ctx.settings.max_openrouter_marginal_usd_per_ticket
                 ):
                     note = (
-                        f"Circuit breaker tripped: {n} traces "
-                        f"(limit {self.ctx.settings.max_traces_per_ticket}), "
+                        f"Circuit breaker tripped: {effective_n} effective traces "
+                        f"({n} total, "
+                        f"baseline {trace_baseline}; "
+                        f"limit {self.ctx.settings.max_traces_per_ticket}), "
                         f"OpenRouter spend ${openrouter_cost:.2f} "
                         f"(limit ${self.ctx.settings.max_openrouter_marginal_usd_per_ticket:.2f}). "
                         "Escalated to BLOCKED to stop further LLM billing. "

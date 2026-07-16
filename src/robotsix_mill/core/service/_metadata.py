@@ -223,6 +223,20 @@ class _MetadataMixin(_ServiceBase):
             s.add(ticket)
             s.commit()
 
+    def set_pre_redraft_trace_count(self, ticket_id: str, value: int) -> None:
+        """Set the ``pre_redraft_trace_count`` baseline on *ticket_id*.
+
+        Used by the trace-count circuit breaker: the baseline is
+        subtracted from the live session trace count so only traces
+        accrued after the last operator resume count toward the
+        ``max_traces_per_ticket`` cap."""
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
+            ticket = _get_ticket(s, ticket_id)
+            ticket.pre_redraft_trace_count = value
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.commit()
+
     def set_depends_on(self, ticket_id: str, depends_on_ids: list[str]) -> None:
         """Set the ``depends_on`` field for *ticket_id* to a JSON-encoded
         list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*
