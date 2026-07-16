@@ -346,7 +346,8 @@ def referenced_mill_paths_absent(
     candidates = _parse_token_candidates(title, body, repo_dir)
     if not candidates:
         return []
-    assert repo_dir is not None  # _parse_token_candidates returns [] when repo_dir is None
+    if repo_dir is None:  # pragma: no cover - _parse_token_candidates invariant
+        raise RuntimeError("repo_dir is None despite non-empty candidates")
     absent: list[str] = []
     for token in candidates:
         result = _candidate_is_absent_mill_path(token, repo_dir)
@@ -416,7 +417,8 @@ def has_unverifiable_cross_repo_refs(
     candidates = _parse_token_candidates(title, body, repo_dir)
     if not candidates:
         return False
-    assert repo_dir is not None  # _parse_token_candidates returns [] when repo_dir is None
+    if repo_dir is None:  # pragma: no cover - _parse_token_candidates invariant
+        raise RuntimeError("repo_dir is None despite non-empty candidates")
     for token in candidates:
         try:
             token_lower = token.lower()
@@ -470,7 +472,8 @@ def referenced_local_deliverable_paths(
     candidates = _parse_token_candidates(title, body, repo_dir)
     if not candidates:
         return []
-    assert repo_dir is not None  # _parse_token_candidates returns [] when repo_dir is None
+    if repo_dir is None:  # pragma: no cover - _parse_token_candidates invariant
+        raise RuntimeError("repo_dir is None despite non-empty candidates")
     result: list[str] = []
     for token in candidates:
         try:
