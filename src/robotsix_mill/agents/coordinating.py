@@ -14,7 +14,10 @@ everything and never converged.
 from __future__ import annotations
 
 import concurrent.futures
+import functools
 import logging
+import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Literal, TypeVar
 
@@ -180,6 +183,76 @@ def _call_with_timeout(
         executor.shutdown(wait=False)
 
 
+def _wrap_tools_with_progress(
+    tools: list,
+    progress_event: threading.Event,
+) -> list:
+    """Wrap each callable tool to set *progress_event* on every invocation.
+
+    The event is set BEFORE the original tool executes, so even a hung
+    or long-running tool doesn't prevent the watchdog from observing
+    forward motion. Non-callable entries pass through unchanged.
+    """
+    wrapped: list = []
+    for t in tools:
+        if callable(t):
+            @functools.wraps(t)
+            def _progress_wrapper(*args, _original=t, **kwargs):
+                progress_event.set()
+                return _original(*args, **kwargs)
+
+            wrapped.append(_progress_wrapper)
+        else:
+            wrapped.append(t)
+    return wrapped
+
+
+def _call_with_progress_watchdog(
+    fn: Callable[[], _T],
+    timeout_seconds: int,
+    progress_event: threading.Event,
+    what: str = "agent run",
+    poll_interval: float = 1.0,
+) -> _T:
+    """Run *fn* in a thread with a progress-reset watchdog.
+
+    The deadline resets to ``now + timeout_seconds`` every time
+    *progress_event* is set.  The function is killed with a
+    ``TimeoutError`` when the deadline expires without progress.
+
+    Uses ``shutdown(wait=False)`` to ensure the timeout propagates
+    immediately instead of blocking on hung threads at context-manager
+    exit.
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(fn)
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                future.cancel()
+                raise TimeoutError(
+                    f"{what} timed out after {timeout_seconds}s of no progress"
+                ) from None
+            try:
+                return future.result(timeout=min(poll_interval, remaining))
+            except concurrent.futures.TimeoutError:
+                # poll_interval elapsed without completion —
+                # check whether progress was made
+                if progress_event.is_set():
+                    progress_event.clear()
+                    deadline = time.monotonic() + timeout_seconds
+                    log.debug(
+                        "progress watchdog: reset deadline to +%ds for %s",
+                        timeout_seconds,
+                        what,
+                    )
+                # else: no progress — loop continues
+    finally:
+        executor.shutdown(wait=False)
+
+
 def run_coordinator(
     *,
     settings: Settings,
@@ -289,6 +362,36 @@ def run_coordinator(
     from .post_comment import make_post_comment_tool
     from .spawn_subtask import make_spawn_subtask_tool
 
+    # -- progress-reset watchdog -----------------------------------------
+    # When implement_pass_timeout > 0, wrap every tool with a progress
+    # signal so the watchdog resets its deadline on each tool call.
+    # The event is created here (before the agent is built) and
+    # consumed by _call_with_progress_watchdog below.
+    _progress_event: threading.Event | None = None
+    if settings.implement_pass_timeout > 0:
+        _progress_event = threading.Event()
+
+    _all_tools: list = [
+        make_explore_tool(
+            settings,
+            repo_dir,
+            extra_roots=extra_roots,
+            pre_seeded_paths=pre_seeded_paths,
+        ),
+        make_parallel_explore_tool(
+            settings,
+            repo_dir,
+            extra_roots=extra_roots,
+        ),
+        make_consult_expert_tool(settings, repo_dir, board_id=board_id),
+        make_spawn_subtask_tool(settings, repo_dir),
+        make_post_comment_tool(settings, agent_name="implement"),
+        make_insert_changelog_entry_tool(repo_dir),
+        *fs_tools,
+    ]
+    if _progress_event is not None:
+        _all_tools = _wrap_tools_with_progress(_all_tools, _progress_event)
+
     agent = build_agent_from_definition(
         settings,
         definition,
@@ -307,24 +410,7 @@ def run_coordinator(
         # generic "no changes produced" block.
         board_id=board_id,
         current_ticket_id=current_ticket_id,
-        tools=[
-            make_explore_tool(
-                settings,
-                repo_dir,
-                extra_roots=extra_roots,
-                pre_seeded_paths=pre_seeded_paths,
-            ),
-            make_parallel_explore_tool(
-                settings,
-                repo_dir,
-                extra_roots=extra_roots,
-            ),
-            make_consult_expert_tool(settings, repo_dir, board_id=board_id),
-            make_spawn_subtask_tool(settings, repo_dir),
-            make_post_comment_tool(settings, agent_name="implement"),
-            make_insert_changelog_entry_tool(repo_dir),
-            *fs_tools,
-        ],
+        tools=_all_tools,
         **overrides,
     )
     try:
@@ -458,27 +544,42 @@ def run_coordinator(
         # Hierarchy (strongest first):
         #   1. coordinator_timeout_overrides[stage_name]  (explicit per-stage)
         #   2. coordinator_timeout_seconds                 (global fallback)
-        # NOTE: implement_pass_timeout is applied at the stage-runner
-        # level in processing.py, not here — it wraps the FULL stage
-        # (scope-triage, rebase, sandbox setup/teardown) rather than
-        # just the inner agent call.
+        # NOTE: implement_pass_timeout is the progress-reset watchdog applied
+        # below via _call_with_progress_watchdog — it replaces the flat
+        # _call_with_timeout cap for the implement stage.
         _pass_timeout = settings.coordinator_timeout_overrides.get(
             stage_name, settings.coordinator_timeout_seconds
         )
 
-        result = _call_with_timeout(
-            lambda: run_agent(
-                agent,
-                lambda h: h.run_sync(
-                    run_user_prompt,
-                    message_history=final_message_history,
-                    usage_limits=limits,
+        if _progress_event is not None:
+            result = _call_with_progress_watchdog(
+                lambda: run_agent(
+                    agent,
+                    lambda h: h.run_sync(
+                        run_user_prompt,
+                        message_history=final_message_history,
+                        usage_limits=limits,
+                    ),
+                    what="implement",
                 ),
-                what="implement",
-            ),
-            timeout_seconds=_pass_timeout,
-            what="implement agent",
-        )
+                timeout_seconds=settings.implement_pass_timeout,
+                progress_event=_progress_event,
+                what="implement agent",
+            )
+        else:
+            result = _call_with_timeout(
+                lambda: run_agent(
+                    agent,
+                    lambda h: h.run_sync(
+                        run_user_prompt,
+                        message_history=final_message_history,
+                        usage_limits=limits,
+                    ),
+                    what="implement",
+                ),
+                timeout_seconds=_pass_timeout,
+                what="implement agent",
+            )
         result = reprompt_if_unstructured(
             result=result,
             agent=agent,

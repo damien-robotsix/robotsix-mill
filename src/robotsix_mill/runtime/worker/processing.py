@@ -499,16 +499,6 @@ async def _process_ticket_inner(
                 _stage_timeout = ctx.settings.stage_timeout_overrides.get(
                     stage_name, ctx.settings.stage_timeout_seconds
                 )
-                # --- implement stage pass timeout ---
-                # implement_pass_timeout wraps the FULL stage (scope-triage,
-                # rebase, sandbox setup/teardown) and is applied at the
-                # stage-runner level rather than inside run_coordinator.
-                if (
-                    stage_name == "implement"
-                    and ctx.settings.implement_pass_timeout > 0
-                    and stage_name not in ctx.settings.stage_timeout_overrides
-                ):
-                    _stage_timeout = ctx.settings.implement_pass_timeout
                 coro = asyncio.to_thread(stage.run, ticket, ctx)
                 # --- progress heartbeat ---
                 # Emit periodic heartbeat logs so stalled stages are
@@ -565,10 +555,13 @@ async def _process_ticket_inner(
                     )
             except _StageDeadlineExceeded:
                 # --- implement stage: transient retry, not immediate block ---
-                # The implement_pass_timeout wraps the full stage (scope-triage,
+                # The stage_timeout_seconds wraps the full stage (scope-triage,
                 # rebase, sandbox setup/teardown, agent call). When it fires,
                 # treat it as a transient infrastructure stall — retry with
                 # backoff rather than hard-blocking.
+                # NOTE: the progress-reset watchdog (implement_pass_timeout)
+                # lives inside run_coordinator and kills only the agent call,
+                # not the full stage.
                 if stage_name == "implement":
                     log.error(
                         "STALL: %s implement stage timed out after %ds — "
@@ -581,7 +574,6 @@ async def _process_ticket_inner(
                         root_io.set_attribute(
                             "error.timeout_seconds", str(_stage_timeout)
                         )
-                        root_io.set_attribute("error.subtype", "stall")
                         root_io.set_output(
                             {
                                 "error": (
@@ -600,6 +592,11 @@ async def _process_ticket_inner(
                         ),
                         trace_id,
                     )
+                    # Set stall subtype AFTER _handle_stage_error so it
+                    # survives the "timeout_inner" default written inside
+                    # that function for generic TimeoutError cases.
+                    if root_io is not None:
+                        root_io.set_attribute("error.subtype", "stall")
                     return
                 # --- all other stages: hard block ---
                 log.error(
