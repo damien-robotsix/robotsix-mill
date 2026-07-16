@@ -568,7 +568,7 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
     def fake_build_agent(*args, **kwargs):
         return FakeAgent()
 
-    def fake_run_agent(agent, make_run, *, what=""):
+    def fake_run_agent(agent, make_run, *, what="", **kwargs):
         return make_run(agent)
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", fake_build_fs_tools)

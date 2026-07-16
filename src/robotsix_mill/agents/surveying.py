@@ -38,4 +38,5 @@ run_survey_agent = make_agent_runner(
     max_gaps=MAX_GAPS,
     include_forge_url=True,
     dynamic_kwargs_fn=_survey_dynamic_kwargs,
+    fallback_level=3,
 )

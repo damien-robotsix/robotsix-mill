@@ -9,6 +9,7 @@ delegate to.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -17,6 +18,8 @@ from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
+
+logger = logging.getLogger(__name__)
 
 # Uniform verification gate appended to every periodic detector's prompt.
 # Modelled on the trace-review optimization gate (PR #1135) in
@@ -163,7 +166,7 @@ def _build_periodic_tools(
     return tools
 
 
-def run_periodic_agent(
+def run_periodic_agent(  # noqa: C901 — 7-step pipeline, fallback adds 1 branch
     *,
     settings: Settings,
     definition_name: str,
@@ -182,6 +185,7 @@ def run_periodic_agent(
     usage_limits: Any = None,
     definition_override: Any = None,
     max_errors: int = 0,
+    fallback_level: int | None = None,
 ) -> Any:
     """Run a periodic agent through the standard 7-step pipeline.
 
@@ -238,6 +242,14 @@ def run_periodic_agent(
         raises ``UsageLimitExceeded`` after *max_errors* tool-call
         errors — terminating runaway agent loops.  Defaults to 0
         (no error limit).
+    fallback_level:
+        When set, a second agent is built at this level and used as a
+        fallback when the primary agent's local retries are exhausted.
+        The fallback agent gets the same prompt, tools, and system
+        prompt as the primary but uses the model configured for the
+        given level.  Guards against persistent provider-side outages
+        (e.g. DeepSeek 503 on OpenRouter) by falling back to a
+        different provider.  Defaults to ``None`` (no fallback).
 
     Returns
     -------
@@ -328,6 +340,27 @@ def run_periodic_agent(
     )
 
     # ------------------------------------------------------------------
+    # Step 4½ — optionally build a fallback agent at a different level
+    # ------------------------------------------------------------------
+    fallback_agent = None
+    if fallback_level is not None:
+        try:
+            fallback_agent = build_agent_from_definition(
+                settings,
+                definition,
+                tools=tools,
+                system_prompt=system_prompt,
+                level=fallback_level,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to build fallback agent at level %d for %s",
+                fallback_level,
+                definition_name,
+                exc_info=True,
+            )
+
+    # ------------------------------------------------------------------
     # Step 5 — construct the prompt
     # ------------------------------------------------------------------
     from .prompt_blocks import section
@@ -366,13 +399,24 @@ def run_periodic_agent(
         _run_kwargs["usage_limits"] = usage_limits
 
     try:
+        # Capture a local reference for the closure (avoid late-binding).
+        _fb_agent = fallback_agent
+        _fallback_fn: Callable[[], Any] | None = None
+        if _fb_agent is not None:
+
+            def _fallback_fn() -> Any:
+                return _fb_agent.run_sync(prompt, **_run_kwargs)
+
         result = run_agent(
             agent,
             lambda h: h.run_sync(prompt, **_run_kwargs),
             what=definition_name,
+            fallback_fn=_fallback_fn,
         )
     finally:
         _safe_close(agent)
+        if fallback_agent is not None:
+            _safe_close(fallback_agent)
 
     # ------------------------------------------------------------------
     # Step 7 — clip and return
@@ -395,6 +439,7 @@ def make_agent_runner(
     include_write_file: bool = False,
     dynamic_kwargs_fn: Callable[[Settings], dict[str, Any]] | None = None,
     extra_kwargs: dict[str, Any] | None = None,
+    fallback_level: int | None = None,
 ) -> Callable[..., Any]:
     """Create a ``run_*_agent`` function with the standard periodic-agent
     signature.
@@ -447,6 +492,7 @@ def make_agent_runner(
                 include_workflow_caller_audit=include_workflow_caller_audit,
                 include_run_command=include_run_command,
                 include_write_file=include_write_file,
+                fallback_level=fallback_level,
                 **kwargs,
             ),
         )
