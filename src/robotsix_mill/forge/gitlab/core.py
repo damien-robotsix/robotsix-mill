@@ -56,6 +56,18 @@ def _map_merge_status(merge_status: str) -> bool | None:
     return None
 
 
+def _mr_status_dict(mr: dict[str, Any]) -> dict[str, Any]:
+    """Build the canonical 6-key status dict from a GitLab MR payload."""
+    return {
+        "merged": mr["state"] == "merged",
+        "state": mr["state"],
+        "url": mr["web_url"],
+        "mergeable": _map_merge_status(mr.get("merge_status", "")),
+        "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
+        "number": mr["iid"],
+    }
+
+
 class GitLabForge(
     GitLabForgeCIMixin,
     GitLabForgeCodeScanningMixin,
@@ -118,14 +130,7 @@ class GitLabForge(
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
             if mr is None:
                 return None
-            return {
-                "merged": mr["state"] == "merged",
-                "state": mr["state"],
-                "url": mr["web_url"],
-                "mergeable": _map_merge_status(mr.get("merge_status", "")),
-                "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
-                "number": mr["iid"],
-            }
+            return _mr_status_dict(mr)
         except Exception:
             return None
 
@@ -138,14 +143,7 @@ class GitLabForge(
             mr = self._get_mr_by_iid(project_path=project_path, mr_iid=int(m.group(1)))
             if mr is None:
                 return None
-            return {
-                "merged": mr["state"] == "merged",
-                "state": mr["state"],
-                "url": mr["web_url"],
-                "mergeable": _map_merge_status(mr.get("merge_status", "")),
-                "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
-                "number": mr["iid"],
-            }
+            return _mr_status_dict(mr)
         except Exception:
             return None
 
