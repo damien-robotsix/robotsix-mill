@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import functools
+import inspect
 import logging
 import threading
 import time
@@ -196,13 +197,31 @@ def _wrap_tools_with_progress(
     wrapped: list[Any] = []
     for t in tools:
         if callable(t):
+            # An async tool needs an async wrapper: a sync wrapper would
+            # return the bare coroutine, which pydantic-ai stores as the
+            # tool result and pydantic_core cannot serialize ("Unable to
+            # serialize unknown type: <class 'coroutine'>"), hard-blocking
+            # every implement run.
+            if inspect.iscoroutinefunction(t):
 
-            @functools.wraps(t)
-            def _progress_wrapper(*args: Any, _original: Any = t, **kwargs: Any) -> Any:
-                progress_event.set()
-                return _original(*args, **kwargs)
+                @functools.wraps(t)
+                async def _async_progress_wrapper(
+                    *args: Any, _original: Any = t, **kwargs: Any
+                ) -> Any:
+                    progress_event.set()
+                    return await _original(*args, **kwargs)
 
-            wrapped.append(_progress_wrapper)
+                wrapped.append(_async_progress_wrapper)
+            else:
+
+                @functools.wraps(t)
+                def _progress_wrapper(
+                    *args: Any, _original: Any = t, **kwargs: Any
+                ) -> Any:
+                    progress_event.set()
+                    return _original(*args, **kwargs)
+
+                wrapped.append(_progress_wrapper)
         else:
             wrapped.append(t)
     return wrapped

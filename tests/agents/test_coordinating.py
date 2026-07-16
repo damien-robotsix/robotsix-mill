@@ -1171,6 +1171,32 @@ class TestProgressWatchdog:
         assert called == [3]
         assert ev.is_set(), "progress_event must be set after tool call"
 
+    async def test_wrap_tools_keeps_async_tools_async(self):
+        """An async tool stays a coroutine function after wrapping and its
+        awaited result is the tool's return value, not a bare coroutine."""
+        import inspect
+        import threading
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_progress,
+        )
+
+        ev = threading.Event()
+        called = []
+
+        async def orig_tool(x):
+            called.append(x)
+            return x * 2
+
+        wrapped = _wrap_tools_with_progress([orig_tool], ev)
+        assert inspect.iscoroutinefunction(wrapped[0]), (
+            "async tools must remain coroutine functions after wrapping"
+        )
+
+        result = await wrapped[0](3)
+        assert result == 6
+        assert called == [3]
+        assert ev.is_set(), "progress_event must be set after tool call"
+
     def test_wrap_tools_skips_non_callables(self):
         """Non-callable entries pass through _wrap_tools_with_progress
         unchanged."""
