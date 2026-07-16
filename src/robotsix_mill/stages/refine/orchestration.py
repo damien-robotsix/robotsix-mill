@@ -558,11 +558,47 @@ class RefineAgentMixin:
                 triage_findings=triage_findings,
                 standards_context=standards_ctx,
             )
-        except RuntimeError as e:
+        except Exception as e:
+            from ...agents.retry import _is_claude_sdk_degenerate_result
             from ...runtime.transient_errors import reraise_if_transient
 
-            reraise_if_transient(e)
-            return Outcome(State.BLOCKED, str(e)), None
+            if _is_claude_sdk_degenerate_result(e):
+                log.info(
+                    "%s: Claude SDK degenerate success result — retrying with DeepSeek",
+                    ticket.id,
+                )
+                try:
+                    result = refining.run_refine_agent(
+                        settings=s,
+                        title=ticket.title,
+                        draft=draft,
+                        repo_dir=repo_dir,
+                        repo_config=ctx.repo_config,
+                        reviewer_comments=reviewer_comments,
+                        memory=memory_text,
+                        epic_context=epic_ctx,
+                        extra_roots=extra_roots,
+                        message_history=resume_history,
+                        board_id=memory_board_id,
+                        current_ticket_id=ticket.id,
+                        language_instructions=language_instructions,
+                        deployed_log_summary=deployed_log_summary,
+                        deployed_log_dir=deployed_log_dir,
+                        screenshot_paths=ws.list_screenshots(),
+                        include_explore=not _explore_simple and not _sendback,
+                        include_parallel_explore=not _explore_simple and not _sendback,
+                        refine_level=1,
+                        refine_model=None,
+                        request_limit_override=request_limit_override,
+                        triage_findings=triage_findings,
+                        standards_context=standards_ctx,
+                    )
+                except Exception as fallback_e:
+                    reraise_if_transient(fallback_e)
+                    return Outcome(State.BLOCKED, str(fallback_e)), None
+            else:
+                reraise_if_transient(e)
+                return Outcome(State.BLOCKED, str(e)), None
 
         _checkpoint.save_refine_checkpoint(ws, result)
 
