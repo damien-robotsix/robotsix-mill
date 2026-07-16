@@ -296,6 +296,25 @@ def _candidate_is_absent_mill_path(token: str, repo_dir: pathlib.Path) -> str | 
     return None
 
 
+def _parse_token_candidates(
+    title: str | None,
+    body: str | None,
+    repo_dir: pathlib.Path | None,
+) -> list[str]:
+    """Extract candidate path tokens from *title* + *body* via
+    :func:`paths_excluding_out_of_scope`.
+
+    Returns ``[]`` when *repo_dir* is ``None`` or token extraction fails.
+    """
+    if repo_dir is None:
+        return []
+    haystack = f"{title or ''}\n{body or ''}"
+    try:
+        return paths_excluding_out_of_scope(haystack)
+    except Exception:
+        return []
+
+
 def referenced_mill_paths_absent(
     title: str | None,
     body: str | None,
@@ -324,13 +343,10 @@ def referenced_mill_paths_absent(
     read-only and must never raise — token iteration is wrapped
     defensively with a broad ``except``.
     """
-    if repo_dir is None:
+    candidates = _parse_token_candidates(title, body, repo_dir)
+    if not candidates:
         return []
-    haystack = f"{title or ''}\n{body or ''}"
-    try:
-        candidates = paths_excluding_out_of_scope(haystack)
-    except Exception:
-        return []
+    assert repo_dir is not None  # _parse_token_candidates returns [] when repo_dir is None
     absent: list[str] = []
     for token in candidates:
         result = _candidate_is_absent_mill_path(token, repo_dir)
@@ -397,13 +413,10 @@ def has_unverifiable_cross_repo_refs(
     When *repo_dir* is ``None``, returns ``False`` (no filesystem
     available to check).  Pure / read-only, must never raise.
     """
-    if repo_dir is None:
+    candidates = _parse_token_candidates(title, body, repo_dir)
+    if not candidates:
         return False
-    haystack = f"{title or ''}\n{body or ''}"
-    try:
-        candidates = paths_excluding_out_of_scope(haystack)
-    except Exception:
-        return False
+    assert repo_dir is not None  # _parse_token_candidates returns [] when repo_dir is None
     for token in candidates:
         try:
             token_lower = token.lower()
@@ -454,13 +467,10 @@ def referenced_local_deliverable_paths(
     *repo_dir* is ``None`` → returns ``[]`` immediately.
     Pure / read-only, must never raise.
     """
-    if repo_dir is None:
+    candidates = _parse_token_candidates(title, body, repo_dir)
+    if not candidates:
         return []
-    haystack = f"{title or ''}\n{body or ''}"
-    try:
-        candidates = paths_excluding_out_of_scope(haystack)
-    except Exception:
-        return []
+    assert repo_dir is not None  # _parse_token_candidates returns [] when repo_dir is None
     result: list[str] = []
     for token in candidates:
         try:
