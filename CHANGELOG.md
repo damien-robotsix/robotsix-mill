@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `frontend_sync_periodic` and `frontend_sync_interval_seconds` Settings fields, matching the pattern of all other periodic passes so operators can disable or tune the frontend-sync pass.
 - Periodic agents (survey, audit, health, etc.) now support an optional
   `fallback_level` that builds a second agent at a different model tier,
   used as a fallback when the primary agent's local retries are exhausted.

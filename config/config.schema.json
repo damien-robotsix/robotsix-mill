@@ -1208,6 +1208,18 @@
           "title": "Freshness Gate Enabled",
           "type": "boolean"
         },
+        "frontend_sync_interval_seconds": {
+          "default": 86400,
+          "description": "Seconds between periodic frontend-sync passes.",
+          "title": "Frontend Sync Interval Seconds",
+          "type": "integer"
+        },
+        "frontend_sync_periodic": {
+          "default": true,
+          "description": "When true, run daily board frontend sync checks.",
+          "title": "Frontend Sync Periodic",
+          "type": "boolean"
+        },
         "github_api_url": {
           "default": "https://api.github.com",
           "description": "GitHub API base URL. Override for GitHub Enterprise.",

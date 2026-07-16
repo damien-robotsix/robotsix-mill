@@ -122,6 +122,8 @@ config_sync_periodic
 config_sync_interval_seconds
 env_doc_sync_periodic
 env_doc_sync_interval_seconds
+frontend_sync_periodic
+frontend_sync_interval_seconds
 member_sync_interval_seconds
 meta_periodic
 security_posture_periodic
