@@ -41,7 +41,7 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic audit passes (seconds). Only used when
     # MILL_AUDIT_PERIODIC=true.
     audit_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic audit passes.",
     )
 

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Rework the audit periodic agent into a **frontier orchestrator** (level 2) that decomposes the repository into 3–7 subparts, fans out sub-agents via `explore`/`parallel_explore`, and synthesises findings. Includes shared run memory protocol (`artifacts/audit-run-<run-id>/memory.md`), two-lens auditing per subpart (general health + standards conformance), and a weekly default schedule (7d interval). The orchestrator uses `write_file` to maintain the shared run memory artifact.
 - `resume_blocked` to READY now always clears the implement spawn counter, note or not — an explicit operator resume IS the human inspection the block asked for; previously a note-less resume left the counter at the limit and the ticket re-blocked instantly. The BLOCKED note for spawn-limit exhaustion now includes the tail of `artifacts/implement_summary.md` when present so the operator sees the genuine failure cause.
 - Extract `_mr_status_dict()` helper in GitLab forge adapter to eliminate duplicated MR status dict construction (clone pair #82).
 - Extract `_parse_token_candidates` helper in `draft_target.py` to eliminate duplicated preamble across `referenced_mill_paths_absent`, `has_unverifiable_cross_repo_refs`, and `referenced_local_deliverable_paths`.

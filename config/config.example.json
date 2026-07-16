@@ -14,7 +14,7 @@
     "api_host": "0.0.0.0",
     "api_port": 8077,
     "api_url": "http://127.0.0.1:8077",
-    "audit_interval_seconds": 86400,
+    "audit_interval_seconds": 604800,
     "audit_periodic": true,
     "audit_request_limit": 80,
     "auto_approve_enabled": false,

@@ -660,7 +660,7 @@
           "type": "string"
         },
         "audit_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic audit passes.",
           "title": "Audit Interval Seconds",
           "type": "integer"

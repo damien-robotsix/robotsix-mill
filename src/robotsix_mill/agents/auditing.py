@@ -38,5 +38,6 @@ run_audit_agent = make_agent_runner(
     include_jscpd=True,
     include_workflow_caller_audit=True,
     include_run_command=True,
+    include_write_file=True,
     dynamic_kwargs_fn=_audit_dynamic_kwargs,
 )
