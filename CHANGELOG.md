@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Extract `_mr_status_dict()` helper in GitLab forge adapter to eliminate duplicated MR status dict construction (clone pair #82).
+- Extract `_parse_token_candidates` helper in `draft_target.py` to eliminate duplicated preamble across `referenced_mill_paths_absent`, `has_unverifiable_cross_repo_refs`, and `referenced_local_deliverable_paths`.
 - Fix: Claude SDK degenerate success result (``is_error=True`` with ``subtype="success"``) no longer blocks refine. The refine runner now catches this self-contradictory envelope and treats it as a successful empty run instead of retrying indefinitely. The call-level and stage-level transient classifiers also exclude it so it does not burn retry budgets.
 - Fix dead lychee pre-commit hook: the `files` regex `^docs/\.md$` only matched a literal `.md` file under `docs/`, never firing on actual markdown files. Changed to `^docs/.*\.md$` so the hook runs on all documentation markdown files.
 - Runtime repo registration and deregistration now reconcile the worker
