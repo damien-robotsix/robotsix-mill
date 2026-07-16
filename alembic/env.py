@@ -34,11 +34,30 @@ from robotsix_mill.core import models  # noqa: F401
 # read ``context.config`` directly.
 
 # Set up Python logging from the config file section (optional).
-# Save the root logger's handlers before fileConfig replaces them
-# (alembic.ini [logger_root] sets handlers=console, which nukes any
-# pre-existing handlers such as pytest caplog).  Restore them after
-# so both the alembic console handler and any prior handlers coexist.
-if context.config.config_file_name is not None:
+# This runs once per process, inside an active Alembic context
+# (so ``context.config`` is valid).  We save the root logger's
+# handlers before ``fileConfig`` replaces them (alembic.ini
+# ``[logger_root]`` sets ``handlers=console``, which nukes any
+# pre-existing handlers such as pytest caplog) and restore them
+# after so both the alembic console handler and any prior handlers
+# coexist.
+_logging_configured: bool = False
+
+
+def _setup_alembic_logging() -> None:
+    """Configure logging from alembic.ini — runs once per process.
+
+    Must be called from inside ``run_migrations_online()`` or
+    ``run_migrations_offline()`` where ``context.config`` is valid.
+    """
+    global _logging_configured
+    if _logging_configured:
+        return
+    _logging_configured = True
+
+    if context.config.config_file_name is None:
+        return
+
     import logging
 
     _root = logging.getLogger()
@@ -57,6 +76,7 @@ if context.config.config_file_name is not None:
             if h not in _root.handlers:
                 _root.addHandler(h)
 
+
 # The metadata object that autogenerate compares against the live DB.
 target_metadata = SQLModel.metadata
 
@@ -67,6 +87,7 @@ def run_migrations_offline() -> None:
     Used by ``alembic upgrade --sql`` to produce a SQL script without
     connecting to a database.
     """
+    _setup_alembic_logging()
     url = context.config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -91,6 +112,7 @@ def run_migrations_online() -> None:
     """
     from sqlalchemy import create_engine
 
+    _setup_alembic_logging()
     connectable = create_engine(
         context.config.get_main_option("sqlalchemy.url"),
     )

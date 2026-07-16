@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,14 @@ _engines: dict[str, Engine] = {}
 # Tracks which boards have had init_db() called so we can lazily
 # materialize schema on first access for a fresh repo.
 _initialized: set[str] = set()
+
+# Per-board locks to serialize init_db calls within a single process.
+# Alembic maintains a global proxy registry that is not thread-safe;
+# concurrent init_db / _run_alembic_migrations calls (e.g. from
+# different tests inside the same xdist worker) race on that registry
+# and raise KeyError: 'config' in _remove_proxy when one call's
+# cleanup removes a proxy that another call still references.
+_init_locks: dict[str, threading.Lock] = {}
 
 # ---------------------------------------------------------------------------
 # Disk-full defence: retry-on-disk-full context manager
@@ -344,28 +353,30 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
 def init_db(settings: Settings, board_id: str) -> None:
     """Create tables (if missing) on the per-board DB and apply any
     pending Alembic migrations."""
-    # import models so SQLModel.metadata is populated before create_all
-    from . import models  # noqa: F401
+    lock = _init_locks.setdefault(board_id, threading.Lock())
+    with lock:
+        # import models so SQLModel.metadata is populated before create_all
+        from . import models  # noqa: F401
 
-    engine = get_engine(settings, board_id)
-    SQLModel.metadata.create_all(engine)
+        engine = get_engine(settings, board_id)
+        SQLModel.metadata.create_all(engine)
 
-    # Run Alembic migrations — stamps fresh databases as ``head``,
-    # applies pending migrations on existing ones.
-    _run_alembic_migrations(settings, board_id, engine)
+        # Run Alembic migrations — stamps fresh databases as ``head``,
+        # applies pending migrations on existing ones.
+        _run_alembic_migrations(settings, board_id, engine)
 
-    # Self-heal any legacy rows whose ``kind`` was persisted as the
-    # lowercase StrEnum *value* instead of the canonical uppercase
-    # member NAME.  Idempotent: upper(upper(x)) == upper(x).  The
-    # CaseTolerantEnum column on Ticket.kind already tolerates
-    # lowercase on read, so this is defense-in-depth that also
-    # normalizes the stored bytes.
-    try:
-        with engine.begin() as conn:
-            conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
-    except sqlite3.OperationalError:
-        pass
-    _initialized.add(board_id)
+        # Self-heal any legacy rows whose ``kind`` was persisted as the
+        # lowercase StrEnum *value* instead of the canonical uppercase
+        # member NAME.  Idempotent: upper(upper(x)) == upper(x).  The
+        # CaseTolerantEnum column on Ticket.kind already tolerates
+        # lowercase on read, so this is defense-in-depth that also
+        # normalizes the stored bytes.
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
+        except sqlite3.OperationalError:
+            pass
+        _initialized.add(board_id)
 
 
 def session(settings: Settings, board_id: str) -> Session:
@@ -390,7 +401,7 @@ def reset_engine() -> None:
     eventually trip an "unable to open database file" / too-many-open-
     files error on whichever later test happens to cross the limit.
     """
-    global _engines, _initialized
+    global _engines, _initialized, _init_locks
     for engine in _engines.values():
         try:
             engine.dispose()
@@ -398,6 +409,7 @@ def reset_engine() -> None:
             pass
     _engines = {}
     _initialized = set()
+    _init_locks = {}
 
 
 # ---------------------------------------------------------------------------
