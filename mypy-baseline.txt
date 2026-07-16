@@ -266,7 +266,6 @@ src/robotsix_mill/agents/reply_thread.py:0: error: Function is missing a return 
 src/robotsix_mill/agents/post_comment.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/agents/list_threads.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/agents/list_threads.py:0: error: "list?[robotsix_mill.core.models.Comment]" has no attribute "__iter__" (not iterable)  [attr-defined]
-src/robotsix_mill/agents/close_thread.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/agents/ask_user.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/agents/web_knowledge.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/robotsix_mill/agents/web_knowledge.py:0: error: Function is missing a return type annotation  [no-untyped-def]

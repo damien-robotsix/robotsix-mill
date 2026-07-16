@@ -5,6 +5,7 @@
   used as a fallback when the primary agent's local retries are exhausted.
   The survey agent now falls back to level 3 (Claude SDK) when level 1
   (DeepSeek via OpenRouter) persistently returns 503 errors.
+- Add `close_threads(comment_ids: list[int])` batch tool to close multiple review threads in a single API round-trip, replacing repeated `close_thread` calls in the refine sendback prompt to reduce Opus latency and cost.
 - Rework the audit periodic agent into a **frontier orchestrator** (level 2) that decomposes the repository into 3–7 subparts, fans out sub-agents via `explore`/`parallel_explore`, and synthesises findings. Includes shared run memory protocol (`artifacts/audit-run-<run-id>/memory.md`), two-lens auditing per subpart (general health + standards conformance), and a weekly default schedule (7d interval). The orchestrator uses `write_file` to maintain the shared run memory artifact. Register `robotsix-standards` as a managed repo in the example config so the audit workflow applies to it.
 - `resume_blocked` to READY now always clears the implement spawn counter, note or not — an explicit operator resume IS the human inspection the block asked for; previously a note-less resume left the counter at the limit and the ticket re-blocked instantly. The BLOCKED note for spawn-limit exhaustion now includes the tail of `artifacts/implement_summary.md` when present so the operator sees the genuine failure cause.
 - Extract `_mr_status_dict()` helper in GitLab forge adapter to eliminate duplicated MR status dict construction (clone pair #82).

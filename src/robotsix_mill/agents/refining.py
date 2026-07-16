@@ -629,6 +629,11 @@ Each comment in ``<reviewer_feedback>`` includes a thread id
   ``comment_id`` once it has returned success (``Thread closed ...``).
   If it returns ``Thread already closed ... is already resolved``,
   treat that as success — the thread is already resolved, do not retry.
+- ``close_threads(comment_ids=...)`` — close multiple threads in a
+  single call. Prefer this batch variant over repeated
+  ``close_thread`` calls when several threads are all addressed by
+  the same spec revision. Pass a list of comment ids; each id follows
+  the same idempotency rules as ``close_thread``.
 
 For each reviewer comment:
 - If your spec revision fully addresses it: call
