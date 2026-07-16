@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Fix infinite auto-approval loop: the mechanical draft fast-path now rejects empty/whitespace drafts, preventing tickets with empty descriptions from being auto-approved in a cycle (approve → refine produces empty body → fast-path approves again).
+- ci_fix: rebase onto main before scanning CI so stale branches produce a fresh run against current main; include branch HEAD SHA in the consecutive-identical failure fingerprint to prevent the re-block loop on already-resolved upstream failures; clear depends-on after spawning an out-of-scope dependency fix so the operator's resume-blocked is not silently parked by the unmet-dependency gate
 - Changed the Pydantic default for `api_host` from `"127.0.0.1"` to `"0.0.0.0"` to match the shipped `config/config.example.json`. Updated `docs/config/configuration.md` accordingly, closing a three-way config-drift gap.
 - Remove 11 backward-compat aliases (`AuditPassResult`, `AgentCheckPassResult`, etc.) from `periodic_runner.py`; all callers now import `PeriodicPassResult` directly.
 - Register five missing CLI subcommands (`state-sync`, `env-doc-sync`, `frontend-sync`, `security-posture`, `triage-boilerplate`) in argparse so they are reachable from the command line.

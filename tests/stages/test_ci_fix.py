@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
@@ -20,6 +22,47 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _write_counter,
 )
 from robotsix_mill.agents.ci_fixing import CiFixResult
+
+
+# ---------------------------------------------------------------------------
+# Module-level autouse fixture: prevent any test from accidentally running
+# real git fetch / push operations during the proactive-rebase step added
+# in _resolve_clone_and_status.  Without this, git fetch against a fake
+# forge URL hangs until the suite's 300s timeout, producing rc=124.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _mock_proactive_rebase_git_ops(monkeypatch):
+    """Stub every git operation in ci_fix that would touch the real network
+    so no test ever hangs waiting for a remote.
+
+    * ``try_rebase_onto`` → ``False`` (nothing to rebase)
+    * ``push`` → no-op
+    * ``reconcile_with_remote_pr`` → ``SYNCED`` (no foreign commits)
+    * ``post_push_check`` → ``PASS`` (push landed cleanly)
+
+    Tests that need different behaviour override the relevant stub with
+    their own ``monkeypatch.setattr`` — call-verification assertions (e.g.
+    counting calls) continue to work because ``monkeypatch`` is function-
+    scoped and later ``setattr`` calls simply overwrite the earlier stub.
+    """
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.reconcile_with_remote_pr",
+        lambda repo, remote_url, branch, token: git_ops.ReconcileResult.SYNCED,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
 
 
 def _ctx(tmp_path, **env):
@@ -904,8 +947,12 @@ def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):
     assert fix.source == SourceKind.CI_FIX_DEPENDENCY
 
     # Dependency wired both directions.
+    # depends_on is cleared after spawn_dependency_fix so the operator's
+    # resume-blocked is not blocked by the dependency check in
+    # _process_ticket_inner.  The unblocks relationship on the fix ticket
+    # is sufficient for auto-resume.
     orig = ctx.service.get(t.id)
-    assert json.loads(orig.depends_on) == [fix.id]
+    assert (orig.depends_on or "") == "" or json.loads(orig.depends_on) == []
     assert json.loads(fix.unblocks) == [t.id]
 
 
@@ -1425,7 +1472,7 @@ def test_identical_failure_blocks_after_max_consecutive(tmp_path, monkeypatch):
     repo_id = ctx.repo_config.board_id
     failing = [{"name": "lint", "summary": "err", "text": None, "annotations": []}]
     summary = _build_failing_summary(failing)
-    fp = _ci_failure_fingerprint(summary, repo_id)
+    fp = _ci_failure_fingerprint(summary, repo_id, head_sha="abc123")
     artifacts = ctx.service.workspace(t).artifacts_dir
     artifacts.mkdir(parents=True, exist_ok=True)
     (artifacts / "ci_failure_fingerprint.txt").write_text(fp, encoding="utf-8")
@@ -1498,13 +1545,13 @@ def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
     old_summary = _build_failing_summary(
         [{"name": "pytest", "summary": "old", "text": None, "annotations": []}]
     )
-    old_fp = _ci_failure_fingerprint(old_summary, repo_id)
+    old_fp = _ci_failure_fingerprint(old_summary, repo_id, head_sha="abc123")
     (artifacts / "ci_failure_fingerprint.txt").write_text(old_fp, encoding="utf-8")
 
     # Current failure is "lint" (different from "pytest" in the stored FP).
     failing = [{"name": "lint", "summary": "new err", "text": None, "annotations": []}]
     current_summary = _build_failing_summary(failing)
-    current_fp = _ci_failure_fingerprint(current_summary, repo_id)
+    current_fp = _ci_failure_fingerprint(current_summary, repo_id, head_sha="abc123")
     assert current_fp != old_fp  # fingerprints must differ for this test
 
     # Run the stage → fingerprint changed → counter resets, agent runs.
@@ -1759,17 +1806,20 @@ def test_transient_check_status_error_maps_to_pending(tmp_path, monkeypatch):
 
 
 def test_branch_own_failure_goes_straight_to_agent(tmp_path, monkeypatch):
-    """A branch-own CI failure runs the ci-fix agent on the FIRST cycle —
-    no proactive rebase precedes it (regression for the rebase-starvation
-    that left trivial branch-own lint/vulture fixes stuck; ticket c14c)."""
+    """A branch-own CI failure rebases onto main first, then runs the
+    ci-fix agent on the first cycle — the rebase ensures a fresh CI run
+    against current main so the failure fingerprint is never stale."""
     ctx = _gh(tmp_path)
     _failing_check_status(monkeypatch)
-    # Even when the branch is behind main, there must be no proactive rebase:
-    # the agent owns the fix and rebases itself only if it decides to.
     rebase_calls = []
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
         lambda *a, **k: rebase_calls.append(1) or True,
+    )
+    push_calls = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        lambda *a, **k: push_calls.append(1),
     )
 
     agent_calls = []
@@ -1790,7 +1840,8 @@ def test_branch_own_failure_goes_straight_to_agent(tmp_path, monkeypatch):
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert agent_calls == [1], "agent must run on the first cycle"
-    assert rebase_calls == [], "no proactive rebase before the agent"
+    assert rebase_calls == [1], "must rebase onto main before scanning CI"
+    assert push_calls == [1], "must push after rebase"
 
 
 # ---------------------------------------------------------------------------
