@@ -319,6 +319,10 @@
     "robotsix-chat-mobile": {
       "board_id": "robotsix-chat-mobile",
       "forge_remote_url": "https://github.com/damien-robotsix/robotsix-chat-mobile"
+    },
+    "robotsix-standards": {
+      "board_id": "robotsix-standards",
+      "forge_remote_url": "https://github.com/damien-robotsix/robotsix-standards"
     }
   }
 }
