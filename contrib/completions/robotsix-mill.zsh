@@ -270,7 +270,7 @@ _shtab_robotsix_mill_ticket_approve_defaults_added=0
 
 _shtab_robotsix_mill_ticket_list_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
-  "--state[]:state:(draft human_issue_approval ready documenting code_review deliverable human_mr_approval implement_complete waiting_auto_merge maintenance rebasing fixing_ci addressing_review done closed errored blocked asked answered awaiting_user_reply epic_open epic_closed)"
+  "--state[]:state:(draft human_issue_approval ready documenting code_review deliverable human_mr_approval implement_complete waiting_auto_merge rebasing fixing_ci addressing_review done closed errored blocked asked answered awaiting_user_reply epic_open epic_closed)"
   "--repo-id[filter tickets by repository (list all when omitted)]:repo_id:"
 )
 

@@ -341,7 +341,6 @@ src/robotsix_mill/stages/review.py:0: error: Function is missing a type annotati
 src/robotsix_mill/agents/spawn_subtask.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/agents/retrospecting.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/agents/retrospecting.py:0: error: Missing type arguments for generic type "list"  [type-arg]
-src/robotsix_mill/agents/maintenance.py:0: error: Returning Any from function declared to return "str"  [no-any-return]
 src/robotsix_mill/agents/expert_manager.py:0: error: Name "AgentHandle" is not defined  [name-defined]
 src/robotsix_mill/agents/expert_manager.py:0: error: Name "AgentHandle" is not defined  [name-defined]
 src/robotsix_mill/agents/expert_manager.py:0: error: Missing type arguments for generic type "Pattern"  [type-arg]
