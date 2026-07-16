@@ -465,6 +465,21 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between periodic env-doc-sync passes.",
     )
 
+    # --- frontend-sync agent (board frontend → ticket system sync) ---
+    # Opt-in periodic frontend-sync pass. Defaults to True (opt-out);
+    # set false to disable the daily board frontend sync pass.
+    frontend_sync_periodic: bool = Field(
+        default=True,
+        description="When true, run daily board frontend sync checks.",
+    )
+    # Seconds between periodic frontend-sync passes when
+    # MILL_FRONTEND_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60s in the worker loop.
+    frontend_sync_interval_seconds: int = Field(
+        default=86400,
+        description="Seconds between periodic frontend-sync passes.",
+    )
+
     # --- security-posture agent (continuous security-scanning coverage) ---
     # Opt-in periodic security-posture pass. Defaults to True (opt-out);
     # set false to disable the weekly security-scanning coverage audit.
