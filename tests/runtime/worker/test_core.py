@@ -2654,9 +2654,7 @@ async def test_implement_stage_timeout_uses_stage_timeout_seconds(
     )
 
 
-async def test_handle_stage_error_reaps_orphans_on_timeout(
-    ctx, service, monkeypatch
-):
+async def test_handle_stage_error_reaps_orphans_on_timeout(ctx, service, monkeypatch):
     """_handle_stage_error calls reap_orphan_sandboxes with max_age_seconds
     when the error is a TimeoutError."""
     from robotsix_mill.runtime.worker.processing import _handle_stage_error
@@ -2675,13 +2673,13 @@ async def test_handle_stage_error_reaps_orphans_on_timeout(
 
     t = service.create("orphan-reap")
     await _handle_stage_error(
-        t.id, ctx, "implement",
+        t.id,
+        ctx,
+        "implement",
         TimeoutError("test timeout"),
         "fake-trace-id",
     )
-    assert len(reap_calls) >= 1, (
-        "reap_orphan_sandboxes must be called on TimeoutError"
-    )
+    assert len(reap_calls) >= 1, "reap_orphan_sandboxes must be called on TimeoutError"
     assert reap_calls[0] == 600  # 2 * 300
 
 

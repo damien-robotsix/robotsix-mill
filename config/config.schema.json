@@ -554,6 +554,13 @@
           "title": "Mill Coordinator Timeout Seconds",
           "type": "integer"
         },
+        "MILL_IMPLEMENT_PASS_TIMEOUT": {
+          "default": 300,
+          "description": "Progress-reset watchdog (seconds) for the implement agent. The timer resets on every tool call (read_file, write_file, explore, etc.) \u2014 the agent is killed only after this many seconds of NO progress. 0 disables the watchdog and falls back to the flat coordinator_timeout_seconds cap.",
+          "minimum": 0,
+          "title": "Mill Implement Pass Timeout",
+          "type": "integer"
+        },
         "MILL_LINT_ON_EDIT": {
           "default": true,
           "description": "When true, pre-write Python syntax check on write_file/edit_file calls.",
@@ -596,6 +603,13 @@
           "description": "When true, retrospect files draft tickets for AGENT.md proposals.",
           "title": "Mill Retrospect Spawn Agented Proposals",
           "type": "boolean"
+        },
+        "MILL_SANDBOX_OP_TIMEOUT": {
+          "default": 300,
+          "description": "Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
+          "minimum": 0,
+          "title": "Mill Sandbox Op Timeout",
+          "type": "integer"
         },
         "MILL_SCOPE_TRIAGE_ENABLED": {
           "default": true,

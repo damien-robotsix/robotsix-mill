@@ -1347,12 +1347,16 @@ def test_sandbox_op_timeout_used_in_run(monkeypatch, tmp_path):
 
     # Must patch _repo_mount to avoid real docker mounts
     monkeypatch.setattr(
-        sandbox, "_repo_mount", lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"]
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
     )
 
     sandbox.run("echo hello", repo_dir=tmp_path, settings=s)
 
-    assert captured_timeout == 42, f"Expected sandbox_op_timeout=42, got {captured_timeout}"
+    assert captured_timeout == 42, (
+        f"Expected sandbox_op_timeout=42, got {captured_timeout}"
+    )
 
 
 def test_sandbox_op_timeout_zero_falls_back_to_command_timeout(monkeypatch, tmp_path):
@@ -1370,9 +1374,13 @@ def test_sandbox_op_timeout_zero_falls_back_to_command_timeout(monkeypatch, tmp_
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(
-        sandbox, "_repo_mount", lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"]
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
     )
 
     sandbox.run("echo hello", repo_dir=tmp_path, settings=s)
 
-    assert captured_timeout == 99, f"Expected command_timeout=99, got {captured_timeout}"
+    assert captured_timeout == 99, (
+        f"Expected command_timeout=99, got {captured_timeout}"
+    )

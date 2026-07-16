@@ -196,6 +196,7 @@ def _wrap_tools_with_progress(
     wrapped: list = []
     for t in tools:
         if callable(t):
+
             @functools.wraps(t)
             def _progress_wrapper(*args, _original=t, **kwargs):
                 progress_event.set()
