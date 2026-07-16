@@ -24,7 +24,7 @@ def test_happy_path_closes_thread(settings, monkeypatch):
         lambda self, comment_id, ticket_id=None: None,
     )
 
-    close_thread = make_close_thread_tool(settings, "test-agent")
+    close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=7)
 
     assert result == "Thread closed (id=7)."
@@ -40,7 +40,7 @@ def test_no_session_returns_error(settings, monkeypatch):
         lambda: None,
     )
 
-    close_thread = make_close_thread_tool(settings, "test-agent")
+    close_thread, _close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=7)
 
     assert "no active ticket session" in result.lower()
@@ -61,7 +61,7 @@ def test_service_valueerror_returns_error_string(settings, monkeypatch):
         ),
     )
 
-    close_thread = make_close_thread_tool(settings, "test-agent")
+    close_thread, _close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=7)
 
     assert result == "Error: only top-level threads can be closed"
@@ -81,7 +81,7 @@ def test_already_closed_is_idempotent_success(settings, monkeypatch):
         ),
     )
 
-    close_thread = make_close_thread_tool(settings, "test-agent")
+    close_thread, _close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=7)
 
     assert "already closed" in result
@@ -116,7 +116,120 @@ def test_service_keyerror_returns_error_string(settings, monkeypatch):
         ),
     )
 
-    close_thread = make_close_thread_tool(settings, "test-agent")
+    close_thread, _close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=99)
 
     assert result == "Error: 'comment 99 not found'"
+
+
+# ── close_threads batch variant ───────────────────────────────────────
+
+
+def test_close_threads_all_succeed(settings, monkeypatch):
+    """All threads close successfully — summary reports them as closed."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "ticket-42",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService.close_thread",
+        lambda self, comment_id, ticket_id=None: None,
+    )
+
+    _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    result = close_threads(comment_ids=[5, 12, 14])
+
+    assert "Closed 3 threads: ids 5, 12, 14." == result
+
+
+def test_close_threads_mixed_already_closed(settings, monkeypatch):
+    """Mix of fresh closes and already-closed: both reported separately."""
+    call_log: list[int] = []
+
+    def _mock_close(self, comment_id, ticket_id=None):
+        call_log.append(comment_id)
+        if comment_id == 5:
+            raise ValueError("thread already closed")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "ticket-42",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService.close_thread",
+        _mock_close,
+    )
+
+    _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    result = close_threads(comment_ids=[5, 12, 14])
+
+    assert "Closed 2 threads: ids 12, 14." in result
+    assert "Already closed (idempotent success): ids 5." in result
+
+
+def test_close_threads_mixed_errors(settings, monkeypatch):
+    """Some ids raise non-idempotent errors — reported in error section."""
+
+    def _mock_close(self, comment_id, ticket_id=None):
+        if comment_id == 99:
+            raise KeyError("comment 99 not found")
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "ticket-42",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService.close_thread",
+        _mock_close,
+    )
+
+    _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    result = close_threads(comment_ids=[12, 99])
+
+    assert "Closed 1 thread: ids 12." in result
+    assert "Errors: id 99:" in result
+
+
+def test_close_threads_empty_list(settings, monkeypatch):
+    """Empty input returns a descriptive message."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "ticket-42",
+    )
+    _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    result = close_threads(comment_ids=[])
+
+    assert "No comment ids provided." == result
+
+
+def test_close_threads_no_session(settings, monkeypatch):
+    """When there's no active session, returns error string."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: None,
+    )
+    _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    result = close_threads(comment_ids=[1, 2])
+
+    assert "no active ticket session" in result.lower()
+
+
+def test_close_threads_single_already_closed(settings, monkeypatch):
+    """Single already-closed id is reported correctly (singular 'Already closed')."""
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: "ticket-42",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.core.service.TicketService.close_thread",
+        lambda self, comment_id, ticket_id=None: (_ for _ in ()).throw(
+            ValueError("thread already closed")
+        ),
+    )
+
+    _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    result = close_threads(comment_ids=[5])
+
+    # No "Closed" message (empty list), just the already-closed note.
+    assert "Closed" not in result
+    assert "Already closed (idempotent success): ids 5." == result

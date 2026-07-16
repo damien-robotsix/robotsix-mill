@@ -490,7 +490,7 @@ def build_agent(  # noqa: C901
         # ticket after addressing review feedback.
         from .close_thread import make_close_thread_tool
 
-        all_tools.append(make_close_thread_tool(settings, agent_name=name))
+        all_tools.extend(make_close_thread_tool(settings, agent_name=name))
     if list_threads:
         # Tool so agents can discover valid thread IDs on the current
         # ticket before calling reply_to_thread / close_thread.
