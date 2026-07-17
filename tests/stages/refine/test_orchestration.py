@@ -1201,6 +1201,43 @@ def test_mechanical_draft_fast_path_falls_through_on_auto_approve_error(
     assert len(calls) == 1  # full refine agent WAS invoked
 
 
+def test_mechanical_draft_fast_path_falls_through_on_empty_draft(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """An empty/whitespace draft must NOT take the mechanical fast-path,
+    even when auto-approve is enabled.  Otherwise an empty draft gets
+    auto-approved → refine produces empty body → fast-path approves
+    again → infinite loop."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="periodic")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="   ")
+
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
+def test_mechanical_draft_fast_path_falls_through_on_empty_draft_user_source(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Same guard for user-source tickets — empty drafts never fast-path."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="user")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="")
+
+    assert not out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 1  # full refine agent WAS invoked
+
+
 # ===========================================================================
 # _no_change_path — external-fix claim re-verification branch
 # ===========================================================================
