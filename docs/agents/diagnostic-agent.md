@@ -80,8 +80,8 @@ record.
 
 | Variable | Default | Description |
 |---|---|---|
-| `MILL_DIAGNOSTIC_PERIODIC` | `false` | Enable the daily diagnostic pass |
-| `MILL_DIAGNOSTIC_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
+| `MILL_DIAGNOSTIC_PERIODIC` | `false` | Enable the weekly diagnostic pass |
+| `MILL_DIAGNOSTIC_INTERVAL_SECONDS` | `604800` | Seconds between automatic passes |
 | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the agent routes activity to; single-repo fallback when the monitored list is empty |
 | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos monitored each pass (JSON list); empty → falls back to `target_repo_id` |
 

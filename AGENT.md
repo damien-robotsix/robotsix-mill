@@ -137,8 +137,8 @@ Pydantic validator on the production `AgentDefinition` model. See
 
 ## Meta-agent
 
-The **meta-agent** is a cross-repo survey agent that runs **daily**
-(86400 s interval) as a single global pass — not per-repo. It clones
+The **meta-agent** is a cross-repo survey agent that runs **weekly**
+(604800 s interval) as a single global pass — not per-repo. It clones
 all registered repositories, compares their codebases, and files:
 
 - **Extraction proposals** (shared abstractions warranting a standalone
@@ -196,9 +196,9 @@ pre-commit hook and CI step, both running
 
 ### `module_curator` periodic agent
 
-A read-only agent runs daily (configurable via
+A read-only agent runs weekly (configurable via
 `module_curator_interval_seconds` in `config/config.example.yaml`,
-default 86400 s). It **never** moves files, deletes files, or edits
+default 604800 s). It **never** moves files, deletes files, or edits
 `docs/modules.yaml`. Its tools are `explore`, `read_file`, `list_dir`,
 and `run_command`.
 

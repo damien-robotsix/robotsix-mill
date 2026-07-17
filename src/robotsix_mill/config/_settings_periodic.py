@@ -117,7 +117,7 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic test-gap passes (seconds). Only used
     # when MILL_TEST_GAP_PERIODIC=true.
     test_gap_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic test-gap passes.",
     )
 
@@ -133,7 +133,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_AGENT_CHECK_PERIODIC=true. Minimum enforced at 60s in the
     # worker loop.
     agent_check_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic agent-check passes.",
     )
 
@@ -149,7 +149,7 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic health passes (seconds). Only used when
     # MILL_HEALTH_PERIODIC=true.
     health_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic health passes.",
     )
 
@@ -205,7 +205,7 @@ class _PeriodicSettings(BaseModel):
         description="Maximum web_search calls per survey run.",
     )
     # Opt-in periodic survey pass. Defaults to True (on by default —
-    # "default yes"). Flip to false to disable the automatic daily
+    # "default yes"). Flip to false to disable the automatic weekly
     # cadence while still allowing on-demand POST /survey and
     # board-button triggers.
     survey_periodic: bool = Field(
@@ -216,7 +216,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_SURVEY_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     survey_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic survey passes.",
     )
 
@@ -232,7 +232,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_BC_CHECK_PERIODIC=true. Minimum enforced at 60s in the
     # worker loop.
     bc_check_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic bc-check passes.",
     )
 
@@ -248,7 +248,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_MODULE_CURATOR_PERIODIC=true. Minimum enforced at 60s in
     # the worker loop.
     module_curator_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic module-curator passes.",
     )
     # Request budget for the module-curator run.  The agent walks the
@@ -397,7 +397,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_COMPLETENESS_CHECK_PERIODIC=true. Minimum enforced at 60s
     # in the worker loop.
     completeness_check_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic completeness-check passes.",
     )
     completeness_check_request_limit: int = Field(
@@ -446,7 +446,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_STATE_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     state_sync_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic state-sync passes.",
     )
 
@@ -461,7 +461,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_ENV_DOC_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     env_doc_sync_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic env-doc-sync passes.",
     )
 
@@ -476,7 +476,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_FRONTEND_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     frontend_sync_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic frontend-sync passes.",
     )
 
@@ -572,7 +572,7 @@ class _PeriodicSettings(BaseModel):
     # Seconds between automatic meta-agent passes. Default 86400 (1 day).
     # Minimum enforced at 60 s in the worker loop.
     meta_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic meta-agent passes.",
     )
 
@@ -589,7 +589,7 @@ class _PeriodicSettings(BaseModel):
     )
     # Seconds between automatic run-health passes. Default 86400 (1 day).
     run_health_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic run-health passes.",
     )
     # Lookback window (hours) over which run registries are scanned.
@@ -637,7 +637,7 @@ class _PeriodicSettings(BaseModel):
     )
     # Seconds between automatic diagnostic passes. Default 86400 (1 day).
     diagnostic_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic diagnostic passes.",
     )
     # Board the diagnostic agent routes board/trace activity to.
@@ -734,6 +734,6 @@ class _PeriodicSettings(BaseModel):
     # Interval between repo-description-sync passes (seconds). Default 86400
     # (daily). Enforced minimum 3600s (1 hour) in the worker.
     repo_description_sync_interval_seconds: int = Field(
-        default=86400,
+        default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between repo-description-sync passes.",
     )

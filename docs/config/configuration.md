@@ -711,7 +711,7 @@ YAML path.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `periodic.run_health.enabled` | `MILL_RUN_HEALTH_PERIODIC` | `true` | Enable periodic run-health passes |
-| `periodic.run_health.interval_seconds` | `MILL_RUN_HEALTH_INTERVAL_SECONDS` | `86400` | Seconds between run-health passes |
+| `periodic.run_health.interval_seconds` | `MILL_RUN_HEALTH_INTERVAL_SECONDS` | `604800` | Seconds between run-health passes |
 | `periodic.run_health.window_hours` | `MILL_RUN_HEALTH_WINDOW_HOURS` | `168` | Lookback window (hours) over which run registries are scanned |
 | `periodic.run_health.target_repo_id` | `MILL_RUN_HEALTH_TARGET_REPO_ID` | `robotsix-mill` | Board the run-health agent files its drafts to |
 | `periodic.run_health.memory_path` | `MILL_RUN_HEALTH_MEMORY_PATH` | `None` | Override path for the run-health memory ledger; defaults to `<data_dir>/<board>/run_health_memory.md` |
@@ -737,7 +737,7 @@ these agent-specific settings are available:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_META_PERIODIC` | `false` | Master switch for the daily meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global daily schedule. |
+| `MILL_META_PERIODIC` | `false` | Master switch for the weekly meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global weekly schedule. |
 | `MILL_META_INTERVAL_SECONDS` | `86400` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
 
 #### sandbox_reaper
@@ -837,16 +837,16 @@ and as environment variables:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
-| `MILL_BC_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between bc-check passes |
+| `MILL_BC_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between bc-check passes |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
-| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between completeness-check passes |
+| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_STATE_SYNC_PERIODIC` | `true` | Enable periodic state-sync passes |
 | `MILL_STATE_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between state-sync passes |
 | `MILL_ENV_DOC_SYNC_PERIODIC` | `true` | Enable periodic env-doc-sync passes |
 | `MILL_ENV_DOC_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between env-doc-sync passes |
 | `MILL_REPO_DESCRIPTION_SYNC_PERIODIC` | `true` | Enable periodic repo-description-sync passes |
-| `MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between repo-description-sync passes |
+| `MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between repo-description-sync passes |
 | `MILL_SECURITY_POSTURE_PERIODIC` | `true` | Enable periodic security-posture passes |
 | `MILL_SECURITY_POSTURE_INTERVAL_SECONDS` | `604800` | Seconds between security-posture passes |
 | `MILL_SECURITY_POSTURE_REQUEST_LIMIT` | `80` | Per-call request cap for the security-posture agent |

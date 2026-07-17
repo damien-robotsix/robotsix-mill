@@ -304,7 +304,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 |---|---|---|---|
 | `MILL_AGENT_CHECK_MODEL` | `periodic.agent_check.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_AGENT_CHECK_PERIODIC` | `periodic.agent_check.enabled` | `false` | |
-| `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `periodic.agent_check.interval_seconds` | `86400` | min 60 enforced in worker |
+| `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `periodic.agent_check.interval_seconds` | `604800` | min 60 enforced in worker |
 
 #### periodic.survey
 
@@ -312,7 +312,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 |---|---|---|---|
 | `MILL_SURVEY_MODEL` | `periodic.survey.model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
 | `MILL_SURVEY_PERIODIC` | `periodic.survey.enabled` | `true` | On by default (unusual) |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `periodic.survey.interval_seconds` | `86400` | min 60 enforced in worker |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `periodic.survey.interval_seconds` | `604800` | min 60 enforced in worker |
 
 #### periodic.ci_monitor
 

@@ -81,7 +81,7 @@ def test_env_doc_sync_config_defaults():
     """Env-doc-sync config has correct defaults."""
     s = Settings()
     assert s.env_doc_sync_periodic is True
-    assert s.env_doc_sync_interval_seconds == 86400
+    assert s.env_doc_sync_interval_seconds == 604800
 
 
 def test_env_doc_sync_periodic_config():
