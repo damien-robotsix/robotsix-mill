@@ -212,19 +212,7 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 repo_config=None,
                 max_traces=settings.langfuse_cleanup_max_traces,
             )
-        elif cmd == "member-sync":
-            resolved = _resolve_repo_config(args, cmd)
-            if isinstance(resolved, int):
-                return resolved
-            rc, session_id = resolved
-            result = func(session_id=session_id, repo_config=rc)
-        elif cmd == "trace-review":
-            resolved = _resolve_repo_config(args, cmd)
-            if isinstance(resolved, int):
-                return resolved
-            rc, session_id = resolved
-            result = func(session_id=session_id, repo_config=rc)
-        elif cmd == "roadmap-sync":
+        elif cmd in ("member-sync", "trace-review", "roadmap-sync"):
             resolved = _resolve_repo_config(args, cmd)
             if isinstance(resolved, int):
                 return resolved
@@ -480,29 +468,20 @@ def _resolve_repo_config(
     from ..config import get_repos_config
 
     session_id = make_session_id(cmd)
-    repos = get_repos_config()
-    repo_id: str | None = getattr(args, "repo_id", None)
-
+    repo_id = _resolve_repo_id(args)
     if repo_id is None:
-        if len(repos.repos) == 1:
-            rc = next(iter(repos.repos.values()))
-        else:
-            print(
-                f"{cmd}: --repo-id is required (multiple repos "
-                f"configured). Known repos: {sorted(repos.repos.keys())}",
-                file=sys.stderr,
-            )
-            return 2
-    elif repo_id not in repos.repos:
+        return 2
+
+    repos = get_repos_config()
+    if repo_id not in repos.repos:
         print(
             f"{cmd}: unknown repo '{repo_id}'. "
             f"Known repos: {sorted(repos.repos.keys())}",
             file=sys.stderr,
         )
         return 2
-    else:
-        rc = repos.repos[repo_id]
 
+    rc = repos.repos[repo_id]
     return rc, session_id
 
 

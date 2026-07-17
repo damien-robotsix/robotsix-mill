@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Deduplicate ``_resolve_repo_config`` by delegating repo-id resolution to
+  ``_resolve_repo_id``; collapse three identical ``elif`` arms in
+  ``_run_and_print`` into a single ``elif cmd in (...)`` block.
 - Change all 14 built-in periodic workflow defaults from daily (86400 s) to weekly (604800 s): `agent_check`, `bc_check`, `completeness_check`, `diagnostic`, `env_doc_sync`, `frontend_sync`, `health`, `meta`, `module_curator`, `repo_description_sync`, `run_health`, `state_sync`, `survey`, `test_gap`. Per-repo overrides via `.robotsix-mill/periodic/<name>.yaml` (`interval:` field) are unchanged — repos that need faster cadence can override back to `1d`.
 - Sandbox test timeouts (rc=124) now produce a deterministic ENV-ERROR diagnosis
   instead of invoking the expensive LLM distiller, letting the fix-loop circuit
