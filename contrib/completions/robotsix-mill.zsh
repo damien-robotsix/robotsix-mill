@@ -12,8 +12,10 @@ _shtab_robotsix_mill_commands() {
     "config-sync:"
     "copy-paste:"
     "diagnostic:"
+    "env-doc-sync:"
     "epic:"
     "forge-parity:"
+    "frontend-sync:"
     "health:"
     "inquire:"
     "langfuse-cleanup:"
@@ -23,12 +25,15 @@ _shtab_robotsix_mill_commands() {
     "repos:"
     "roadmap-sync:"
     "run-health:"
+    "security-posture:"
     "serve:"
+    "state-sync:"
     "survey:"
     "test-gap:"
     "ticket:"
     "trace-health:"
     "trace-review:"
+    "triage-boilerplate:"
     "verify:"
   )
   _describe 'robotsix-mill commands' _commands
@@ -123,6 +128,14 @@ _shtab_robotsix_mill_diagnostic_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_diagnostic_defaults_added=0
 
+_shtab_robotsix_mill_env_doc_sync_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_env_doc_sync_defaults_added=0
+
 _shtab_robotsix_mill_epic_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
 )
@@ -147,6 +160,14 @@ _shtab_robotsix_mill_forge_parity_options=(
 
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_forge_parity_defaults_added=0
+
+_shtab_robotsix_mill_frontend_sync_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_frontend_sync_defaults_added=0
 
 _shtab_robotsix_mill_health_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -229,6 +250,14 @@ _shtab_robotsix_mill_run_health_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_run_health_defaults_added=0
 
+_shtab_robotsix_mill_security_posture_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_security_posture_defaults_added=0
+
 _shtab_robotsix_mill_serve_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--repo-id[repository identifier to serve a single repo\; omit to serve all repos from config\/repos.yaml]:repo_id:"
@@ -236,6 +265,14 @@ _shtab_robotsix_mill_serve_options=(
 
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_serve_defaults_added=0
+
+_shtab_robotsix_mill_state_sync_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_state_sync_defaults_added=0
 
 _shtab_robotsix_mill_survey_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -322,6 +359,14 @@ _shtab_robotsix_mill_trace_review_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_trace_review_defaults_added=0
 
+_shtab_robotsix_mill_triage_boilerplate_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_triage_boilerplate_defaults_added=0
+
 _shtab_robotsix_mill_verify_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--ticket-id[verify a single ticket\'s chain (default\: all tickets)]:ticket_id:"
@@ -356,8 +401,10 @@ _shtab_robotsix_mill() {
         config-sync) _arguments -C -s $_shtab_robotsix_mill_config_sync_options ;;
         copy-paste) _arguments -C -s $_shtab_robotsix_mill_copy_paste_options ;;
         diagnostic) _arguments -C -s $_shtab_robotsix_mill_diagnostic_options ;;
+        env-doc-sync) _arguments -C -s $_shtab_robotsix_mill_env_doc_sync_options ;;
         epic) _shtab_robotsix_mill_epic ;;
         forge-parity) _arguments -C -s $_shtab_robotsix_mill_forge_parity_options ;;
+        frontend-sync) _arguments -C -s $_shtab_robotsix_mill_frontend_sync_options ;;
         health) _arguments -C -s $_shtab_robotsix_mill_health_options ;;
         inquire) _arguments -C -s $_shtab_robotsix_mill_inquire_options ;;
         langfuse-cleanup) _arguments -C -s $_shtab_robotsix_mill_langfuse_cleanup_options ;;
@@ -367,12 +414,15 @@ _shtab_robotsix_mill() {
         repos) _shtab_robotsix_mill_repos ;;
         roadmap-sync) _arguments -C -s $_shtab_robotsix_mill_roadmap_sync_options ;;
         run-health) _arguments -C -s $_shtab_robotsix_mill_run_health_options ;;
+        security-posture) _arguments -C -s $_shtab_robotsix_mill_security_posture_options ;;
         serve) _arguments -C -s $_shtab_robotsix_mill_serve_options ;;
+        state-sync) _arguments -C -s $_shtab_robotsix_mill_state_sync_options ;;
         survey) _arguments -C -s $_shtab_robotsix_mill_survey_options ;;
         test-gap) _arguments -C -s $_shtab_robotsix_mill_test_gap_options ;;
         ticket) _shtab_robotsix_mill_ticket ;;
         trace-health) _arguments -C -s $_shtab_robotsix_mill_trace_health_options ;;
         trace-review) _arguments -C -s $_shtab_robotsix_mill_trace_review_options ;;
+        triage-boilerplate) _arguments -C -s $_shtab_robotsix_mill_triage_boilerplate_options ;;
         verify) _arguments -C -s $_shtab_robotsix_mill_verify_options ;;
       esac
   esac
