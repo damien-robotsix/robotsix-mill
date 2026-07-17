@@ -36,28 +36,11 @@ class PeriodicPassResult:
     """Result of running a periodic pass.
 
     Replaces the 12 formerly-identical ``*PassResult`` dataclasses.
-    Each historical name is retained as a backward-compat alias below.
     """
 
     updated_memory: str
     drafts_created: list[dict]
     session_id: str = ""
-
-
-# Backward-compat aliases — tests and stubs import these by name.
-AuditPassResult = PeriodicPassResult
-AgentCheckPassResult = PeriodicPassResult
-BcCheckPassResult = PeriodicPassResult
-SurveyPassResult = PeriodicPassResult
-CompletenessCheckPassResult = PeriodicPassResult
-CopyPastePassResult = PeriodicPassResult
-ForgeParityPassResult = PeriodicPassResult
-ConfigSyncPassResult = PeriodicPassResult
-HealthPassResult = PeriodicPassResult
-ModuleCuratorPassResult = PeriodicPassResult
-TestGapPassResult = PeriodicPassResult
-# Prevent pytest from collecting ``TestGapPassResult`` as a test class.
-TestGapPassResult.__test__ = False  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +131,7 @@ class PeriodicPassConfig:
     """Clone workspace subdirectory, e.g. ``"audit_workspace"``."""
 
     result_dataclass: type[PeriodicPassResult]
-    """The typed result dataclass (e.g. ``AuditPassResult``).
+    """The typed result dataclass (e.g. ``PeriodicPassResult``).
     Must have fields ``updated_memory: str``, ``drafts_created: list[dict]``,
     ``session_id: str``."""
 

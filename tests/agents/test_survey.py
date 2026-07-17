@@ -7,7 +7,7 @@ import yaml
 
 from robotsix_mill.agents import surveying as survey_agent
 from robotsix_mill.runners.periodic_runner import run_survey_pass
-from robotsix_mill.runners.periodic_runner import SurveyPassResult
+from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -272,7 +272,7 @@ def test_run_survey_pass_missing_memory_file(tmp_path, monkeypatch):
 
 
 def test_survey_pass_result_structure(tmp_path, monkeypatch):
-    """SurveyPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -289,7 +289,7 @@ def test_survey_pass_result_structure(tmp_path, monkeypatch):
     )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert isinstance(result, SurveyPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
@@ -425,7 +425,7 @@ def test_survey_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return SurveyPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
         )
@@ -446,7 +446,7 @@ def test_survey_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return SurveyPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Adopt pattern X"}],
         )
@@ -469,7 +469,7 @@ def test_survey_cli_no_drafts(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return SurveyPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )
@@ -511,7 +511,7 @@ class TestSurveyRunnerTraceBudgetWiring:
         """run_survey_pass resets both web_fetch and web_search trace
         budgets with the configured settings values before delegating
         to run_periodic_pass."""
-        from robotsix_mill.runners.periodic_runner import SurveyPassResult
+        from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
         settings = _make_settings(
             tmp_path,
@@ -541,7 +541,7 @@ class TestSurveyRunnerTraceBudgetWiring:
 
         # Stub run_periodic_pass.
         def fake_run_periodic(session_id, repo_config, *, config, settings):
-            return SurveyPassResult(
+            return PeriodicPassResult(
                 updated_memory="ok", drafts_created=[], session_id=session_id
             )
 
@@ -564,7 +564,7 @@ class TestSurveyRunnerTraceBudgetWiring:
     def test_run_survey_pass_respects_custom_budget_values(self, tmp_path, monkeypatch):
         """When settings have different budget values, those are passed
         to the reset functions."""
-        from robotsix_mill.runners.periodic_runner import SurveyPassResult
+        from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
         settings = _make_settings(
             tmp_path,
@@ -591,7 +591,7 @@ class TestSurveyRunnerTraceBudgetWiring:
         monkeypatch.setattr(sr, "Settings", lambda: settings)
 
         def fake_run_periodic(session_id, repo_config, *, config, settings):
-            return SurveyPassResult(
+            return PeriodicPassResult(
                 updated_memory="ok", drafts_created=[], session_id=session_id
             )
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from robotsix_mill.agents import agent_check
 from robotsix_mill.runners.periodic_runner import (
     run_agent_check_pass,
-    AgentCheckPassResult,
+    PeriodicPassResult,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -308,7 +308,7 @@ def test_run_agent_check_pass_missing_memory_file(tmp_path, monkeypatch):
 
 
 def test_agent_check_pass_result_structure(tmp_path, monkeypatch):
-    """AgentCheckPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -327,7 +327,7 @@ def test_agent_check_pass_result_structure(tmp_path, monkeypatch):
     result = run_agent_check_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     )
-    assert isinstance(result, AgentCheckPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
 
@@ -368,7 +368,7 @@ def test_agent_check_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return AgentCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
@@ -389,7 +389,7 @@ def test_agent_check_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return AgentCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
@@ -412,7 +412,7 @@ def test_agent_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return AgentCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )

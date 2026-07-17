@@ -468,7 +468,7 @@ def test_run_periodic_pass_resolves_max_drafts_fn(tmp_path, monkeypatch):
 def test_run_periodic_pass_returns_result_dataclass(tmp_path, monkeypatch):
     """run_periodic_pass returns the correct result dataclass with
     expected fields populated."""
-    from robotsix_mill.runners.periodic_runner import AuditPassResult
+    from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
     settings = _make_settings(tmp_path)
 
@@ -487,7 +487,7 @@ def test_run_periodic_pass_returns_result_dataclass(tmp_path, monkeypatch):
         settings=settings,
     )
 
-    assert isinstance(result, AuditPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "test-mem"
     assert result.drafts_created == [{"id": "1", "title": "t"}]
     assert result.session_id == "test-sid"
