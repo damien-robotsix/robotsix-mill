@@ -324,6 +324,69 @@ def _spec_is_degenerate(spec: str | None) -> bool:
     return any(p in norm for p in _PLACEHOLDER_SPEC_PHRASES)
 
 
+def _draft_is_near_empty(draft: str, min_chars: int = 50) -> bool:
+    """True when *draft* is empty or trivially short after stripping.
+
+    Strips markdown headings (``## …``, ``# …``), code fences and their
+    content, and whitespace.  If the remaining text is under *min_chars*,
+    the draft is considered near-empty and the fast-path must not fire.
+
+    The default threshold of 50 characters catches completely empty
+    descriptions (the 968f scenario) while allowing short-but-legitimate
+    mechanical drafts (e.g. "Rename X to Y in file Z") to still fast-path.
+    """
+    if not draft or not draft.strip():
+        return True
+    # Strip markdown heading lines (## ..., # ...)
+    stripped = re.sub(r"^\s*#{1,6}\s+.*$", "", draft, flags=re.MULTILINE)
+    # Strip fenced code blocks and their content
+    stripped = re.sub(r"```[^\n]*\n.*?```", "", stripped, flags=re.DOTALL)
+    stripped = stripped.strip()
+    return len(stripped) < min_chars
+
+
+def _fast_path_scope_checks(draft: str) -> dict[str, str | bool]:
+    """Run pre-auto-approve scope checks on *draft*.
+
+    Returns a dict mapping check names to string results (``"pass"`` /
+    ``"fail: <reason>"``) suitable for a triage note.
+
+    Checks:
+
+    - **empty/near-empty**: passes when the draft has ≥ 200 chars after
+      stripping headings and code fences.
+    - **file count**: passes when the draft mentions ≤ 7 distinct
+      backtick-enclosed file paths (a heuristic for single-implement-run
+      scope).  More than 7 signals a multi-file change that likely
+      exceeds one PR.
+    """
+    checks: dict[str, str | bool] = {}
+    # --- emptiness ---
+    if _draft_is_near_empty(draft):
+        checks["empty"] = "fail: draft is empty or < 200 chars after stripping"
+    else:
+        checks["empty"] = "pass"
+
+    # --- file-count scope ---
+    path_count = _count_distinct_backtick_paths(draft)
+    if path_count > 7:
+        checks["scope"] = (
+            f"fail: {path_count} distinct file paths — "
+            "likely exceeds single-implement-run scope"
+        )
+    else:
+        checks["scope"] = f"pass ({path_count} files)"
+    return checks
+
+
+_PATH_RE = re.compile(r"`([^`]*/[^`]*\.[a-zA-Z]{1,10})`")
+
+
+def _count_distinct_backtick_paths(text: str) -> int:
+    """Return the number of distinct backtick-enclosed file paths in *text*."""
+    return len(set(_PATH_RE.findall(text)))
+
+
 # --- external-fix claim detection (live re-verification gate) ---------------
 # A refine ``no_change_needed`` verdict that asserts the work was *already
 # shipped elsewhere* must NOT be trusted on its word: the 2026-06-09 incident
@@ -793,7 +856,7 @@ def _resolve_next_state(
     if not ctx.settings.require_approval:
         return State.READY, None
     if _spec_is_degenerate(spec):
-        return State.HUMAN_ISSUE_APPROVAL, None
+        return State.BLOCKED, "refine produced no spec"
     if not ctx.settings.auto_approve_enabled:
         return State.HUMAN_ISSUE_APPROVAL, None
     # Deterministic auto-approve for sources whose drafts are

@@ -1162,7 +1162,7 @@ def test_mechanical_draft_fast_path_short_circuits_on_needs_approval(
         ctx,
         t,
         tmp_path,
-        draft="Add a new public endpoint with authentication.",
+        draft="Add a new public endpoint with authentication and rate limiting.",
     )
 
     # Fast-path short-circuit fires even on NEEDS_APPROVAL.
@@ -3376,3 +3376,167 @@ def test_delta_reuse_triage_refine_not_called(ctx_factory, monkeypatch, tmp_path
     # call from _run_refine_agent is also skipped due to delta-reuse guard.
     assert triage_refine_called == []
     assert out.note.startswith("refined")
+
+
+# ===========================================================================
+# Mechanical fast-path — empty / near-empty + scope guards
+# ===========================================================================
+
+
+def test_fast_path_blocked_by_empty_draft(ctx_factory, monkeypatch, tmp_path):
+    """A ticket with an empty description must never reach auto-approve
+    via the mechanical fast-path.  The fast-path is blocked and the full
+    refine agent runs instead."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="")
+
+    # Fast-path was blocked — full refine agent ran.
+    assert len(calls) == 1
+    # The outcome note does NOT mention "mechanical draft fast-path".
+    assert "mechanical draft fast-path" not in out.note
+
+
+def test_fast_path_blocked_by_near_empty_draft(ctx_factory, monkeypatch, tmp_path):
+    """A ticket with a trivially short (< 50 chars) description must not
+    reach auto-approve via the mechanical fast-path."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="Fix bug")
+
+    # Full refine agent ran instead of fast-path.
+    assert len(calls) == 1
+    assert "mechanical draft fast-path" not in out.note
+
+
+def test_fast_path_blocked_by_oversized_scope(ctx_factory, monkeypatch, tmp_path):
+    """A ticket whose draft mentions > 7 distinct file paths must not be
+    auto-approved by the fast-path — route to full refine instead."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+
+    paths = " ".join(f"`src/module_{i}.py`" for i in range(10))
+    draft = (
+        f"Multi-file refactor touching many modules: {paths}. "
+        "This is a large-scale change with enough descriptive content "
+        "to pass the near-empty threshold comfortably."
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    # Fast-path was blocked — full refine agent ran.
+    assert len(calls) == 1
+    assert "mechanical draft fast-path" not in out.note
+
+
+def test_well_formed_mechanical_draft_still_fast_paths(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Existing well-formed mechanical drafts still fast-path as before
+    (no regression on the happy path)."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="test_gap")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(
+            decision="REFINE", reason="needs minor wording polish"
+        ),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="APPROVE",
+            reason="Mechanical rename — no design decisions",
+        ),
+    )
+
+    draft = (
+        "Rename `old_func` to `new_func` in `src/foo/bar.py`. "
+        "This is a straightforward mechanical rename with no behavioural "
+        "change — the old function is deprecated and all call sites have "
+        "already been updated."
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "APPROVE" in out.note
+    assert calls == []  # full refine agent never invoked
+    ws = ctx.service.workspace(t)
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+    file_map = json.loads(
+        (ws.artifacts_dir / "file_map.json").read_text(encoding="utf-8")
+    )
+    assert {"file": "src/foo/bar.py", "note": "from draft"} in file_map
+
+
+def test_fast_path_checks_recorded_in_triage_note(ctx_factory, monkeypatch, tmp_path):
+    """The triage note records which fast-path checks ran and their outcomes."""
+    ctx = ctx_factory(auto_approve_enabled=True)
+    t = _ticket(ctx, source="audit")  # deterministic source
+    calls = _spy_refine(monkeypatch)
+
+    draft = (
+        "Edit `src/foo.py` and `tests/test_bar.py` for an audit finding "
+        "regarding dead code removal in the widget module."
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert "deterministic source" in out.note
+    assert "checks:" in out.note
+    assert "empty: pass" in out.note
+    assert "scope: pass" in out.note
+    assert calls == []  # full refine agent never invoked
+
+
+def test_refine_produced_no_spec_routes_to_blocked(ctx_factory, monkeypatch, tmp_path):
+    """When the refine output is degenerate (empty/placeholder), the ticket
+    must go to BLOCKED with a 'refine produced no spec' note, not to the
+    approval gate."""
+    ctx = ctx_factory(require_approval=True, auto_approve_enabled=True)
+    t = _ticket(ctx, source="user")
+
+    # Use a near-empty draft so the mechanical fast-path is blocked,
+    # forcing the full refine agent to run and produce a (degenerate) spec.
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=lambda **kw: RefineResult(spec_markdown="(see spec above)"),
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    # Mock triage_auto_approve (called from _resolve_next_state after refine).
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: refining.AutoApproveResult(
+            decision="APPROVE", reason="mechanical"
+        ),
+    )
+    # Mock standards fetch to avoid real HTTP call.
+    monkeypatch.setattr(
+        refine_module.orchestration,
+        "fetch_standards_context",
+        lambda s: "",
+    )
+
+    out = _run_agent(ctx, t, tmp_path, draft="")  # empty draft blocks fast-path
+
+    assert out.next_state is State.BLOCKED
+    assert "no usable spec" in out.note

@@ -819,7 +819,7 @@ def test_triage_skip_mechanical_fast_path_deterministic_source(ctx_factory, tmp_
     ctx = ctx_factory(auto_approve_enabled=True)
     t = _ticket(ctx, source="audit")
     ws = ctx.service.workspace(t)
-    draft = "Edit `src/foo.py` for this audit finding."
+    draft = "Edit `src/foo.py` and `tests/test_foo.py` for this audit finding regarding dead code removal."
 
     with patch.object(
         _triage.refining,
@@ -869,7 +869,7 @@ def test_triage_skip_mechanical_fast_path_auto_approve_approve(ctx_factory, tmp_
                         result = _triage.triage_skip(
                             ctx,
                             t,
-                            "## Problem\n\nSome issue\n\n## Scope\n\nFix it",
+                            "## Problem\n\nSome issue with the widget loader that needs fixing.\n\n## Scope\n\nFix it by adding error handling.\n\n## Acceptance\n\nTests pass.",
                             None,
                             None,
                             t.title,
@@ -915,7 +915,7 @@ def test_triage_skip_mechanical_fast_path_auto_approve_needs_approval(
                         result = _triage.triage_skip(
                             ctx,
                             t,
-                            "## Problem\n\nSecurity issue\n\n## Scope\n\nFix auth",
+                            "## Problem\n\nSecurity issue in the authentication module.\n\n## Scope\n\nFix the auth token validation to reject expired tokens.\n\n## Acceptance\n\nExpired tokens return 401.",
                             None,
                             None,
                             t.title,
