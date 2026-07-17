@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Changed the Pydantic default for `api_host` from `"127.0.0.1"` to `"0.0.0.0"` to match the shipped `config/config.example.json`. Updated `docs/config/configuration.md` accordingly, closing a three-way config-drift gap.
 - Remove 11 backward-compat aliases (`AuditPassResult`, `AgentCheckPassResult`, etc.) from `periodic_runner.py`; all callers now import `PeriodicPassResult` directly.
 - Deduplicate ``_resolve_repo_config`` by delegating repo-id resolution to
   ``_resolve_repo_id``; collapse three identical ``elif`` arms in

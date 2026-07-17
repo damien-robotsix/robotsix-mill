@@ -547,7 +547,7 @@ class _CoreSettings(BaseModel):
 
     # --- management-plane service ---
     api_host: str = Field(
-        default="127.0.0.1",
+        default="0.0.0.0",  # noqa: S104  # nosec B104 — config default, not a bind call; management API is localhost-restricted
         description="Management API listen host.",
     )
     api_port: int = Field(

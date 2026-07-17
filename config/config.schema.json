@@ -655,7 +655,7 @@
           "type": "boolean"
         },
         "api_host": {
-          "default": "127.0.0.1",
+          "default": "0.0.0.0",
           "description": "Management API listen host.",
           "title": "Api Host",
           "type": "string"

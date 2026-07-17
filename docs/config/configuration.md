@@ -465,7 +465,7 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | `service.data_dir` | `MILL_DATA_DIR` | `.data` | Data directory for DB, workspaces, and memory ledgers |
 | `service.default_repo_id` | `MILL_DEFAULT_REPO_ID` | `""` | Backward-compatibility fallback: board_id assigned to tickets created before the mandatory-board_id migration. Not a substitute for configuring repos.yaml. |
-| `service.api_host` | `MILL_API_HOST` | `127.0.0.1` | FastAPI listen address |
+| `service.api_host` | `MILL_API_HOST` | `0.0.0.0` | FastAPI listen address |
 | `service.api_port` | `MILL_API_PORT` | `8077` | FastAPI listen port |
 | `service.api_url` | `MILL_API_URL` | `http://127.0.0.1:8077` | Base URL the CLI client uses to reach the API |
 | `service.shutdown_grace_seconds` | `MILL_SHUTDOWN_GRACE_SECONDS` | `1800` | Maximum seconds to wait for in-flight periodic-agent passes to finish before tearing the worker down on container shutdown. 0 = wait forever. |
