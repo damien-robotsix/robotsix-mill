@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add module-level docstring to `src/robotsix_mill/dev_tooling/__init__.py`.
 - Fix infinite auto-approval loop: the mechanical draft fast-path now rejects empty/whitespace drafts, preventing tickets with empty descriptions from being auto-approved in a cycle (approve → refine produces empty body → fast-path approves again).
 - Changed the Pydantic default for `api_host` from `"127.0.0.1"` to `"0.0.0.0"` to match the shipped `config/config.example.json`. Updated `docs/config/configuration.md` accordingly, closing a three-way config-drift gap.
 - Remove 11 backward-compat aliases (`AuditPassResult`, `AgentCheckPassResult`, etc.) from `periodic_runner.py`; all callers now import `PeriodicPassResult` directly.
