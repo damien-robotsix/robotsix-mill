@@ -733,8 +733,6 @@ class TestBuildPeriodicToolsExtraRoots:
     def test_explore_tools_receive_extra_roots(self, tmp_path):
         """When extra_roots is a non-empty list, make_explore_tool and
         make_parallel_explore_tool are called with extra_roots."""
-        from pathlib import Path
-
         from robotsix_mill.agents.periodic_base import _build_periodic_tools
 
         settings = _make_settings(tmp_path)
