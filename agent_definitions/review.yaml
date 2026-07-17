@@ -83,6 +83,11 @@ system_prompt: |
     bullet than its own, flag this as a CHANGELOG corruption that must
     be repaired.
 
+    Do NOT flag wording, overlap, or labeling nits in CHANGELOG entries
+    — those are merge-time editorial concerns handled by the merge
+    stage's ``_lint_changelog``.  Only flag structural corruption
+    (broken bullets, mis-indented continuation lines).
+
   Do NOT:
   - Critique the *idea* or re-litigate the ticket spec — audit the
     *implementation*.
