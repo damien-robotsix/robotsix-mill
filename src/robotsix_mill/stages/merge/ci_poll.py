@@ -468,6 +468,17 @@ class CIPollMixin(_MergeStageBase):
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""
         from robotsix_mill.stages import merge as _facade
 
+        # --- CHANGELOG lint (advisory, non-blocking) -------------------
+        repo_dir = _facade._workspace_repo_dir(ctx, ticket)
+        warnings = _facade._changelog_warnings_for_ticket(repo_dir, ticket.id)
+        for w in warnings:
+            log.warning(
+                "%s: CHANGELOG %s: %s",
+                ticket.id,
+                w.get("severity", "warn"),
+                w.get("message", ""),
+            )
+
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         pr, early = self._check_pr_baseline(

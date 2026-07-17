@@ -884,7 +884,20 @@
      '<div class="mi-row">' + ciHtml + '</div>' +
      '<div class="mi-row">' + mgHtml + '</div>' +
      filesHtml +
+     renderChangelogWarnings(mi.changelog_warnings) +
      '</div>';
+  }
+
+  function renderChangelogWarnings(warnings) {
+    if (!warnings || !warnings.length) return "";
+    var html = '<div class="mi-changelog">';
+    for (var i = 0; i < warnings.length; i++) {
+      var w = warnings[i];
+      var cls = w.severity === "info" ? "mi-changelog-info" : "mi-changelog-warn";
+      html += '<div class="' + cls + '">' + esc(w.message) + '</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function renderThreads(cs) {

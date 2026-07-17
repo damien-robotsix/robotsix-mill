@@ -960,6 +960,35 @@ pre {
 .agents-menu button:disabled { color: #6b7280; cursor: wait; }
 
 /* ============================================================
+   CHANGELOG lint advisories (merge info drawer)
+   ============================================================ */
+.mi-changelog {
+  margin-top: 10px;
+  border-top: 1px solid #2a2e37;
+  padding-top: 8px;
+}
+.mi-changelog-warn {
+  font-size: 11px;
+  color: #fbbf24;
+  background: #2a2010;
+  border-left: 3px solid #f59e0b;
+  padding: 4px 8px;
+  margin: 4px 0;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+.mi-changelog-info {
+  font-size: 11px;
+  color: #93c5fd;
+  background: #1a2438;
+  border-left: 3px solid #3b82f6;
+  padding: 4px 8px;
+  margin: 4px 0;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+/* ============================================================
    Merge info (in drawer)
    ============================================================ */
 .mi-section {

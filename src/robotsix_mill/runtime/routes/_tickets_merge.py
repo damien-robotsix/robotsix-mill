@@ -6,11 +6,16 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
 from ...config.repos import target_branch_for
 from ...core.models import TicketRead
+from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
-from ...stages.merge import _verify_merge_ancestor
+from ...stages.merge import (
+    _verify_merge_ancestor,
+    _changelog_warnings_for_ticket,
+)
 from ..deps import (
     enrich_ticket_read,
     get_service,
@@ -24,6 +29,15 @@ from ._tickets import _repo_config_for_ticket
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Tickets"])
+
+
+def _workspace_repo_dir_from_svc(svc, ticket) -> str | None:
+    """Return the ticket's workspace clone dir, or None if missing."""
+    ws = svc.workspace(ticket)
+    repo = ws.dir / "repo"
+    if not (repo / ".git").exists():
+        return None
+    return str(repo)
 
 
 @router.post("/tickets/{ticket_id}/merge-now", response_model=TicketRead)
@@ -218,11 +232,21 @@ def get_merge_info(
         except Exception:
             pass  # best-effort: file list is optional
 
+    # --- changelog warnings ----------------------------------------------
+    changelog_warnings: list[dict] = []
+    if forge is not None:
+        try:
+            repo_dir = _workspace_repo_dir_from_svc(svc, ticket)
+            changelog_warnings = _changelog_warnings_for_ticket(repo_dir, ticket_id)
+        except Exception:
+            pass  # best-effort: changelog is advisory
+
     return {
         "mergeable": mergeable,
         "ci_conclusion": ci_conclusion,
         "ci_failing": ci_failing,
         "files": files,
+        "changelog_warnings": changelog_warnings,
     }
 
 
@@ -247,9 +271,9 @@ def get_merge_reason(
 def get_merge_status(
     ticket_id: str,
     request: Request,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-) -> dict:
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
     """Return live merge-readiness for a ticket's PR.
 
     Called by the ticket drawer before rendering the Merge button so
@@ -276,10 +300,29 @@ def get_merge_status(
             "ci_conclusion": None,
             "can_merge": False,
             "reason": f"ticket is not in a merge-relevant state (currently {ticket.state.value})",
+            "changelog_warnings": [],
         }
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     forge = get_forge(settings, repo_config=repo_config)
+
+    # ── CHANGELOG warnings (advisory, non-blocking) ──────────────
+    changelog_warnings: list[dict[str, str]] = []
+    try:
+        repo_dir = _workspace_repo_dir_from_svc(svc, ticket)
+        changelog_warnings = _changelog_warnings_for_ticket(repo_dir, ticket_id)
+    except Exception:  # CHANGELOG warnings are advisory only — silently skip
+        pass
+
+    # ── Branch guard ─────────────────────────────────────────────
+    if ticket.branch is None:
+        return {
+            "mergeable": None,
+            "ci_conclusion": None,
+            "can_merge": False,
+            "reason": "Ticket has no branch",
+            "changelog_warnings": changelog_warnings,
+        }
 
     # ── PR mergeability ──────────────────────────────────────────
     mergeable: bool | None = None
@@ -293,6 +336,7 @@ def get_merge_status(
             "ci_conclusion": None,
             "can_merge": True,
             "reason": "",
+            "changelog_warnings": changelog_warnings,
         }
 
     if pr is None:
@@ -301,6 +345,7 @@ def get_merge_status(
             "ci_conclusion": None,
             "can_merge": False,
             "reason": "No PR found for this branch",
+            "changelog_warnings": changelog_warnings,
         }
     mergeable = pr.get("mergeable")
 
@@ -320,6 +365,7 @@ def get_merge_status(
             "ci_conclusion": ci_conclusion,
             "can_merge": False,
             "reason": "PR has conflicts — rebase needed",
+            "changelog_warnings": changelog_warnings,
         }
     if ci_conclusion == "failure":
         return {
@@ -327,6 +373,7 @@ def get_merge_status(
             "ci_conclusion": ci_conclusion,
             "can_merge": False,
             "reason": "CI checks are failing",
+            "changelog_warnings": changelog_warnings,
         }
     if ci_conclusion == "pending":
         return {
@@ -334,6 +381,7 @@ def get_merge_status(
             "ci_conclusion": ci_conclusion,
             "can_merge": False,
             "reason": "CI checks are still running",
+            "changelog_warnings": changelog_warnings,
         }
 
     return {
@@ -341,4 +389,5 @@ def get_merge_status(
         "ci_conclusion": ci_conclusion,
         "can_merge": True,
         "reason": "",
+        "changelog_warnings": changelog_warnings,
     }

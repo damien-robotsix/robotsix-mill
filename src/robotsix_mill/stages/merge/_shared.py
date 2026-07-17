@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re as _re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -477,3 +478,172 @@ def _is_pr_check_run(run: dict[str, Any]) -> bool:
         # Branch push (head_branch set) = PR check; tag push (head_branch null) = release.
         return bool((run.get("head_branch") or "").strip())
     return False  # release, schedule, workflow_dispatch, …
+
+
+# ---------------------------------------------------------------------------
+# CHANGELOG lint (merge-stage advisory, not a gate)
+# ---------------------------------------------------------------------------
+
+
+def _lint_changelog(repo_dir: str | None) -> list[dict[str, str]]:
+    """Parse ``CHANGELOG.md`` and return advisory warnings.
+
+    Returns a list of dicts, each with ``severity`` (``"warn"`` or
+    ``"info"``) and ``message`` (human-readable).  Checks:
+
+    * Empty bullets (bare ``"- "`` with no body).  Uses ``.lstrip()``
+      (not ``.strip()``) so a bullet whose body is only whitespace is
+      detected — ``.strip()`` would collapse it to ``"-"`` and miss it.
+    * Overlapping entries — two distinct bullets that share a code
+      identifier (underscore-containing token ≥ 8 chars, no dots).
+
+    Returns an empty list when *repo_dir* is ``None`` or ``CHANGELOG.md``
+    does not exist.
+    """
+    if repo_dir is None:
+        return []
+
+    changelog_path = Path(repo_dir) / "CHANGELOG.md"
+    if not changelog_path.is_file():
+        return []
+
+    content = changelog_path.read_text(encoding="utf-8")
+
+    # -- locate the ## 0.0.0 (unreleased) section -----------------------
+    unreleased_start = content.find("## 0.0.0 (unreleased)")
+    if unreleased_start < 0:
+        return []
+
+    # Find the next ## section header (not ### sub-headings)
+    rest = content[unreleased_start + len("## 0.0.0 (unreleased)") :]
+    next_section = _re.search(r"\n## [^#]", rest)
+    if next_section is not None:
+        rest = rest[: next_section.start()]
+    unreleased_lines = rest.split("\n")
+
+    # -- parse bullets --------------------------------------------------
+    bullets: list[tuple[int, str, list[str]]] = []
+    # Each entry: (line_number, body_text, continuation_lines)
+    current: tuple[int, str, list[str]] | None = None
+
+    for line in unreleased_lines:
+        if line.startswith("- "):
+            if current is not None:
+                bullets.append(current)
+            body = line[2:]  # everything after "- "
+            # Use the original line's position relative to the file for
+            # diagnostics — approximate by counting from the section header.
+            # We don't have exact line numbers; we'll use the bullet index.
+            current = (len(bullets) + 1, body, [])
+        elif line.startswith("  ") and current is not None:
+            # Continuation line — must be indented with exactly 2 spaces.
+            # Only capture if it's a true continuation (not an empty or
+            # whitespace-only line that could be inter-bullet spacing).
+            stripped = line[2:]
+            if (
+                stripped or current[2]
+            ):  # keep empty continuation lines if preceded by other continuations
+                current[2].append(stripped)
+        elif line == "":
+            # Blank line resets continuation tracking.
+            pass
+
+    if current is not None:
+        bullets.append(current)
+
+    warnings: list[dict[str, str]] = []
+
+    # -- detect empty bullets -------------------------------------------
+    # Use .lstrip() so a bullet whose body is only whitespace
+    # ("- " or "-  ") is caught — .strip() would collapse "- " to "-"
+    # and miss it.
+    for idx, body, cont_lines in bullets:
+        if not body.lstrip() and not cont_lines:
+            warnings.append(
+                {
+                    "severity": "warn",
+                    "message": f"CHANGELOG.md: empty bullet at position {idx} "
+                    f'(bare "- " with no body)',
+                }
+            )
+
+    # -- detect overlapping entries (shared code identifiers) -----------
+    # A "code identifier" is an underscore-containing token, ≥ 8 chars,
+    # no dots — this catches function/class/variable names like
+    # ``implement_pass_timeout``, ``sandbox_op_timeout``, etc. while
+    # ignoring plain English phrases and short acronyms.
+    #
+    # Two-pass: first collect which bullets mention each identifier,
+    # then only flag identifiers that appear in EXACTLY two bullets.
+    # Identifiers appearing in 3+ bullets are common terms (e.g. the
+    # package name ``robotsix_mill``, generic parameter names like
+    # ``ticket_id``) — not editorial overlaps.
+    _IDENT_RE = _re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]{7,})(?![.\w])")
+
+    # identifier → list of bullet indices
+    ident_bullets: dict[str, list[int]] = {}
+    for idx, body, cont_lines in bullets:
+        full_text = body + " " + " ".join(cont_lines)
+        idents = {m.group(1) for m in _IDENT_RE.finditer(full_text)}
+        for ident in idents:
+            if "_" not in ident:
+                continue  # plain English word, not a code identifier
+            ident_bullets.setdefault(ident, []).append(idx)
+
+    # Flag each identifier that appears in exactly two bullets.
+    # Collect all identifiers per pair so the warning lists every shared term.
+    pair_idents: dict[tuple[int, int], list[str]] = {}
+    for ident, idxs in ident_bullets.items():
+        if len(idxs) == 2:
+            pair = (min(idxs), max(idxs))
+            pair_idents.setdefault(pair, []).append(ident)
+
+    for (a, b), shared in sorted(pair_idents.items()):
+        id_list = "`, `".join(shared)
+        warnings.append(
+            {
+                "severity": "warn",
+                "message": (
+                    f"CHANGELOG.md entries at positions {a} and "
+                    f"{b} both mention `{id_list}` — possible overlap"
+                ),
+            }
+        )
+
+    return warnings
+
+
+def _changelog_warnings_for_ticket(
+    repo_dir: str | None, ticket_id: str
+) -> list[dict[str, str]]:
+    """Filter ``_lint_changelog`` warnings for *ticket_id* and add a
+    missing-entry advisory when the ticket has no CHANGELOG bullet.
+
+    Returns a list of dicts with ``severity`` (``"warn"`` or ``"info"``)
+    and ``message``.  The ``"info"`` missing-entry advisory is only
+    appended when ``CHANGELOG.md`` exists and the ticket id string does
+    not appear anywhere in the ``## 0.0.0 (unreleased)`` section.
+    """
+    all_warnings = _lint_changelog(repo_dir)
+
+    if repo_dir is not None:
+        changelog_path = Path(repo_dir) / "CHANGELOG.md"
+        if changelog_path.is_file():
+            content = changelog_path.read_text(encoding="utf-8")
+            unreleased_start = content.find("## 0.0.0 (unreleased)")
+            if unreleased_start >= 0:
+                rest = content[unreleased_start:]
+                next_section = _re.search(r"\n## [^#]", rest)
+                unreleased = rest[: next_section.start()] if next_section else rest
+                if ticket_id not in unreleased:
+                    all_warnings.append(
+                        {
+                            "severity": "info",
+                            "message": (
+                                f"No CHANGELOG entry found for ticket "
+                                f"{ticket_id} — consider adding one"
+                            ),
+                        }
+                    )
+
+    return all_warnings
