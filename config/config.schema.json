@@ -637,7 +637,7 @@
           "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic agent-check passes.",
           "title": "Agent Check Interval Seconds",
           "type": "integer"
@@ -718,7 +718,7 @@
           "type": "boolean"
         },
         "bc_check_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic bc-check passes.",
           "title": "Bc Check Interval Seconds",
           "type": "integer"
@@ -875,7 +875,7 @@
           "type": "boolean"
         },
         "completeness_check_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic completeness-check passes.",
           "title": "Completeness Check Interval Seconds",
           "type": "integer"
@@ -1103,7 +1103,7 @@
           "type": "boolean"
         },
         "diagnostic_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between automatic diagnostic passes.",
           "title": "Diagnostic Interval Seconds",
           "type": "integer"
@@ -1167,7 +1167,7 @@
           "type": "boolean"
         },
         "env_doc_sync_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic env-doc-sync passes.",
           "title": "Env Doc Sync Interval Seconds",
           "type": "integer"
@@ -1223,7 +1223,7 @@
           "type": "boolean"
         },
         "frontend_sync_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic frontend-sync passes.",
           "title": "Frontend Sync Interval Seconds",
           "type": "integer"
@@ -1249,7 +1249,7 @@
           "type": "string"
         },
         "health_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic health passes.",
           "title": "Health Interval Seconds",
           "type": "integer"
@@ -1443,7 +1443,7 @@
           "type": "integer"
         },
         "meta_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between automatic meta-agent passes.",
           "title": "Meta Interval Seconds",
           "type": "integer"
@@ -1455,7 +1455,7 @@
           "type": "boolean"
         },
         "module_curator_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic module-curator passes.",
           "title": "Module Curator Interval Seconds",
           "type": "integer"
@@ -1798,7 +1798,7 @@
           "type": "integer"
         },
         "repo_description_sync_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between repo-description-sync passes.",
           "title": "Repo Description Sync Interval Seconds",
           "type": "integer"
@@ -1937,7 +1937,7 @@
           "type": "boolean"
         },
         "run_health_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between automatic run-health passes.",
           "title": "Run Health Interval Seconds",
           "type": "integer"
@@ -2141,7 +2141,7 @@
           "type": "integer"
         },
         "state_sync_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic state-sync passes.",
           "title": "State Sync Interval Seconds",
           "type": "integer"
@@ -2159,7 +2159,7 @@
           "type": "integer"
         },
         "survey_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between automatic survey passes.",
           "title": "Survey Interval Seconds",
           "type": "integer"
@@ -2204,7 +2204,7 @@
           "type": "string"
         },
         "test_gap_interval_seconds": {
-          "default": 86400,
+          "default": 604800,
           "description": "Seconds between periodic test-gap passes.",
           "title": "Test Gap Interval Seconds",
           "type": "integer"
