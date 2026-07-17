@@ -603,9 +603,17 @@ def triage_skip(
             )
 
         # --- mechanical draft fast-path ---
-        if s.auto_approve_enabled and (
-            ticket.source != "ci"
-            or (ticket.source == "ci" and _draft_has_complete_spec(draft))
+        # Empty/whitespace drafts cannot be auto-approved — they'd
+        # create an infinite loop (approve → refine produces empty
+        # body → fast-path approves again).  Fall through to the
+        # full refine agent instead.
+        if (
+            s.auto_approve_enabled
+            and draft.strip()
+            and (
+                ticket.source != "ci"
+                or (ticket.source == "ci" and _draft_has_complete_spec(draft))
+            )
         ):
             try:
                 if ticket.source in _AUTO_APPROVE_SOURCES:
