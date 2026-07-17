@@ -91,6 +91,11 @@
   * Degrades gracefully — when the fetch fails, the spec is marked "standards context unavailable"
   * Acceptance criterion: a commitizen/scm-release spec is flagged as conflicting with the
     documented towncrier + shared auto-release pattern
+- Centralise the terminal/resolved state set on the `State` enum:
+  add `DONE_OR_CLOSED` frozenset to `src/robotsix_mill/core/states.py`
+  and replace five ad-hoc raw-string checks in `report_issue.py`,
+  `retrospect.py`, `diagnostic_check_errors.py`, `periodic_base.py`,
+  and `poll_loops.py`.
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
 - Merged hooks module into stages: moved ``run_prepare_hook`` to
   ``src/robotsix_mill/stages/hooks.py``, moved tests to

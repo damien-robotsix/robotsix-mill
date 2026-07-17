@@ -19,6 +19,7 @@ from typing import Any
 
 from ..core.models import SourceKind, TicketKind
 from ..core.service import TicketService
+from ..core.states import DONE_OR_CLOSED
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,
@@ -27,10 +28,6 @@ from .diagnostic_checks import (
 from .diagnostic_data import query_run_errors
 
 log = logging.getLogger(__name__)
-
-# Tickets in these states are "done with"; an identical title may be
-# filed again (mirrors ``report_issue._DONE_WITH``).
-_DONE_WITH = {"closed", "done"}
 
 
 def _signature(run: dict[str, Any]) -> str:
@@ -139,7 +136,7 @@ class ErroredRunsCheck:
         """Return True if a non-terminal ticket with *title* already exists."""
         norm = title.strip().casefold()
         for t in service.list():
-            if t.title.strip().casefold() == norm and t.state.value not in _DONE_WITH:
+            if t.title.strip().casefold() == norm and t.state not in DONE_OR_CLOSED:
                 return True
         return False
 
