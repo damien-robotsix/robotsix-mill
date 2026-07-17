@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Deduplicate ``_resolve_repo_config`` by delegating repo-id resolution to
+  ``_resolve_repo_id``; collapse three identical ``elif`` arms in
+  ``_run_and_print`` into a single ``elif cmd in (...)`` block.
 - Change all 14 built-in periodic workflow defaults from daily (86400 s) to weekly (604800 s): `agent_check`, `bc_check`, `completeness_check`, `diagnostic`, `env_doc_sync`, `frontend_sync`, `health`, `meta`, `module_curator`, `repo_description_sync`, `run_health`, `state_sync`, `survey`, `test_gap`. Per-repo overrides via `.robotsix-mill/periodic/<name>.yaml` (`interval:` field) are unchanged — repos that need faster cadence can override back to `1d`.
 - **Trace-count circuit breaker: per-ticket baseline on resume.** When an operator resumes a ticket blocked by the trace-count circuit breaker, the current trace count is captured as a baseline (`pre_redraft_trace_count`) and the ticket is not re-blocked for pre-resume traces. Only new traces accumulated after resume count toward the `max_traces_per_ticket` cap, so the guard stays effective without requiring a fleet-wide limit change.
 - Adopt Hatchling's path-based versioning: `__init__.py` is now the single source of truth for the package version, with `pyproject.toml` reading it via `[tool.hatch.version] path` instead of a duplicate `version` string.
