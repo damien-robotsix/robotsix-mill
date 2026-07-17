@@ -309,7 +309,7 @@ def get_merge_status(
     try:
         repo_dir = _workspace_repo_dir_from_svc(svc, ticket)
         changelog_warnings = _changelog_warnings_for_ticket(repo_dir, ticket_id)
-    except Exception:
+    except Exception:  # CHANGELOG warnings are advisory only — silently skip
         pass
 
     # ── PR mergeability ──────────────────────────────────────────

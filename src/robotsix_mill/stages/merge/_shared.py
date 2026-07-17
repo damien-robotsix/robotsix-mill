@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re as _re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -483,8 +484,6 @@ def _is_pr_check_run(run: dict[str, Any]) -> bool:
 # CHANGELOG lint (merge-stage advisory, not a gate)
 # ---------------------------------------------------------------------------
 
-import re as _re
-
 
 def _lint_changelog(repo_dir: str | None) -> list[dict[str, str]]:
     """Parse ``CHANGELOG.md`` and return advisory warnings.
@@ -516,7 +515,7 @@ def _lint_changelog(repo_dir: str | None) -> list[dict[str, str]]:
         return []
 
     # Find the next ## section header (not ### sub-headings)
-    rest = content[unreleased_start + len("## 0.0.0 (unreleased)"):]
+    rest = content[unreleased_start + len("## 0.0.0 (unreleased)") :]
     next_section = _re.search(r"\n## [^#]", rest)
     if next_section is not None:
         rest = rest[: next_section.start()]
@@ -541,7 +540,9 @@ def _lint_changelog(repo_dir: str | None) -> list[dict[str, str]]:
             # Only capture if it's a true continuation (not an empty or
             # whitespace-only line that could be inter-bullet spacing).
             stripped = line[2:]
-            if stripped or current[2]:  # keep empty continuation lines if preceded by other continuations
+            if (
+                stripped or current[2]
+            ):  # keep empty continuation lines if preceded by other continuations
                 current[2].append(stripped)
         elif line == "":
             # Blank line resets continuation tracking.
@@ -562,7 +563,7 @@ def _lint_changelog(repo_dir: str | None) -> list[dict[str, str]]:
                 {
                     "severity": "warn",
                     "message": f"CHANGELOG.md: empty bullet at position {idx} "
-                    f"(bare \"- \" with no body)",
+                    f'(bare "- " with no body)',
                 }
             )
 
@@ -633,9 +634,7 @@ def _changelog_warnings_for_ticket(
             if unreleased_start >= 0:
                 rest = content[unreleased_start:]
                 next_section = _re.search(r"\n## [^#]", rest)
-                unreleased = (
-                    rest[: next_section.start()] if next_section else rest
-                )
+                unreleased = rest[: next_section.start()] if next_section else rest
                 if ticket_id not in unreleased:
                     all_warnings.append(
                         {
