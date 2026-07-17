@@ -547,7 +547,7 @@ class _CoreSettings(BaseModel):
 
     # --- management-plane service ---
     api_host: str = Field(
-        default="127.0.0.1",
+        default="0.0.0.0",
         description="Management API listen host.",
     )
     api_port: int = Field(
