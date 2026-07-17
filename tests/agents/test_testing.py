@@ -129,6 +129,15 @@ def test_env_error_diag_rc_1_not_env():
     assert diag is None
 
 
+def test_env_error_diag_rc_124_timeout():
+    """rc=124 (sandbox timeout) is an environmental error — no LLM distiller."""
+    diag = _env_error_diag(124, "command timed out after 3600s")
+    assert diag is not None
+    assert diag.startswith(ENV_ERROR_PREFIX)
+    assert "rc=124" in diag
+    assert "sandbox timeout" in diag
+
+
 def test_env_error_diag_is_stable():
     """Same input produces byte-identical output (circuit-breaker requirement)."""
     diag1 = _env_error_diag(127, "sh: 1: yamllint: not found")
@@ -350,6 +359,27 @@ def test_evaluate_gate_result_env_error():
     assert passed is False
     assert msg.startswith(ENV_ERROR_PREFIX)
     assert "yamllint" in msg
+
+
+def test_evaluate_gate_result_rc_124_timeout():
+    """Sandbox timeout (rc=124) → deterministic ENV-ERROR, no distill."""
+    passed, msg = _evaluate_gate_result(
+        settings=None,
+        repo_dir=Path("/fake"),
+        cmd="pytest",
+        rc=124,
+        out="command timed out after 3600s",
+        retry_on_failure=False,
+        sandbox_image=None,
+        file_map=None,
+        success_msg="all good",
+        retry_success_msg="retry good",
+        is_test_gate=True,
+    )
+    assert passed is False
+    assert msg.startswith(ENV_ERROR_PREFIX)
+    assert "timed out" in msg
+    assert "rc=124" in msg
 
 
 def test_evaluate_gate_result_retry_success(monkeypatch, tmp_path):
