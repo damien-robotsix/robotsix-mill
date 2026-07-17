@@ -74,16 +74,30 @@ def _detect_noexec_script(out: str) -> str | None:
 def _env_error_diag(rc: int, out: str) -> str | None:
     """Return a STABLE, LLM-free diagnosis for an environmental failure —
     a binary referenced by the gate command is not installed / not on
-    PATH — or ``None`` when the failure is not environmental.
+    PATH, or the sandbox command timed out — or ``None`` when the failure
+    is not environmental.
 
-    Triggers on ``rc == 127`` OR an explicit command-not-found signature,
-    OR ``rc == 126`` with a Permission-denied signature on a
-    ``$HOME/.local/bin`` (or ``/tmp``) path — a pip --user console script
-    blocked by a ``noexec`` tmpfs (conservative: a normal assertion
-    failure must NOT match). The string is byte-identical across cycles
-    for the same failure, which is what lets the implement fix-loop
-    circuit breaker fire.
+    Triggers on ``rc == 124`` (sandbox timeout — the test command was
+    killed by ``timeout(1)``), ``rc == 127`` OR an explicit
+    command-not-found signature, OR ``rc == 126`` with a
+    Permission-denied signature on a ``$HOME/.local/bin`` (or ``/tmp``)
+    path — a pip --user console script blocked by a ``noexec`` tmpfs
+    (conservative: a normal assertion failure must NOT match). The
+    string is byte-identical across cycles for the same failure, which
+    is what lets the implement fix-loop circuit breaker fire.
     """
+    # rc=124 is the Linux ``timeout(1)`` exit code — the sandbox command
+    # was killed after exceeding its deadline. This is not fixable by
+    # editing code; skip the expensive LLM distiller so the circuit
+    # breaker fires immediately.
+    if rc == 124:
+        return (
+            f"{ENV_ERROR_PREFIX} sandbox command timed out (rc=124). "
+            "The test/smoke command exceeded its sandbox deadline — "
+            "this is a sandbox timeout, not fixable by editing code. "
+            "CI is the source of truth for test results."
+        )
+
     missing_bin = _detect_missing_binary(out)
     if rc != 127 and missing_bin is None:
         # Not command-not-found, but rc 126 + a Permission-denied signature
