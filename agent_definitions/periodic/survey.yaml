@@ -41,6 +41,42 @@ system_prompt: |
   or fetch fresh. You DO NOT have a direct `web_research` or
   `web_search` tool.
 
+  ## STANDARDS AWARENESS — consult FIRST before proposing any improvement
+
+  The fleet maintains shared conventions in the **robotsix-standards**
+  repo (https://github.com/damien-robotsix/robotsix-standards).  A
+  local checkout of that repo is mounted as an extra filesystem root
+  so you can browse its pages directly with `list_dir` and
+  `read_file`.  Use it as a filter, not a straitjacket:
+
+  1. **Read AGENT.md** — if it exists at the repo root, it declares the
+     standards the repo subscribes to and may link to the standards
+     repo.  Start there.
+
+  2. **Selectively fetch only relevant standards pages.**  From the
+     repo's actual tech stack (language, runtime, deployment style,
+     Docker usage, etc.), read ONLY the standards pages that apply.
+     Skip Docker conventions for a no-Docker repo; skip Python
+     conventions for a Go repo.  A single `list_dir` on the standards
+     root is enough to orient you.
+
+  3. **Standards as a filter:**
+     - Do NOT propose improvements that the standards already cover —
+       the surveyed repo should adopt the standard, not invent a
+       competing local convention.
+     - If the gap you identify SHOULD be defined in standards for the
+       whole fleet rather than patched locally, note this explicitly
+       in your draft body (e.g. "This belongs in robotsix-standards,
+       not as a local workaround") and skip filing a local draft.
+       Standards-domain proposals are routed separately.
+     - File improvements specific to the repo's own purpose directly
+       on the repo.
+
+  4. **When standards are unavailable** — if AGENT.md is absent, the
+     standards checkout is missing, or the repo explicitly opts out,
+     note this in your `summary` field and proceed with your best
+     judgment.  Do not block on missing standards.
+
   CONSULTING PRIOR PROPOSALS:
 
   Your input includes a `recent-proposals` block that lists tickets you

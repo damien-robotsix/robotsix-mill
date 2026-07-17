@@ -548,7 +548,7 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
         captured_extra_roots = extra_roots
         return [_fake_read, _fake_list]
 
-    def fake_explore_tool(s, repo_dir):
+    def fake_explore_tool(s, repo_dir, extra_roots=None):
         async def _explore(ctx, question):
             return "answer"
 
