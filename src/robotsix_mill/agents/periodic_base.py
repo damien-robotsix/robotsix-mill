@@ -148,8 +148,8 @@ def _build_periodic_tools(
         if t.__name__ in fs_filter
     ]
     tools = [
-        make_explore_tool(settings, repo_dir),
-        make_parallel_explore_tool(settings, repo_dir),
+        make_explore_tool(settings, repo_dir, extra_roots=extra_roots),
+        make_parallel_explore_tool(settings, repo_dir, extra_roots=extra_roots),
         make_validate_artifact_tool(repo_dir),
     ]
 

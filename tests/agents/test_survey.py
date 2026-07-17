@@ -45,7 +45,8 @@ def _make_settings(tmp_path, **overrides):
 def test_survey_system_prompt_covers_key_dimensions():
     """The survey agent prompt (loaded from YAML) must cover the key
     dimensions: open-source discovery, single-subject focus, proposal
-    generation, rotation log, ask_web_knowledge gateway."""
+    generation, rotation log, ask_web_knowledge gateway, and standards
+    awareness."""
     prompt_path = Path("agent_definitions/periodic/survey.yaml")
     definition = yaml.safe_load(prompt_path.read_text())
     prompt = definition["system_prompt"].lower()
@@ -64,6 +65,30 @@ def test_survey_system_prompt_covers_key_dimensions():
         "one proposal per run",
     ):
         assert kw in prompt, f"survey prompt missing key dimension: {kw}"
+
+
+def test_survey_prompt_includes_standards_awareness():
+    """The survey agent prompt includes a STANDARDS AWARENESS section
+    telling the agent to consult robotsix-standards before proposing."""
+    prompt_path = Path("agent_definitions/periodic/survey.yaml")
+    definition = yaml.safe_load(prompt_path.read_text())
+    prompt = definition["system_prompt"]
+
+    # Section heading must be present.
+    assert "STANDARDS AWARENESS" in prompt, (
+        "survey prompt missing STANDARDS AWARENESS section"
+    )
+
+    # Key standards-awareness behaviours — check case-sensitive since
+    # these are specific technical terms / repo names.
+    for kw in (
+        "robotsix-standards",
+        "AGENT.md",
+        "extra filesystem root",
+        "Selectively fetch",
+        "filter, not a straitjacket",
+    ):
+        assert kw in prompt, f"survey prompt missing standards keyword: {kw}"
 
 
 def test_survey_result_model():
@@ -577,6 +602,223 @@ class TestSurveyRunnerTraceBudgetWiring:
 
         assert fetch_reset_calls == [(7, 300_000)]
         assert search_reset_calls == [3]
+
+
+# --- Standards awareness tests ---
+
+
+class TestStandardsRepoClone:
+    """Verify the standards repo clone / cache behaviour used by
+    ``_survey_dynamic_kwargs`` to inject ``extra_roots``."""
+
+    def test_inject_standards_root_clones_repo(self, tmp_path, monkeypatch):
+        """First call clones the standards repo into the cache dir."""
+        from robotsix_mill.agents.surveying import (
+            _ensure_standards_repo,
+            _STANDARDS_CACHE_SUBDIR,
+        )
+
+        settings = _make_settings(tmp_path)
+        run_calls = []
+
+        def fake_run(cmd, **kwargs):
+            run_calls.append(cmd)
+            # Simulate clone: create the .git marker so the next
+            # call sees an existing clone.
+            if "clone" in cmd:
+                dest = Path(cmd[-1])
+                dest.mkdir(parents=True, exist_ok=True)
+                (dest / ".git").mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        result = _ensure_standards_repo(settings)
+
+        expected_dir = settings.data_dir.joinpath(*_STANDARDS_CACHE_SUBDIR)
+        assert result == expected_dir
+        assert len(run_calls) >= 1
+        # First call must be a clone.
+        clone_cmd = " ".join(run_calls[0])
+        assert "clone" in clone_cmd
+
+    def test_inject_standards_root_idempotent(self, tmp_path, monkeypatch):
+        """Second call pulls (does not re-clone) when .git already exists."""
+        from robotsix_mill.agents.surveying import (
+            _ensure_standards_repo,
+            _STANDARDS_CACHE_SUBDIR,
+        )
+
+        settings = _make_settings(tmp_path)
+        expected_dir = settings.data_dir.joinpath(*_STANDARDS_CACHE_SUBDIR)
+        expected_dir.mkdir(parents=True, exist_ok=True)
+        (expected_dir / ".git").mkdir(parents=True, exist_ok=True)
+
+        run_calls = []
+
+        def fake_run(cmd, **kwargs):
+            run_calls.append(cmd)
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        result = _ensure_standards_repo(settings)
+        assert result == expected_dir
+        # Should pull, not clone.
+        assert len(run_calls) >= 1
+        pull_cmd = " ".join(run_calls[0])
+        assert "pull" in pull_cmd
+
+    def test_inject_standards_root_clone_failure_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        """When clone fails, return None (graceful degradation)."""
+        from robotsix_mill.agents.surveying import _ensure_standards_repo
+
+        settings = _make_settings(tmp_path)
+
+        def fake_run(cmd, **kwargs):
+            raise OSError("network unreachable")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        result = _ensure_standards_repo(settings)
+        assert result is None
+
+
+class TestSurveyDynamicKwargsExtraRoots:
+    """Verify ``_survey_dynamic_kwargs`` includes ``extra_roots`` when
+    the standards clone succeeds."""
+
+    def test_survey_dynamic_kwargs_includes_extra_roots(self, tmp_path, monkeypatch):
+        """When the standards repo is cloned, extra_roots points to it."""
+        from robotsix_mill.agents.surveying import (
+            _survey_dynamic_kwargs,
+            _STANDARDS_CACHE_SUBDIR,
+        )
+
+        settings = _make_settings(tmp_path)
+        expected_dir = settings.data_dir.joinpath(*_STANDARDS_CACHE_SUBDIR)
+        expected_dir.mkdir(parents=True, exist_ok=True)
+        (expected_dir / ".git").mkdir(parents=True, exist_ok=True)
+
+        # No-op pull.
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: None)
+
+        kwargs = _survey_dynamic_kwargs(settings)
+        assert "extra_roots" in kwargs
+        assert kwargs["extra_roots"] == [expected_dir]
+        assert "usage_limits" in kwargs
+
+    def test_survey_dynamic_kwargs_no_extra_roots_on_clone_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """When the standards clone fails, extra_roots is absent."""
+        from robotsix_mill.agents.surveying import _survey_dynamic_kwargs
+
+        settings = _make_settings(tmp_path)
+
+        def fake_run(cmd, **kwargs):
+            raise OSError("network unreachable")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        kwargs = _survey_dynamic_kwargs(settings)
+        assert "extra_roots" not in kwargs
+        assert "usage_limits" in kwargs
+
+
+class TestBuildPeriodicToolsExtraRoots:
+    """Verify ``_build_periodic_tools`` forwards ``extra_roots`` to
+    explore and parallel_explore tool factories."""
+
+    def test_explore_tools_receive_extra_roots(self, tmp_path):
+        """When extra_roots is a non-empty list, make_explore_tool and
+        make_parallel_explore_tool are called with extra_roots."""
+        from robotsix_mill.agents.periodic_base import _build_periodic_tools
+
+        settings = _make_settings(tmp_path)
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        extra = [tmp_path / "standards"]
+
+        captured_explore = {}
+        captured_parallel = {}
+
+        import robotsix_mill.agents.explore as explore_mod
+
+        orig_make_explore = explore_mod.make_explore_tool
+        orig_make_parallel = explore_mod.make_parallel_explore_tool
+
+        def fake_explore(s, rd, extra_roots=None):
+            captured_explore["extra_roots"] = extra_roots
+            return orig_make_explore(s, rd, extra_roots=extra_roots)
+
+        def fake_parallel(s, rd, extra_roots=None):
+            captured_parallel["extra_roots"] = extra_roots
+            return orig_make_parallel(s, rd, extra_roots=extra_roots)
+
+        monkeypatch = __import__("pytest").MonkeyPatch()
+        monkeypatch.setattr(explore_mod, "make_explore_tool", fake_explore)
+        monkeypatch.setattr(explore_mod, "make_parallel_explore_tool", fake_parallel)
+
+        try:
+            _build_periodic_tools(
+                settings=settings,
+                repo_dir=repo_dir,
+                include_jscpd=False,
+                include_workflow_caller_audit=False,
+                include_run_command=False,
+                include_write_file=False,
+                extra_roots=extra,
+            )
+        finally:
+            monkeypatch.undo()
+
+        assert captured_explore.get("extra_roots") == extra
+        assert captured_parallel.get("extra_roots") == extra
+
+    def test_explore_tools_none_extra_roots_is_none(self, tmp_path):
+        """When extra_roots is None, explore tools receive None."""
+        from robotsix_mill.agents.periodic_base import _build_periodic_tools
+
+        settings = _make_settings(tmp_path)
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        captured_explore = {}
+        captured_parallel = {}
+
+        import robotsix_mill.agents.explore as explore_mod
+
+        orig_make_explore = explore_mod.make_explore_tool
+        orig_make_parallel = explore_mod.make_parallel_explore_tool
+
+        def fake_explore(s, rd, extra_roots=None):
+            captured_explore["extra_roots"] = extra_roots
+            return orig_make_explore(s, rd, extra_roots=extra_roots)
+
+        def fake_parallel(s, rd, extra_roots=None):
+            captured_parallel["extra_roots"] = extra_roots
+            return orig_make_parallel(s, rd, extra_roots=extra_roots)
+
+        monkeypatch = __import__("pytest").MonkeyPatch()
+        monkeypatch.setattr(explore_mod, "make_explore_tool", fake_explore)
+        monkeypatch.setattr(explore_mod, "make_parallel_explore_tool", fake_parallel)
+
+        try:
+            _build_periodic_tools(
+                settings=settings,
+                repo_dir=repo_dir,
+                include_jscpd=False,
+                include_workflow_caller_audit=False,
+                include_run_command=False,
+                include_write_file=False,
+                extra_roots=None,
+            )
+        finally:
+            monkeypatch.undo()
+
+        assert captured_explore.get("extra_roots") is None
+        assert captured_parallel.get("extra_roots") is None
 
 
 # --- Worker periodic tests ---
