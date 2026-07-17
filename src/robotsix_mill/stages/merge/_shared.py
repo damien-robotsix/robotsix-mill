@@ -598,8 +598,8 @@ def _lint_changelog(repo_dir: str | None) -> list[dict[str, str]]:
             pair = (min(idxs), max(idxs))
             pair_idents.setdefault(pair, []).append(ident)
 
-    for (a, b), idents in sorted(pair_idents.items()):
-        id_list = "`, `".join(idents)
+    for (a, b), shared in sorted(pair_idents.items()):
+        id_list = "`, `".join(shared)
         warnings.append(
             {
                 "severity": "warn",

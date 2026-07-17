@@ -6,8 +6,10 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
 from ...config.repos import target_branch_for
 from ...core.models import TicketRead
+from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
 from ...stages.merge import (
@@ -269,9 +271,9 @@ def get_merge_reason(
 def get_merge_status(
     ticket_id: str,
     request: Request,
-    svc=Depends(get_service),
-    settings=Depends(get_settings),
-) -> dict:
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
     """Return live merge-readiness for a ticket's PR.
 
     Called by the ticket drawer before rendering the Merge button so
@@ -305,7 +307,7 @@ def get_merge_status(
     forge = get_forge(settings, repo_config=repo_config)
 
     # ── CHANGELOG warnings (advisory, non-blocking) ──────────────
-    changelog_warnings: list[dict] = []
+    changelog_warnings: list[dict[str, str]] = []
     try:
         repo_dir = _workspace_repo_dir_from_svc(svc, ticket)
         changelog_warnings = _changelog_warnings_for_ticket(repo_dir, ticket_id)
