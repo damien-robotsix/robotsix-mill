@@ -97,6 +97,7 @@
   `retrospect.py`, `diagnostic_check_errors.py`, `periodic_base.py`,
   and `poll_loops.py`.
 - Replace raw state strings in `_COLUMNS` with `State.X.value` references so column keys auto-sync with the `State` enum.
+- Move `towncrier.py` from `src/robotsix_mill/` into `src/robotsix_mill/stages/` to co-locate with its owning module.
 - Consolidate duplicate `_parse_iso_utc` into `forge/base.py`; remove the copy from `forge/github_pr.py` and the original from `forge/github.py` (both now import from `base`).
 - Merged hooks module into stages: moved ``run_prepare_hook`` to
   ``src/robotsix_mill/stages/hooks.py``, moved tests to
