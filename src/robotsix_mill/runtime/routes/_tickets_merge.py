@@ -314,6 +314,16 @@ def get_merge_status(
     except Exception:  # CHANGELOG warnings are advisory only — silently skip
         pass
 
+    # ── Branch guard ─────────────────────────────────────────────
+    if ticket.branch is None:
+        return {
+            "mergeable": None,
+            "ci_conclusion": None,
+            "can_merge": False,
+            "reason": "Ticket has no branch",
+            "changelog_warnings": changelog_warnings,
+        }
+
     # ── PR mergeability ──────────────────────────────────────────
     mergeable: bool | None = None
     try:
