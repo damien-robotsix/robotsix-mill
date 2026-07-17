@@ -355,30 +355,34 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
 def init_db(settings: Settings, board_id: str) -> None:
     """Create tables (if missing) on the per-board DB and apply any
     pending Alembic migrations."""
-    lock = _init_locks.setdefault(board_id, threading.Lock())
-    with lock:
-        # import models so SQLModel.metadata is populated before create_all
-        from . import models  # noqa: F401
+    if board_id not in _initialized:
+        lock = _init_locks.setdefault(board_id, threading.Lock())
+        with lock:
+            if board_id not in _initialized:
+                # import models so SQLModel.metadata is populated before create_all
+                from . import models  # noqa: F401
 
+                engine = get_engine(settings, board_id)
+                SQLModel.metadata.create_all(engine)
+
+                # Run Alembic migrations — stamps fresh databases as ``head``,
+                # applies pending migrations on existing ones.
+                _run_alembic_migrations(settings, board_id, engine)
+
+                _initialized.add(board_id)
+
+    # Self-heal any legacy rows whose ``kind`` was persisted as the
+    # lowercase StrEnum *value* instead of the canonical uppercase
+    # member NAME.  Idempotent: upper(upper(x)) == upper(x).  The
+    # CaseTolerantEnum column on Ticket.kind already tolerates
+    # lowercase on read, so this is defense-in-depth that also
+    # normalizes the stored bytes.
+    try:
         engine = get_engine(settings, board_id)
-        SQLModel.metadata.create_all(engine)
-
-        # Run Alembic migrations — stamps fresh databases as ``head``,
-        # applies pending migrations on existing ones.
-        _run_alembic_migrations(settings, board_id, engine)
-
-        # Self-heal any legacy rows whose ``kind`` was persisted as the
-        # lowercase StrEnum *value* instead of the canonical uppercase
-        # member NAME.  Idempotent: upper(upper(x)) == upper(x).  The
-        # CaseTolerantEnum column on Ticket.kind already tolerates
-        # lowercase on read, so this is defense-in-depth that also
-        # normalizes the stored bytes.
-        try:
-            with engine.begin() as conn:
-                conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
-        except sqlite3.OperationalError:
-            pass
-        _initialized.add(board_id)
+        with engine.begin() as conn:
+            conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
+    except sqlite3.OperationalError:
+        pass
 
 
 def session(settings: Settings, board_id: str) -> Session:
