@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Remove 11 backward-compat aliases (`AuditPassResult`, `AgentCheckPassResult`, etc.) from `periodic_runner.py`; all callers now import `PeriodicPassResult` directly.
+- Register five missing CLI subcommands (`state-sync`, `env-doc-sync`, `frontend-sync`, `security-posture`, `triage-boilerplate`) in argparse so they are reachable from the command line.
 - Deduplicate ``_resolve_repo_config`` by delegating repo-id resolution to
   ``_resolve_repo_id``; collapse three identical ``elif`` arms in
   ``_run_and_print`` into a single ``elif cmd in (...)`` block.
