@@ -329,7 +329,7 @@ def test_test_gap_config_defaults():
     """Test-gap config has correct defaults."""
     s = Settings()
     assert s.test_gap_periodic is True
-    assert s.test_gap_interval_seconds == 86400
+    assert s.test_gap_interval_seconds == 604800
 
 
 def test_test_gap_periodic_config():

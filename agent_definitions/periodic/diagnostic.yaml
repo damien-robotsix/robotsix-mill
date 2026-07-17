@@ -1,4 +1,4 @@
-# Diagnostic agent — daily deterministic check orchestrator.
+# Diagnostic agent — weekly deterministic check orchestrator.
 #
 # This is NOT an LLM agent: ``run_diagnostic_pass`` is plain Python that
 # iterates a pluggable check registry (see runners/diagnostic_checks.py).
@@ -15,7 +15,7 @@ description: >-
 
 category: periodic
 
-interval: 1d
+interval: 1w
 enabled: true
 
 level: 2

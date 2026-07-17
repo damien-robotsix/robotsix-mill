@@ -210,7 +210,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_HEALTH_PERIODIC` | `health_periodic` | `false` | `bool` | Settings | non-sensitive | default | §13 | `health_runner.py`, `runtime/worker.py` | |
-| `MILL_HEALTH_INTERVAL_SECONDS` | `health_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §13 | `runtime/worker.py` | |
+| `MILL_HEALTH_INTERVAL_SECONDS` | `health_interval_seconds` | `604800` | `int` | Settings | non-sensitive | default | §13 | `runtime/worker.py` | |
 
 ### 1.17  Periodic agents — test-gap
 
@@ -224,21 +224,21 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_AGENT_CHECK_PERIODIC` | `agent_check_periodic` | `false` | `bool` | Settings | non-sensitive | default | §15 | `agent_check_runner.py`, `runtime/worker.py` | |
-| `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `agent_check_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §15 | `runtime/worker.py` | |
+| `MILL_AGENT_CHECK_INTERVAL_SECONDS` | `agent_check_interval_seconds` | `604800` | `int` | Settings | non-sensitive | default | §15 | `runtime/worker.py` | |
 
 ### 1.19  Periodic agents — survey
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_SURVEY_PERIODIC` | `survey_periodic` | `true` | `bool` | Settings | non-sensitive | default | **missing** | `survey_runner.py`, `runtime/worker.py` | ⚠️ Undocumented; default `true` (on by default) |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §16 | `runtime/worker.py` | |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `604800` | `int` | Settings | non-sensitive | default | §16 | `runtime/worker.py` | |
 
 ### 1.20  Periodic agents — diagnostic
 
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_DIAGNOSTIC_PERIODIC` | `diagnostic_periodic` | `false` | `bool` | Settings | non-sensitive | `periodic.diagnostic.enabled` | §12 | `diagnostic_runner.py`, `runtime/worker.py` | Deterministic pass (no LLM) |
-| `MILL_DIAGNOSTIC_INTERVAL_SECONDS` | `diagnostic_interval_seconds` | `86400` | `int` | Settings | non-sensitive | `periodic.diagnostic.interval_seconds` | §12 | `runtime/worker.py` | |
+| `MILL_DIAGNOSTIC_INTERVAL_SECONDS` | `diagnostic_interval_seconds` | `604800` | `int` | Settings | non-sensitive | `periodic.diagnostic.interval_seconds` | §12 | `runtime/worker.py` | |
 | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `diagnostic_target_repo_id` | `robotsix-mill` | `str` | Settings | non-sensitive | `periodic.diagnostic.target_repo_id` | §12 | `diagnostic_runner.py` | Single-repo fallback when monitored list is empty |
 | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `diagnostic_monitored_repo_ids` | `[]` | `list[str]` | Settings | non-sensitive | `periodic.diagnostic.monitored_repo_ids` | §12 | `diagnostic_runner.py` | Repos monitored each pass; empty -> falls back to `target_repo_id` |
 

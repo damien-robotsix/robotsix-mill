@@ -384,7 +384,7 @@ def test_health_config_defaults():
     """Health config has correct defaults."""
     s = Settings()
     assert s.health_periodic is True
-    assert s.health_interval_seconds == 86400
+    assert s.health_interval_seconds == 604800
 
 
 def test_health_periodic_config():

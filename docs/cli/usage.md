@@ -212,7 +212,7 @@ robotsix-mill survey             # OSS project discovery
 robotsix-mill copy-paste         # code-duplication detection
 robotsix-mill forge-parity       # forge state drift detection
 robotsix-mill run-health         # run outcome health analysis
-robotsix-mill diagnostic         # daily diagnostic pass
+robotsix-mill diagnostic         # weekly diagnostic pass
 robotsix-mill module-curator     # module taxonomy drift detection
 ```
 

@@ -82,7 +82,7 @@ def test_state_sync_config_defaults():
     """State-sync config has correct defaults."""
     s = Settings()
     assert s.state_sync_periodic is True
-    assert s.state_sync_interval_seconds == 86400
+    assert s.state_sync_interval_seconds == 604800
 
 
 def test_state_sync_periodic_config():

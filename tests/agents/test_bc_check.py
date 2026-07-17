@@ -309,7 +309,7 @@ def test_bc_check_config_defaults():
     """BC-check config has correct defaults."""
     s = Settings()
     assert s.bc_check_periodic is True
-    assert s.bc_check_interval_seconds == 86400
+    assert s.bc_check_interval_seconds == 604800
 
 
 def test_bc_check_periodic_config():
