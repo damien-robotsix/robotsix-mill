@@ -763,6 +763,56 @@ def build_parser() -> argparse.ArgumentParser:
         help="output full JSON result (default: summary)",
     )
 
+    # --- state-sync command ---
+    p_state_sync = sub.add_parser(
+        "state-sync", help="run a State-enum consistency check pass"
+    )
+    p_state_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- env-doc-sync command ---
+    p_env_doc_sync = sub.add_parser(
+        "env-doc-sync", help="run a .env example / README sync pass"
+    )
+    p_env_doc_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- frontend-sync command ---
+    p_frontend_sync = sub.add_parser(
+        "frontend-sync", help="run an internal-tool frontend config sync pass"
+    )
+    p_frontend_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- security-posture command ---
+    p_security_posture = sub.add_parser(
+        "security-posture", help="run a security-posture assessment pass"
+    )
+    p_security_posture.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- triage-boilerplate command ---
+    p_triage_boilerplate = sub.add_parser(
+        "triage-boilerplate", help="run a triage-boilerplate generation pass"
+    )
+    p_triage_boilerplate.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
     # --- trace-review command ---
     p_trace_review = sub.add_parser(
         "trace-review",
