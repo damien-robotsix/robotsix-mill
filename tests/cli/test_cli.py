@@ -286,10 +286,10 @@ def test_forge_parity_registered_in_runners():
 
 def test_copy_paste_cli_command(monkeypatch):
     """`main(["copy-paste"])` dispatches into the runner and exits 0."""
-    from robotsix_mill.runners.periodic_runner import CopyPastePassResult
+    from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
     def mock_run(session_id=None):
-        return CopyPastePassResult(updated_memory="mem", drafts_created=[])
+        return PeriodicPassResult(updated_memory="mem", drafts_created=[])
 
     monkeypatch.setattr(
         "robotsix_mill.runners.periodic_runner.run_copy_paste_pass", mock_run
@@ -300,10 +300,10 @@ def test_copy_paste_cli_command(monkeypatch):
 
 def test_forge_parity_cli_command(monkeypatch):
     """`main(["forge-parity"])` dispatches into the runner and exits 0."""
-    from robotsix_mill.runners.periodic_runner import ForgeParityPassResult
+    from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
     def mock_run(session_id=None):
-        return ForgeParityPassResult(updated_memory="mem", drafts_created=[])
+        return PeriodicPassResult(updated_memory="mem", drafts_created=[])
 
     monkeypatch.setattr(
         "robotsix_mill.runners.periodic_runner.run_forge_parity_pass", mock_run

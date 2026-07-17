@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 from robotsix_mill.agents import test_gap as test_gap_agent
-from robotsix_mill.runners.periodic_runner import run_test_gap_pass, TestGapPassResult
+from robotsix_mill.runners.periodic_runner import run_test_gap_pass, PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -299,7 +299,7 @@ def test_run_test_gap_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 
 
 def test_test_gap_pass_result_structure(tmp_path, monkeypatch):
-    """TestGapPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -316,7 +316,7 @@ def test_test_gap_pass_result_structure(tmp_path, monkeypatch):
     )
 
     result = run_test_gap_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert isinstance(result, TestGapPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
@@ -347,7 +347,7 @@ def test_test_gap_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return TestGapPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "test gap: add unit tests for X"}],
         )
@@ -368,7 +368,7 @@ def test_test_gap_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return TestGapPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "test gap: add unit tests for X"}],
         )
@@ -393,7 +393,7 @@ def test_test_gap_cli_no_drafts(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return TestGapPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )
@@ -550,7 +550,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
     def slow_run(session_id=None, repo_config=None):
         started.set()
         finished.wait(timeout=5)
-        return TestGapPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )
@@ -589,7 +589,7 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
         svc = TicketService(settings, board_id="test-board")
         svc.create("Test-gap draft", "Test-gap body", source="test_gap")
         run_event.set()
-        return TestGapPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "test-id", "title": "Test-gap draft"}],
         )

@@ -15,7 +15,7 @@ import pytest
 from robotsix_mill.runners import periodic_runner
 from robotsix_mill.config import RepoConfig
 from robotsix_mill.runners.periodic_runner import (
-    CopyPastePassResult,
+    PeriodicPassResult,
     PERIODIC_PASS_CONFIGS,
 )
 
@@ -42,7 +42,7 @@ def test_run_copy_paste_pass_delegates_to_run_periodic_pass(monkeypatch):
         captured["repo_config"] = repo_config
         captured["config"] = config
         captured["settings"] = settings
-        return CopyPastePassResult(
+        return PeriodicPassResult(
             updated_memory="m",
             drafts_created=[],
             session_id=session_id,
@@ -52,7 +52,7 @@ def test_run_copy_paste_pass_delegates_to_run_periodic_pass(monkeypatch):
 
     result = periodic_runner.run_copy_paste_pass(session_id="s1", repo_config=rc)
 
-    assert isinstance(result, CopyPastePassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.session_id == "s1"
     assert captured["session_id"] == "s1"
     # The stub MUST select the copy_paste config from the registry —
@@ -69,7 +69,7 @@ def test_run_copy_paste_pass_passes_repo_config_through(monkeypatch):
 
     def fake_run_periodic_pass(session_id, repo_config, *, config, settings):
         captured["repo_config"] = repo_config
-        return CopyPastePassResult(
+        return PeriodicPassResult(
             updated_memory="",
             drafts_created=[],
             session_id=session_id,
@@ -104,7 +104,7 @@ def test_run_copy_paste_pass_constructs_settings_via_default(monkeypatch):
 
     def fake_run_periodic_pass(session_id, repo_config, *, config, settings):
         captured["settings"] = settings
-        return CopyPastePassResult(
+        return PeriodicPassResult(
             updated_memory="",
             drafts_created=[],
             session_id=session_id,

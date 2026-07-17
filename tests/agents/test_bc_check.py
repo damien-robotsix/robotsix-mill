@@ -4,7 +4,7 @@ import json
 
 
 from robotsix_mill.agents import bc_check as bc_check_agent
-from robotsix_mill.runners.periodic_runner import run_bc_check_pass, BcCheckPassResult
+from robotsix_mill.runners.periodic_runner import run_bc_check_pass, PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -256,7 +256,7 @@ def test_run_bc_check_pass_missing_memory_file(tmp_path, monkeypatch):
 
 
 def test_bc_check_pass_result_structure(tmp_path, monkeypatch):
-    """BcCheckPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -273,7 +273,7 @@ def test_bc_check_pass_result_structure(tmp_path, monkeypatch):
     )
 
     result = run_bc_check_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert isinstance(result, BcCheckPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
@@ -327,7 +327,7 @@ def test_bc_check_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return BcCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Remove no-op init()"}],
         )
@@ -348,7 +348,7 @@ def test_bc_check_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return BcCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Remove no-op init()"}],
         )
@@ -371,7 +371,7 @@ def test_bc_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return BcCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )

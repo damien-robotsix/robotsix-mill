@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 
 from robotsix_mill.agents import health as health_agent
-from robotsix_mill.runners.periodic_runner import run_health_pass, HealthPassResult
+from robotsix_mill.runners.periodic_runner import run_health_pass, PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -331,7 +331,7 @@ def test_run_health_pass_unreadable_memory(tmp_path, monkeypatch):
 
 
 def test_health_pass_result_structure(tmp_path, monkeypatch):
-    """HealthPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -348,7 +348,7 @@ def test_health_pass_result_structure(tmp_path, monkeypatch):
     )
 
     result = run_health_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert isinstance(result, HealthPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
@@ -402,7 +402,7 @@ def test_health_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return HealthPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
@@ -423,7 +423,7 @@ def test_health_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return HealthPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
@@ -446,7 +446,7 @@ def test_health_cli_no_drafts(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return HealthPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )
@@ -645,7 +645,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
     def slow_run(session_id=None, repo_config=None):
         started.set()
         finished.wait(timeout=5)
-        return HealthPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )
@@ -687,7 +687,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
         svc = TicketService(settings, board_id="test-board")
         svc.create("Health draft", "Health body", source="health")
         run_event.set()
-        return HealthPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "test-id", "title": "Health draft"}],
         )

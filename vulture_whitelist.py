@@ -266,18 +266,6 @@ run_copy_paste_pass
 run_security_posture_pass
 run_data_dir_gc_pass
 dir_size_bytes
-# Consumed by tests through imports and isinstance checks.
-AuditPassResult
-AgentCheckPassResult
-BcCheckPassResult
-SurveyPassResult
-CompletenessCheckPassResult
-CopyPastePassResult
-ForgeParityPassResult
-ConfigSyncPassResult
-HealthPassResult
-ModuleCuratorPassResult
-TestGapPassResult
 oversized_items
 query_traces_since
 query_recent_traces

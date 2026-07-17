@@ -2,7 +2,7 @@
 
 from robotsix_mill.runners.periodic_runner import (
     run_config_sync_pass,
-    ConfigSyncPassResult,
+    PeriodicPassResult,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -210,7 +210,7 @@ def test_run_config_sync_pass_missing_memory_file(tmp_path, monkeypatch):
 
 
 def test_config_sync_pass_result_structure(tmp_path, monkeypatch):
-    """ConfigSyncPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     from robotsix_mill.agents import config_syncing
 
     settings = _make_settings(tmp_path)
@@ -231,7 +231,7 @@ def test_config_sync_pass_result_structure(tmp_path, monkeypatch):
     result = run_config_sync_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     )
-    assert isinstance(result, ConfigSyncPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"

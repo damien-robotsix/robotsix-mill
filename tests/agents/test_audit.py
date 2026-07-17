@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from robotsix_mill.agents import auditing
-from robotsix_mill.runners.periodic_runner import run_audit_pass, AuditPassResult
+from robotsix_mill.runners.periodic_runner import run_audit_pass, PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -308,7 +308,7 @@ def test_run_audit_pass_missing_memory_file(tmp_path, monkeypatch):
 
 
 def test_audit_pass_result_structure(tmp_path, monkeypatch):
-    """AuditPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -325,7 +325,7 @@ def test_audit_pass_result_structure(tmp_path, monkeypatch):
     )
 
     result = run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert isinstance(result, AuditPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
 
@@ -349,7 +349,7 @@ def test_audit_cli_command(capsys, tmp_path, monkeypatch):
 
     # Mock the run_audit_pass function
     def mock_run(session_id=None):
-        return AuditPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )
@@ -369,7 +369,7 @@ def test_audit_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return AuditPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Fix gap"}],
         )

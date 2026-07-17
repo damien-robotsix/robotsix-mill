@@ -6,7 +6,7 @@ import json
 from robotsix_mill.agents import completeness_check as cc_agent
 from robotsix_mill.runners.periodic_runner import (
     run_completeness_check_pass,
-    CompletenessCheckPassResult,
+    PeriodicPassResult,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -267,7 +267,7 @@ def test_run_completeness_check_pass_missing_memory_file(tmp_path, monkeypatch):
 
 
 def test_completeness_check_pass_result_structure(tmp_path, monkeypatch):
-    """CompletenessCheckPassResult has correct structure."""
+    """PeriodicPassResult has correct structure."""
     settings = _make_settings(tmp_path)
 
     def mock_agent(**kwargs):
@@ -286,7 +286,7 @@ def test_completeness_check_pass_result_structure(tmp_path, monkeypatch):
     result = run_completeness_check_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     )
-    assert isinstance(result, CompletenessCheckPassResult)
+    assert isinstance(result, PeriodicPassResult)
     assert result.updated_memory == "mem"
     assert len(result.drafts_created) == 1
     assert result.drafts_created[0]["title"] == "t1"
@@ -344,7 +344,7 @@ def test_completeness_check_cli_command(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return CompletenessCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Add YAML mapping for foo"}],
         )
@@ -366,7 +366,7 @@ def test_completeness_check_cli_json_output(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return CompletenessCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Add YAML mapping for foo"}],
         )
@@ -392,7 +392,7 @@ def test_completeness_check_cli_no_drafts(capsys, tmp_path, monkeypatch):
     from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
-        return CompletenessCheckPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )

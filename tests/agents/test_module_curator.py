@@ -3,7 +3,7 @@
 from robotsix_mill.agents import module_curator as mc_agent
 from robotsix_mill.runners.periodic_runner import (
     run_module_curator_pass,
-    ModuleCuratorPassResult,
+    PeriodicPassResult,
 )
 from robotsix_mill.runners.pass_runner import _GAP_ID_RE
 
@@ -84,7 +84,7 @@ def test_max_drafts_is_reasonable():
 def test_runner_stub_exists():
     """The runner stub should be callable with correct types."""
     assert callable(run_module_curator_pass)
-    assert issubclass(ModuleCuratorPassResult, object)
+    assert issubclass(PeriodicPassResult, object)
 
 
 def test_gap_id_re_matches_module_curator():
@@ -151,10 +151,10 @@ def test_gap_id_re_rejects_malformed():
 def test_module_curator_cli_command(capsys, monkeypatch):
     """Test that CLI module-curator command works."""
     from robotsix_mill.cli import main
-    from robotsix_mill.runners.periodic_runner import ModuleCuratorPassResult
+    from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
     def mock_run(session_id=None):
-        return ModuleCuratorPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "123", "title": "Classify file: src/foo.py"}],
         )
@@ -175,10 +175,10 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
     import json
 
     from robotsix_mill.cli import main
-    from robotsix_mill.runners.periodic_runner import ModuleCuratorPassResult
+    from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
     def mock_run(session_id=None):
-        return ModuleCuratorPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[{"id": "456", "title": "Stale path: old/file.py"}],
         )
@@ -201,10 +201,10 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
 def test_module_curator_cli_no_drafts(capsys, monkeypatch):
     """CLI module-curator command when no drafts created."""
     from robotsix_mill.cli import main
-    from robotsix_mill.runners.periodic_runner import ModuleCuratorPassResult
+    from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 
     def mock_run(session_id=None):
-        return ModuleCuratorPassResult(
+        return PeriodicPassResult(
             updated_memory="mem",
             drafts_created=[],
         )
