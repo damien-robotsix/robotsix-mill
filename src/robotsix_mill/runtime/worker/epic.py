@@ -1,3 +1,14 @@
+"""Epic lifecycle management — child-ticket state tracking and closure reevaluation.
+
+Defines the ``_run_epic_reeval`` function, which is invoked when a
+child ticket reaches a terminal state.  It gathers child summaries,
+calls the epic-status agent to decide the epic's fate (close, keep
+open, or update its description), and reconciles dependency changes
+across children.  Also provides the ``_run_epic_reprocess``
+re-evaluation entry point for periodic passes and the
+``_EPIC_CHILD_TERMINAL`` constant used by ``processing.py``.
+"""
+
 from __future__ import annotations
 
 import logging
