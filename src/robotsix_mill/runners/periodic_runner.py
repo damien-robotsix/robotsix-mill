@@ -452,17 +452,6 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
-    "env_doc_sync": PeriodicPassConfig(
-        label="env_doc_sync",
-        source_kind=SourceKind.ENV_DOC_SYNC,
-        agent_module_attr="env_doc_syncing",
-        agent_fn_name="run_env_doc_sync_agent",
-        memory_filename="env_doc_sync_memory.md",
-        workspace_subdir="env_doc_sync_workspace",
-        result_dataclass=PeriodicPassResult,
-        clone_token_fn=None,  # uses forge_token (raises on missing)
-        requires_repo=True,
-    ),
     "frontend_sync": PeriodicPassConfig(
         label="frontend_sync",
         source_kind=SourceKind.FRONTEND_SYNC,
@@ -584,7 +573,6 @@ run_health_pass = _make_entry("health")
 run_module_curator_pass = _make_entry("module_curator")
 run_test_gap_pass = _make_entry("test_gap")
 run_state_sync_pass = _make_entry("state_sync")
-run_env_doc_sync_pass = _make_entry("env_doc_sync")
 run_frontend_sync_pass = _make_entry("frontend_sync")
 run_security_posture_pass = _make_entry("security_posture")
 run_triage_boilerplate_pass = _make_entry("triage_boilerplate")

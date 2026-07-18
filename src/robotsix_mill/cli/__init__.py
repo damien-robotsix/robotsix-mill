@@ -131,12 +131,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "State-sync pass",
         "format": "memory_drafts",
     },
-    "env-doc-sync": {
-        "module": "runners.periodic_runner",
-        "function": "run_env_doc_sync_pass",
-        "label": "Env-doc-sync pass",
-        "format": "memory_drafts",
-    },
     "frontend-sync": {
         "module": "runners.periodic_runner",
         "function": "run_frontend_sync_pass",
@@ -768,16 +762,6 @@ def build_parser() -> argparse.ArgumentParser:
         "state-sync", help="run a State-enum consistency check pass"
     )
     p_state_sync.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-
-    # --- env-doc-sync command ---
-    p_env_doc_sync = sub.add_parser(
-        "env-doc-sync", help="run a .env example / README sync pass"
-    )
-    p_env_doc_sync.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

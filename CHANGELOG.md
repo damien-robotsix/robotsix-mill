@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove deprecated `env_doc_sync` periodic agent (agent definition, implementation module, route, CLI, board UI, config settings, and all test coverage). Env-var documentation consistency is now governed by robotsix-standards policy with audit enforcement.
 - Add module-level docstring to `src/robotsix_mill/dev_tooling/__init__.py`.
 - Add module-level docstrings to worker submodules (`core.py`, `poll_loops.py`, `periodic_passes.py`), describing each mixin's role in the event-driven consumer assembly.
 - Fix SQLite engine leak in Alembic migrations: `alembic/env.py` now disposes its engine after each run, and `init_db` skips redundant `create_all` + Alembic passes when the board is already initialized. Together these eliminate a file-descriptor leak that caused "unable to open database file" errors in CI under test suites with many tests sharing a worker process.

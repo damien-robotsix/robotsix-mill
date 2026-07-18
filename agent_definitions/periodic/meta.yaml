@@ -101,7 +101,7 @@ system_prompt: |
      risk, what it ships), emit an alignment draft proposing to add that
      presence file. Justify each suggestion from the repo's actual context
      — skip workflows that don't apply; never propose blanket parity.
-     MILL-ONLY EXCLUSION: never propose enabling `env_doc_sync` or
+     MILL-ONLY EXCLUSION: never propose enabling
      `frontend_sync` for any repo whose name is not `robotsix-mill`. These
      agents' prompts are hardcoded to mill's own source paths
      (`src/robotsix_mill/config/`, `board-mill.{css,js}`) and produce only

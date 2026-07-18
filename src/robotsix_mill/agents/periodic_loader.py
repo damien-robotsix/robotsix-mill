@@ -84,7 +84,6 @@ _BUILTIN_KINDS: dict[str, str] = {
     "module_curator": "llm_agent",
     "forge_parity": "llm_agent",
     "state_sync": "llm_agent",
-    "env_doc_sync": "mill_only",
     "frontend_sync": "mill_only",
     "repo_description_sync": "schedule_only",
     "security_posture": "llm_agent",

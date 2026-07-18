@@ -1166,18 +1166,6 @@
           "title": "Enable Repo Creation",
           "type": "boolean"
         },
-        "env_doc_sync_interval_seconds": {
-          "default": 604800,
-          "description": "Seconds between periodic env-doc-sync passes.",
-          "title": "Env Doc Sync Interval Seconds",
-          "type": "integer"
-        },
-        "env_doc_sync_periodic": {
-          "default": true,
-          "description": "When true, run daily env-var documentation consistency checks.",
-          "title": "Env Doc Sync Periodic",
-          "type": "boolean"
-        },
         "epic_dedup_lookback_days": {
           "default": 7,
           "description": "Recency window (days) for advisory duplicate detection in epic decomposition.",

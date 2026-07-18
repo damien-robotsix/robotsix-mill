@@ -1205,11 +1205,6 @@ BG_PASS_ROUTES = [
         "robotsix_mill.runners.periodic_runner",
         "run_state_sync_pass",
     ),
-    (
-        "/env-doc-sync",
-        "robotsix_mill.runners.periodic_runner",
-        "run_env_doc_sync_pass",
-    ),
 ]
 
 

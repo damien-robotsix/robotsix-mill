@@ -1,6 +1,0 @@
-# Per-repo periodic workflow: presence enables env_doc_sync for this repo.
-# Cross-references every env-var declared in the Pydantic Settings mixins
-# and secrets.py against docs/config/configuration.md, and files draft tickets for
-# documentation discrepancies. Name-only -> inherits the built-in
-# env_doc_sync definition (robotsix-mill: agent_definitions/periodic/env_doc_sync.yaml).
-name: env_doc_sync

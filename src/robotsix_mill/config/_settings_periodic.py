@@ -450,21 +450,6 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between periodic state-sync passes.",
     )
 
-    # --- env-doc-sync agent (env-var documentation consistency) ---
-    # Opt-in periodic env-doc-sync pass. Defaults to True (opt-out);
-    # set false to disable the daily env-var documentation consistency check.
-    env_doc_sync_periodic: bool = Field(
-        default=True,
-        description="When true, run daily env-var documentation consistency checks.",
-    )
-    # Seconds between periodic env-doc-sync passes when
-    # MILL_ENV_DOC_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
-    # enforced at 60s in the worker loop.
-    env_doc_sync_interval_seconds: int = Field(
-        default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic env-doc-sync passes.",
-    )
-
     # --- frontend-sync agent (board frontend → ticket system sync) ---
     # Opt-in periodic frontend-sync pass. Defaults to True (opt-out);
     # set false to disable the daily board frontend sync pass.

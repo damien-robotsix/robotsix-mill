@@ -48,8 +48,6 @@ class RunEntry:
         "run_health",
         "state-sync",
         "state_sync",
-        "env-doc-sync",
-        "env_doc_sync",
         "survey",
         "test-gap",
         "trace-health",
