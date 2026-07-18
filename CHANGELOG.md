@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add class-level docstring to `PeriodicPassesMixin` describing its per-repo periodic pass orchestration.
+- Added docstring to ``health_ready`` endpoint in ``_health.py`` documenting the readiness probe's Args, Returns shape, and 503-on-failure behaviour.
 - Add docstring to `WorkerPool.start()` method in `src/robotsix_mill/runtime/worker/core.py`.
 - Merge gate: stale review verdicts no longer block auto-merge after a rebase. The review artifact now records the branch head SHA; when the current PR head differs the stale verdict is ignored. Prevents the merge gate from re-posting byte-identical REQUEST_CHANGES verdicts that no longer apply to the rebased branch.
 - Document `sandbox.image` dev-vs-prod dual default: the Pydantic model default is `python:3.14-slim` for lightweight local development, while the production JSON config overrides to `robotsix/mill-sandbox:latest` (includes `uv` and toolchain). Added inline docstring comment and updated config docs table to match.
