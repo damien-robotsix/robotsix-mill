@@ -24,7 +24,6 @@ _shtab_robotsix_mill_commands() {
     "repos:"
     "roadmap-sync:"
     "run-health:"
-    "security-posture:"
     "serve:"
     "state-sync:"
     "survey:"
@@ -241,14 +240,6 @@ _shtab_robotsix_mill_run_health_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_run_health_defaults_added=0
 
-_shtab_robotsix_mill_security_posture_options=(
-  "(- : *)"{-h,--help}"[show this help message and exit]"
-  "--json[output full JSON result (default\: summary)]"
-)
-
-# guard to ensure default positional specs are added only once per session
-_shtab_robotsix_mill_security_posture_defaults_added=0
-
 _shtab_robotsix_mill_serve_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--repo-id[repository identifier to serve a single repo\; omit to serve all repos from config\/repos.yaml]:repo_id:"
@@ -404,7 +395,6 @@ _shtab_robotsix_mill() {
         repos) _shtab_robotsix_mill_repos ;;
         roadmap-sync) _arguments -C -s $_shtab_robotsix_mill_roadmap_sync_options ;;
         run-health) _arguments -C -s $_shtab_robotsix_mill_run_health_options ;;
-        security-posture) _arguments -C -s $_shtab_robotsix_mill_security_posture_options ;;
         serve) _arguments -C -s $_shtab_robotsix_mill_serve_options ;;
         state-sync) _arguments -C -s $_shtab_robotsix_mill_state_sync_options ;;
         survey) _arguments -C -s $_shtab_robotsix_mill_survey_options ;;
