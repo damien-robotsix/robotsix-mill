@@ -656,6 +656,7 @@ def test_periodic_pass_configs_registry_has_all_sixteen_entries():
         "survey",
         "completeness_check",
         "copy_paste",
+        "docstring_coverage",
         "forge_parity",
         "config_sync",
         "health",
@@ -678,6 +679,7 @@ def test_periodic_pass_configs_requires_repo():
     assert PERIODIC_PASS_CONFIGS["frontend_sync"].requires_repo is True
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
         if key in (
+            "docstring_coverage",
             "module_curator",
             "test_gap",
             "state_sync",

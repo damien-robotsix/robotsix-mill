@@ -49,6 +49,7 @@ class SourceKind(StrEnum):
     STATE_SYNC = "state_sync"
     FRONTEND_SYNC = "frontend_sync"
     TRIAGE_BOILERPLATE = "triage_boilerplate"
+    DOCSTRING_COVERAGE = "docstring_coverage"
     META = "meta"
     RUN_HEALTH = "run-health"
     LANGFUSE_CLEANUP = "langfuse-cleanup"

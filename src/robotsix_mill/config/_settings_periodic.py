@@ -105,6 +105,18 @@ class _PeriodicSettings(BaseModel):
         description="Staleness threshold: tickets in AWAITING_USER_REPLY older than this are escalated to BLOCKED.",
     )
 
+    # --- docstring-coverage agent (public-API documentation oversight) ---
+    # When True, the worker runs periodic docstring-coverage passes.
+    docstring_coverage_periodic: bool = Field(
+        default=True,
+        description="When true, run periodic docstring-coverage passes for public-API documentation oversight.",
+    )
+    # Interval between periodic docstring-coverage passes (seconds).
+    docstring_coverage_interval_seconds: int = Field(
+        default=604800,  # 7d — weekly default; per-repo override via YAML
+        description="Seconds between periodic docstring-coverage passes.",
+    )
+
     # --- test-gap agent (dedicated test-coverage oversight) ---
     # Model for the test-gap agent. Defaults to the same capable model
     # as audit/health. Override with MILL_TEST_GAP_MODEL.

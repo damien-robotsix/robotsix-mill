@@ -68,6 +68,7 @@ def test_sourcekind_member_count():
         "DEPENDABOT_ALERTS",
         "COMPLETENESS_CHECK",
         "COPY_PASTE",
+        "DOCSTRING_COVERAGE",
         "FORGE_PARITY",
         "TRACE_HEALTH",
         "TRACE_REVIEW",

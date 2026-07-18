@@ -98,6 +98,7 @@ margin-left:4px" title="Register a new repo">
     <button onclick="runAudit()" data-agent="audit">Audit</button>
     <button onclick="runHealth()" data-agent="health">Health Check</button>
     <button onclick="runTestGap()" data-agent="test_gap">Test Gaps</button>
+    <button onclick="runDocstringCoverage()" data-agent="docstring_coverage">Doc Coverage</button>
     <button onclick="runTraceHealth()" data-agent="trace_health">Trace Health</button>
     <button onclick="runLangfuseCleanup()" data-agent="langfuse_cleanup">Langfuse Cleanup</button>
     <button onclick="runAgentCheck()" data-agent="agent_check">Agent Check</button>

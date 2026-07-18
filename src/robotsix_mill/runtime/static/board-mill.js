@@ -57,6 +57,7 @@
     audit: '#059669',
     health: '#0d9488',
     test_gap: '#7c3aed',
+    docstring_coverage: '#d97706',
     trace_health: '#0ea5e9',
     langfuse_cleanup: '#14b8a6',
     agent_check: '#db2777',
@@ -86,6 +87,7 @@
     "trace-health": "trace-health",
     health: "health",
     test_gap: "test-gap",
+    docstring_coverage: "docstring-coverage",
     agent: "agent",
     survey: "survey",
     ci: "ci",
@@ -98,6 +100,7 @@
     frontend_sync: "frontend-sync",
     module_curator: "module-curator",
     copy_paste: "copy-paste",
+    docstring_coverage: "docstring-coverage",
     state_sync: "state-sync",
     data_dir_gc: "data-dir-gc",
     meta: "meta",
@@ -1959,6 +1962,23 @@
     }
   }
 
+  async function runDocstringCoverage() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = 'Running...';
+    try {
+      var repoId = getRepoId();
+      var dcUrl = repoId !== "all" ? "/docstring-coverage?repo_id=" + encodeURIComponent(repoId) : "/docstring-coverage";
+      var r = await jpost(dcUrl);
+      if (!r.ok) { throw new Error(await r.text()); }
+      alert("Docstring-coverage inspection started — new draft tickets will appear on the board if gaps are found.");
+      setTimeout(refresh, 3000);
+    } catch (e) {
+      alert("Docstring-coverage check failed to start: " + e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Doc Coverage';
+    }
+  }
+
   async function runAgentCheck() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2544,6 +2564,7 @@
   window.runConfigSync = runConfigSync;
   window.runMemberSync = runMemberSync;
   window.runTraceReview = runTraceReview;
+  window.runDocstringCoverage = runDocstringCoverage;
   window.runRoadmapSync = runRoadmapSync;
   window.runMeta = runMeta;
 

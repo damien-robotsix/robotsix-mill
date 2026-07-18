@@ -91,6 +91,7 @@ h1 {
 .src-trace-health    { background: #1a2a3b; color: #60c0fa; }
 .src-health          { background: #1a3b2f; color: #34d399; }
 .src-test-gap        { background: #2e1065; color: #c084fc; }
+.src-docstring-coverage { background: #451a03; color: #fbbf24; }
 .src-agent           { background: #3b1a1a; color: #f87171; }
 .src-survey          { background: #134e4a; color: #2dd4bf; }
 .src-ci              { background: #1e293b; color: #94a3b8; }

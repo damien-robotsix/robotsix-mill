@@ -473,6 +473,17 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
     ),
+    "docstring_coverage": PeriodicPassConfig(
+        label="docstring_coverage",
+        source_kind=SourceKind.DOCSTRING_COVERAGE,
+        agent_module_attr="docstring_coverage",
+        agent_fn_name="run_docstring_coverage_agent",
+        memory_filename="docstring_coverage_memory.md",
+        workspace_subdir="docstring_coverage_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=_clone_token,
+        requires_repo=True,
+    ),
 }
 
 
@@ -564,3 +575,4 @@ run_test_gap_pass = _make_entry("test_gap")
 run_state_sync_pass = _make_entry("state_sync")
 run_frontend_sync_pass = _make_entry("frontend_sync")
 run_triage_boilerplate_pass = _make_entry("triage_boilerplate")
+run_docstring_coverage_pass = _make_entry("docstring_coverage")

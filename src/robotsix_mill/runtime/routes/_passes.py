@@ -236,6 +236,15 @@ test_gap_pass = _make_background_pass(
 router.post("/test-gap", status_code=202)(test_gap_pass)
 
 
+docstring_coverage_pass = _make_background_pass(
+    kind="docstring-coverage",
+    runner_module="robotsix_mill.runners.periodic_runner",
+    runner_func="run_docstring_coverage_pass",
+    docstring="""Kick off a docstring-coverage inspection pass in the BACKGROUND.""",
+)
+router.post("/docstring-coverage", status_code=202)(docstring_coverage_pass)
+
+
 survey_pass = _make_background_pass(
     kind="survey",
     runner_module="robotsix_mill.runners.periodic_runner",

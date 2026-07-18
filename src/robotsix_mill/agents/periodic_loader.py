@@ -81,6 +81,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "copy_paste": "llm_agent",
     "survey": "llm_agent",
     "test_gap": "llm_agent",
+    "docstring_coverage": "llm_agent",
     "module_curator": "llm_agent",
     "forge_parity": "llm_agent",
     "state_sync": "llm_agent",
