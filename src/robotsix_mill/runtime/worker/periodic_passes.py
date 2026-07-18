@@ -179,6 +179,13 @@ def _ci_debt_recheck_pass(
 
 
 class PeriodicPassesMixin(_WorkerBase):
+    """Orchestrates periodic agent passes across all registered repos.
+
+    Each repo is driven independently — the shared per-repo supervisor
+    loop tracks per-repo cadence so that one stalled repo never blocks
+    passes on others.
+    """
+
     async def _run_periodic_pass_per_repo(
         self,
         label: str,
