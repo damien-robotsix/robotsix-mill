@@ -127,7 +127,6 @@ _shtab_robotsix_mill_diagnostic_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_diagnostic_defaults_added=0
 
-  "(- : *)"{-h,--help}"[show this help message and exit]"
 _shtab_robotsix_mill_epic_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
 )
