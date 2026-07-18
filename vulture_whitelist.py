@@ -241,6 +241,9 @@ deduped
 # -- meta --------------------------------------------------------------------
 todo_drafts_created
 MARKERS
+# run_meta_pass_wrapper — called from the FastAPI route via _run_periodic_pass;
+# vulture (60% confidence) cannot trace the call site.
+run_meta_pass_wrapper
 
 # -- repo_scaffold -----------------------------------------------------------
 # run_repo_scaffold — callers removed when ticket-based maintenance flow
@@ -290,6 +293,15 @@ run_changelog_autofill_pass
 run_pin_bump_pass
 run_repo_description_sync_pass
 run_docstring_coverage_pass
+# run_langfuse_cleanup_pass_wrapper — called from _passes.py via
+# _run_periodic_pass wrapper; vulture (60% confidence) cannot trace it.
+run_langfuse_cleanup_pass_wrapper
+# run_run_health_pass_wrapper — called from _passes.py via
+# _run_periodic_pass wrapper; vulture (60% confidence) cannot trace it.
+run_run_health_pass_wrapper
+# run_trace_health_pass — called from _passes.py via _run_periodic_pass
+# wrapper; vulture (60% confidence) cannot trace it.
+run_trace_health_pass
 
 # -- vcs ---------------------------------------------------------------------
 # Tested git utility with no current production caller: ci_fix's proactive
@@ -379,6 +391,15 @@ _requeue_task
 queue_size
 queue_join
 _run_periodic_pass_per_repo
+# _make_background_pass — factory function for creating background-pass
+# runners; called dynamically from the periodic pass setup (vulture 60%).
+_make_background_pass
+# list_passes — FastAPI route handler invoked via @router.get decorator;
+# vulture (60% confidence) cannot trace FastAPI-decorated handlers.
+list_passes
+# run_pass — FastAPI route handler invoked via @router.post decorator;
+# vulture (60% confidence) cannot trace FastAPI-decorated handlers.
+run_pass
 
 # -- stages ------------------------------------------------------------------
 input_state
