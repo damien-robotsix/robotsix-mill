@@ -39,29 +39,31 @@ Opt-in agents that run independently of the ticket pipeline.
 
 | Agent | Definition | Module | Model var | Trigger | Role |
 |---|---|---|---|---|---|
-| Audit | `agent_definitions/audit.yaml` | `agents/auditing.py` | `MILL_AUDIT_MODEL` | CLI (`audit`), API (`POST /audit`), board button, or periodic (`MILL_AUDIT_PERIODIC`) | Meta-audit: identifies gaps in repo quality/security tooling coverage; emits improvement drafts |
-| Trace-health | (no agent — deterministic check in `trace_health_runner.py`) | — | — | CLI (`trace-health`), API (`POST /trace-health`), board button, or periodic (`MILL_TRACE_HEALTH_PERIODIC`) | Scans Langfuse for unsessioned traces; files alert draft |
-| Health | `agent_definitions/health.yaml` | `agents/health.py` | `MILL_HEALTH_MODEL` | CLI, API (`POST /health-check`), or periodic (`MILL_HEALTH_PERIODIC`) | Codebase-health inspection across 6 dimensions (size, length, docs, tests, complexity, dead code) |
-| Test-gap | `agent_definitions/test_gap.yaml` | `agents/test_gap.py` | `MILL_TEST_GAP_MODEL` | CLI, API (`POST /test-gap`), or periodic (`MILL_TEST_GAP_PERIODIC`) | Identifies modules with zero dedicated unit-test coverage |
-| Agent-check | `agent_definitions/agent_check.yaml` | `agents/agent_check.py` | `MILL_AGENT_CHECK_MODEL` | CLI, API (`POST /agent-check`), or periodic (`MILL_AGENT_CHECK_PERIODIC`) | Meta-agent: inspects all agent definitions for tool–prompt mismatch, skill drift, metadata correctness, registration completeness, prompt self-consistency, and memory ledger coherence |
-| Survey | `agent_definitions/survey.yaml` | `agents/surveying.py` | `MILL_SURVEY_MODEL` | CLI, API (`POST /survey`) | Discovers similar OSS projects via web research; proposes concrete improvements |
-| BC-check | `agent_definitions/bc_check.yaml` | `agents/bc_check.py` | `MILL_BC_CHECK_MODEL` | CLI, API (`POST /bc-check`), or periodic (`MILL_BC_CHECK_PERIODIC`) | Backward-compatibility scanner: examines git history for changed signatures and flags breakage |
-| Completeness-check | `agent_definitions/completeness_check.yaml` | `agents/completeness_check.py` | `MILL_COMPLETENESS_CHECK_MODEL` | CLI, API (`POST /completeness-check`), or periodic (`MILL_COMPLETENESS_CHECK_PERIODIC`) | Scans the repo for incomplete feature wiring (missing YAML mappings/defaults, routes without buttons, runners without CLI, agent files without callers) |
-| Config-sync | (no agent — deterministic orchestrator in `config_sync_runner.py`) | `agents/config_syncing.py` | `MILL_CONFIG_SYNC_MODEL` | CLI (`config-sync`), API (`POST /config-sync`), board button, or periodic (`MILL_CONFIG_SYNC_PERIODIC`) | Scans for config ↔ .env ↔ docs drift; emits draft tickets for gaps |
+| Audit | `agent_definitions/audit.yaml` | `agents/auditing.py` | `MILL_AUDIT_MODEL` | CLI (`audit`), API (`POST /passes/audit/run`), board button, or periodic (`MILL_AUDIT_PERIODIC`) | Meta-audit: identifies gaps in repo quality/security tooling coverage; emits improvement drafts |
+| Trace-health | (no agent — deterministic check in `trace_health_runner.py`) | — | — | CLI (`trace-health`), API (`POST /passes/trace_health/run`), board button, or periodic (`MILL_TRACE_HEALTH_PERIODIC`) | Scans Langfuse for unsessioned traces; files alert draft |
+| Health | `agent_definitions/health.yaml` | `agents/health.py` | `MILL_HEALTH_MODEL` | CLI, API (`POST /passes/health/run`), or periodic (`MILL_HEALTH_PERIODIC`) | Codebase-health inspection across 6 dimensions (size, length, docs, tests, complexity, dead code) |
+| Test-gap | `agent_definitions/test_gap.yaml` | `agents/test_gap.py` | `MILL_TEST_GAP_MODEL` | CLI, API (`POST /passes/test_gap/run`), or periodic (`MILL_TEST_GAP_PERIODIC`) | Identifies modules with zero dedicated unit-test coverage |
+| Agent-check | `agent_definitions/agent_check.yaml` | `agents/agent_check.py` | `MILL_AGENT_CHECK_MODEL` | CLI, API (`POST /passes/agent_check/run`), or periodic (`MILL_AGENT_CHECK_PERIODIC`) | Meta-agent: inspects all agent definitions for tool–prompt mismatch, skill drift, metadata correctness, registration completeness, prompt self-consistency, and memory ledger coherence |
+| Survey | `agent_definitions/survey.yaml` | `agents/surveying.py` | `MILL_SURVEY_MODEL` | CLI, API (`POST /passes/survey/run`) | Discovers similar OSS projects via web research; proposes concrete improvements |
+| BC-check | `agent_definitions/bc_check.yaml` | `agents/bc_check.py` | `MILL_BC_CHECK_MODEL` | CLI, API (`POST /passes/bc_check/run`), or periodic (`MILL_BC_CHECK_PERIODIC`) | Backward-compatibility scanner: examines git history for changed signatures and flags breakage |
+| Completeness-check | `agent_definitions/completeness_check.yaml` | `agents/completeness_check.py` | `MILL_COMPLETENESS_CHECK_MODEL` | CLI, API (`POST /passes/completeness_check/run`), or periodic (`MILL_COMPLETENESS_CHECK_PERIODIC`) | Scans the repo for incomplete feature wiring (missing YAML mappings/defaults, routes without buttons, runners without CLI, agent files without callers) |
+| Config-sync | (no agent — deterministic orchestrator in `config_sync_runner.py`) | `agents/config_syncing.py` | `MILL_CONFIG_SYNC_MODEL` | CLI (`config-sync`), API (`POST /passes/config_sync/run`), board button, or periodic (`MILL_CONFIG_SYNC_PERIODIC`) | Scans for config ↔ .env ↔ docs drift; emits draft tickets for gaps |
 | Answer | `agent_definitions/answer.yaml` | `agents/answering.py` | `MILL_ANSWER_MODEL` | `answer` stage (ASKED state — ticket type `inquiry`) | Investigative analyst: answers questions using repo exploration + web research + Langfuse data |
 
-All on-demand `POST` routes accept an optional **`?repo_id=<id>`** query
-parameter.  In single-repo mode (one repo configured) the parameter is
-ignored and the runner uses global defaults — backward compatible.
-In multi-repo mode:
+All on-demand `POST /passes/{pass_id}/run` routes accept an optional
+**`?repo_id=<id>`** query parameter.  In single-repo mode (one repo
+configured) the parameter is ignored and the runner uses global defaults
+— backward compatible.  In multi-repo mode:
 
-- **`?repo_id=my-repo`** — runs the agent against that repo only
+- **`?repo_id=my-repo`** — runs the pass against that repo only
   (scoped memory, board, and clone directory).
-- **`?repo_id=all`** — fans the agent out across every registered repo.
+- **`?repo_id=all`** — fans the pass out across every registered repo.
 - **Omitting `?repo_id`** — also fans out across every repo (equivalent
-  to `?repo_id=all`).  The `/trace-health` route uses the same
-  convention but has no `session_id` parameter.
+  to `?repo_id=all`).
 - **Unknown `repo_id`** → HTTP 400 with a list of known repo IDs.
+
+Global-only passes (`meta`, `run_health`) ignore the `repo_id` parameter
+and always run once at the mill level.
 
 ## Sub-agents
 

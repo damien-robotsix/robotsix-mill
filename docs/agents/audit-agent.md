@@ -46,10 +46,10 @@ robotsix-mill audit --json      # full JSON result
 
 **API:**
 ```sh
-curl -X POST http://localhost:8077/audit
+curl -X POST http://localhost:8077/passes/audit/run
 ```
 
-**Web board:** Click the "Run Audit" button on the board page.
+**Web board:** Open the `⚡ Passes` dropdown on the board page and select "Audit".
 
 **Periodic polling (opt-in):**
 ```yaml

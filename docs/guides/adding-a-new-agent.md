@@ -312,21 +312,43 @@ If the agent should be invocable on-demand via the management API:
 
 1. Open `src/robotsix_mill/runtime/routes/_passes.py`.
 
-2. Add a `_make_background_pass` call and register it with the router:
+2. Add an entry to the ``_PASS_REGISTRY`` dict:
 
    ```python
-   health_check_pass = _make_background_pass(
-       kind="health",
-       runner_module="robotsix_mill.runners.health_runner",
-       runner_func="run_health_pass",
-       docstring="""Kick off a codebase-health pass in the
-       BACKGROUND and return at once. …""",
-   )
-   router.post("/health-check", status_code=202)(health_check_pass)
+   "my_pass_name": {
+       "kind": "llm_agent",             # "llm_agent", "schedule_only", or "global_only"
+       "runner_module": "robotsix_mill.runners.periodic_runner",
+       "runner_func": "run_my_pass",
+       "label": "My Pass Label",
+   },
    ```
 
-3. If you also want a CLI entry-point, add it to the management CLI
+   For deterministic (no-LLM) passes use ``"kind": "schedule_only"``.
+   For global passes that run once at the mill level (not per-repo) use
+   ``"kind": "global_only"`` with ``"global_only": True``.
+
+   Each runner must accept ``(session_id: str | None, repo_config: object | None, **extra)``
+   and return an object with a ``drafts_created: list[dict]`` attribute (or at minimum
+   a ``summary`` property) for the run registry.
+
+3. If the pass needs extra kwargs from the request (e.g. settings or
+   configuration), add an ``"extra_runner_kwargs"`` callable:
+
+   ```python
+   "my_pass": {
+       ...
+       "extra_runner_kwargs": lambda request: {
+           "settings": request.app.state.settings,
+       },
+   },
+   ```
+
+4. If you also want a CLI entry-point, add it to the management CLI
    under `src/robotsix_mill/cli/` following the existing pattern.
+
+The generic ``POST /passes/{pass_id}/run`` endpoint, the ``GET /passes``
+listing, and the board's `⚡ Passes` dropdown all derive from
+``_PASS_REGISTRY`` automatically — no additional wiring is needed.
 
 ---
 

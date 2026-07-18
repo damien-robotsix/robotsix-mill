@@ -43,10 +43,10 @@ robotsix-mill trace-health --json      # full JSON result
 
 **API:**
 ```sh
-curl -X POST http://localhost:8077/trace-health
+curl -X POST http://localhost:8077/passes/trace_health/run
 ```
 
-**Web board:** Click the "Trace Health" button on the board page.
+**Web board:** Open the `⚡ Passes` dropdown on the board page and select "Trace Health".
 
 **Periodic polling (opt-in):**
 ```yaml
