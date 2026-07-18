@@ -554,7 +554,10 @@ class CIPollMixin(_MergeStageBase):
             )
 
         # success, pending, or None — evaluate auto-merge eligibility.
-        eligible, eligibility_reason = self._auto_merge_eligible(ticket, ctx)
+        feature_tip_sha = pr.get("sha", "")
+        eligible, eligibility_reason = self._auto_merge_eligible(
+            ticket, ctx, pr_head_sha=feature_tip_sha
+        )
 
         if _ci_truly_green(conclusion, pr):
             if eligible:
@@ -618,7 +621,7 @@ class CIPollMixin(_MergeStageBase):
         return Outcome(State.HUMAN_MR_APPROVAL)
 
     def _auto_merge_eligible(
-        self, ticket: Ticket, ctx: StageContext
+        self, ticket: Ticket, ctx: StageContext, pr_head_sha: str | None = None
     ) -> tuple[bool, str]:
         """Return ``(eligible, reason)`` for auto-merge.
 
@@ -627,6 +630,9 @@ class CIPollMixin(_MergeStageBase):
         2. ``settings.review_enabled`` is True
         3. Review artifact exists at ``{workspace}/artifacts/review.md``
         4. Artifact contains the literal string ``"auto_merge_eligible: true"``
+        5. Artifact's ``head_sha`` matches *pr_head_sha* (when both are
+           present); a mismatch means the review is stale — it was
+           produced against a different branch tip.
 
         *reason* explains the blocking condition when eligible is False.
         """
@@ -641,6 +647,24 @@ class CIPollMixin(_MergeStageBase):
             return False, "no review artifact — human approval required"
 
         review_text = review_artifact.read_text(encoding="utf-8")
+
+        # --- head SHA freshness gate ---
+        # When the artifact's head_sha differs from the current PR tip,
+        # the review is stale — the branch has been rebased or force-
+        # pushed since the review ran.  A stale verdict is never re-posted
+        # or used to block auto-merge: treat as eligible regardless of
+        # the old verdict, so the ticket can proceed.
+        artifact_head_sha = ""
+        for line in review_text.splitlines():
+            if line.startswith("head_sha:"):
+                artifact_head_sha = line[len("head_sha:") :].strip()
+                break
+        if pr_head_sha and artifact_head_sha and pr_head_sha != artifact_head_sha:
+            return True, (
+                "stale review verdict — branch head changed since last"
+                " review; treating as eligible"
+            )
+
         if "auto_merge_eligible: true" not in review_text:
             # Try to read the verdict line for context.
             verdict_note = ""
@@ -674,12 +698,6 @@ class CIPollMixin(_MergeStageBase):
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
 
-        # First, re-check eligibility (review artifact may have changed).
-        eligible, reason = self._auto_merge_eligible(ticket, ctx)
-        if not eligible:
-            self._maybe_comment(ticket, ctx, reason)
-            return Outcome(State.HUMAN_MR_APPROVAL, reason)
-
         pr, early = self._check_pr_baseline(
             ticket, ctx, branch, State.WAITING_AUTO_MERGE, verify_merge=True
         )
@@ -687,6 +705,15 @@ class CIPollMixin(_MergeStageBase):
             return early
         if pr is None:  # type guard: _check_pr_baseline guarantees pr is non-None here
             raise RuntimeError("_check_pr_baseline returned (None, None) — impossible")
+
+        # Re-check eligibility (review artifact may have changed / become stale).
+        feature_tip_sha = pr.get("sha", "")
+        eligible, reason = self._auto_merge_eligible(
+            ticket, ctx, pr_head_sha=feature_tip_sha
+        )
+        if not eligible:
+            self._maybe_comment(ticket, ctx, reason)
+            return Outcome(State.HUMAN_MR_APPROVAL, reason)
 
         mergeable = pr.get("mergeable")
         if mergeable is False:
