@@ -14,6 +14,7 @@ from robotsix_mill.stages.implement._shared import (
     CONFIG_ONLY_EXTENSIONS,
     _is_config_only_change,
     _is_rename_only_change,
+    _is_small_mechanical_refactor,
     _is_spec_exact_edits,
     _parse_spec_code_blocks,
     _should_skip_test_gate,
@@ -318,6 +319,127 @@ class TestIsRenameOnlyChange:
             check=True,
         )
         assert _is_rename_only_change(git_repo, "main") is False
+
+
+# ---------------------------------------------------------------------------
+# _is_small_mechanical_refactor
+# ---------------------------------------------------------------------------
+
+
+class TestIsSmallMechanicalRefactor:
+    """Tests for ``_is_small_mechanical_refactor`` using a real git repo fixture."""
+
+    @pytest.fixture
+    def git_repo(self, tmp_path: Path) -> Path:
+        """Create a temp git repo with an origin/main ref for diffing."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+        )
+        (repo / "README.md").write_text("# Test Repo")
+        (repo / "src").mkdir()
+        (repo / "src" / "mod.py").write_text("x = 1\ny = 2\nz = 3\n")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "initial"],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(repo), "branch", "-M", "main"], check=True)
+        remote = tmp_path / "remote.git"
+        remote.mkdir()
+        subprocess.run(["git", "-C", str(remote), "init", "--bare"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "remote", "add", "origin", str(remote)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "push", "-u", "origin", "main"],
+            check=True,
+        )
+        return repo
+
+    def test_small_modification_only(self, git_repo: Path) -> None:
+        """A single-line edit to an existing file → True."""
+        (git_repo / "src" / "mod.py").write_text("x = 1\ny = 99\nz = 3\n")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "small edit"],
+            check=True,
+        )
+        assert _is_small_mechanical_refactor(git_repo, "main") is True
+
+    def test_new_file_returns_false(self, git_repo: Path) -> None:
+        """Adding a new file → False (not a pure refactor)."""
+        (git_repo / "src" / "new_file.py").write_text("# new")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "add file"],
+            check=True,
+        )
+        assert _is_small_mechanical_refactor(git_repo, "main") is False
+
+    def test_large_diff_returns_false(self, git_repo: Path) -> None:
+        """A diff with >40 total lines changed → False."""
+        # Generate 50+ lines of changes by writing a large file modification.
+        content = "\n".join(f"line_{i} = {i}" for i in range(50))
+        (git_repo / "src" / "mod.py").write_text(content)
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "big edit"],
+            check=True,
+        )
+        assert _is_small_mechanical_refactor(git_repo, "main") is False
+
+    def test_no_diff_returns_false(self, git_repo: Path) -> None:
+        """No diff vs origin/main → False (fail-closed)."""
+        assert _is_small_mechanical_refactor(git_repo, "main") is False
+
+    def test_git_failure_returns_false(self, tmp_path: Path) -> None:
+        """Nonexistent origin/<branch> → git diff fails → False."""
+        repo = tmp_path / "noremote"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init"], check=True)
+        assert _is_small_mechanical_refactor(repo, "nonexistent") is False
+
+    def test_deletions_only_still_counted(self, git_repo: Path) -> None:
+        """Pure deletions (e.g. removing dead code) are counted."""
+        # Delete several lines from mod.py.
+        (git_repo / "src" / "mod.py").write_text("x = 1\n")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "delete lines"],
+            check=True,
+        )
+        assert _is_small_mechanical_refactor(git_repo, "main") is True
+
+    def test_multiple_small_edits(self, git_repo: Path) -> None:
+        """Multiple small edits across existing files, total ≤40 → True."""
+        (git_repo / "src" / "mod.py").write_text("x = 10\ny = 20\nz = 30\n")
+        (git_repo / "README.md").write_text("# Updated\n\nSome text.\n")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "multi edit"],
+            check=True,
+        )
+        assert _is_small_mechanical_refactor(git_repo, "main") is True
+
+    def test_add_new_test_file_returns_false(self, git_repo: Path) -> None:
+        """Adding a new test file → False (new file added)."""
+        (git_repo / "tests").mkdir(exist_ok=True)
+        (git_repo / "tests" / "test_new.py").write_text("def test_x(): pass\n")
+        subprocess.run(["git", "-C", str(git_repo), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "-m", "add test"],
+            check=True,
+        )
+        assert _is_small_mechanical_refactor(git_repo, "main") is False
 
 
 # ---------------------------------------------------------------------------
