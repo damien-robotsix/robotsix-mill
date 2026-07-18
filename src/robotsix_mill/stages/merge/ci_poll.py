@@ -696,7 +696,7 @@ class CIPollMixin(_MergeStageBase):
             if line.startswith("head_sha:"):
                 artifact_head_sha = line[len("head_sha:") :].strip()
                 break
-        if pr_head_sha and artifact_head_sha and pr_head_sha != artifact_head_sha:
+        if pr_head_sha and (not artifact_head_sha or pr_head_sha != artifact_head_sha):
             return True, (
                 "stale review verdict — branch head changed since last"
                 " review; treating as eligible"
