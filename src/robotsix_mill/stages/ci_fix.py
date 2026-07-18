@@ -75,6 +75,7 @@ class CIFixStage(Stage):
             alerts,
             changed_paths,
             alerts_unreadable,
+            head_sha,
         ) = resolved
 
         # --- Early guard: CodeQL failing but alerts unreadable (403) ---
@@ -104,24 +105,10 @@ class CIFixStage(Stage):
         if triage_outcome is not None:
             return triage_outcome
 
-        # NOTE: there is intentionally no proactive rebase here. The merge
-        # poll already routes branch-introduced failures straight to ci_fix
-        # (pre-existing main-branch debt is blocked there, conflicts go to
-        # REBASING), so by the time we reach this stage the PR is mergeable
-        # and the failure is the branch's own. A local rebase + force-push
-        # here cannot fix a branch-own lint/type/vulture failure — it only
-        # burns a cycle (and used to pre-seed the identical-failure
-        # fingerprint, biasing the backstop toward an early BLOCK before the
-        # agent ever ran). The agent OWNS the fix: it has bridged git tools
-        # and the target branch, so it can rebase itself when (and only when)
-        # it determines the failure is base-caused. Genuine "behind main"
-        # staleness is still handled by the server-side update-branch backstop
-        # in the OUT_OF_SCOPE path below.
-
         # Identical-failure gate: when the same CI failure fingerprint repeats
         # ci_fix_max_identical_failures times in a row, escalate to BLOCKED.
         identical_outcome = self._check_consecutive_identical_failure(
-            ticket, ctx, failing_summary
+            ticket, ctx, failing_summary, head_sha
         )
         if identical_outcome is not None:
             return identical_outcome
@@ -151,9 +138,10 @@ class CIFixStage(Stage):
             failing,
             alerts,
             changed_paths,
+            head_sha,
         )
 
-    def _resolve_clone_and_status(
+    def _resolve_clone_and_status(  # noqa: C901 — multi-step routing; each branch is simple
         self, ticket: Ticket, ctx: StageContext
     ) -> Outcome | _FailingContext:
         """Run the guards, resolve the clone, and route on CI status.
@@ -182,6 +170,45 @@ class CIFixStage(Stage):
                 State.BLOCKED,
                 "workspace clone is missing; cannot fix CI. "
                 "Re-run implement to recreate the clone.",
+            )
+
+        # --- Rebase onto current main before scanning CI ---
+        # A stale branch can carry a CI fingerprint from an already-fixed
+        # upstream issue (e.g. a resolved PYSEC advisory).  Rebase onto
+        # current main and force-push so the CI re-runs against the
+        # latest base — the fresh run produces a different head SHA,
+        # which feeds into the failure fingerprint and prevents the
+        # consecutive-identical backstop from re-blocking a ticket whose
+        # upstream issue has already been resolved.
+        _target = target_branch_for(s, ctx.repo_config)
+        _remote_url = _resolve_remote_url(s, ctx.repo_config)
+        _token = github_token(s, repo_config=ctx.repo_config)
+        try:
+            _did_rebase = git_ops.try_rebase_onto(
+                Path(repo_dir),
+                _target,
+                remote_url=_remote_url,
+                token=_token,
+            )
+            if _did_rebase:
+                git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                log.info(
+                    "%s: rebased onto %s and pushed before CI scan",
+                    ticket.id,
+                    _target,
+                )
+            else:
+                log.warning(
+                    "%s: rebase onto %s failed or was unnecessary — "
+                    "proceeding with existing branch HEAD",
+                    ticket.id,
+                    _target,
+                )
+        except Exception:
+            log.warning(
+                "%s: rebase step failed — proceeding with existing branch",
+                ticket.id,
+                exc_info=True,
             )
 
         # Fetch check status from the forge.
@@ -229,7 +256,7 @@ class CIFixStage(Stage):
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
-        failing_summary, alerts, changed_paths, alerts_unreadable = (
+        failing_summary, alerts, changed_paths, alerts_unreadable, head_sha = (
             self._build_failure_detail(ticket, ctx, branch, failing)
         )
         # Persist the failure detail for observability.
@@ -242,6 +269,7 @@ class CIFixStage(Stage):
             alerts,
             changed_paths,
             alerts_unreadable,
+            head_sha,
         )
 
     def _build_failure_detail(  # noqa: C901 — enrichment is inherently branchy
@@ -250,12 +278,14 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
-    ) -> tuple[str, list[dict[str, Any]], set[str], bool]:
+    ) -> tuple[str, list[dict[str, Any]], set[str], bool, str]:
         """Enrich the failing-check list with job logs + code-scanning alerts.
 
-        Returns ``(failing_summary, alerts, changed_paths, alerts_unreadable)``
-        so callers can inspect the raw alert data (e.g. for FP triage gating)
-        and detect when alerts were unreadable due to a 403 permission gap.
+        Returns ``(failing_summary, alerts, changed_paths, alerts_unreadable,
+        head_sha)`` so callers can inspect the raw alert data (e.g. for FP
+        triage gating), detect when alerts were unreadable due to a 403
+        permission gap, and include the branch HEAD SHA in the failure
+        fingerprint.
         """
         s = ctx.settings
 
@@ -265,6 +295,7 @@ class CIFixStage(Stage):
         alerts: list[dict[str, Any]] = []
         changed_paths: set[str] = set()
         alerts_unreadable = False
+        head_sha = ""
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
             alerts = forge.list_code_scanning_alerts(source_branch=branch)
@@ -315,6 +346,7 @@ class CIFixStage(Stage):
             alerts,
             changed_paths,
             alerts_unreadable,
+            head_sha,
         )
 
     def _write_failing_summary_artifact(
@@ -345,6 +377,7 @@ class CIFixStage(Stage):
         ticket: Ticket,
         ctx: StageContext,
         failing_summary: str,
+        head_sha: str = "",
     ) -> Outcome | None:
         """Return ``Outcome(State.BLOCKED, ...)`` when the same CI failure
         fingerprint has repeated ``ci_fix_max_identical_failures`` times in a
@@ -368,7 +401,7 @@ class CIFixStage(Stage):
             return None
 
         repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
-        current_fp = _ci_failure_fingerprint(failing_summary, repo_id)
+        current_fp = _ci_failure_fingerprint(failing_summary, repo_id, head_sha)
         artifacts = ctx.service.workspace(ticket).artifacts_dir
         fp_path = artifacts / _CI_FAILURE_FINGERPRINT
         counter_path = artifacts / _CI_IDENTICAL_FAILURE_COUNT
@@ -522,6 +555,7 @@ class CIFixStage(Stage):
         failing: list[dict[str, Any]],
         alerts: list[dict[str, Any]],
         changed_paths: set[str],
+        head_sha: str = "",
     ) -> Outcome:
         """Reconcile, run the agent (which owns the loop), and route its verdict.
 
@@ -569,7 +603,7 @@ class CIFixStage(Stage):
 
         if result is not None and result.status == "OUT_OF_SCOPE":
             return self._handle_out_of_scope(
-                ticket, ctx, branch, result, failing_summary
+                ticket, ctx, branch, result, failing_summary, head_sha
             )
 
         # FAILED, or None on crash — the agent could not turn CI green within
@@ -776,8 +810,8 @@ class CIFixStage(Stage):
 
             if conclusion == "failure":
                 failing = status.get("failing", [])
-                summary, _alerts, _changed, _unreadable = self._build_failure_detail(
-                    ticket, ctx, branch, failing
+                summary, _alerts, _changed, _unreadable, _head = (
+                    self._build_failure_detail(ticket, ctx, branch, failing)
                 )
                 if sha:
                     summary = f"[sha: {sha[:7]}]\n{summary}"
@@ -811,6 +845,7 @@ class CIFixStage(Stage):
         branch: str,
         result: CiFixResult,
         failing_summary: str,
+        head_sha: str = "",
     ) -> Outcome:
         """Route an out-of-scope CI failure to a dedicated fix ticket.
 
@@ -908,6 +943,7 @@ class CIFixStage(Stage):
         fingerprint = _ci_failure_fingerprint(
             failing_summary,
             ctx.repo_config.board_id if ctx.repo_config else "",
+            head_sha,
         )
         outcome = dependency_fix.spawn_dependency_fix(
             ticket,
@@ -919,6 +955,15 @@ class CIFixStage(Stage):
             priority=ticket.priority,
             dedup_labels=[f"ci_fp:{fingerprint}"],
         )
+
+        # Clear the depends-on relationship that spawn_dependency_fix set
+        # on the original ticket.  The unblocks relationship on the fix
+        # ticket is sufficient — when the fix completes it auto-unblocks
+        # this ticket.  Leaving depends_on set would block the operator's
+        # resume-blocked: the dependency check in _process_ticket_inner
+        # short-circuits before the ci_fix stage ever runs, parking the
+        # ticket in FIXING_CI indefinitely.
+        ctx.service.set_depends_on(ticket.id, [])
 
         # Reset the per-ticket refresh counter so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.

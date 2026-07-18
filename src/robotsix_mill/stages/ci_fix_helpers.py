@@ -233,18 +233,25 @@ def _only_codeql_failing(failing: list[dict[str, Any]]) -> bool:
     return True
 
 
-def _ci_failure_fingerprint(failing_summary: str, repo_id: str) -> str:
+def _ci_failure_fingerprint(
+    failing_summary: str,
+    repo_id: str,
+    head_sha: str = "",
+) -> str:
     """Compute a stable hex fingerprint for a CI failure.
 
     The fingerprint is derived from *failing_summary* up to the
     ``**Job logs:**`` marker (exclusive), or the first 2000 characters
     when there is no marker.  The marker-trimmed summary is combined
-    with *repo_id* and hashed with SHA-256; the first 16 hex digits
-    become the fingerprint.
+    with *repo_id* and *head_sha* (the branch's current HEAD commit)
+    and hashed with SHA-256; the first 16 hex digits become the
+    fingerprint.
 
-    This is deterministic (same input → same output) and stable across
-    different PRs that hit the same underlying CI failure, while
-    remaining specific enough to distinguish different failures.
+    Including *head_sha* ensures that a rebased branch (which triggers
+    a fresh CI run) produces a different fingerprint even when the
+    failure content is identical — preventing the consecutive-identical
+    backstop from re-blocking a ticket whose branch has been refreshed
+    against current main.
     """
     marker = "**Job logs:**"
     idx = failing_summary.find(marker)
@@ -252,7 +259,7 @@ def _ci_failure_fingerprint(failing_summary: str, repo_id: str) -> str:
         core_summary = failing_summary[:idx].rstrip()
     else:
         core_summary = failing_summary[:2000]
-    data = f"{repo_id}\n{core_summary}"
+    data = f"{repo_id}\n{head_sha}\n{core_summary}"
     return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
 
 
@@ -266,3 +273,4 @@ class _FailingContext(NamedTuple):
     alerts: list[dict[str, Any]] = []
     changed_paths: set[str] = set()
     alerts_unreadable: bool = False
+    head_sha: str = ""
