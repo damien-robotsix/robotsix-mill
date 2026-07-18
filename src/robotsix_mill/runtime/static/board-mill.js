@@ -73,7 +73,6 @@
     copy_paste: '#ec4899',
     state_sync: '#0891b2',
     frontend_sync: '#06b6d4',
-    security_posture: '#4a1a2e',
     triage_boilerplate: '#d97706',
     data_dir_gc: '#312e81',
     meta: '#a855f7',
@@ -104,9 +103,7 @@
     meta: "meta",
     "run-health": "run-health",
     "langfuse-cleanup": "langfuse-cleanup",
-    security_posture: "security-posture",
-    triage_boilerplate: "triage-boilerplate",
-    ci_fix_dependency: "ci-fix-dependency",
+    triage_boilerplate: "triage-boilerplate",    ci_fix_dependency: "ci-fix-dependency",
     dependabot_alerts: "dependabot-alerts",
     implement_baseline_dependency: "implement-baseline-dependency",
     orphaned_pr_check: "orphaned-pr-check",
@@ -2164,23 +2161,6 @@
     }
   }
 
-  async function runSecurityPosture() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var spUrl = repoId !== "all" ? "/security-posture?repo_id=" + encodeURIComponent(repoId) : "/security-posture";
-      var r = await jpost(spUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Security Posture started — it reviews the codebase for security weaknesses, dependency vulnerabilities, and configuration gaps. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Security Posture failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Security Posture';
-    }
-  }
-
   async function runTraceReview() {
     var btn = event.target;
     btn.disabled = true; btn.textContent = 'Running...';
@@ -2560,12 +2540,12 @@
   window.runBcCheck = runBcCheck;
   window.runCompletenessCheck = runCompletenessCheck;
   window.runRunHealth = runRunHealth;
-  window.runSecurityPosture = runSecurityPosture;
   window.runTriageBoilerplate = runTriageBoilerplate;
   window.runConfigSync = runConfigSync;
   window.runMemberSync = runMemberSync;
   window.runTraceReview = runTraceReview;
   window.runRoadmapSync = runRoadmapSync;
   window.runMeta = runMeta;
+
 
 })();

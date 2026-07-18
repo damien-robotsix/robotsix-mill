@@ -465,25 +465,6 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between periodic frontend-sync passes.",
     )
 
-    # --- security-posture agent (continuous security-scanning coverage) ---
-    # Opt-in periodic security-posture pass. Defaults to True (opt-out);
-    # set false to disable the weekly security-scanning coverage audit.
-    security_posture_periodic: bool = Field(
-        default=True,
-        description="When true, run weekly security-scanning coverage audits.",
-    )
-    # Seconds between periodic security-posture passes when
-    # MILL_SECURITY_POSTURE_PERIODIC=true. Default 604800 (1 week). Minimum
-    # enforced at 60s in the worker loop.
-    security_posture_interval_seconds: int = Field(
-        default=604800,
-        description="Seconds between periodic security-posture passes.",
-    )
-    security_posture_request_limit: int = Field(
-        default=80,
-        description="Request budget for the security-posture agent.",
-    )
-
     # --- pin-bump agent (scheduled dependency pin-bump PR actuator) ---
     # Opt-in periodic pin-bump pass. Defaults to False (off).
     # The PR actuator (SHA-latest resolution → pyproject.toml edit →

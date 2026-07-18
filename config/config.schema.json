@@ -2023,24 +2023,6 @@
           "title": "Sandbox Reaper Periodic",
           "type": "boolean"
         },
-        "security_posture_interval_seconds": {
-          "default": 604800,
-          "description": "Seconds between periodic security-posture passes.",
-          "title": "Security Posture Interval Seconds",
-          "type": "integer"
-        },
-        "security_posture_periodic": {
-          "default": true,
-          "description": "When true, run weekly security-scanning coverage audits.",
-          "title": "Security Posture Periodic",
-          "type": "boolean"
-        },
-        "security_posture_request_limit": {
-          "default": 80,
-          "description": "Request budget for the security-posture agent.",
-          "title": "Security Posture Request Limit",
-          "type": "integer"
-        },
         "shutdown_grace_seconds": {
           "default": 1800,
           "description": "Maximum seconds to wait for in-flight periodic passes before teardown.",

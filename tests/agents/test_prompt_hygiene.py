@@ -270,11 +270,6 @@ _IMPLEMENT_ACTION_TAG_MARKER = "Do NOT guess or fabricate a commit SHA"
         ("ci_fix", "ci_fix.yaml", _SHARED_ACTION_TAG_MARKER),
         ("implement", "implement.yaml", _IMPLEMENT_ACTION_TAG_MARKER),
         ("refine", "refine.yaml", _SHARED_ACTION_TAG_MARKER),
-        (
-            "security_posture",
-            "periodic/security_posture.yaml",
-            _SHARED_ACTION_TAG_MARKER,
-        ),
     ],
 )
 def test_action_tag_resolution_instruction_present(
@@ -282,7 +277,7 @@ def test_action_tag_resolution_instruction_present(
 ) -> None:
     """Pipeline agent prompts must contain the action-tag pinning instruction.
 
-    ci_fix, refine, and security_posture must include the ``git ls-remote``
+    ci_fix and refine must include the ``git ls-remote``
     resolution instruction; implement uses tag references and defers pinning to
     Renovate, so its marker is different."""
     definition = load_agent_definition(
