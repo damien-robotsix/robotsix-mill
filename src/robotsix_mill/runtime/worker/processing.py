@@ -1,3 +1,12 @@
+"""Ticket processing loop — stage chaining, timeout/error handling, and sandbox reaping.
+
+Defines the ``process_ticket`` coroutine, which is the worker's
+core event loop: it chains pipeline stages (refine → implement →
+review → ...) for a single ticket, handles stage-level timeouts
+and errors, posts Langfuse trace breadcrumbs, and spawns epic
+re-evaluation when a child ticket reaches a terminal state.
+"""
+
 from __future__ import annotations
 
 import asyncio
