@@ -29,6 +29,57 @@ log = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+# ── zero-tool-call detection helpers ──────────────────────────────────────
+
+
+def _has_tool_calls(result: Any) -> bool:
+    """Return True when any ``tool-call`` or ``tool-return`` part exists
+    in *result*'s message history."""
+    try:
+        messages = result.all_messages()
+    except Exception:
+        return False
+    return any(
+        getattr(part, "part_kind", "") in ("tool-call", "tool-return")
+        for msg in messages
+        for part in getattr(msg, "parts", [])
+    )
+
+
+def _zero_tool_call_reprompt_needed(
+    result: Any,
+    expected_type: type,
+    what: str,
+) -> bool:
+    """Return True when the agent produced zero tool calls AND this is
+    not a legitimate no-change pass.
+
+    A structured output with ``no_change_needed=True`` is a deliberate
+    signal that the spec is already satisfied — the agent correctly
+    made zero edits.  Everything else with zero tool calls needs a
+    re-prompt.
+    """
+    if _has_tool_calls(result):
+        return False
+
+    # Carve-out: structured output that explicitly declares no change
+    # needed (ticket's intent is already satisfied by the codebase).
+    if isinstance(result.output, expected_type):
+        if getattr(result.output, "no_change_needed", False):
+            return False
+
+    log.warning(
+        "%s: zero tool calls detected (%d chars of output); "
+        "re-prompting agent to use tools",
+        what,
+        len(str(result.output)),
+    )
+    return True
+
+
+# ── main guard ────────────────────────────────────────────────────────────
+
+
 def reprompt_if_unstructured(
     *,
     result: Any,
@@ -41,23 +92,38 @@ def reprompt_if_unstructured(
     require_no_tool_calls: bool = False,
     char_threshold: int = 10_000,
 ) -> Any:
-    """Re-prompt *agent* once when ``result.output`` is unstructured.
+    """Re-prompt *agent* once when ``result.output`` is unstructured,
+    OR when *require_no_tool_calls* is True and the pass produced zero
+    tool calls.
 
-    Returns *result* unchanged when ``result.output`` is already an
-    instance of *expected_type*. Otherwise inspects the raw output and,
-    when the prose-only criteria are met, re-prompts *agent* once via
-    :func:`robotsix_mill.agents.retry.run_agent` with the original
-    message history attached, and returns the new result. On re-prompt
-    exception, logs a warning and returns the ORIGINAL ``result`` so
-    the caller's terminal coercion still runs.
+    The zero-tool-call gate runs BEFORE the structured-output check so
+    that a structured ``ImplementResult`` the model produced without
+    ever calling a tool does not slip through — that is the exact
+    zero-tool-call pass this guard exists to catch.
+
+    Returns *result* unchanged when:
+
+    - *require_no_tool_calls* is True, zero tool calls were made, BUT
+      the output is a structured result with ``no_change_needed=True``
+      (a deliberate signal the spec is already satisfied); OR
+    - ``result.output`` is already an instance of *expected_type* (and
+      the zero-tool-call gate above did not fire); OR
+    - ``len(str(result.output)) < char_threshold`` (too short to act
+      on); OR
+    - the re-prompt itself raises (original result returned so the
+      caller's terminal coercion still runs).
 
     Detection rule:
 
-    - ``isinstance(result.output, expected_type)`` is False, AND
-    - ``len(str(result.output)) >= char_threshold``, AND
-    - when *require_no_tool_calls* is True: no ``tool-call`` or
-      ``tool-return`` part is present anywhere in
-      ``result.all_messages()`` (the implement-specific gate).
+    - Zero-tool-call gate (when *require_no_tool_calls* is True):
+      no ``tool-call`` or ``tool-return`` part present AND output is
+      NOT a structured ``no_change_needed=True`` pass → re-prompt.
+    - Structured-output gate:
+      ``isinstance(result.output, expected_type)`` is False, AND
+      ``len(str(result.output)) >= char_threshold``, AND
+      (when *require_no_tool_calls* is True) tool calls ARE present
+      (the zero-tool-call gate above would have caught a no-tool-call
+      case) → re-prompt.
 
     *run_kwargs* is forwarded to ``agent.run_sync`` on the re-prompt
     (e.g. ``{"usage_limits": limits}``); ``message_history`` is owned
@@ -65,38 +131,64 @@ def reprompt_if_unstructured(
     """
     from .retry import run_agent
 
+    # ── Zero-tool-call gate (BEFORE structured-output check) ──────────
+    # Must run first because ``isinstance(result.output, expected_type)``
+    # would return early for a structured ``ImplementResult`` that the
+    # model produced without ever calling a tool — the exact zero-tool-call
+    # pass this guard exists to catch.
+    if require_no_tool_calls and _zero_tool_call_reprompt_needed(
+        result, expected_type, what
+    ):
+        extra_kwargs = dict(run_kwargs or {})
+        try:
+            original_messages = result.all_messages()
+        except Exception:
+            original_messages = []
+        try:
+            new_result = run_agent(
+                agent,
+                lambda h: h.run_sync(
+                    reprompt_message,
+                    message_history=original_messages,
+                    **extra_kwargs,
+                ),
+                what=what,
+            )
+        except Exception as reprompt_exc:
+            log.warning(
+                "%s: re-prompt after zero-tool-call failed (%s); "
+                "returning original result",
+                what,
+                reprompt_exc,
+            )
+            return result
+        return new_result
+
+    # ── Structured-output check ───────────────────────────────────────
     if isinstance(result.output, expected_type):
         return result
 
+    # ── Short prose → no re-prompt ────────────────────────────────────
     raw_output = str(result.output)
     if len(raw_output) < char_threshold:
         return result
 
+    # ── Unstructured path ────────────────────────────────────────────
+    # When require_no_tool_calls is True and we reach here, tool calls
+    # ARE present (the zero-tool-call gate above would have caught a
+    # no-tool-call case).  Return early — the model used tools, so the
+    # prose-only output is acceptable.
     if require_no_tool_calls:
-        try:
-            messages = result.all_messages()
-        except Exception:
-            messages = []
-        has_tool_call = any(
-            getattr(part, "part_kind", "") in ("tool-call", "tool-return")
-            for msg in messages
-            for part in getattr(msg, "parts", [])
-        )
-        if has_tool_call:
-            return result
-        log.warning(
-            "%s: prose-only response (%d chars) with no tool calls detected; "
-            "re-prompting agent to use tools",
-            what,
-            len(raw_output),
-        )
-    else:
-        log.warning(
-            "%s: prose-only structured-output failure (%d chars) detected; "
-            "re-prompting agent for structured output",
-            what,
-            len(raw_output),
-        )
+        return result
+
+    # require_no_tool_calls=False (review / retrospect): re-prompt for
+    # structured output.
+    log.warning(
+        "%s: prose-only structured-output failure (%d chars) detected; "
+        "re-prompting agent for structured output",
+        what,
+        len(raw_output),
+    )
 
     extra_kwargs = dict(run_kwargs or {})
     try:
