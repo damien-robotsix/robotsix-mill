@@ -1,6 +1,10 @@
 ## 0.0.0 (unreleased)
 
 - Document `sandbox.image` dev-vs-prod dual default: the Pydantic model default is `python:3.14-slim` for lightweight local development, while the production JSON config overrides to `robotsix/mill-sandbox:latest` (includes `uv` and toolchain). Added inline docstring comment and updated config docs table to match.
+- Fix orphan `agent run` Langfuse traces: propagate OTel/contextvars across
+  `ThreadPoolExecutor` boundaries in watchdog/timeout helpers so pydantic-ai
+  agent spans nest under the stage-named root trace instead of creating
+  unattributed root spans.
 - Update `docs/agents/agent-yaml-schema.md` to match the current `AgentDefinition` model: replace `model` with `level`, replace `web` with `web_knowledge`, add missing field docs (`list_epic_children`, `list_threads`, `ask_user`, `inject_agent_md`, `inject_language_conventions`, `max_tokens`), update category listings and tools table, fix `read_ticket` section.
 - Fix `coordinator_timeout_seconds` model default drift: changed from 900 to 600 in `_settings_core.py` to match `config/config.example.json` and documentation.
 - Fixed typo `rebasin` → `rebasing` in the valid State values list in the chat-skill endpoint docstring.
