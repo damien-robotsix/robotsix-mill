@@ -101,6 +101,17 @@ class PeriodicAgentResult(BaseModel):
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
+    draft_target_repo_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "One entry per draft (parallels draft_titles/draft_bodies/gap_ids). "
+            "Empty string means file the draft on the current repo's board. "
+            "A non-empty repo_id (e.g. 'robotsix-standards') routes the draft "
+            "to that repo's board via the repos registry. The repo_id must be "
+            "registered in the repos config. Used by survey to file fleet-wide "
+            "convention proposals on the standards board."
+        ),
+    )
     verified_gap_ids: list[str] = Field(
         default_factory=list,
         description=(
