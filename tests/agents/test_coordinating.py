@@ -962,10 +962,10 @@ class TestCallWithTimeout:
             def __init__(self, max_workers=1):
                 pass
 
-            def submit(self, fn):
+            def submit(self, fn, *args, **kwargs):
                 class _Future:
                     def result(self, timeout=None):
-                        return fn()
+                        return fn(*args, **kwargs)
 
                     def cancel(self):
                         pass
@@ -987,6 +987,28 @@ class TestCallWithTimeout:
         assert result == 42
         assert shutdown_calls == [False], (
             f"Expected shutdown(wait=False), got {shutdown_calls}"
+        )
+
+    def test_contextvars_propagated_to_worker_thread(self):
+        """contextvars set in the calling thread must be visible inside
+        the worker thread — ThreadPoolExecutor drops them by default,
+        so _call_with_timeout must propagate via contextvars.copy_context()."""
+        import contextvars
+        from robotsix_mill.agents.coordinating import _call_with_timeout
+
+        test_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+            "test_var", default="default"
+        )
+        test_var.set("outer")
+
+        captured: list[str | None] = []
+
+        def _read_in_worker():
+            captured.append(test_var.get())
+
+        _call_with_timeout(_read_in_worker, timeout_seconds=10)
+        assert captured == ["outer"], (
+            f"contextvar should be 'outer' in worker, got {captured}"
         )
 
     def test_timeout_raises_with_shutdown_wait_false(self):
@@ -1103,6 +1125,37 @@ class TestProgressWatchdog:
                 poll_interval=0.02,
             )
 
+    def test_contextvars_propagated_to_worker_thread(self):
+        """contextvars set in the calling thread must be visible inside
+        the worker thread — ThreadPoolExecutor drops them by default,
+        so _call_with_progress_watchdog must propagate them."""
+        import contextvars
+        import threading
+        from robotsix_mill.agents.coordinating import (
+            _call_with_progress_watchdog,
+        )
+
+        test_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+            "test_var", default="default"
+        )
+        test_var.set("outer")
+
+        captured: list[str | None] = []
+        ev = threading.Event()
+        ev.set()  # ensure no timeout before result
+
+        def _read_in_worker():
+            captured.append(test_var.get())
+
+        _call_with_progress_watchdog(
+            _read_in_worker,
+            timeout_seconds=10,
+            progress_event=ev,
+        )
+        assert captured == ["outer"], (
+            f"contextvar should be 'outer' in worker, got {captured}"
+        )
+
     def test_shutdown_uses_wait_false(self):
         """_call_with_progress_watchdog always calls shutdown(wait=False)."""
         import concurrent.futures
@@ -1126,7 +1179,7 @@ class TestProgressWatchdog:
 
             def submit(self, fn, *a, **kw):
                 fut = _RealFuture()
-                fut.set_result(fn())
+                fut.set_result(fn(*a, **kw))
                 return fut
 
             def shutdown(self, wait=True):

@@ -14,6 +14,7 @@ everything and never converged.
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import functools
 import inspect
 import logging
@@ -173,8 +174,9 @@ def _call_with_timeout(
     immediately instead of blocking on hung threads at context-manager exit.
     """
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    ctx = contextvars.copy_context()
     try:
-        future = executor.submit(fn)
+        future = executor.submit(ctx.run, fn)
         try:
             return future.result(timeout=timeout_seconds)
         except concurrent.futures.TimeoutError:
@@ -245,8 +247,9 @@ def _call_with_progress_watchdog(
     exit.
     """
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    ctx = contextvars.copy_context()
     try:
-        future = executor.submit(fn)
+        future = executor.submit(ctx.run, fn)
         deadline = time.monotonic() + timeout_seconds
         while True:
             remaining = deadline - time.monotonic()
