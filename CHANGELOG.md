@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add `changelog_autofill_periodic` and `changelog_autofill_interval_seconds` settings fields, giving the changelog-autofill schedule-only pass a configurable kill-switch and interval (previously hardcoded to 86400 s with no disable option).
+- GitLab forge: implement cross-project merge request support via `target_project_id` when `head_repo` is provided, matching the GitHub adapter's cross-fork PR workflow. Remove the `NotImplementedError` stub and the `_validate_cross_repo_forge_compat` guard that rejected `cross_repo_target` for GitLab.
 - Add class-level docstring to `PeriodicPassesMixin` describing its per-repo periodic pass orchestration.
 - Added docstring to ``health_ready`` endpoint in ``_health.py`` documenting the readiness probe's Args, Returns shape, and 503-on-failure behaviour.
 - Add docstring to `WorkerPool.start()` method in `src/robotsix_mill/runtime/worker/core.py`.

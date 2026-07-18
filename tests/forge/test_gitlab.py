@@ -81,7 +81,7 @@ def _mock_httpx(monkeypatch, *, get_map=None, post_response=None, put_response=N
     *post_response*: returned for every POST call.
     *put_response*: returned for every PUT call.
     """
-    captured = {"post_payload": None, "put_payload": None}
+    captured = {"post_payload": None, "post_url": None, "put_payload": None}
 
     class MockClient:
         def __init__(self, **kw):
@@ -95,6 +95,7 @@ def _mock_httpx(monkeypatch, *, get_map=None, post_response=None, put_response=N
 
         def post(self, url, headers=None, json=None, **kwargs):
             captured["post_payload"] = json
+            captured["post_url"] = url
             return post_response or _make_response(500, {}, "error")
 
         def put(self, url, headers=None, json=None, **kwargs):
@@ -300,6 +301,54 @@ def test_create_mr_unexpected_status_raises(tmp_path, monkeypatch):
     forge = _forge(tmp_path)
     with pytest.raises(RuntimeError, match="GitLab MR create failed"):
         forge.open_merge_request(source_branch="feature/x", title="t", body="b")
+
+
+def test_create_cross_project_mr_201_returns_web_url(tmp_path, monkeypatch):
+    """When head_repo is set, create the MR on the fork project with
+    target_project_id pointing to the upstream project."""
+    from robotsix_mill.config import RepoConfig, CrossRepoTarget
+
+    upstream_json = {"id": 42}
+    fork_json = {"id": 99}
+    mr_json = {
+        "web_url": "https://gitlab.com/fork-ns/fork/-/merge_requests/3",
+    }
+    get_map = {
+        "projects/fork-ns%2Ffork": _make_response(200, fork_json),
+        "projects/ns%2Fproject": _make_response(200, upstream_json),
+    }
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, mr_json),
+    )
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="b",
+        langfuse_project_name="r",
+        langfuse_public_key="",
+        langfuse_secret_key="",
+        cross_repo_target=CrossRepoTarget(
+            base_branch="develop",
+            upstream_remote_url="https://gitlab.com/ns/project.git",
+            fork_remote_url="https://gitlab.com/fork-ns/fork.git",
+        ),
+    )
+    forge = GitLabForge(_settings(tmp_path), repo_config=rc)
+    url = forge.open_merge_request(
+        source_branch="feature/x",
+        title="t",
+        body="b",
+        head_repo="fork-ns/fork",
+    )
+    assert url == "https://gitlab.com/fork-ns/fork/-/merge_requests/3"
+    # MR was created on the fork project (id 99) targeting upstream (id 42)
+    assert captured["post_payload"]["source_branch"] == "feature/x"
+    assert captured["post_payload"]["target_branch"] == "develop"
+    assert captured["post_payload"]["target_project_id"] == 42
+    assert captured["post_payload"]["title"] == "t"
+    assert captured["post_payload"]["description"] == "b"
 
 
 # ---------------------------------------------------------------------------

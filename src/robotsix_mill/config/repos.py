@@ -239,29 +239,13 @@ class ReposRegistry(BaseModel):
 def _validate_cross_repo_forge_compat(
     repos: dict[str, RepoConfig], forge_kind: str
 ) -> None:
-    """Reject a ``cross_repo_target`` on a repo when the global forge kind
-    is GitLab.
+    """Validate that ``cross_repo_target`` is compatible with the forge kind.
 
-    The GitLab forge adapter does not support cross-fork merge requests
-    (``cross_repo_target`` is GitHub-only); without this check the
-    misconfiguration only surfaces at runtime in the deliver stage as a
-    ``NotImplementedError``. Only the explicit ``"gitlab"`` value is
-    rejected — ``"auto"`` resolves the forge kind from the remote URL
-    later and cannot be statically known here, so rejecting it would
-    produce false positives.
+    Both GitHub and GitLab adapters now support cross-fork merge requests
+    (via ``head_repo`` / ``target_project_id``, respectively), so this
+    function is a no-op kept as a hook for future forge-specific checks.
     """
-    from .loader import ConfigError
-
-    if forge_kind != "gitlab":
-        return
-    for repo_id, cfg in repos.items():
-        if cfg.cross_repo_target is not None:
-            raise ConfigError(
-                f"Repo '{repo_id}' sets cross_repo_target, but the GitLab forge "
-                f"adapter does not support cross-fork merge requests "
-                f"(cross_repo_target is GitHub-only). Remove cross_repo_target or "
-                f"set FORGE_KIND to github."
-            )
+    del repos, forge_kind  # unused — kept as a future-proof hook
 
 
 def _split_registry_shape(
