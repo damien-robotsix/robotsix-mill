@@ -382,6 +382,32 @@ class _CoreSettings(BaseModel):
         ge=1,
         description="Per-call request cap for the periodic audit agent's tool loop.",
     )
+    # Per-call cap for the docstring-coverage agent's tool loop. The
+    # docstring-coverage agent does broad work (explore storms scanning
+    # the full repo for docstring gaps) and can saturate the pydantic-ai
+    # default.  80 matches the test-gap agent's budget for a similar
+    # broad-scan workload.
+    docstring_coverage_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for the docstring-coverage agent's tool loop.",
+    )
+    # Hard cap on total tool calls per docstring_coverage trace. 100 tool
+    # calls is far beyond what any legitimate docstring scan requires —
+    # only clearly broken runs are terminated.
+    docstring_coverage_max_tool_calls: int = Field(
+        default=100,
+        ge=1,
+        description="Hard cap on total tool calls per docstring_coverage trace.",
+    )
+    # Hard cap on tool-call errors before auto-termination. A healthy
+    # inspection should have near-zero errors; 20 indicates a broken
+    # execution loop.
+    docstring_coverage_max_errors: int = Field(
+        default=20,
+        ge=0,
+        description="Hard cap on tool-call errors before auto-termination of docstring_coverage agent.",
+    )
     # Per-call cap for the test-gap agent's tool loop. The test-gap
     # agent does broad work (explore storms scanning the full repo for
     # test-coverage gaps) and can saturate the pydantic-ai default of

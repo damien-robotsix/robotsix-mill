@@ -59,6 +59,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Test-gap pass",
         "format": "memory_drafts",
     },
+    "docstring-coverage": {
+        "module": "runners.periodic_runner",
+        "function": "run_docstring_coverage_pass",
+        "label": "Docstring-coverage pass",
+        "format": "memory_drafts",
+    },
     "config-sync": {
         "module": "runners.periodic_runner",
         "function": "run_config_sync_pass",
@@ -651,6 +657,17 @@ def build_parser() -> argparse.ArgumentParser:
         "test-gap", help="run a test-gap coverage inspection pass"
     )
     p_test_gap.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- docstring-coverage command ---
+    p_docstring_coverage = sub.add_parser(
+        "docstring-coverage",
+        help="run a docstring-coverage inspection pass",
+    )
+    p_docstring_coverage.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
