@@ -376,7 +376,10 @@ def test_ci_green_while_in_fixing_ci_returns_implement_complete(tmp_path, monkey
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch, require_checks=False: {"conclusion": "success", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+        },
     )
 
     t = _fixing_ci(ctx)
@@ -393,7 +396,10 @@ def test_ci_pending_while_in_fixing_ci_returns_implement_complete(
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch, require_checks=False: {"conclusion": "pending", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "pending",
+            "failing": [],
+        },
     )
 
     t = _fixing_ci(ctx)
@@ -425,7 +431,9 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch, require_checks=False: (_ for _ in ()).throw(RuntimeError("api down")),
+        lambda self, *, source_branch, require_checks=False: (_ for _ in ()).throw(
+            RuntimeError("api down")
+        ),
     )
 
     t = _fixing_ci(ctx)
@@ -1754,7 +1762,9 @@ def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):
         "check_status",
         _cs(
             "failure",
-            failing=[{"name": "lint", "summary": "boom", "text": None, "annotations": []}],
+            failing=[
+                {"name": "lint", "summary": "boom", "text": None, "annotations": []}
+            ],
             sha="abc123",
         ),
     )
@@ -2053,7 +2063,10 @@ def test_success_repoll_does_not_write_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch, require_checks=False: {"conclusion": "success", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+        },
     )
 
     t = _fixing_ci(ctx)
@@ -2075,7 +2088,10 @@ def test_pending_repoll_does_not_write_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch, require_checks=False: {"conclusion": "pending", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "pending",
+            "failing": [],
+        },
     )
 
     t = _fixing_ci(ctx)

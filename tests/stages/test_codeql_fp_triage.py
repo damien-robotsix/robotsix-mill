@@ -693,10 +693,14 @@ def test_early_triage_skipped_when_non_codeql_fails(tmp_path, monkeypatch):
         ],
     }
     monkeypatch.setattr(
-        github.GitHubForge, "check_status", lambda self, *, source_branch, require_checks=False: ci_fail
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: ci_fail,
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status", lambda self, *, source_branch, require_checks=False: {"sha": "abc"}
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
