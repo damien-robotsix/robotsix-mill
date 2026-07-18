@@ -42,6 +42,7 @@ nav:
       - Expert YAML schema: agent-definitions/expert-yaml-schema.md
       - Agent YAML schema: agents/agent-yaml-schema.md
       - Meta board: meta/meta-board.md
+      - Survey cross-board routing: agents/periodic/survey-cross-board-routing.md
   - Runtime:
       - Worker: runtime/worker.md
       - API routes: runtime/routes.md
