@@ -6,7 +6,9 @@ import json
 import subprocess
 from pathlib import Path
 
+from ..._resources import agent_definitions_dir
 from ...agents.testing import ENV_ERROR_PREFIX
+from ...agents.yaml_loader import load_agent_definition
 from ...config import effective_target_branch
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
@@ -204,6 +206,53 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         "result.  Update the specification or use "
                         "the reset-fingerprint endpoint to clear.",
                     )
+
+        # 5. Agent tool-definition integrity: the assembled tool list
+        #    must be non-empty before we open a trace.  Load the agent-
+        #    definition YAML and verify it declares at least one tool.
+        #    An empty tools list signals a misconfigured or corrupted
+        #    agent definition that would produce a no-op agent with no
+        #    ability to explore, read, or edit.
+        try:
+            definition = load_agent_definition(
+                agent_definitions_dir() / "implement.yaml"
+            )
+        except Exception as exc:
+            return Outcome(
+                State.BLOCKED,
+                f"failed to load implement agent definition: {exc}",
+            )
+        if not definition.tools:
+            return Outcome(
+                State.BLOCKED,
+                "implement agent definition has no tools configured — "
+                "the tools list in agent_definitions/implement.yaml "
+                "is empty",
+            )
+
+        # 6. Skill-file integrity: every skill referenced by the agent
+        #    definition must exist on disk before the model runs.  A
+        #    missing skill silently degrades the system prompt (the
+        #    ``compose_prompt`` warning is invisible to the model) and
+        #    produces a no-op loop.
+        for name in definition.skills or ():
+            skill_path = s.skills_dir / name / "SKILL.md"
+            if not skill_path.is_file():
+                return Outcome(
+                    State.BLOCKED,
+                    f"missing skill file: {skill_path}",
+                )
+
+        # 7. Workspace integrity: the ticket workspace directory must
+        #    be present and accessible.  If the workspace root has been
+        #    deleted or the filesystem is unavailable, fail fast
+        #    instead of spinning a model pass that cannot persist
+        #    artifacts.
+        if not ws.dir.exists() or not ws.dir.is_dir():
+            return Outcome(
+                State.BLOCKED,
+                f"workspace directory absent or inaccessible: {ws.dir}",
+            )
 
         return None
 

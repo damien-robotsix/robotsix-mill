@@ -5688,6 +5688,168 @@ def test_stale_respawn_guard_skips_without_implement_md(
     assert out is None, f"preflight must allow on first run, got: {out}"
 
 
+# --- preflight: tool-definition integrity ---------------------------------
+
+
+def test_preflight_blocks_when_agent_definition_has_empty_tools(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the implement agent definition declares no tools, preflight
+    must block BEFORE opening a trace — an agent with no tools is a
+    guaranteed no-op."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Empty tools", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    from robotsix_mill.agents.yaml_loader import AgentDefinition
+
+    empty_def = AgentDefinition(
+        name="implement",
+        level=2,
+        system_prompt="you are a bot",
+        tools=[],  # empty tools list
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.phase_coordinator.load_agent_definition",
+        lambda _path: empty_def,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "no tools configured" in out.note.lower()
+
+
+def test_preflight_blocks_when_agent_definition_fails_to_load(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the implement agent definition YAML cannot be loaded
+    (missing file, invalid YAML), preflight must block with the
+    underlying error."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Bad def", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.implement.phase_coordinator.load_agent_definition",
+        lambda _path: (_ for _ in ()).throw(FileNotFoundError("no such file")),
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "failed to load implement agent definition" in out.note.lower()
+    assert "no such file" in out.note
+
+
+# --- preflight: skill-file integrity --------------------------------------
+
+
+def test_preflight_blocks_when_skill_file_missing(ctx_factory, tmp_path, monkeypatch):
+    """When a skill referenced by the agent definition does not exist
+    on disk, preflight must block with the missing path in the note."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Missing skill", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Point skills_dir at an empty temp directory so no skill files
+    # exist.
+    empty_skills = tmp_path / "no_skills_here"
+    empty_skills.mkdir()
+    monkeypatch.setattr(ctx.settings, "skills_dir", empty_skills)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "missing skill file:" in out.note.lower()
+    assert "SKILL.md" in out.note
+
+
+# --- preflight: workspace integrity ---------------------------------------
+
+
+def test_preflight_blocks_when_workspace_absent(ctx_factory, tmp_path, monkeypatch):
+    """When the ticket workspace directory has been deleted (or the
+    filesystem is inaccessible), preflight must block with the
+    workspace path in the note."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        # Disable checks that access ws.artifacts_dir (which would
+        # recreate the workspace directory as a side-effect).
+        implement_max_spawns_per_ticket="0",
+        max_implement_review_cycles="0",
+    )
+    t = _ticket(ctx, title="No workspace", body="Implement feature X")
+
+    import robotsix_mill.core.workspace as wmod
+
+    # Delete the workspace directory that _ticket (via create) made.
+    # Then monkeypatch Workspace so preflight's own workspace() call
+    # doesn't recreate it, and stub read_description so the
+    # spec-empty gate passes.
+    import shutil
+
+    ws_for_deletion = ctx.service.workspace(t)
+    shutil.rmtree(ws_for_deletion.dir)
+
+    def _no_mkdir(self, root, ticket_id):
+        from pathlib import Path
+        import os
+
+        if ticket_id != Path(ticket_id).name or ticket_id in (".", ".."):
+            raise ValueError(f"Unsafe ticket_id: {ticket_id!r}")
+        _root = os.path.realpath(os.fspath(root))
+        _dir = os.path.realpath(os.path.join(_root, ticket_id))
+        if not _dir.startswith(_root + os.sep):
+            raise ValueError(f"Unsafe ticket_id: {ticket_id!r}")
+        self.dir = Path(_dir)
+
+    monkeypatch.setattr(wmod.Workspace, "__init__", _no_mkdir)
+
+    # Prevent artifacts_dir from recreating the directory.
+    monkeypatch.setattr(
+        wmod.Workspace,
+        "artifacts_dir",
+        property(lambda self: self.dir / "artifacts"),
+    )
+
+    # Stub read_description so the spec-empty gate passes.
+    monkeypatch.setattr(
+        wmod.Workspace, "read_description", lambda self: "Implement feature X"
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "workspace directory absent or inaccessible" in out.note.lower()
+
+
 def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeypatch):
     """When the convergence backstop fires (empty diff after review) it
     now terminates DONE (already satisfied). implement.md must still be
