@@ -9,6 +9,7 @@ tests for the happy path, tools, or ValidationResult.decide.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic_ai import PromptedOutput
@@ -207,10 +208,24 @@ class TestRunCoordinator:
                     self.captured["user_prompt"] = prompt
 
                     class _R:
-                        pass
+                        output: object = ImplementResult(summary="ok")
+
+                        @staticmethod
+                        def all_messages():
+                            # Return a tool-call message so the
+                            # zero-tool-call gate in
+                            # reprompt_if_unstructured sees that tools
+                            # were used and falls through to the
+                            # existing structured-output check.
+                            return [
+                                SimpleNamespace(
+                                    parts=[
+                                        SimpleNamespace(part_kind="tool-call")
+                                    ]
+                                )
+                            ]
 
                     r = _R()
-                    r.output = ImplementResult(summary="ok")
                     return r
 
                 @staticmethod
