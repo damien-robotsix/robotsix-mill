@@ -14,6 +14,7 @@ and the stdlib-only ``core.duration`` helper for the human-readable
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +22,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.duration import parse_duration
 from .._resources import agent_definitions_dir
+
+_MAX_INCLUDE_DEPTH = 10
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -101,6 +104,91 @@ class AgentDefinition(BaseModel):
         return self
 
 
+def _resolve_includes(  # noqa: C901
+    raw_text: str,
+    base_dir: Path,
+    _depth: int = 0,
+    _containment_root: Path | None = None,
+) -> str:
+    """Replace ``!include <path>`` directives with file content.
+
+    Each ``!include`` line's leading whitespace is preserved and applied
+    to every line of the included file.  Paths are resolved relative to
+    *base_dir*.  Leading ``#``-comment lines in included files are
+    stripped so that shared-partial YAML files can carry discoverability
+    comments without polluting the prompt.
+
+    Nested includes are resolved recursively up to ``_MAX_INCLUDE_DEPTH``.
+
+    The *_containment_root* parameter (defaults to
+    ``agent_definitions_dir()``) is the outermost directory that
+    ``!include`` is allowed to reach — paths that resolve outside it
+    are rejected.  Tests may override this to a temp directory.
+    """
+    if _depth >= _MAX_INCLUDE_DEPTH:
+        raise RecursionError(f"!include nesting depth exceeded ({_MAX_INCLUDE_DEPTH})")
+
+    if _containment_root is None:
+        _containment_root = agent_definitions_dir().resolve()
+
+    _INCLUDE_RE = re.compile(r"^(\s*)!include\s+(.+)$")
+
+    lines = raw_text.split("\n")
+    result: list[str] = []
+
+    for line in lines:
+        m = _INCLUDE_RE.match(line)
+        if m is None:
+            result.append(line)
+            continue
+
+        indent = m.group(1)
+        include_path = m.group(2).strip()
+        resolved = (base_dir / include_path).resolve()
+
+        # Safety: only allow includes within the containment root.
+        try:
+            resolved.relative_to(_containment_root)
+        except ValueError as err:
+            raise ValueError(
+                f"!include path {include_path!r} escapes containment root "
+                f"{_containment_root}"
+            ) from err
+
+        if not resolved.is_file():
+            raise FileNotFoundError(f"!include target not found: {resolved}")
+
+        included_raw = resolved.read_text(encoding="utf-8")
+
+        # Strip leading YAML comment lines (discoverability metadata
+        # that should not land in the composed prompt).
+        included_lines = included_raw.split("\n")
+        while included_lines and included_lines[0].lstrip().startswith("#"):
+            included_lines.pop(0)
+        # Also strip a single blank line that immediately follows
+        # the comment block (separator between header and content).
+        if included_lines and included_lines[0].strip() == "":
+            included_lines.pop(0)
+
+        included_text = "\n".join(included_lines)
+
+        # Recurse in case the included file itself has !include lines.
+        included_text = _resolve_includes(
+            included_text, base_dir, _depth + 1, _containment_root
+        )
+
+        # Split, preserving empty lines within the content but dropping
+        # a single trailing empty string that results from a final \n.
+        ilines = included_text.split("\n")
+        if ilines and ilines[-1] == "":
+            ilines.pop()
+
+        for iline in ilines:
+            result.append(indent + iline)
+
+    return "\n".join(result)
+
+
 def load_agent_definition(path: Path) -> AgentDefinition:
     """Parse and validate an agent YAML definition.
 
@@ -119,6 +207,11 @@ def load_agent_definition(path: Path) -> AgentDefinition:
     import yaml
 
     raw_text = path.read_text(encoding="utf-8")
+    # Resolve !include directives before YAML parsing — they are
+    # text-level includes that must be expanded so the resulting
+    # YAML string is self-contained.  Paths are relative to the
+    # YAML file's own directory.
+    raw_text = _resolve_includes(raw_text, path.parent.resolve())
     data = yaml.safe_load(raw_text)
 
     if not isinstance(data, dict):

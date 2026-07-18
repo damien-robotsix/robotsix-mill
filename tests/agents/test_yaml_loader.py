@@ -13,6 +13,7 @@ from robotsix_mill.agents.yaml_loader import (
     AgentDefinition,
     load_agent_definition,
     load_periodic_agent_definition,
+    _resolve_includes,
 )
 
 
@@ -859,3 +860,150 @@ def test_every_real_yaml_declares_a_valid_level(monkeypatch):
 
     for yf, ad in _all_definitions():
         assert ad.level in (1, 2, 3), f"{yf.name}: level {ad.level} out of range"
+
+
+# ── !include resolution ──────────────────────────────────────────────
+
+
+def test_resolve_includes_basic(tmp_path):
+    """!include replaces the directive line with the file content,
+    preserving indentation."""
+    included = tmp_path / "_shared" / "block.yaml"
+    included.parent.mkdir(parents=True)
+    included.write_text("line one\nline two\n", encoding="utf-8")
+
+    raw = "  prefix\n  !include _shared/block.yaml\n  suffix\n"
+    result = _resolve_includes(raw, tmp_path, _containment_root=tmp_path)
+
+    assert result == "  prefix\n  line one\n  line two\n  suffix\n"
+
+
+def test_resolve_includes_strips_leading_comments(tmp_path):
+    """Leading #-comment lines in included files are stripped so
+    YAML discoverability metadata does not land in the prompt."""
+    included = tmp_path / "_shared" / "block.yaml"
+    included.parent.mkdir(parents=True)
+    included.write_text(
+        "# This is a shared partial.\n"
+        "# It is not a standalone agent.\n"
+        "\n"
+        "actual content\n",
+        encoding="utf-8",
+    )
+
+    raw = "  !include _shared/block.yaml\n"
+    result = _resolve_includes(raw, tmp_path, _containment_root=tmp_path)
+
+    assert result == "  actual content\n"
+
+
+def test_resolve_includes_nested(tmp_path):
+    """Nested !include directives are resolved recursively."""
+    inner = tmp_path / "_shared" / "inner.yaml"
+    inner.parent.mkdir(parents=True)
+    inner.write_text("inner line\n", encoding="utf-8")
+
+    outer = tmp_path / "_shared" / "outer.yaml"
+    outer.write_text(
+        "outer line\n  !include _shared/inner.yaml\n",
+        encoding="utf-8",
+    )
+
+    raw = "  !include _shared/outer.yaml\n"
+    result = _resolve_includes(raw, tmp_path, _containment_root=tmp_path)
+
+    # outer line gets 2-space indent from root !include.
+    # inner !include is at 2 (root) + 2 (outer content) = 4 spaces.
+    assert result == "  outer line\n    inner line\n"
+
+
+def test_resolve_includes_escapes_base_dir(tmp_path):
+    """!include paths that escape the base directory are rejected."""
+    raw = "  !include ../escape.yaml\n"
+    with pytest.raises(ValueError, match="escapes containment root"):
+        _resolve_includes(raw, tmp_path, _containment_root=tmp_path)
+
+
+def test_resolve_includes_file_not_found(tmp_path):
+    """!include pointing to a non-existent file raises FileNotFoundError."""
+    raw = "  !include _shared/nonexistent.yaml\n"
+    with pytest.raises(FileNotFoundError, match="!include target not found"):
+        _resolve_includes(raw, tmp_path, _containment_root=tmp_path)
+
+
+def test_resolve_includes_depth_limit(tmp_path):
+    """Exceeding the max include depth raises RecursionError."""
+    # Create a self-referencing file.
+    loop = tmp_path / "_shared" / "loop.yaml"
+    loop.parent.mkdir(parents=True)
+    loop.write_text("!include _shared/loop.yaml\n", encoding="utf-8")
+
+    raw = "  !include _shared/loop.yaml\n"
+    with pytest.raises(RecursionError, match="nesting depth exceeded"):
+        _resolve_includes(raw, tmp_path, _containment_root=tmp_path)
+
+
+# ── Real-file !include smoke tests ───────────────────────────────────
+
+
+def test_survey_yaml_includes_standards_awareness():
+    """The real survey.yaml uses !include for its standards block."""
+    p = Path("agent_definitions/periodic/survey.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/periodic/survey.yaml not found")
+
+    raw = p.read_text(encoding="utf-8")
+    assert "!include ../_shared/standards-awareness.yaml" in raw
+    assert "STANDARDS AWARENESS — consult FIRST" not in raw
+
+
+def test_audit_yaml_includes_standards_awareness():
+    """The real audit.yaml uses !include for its standards block."""
+    p = Path("agent_definitions/periodic/audit.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/periodic/audit.yaml not found")
+
+    raw = p.read_text(encoding="utf-8")
+    assert "!include ../_shared/standards-awareness.yaml" in raw
+    assert "REPO-DECLARED STANDARDS (consult FIRST)" not in raw
+
+
+def test_shared_standards_awareness_file_exists():
+    """The shared partial file exists and contains the canonical text."""
+    p = Path("agent_definitions/_shared/standards-awareness.yaml")
+    assert p.is_file(), f"Missing shared standards-awareness file: {p}"
+    content = p.read_text(encoding="utf-8")
+    assert "robotsix-standards" in content
+    assert "STANDARDS AWARENESS" in content
+
+
+def test_resolved_survey_prompt_has_standards_block(monkeypatch):
+    """After include resolution, survey's system_prompt contains the
+    standards-awareness text."""
+    monkeypatch.setenv("MILL_SURVEY_MODEL", "mock/model")
+
+    p = Path("agent_definitions/periodic/survey.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/periodic/survey.yaml not found")
+
+    ad = load_agent_definition(p)
+    assert "STANDARDS AWARENESS" in ad.system_prompt
+    assert "robotsix-standards" in ad.system_prompt
+    # The old inline block header should NOT appear.
+    assert "the surveyed repo should adopt" not in ad.system_prompt
+
+
+def test_resolved_audit_prompt_has_standards_block(monkeypatch):
+    """After include resolution, audit's system_prompt contains the
+    standards-awareness text."""
+    monkeypatch.setenv("MILL_AUDIT_MODEL", "mock/model")
+
+    p = Path("agent_definitions/periodic/audit.yaml")
+    if not p.exists():
+        pytest.skip("agent_definitions/periodic/audit.yaml not found")
+
+    ad = load_agent_definition(p)
+    assert "STANDARDS AWARENESS" in ad.system_prompt
+    assert "robotsix-standards" in ad.system_prompt
+    # The old audit-specific header should NOT appear.
+    assert "REPO-DECLARED STANDARDS" not in ad.system_prompt

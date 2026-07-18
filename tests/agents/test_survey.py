@@ -3,9 +3,8 @@
 import json
 from pathlib import Path
 
-import yaml
-
 from robotsix_mill.agents import surveying as survey_agent
+from robotsix_mill.agents.yaml_loader import load_agent_definition
 from robotsix_mill.runners.periodic_runner import run_survey_pass
 from robotsix_mill.runners.periodic_runner import PeriodicPassResult
 from robotsix_mill.config import Settings
@@ -48,8 +47,8 @@ def test_survey_system_prompt_covers_key_dimensions():
     generation, rotation log, ask_web_knowledge gateway, and standards
     awareness."""
     prompt_path = Path("agent_definitions/periodic/survey.yaml")
-    definition = yaml.safe_load(prompt_path.read_text())
-    prompt = definition["system_prompt"].lower()
+    definition = load_agent_definition(prompt_path)
+    prompt = definition.system_prompt.lower()
 
     for kw in (
         "open-source",
@@ -71,8 +70,8 @@ def test_survey_prompt_includes_standards_awareness():
     """The survey agent prompt includes a STANDARDS AWARENESS section
     telling the agent to consult robotsix-standards before proposing."""
     prompt_path = Path("agent_definitions/periodic/survey.yaml")
-    definition = yaml.safe_load(prompt_path.read_text())
-    prompt = definition["system_prompt"]
+    definition = load_agent_definition(prompt_path)
+    prompt = definition.system_prompt
 
     # Section heading must be present.
     assert "STANDARDS AWARENESS" in prompt, (
