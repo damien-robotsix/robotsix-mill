@@ -187,7 +187,7 @@ class CIFixStage(Stage):
         # Fetch check status from the forge.
         try:
             status = get_forge(s, repo_config=ctx.repo_config).check_status(
-                source_branch=branch
+                source_branch=branch, require_checks=True
             )
         except Exception as e:  # noqa: BLE001 — transient
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
@@ -731,13 +731,27 @@ class CIFixStage(Stage):
         alerts) so the agent gets actionable detail for its next iteration.
         Transient forge errors map to ``pending`` so the agent keeps waiting
         rather than giving up on a blip.
+
+        The closure includes a **120 s grace period** (measured from closure
+        creation via ``time.monotonic()``).  During that window ANY
+        ``"success"`` verdict is downgraded to ``"pending"`` so the agent
+        keeps waiting — this prevents a race where GitHub's check-runs
+        endpoint returns no runs (or stale runs from a prior commit) for a
+        freshly-pushed SHA and the no-CI fast-path (or a stale green) would
+        otherwise produce a false ``CI_PASSED``.
         """
+        import time
+
         s = ctx.settings
+        _created_at = time.monotonic()
+        _grace_s = 120.0
 
         def status_fn() -> tuple[str, str]:
+            in_grace = (time.monotonic() - _created_at) < _grace_s
+
             try:
                 status = get_forge(s, repo_config=ctx.repo_config).check_status(
-                    source_branch=branch
+                    source_branch=branch, require_checks=True
                 )
             except Exception:  # noqa: BLE001 — transient; keep waiting
                 log.warning(
@@ -747,14 +761,27 @@ class CIFixStage(Stage):
                 return ("pending", "")
             if status is None:
                 return ("gone", "")
+
             conclusion = status.get("conclusion")
+            sha = status.get("_sha", "")
+
+            # During the grace period never trust "success" — check runs
+            # may not be registered yet, or may be stale from a prior
+            # commit.  Keep waiting.
+            if conclusion == "success" and in_grace:
+                return ("pending", "")
+
             if conclusion == "success":
-                return ("success", "")
+                sha_note = f" (sha: {sha[:7]})" if sha else ""
+                return ("success", f"CI green at {sha[:7]}" if sha else "")
+
             if conclusion == "failure":
                 failing = status.get("failing", [])
                 summary, _alerts, _changed, _unreadable = self._build_failure_detail(
                     ticket, ctx, branch, failing
                 )
+                if sha:
+                    summary = f"[sha: {sha[:7]}]\n{summary}"
                 return ("failure", summary)
             # pending / None / unknown — not terminal yet.
             return ("pending", "")

@@ -85,7 +85,7 @@ def _failing_check_status(monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -95,7 +95,7 @@ def _failing_check_status(monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
 
 
@@ -107,7 +107,7 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -118,7 +118,7 @@ def test_fix_success_push_success_returns_implement_complete(tmp_path, monkeypat
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -158,7 +158,7 @@ def test_ci_fix_memory_read_is_tail_truncated(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -168,7 +168,7 @@ def test_ci_fix_memory_read_is_tail_truncated(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     seen = {}
 
@@ -210,7 +210,7 @@ def test_ci_fix_memory_read_passthrough_when_small(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -220,7 +220,7 @@ def test_ci_fix_memory_read_passthrough_when_small(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     seen = {}
 
@@ -256,7 +256,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": None, "text": None, "annotations": []}
@@ -266,7 +266,7 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -331,7 +331,7 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": None, "text": None, "annotations": []}
@@ -341,7 +341,7 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -376,7 +376,7 @@ def test_ci_green_while_in_fixing_ci_returns_implement_complete(tmp_path, monkey
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {"conclusion": "success", "failing": []},
     )
 
     t = _fixing_ci(ctx)
@@ -393,7 +393,7 @@ def test_ci_pending_while_in_fixing_ci_returns_implement_complete(
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {"conclusion": "pending", "failing": []},
     )
 
     t = _fixing_ci(ctx)
@@ -409,7 +409,7 @@ def test_check_status_returns_none_while_in_fixing_ci(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: None,
+        lambda self, *, source_branch, require_checks=False: None,
     )
 
     t = _fixing_ci(ctx)
@@ -425,7 +425,7 @@ def test_check_status_exception_while_in_fixing_ci(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: (_ for _ in ()).throw(RuntimeError("api down")),
+        lambda self, *, source_branch, require_checks=False: (_ for _ in ()).throw(RuntimeError("api down")),
     )
 
     t = _fixing_ci(ctx)
@@ -516,7 +516,7 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "merged": False,
             "state": "open",
             "url": "http://pr",
@@ -528,7 +528,7 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "build", "summary": None, "text": None, "annotations": []}
@@ -615,7 +615,7 @@ def _oos_forge(
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
@@ -625,12 +625,12 @@ def _oos_forge(
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {
                 "rule": "py/clear-text-logging",
                 "severity": "high",
@@ -644,7 +644,7 @@ def _oos_forge(
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {"path": p, "status": "modified", "additions": 1, "deletions": 0}
             for p in pr_paths
         ],
@@ -776,7 +776,7 @@ def test_alerts_in_added_files_classify_in_scope_no_spawn(tmp_path, monkeypatch)
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
@@ -786,13 +786,13 @@ def test_alerts_in_added_files_classify_in_scope_no_spawn(tmp_path, monkeypatch)
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # 274d: 16x unused-global + 4x empty-except, ALL in the PR's added files.
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: (
+        lambda self, *, source_branch, require_checks=False: (
             [
                 {
                     "rule": "py/unused-global-variable",
@@ -819,7 +819,7 @@ def test_alerts_in_added_files_classify_in_scope_no_spawn(tmp_path, monkeypatch)
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {"path": added, "status": "added", "additions": 40, "deletions": 0}
         ],
     )
@@ -1004,7 +1004,7 @@ def test_out_of_scope_stale_branch_refreshes_no_spawn(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
@@ -1015,7 +1015,7 @@ def test_out_of_scope_stale_branch_refreshes_no_spawn(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "sha": "abc123",
             "mergeable": True,
             "mergeable_state": "behind",
@@ -1025,7 +1025,7 @@ def test_out_of_scope_stale_branch_refreshes_no_spawn(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "update_branch",
-        lambda self, *, source_branch: (
+        lambda self, *, source_branch, require_checks=False: (
             update_calls.append(source_branch)
             or {"updated": True, "reason": "update-branch accepted"}
         ),
@@ -1065,7 +1065,7 @@ def test_out_of_scope_clean_branch_spawns_fix(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
@@ -1075,7 +1075,7 @@ def test_out_of_scope_clean_branch_spawns_fix(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "sha": "abc123",
             "mergeable": True,
             "mergeable_state": "clean",
@@ -1085,7 +1085,7 @@ def test_out_of_scope_clean_branch_spawns_fix(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "update_branch",
-        lambda self, *, source_branch: (
+        lambda self, *, source_branch, require_checks=False: (
             update_calls.append(source_branch) or {"updated": True}
         ),
     )
@@ -1115,7 +1115,7 @@ def test_out_of_scope_stale_branch_refresh_capped_at_one(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "alert", "text": None, "annotations": []}
@@ -1125,7 +1125,7 @@ def test_out_of_scope_stale_branch_refresh_capped_at_one(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "sha": "abc123",
             "mergeable": True,
             "mergeable_state": "behind",
@@ -1135,7 +1135,7 @@ def test_out_of_scope_stale_branch_refresh_capped_at_one(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "update_branch",
-        lambda self, *, source_branch: (
+        lambda self, *, source_branch, require_checks=False: (
             update_calls.append(source_branch) or {"updated": True}
         ),
     )
@@ -1231,7 +1231,7 @@ def test_reconcile_diverged_blocks_without_pushing(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -1241,7 +1241,7 @@ def test_reconcile_diverged_blocks_without_pushing(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # Diverged: reconcile reports it cannot fast-forward.
     monkeypatch.setattr(
@@ -1390,7 +1390,7 @@ def test_identical_failure_blocks_after_max_consecutive(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -1400,7 +1400,7 @@ def test_identical_failure_blocks_after_max_consecutive(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
 
     agent_calls = []
@@ -1455,7 +1455,7 @@ def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "new err", "text": None, "annotations": []}
@@ -1465,7 +1465,7 @@ def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
 
     agent_calls = []
@@ -1579,7 +1579,7 @@ def test_codeql_security_severity_block_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {
@@ -1594,13 +1594,13 @@ def test_codeql_security_severity_block_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # Return a security-severity alert (high).
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {
                 "number": 42,
                 "rule": "py/clear-text-logging-sensitive-data",
@@ -1616,7 +1616,7 @@ def test_codeql_security_severity_block_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {
                 "path": "src/foo.py",
                 "status": "modified",
@@ -1693,25 +1693,50 @@ def test_ci_status_fn_passed_to_agent(tmp_path, monkeypatch):
 def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):
     """_make_ci_status_fn returns (conclusion, summary) tuples matching the
     forge's check_status verdicts."""
+    import time as _time_mod
+
     ctx = _gh(tmp_path)
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
     branch = f"mill/{t.id}"
     stage = CIFixStage()
 
+    # Ensure the 120 s grace period is always expired so verdicts are
+    # mapped straight through (the grace-period behaviour is tested
+    # separately below).
+    _tick = [0]
+
+    def _fake_monotonic():
+        _tick[0] += 1000.0
+        return _tick[0]
+
+    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
+
+    # Helper that accepts the new ``require_checks`` kwarg.
+    def _cs(conclusion, failing=(), sha=""):
+        def _fn(self, *, source_branch, require_checks=False):
+            result: dict = {"conclusion": conclusion, "failing": list(failing)}
+            if sha:
+                result["_sha"] = sha
+            return result
+
+        return _fn
+
     # success
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+        _cs("success", sha="abc1234"),
     )
-    assert stage._make_ci_status_fn(t, ctx, branch)() == ("success", "")
+    conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
+    assert conclusion == "success"
+    assert "abc1234" in summary
 
     # pending
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+        _cs("pending"),
     )
     assert stage._make_ci_status_fn(t, ctx, branch)() == ("pending", "")
 
@@ -1719,7 +1744,7 @@ def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: None,
+        lambda self, *, source_branch, require_checks=False: None,
     )
     assert stage._make_ci_status_fn(t, ctx, branch)() == ("gone", "")
 
@@ -1727,21 +1752,21 @@ def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
-            "conclusion": "failure",
-            "failing": [
-                {"name": "lint", "summary": "boom", "text": None, "annotations": []}
-            ],
-        },
+        _cs(
+            "failure",
+            failing=[{"name": "lint", "summary": "boom", "text": None, "annotations": []}],
+            sha="abc123",
+        ),
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
     assert conclusion == "failure"
     assert "lint" in summary
+    assert "abc123" in summary
 
 
 def test_transient_check_status_error_maps_to_pending(tmp_path, monkeypatch):
@@ -1751,7 +1776,7 @@ def test_transient_check_status_error_maps_to_pending(tmp_path, monkeypatch):
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
 
-    def boom(self, *, source_branch):
+    def boom(self, *, source_branch, require_checks=False):
         raise RuntimeError("forge 500")
 
     monkeypatch.setattr(github.GitHubForge, "check_status", boom)
@@ -1804,7 +1829,7 @@ def test_failing_summary_txt_written_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -1814,7 +1839,7 @@ def test_failing_summary_txt_written_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -1845,7 +1870,7 @@ def test_failing_summary_txt_fallback_when_summary_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "build", "summary": None, "text": None, "annotations": []}
@@ -1855,7 +1880,7 @@ def test_failing_summary_txt_fallback_when_summary_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -1886,7 +1911,7 @@ def test_ci_fix_md_written_with_failure_and_agent_recap(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {
@@ -1901,7 +1926,7 @@ def test_ci_fix_md_written_with_failure_and_agent_recap(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -1934,7 +1959,7 @@ def test_ci_fix_md_written_when_agent_crashes(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
@@ -1944,7 +1969,7 @@ def test_ci_fix_md_written_when_agent_crashes(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # Simulate agent crash.
     monkeypatch.setattr(
@@ -1972,7 +1997,7 @@ def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {
@@ -1987,7 +2012,7 @@ def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
@@ -2028,7 +2053,7 @@ def test_success_repoll_does_not_write_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {"conclusion": "success", "failing": []},
     )
 
     t = _fixing_ci(ctx)
@@ -2050,7 +2075,7 @@ def test_pending_repoll_does_not_write_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+        lambda self, *, source_branch, require_checks=False: {"conclusion": "pending", "failing": []},
     )
 
     t = _fixing_ci(ctx)
@@ -2072,7 +2097,7 @@ def test_check_status_none_does_not_write_history_note(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: None,
+        lambda self, *, source_branch, require_checks=False: None,
     )
 
     t = _fixing_ci(ctx)
@@ -2105,7 +2130,7 @@ def test_codeql_403_unreadable_blocks_immediately(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {
@@ -2120,13 +2145,13 @@ def test_codeql_403_unreadable_blocks_immediately(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # list_code_scanning_alerts raises the 403 signal.
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: (_ for _ in ()).throw(
+        lambda self, *, source_branch, require_checks=False: (_ for _ in ()).throw(
             CodeScanningAlertsUnavailable("403 forbidden")
         ),
     )
@@ -2157,7 +2182,7 @@ def test_codeql_403_readable_alerts_still_works(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {
@@ -2172,13 +2197,13 @@ def test_codeql_403_readable_alerts_still_works(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # Return a security-severity alert (high) — the normal readable path.
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {
                 "number": 42,
                 "rule": "py/clear-text-logging-sensitive-data",
@@ -2193,7 +2218,7 @@ def test_codeql_403_readable_alerts_still_works(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             {"path": "src/foo.py", "status": "modified", "additions": 1, "deletions": 0}
         ],
     )
@@ -2236,7 +2261,7 @@ def test_ci_fix_dedup_removes_extra_fragment_without_invoking_agent(
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {
@@ -2251,13 +2276,13 @@ def test_ci_fix_dedup_removes_extra_fragment_without_invoking_agent(
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # Keep enrichment seams quiet.
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [],
+        lambda self, *, source_branch, require_checks=False: [],
     )
     monkeypatch.setattr(
         github.GitHubForge,

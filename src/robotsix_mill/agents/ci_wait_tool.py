@@ -108,7 +108,8 @@ def build_ci_wait_tool(
             while True:
                 conclusion, summary = ci_status_fn()
                 if conclusion == "success":
-                    return "CI_PASSED: all checks are green — report DONE."
+                    sha_note = f" ({summary})" if summary else ""
+                    return f"CI_PASSED: all checks are green{sha_note} — report DONE."
                 if conclusion == "failure":
                     return (
                         f"CI_FAILING (attempt {attempt}/{max_iterations}):\n\n{summary}"
