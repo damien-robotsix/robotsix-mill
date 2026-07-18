@@ -398,7 +398,8 @@ test("distinct non-loop stages (refine, review, merge, done) render unchanged", 
   // Transition labels
   assert.ok(html.includes("review → code_review"), "missing review transition");
   assert.ok(html.includes("merge → done"), "missing merge transition");
-  assert.ok(html.includes("retrospect → closed"), "missing retrospect transition");
+  // closed is terminal (no stage in STATE_TRACE) — renders bare state name.
+  assert.ok(html.includes('s-closed'), "missing closed state class");
 });
 
 // ======================================================================
