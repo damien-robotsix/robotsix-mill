@@ -20,13 +20,16 @@ from .periodic_base import (
 
 logger = logging.getLogger(__name__)
 
-# One subject per run → one proposal max.  The previous limit of 5
-# encouraged the agent to sweep the codebase for five gaps in a
-# single ~$1 run that routinely blew the 12-request budget.  The
-# rewritten prompt (agent_definitions/periodic/survey.yaml) caps
-# the agent at one focused subject per run; this code-side cap is
-# defence in depth.
-MAX_GAPS = 1
+# One subject per run → one proposal max, plus an optional companion
+# standards-board ticket when the finding is fleet-wide.  The previous
+# limit of 5 encouraged the agent to sweep the codebase for five gaps
+# in a single ~$1 run that routinely blew the 12-request budget.  The
+# rewritten prompt (agent_definitions/periodic/survey.yaml) caps the
+# agent at one focused subject per run; this code-side cap is defence
+# in depth.  A fleet-wide finding may produce two drafts: one on the
+# standards board (codification proposal) and one on the current
+# repo's board (repo-specific mechanical work).
+MAX_GAPS = 2
 
 SurveyResult = PeriodicAgentResult
 

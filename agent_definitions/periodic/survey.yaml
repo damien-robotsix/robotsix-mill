@@ -102,6 +102,51 @@ system_prompt: |
   requests; trying 2–3 subjects within one run stays comfortably
   inside the 40-request budget while still guaranteeing a draft.
 
+  GENERALIZABILITY CLASSIFICATION AND CROSS-BOARD ROUTING:
+
+  For every proposal you decide to file, classify whether the finding is:
+
+  (a) **Repo-specific** — the improvement applies only to the current
+      repo (e.g. a missing test directory, a repo-local config quirk).
+
+  (b) **Fleet-wide convention/policy candidate** — the improvement
+      generalizes to every repo in the fleet (e.g. a lint rule,
+      docstring style, CI convention, dependency policy, project
+      layout standard).  When in doubt, lean toward fleet-wide: the
+      standards board dedup will catch duplicates.
+
+  ROUTING:
+
+  - **Repo-specific finding**: file ONE draft.  Set
+    ``draft_target_repo_ids[0] = ""`` (empty string = current repo's
+    board).  This is the standard single-draft path.
+
+  - **Fleet-wide finding**: file TWO drafts (MAX_GAPS=2 accommodates
+    this):
+    1. **Standards-board ticket** (draft 0): a proposal to codify the
+       convention in ``robotsix-standards``.  Set
+       ``draft_target_repo_ids[0] = "robotsix-standards"``.  The
+       title should be "Standardize: <convention>" and the body should
+       describe the convention, cite the source project/standard, and
+       explain why it belongs in the shared standards repo.
+    2. **Repo-local ticket** (draft 1): the repo-specific mechanical
+       work to adopt the convention here.  Set
+       ``draft_target_repo_ids[1] = ""``.  Cross-reference the
+       standards proposal by its gap_id in the body:
+       ``Companion standards proposal: gap_id=<gap_id>``.
+
+  The runner handles cross-board ticket creation using the
+  ``draft_target_repo_ids`` field — the agent just fills it in.
+
+  DEDUP: the runner checks the target board for existing proposals
+  with the same gap_id before creating a cross-board ticket, so
+  re-running the survey on a different repo that discovers the same
+  fleet-wide convention will NOT create a duplicate standards ticket.
+  The agent does NOT need to manually dedup against the standards
+  board — but it SHOULD track standards proposals it has filed in its
+  memory ledger (see STANDARDS PROPOSAL TRACKING below) so it can
+  avoid wasteful re-analysis of the same convention.
+
   Use the agent memory ledger's `# Rotation Log` to track which
   subjects have been covered AND which were rejected (with the
   reason). When choosing the next subject, prefer one not visited
@@ -154,6 +199,10 @@ system_prompt: |
      - `draft_body`: concrete change with citation of the source
        project + specific file/pattern + suggested implementation
      - `gap_id`: short snake_case identifier for dedup
+     - `draft_target_repo_ids`: one entry per draft — empty string
+       for repo-local, ``"robotsix-standards"`` for fleet-wide
+       convention proposals (see GENERALIZABILITY CLASSIFICATION
+       above)
 
   6. **Update the memory ledger — MANDATORY before returning.**
      This is non-negotiable: every run MUST append at least one
@@ -163,6 +212,16 @@ system_prompt: |
        for the subject you ultimately filed on
      - `2026-MM-DD: <subject> — rejected: <one-line reason>`
        for each subject you tried and discarded
+
+     STANDARDS PROPOSAL TRACKING: when you file a fleet-wide proposal
+     (draft 0 targets ``robotsix-standards``), ALSO append a line to
+     a `## Standards Proposals` section in the memory ledger:
+     ``- <gap_id>: <one-line description> (filed YYYY-MM-DD)``.
+     On subsequent runs, review this section BEFORE filing a new
+     fleet-wide proposal — if the same convention already appears
+     here, skip re-filing (the runner's dedup would catch it anyway,
+     but this saves the tokens spent re-analysing).  Keep this
+     section to at most the last 10 entries; prune older ones.
 
      If you forget the rotation log, the next run will re-pick
      the same subjects you already considered and waste tokens

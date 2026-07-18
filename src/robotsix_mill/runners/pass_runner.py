@@ -538,6 +538,42 @@ def _module_curator_premise_check(
     return None
 
 
+def _resolve_board_id(settings: Any, repo_id: str) -> str:
+    """Resolve a board_id for *repo_id* from the repos registry.
+
+    Returns the board_id string, or raises ``ValueError`` when *repo_id*
+    is not found in the registry.
+    """
+    from ..config import get_repos_config
+
+    repos = get_repos_config()
+    repo_config = repos.repos.get(repo_id)
+    if repo_config is None:
+        raise ValueError(
+            f"Unknown repo_id {repo_id!r} — cannot resolve board for "
+            f"cross-board ticket filing. Registered repos: "
+            f"{sorted(repos.repos.keys())}"
+        )
+    return repo_config.board_id
+
+
+def _verify_prior_on_board(
+    settings: Any,
+    board_id: str,
+    source_label: SourceKind,
+) -> dict[str, dict]:
+    """Verify prior proposals on an arbitrary *board_id*.
+
+    Identical to :func:`_verify_prior_proposals` but scoped to a
+    specific board rather than the default service's board.  Used for
+    cross-board dedup when a periodic pass files a draft on a board
+    other than the current repo's (e.g. survey filing on the standards
+    board).
+    """
+    target_service = TicketService(settings, board_id=board_id)
+    return _verify_prior_proposals(target_service, settings, source_label)
+
+
 def run_agent_pass(
     agent_fn: Callable[..., Any],
     *,
@@ -631,7 +667,8 @@ def run_agent_pass(
 
     # 5. Create draft tickets for each proposal.
     gap_ids: list[str] = getattr(res, "gap_ids", [])
-    created: list[dict] = []
+    draft_target_repo_ids: list[str] = getattr(res, "draft_target_repo_ids", [])
+    created: list[dict[str, str]] = []
     verified_gap_ids: list[str] = []
     limit = min(len(res.draft_titles), len(res.draft_bodies))
     if max_drafts is not None:
@@ -641,6 +678,49 @@ def run_agent_pass(
         body = res.draft_bodies[i]
         if not title or not body:
             continue
+
+        # --- Resolve the target board for this draft. ---
+        target_repo_id = (
+            draft_target_repo_ids[i]
+            if i < len(draft_target_repo_ids) and draft_target_repo_ids[i]
+            else ""
+        )
+        if target_repo_id:
+            try:
+                target_board_id = _resolve_board_id(settings, target_repo_id)
+            except ValueError as exc:
+                log.warning(
+                    "%s draft %d skipped — cannot resolve target repo %r: %s",
+                    source_label,
+                    i,
+                    target_repo_id,
+                    exc,
+                )
+                continue
+            target_service = TicketService(settings, board_id=target_board_id)
+            # Cross-board dedup: check the target board for prior proposals
+            # with the same gap_id before filing — prevents re-proposing the
+            # same fleet-wide convention from every repo the survey visits.
+            target_verified = _verify_prior_on_board(
+                settings, target_board_id, source_label
+            )
+            gap_id = gap_ids[i] if i < len(gap_ids) and gap_ids[i] else ""
+            if gap_id and gap_id in target_verified:
+                log.info(
+                    "%s draft %d skipped — gap_id %r already exists on target board %s "
+                    "(ticket %s, state %s)",
+                    source_label,
+                    i,
+                    gap_id,
+                    target_board_id,
+                    target_verified[gap_id]["ticket_id"],
+                    target_verified[gap_id]["state"],
+                )
+                continue
+        else:
+            target_board_id = service.board_id
+            target_service = service
+
         # Live-filesystem guard: skip drafts whose expected test
         # file(s) already exist on disk.
         if (
@@ -715,11 +795,12 @@ def run_agent_pass(
         if i < len(gap_ids) and gap_ids[i]:
             body += f"\n\n<!-- {source_label}-gap-id: {gap_ids[i]} -->"
         try:
-            ticket = service.create(
+            ticket = target_service.create(
                 title,
                 body,
                 source=source_label,
                 origin_session=origin_session,
+                board_id=target_board_id,
             )
             created.append({"id": ticket.id, "title": ticket.title})
             # Track which gap_ids were actually filed — used to
@@ -727,9 +808,10 @@ def run_agent_pass(
             if i < len(gap_ids) and gap_ids[i]:
                 verified_gap_ids.append(gap_ids[i])
             log.info(
-                "%s spawned draft %s: %s",
+                "%s spawned draft %s on board %s: %s",
                 source_label,
                 ticket.id,
+                target_board_id,
                 title,
             )
         except Exception:
