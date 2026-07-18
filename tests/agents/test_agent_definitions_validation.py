@@ -22,7 +22,8 @@ from robotsix_mill.agents.yaml_loader import (
 )
 
 _ALL_DEFINITIONS = sorted(
-    p for p in Path("agent_definitions").rglob("*.yaml")
+    p
+    for p in Path("agent_definitions").rglob("*.yaml")
     if "agent_definitions/_shared/" not in str(p)
 )
 
