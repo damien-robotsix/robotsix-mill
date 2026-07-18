@@ -96,13 +96,18 @@ def refine_input_hash(ws: Workspace) -> str:
     return ws.content_hash()
 
 
-def review_input_hash(ws: Workspace, diff: str) -> str:
+def review_input_hash(ws: Workspace, diff: str, head_sha: str = "") -> str:
     """Compute the input hash for the review stage.
 
-    Based on the ticket description (the spec) and the implementation
-    diff — the two inputs the review agent sees.
+    Based on the ticket description (the spec), the implementation
+    diff, and the branch-tip HEAD SHA — the three inputs the review
+    agent sees.  Including *head_sha* ensures that after a rebase or
+    force-push (new HEAD SHA) the cache misses even when the diff
+    text is unchanged, forcing a fresh review against the current
+    branch tip.
     """
     h = hashlib.sha256()
     h.update(ws.read_description().encode("utf-8", errors="replace"))
     h.update(diff.encode("utf-8", errors="replace"))
+    h.update(head_sha.encode("utf-8", errors="replace"))
     return h.hexdigest()

@@ -1938,12 +1938,14 @@ def test_root_span_only_on_first_rebase_attempt(tmp_path, monkeypatch):
 
 
 def _write_review_artifact(
-    ctx, ticket, *, verdict="APPROVE", eligible=True, comment=""
+    ctx, ticket, *, verdict="APPROVE", eligible=True, comment="", head_sha=None
 ):
     """Helper: write a review.md artifact for auto-merge tests."""
     art_dir = ctx.service.workspace(ticket).artifacts_dir
     art_dir.mkdir(parents=True, exist_ok=True)
     text = f"verdict: {verdict}\nauto_merge_eligible: {str(eligible).lower()}\n"
+    if head_sha is not None:
+        text += f"head_sha: {head_sha}\n"
     if comment:
         text += f"comment: {comment}\n"
     (art_dir / "review.md").write_text(text, encoding="utf-8")
@@ -5430,3 +5432,219 @@ def test_multi_repo_no_changes_requested_auto_merges(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert sorted(merged_calls) == [remote_a, remote_b]
+
+
+# ============================================================
+# Stale review artifact (head_sha mismatch) — regression tests
+# for merge-gate-replays-stale-request-changes
+# ============================================================
+
+
+def test_auto_merge_not_blocked_by_stale_artifact_head_sha(tmp_path, monkeypatch):
+    """When review.md has a different head_sha than the current PR head,
+    the stale verdict must not block auto-merge (eligible=True)."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "current-head-abc123",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    # Write an artifact with a DIFFERENT head_sha than the PR reports.
+    _write_review_artifact(
+        ctx,
+        t,
+        verdict="REQUEST_CHANGES",
+        eligible=False,
+        head_sha="old-stale-head-xyz789",
+    )
+
+    out = MergeStage().run(t, ctx)
+    # Despite auto_merge_eligible: false in artifact, the stale head_sha
+    # mismatch makes it eligible → auto-merge to DONE.
+    assert out.next_state is State.DONE
+
+
+def test_auto_merge_blocked_by_current_artifact_same_head_sha(
+    tmp_path,
+    monkeypatch,
+):
+    """When review.md has the SAME head_sha as the current PR, the
+    verdict is current and must still block (existing behavior)."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "same-head-123",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(
+        ctx,
+        t,
+        verdict="REQUEST_CHANGES",
+        eligible=False,
+        head_sha="same-head-123",
+    )
+
+    out = MergeStage().run(t, ctx)
+    # Same head SHA → current verdict → still blocks.
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_auto_merge_without_head_sha_in_artifact_is_backward_compat(
+    tmp_path,
+    monkeypatch,
+):
+    """When review.md has NO head_sha line (old artifact), the behavior
+    is unchanged — auto_merge_eligible: false still blocks."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "any-head",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+
+    t = _human_mr_approval(ctx)
+    # No head_sha line — backward compat.
+    _write_review_artifact(ctx, t, verdict="REQUEST_CHANGES", eligible=False)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+
+
+def test_waiting_auto_merge_stale_artifact_does_not_bounce(tmp_path, monkeypatch):
+    """WAITING_AUTO_MERGE poll with a stale artifact (different head_sha)
+    must not bounce back to HUMAN_MR_APPROVAL — the ticket proceeds to
+    auto-merge when CI is green."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "rebased-head-def456",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    # Artifact from BEFORE the rebase — different head_sha.
+    _write_review_artifact(
+        ctx,
+        t,
+        verdict="REQUEST_CHANGES",
+        eligible=False,
+        head_sha="pre-rebase-head-abc111",
+    )
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    # Should not bounce — stale artifact is ignored, proceeds to auto-merge.
+    assert out.next_state is State.DONE
+
+
+def test_waiting_auto_merge_current_artifact_still_bounces_if_not_eligible(
+    tmp_path,
+    monkeypatch,
+):
+    """WAITING_AUTO_MERGE poll with a CURRENT artifact (same head_sha)
+    that is not eligible should still bounce to HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "current-head-999",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(
+        ctx,
+        t,
+        verdict="REQUEST_CHANGES",
+        eligible=False,
+        head_sha="current-head-999",
+    )
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    # Same head SHA → current verdict → still bounces.
+    assert out.next_state is State.HUMAN_MR_APPROVAL

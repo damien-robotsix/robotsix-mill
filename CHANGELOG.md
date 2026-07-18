@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Merge gate: stale review verdicts no longer block auto-merge after a rebase. The review artifact now records the branch head SHA; when the current PR head differs the stale verdict is ignored. Prevents the merge gate from re-posting byte-identical REQUEST_CHANGES verdicts that no longer apply to the rebased branch.
 - Document `sandbox.image` dev-vs-prod dual default: the Pydantic model default is `python:3.14-slim` for lightweight local development, while the production JSON config overrides to `robotsix/mill-sandbox:latest` (includes `uv` and toolchain). Added inline docstring comment and updated config docs table to match.
 - Update `docs/agents/agent-yaml-schema.md` to match the current `AgentDefinition` model: replace `model` with `level`, replace `web` with `web_knowledge`, add missing field docs (`list_epic_children`, `list_threads`, `ask_user`, `inject_agent_md`, `inject_language_conventions`, `max_tokens`), update category listings and tools table, fix `read_ticket` section.
 - Fix `coordinator_timeout_seconds` model default drift: changed from 900 to 600 in `_settings_core.py` to match `config/config.example.json` and documentation.

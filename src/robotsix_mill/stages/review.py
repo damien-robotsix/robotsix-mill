@@ -561,10 +561,15 @@ class ReviewStage(Stage):
             log.info("%s: empty diff — approving without review", ticket.id)
             return Outcome(State.DOCUMENTING, "empty diff (no-op implementation)")
 
+        # Snapshot the branch-tip HEAD SHA so downstream consumers
+        # (stage cache, auto-merge eligibility) can detect when a later
+        # rebase or force-push has made this review stale.
+        head_sha = git_ops.head_sha(Path(repo_dir))
+
         # --- stage-outcome cache: short-circuit when input is unchanged ---
         from ._stage_cache import _check, review_input_hash
 
-        input_hash = review_input_hash(ws, diff)
+        input_hash = review_input_hash(ws, diff, head_sha)
         cached = _check(ws, ReviewStage.name, input_hash)
         if cached is not None:
             log.info(
@@ -831,6 +836,7 @@ class ReviewStage(Stage):
         ws.artifacts_dir.joinpath("review.md").write_text(
             f"verdict: {verdict.verdict}\n"
             f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n"
+            f"head_sha: {head_sha}\n"
             f"board_screenshot: {'present' if screenshot_path else 'absent'}\n"
             f"comment: {_collapse_comments(verdict.comments)}\n",
             encoding="utf-8",
