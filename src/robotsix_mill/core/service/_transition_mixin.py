@@ -334,6 +334,14 @@ class _TransitionMixin(_ServiceBase):
         explicit operator justification is treated as sufficient reason
         to retry even though the spec itself is unchanged, instead of
         requiring manual workspace surgery to reset the guard.
+
+        When the ticket was blocked from READY due to the implement
+        spawn limit (``artifacts/implement_spawn_count`` ≥
+        ``implement_max_spawns_per_ticket``), the counter file is
+        deleted so the ticket gets a fresh attempt budget, and the
+        reset is recorded in the event history as "spawn counter reset
+        via resume-blocked". Tickets blocked from READY for other
+        reasons keep their counter intact.
         """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
@@ -363,25 +371,41 @@ class _TransitionMixin(_ServiceBase):
             if note:
                 s.add(Comment(ticket_id=ticket_id, body=note, author="operator"))
             s.flush()
+            # Detect spawn-limit block: only reset the counter when it's
+            # actually at/above the limit — tickets blocked from READY
+            # for other reasons keep their counter so the state is
+            # faithfully preserved across the resume.
+            spawn_reset = False
+            counter_path = None
+            if dst is State.READY and self.settings.implement_max_spawns_per_ticket > 0:
+                counter_path = (
+                    self.workspace(ticket).artifacts_dir / "implement_spawn_count"
+                )
+                spawn_limit = self.settings.implement_max_spawns_per_ticket
+                spawn_count = 0
+                if counter_path.exists():
+                    try:
+                        spawn_count = int(
+                            counter_path.read_text(encoding="utf-8").strip()
+                        )
+                    except ValueError, OSError:
+                        spawn_count = 0
+                spawn_reset = spawn_count >= spawn_limit
             event_note = f"resumed from blocked (was blocked from {dst.value})"
             if note:
                 event_note += f"; override: {note}"
+            if spawn_reset:
+                event_note += "; spawn counter reset via resume-blocked"
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=event_note))
             s.commit()
             s.refresh(ticket)
             if note and dst is State.READY:
                 _clear_stale_implement_guard(self.workspace(ticket))
-            if dst is State.READY:
-                # Always clear the implement spawn counter so a resumed
-                # ticket doesn't immediately re-hit the spawn limit —
-                # an explicit operator resume IS the human inspection
-                # the block asked for, note or not.
+            if spawn_reset and counter_path is not None:
                 try:
-                    (
-                        self.workspace(ticket).artifacts_dir / "implement_spawn_count"
-                    ).unlink()
+                    counter_path.unlink()
                 except FileNotFoundError:
-                    pass  # best-effort cleanup; file may not exist
+                    pass  # best-effort; file may already be gone
             if self._on_transition is not None:
                 self._on_transition(ticket)
             return ticket

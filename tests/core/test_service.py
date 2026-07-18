@@ -311,9 +311,10 @@ def test_resume_blocked_without_note_clears_spawn_counter_but_not_implement_guar
     service,
 ):
     """resume_blocked with no note still clears artifacts/implement_spawn_count
-    (an explicit operator resume IS the human inspection the block asked for)
-    but leaves the stale-spec guard (artifacts/implement.md) untouched — that
-    guard still requires an explicit note."""
+    when the counter is at/above the spawn limit (explicit operator resume IS
+    the human inspection the block asked for) but leaves the stale-spec guard
+    (artifacts/implement.md) untouched — that guard still requires an explicit
+    note."""
     t = service.create("resume without note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -329,6 +330,49 @@ def test_resume_blocked_without_note_clears_spawn_counter_but_not_implement_guar
     assert stale.exists()
     assert not spawn_counter.exists()
     assert service.list_comments(t.id) == []
+    hist = service.history(t.id)
+    assert "spawn counter reset via resume-blocked" in (hist[-1].note or "")
+
+
+def test_resume_blocked_below_spawn_limit_preserves_counter(service):
+    """resume_blocked does NOT clear the spawn counter when it's below
+    the limit — the ticket was blocked from READY for another reason."""
+    t = service.create("below spawn limit resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="transient OOM in sandbox")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("1", encoding="utf-8")  # < default limit of 3
+
+    resumed = service.resume_blocked(t.id)
+    assert resumed.state is State.READY
+    assert spawn_counter.exists()
+    assert spawn_counter.read_text(encoding="utf-8").strip() == "1"
+    hist = service.history(t.id)
+    assert "spawn counter reset" not in (hist[-1].note or "")
+
+
+def test_resume_blocked_spawn_limit_reset_recorded_in_history(service):
+    """When the spawn counter IS at the limit, the reset is recorded in
+    the event history alongside the standard resume note."""
+    t = service.create("spawn limit reset history test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="implement spawn limit reached")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")  # at default limit
+
+    resumed = service.resume_blocked(t.id, note="operator inspection done")
+    assert resumed.state is State.READY
+    assert not spawn_counter.exists()
+
+    hist = service.history(t.id)
+    last_note = hist[-1].note or ""
+    assert "resumed from blocked" in last_note
+    assert "override: operator inspection done" in last_note
+    assert "spawn counter reset via resume-blocked" in last_note
 
 
 def test_resume_blocked_after_retrospect_failure(service):
