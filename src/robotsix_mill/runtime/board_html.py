@@ -113,7 +113,6 @@ margin-left:4px" title="Register a new repo">
     <button onclick="runForgeParity()" data-agent="forge_parity">Forge Parity</button>
     <button onclick="runCopyPaste()" data-agent="copy_paste">Copy Paste</button>
     <button onclick="runStateSync()" data-agent="state_sync">State Sync</button>
-    <button onclick="runEnvDocSync()" data-agent="env_doc_sync">Env Doc Sync</button>
     <button onclick="runFrontendSync()" data-agent="frontend_sync">Frontend Sync</button>
     <button onclick="runSecurityPosture()" data-agent="security_posture">Security Posture</button>
     <button onclick="runTriageBoilerplate()" data-agent="triage_boilerplate">Triage Boilerplate</button>

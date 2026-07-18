@@ -12,7 +12,6 @@ _shtab_robotsix_mill_commands() {
     "config-sync:"
     "copy-paste:"
     "diagnostic:"
-    "env-doc-sync:"
     "epic:"
     "forge-parity:"
     "frontend-sync:"
@@ -128,14 +127,7 @@ _shtab_robotsix_mill_diagnostic_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_diagnostic_defaults_added=0
 
-_shtab_robotsix_mill_env_doc_sync_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
-  "--json[output full JSON result (default\: summary)]"
-)
-
-# guard to ensure default positional specs are added only once per session
-_shtab_robotsix_mill_env_doc_sync_defaults_added=0
-
 _shtab_robotsix_mill_epic_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
 )
@@ -401,7 +393,6 @@ _shtab_robotsix_mill() {
         config-sync) _arguments -C -s $_shtab_robotsix_mill_config_sync_options ;;
         copy-paste) _arguments -C -s $_shtab_robotsix_mill_copy_paste_options ;;
         diagnostic) _arguments -C -s $_shtab_robotsix_mill_diagnostic_options ;;
-        env-doc-sync) _arguments -C -s $_shtab_robotsix_mill_env_doc_sync_options ;;
         epic) _shtab_robotsix_mill_epic ;;
         forge-parity) _arguments -C -s $_shtab_robotsix_mill_forge_parity_options ;;
         frontend-sync) _arguments -C -s $_shtab_robotsix_mill_frontend_sync_options ;;

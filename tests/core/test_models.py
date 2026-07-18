@@ -74,7 +74,6 @@ def test_sourcekind_member_count():
         "MODULE_CURATOR",
         "ROADMAP_SYNC",
         "STATE_SYNC",
-        "ENV_DOC_SYNC",
         "FRONTEND_SYNC",
         "SECURITY_POSTURE",
         "TRIAGE_BOILERPLATE",

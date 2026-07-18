@@ -32,7 +32,6 @@ run_bc_check_agent
 reset_for_tests
 run_completeness_check_agent
 run_config_sync_agent
-run_env_doc_sync_agent
 run_security_posture_agent
 _absorb_summary_typos
 best_k
@@ -120,8 +119,6 @@ triage_boilerplate_periodic
 triage_boilerplate_interval_seconds
 config_sync_periodic
 config_sync_interval_seconds
-env_doc_sync_periodic
-env_doc_sync_interval_seconds
 frontend_sync_periodic
 frontend_sync_interval_seconds
 member_sync_interval_seconds
@@ -261,7 +258,6 @@ run_audit_pass
 run_bc_check_pass
 run_completeness_check_pass
 run_config_sync_pass
-run_env_doc_sync_pass
 run_copy_paste_pass
 run_security_posture_pass
 run_data_dir_gc_pass

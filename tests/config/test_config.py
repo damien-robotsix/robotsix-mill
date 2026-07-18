@@ -515,14 +515,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "50",
         50,
     ),
-    # --- periodic env-doc-sync ---
-    ("env_doc_sync_periodic", "MILL_ENV_DOC_SYNC_PERIODIC", "0", False),
-    (
-        "env_doc_sync_interval_seconds",
-        "MILL_ENV_DOC_SYNC_INTERVAL_SECONDS",
-        "43200",
-        43200,
-    ),
     # --- periodic state-sync ---
     ("state_sync_periodic", "MILL_STATE_SYNC_PERIODIC", "0", False),
     ("state_sync_interval_seconds", "MILL_STATE_SYNC_INTERVAL_SECONDS", "43200", 43200),

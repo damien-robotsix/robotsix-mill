@@ -89,8 +89,6 @@
     "doc_memory_path": null,
     "doc_request_limit": 32,
     "enable_repo_creation": false,
-    "env_doc_sync_interval_seconds": 604800,
-    "env_doc_sync_periodic": true,
     "epic_dedup_lookback_days": 7,
     "explore_max_tokens": 4096,
     "explore_request_limit": 100,

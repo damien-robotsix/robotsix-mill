@@ -32,7 +32,10 @@ const BOARD_JS = path.resolve(
 const source = fs
   .readFileSync(BOARD_JS, "utf8")
   .replace(/^\(function\(\)\s*\{\s*"use strict";/, "")
-  .replace(/\}\)\(\);\s*$/, "");
+  .replace(/\}\)\(\);\s*$/, "")
+    // After stripping the IIFE, bare `window.xxx = xxx;` assignments at
+    // end of the file need `window` in scope — alias from the context.
+    .replace(/^(?=\s*window\.)/m, "var window = globalThis.window;\n");
 
 // --- minimal DOM/XHR/timer/window stubs --------------------------------
 
