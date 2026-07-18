@@ -119,11 +119,11 @@ def test_state_sync_in_periodic_pass_configs():
 
 
 def test_state_sync_in_builtin_kinds():
-    """state_sync is listed in _BUILTIN_KINDS as llm_agent."""
+    """state_sync is listed in _BUILTIN_KINDS as mill_only."""
     from robotsix_mill.agents.periodic_loader import _BUILTIN_KINDS
 
     assert "state_sync" in _BUILTIN_KINDS
-    assert _BUILTIN_KINDS["state_sync"] == "llm_agent"
+    assert _BUILTIN_KINDS["state_sync"] == "mill_only"
 
 
 def test_state_sync_presence_file(tmp_path):

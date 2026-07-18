@@ -84,7 +84,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "docstring_coverage": "llm_agent",
     "module_curator": "llm_agent",
     "forge_parity": "llm_agent",
-    "state_sync": "llm_agent",
+    "state_sync": "mill_only",
     "frontend_sync": "mill_only",
     "repo_description_sync": "schedule_only",
     "triage_boilerplate": "llm_agent",
@@ -341,7 +341,7 @@ def resolve_periodic_workflow(
 
     definition: AgentDefinition | None = None
     try:
-        if kind == "llm_agent":
+        if kind in ("llm_agent", "mill_only"):
             definition = _merge_over_builtin(_builtin_definition(pwf.name), pwf)
         elif kind == "bespoke":
             definition = _bespoke_definition(pwf)

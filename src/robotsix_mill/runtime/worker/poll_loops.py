@@ -309,7 +309,7 @@ class PollLoopsMixin(_WorkerBase):
         the merged definition threaded in as ``definition_override``.
         ``schedule_only`` → the workflow's module-level pass stub.
         """
-        if wf.kind == "llm_agent":
+        if wf.kind in ("llm_agent", "mill_only"):
             from ...config import Settings
 
             definition = wf.definition

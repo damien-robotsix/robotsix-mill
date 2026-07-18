@@ -271,3 +271,14 @@ def test_validate_mill_only_frontend_sync_rejected():
 def test_kind_for_mill_only():
     """frontend_sync must resolve to mill_only kind."""
     assert kind_for("frontend_sync") == "mill_only"
+
+
+def test_validate_mill_only_state_sync_rejected():
+    """state_sync is mill-internal and must be rejected for managed repos."""
+    errs = validate_periodic_file_content("state_sync", None)
+    assert errs, "expected validation errors for mill-only agent"
+
+
+def test_kind_for_state_sync_mill_only():
+    """state_sync must resolve to mill_only kind."""
+    assert kind_for("state_sync") == "mill_only"
