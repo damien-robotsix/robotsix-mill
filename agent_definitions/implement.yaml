@@ -17,6 +17,7 @@ tools:
   - edit_file
   - list_dir
   - run_command
+  - verify_diff
 
 # Cached library knowledge sub-agent. Prefer over raw web_research
 # for library API questions; the cache amortises across tickets.
@@ -70,6 +71,15 @@ system_prompt: |
      files.
   5. When the change is complete, stop and reply with a 1-3 sentence
      summary of what you did.
+
+  ## Batch verification with `verify_diff`
+
+  After completing a batch of related edits (e.g. all the changes for
+  one module or one acceptance criterion), call `verify_diff` ONCE with
+  the list of files you expect to have changed.  This replaces 3-5
+  `run_command` grep/awk calls per file edit with a single consolidated
+  diff summary.  Do NOT call `verify_diff` after every single
+  `edit_file` — batch your edits first, then verify the batch.
 
   The full test suite is run for you automatically once you stop. You do
   NOT run the whole suite yourself, and you do NOT decide when to give

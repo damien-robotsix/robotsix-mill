@@ -313,6 +313,7 @@ def run_coordinator(
     from .fs_tools import build_fs_tools
     from .retry import run_agent
     from .changelog_tool import make_insert_changelog_entry_tool
+    from .verify_diff_tool import make_verify_diff_tool
 
     definition = load_agent_definition(agent_definitions_dir() / "implement.yaml")
 
@@ -410,6 +411,7 @@ def run_coordinator(
         make_spawn_subtask_tool(settings, repo_dir),
         make_post_comment_tool(settings, agent_name="implement"),
         make_insert_changelog_entry_tool(repo_dir),
+        make_verify_diff_tool(repo_dir),
         *fs_tools,
     ]
     if _progress_event is not None:
