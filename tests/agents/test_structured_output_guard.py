@@ -120,7 +120,7 @@ def test_passthrough_when_structured_and_tool_calls_present(monkeypatch):
         messages=[_msg_with_parts("tool-call")],
     )
 
-    stub, calls = _stub_run_agent_returning(_FakeResult("should-not-be-used"))
+    stub, calls = _stub_run_agent_returning(_FakeResult("unused"))
     _install_run_agent_stub(monkeypatch, stub)
 
     out = reprompt_if_unstructured(
@@ -153,13 +153,85 @@ def test_raw_string_under_threshold_no_reprompt(monkeypatch):
         result=initial,
         agent=object(),
         expected_type=ImplementResult,
-        reprompt_message="please structure",
+        reprompt_message="ignored",
         settings=object(),
         what="implement",
         require_no_tool_calls=True,
     )
     assert out is initial
     assert calls == []
+
+
+def test_structured_no_change_needed_carve_out(monkeypatch):
+    """Structured output with ``no_change_needed=True`` and zero tool
+    calls passes through — the agent correctly determined the spec is
+    already satisfied."""
+    structured = ImplementResult(summary="ok", no_change_needed=True)
+    initial = _FakeResult(structured)
+
+    stub, calls = _stub_run_agent_returning(_FakeResult("unused"))
+    _install_run_agent_stub(monkeypatch, stub)
+
+    out = reprompt_if_unstructured(
+        result=initial,
+        agent=object(),
+        expected_type=ImplementResult,
+        reprompt_message="ignored",
+        settings=object(),
+        what="implement",
+        require_no_tool_calls=True,
+    )
+    assert out is initial
+    assert calls == []
+
+
+def test_structured_zero_tool_calls_triggers_reprompt(monkeypatch):
+    """Structured output with zero tool calls AND
+    ``no_change_needed=False`` → the agent returned a clean envelope
+    without doing any work. Re-prompt fires."""
+    structured = ImplementResult(summary="ok")
+    initial = _FakeResult(structured)
+    successor = _FakeResult(ImplementResult(summary="after retry"))
+
+    stub, calls = _stub_run_agent_returning(successor)
+    _install_run_agent_stub(monkeypatch, stub)
+
+    out = reprompt_if_unstructured(
+        result=initial,
+        agent=object(),
+        expected_type=ImplementResult,
+        reprompt_message="please use tools",
+        settings=object(),
+        what="implement",
+        require_no_tool_calls=True,
+    )
+    assert out is successor
+    assert isinstance(out.output, ImplementResult)
+    assert len(calls) == 1
+
+
+def test_zero_tool_calls_reprompts_even_under_char_threshold(monkeypatch):
+    """When ``require_no_tool_calls=True``, a short prose output with
+    zero tool calls still triggers a re-prompt — the zero-tool-call
+    gate fires before the char-threshold check."""
+    initial = _FakeResult("short prose")
+    successor = _FakeResult(ImplementResult(summary="after retry"))
+
+    stub, calls = _stub_run_agent_returning(successor)
+    _install_run_agent_stub(monkeypatch, stub)
+
+    out = reprompt_if_unstructured(
+        result=initial,
+        agent=object(),
+        expected_type=ImplementResult,
+        reprompt_message="please structure",
+        settings=object(),
+        what="implement",
+        require_no_tool_calls=True,
+    )
+    assert out is successor
+    assert isinstance(out.output, ImplementResult)
+    assert len(calls) == 1
 
 
 def test_short_prose_zero_tool_calls_triggers_reprompt(monkeypatch):

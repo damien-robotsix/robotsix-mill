@@ -768,36 +768,49 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     except Exception:
                         has_diff = True
 
+            # Always analyze pass progress — even when has_diff is True,
+            # because leftover changes from a prior session can mask a
+            # current pass that made zero tool calls (silently burning
+            # iterations until the loop exhausts).
+            progress = short_circuit_verify.analyze_pass_progress(
+                result.new_msgs,
+                same_tool_window=_STUCK_SAME_TOOL_WINDOW,
+            )
+
             if not has_diff:
                 no_diff_passes += 1
-                # Count tool calls from this pass (fail-open: 0 on parse error).
-                progress = short_circuit_verify.analyze_pass_progress(
-                    result.new_msgs,
-                    same_tool_window=_STUCK_SAME_TOOL_WINDOW,
-                )
                 total_tool_calls_no_diff += progress["total"]
             else:
                 no_diff_passes = 0
                 total_tool_calls_no_diff = 0
-                progress = None
 
             cls._stuck_no_diff_passes = no_diff_passes
             cls._stuck_total_tool_calls_no_diff = total_tool_calls_no_diff
 
-            # Zero-tool-call pass with no diff — the agent issued no tool
-            # calls at all, which is a distinct failure mode (prompt/context
-            # assembly, workspace inaccessibility, or a spec the agent cannot
-            # act on). Surface immediately instead of waiting for the
-            # 3-pass no-edit threshold. Only fires when ``has_diff`` is False
-            # (progress is always set in that branch).
-            if not has_diff and progress is not None and progress["total"] == 0:
+            # Zero-tool-call pass — the agent issued no tool calls at all,
+            # which is a distinct failure mode (prompt/context assembly,
+            # workspace inaccessibility, or a spec the agent cannot act on).
+            # Surface immediately instead of waiting for the 3-pass no-edit
+            # threshold.  Fires regardless of has_diff: leftover changes
+            # from a prior session should not mask a pass that contributed
+            # nothing.  Only fires when new_msgs is present (a real LLM
+            # pass); rename-only / spec-exact / test-stub passes carry
+            # new_msgs=None and are exempt.
+            if progress["total"] == 0 and result.new_msgs is not None:
+                detail = (
+                    "and produced no file changes"
+                    if not has_diff
+                    else (
+                        "but the working tree carries uncommitted changes "
+                        "(likely from a prior session)"
+                    )
+                )
                 note = (
                     f"zero tool calls — the implement agent completed "
                     f"pass {attempt} without issuing a single tool call "
-                    "and produced no file changes.  This indicates a "
-                    "prompt/context assembly failure, workspace "
-                    "inaccessibility, or a spec the agent cannot act on.  "
-                    "Short-circuiting to BLOCKED."
+                    f"{detail}.  This indicates a prompt/context assembly "
+                    "failure, workspace inaccessibility, or a spec the "
+                    "agent cannot act on.  Short-circuiting to BLOCKED."
                 )
                 cls._finalize(
                     ctx,
