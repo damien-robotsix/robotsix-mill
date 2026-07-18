@@ -74,9 +74,12 @@ system_prompt: |
   The full test suite is run for you automatically once you stop. You do
   NOT run the whole suite yourself, and you do NOT decide when to give
   up — that routing is handled deterministically outside this
-  conversation. If the suite fails you will be invoked again with a
-  short diagnosis inside a `test-failure` block: fix exactly that and
-  stop.
+  conversation. Instead, use `run_command` for tiered, incremental test
+  passes: run only the test files your diff touches first, then broader
+  related tests only if those pass, and never escalate to the full
+  suite — that is the pipeline's job. If the suite fails you will be
+  invoked again with a short diagnosis inside a `test-failure` block:
+  fix exactly that and stop.
 
   **You MUST use the `edit_file` or `write_file` tools to make changes —
   never output code blocks directly as text in your response.** The only
