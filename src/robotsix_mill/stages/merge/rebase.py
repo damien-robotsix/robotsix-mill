@@ -259,6 +259,21 @@ class RebaseMixin(_MergeStageBase):
         if check is _facade.git_ops.PostPushResult.PASS:
             # Push landed, no foreign commits — genuine success.
             log.info("%s: rebase succeeded, push verified", ticket.id)
+
+            # The rebase changed the branch tip — any review verdict
+            # (and its stage-outcome cache entry) produced against the
+            # old tip is now stale.  Clear both so a subsequent review
+            # pass evaluates the current diff rather than replaying a
+            # cached REQUEST_CHANGES.
+            ws = ctx.service.workspace(ticket)
+            review_path = ws.artifacts_dir / "review.md"
+            if review_path.exists():
+                review_path.unlink()
+                log.info("%s: removed stale review.md after rebase", ticket.id)
+            from robotsix_mill.stages._stage_cache import _invalidate
+
+            _invalidate(ws, "review")
+
             try:
                 pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                     source_branch=branch

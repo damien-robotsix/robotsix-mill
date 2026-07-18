@@ -860,6 +860,86 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
     assert post_check_calls["branch"] == f"mill/{t.id}"
 
 
+def test_rebase_clears_stale_review_artifact_and_cache(tmp_path, monkeypatch):
+    """After a successful rebase, the review.md artifact and the review
+    stage-outcome cache must be cleared so a subsequent review pass
+    evaluates the current diff rather than replaying a stale verdict."""
+    ctx = _gh(tmp_path)
+
+    def fake_rebase(
+        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+    ):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+
+    t = _in_rebasing(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    # Pre-populate a review.md artifact and a stage cache entry to
+    # simulate a pre-rebase REQUEST_CHANGES verdict.
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ws.artifacts_dir / "review.md").write_text(
+        "verdict: REQUEST_CHANGES\n"
+        "auto_merge_eligible: false\n"
+        "head_sha: old-stale-sha\n"
+        "comment: build artifacts in diff\n",
+        encoding="utf-8",
+    )
+    # Write a stage_cache.json with a "review" entry.
+    import json
+
+    cache_path = ws.artifacts_dir / "stage_cache.json"
+    cache_path.write_text(
+        json.dumps(
+            {"review": {"input_hash": "abc123", "next_state": "ready", "note": ""}}
+        ),
+        encoding="utf-8",
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # After rebase, review.md must be removed.
+    assert not (ws.artifacts_dir / "review.md").exists(), (
+        "review.md must be deleted after successful rebase"
+    )
+
+    # After rebase, the review stage cache entry must be cleared.
+    cache = (
+        json.loads(cache_path.read_text(encoding="utf-8"))
+        if cache_path.exists()
+        else {}
+    )
+    assert "review" not in cache, (
+        "review stage cache entry must be removed after successful rebase"
+    )
+
+
 def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
     """Regression: the post-rebase force-push must target the ticket's
     *per-repo* remote, not the global FORGE_REMOTE_URL.
@@ -5750,3 +5830,72 @@ def test_waiting_auto_merge_current_artifact_still_bounces_if_not_eligible(
     out = MergeStage().run(t, ctx)
     # Same head SHA → current verdict → still bounces.
     assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_stale_verdict_invalidates_review_stage_cache(tmp_path, monkeypatch):
+    """When _auto_merge_eligible detects a stale review (head_sha
+    mismatch), it must invalidate the review stage-outcome cache so
+    that a future CODE_REVIEW pass re-evaluates against the current
+    diff rather than replaying the cached outcome."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "rebased-head-abc",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    ws = ctx.service.workspace(t)
+
+    # Pre-populate a review stage cache entry — simulates a cached
+    # REQUEST_CHANGES outcome from before the rebase.
+    import json
+
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = ws.artifacts_dir / "stage_cache.json"
+    cache_path.write_text(
+        json.dumps(
+            {"review": {"input_hash": "old-hash", "next_state": "ready", "note": ""}}
+        ),
+        encoding="utf-8",
+    )
+
+    # Write a review artifact with a DIFFERENT head_sha (stale).
+    _write_review_artifact(
+        ctx,
+        t,
+        verdict="REQUEST_CHANGES",
+        eligible=False,
+        head_sha="old-stale-sha-xyz",
+    )
+
+    out = MergeStage().run(t, ctx)
+    # Stale verdict → eligible → auto-merge to DONE.
+    assert out.next_state is State.DONE
+
+    # The review stage cache entry must have been cleared by the
+    # stale-verdict path in _auto_merge_eligible.
+    cache = (
+        json.loads(cache_path.read_text(encoding="utf-8"))
+        if cache_path.exists()
+        else {}
+    )
+    assert "review" not in cache, (
+        "review stage cache entry must be invalidated when stale verdict detected"
+    )

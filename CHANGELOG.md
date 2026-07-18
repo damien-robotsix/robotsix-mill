@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Clear stale review artifact and stage-outcome cache on successful rebase so the review gate re-evaluates the current diff instead of replaying a cached REQUEST_CHANGES verdict. Also invalidate the review cache when the auto-merge eligibility gate detects a stale (head-SHA-mismatched) verdict.
 - Survey periodic pass now classifies findings as repo-specific or fleet-wide convention candidates, and can file companion tickets on the ``robotsix-standards`` board for generalizable conventions. The runner supports cross-board ticket creation via the new ``draft_target_repo_ids`` field on ``PeriodicAgentResult``, with creation-time dedup on the target board to prevent duplicate standards proposals across repos.
 - Add zero-tool-call guard in implement stage: a pass where the agent issues no tool calls and produces no diff now surfaces a distinct BLOCKED error immediately in both the retry loop and the resume→CODE_REVIEW path, rather than masquerading as a generic no-edit stall. (mill: Implement agent spins with zero tool calls / zero edits on robotsix-auto-mail workspace (20260718T152204Z-implement-agent-spins-with-zero-tool-cal-1620))
 - Resolve six trivial `# type: ignore` suppressions with proper type annotations, shrinking the mypy baseline by 4 entries (708→704).

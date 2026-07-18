@@ -697,6 +697,13 @@ class CIPollMixin(_MergeStageBase):
                 artifact_head_sha = line[len("head_sha:") :].strip()
                 break
         if pr_head_sha and (not artifact_head_sha or pr_head_sha != artifact_head_sha):
+            # Invalidate the review stage cache so that if the ticket
+            # ever re-enters CODE_REVIEW (e.g. after a future rebase
+            # that returns READY), the review re-runs against the
+            # current diff rather than replaying a cached outcome.
+            from robotsix_mill.stages._stage_cache import _invalidate
+
+            _invalidate(ctx.service.workspace(ticket), "review")
             return True, (
                 "stale review verdict — branch head changed since last"
                 " review; treating as eligible"
