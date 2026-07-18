@@ -21,7 +21,10 @@ from robotsix_mill.agents.yaml_loader import (
     load_agent_definition,
 )
 
-_ALL_DEFINITIONS = sorted(Path("agent_definitions").rglob("*.yaml"))
+_ALL_DEFINITIONS = sorted(
+    p for p in Path("agent_definitions").rglob("*.yaml")
+    if "agent_definitions/_shared/" not in str(p)
+)
 
 
 @pytest.mark.parametrize("path", _ALL_DEFINITIONS, ids=str)
