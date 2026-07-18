@@ -245,7 +245,6 @@ def _validate_cross_repo_forge_compat(
     (via ``head_repo`` / ``target_project_id``, respectively), so this
     function is a no-op kept as a hook for future forge-specific checks.
     """
-    del repos, forge_kind  # unused — kept as a future-proof hook
 
 
 def _split_registry_shape(
