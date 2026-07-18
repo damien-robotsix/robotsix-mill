@@ -185,7 +185,7 @@ def test_structured_no_change_needed_carve_out(monkeypatch):
     assert calls == []
 
 
-def test_structured_zero_tool_calls_triggers_reprompt(monkeypatch):
+def test_structured_zero_tool_calls_no_change_false_reprompts(monkeypatch):
     """Structured output with zero tool calls AND
     ``no_change_needed=False`` → the agent returned a clean envelope
     without doing any work. Re-prompt fires."""
