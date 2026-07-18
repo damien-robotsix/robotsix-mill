@@ -219,9 +219,7 @@ class TestRunCoordinator:
                             # existing structured-output check.
                             return [
                                 SimpleNamespace(
-                                    parts=[
-                                        SimpleNamespace(part_kind="tool-call")
-                                    ]
+                                    parts=[SimpleNamespace(part_kind="tool-call")]
                                 )
                             ]
 
