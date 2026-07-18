@@ -20,6 +20,7 @@ from .. import short_circuit_verify
 from ..base import Outcome, StageContext
 from ..pause import (
     acknowledge_unanswered_threads,
+    save_conversation_state,
 )
 from ._base import _ImplementStageBase
 from ._shared import (
@@ -99,6 +100,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
         resume_history: list | None,
         extra_roots: list[Path] | None,
         memory_board_id: str,
+        ws=None,  # Workspace — needed for save_conversation_state on budget error
     ) -> _AgentRunOutcome:
         """Invoke ``coding.run_implement_agent`` and capture caught errors.
 
@@ -129,6 +131,8 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 else None,
             )
         except AgentBudgetError as e:
+            if e.conversation_state is not None and ws is not None:
+                save_conversation_state(ws, e.conversation_state, "implement")
             cls._finalize(
                 ctx,
                 ticket,
@@ -1235,6 +1239,7 @@ class ImplementationLogicMixin(_ImplementStageBase):
             resume_history,
             extra_roots,
             memory_board_id,
+            ws,
         )
         if agent_result.failure is not None:
             return agent_result.failure

@@ -1,6 +1,10 @@
 ## 0.0.0 (unreleased)
 
 - Fixed typo `rebasin` → `rebasing` in the valid State values list in the chat-skill endpoint docstring.
+- Save conversation state on `AgentBudgetError` (budget exhaustion) so
+  the implement agent can resume from where it left off instead of
+  restarting from scratch. The BLOCKED→READY resume path now loads
+  saved conversation state alongside `previous_attempt_summary`.
 - Auto-generate board passes dropdown from the pass registry; remove hand-wired routes and buttons for trace_health, langfuse_cleanup, meta, and run_health — all passes now trigger via the generic ``POST /passes/{pass_id}/run`` endpoint.  Passes are grouped by kind (LLM Agents, Runners, Global) in the dropdown.
 - **Board UI**: replaced hand-wired "Agents" dropdown with a dynamically-populated "Passes" dropdown driven by the periodic pass registry (`GET /passes` + `POST /passes/{pass_id}/run`). Passes are grouped by kind (LLM Agents / Runners). Adding a new pass to `_PASS_REGISTRY` is now the only wiring needed to make it manually triggerable from the board.
 - Sync `STATE_TRACE` in `board-mill.js` with the canonical `STAGE_FOR_STATE` mapping from `states.py`: corrected `ready`→`"implement"`, `implement_complete`→`"merge"`, `rebasing`→`"merge"`, `done`→`"retrospect"`; added missing `draft: "refine"`; removed terminal `closed` (no stage).
