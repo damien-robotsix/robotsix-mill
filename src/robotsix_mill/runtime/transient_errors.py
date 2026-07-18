@@ -10,15 +10,19 @@ import re
 import socket
 import subprocess
 import time
+from typing import Any
 
 import httpx
 
 from robotsix_mill.sandbox import SandboxError
 
+openai: Any = None
 try:
-    import openai
+    import openai as _openai
+
+    openai = _openai
 except ImportError:  # pragma: no cover
-    openai = None  # type: ignore[no-redef]
+    pass
 
 _TRANSIENT_HTTPX_EXCEPTIONS = (
     httpx.ConnectError,
