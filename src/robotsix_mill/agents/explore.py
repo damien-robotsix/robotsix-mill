@@ -269,13 +269,12 @@ async def _run_single_explore_attempt(
 
     with trace_stage("explore"):
         try:
-            # Capture loop variables as defaults so the lambda binds
-            # them at definition time, not at call time (B023).
-            _agent = agent
-            _prompt = prompt
-            _limits = limits
+
+            async def _call_explore() -> Any:
+                return await agent.run(prompt, usage_limits=limits)
+
             result = await acall_with_retry(
-                lambda a=_agent, p=_prompt, lim=_limits: a.run(p, usage_limits=lim),  # type: ignore[misc]
+                _call_explore,
                 what="explore",
             )
         except UsageLimitExceeded:

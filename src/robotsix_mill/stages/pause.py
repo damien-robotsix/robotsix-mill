@@ -20,6 +20,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from ..core.models import Comment
 from ..core.workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -218,10 +219,10 @@ def acknowledge_unanswered_threads(ctx, ticket, thread_ids: set[int]) -> None:
         return
 
     # Index by id for O(1) lookups.
-    comments_by_id: dict[int, object] = {c.id: c for c in comments}
+    comments_by_id: dict[int, Comment] = {c.id: c for c in comments}
 
     # Index children by parent_id.
-    children_by_parent: dict[int, list] = {}  # type: ignore[type-arg]
+    children_by_parent: dict[int, list[Comment]] = {}
     for c in comments:
         if c.parent_id is not None:
             children_by_parent.setdefault(c.parent_id, []).append(c)
@@ -310,7 +311,7 @@ def _collect_ask_user_replies(ctx, ticket) -> str:
         return "(no operator reply found)"
 
     # Partition comments by parent_id for O(1) child lookup.
-    children_by_parent: dict[int, list] = {}  # type: ignore[type-arg]
+    children_by_parent: dict[int, list[Comment]] = {}
     ask_threads = []
     for c in comments:
         if c.parent_id is None and (c.body or "").startswith("[ASK_USER]"):

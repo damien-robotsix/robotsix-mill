@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Resolve six trivial `# type: ignore` suppressions with proper type annotations, shrinking the mypy baseline by 4 entries (708→704).
 - Add `verify_diff` tool to the implement agent: replaces 3-5 `run_command` grep/awk verification calls per `edit_file` with a single `git diff --stat` call plus optional expected-file cross-check. Registered in `ToolRegistry` category `git` and steered by a new "Batch verification with `verify_diff`" prompt section.
 - Add module-level docstrings to `runtime/worker/processing.py` and `runtime/worker/epic.py`, matching the style of the other worker submodules.
 - `resume-blocked` now only resets the implement spawn counter when the ticket was actually blocked at the spawn limit (counter ≥ `implement_max_spawns_per_ticket`), and records the reset as a history event ("spawn counter reset via resume-blocked"). Tickets blocked from READY for other reasons keep their counter intact.

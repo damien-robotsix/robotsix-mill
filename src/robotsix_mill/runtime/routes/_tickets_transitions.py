@@ -116,8 +116,8 @@ def redraft(
 @router.post("/tickets/{ticket_id}/mark-done")
 def mark_done(
     ticket_id: str,
+    request: Request,
     body: dict = Body({}),
-    request: Request = None,  # type: ignore[assignment]
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
@@ -135,6 +135,7 @@ def mark_done(
         comment, ticket = svc.mark_done(ticket_id, note=note)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
+    assert request is not None  # FastAPI always injects Request  # noqa: S101
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
@@ -227,10 +228,7 @@ def reset_fingerprint(
 @router.get("/tickets/{ticket_id}/cost-breakdown")
 def cost_breakdown(
     ticket_id: str,
-    # FastAPI injects Request and ignores the default; the implicit-Optional
-    # form is intentional. Suppress the [assignment] error so its PEP-484
-    # notes don't trip mypy-baseline's note-block sync.
-    request: Request = None,  # type: ignore[assignment]
+    request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> dict:
@@ -249,6 +247,7 @@ def cost_breakdown(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
+    assert request is not None  # FastAPI always injects Request  # noqa: S101
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     from ...langfuse.client import session_traces
 

@@ -28,7 +28,7 @@ import shutil
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator, cast
 
 import sqlite3
 
@@ -167,7 +167,9 @@ class _RetrySession:
 
 
 @contextmanager
-def retry_on_db_full(settings: Settings, board_id: str):  # type: ignore[no-untyped-def]
+def retry_on_db_full(
+    settings: Settings, board_id: str
+) -> Generator[Session, None, None]:
     """Context manager yielding a session whose ``commit()`` and ``flush()``
     are wrapped with disk-full retry + emergency VACUUM.
 
@@ -179,7 +181,7 @@ def retry_on_db_full(settings: Settings, board_id: str):  # type: ignore[no-unty
             s.commit()  # auto-retried on disk-full
     """
     with session(settings, board_id) as s:
-        yield _RetrySession(s, settings, board_id)
+        yield cast(Session, _RetrySession(s, settings, board_id))
 
 
 # ---------------------------------------------------------------------------

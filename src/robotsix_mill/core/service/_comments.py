@@ -157,7 +157,7 @@ class _CommentMixin(_ServiceBase):
         # session) so the commit above is visible.
         self._maybe_resume_awaiting_user_reply(ticket_id, board)
 
-        return comment  # type: ignore[no-any-return]  # session wrapped via _RetrySession
+        return comment
 
     def _maybe_resume_awaiting_user_reply(
         self,
@@ -267,4 +267,4 @@ class _CommentMixin(_ServiceBase):
             s.add(comment)
             s.commit()
             s.refresh(comment)
-            return comment  # type: ignore[no-any-return]  # session wrapped via _RetrySession
+            return comment
