@@ -688,10 +688,47 @@ def test_unstable_green_promotes(tmp_path, monkeypatch):
     assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
-def test_blocked_behind_unknown_still_wait(tmp_path, monkeypatch):
-    """mergeable_state in (blocked, behind, unknown) with success conclusion
+def test_green_behind_routes_to_rebasing(tmp_path, monkeypatch):
+    """conclusion=success + mergeable_state=behind → REBASING.
+
+    Under a strict up-to-date branch policy a green PR behind the target
+    stays "behind" forever — no re-poll changes it. The gate check must
+    dispatch the rebase agent to catch the branch up instead of waiting.
+    Regression: six chat PRs sat in implement_complete/waiting_auto_merge
+    indefinitely, each auto-merge stranding the survivors further behind.
+    """
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+        },
+    )
+
+    t = _implement_complete(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+    assert "behind" in (out.note or "")
+
+
+def test_blocked_unknown_still_wait(tmp_path, monkeypatch):
+    """mergeable_state in (blocked, unknown) with success conclusion
     still waits — premature-green guard remains intact."""
-    for ms in ("blocked", "behind", "unknown"):
+    for ms in ("blocked", "unknown"):
         ctx = _gh(tmp_path)
         monkeypatch.setattr(
             github.GitHubForge,

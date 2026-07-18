@@ -21,8 +21,9 @@ failure or conflict it falls back to ``IMPLEMENT_COMPLETE``, and on
 eligibility changes it
 returns to ``HUMAN_MR_APPROVAL``. ``REBASING`` is an active state between
 ``IMPLEMENT_COMPLETE`` and ``IMPLEMENT_COMPLETE``: the merge stage detects a
-conflicting PR and transitions to ``REBASING``, then on the next poll
-runs the rebase agent and force-pushes the ticket branch. On success it
+conflicting PR — or a green-CI PR whose branch is behind the target under
+a strict up-to-date branch policy — and transitions to ``REBASING``, then
+on the next poll runs the rebase agent and force-pushes the ticket branch. On success it
 returns to ``IMPLEMENT_COMPLETE`` for gate re-verification; on temporary
 failure it stays in ``REBASING`` for a retry; on exhaustion it escalates
 to ``BLOCKED``. ``FIXING_CI`` is an active state between
@@ -162,7 +163,8 @@ TRANSITIONS: dict[State, set[State]] = {
     },
     # implement_complete: merge stage polls gates (CI + mergeability).
     # Both gates green → human_mr_approval (notify human).  CI failing →
-    # fixing_ci; conflicting → rebasing; CI pending → same-state re-poll.
+    # fixing_ci; conflicting OR green-but-behind-target → rebasing;
+    # CI pending → same-state re-poll.
     State.IMPLEMENT_COMPLETE: {
         State.HUMAN_MR_APPROVAL,
         State.FIXING_CI,

@@ -2808,6 +2808,66 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     assert "gates no longer pass" in out.note
 
 
+def _green_behind_forge(monkeypatch):
+    """Patch the forge: PR open+mergeable but behind target, CI green."""
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+        },
+    )
+
+
+def test_waiting_auto_merge_green_behind_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + green CI + branch behind target →
+    IMPLEMENT_COMPLETE, so the gate check dispatches the rebase agent.
+    Without this the ticket waits forever — a behind PR never merges
+    under a strict up-to-date branch policy."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    _green_behind_forge(monkeypatch)
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "behind" in (out.note or "")
+
+
+def test_human_mr_approval_green_behind_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """HUMAN_MR_APPROVAL + green CI + branch behind target →
+    silent fallback to IMPLEMENT_COMPLETE (mirrors the conflict fallback)
+    so the rebase agent catches the branch up."""
+    ctx = _gh(tmp_path)
+    _green_behind_forge(monkeypatch)
+
+    t = _human_mr_approval(ctx)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "behind" in (out.note or "")
+
+
 # ============================================================
 # Multi-repo PR aggregation
 # ============================================================
