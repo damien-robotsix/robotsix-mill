@@ -119,6 +119,21 @@ async def _check_langfuse(settings: Settings) -> dict[str, Any]:
 async def health_ready(
     request: Request, settings: Settings = Depends(get_settings)
 ) -> JSONResponse | dict[str, Any]:
+    """Health-check endpoint that probes database connectivity and Langfuse
+    observability status, returning a structured readiness response.
+
+    Args:
+        request: The incoming FastAPI request, used to resolve the
+            board_id from the repos registry.
+        settings: Application settings injected via ``Depends(get_settings)``.
+
+    Returns:
+        A ``dict`` with keys ``"status"`` (``"ready"`` or ``"not_ready"``)
+        and ``"checks"`` (a list of per-component result dicts, each with
+        ``"name"``, ``"status"`` and ``"latency_ms"``).  When any check
+        reports ``"error"`` or ``"timeout"`` the endpoint returns a
+        ``JSONResponse`` with HTTP **503**.
+    """
     board_id = _resolve_board_id(request)
 
     async def _with_timeout(
