@@ -379,9 +379,7 @@ def test_triple_repeat_short_circuit_not_transient(ctx_factory, tmp_path, monkey
     assert fin.calls[0]["transient"] is False
 
 
-def test_loop_budget_exhaustion_resume_loads_state(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_loop_budget_exhaustion_resume_loads_state(ctx_factory, tmp_path, monkeypatch):
     """When saved conversation state exists but no AWAITING_USER_REPLY
     event is present, the resume path passes the full conversation state
     as ``resume_history`` to the first pass."""
@@ -391,10 +389,10 @@ def test_loop_budget_exhaustion_resume_loads_state(
 
     # Write fake conversation state to the workspace.
     ws = ctx.service.workspace(t)
-    fake_state = b'[{"kind":"request","parts":[{"part_kind":"user-prompt","content":"hello"}]}]'
-    (ws.artifacts_dir / "implement_conversation_state.json").write_bytes(
-        fake_state
+    fake_state = (
+        b'[{"kind":"request","parts":[{"part_kind":"user-prompt","content":"hello"}]}]'
     )
+    (ws.artifacts_dir / "implement_conversation_state.json").write_bytes(fake_state)
 
     captured_resume_history = []
 
@@ -425,9 +423,7 @@ def test_loop_budget_exhaustion_resume_loads_state(
         ImplementStage, "_load_implement_context", lambda ctx, t, s: _ic()
     )
 
-    out = ImplementStage._implement_loop(
-        ctx, t, tmp_path, "mill/x", False, settings
-    )
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
 
     assert out.next_state is State.DOCUMENTING
     assert len(captured_resume_history) == 1

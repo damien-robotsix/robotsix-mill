@@ -284,9 +284,7 @@ class TestInvokeImplementAgent:
         monkeypatch.setattr(
             "robotsix_mill.agents.coding.run_implement_agent",
             lambda **kw: (_ for _ in ()).throw(
-                AgentBudgetError(
-                    "cap hit", [], conversation_state=fake_conv_state
-                )
+                AgentBudgetError("cap hit", [], conversation_state=fake_conv_state)
             ),
         )
 
@@ -331,9 +329,7 @@ class TestInvokeImplementAgent:
         monkeypatch.setattr(
             "robotsix_mill.agents.coding.run_implement_agent",
             lambda **kw: (_ for _ in ()).throw(
-                AgentBudgetError(
-                    "cap hit", [], conversation_state=fake_conv_state
-                )
+                AgentBudgetError("cap hit", [], conversation_state=fake_conv_state)
             ),
         )
 
