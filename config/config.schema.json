@@ -1160,6 +1160,39 @@
           "title": "Doc Request Limit",
           "type": "integer"
         },
+        "docstring_coverage_interval_seconds": {
+          "default": 604800,
+          "description": "Seconds between periodic docstring-coverage passes.",
+          "title": "Docstring Coverage Interval Seconds",
+          "type": "integer"
+        },
+        "docstring_coverage_max_errors": {
+          "default": 20,
+          "description": "Hard cap on tool-call errors before auto-termination of docstring_coverage agent.",
+          "minimum": 0,
+          "title": "Docstring Coverage Max Errors",
+          "type": "integer"
+        },
+        "docstring_coverage_max_tool_calls": {
+          "default": 100,
+          "description": "Hard cap on total tool calls per docstring_coverage trace.",
+          "minimum": 1,
+          "title": "Docstring Coverage Max Tool Calls",
+          "type": "integer"
+        },
+        "docstring_coverage_periodic": {
+          "default": true,
+          "description": "When true, run periodic docstring-coverage passes for public-API documentation oversight.",
+          "title": "Docstring Coverage Periodic",
+          "type": "boolean"
+        },
+        "docstring_coverage_request_limit": {
+          "default": 80,
+          "description": "Per-call request cap for the docstring-coverage agent's tool loop.",
+          "minimum": 1,
+          "title": "Docstring Coverage Request Limit",
+          "type": "integer"
+        },
         "enable_repo_creation": {
           "default": false,
           "description": "When true, Forge.create_repo() is permitted to create repositories via the forge API.",
