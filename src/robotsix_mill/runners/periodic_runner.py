@@ -463,17 +463,6 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
-    "security_posture": PeriodicPassConfig(
-        label="security_posture",
-        source_kind=SourceKind.SECURITY_POSTURE,
-        agent_module_attr="security_posturing",
-        agent_fn_name="run_security_posture_agent",
-        memory_filename="security_posture_memory.md",
-        workspace_subdir="security_posture_workspace",
-        result_dataclass=PeriodicPassResult,
-        clone_token_fn=None,  # uses forge_token (raises on missing)
-        requires_repo=True,
-    ),
     "triage_boilerplate": PeriodicPassConfig(
         label="triage_boilerplate",
         source_kind=SourceKind.TRIAGE_BOILERPLATE,
@@ -574,5 +563,4 @@ run_module_curator_pass = _make_entry("module_curator")
 run_test_gap_pass = _make_entry("test_gap")
 run_state_sync_pass = _make_entry("state_sync")
 run_frontend_sync_pass = _make_entry("frontend_sync")
-run_security_posture_pass = _make_entry("security_posture")
 run_triage_boilerplate_pass = _make_entry("triage_boilerplate")

@@ -75,7 +75,6 @@ def test_sourcekind_member_count():
         "ROADMAP_SYNC",
         "STATE_SYNC",
         "FRONTEND_SYNC",
-        "SECURITY_POSTURE",
         "TRIAGE_BOILERPLATE",
         "META",
         "RUN_HEALTH",

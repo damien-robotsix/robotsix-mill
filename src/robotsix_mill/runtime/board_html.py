@@ -114,7 +114,6 @@ margin-left:4px" title="Register a new repo">
     <button onclick="runCopyPaste()" data-agent="copy_paste">Copy Paste</button>
     <button onclick="runStateSync()" data-agent="state_sync">State Sync</button>
     <button onclick="runFrontendSync()" data-agent="frontend_sync">Frontend Sync</button>
-    <button onclick="runSecurityPosture()" data-agent="security_posture">Security Posture</button>
     <button onclick="runTriageBoilerplate()" data-agent="triage_boilerplate">Triage Boilerplate</button>
     <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
   </div>

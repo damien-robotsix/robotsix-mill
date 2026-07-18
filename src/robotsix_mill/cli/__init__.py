@@ -149,12 +149,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Module-curator pass",
         "format": "memory_drafts",
     },
-    "security-posture": {
-        "module": "runners.periodic_runner",
-        "function": "run_security_posture_pass",
-        "label": "Security-posture pass",
-        "format": "memory_drafts",
-    },
     "roadmap-sync": {
         "module": "runners.roadmap_sync_runner",
         "function": "run_roadmap_sync_pass",
@@ -772,16 +766,6 @@ def build_parser() -> argparse.ArgumentParser:
         "frontend-sync", help="run an internal-tool frontend config sync pass"
     )
     p_frontend_sync.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-
-    # --- security-posture command ---
-    p_security_posture = sub.add_parser(
-        "security-posture", help="run a security-posture assessment pass"
-    )
-    p_security_posture.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

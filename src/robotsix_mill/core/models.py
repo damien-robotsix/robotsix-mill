@@ -48,7 +48,6 @@ class SourceKind(StrEnum):
     ROADMAP_SYNC = "roadmap_sync"
     STATE_SYNC = "state_sync"
     FRONTEND_SYNC = "frontend_sync"
-    SECURITY_POSTURE = "security_posture"
     TRIAGE_BOILERPLATE = "triage_boilerplate"
     META = "meta"
     RUN_HEALTH = "run-health"
