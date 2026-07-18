@@ -735,6 +735,33 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             cls._stuck_no_diff_passes = no_diff_passes
             cls._stuck_total_tool_calls_no_diff = total_tool_calls_no_diff
 
+            # Zero-tool-call pass with no diff — the agent issued no tool
+            # calls at all, which is a distinct failure mode (prompt/context
+            # assembly, workspace inaccessibility, or a spec the agent cannot
+            # act on). Surface immediately instead of waiting for the
+            # 3-pass no-edit threshold. Only fires when ``has_diff`` is False
+            # (progress is always set in that branch).
+            if not has_diff and progress is not None and progress["total"] == 0:
+                note = (
+                    f"zero tool calls — the implement agent completed "
+                    f"pass {attempt} without issuing a single tool call "
+                    "and produced no file changes.  This indicates a "
+                    "prompt/context assembly failure, workspace "
+                    "inaccessibility, or a spec the agent cannot act on.  "
+                    "Short-circuiting to BLOCKED."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=False,
+                    reference_files=ic.reference_files,
+                    extra_roots=extra_roots,
+                )
+                return Outcome(State.BLOCKED, note)
+
             if no_diff_passes >= _STUCK_NO_DIFF_PASSES:
                 # progress is always set in the not-has_diff branch above.
                 if progress is None:  # pragma: no cover — defensive
