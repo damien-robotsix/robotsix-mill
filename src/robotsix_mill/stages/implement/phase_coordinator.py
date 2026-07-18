@@ -604,43 +604,64 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             if attempt == 1:
                 ws = ctx.service.workspace(ticket)
                 saved_state = load_conversation_state(ws, "implement")
-                if saved_state is not None and any(
-                    ev.state == State.AWAITING_USER_REPLY
-                    for ev in ctx.service.history(ticket.id)
-                ):
-                    from ..pause import _collect_ask_user_replies
+                if saved_state is not None:
+                    has_pause = any(
+                        ev.state == State.AWAITING_USER_REPLY
+                        for ev in ctx.service.history(ticket.id)
+                    )
+                    if has_pause:
+                        from ..pause import _collect_ask_user_replies
 
-                    reply_text = _collect_ask_user_replies(ctx, ticket)
-                    # Compute git diff --stat for the compact resume
-                    # history so the agent knows which files were
-                    # modified during the prior session.
-                    import subprocess
+                        reply_text = _collect_ask_user_replies(ctx, ticket)
+                        # Compute git diff --stat for the compact resume
+                        # history so the agent knows which files were
+                        # modified during the prior session.
+                        import subprocess
 
-                    git_stat: str | None = None
-                    try:
-                        git_stat = (
-                            subprocess.run(
-                                ["git", "diff", "--stat", "HEAD"],
-                                cwd=repo_dir,
-                                capture_output=True,
-                                text=True,
-                            ).stdout.strip()
-                            or None
+                        git_stat: str | None = None
+                        try:
+                            git_stat = (
+                                subprocess.run(
+                                    ["git", "diff", "--stat", "HEAD"],
+                                    cwd=repo_dir,
+                                    capture_output=True,
+                                    text=True,
+                                ).stdout.strip()
+                                or None
+                            )
+                        except Exception:
+                            git_stat = None
+                        resume_history = build_compact_resume_message_history(
+                            saved_state,
+                            reply_text,
+                            git_stat=git_stat,
                         )
-                    except Exception:
-                        git_stat = None
-                    resume_history = build_compact_resume_message_history(
-                        saved_state,
-                        reply_text,
-                        git_stat=git_stat,
-                    )
-                    log.info(
-                        "%s: resuming implement from pause — "
-                        "loaded %d-byte conversation state",
-                        ticket.id,
-                        len(saved_state),
-                    )
-                    ic.feedback = None
+                        log.info(
+                            "%s: resuming implement from pause — "
+                            "loaded %d-byte conversation state",
+                            ticket.id,
+                            len(saved_state),
+                        )
+                        ic.feedback = None
+                    else:
+                        # Budget exhaustion resume: the coordinator hit its
+                        # request limit or an explore sub-agent exhausted its
+                        # budget.  Replay the full conversation state so the
+                        # agent can continue where it left off instead of
+                        # restarting from scratch.
+                        from pydantic_ai.messages import (
+                            ModelMessagesTypeAdapter,
+                        )
+
+                        resume_history = ModelMessagesTypeAdapter.validate_json(
+                            saved_state
+                        )
+                        log.info(
+                            "%s: resuming implement from budget exhaustion "
+                            "— loaded %d-byte conversation state",
+                            ticket.id,
+                            len(saved_state),
+                        )
 
             result = cls._run_single_implement_pass(
                 ctx,

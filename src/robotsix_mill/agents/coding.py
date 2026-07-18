@@ -25,11 +25,24 @@ log = logging.getLogger("robotsix_mill.coding")
 
 
 class AgentBudgetError(RuntimeError):
-    """Usage/budget cap hit — operationally retryable."""
+    """Usage/budget cap hit — operationally retryable.
 
-    def __init__(self, message: str, messages: list) -> None:
+    ``conversation_state`` carries the serialized message history
+    (``all_messages_json()`` bytes) when available so the stage can
+    persist it for a budget-exhaustion resume.  It is ``None`` when
+    the primary model raised ``UsageLimitExceeded`` mid-run (pydantic-ai
+    does not expose partial state in the installed version).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        messages: list,
+        conversation_state: bytes | None = None,
+    ) -> None:
         super().__init__(message)
         self.messages = messages
+        self.conversation_state = conversation_state
 
 
 class AgentRunError(RuntimeError):
@@ -194,6 +207,7 @@ def run_implement_agent(
             f"{settings.explore_request_limit}; "
             f"coordinator could not proceed without exploration",
             [],
+            conversation_state=result.conversation_state,
         )
 
     return (

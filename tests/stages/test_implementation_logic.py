@@ -278,6 +278,87 @@ class TestInvokeImplementAgent:
         assert len(finalize_calls) == 1
         assert finalize_calls[0]["ok"] is False
 
+    def test_budget_error_saves_conversation_state(self, monkeypatch, tmp_path):
+        """AgentBudgetError with conversation_state + ws → saves state."""
+        fake_conv_state = b'{"messages": ["test"]}'
+        monkeypatch.setattr(
+            "robotsix_mill.agents.coding.run_implement_agent",
+            lambda **kw: (_ for _ in ()).throw(
+                AgentBudgetError("cap hit", [], conversation_state=fake_conv_state)
+            ),
+        )
+
+        finalize_calls = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append(dict(ok=ok, summary=summary))
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        # Create a fake workspace with an artifacts_dir so
+        # save_conversation_state can write the file.
+        fake_ws = SimpleNamespace(artifacts_dir=tmp_path)
+
+        outcome = _Stage._invoke_implement_agent(
+            ctx=_stage_ctx(),
+            ticket=FakeTicket(),
+            repo_dir=_DUMMY_PATH,
+            branch="main",
+            settings=_simple_namespace(),
+            ic=_ic(),
+            language_instructions="",
+            agent_level=None,
+            resume_history=None,
+            extra_roots=None,
+            memory_board_id="mb",
+            ws=fake_ws,
+        )
+        assert outcome.success is None
+        assert outcome.failure is not None
+        assert outcome.failure.next_action == "return"
+        assert len(finalize_calls) == 1
+
+        # Verify the conversation state file was written.
+        state_path = tmp_path / "implement_conversation_state.json"
+        assert state_path.exists()
+        assert state_path.read_bytes() == fake_conv_state
+
+    def test_budget_error_no_ws_skips_save(self, monkeypatch):
+        """AgentBudgetError with conversation_state but ws=None → no save."""
+        fake_conv_state = b'{"messages": ["test"]}'
+        monkeypatch.setattr(
+            "robotsix_mill.agents.coding.run_implement_agent",
+            lambda **kw: (_ for _ in ()).throw(
+                AgentBudgetError("cap hit", [], conversation_state=fake_conv_state)
+            ),
+        )
+
+        finalize_calls = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append(dict(ok=ok, summary=summary))
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        outcome = _Stage._invoke_implement_agent(
+            ctx=_stage_ctx(),
+            ticket=FakeTicket(),
+            repo_dir=_DUMMY_PATH,
+            branch="main",
+            settings=_simple_namespace(),
+            ic=_ic(),
+            language_instructions="",
+            agent_level=None,
+            resume_history=None,
+            extra_roots=None,
+            memory_board_id="mb",
+            # ws defaults to None — save_conversation_state must not be called
+        )
+        assert outcome.success is None
+        assert outcome.failure is not None
+        assert outcome.failure.next_action == "return"
+        assert len(finalize_calls) == 1
+
     def test_agent_error_non_transient(self, monkeypatch):
         """AgentRunError with non-transient cause → failure BLOCKED, no re-raise."""
         monkeypatch.setattr(
