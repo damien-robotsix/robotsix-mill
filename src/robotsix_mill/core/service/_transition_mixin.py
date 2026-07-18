@@ -388,7 +388,7 @@ class _TransitionMixin(_ServiceBase):
                         spawn_count = int(
                             counter_path.read_text(encoding="utf-8").strip()
                         )
-                    except (ValueError, OSError):
+                    except ValueError, OSError:
                         spawn_count = 0
                 spawn_reset = spawn_count >= spawn_limit
             event_note = f"resumed from blocked (was blocked from {dst.value})"
