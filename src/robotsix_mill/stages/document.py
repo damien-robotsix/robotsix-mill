@@ -80,6 +80,25 @@ class DocumentStage(Stage):
                 "empty diff (no documentation needed)",
             )
 
+        # Deterministic short-circuit: when every modified file is a
+        # documentation or config path (.md extension or under docs/),
+        # skip the classifier + doc agent — the doc agent would produce
+        # only a recommendation anyway.
+        modified_paths = git_ops._paths_from_diff(diff)
+        if modified_paths and all(
+            p.endswith(".md") or p.startswith("docs/") for p in modified_paths
+        ):
+            log.info(
+                "%s: doc-only diff (%d paths) — skipping doc agent",
+                ticket.id,
+                len(modified_paths),
+            )
+            return Outcome(
+                State.DELIVERABLE,
+                "doc-only change (documentation/config files only; "
+                "no doc agent needed)",
+            )
+
         spec = ws.read_description()
 
         # --- Phase 1: cheap classifier gate ---
@@ -125,7 +144,6 @@ class DocumentStage(Stage):
         # whichever top-level docs actually exist (README.md, AGENT.md)
         # so the doc agent doesn't have to read each file via a
         # separate round-trip. Same pattern review uses.
-        modified_paths = git_ops._paths_from_diff(diff)
         preload_paths: list[str] = list(modified_paths)
         for doc_name in ("README.md", "AGENT.md"):
             if doc_name not in preload_paths and (repo_dir / doc_name).exists():
