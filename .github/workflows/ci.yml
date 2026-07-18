@@ -143,7 +143,6 @@ jobs:
             echo "Run 'make completions' and commit the result."
             exit 1
           }
-
       - name: Check for un-generated migrations (model/migration drift)
         env:
           UV_PROJECT_ENVIRONMENT: system
@@ -152,3 +151,6 @@ jobs:
           sed -i "s|^sqlalchemy\.url = .*|sqlalchemy.url = $DB_URL|" alembic.ini
           uv run alembic upgrade head
           uv run alembic check
+
+      - name: Lint shell scripts (shellcheck)
+        run: shellcheck --severity=warning scripts/*.sh dev/*.sh entrypoint.sh
