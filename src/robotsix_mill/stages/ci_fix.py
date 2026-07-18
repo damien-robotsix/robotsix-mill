@@ -772,7 +772,6 @@ class CIFixStage(Stage):
                 return ("pending", "")
 
             if conclusion == "success":
-                sha_note = f" (sha: {sha[:7]})" if sha else ""
                 return ("success", f"CI green at {sha[:7]}" if sha else "")
 
             if conclusion == "failure":
