@@ -666,6 +666,56 @@ class ImplementationLogicMixin(_ImplementStageBase):
                     ),
                 )
 
+            # --- zero-tool-call guard for resumed passes ---
+            # When resuming and the agent issued zero tool calls with no
+            # diff, surface a distinct error instead of silently routing
+            # to CODE_REVIEW with an empty working tree.  A non-resume
+            # empty-diff is caught by the "already satisfied" DONE branch
+            # above; a resume with tool calls but no surviving diff is
+            # caught by the per-pass stuck-loop detection in
+            # ``_implement_loop`` (which fires on ``retry`` paths).  This
+            # guard catches the remaining gap: resume + 0 tool calls +
+            # test-gate-passed → would otherwise hand an empty diff to
+            # CODE_REVIEW.
+            if (
+                resuming
+                and not changed
+                and not cls._any_repo_has_changes(
+                    repo_dir, extra_roots, target, settings=settings
+                )
+            ):
+                progress = short_circuit_verify.analyze_pass_progress(new_msgs)
+                if progress["total"] == 0:
+                    diag = (
+                        "zero tool calls on resume — the implement agent "
+                        "completed this pass without issuing a single tool "
+                        "call and produced no file changes.  The previous "
+                        "implement session left no surviving diff either, so "
+                        "there is nothing to hand to code review.  This "
+                        "indicates a prompt/context assembly failure, "
+                        "workspace inaccessibility, or a spec the agent "
+                        "cannot act on."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            f"zero tool calls on resume — "
+                            f"{diag[:200]}"
+                            + ("… (see implement.md)" if len(diag) > 200 else ""),
+                        ),
+                    )
+
             # --- post-agent thread acknowledgment ---
             if ic.open_thread_ids and ic.feedback:
                 acknowledge_unanswered_threads(ctx, ticket, ic.open_thread_ids)
