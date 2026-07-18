@@ -751,6 +751,18 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 log.exception("reconcile sweep failed")
 
     def start(self) -> None:
+        """Start all worker tasks: per-repo consumer pools, health monitoring,
+        and periodic poll loops.
+
+        Idempotent — safe to call multiple times.  On first call, spawns a
+        global-semaphore-gated pool of ``_run`` consumer tasks per board
+        (keyed by ``repos.yaml`` concurrency settings), the main ``_poll_loop``,
+        and a suite of periodic background tasks: trace-health, Langfuse
+        cleanup, timeout escalation, meta-agent, run-health, diagnostic,
+        stale-branch cleanup, orphaned-PR check, DB maintenance, sandbox
+        reaper, CI-debt recheck, Dependabot ingest, credit-balance poll, CI
+        monitor, and one periodic-supervisor task per repo.
+        """
         if not self._tasks:
             repos = get_repos_config()
             cap = max(1, self.ctx.settings.max_global_concurrency)
