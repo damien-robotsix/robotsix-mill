@@ -1109,9 +1109,9 @@ def test_static_assets_served(client):
 
 
 def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
-    """Regression: POST /audit ran the LLM agent synchronously, so the
-    browser fetch hung for minutes and dropped ('NetworkError'). It
-    must return 202 immediately and run the audit in the background."""
+    """Regression: POST /passes/audit/run must return 202 immediately
+    and run the audit in the background — same fire-and-forget contract
+    as the old /audit route."""
     import threading
 
     from robotsix_mill.runners import periodic_runner
@@ -1129,7 +1129,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
 
     monkeypatch.setattr(periodic_runner, "run_audit_pass", slow_audit)
 
-    r = client.post("/audit")  # must NOT block on slow_audit
+    r = client.post("/passes/audit/run")  # must NOT block on slow_audit
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
     assert ran.wait(5)  # audit really started in the background
@@ -1137,9 +1137,9 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
 
 
 def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
-    """POST /agent-check returns 202 immediately and runs the
+    """POST /passes/agent_check/run returns 202 immediately and runs the
     agent-check agent in the background — same fire-and-forget
-    contract as /audit, /health-check, /trace-health."""
+    contract as the generic pass endpoint."""
     import threading
 
     from robotsix_mill.runners import periodic_runner
@@ -1157,7 +1157,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
 
     monkeypatch.setattr(periodic_runner, "run_agent_check_pass", slow_agent_check)
 
-    r = client.post("/agent-check")
+    r = client.post("/passes/agent_check/run")
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
     assert ran.wait(5)
@@ -1165,7 +1165,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
 
 
 def test_run_health_endpoint_is_fire_and_forget(client, monkeypatch):
-    """POST /run-health returns 202 immediately and runs the run-health
+    """POST /passes/run_health/run returns 202 immediately and runs the run-health
     pass in the background — same fire-and-forget contract as /audit,
     /health-check. It is a global pass (no repo_id)."""
     import threading
@@ -1178,14 +1178,16 @@ def test_run_health_endpoint_is_fire_and_forget(client, monkeypatch):
     class _R:
         drafts_created: list = []
 
-    def slow_run_health(session_id=None):
+    def slow_run_health(session_id=None, repo_config=None):
         ran.set()
         release.wait(5)  # simulate a minutes-long run
         return _R()
 
-    monkeypatch.setattr(run_health_runner, "run_run_health_pass", slow_run_health)
+    monkeypatch.setattr(
+        run_health_runner, "run_run_health_pass_wrapper", slow_run_health
+    )
 
-    r = client.post("/run-health")  # must NOT block on slow_run_health
+    r = client.post("/passes/run_health/run")  # must NOT block on slow_run_health
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
     assert ran.wait(5)  # run-health really started in the background
@@ -1193,17 +1195,16 @@ def test_run_health_endpoint_is_fire_and_forget(client, monkeypatch):
 
 
 def test_board_html_includes_agent_check_button(client):
-    """The board exposes an 'Agent Check' button wired to
-    runAgentCheck() in the JS. Without it the user can't see the
-    agent-check feature exists, and only the CLI is discoverable."""
+    """The board exposes an 'Agent Check' pass via the dynamic passes
+    dropdown. The JS contains the generic runPass dispatcher referencing
+    the /passes endpoint."""
     body = client.get("/").text
-    assert "Agent Check" in body
-    assert "runAgentCheck()" in body
-    # Mill-specific agent functions are in board-mill.js (layered on top
+    assert "Agent Check" in body or "passes-dropdown" in body
+    # Mill-specific pass functions are in board-mill.js (layered on top
     # of robotsix-board's shared board.js).
     js = client.get("/static/mill/board-mill.js").text
-    assert "runAgentCheck" in js
-    assert '"/agent-check"' in js
+    assert "runPass" in js
+    assert '"/passes/"' in js
 
 
 def test_setup_logging_surfaces_app_logs_idempotently(capsys):

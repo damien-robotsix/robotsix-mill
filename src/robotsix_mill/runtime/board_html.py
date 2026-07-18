@@ -92,31 +92,10 @@ background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;curs
 margin-left:4px" title="Register a new repo">
   + Repo
 </button>
-<div class="agents-dropdown">
-  <button class="agents-trigger" onclick="toggleAgentsMenu(event)">🤖 Agents ▾</button>
-  <div class="agents-menu" id="agents-menu" onclick="event.stopPropagation()">
-    <button onclick="runAudit()" data-agent="audit">Audit</button>
-    <button onclick="runHealth()" data-agent="health">Health Check</button>
-    <button onclick="runTestGap()" data-agent="test_gap">Test Gaps</button>
-    <button onclick="runDocstringCoverage()" data-agent="docstring_coverage">Doc Coverage</button>
-    <button onclick="runTraceHealth()" data-agent="trace_health">Trace Health</button>
-    <button onclick="runLangfuseCleanup()" data-agent="langfuse_cleanup">Langfuse Cleanup</button>
-    <button onclick="runAgentCheck()" data-agent="agent_check">Agent Check</button>
-    <button onclick="runSurvey()" data-agent="survey">Survey</button>
-    <button onclick="runBcCheck()" data-agent="bc_check">BC Check</button>
-    <button onclick="runCompletenessCheck()" data-agent="completeness_check">Completeness</button>
-    <button onclick="runRunHealth()" data-agent="run_health">Run Health</button>
-    <button onclick="runConfigSync()" data-agent="config_sync">Config Sync</button>
-    <button onclick="runMemberSync()" data-agent="member_sync">Member Sync</button>
-    <button onclick="runRoadmapSync()" data-agent="roadmap_sync">Roadmap Sync</button>
-    <button onclick="runTraceReview()" data-agent="trace_review">Trace Review</button>
-    <button onclick="runModuleCurator()" data-agent="module_curator">Module Curator</button>
-    <button onclick="runForgeParity()" data-agent="forge_parity">Forge Parity</button>
-    <button onclick="runCopyPaste()" data-agent="copy_paste">Copy Paste</button>
-    <button onclick="runStateSync()" data-agent="state_sync">State Sync</button>
-    <button onclick="runFrontendSync()" data-agent="frontend_sync">Frontend Sync</button>
-    <button onclick="runTriageBoilerplate()" data-agent="triage_boilerplate">Triage Boilerplate</button>
-    <button onclick="runMeta()" data-agent="meta" class="meta-only">Meta</button>
+<div class="passes-dropdown">
+  <button class="passes-trigger" onclick="togglePassesMenu(event)">⚡ Passes ▾</button>
+  <div class="passes-menu" id="passes-menu" onclick="event.stopPropagation()">
+    <!-- populated dynamically from GET /passes -->
   </div>
 </div>
 <button id="agentmd-btn" onclick="openCandidates()" style="font-size:11px;padding:3px 10px;

@@ -362,3 +362,10 @@ def run_run_health_pass(session_id: str) -> RunHealthPassResult:
         drafts_created=created,
         session_id=session_id,
     )
+
+
+def run_run_health_pass_wrapper(
+    session_id: str | None = None, repo_config: object = None
+) -> RunHealthPassResult:  # noqa: ARG001
+    """Wrapper conforming to (session_id, repo_config) for generic dispatcher."""
+    return run_run_health_pass(session_id=session_id)  # type: ignore[arg-type]

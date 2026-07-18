@@ -632,7 +632,7 @@ async def test_worker_spawns_periodic_supervisor_per_repo(
 
 
 def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
-    """POST /health-check returns 202 immediately, runs in background."""
+    """POST /passes/health/run returns 202 immediately, runs in background."""
     from fastapi.testclient import TestClient
 
     settings = _make_settings(tmp_path)
@@ -661,7 +661,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
     # populates app.state.run_registry — required now that /health-check
     # registers its in-flight run there for the board's Runs panel.
     with TestClient(app) as client:
-        response = client.post("/health-check")
+        response = client.post("/passes/health/run")
         assert response.status_code == 202
         assert response.json() == {"status": "started"}
 
@@ -673,7 +673,7 @@ def test_post_health_check_returns_202(tmp_path, monkeypatch, repos_registry):
 
 
 def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_registry):
-    """POST /health-check runs in background thread, drafts appear."""
+    """POST /passes/health/run runs in background thread, drafts appear."""
     from fastapi.testclient import TestClient
 
     settings = _make_settings(tmp_path)
@@ -702,7 +702,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
     # Lifespan-aware client so app.state.run_registry is initialised
     # (the /health-check route now records the in-flight run there).
     with TestClient(app) as client:
-        response = client.post("/health-check")
+        response = client.post("/passes/health/run")
         assert response.status_code == 202
 
         # Wait for background thread to complete
@@ -765,12 +765,12 @@ def test_health_draft_blocked_when_test_dir_exists(tmp_path, monkeypatch):
 
 
 def test_board_html_contains_health_button():
-    """Board HTML contains the 'Health Check' button; the JS file
-    references the /health-check endpoint."""
+    """Board HTML contains the passes dropdown; the JS file
+    references the generic /passes/ endpoint."""
     from robotsix_mill.runtime.board_html import BOARD_HTML
 
-    assert "Health Check" in BOARD_HTML
-    assert "runHealth()" in BOARD_HTML
+    assert "passes-dropdown" in BOARD_HTML
+    assert "togglePassesMenu" in BOARD_HTML
 
     import robotsix_mill.runtime.board_html
 
@@ -779,7 +779,7 @@ def test_board_html_contains_health_button():
         / "static"
         / "board-mill.js"
     ).read_text()
-    assert "/health-check" in js
+    assert "/passes/" in js
 
 
 def test_board_html_contains_health_css_class():

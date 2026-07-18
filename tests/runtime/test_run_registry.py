@@ -380,7 +380,7 @@ class TestAuditTraceHealthEndpoints:
             lambda session_id=None, repo_config=None: _R(),
         )
 
-        r = client.post("/audit")
+        r = client.post("/passes/audit/run")
         assert r.status_code == 202
         assert r.json() == {"status": "started"}
 
@@ -409,12 +409,15 @@ class TestAuditTraceHealthEndpoints:
             total_traces: int = 10
             window_start: str = "2025-01-01T00:00:00Z"
             window_end: str = "2025-01-02T00:00:00Z"
+            summary: str = "Unsessoned: 3, unnamed: 0 / 10, draft created"
 
         monkeypatch.setattr(
-            trace_health_runner, "run_trace_health_check", lambda repo_config=None: _R()
+            trace_health_runner,
+            "run_trace_health_pass",
+            lambda session_id=None, repo_config=None: _R(),
         )
 
-        r = client.post("/trace-health")
+        r = client.post("/passes/trace_health/run")
         assert r.status_code == 202
         assert r.json() == {"status": "started"}
 
@@ -429,7 +432,7 @@ class TestAuditTraceHealthEndpoints:
 
         assert len(runs) >= 1
         run = runs[0]
-        assert run["kind"] == "trace-health"
+        assert run["kind"] == "trace_health"
         assert run["status"] == "ok"
         assert "Unsessoned: 3, unnamed: 0 / 10" in run["summary"]
         assert "draft created" in run["summary"]
@@ -442,7 +445,7 @@ class TestAuditTraceHealthEndpoints:
 
         monkeypatch.setattr(periodic_runner, "run_audit_pass", _fail)
 
-        r = client.post("/audit")
+        r = client.post("/passes/audit/run")
         assert r.status_code == 202
 
         # Poll for the background thread to finish

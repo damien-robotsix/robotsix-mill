@@ -537,7 +537,7 @@ def test_run_test_gap_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 
 
 def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
-    """POST /test-gap returns 202 immediately, runs in background."""
+    """POST /passes/test_gap/run returns 202 immediately, runs in background."""
     from fastapi.testclient import TestClient
 
     settings = _make_settings(tmp_path)
@@ -563,7 +563,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
 
     app = create_app(repos_registry, settings, single_repo_id="test-repo")
     with TestClient(app) as client:
-        response = client.post("/test-gap")
+        response = client.post("/passes/test_gap/run")
         assert response.status_code == 202
         assert response.json() == {"status": "started"}
 
@@ -575,7 +575,7 @@ def test_post_test_gap_returns_202(tmp_path, monkeypatch, repos_registry):
 
 
 def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry):
-    """POST /test-gap runs in background thread, drafts appear."""
+    """POST /passes/test_gap/run runs in background thread, drafts appear."""
     from fastapi.testclient import TestClient
 
     settings = _make_settings(tmp_path)
@@ -602,7 +602,7 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
 
     app = create_app(repos_registry, settings, single_repo_id="test-repo")
     with TestClient(app) as client:
-        response = client.post("/test-gap")
+        response = client.post("/passes/test_gap/run")
         assert response.status_code == 202
 
         # Wait for background thread to complete
@@ -620,12 +620,11 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
 
 
 def test_board_html_contains_test_gap_button():
-    """Board HTML contains the 'Test Gaps' button; the JS file
-    references the /test-gap endpoint."""
+    """Board HTML contains the passes dropdown; the JS file
+    references the generic /passes/ endpoint."""
     from robotsix_mill.runtime.board_html import BOARD_HTML
 
-    assert "Test Gaps" in BOARD_HTML
-    assert "runTestGap()" in BOARD_HTML
+    assert "passes-dropdown" in BOARD_HTML
 
     import robotsix_mill.runtime.board_html
 
@@ -634,7 +633,7 @@ def test_board_html_contains_test_gap_button():
         / "static"
         / "board-mill.js"
     ).read_text()
-    assert "/test-gap" in js
+    assert "/passes/" in js
 
 
 def test_board_contains_test_gap_js_and_css():

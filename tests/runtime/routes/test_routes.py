@@ -549,7 +549,7 @@ def test_survey_fire_and_forget(client, monkeypatch):
 
     monkeypatch.setattr(periodic_runner, "run_survey_pass", slow_survey)
 
-    r = client.post("/survey")
+    r = client.post("/passes/survey/run")
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
     assert ran.wait(5), "survey did not start in background"
@@ -577,7 +577,7 @@ def test_module_curator_fire_and_forget(client, monkeypatch):
 
     monkeypatch.setattr(periodic_runner, "run_module_curator_pass", slow_curator)
 
-    r = client.post("/module-curator")
+    r = client.post("/passes/module_curator/run")
     assert r.status_code == 202
     assert r.json() == {"status": "started"}
     assert ran.wait(5), "module-curator did not start in background"
@@ -1137,81 +1137,56 @@ class _FakePassResult:
 
 
 # (route_path, dotted_module_to_patch, attr_name_to_patch)
-BG_PASS_ROUTES = [
-    # -- 13 factory-based routes (all use _make_background_pass) ----------
-    ("/audit", "robotsix_mill.runners.periodic_runner", "run_audit_pass"),
-    ("/bc-check", "robotsix_mill.runners.periodic_runner", "run_bc_check_pass"),
+# ---- Generic pass endpoint test entries --------------------------------
+# Each entry: (pass_id, runner_module, runner_attr)
+
+GENERIC_PASS_ENTRIES = [
+    ("audit", "robotsix_mill.runners.periodic_runner", "run_audit_pass"),
+    ("health", "robotsix_mill.runners.periodic_runner", "run_health_pass"),
+    ("test_gap", "robotsix_mill.runners.periodic_runner", "run_test_gap_pass"),
+    ("survey", "robotsix_mill.runners.periodic_runner", "run_survey_pass"),
+    ("copy_paste", "robotsix_mill.runners.periodic_runner", "run_copy_paste_pass"),
+    ("config_sync", "robotsix_mill.runners.periodic_runner", "run_config_sync_pass"),
+    ("member_sync", "robotsix_mill.runners.member_sync_runner", "run_member_sync_pass"),
     (
-        "/completeness-check",
-        "robotsix_mill.runners.periodic_runner",
-        "run_completeness_check_pass",
+        "repo_description_sync",
+        "robotsix_mill.runners.repo_description_sync_runner",
+        "run_repo_description_sync_pass",
     ),
     (
-        "/agent-check",
-        "robotsix_mill.runners.periodic_runner",
-        "run_agent_check_pass",
-    ),
-    ("/health-check", "robotsix_mill.runners.periodic_runner", "run_health_pass"),
-    ("/test-gap", "robotsix_mill.runners.periodic_runner", "run_test_gap_pass"),
-    (
-        "/copy-paste",
-        "robotsix_mill.runners.periodic_runner",
-        "run_copy_paste_pass",
-    ),
-    (
-        "/forge-parity",
-        "robotsix_mill.runners.periodic_runner",
-        "run_forge_parity_pass",
-    ),
-    (
-        "/config-sync",
-        "robotsix_mill.runners.periodic_runner",
-        "run_config_sync_pass",
-    ),
-    (
-        "/member-sync",
-        "robotsix_mill.runners.member_sync_runner",
-        "run_member_sync_pass",
-    ),
-    (
-        "/trace-review",
-        "robotsix_mill.runners.trace_review_runner",
-        "run_trace_review_pass",
-    ),
-    (
-        "/roadmap-sync",
-        "robotsix_mill.runners.roadmap_sync_runner",
-        "run_roadmap_sync_pass",
-    ),
-    # -- 6 custom handlers -----------------------------------------------
-    (
-        "/trace-health",
+        "trace_health",
         "robotsix_mill.runners.trace_health_runner",
-        "run_trace_health_check",
+        "run_trace_health_pass",
     ),
     (
-        "/langfuse-cleanup",
+        "langfuse_cleanup",
         "robotsix_mill.runners.langfuse_cleanup_runner",
-        "run_langfuse_cleanup_pass",
+        "run_langfuse_cleanup_pass_wrapper",
     ),
-    ("/meta", "robotsix_mill.meta.runner", "run_meta_pass"),
     (
-        "/run-health",
+        "meta",
+        "robotsix_mill.meta.runner",
+        "run_meta_pass_wrapper",
+    ),
+    (
+        "run_health",
         "robotsix_mill.runners.run_health_runner",
-        "run_run_health_pass",
+        "run_run_health_pass_wrapper",
     ),
     (
-        "/state-sync",
+        "state_sync",
         "robotsix_mill.runners.periodic_runner",
         "run_state_sync_pass",
     ),
 ]
 
 
-@pytest.mark.parametrize("route, target_module, target_attr", BG_PASS_ROUTES)
-def test_bg_pass_route_success(client, monkeypatch, route, target_module, target_attr):
-    """Every background-pass route returns 202 {"status": "started"} and
-    invokes its runner in a background thread."""
+@pytest.mark.parametrize("pass_id, target_module, target_attr", GENERIC_PASS_ENTRIES)
+def test_generic_pass_run_success(
+    client, monkeypatch, pass_id, target_module, target_attr
+):
+    """POST /passes/{pass_id}/run returns 202 {"status": "started"} and
+    invokes the correct runner in a background thread."""
     import importlib
 
     ran = threading.Event()
@@ -1225,28 +1200,23 @@ def test_bg_pass_route_success(client, monkeypatch, route, target_module, target
     mod = importlib.import_module(target_module)
     monkeypatch.setattr(mod, target_attr, fake_runner)
 
-    r = client.post(route)
-    assert r.status_code == 202, f"{route}: expected 202, got {r.status_code}"
+    r = client.post(f"/passes/{pass_id}/run")
+    assert r.status_code == 202, (
+        f"/passes/{pass_id}/run: expected 202, got {r.status_code}"
+    )
     assert r.json() == {"status": "started"}
-    assert ran.wait(5), f"{route}: runner was not invoked in background"
+    assert ran.wait(5), f"/passes/{pass_id}/run: runner was not invoked in background"
     release.set()
 
 
-# Routes whose handler calls _resolve_agent_run_repos *synchronously*
-# (outside the daemon thread), so an unknown repo_id → 400 to the client.
-_REPO_ID_ERROR_ROUTES = [
-    "/trace-health",
-    "/langfuse-cleanup",
-]
+def test_generic_pass_run_unknown_returns_404(client):
+    """POST /passes/nonexistent/run returns 404."""
+    r = client.post("/passes/nonexistent/run")
+    assert r.status_code == 404
+    assert "Unknown pass" in r.json()["detail"]
 
 
-@pytest.mark.parametrize("route", _REPO_ID_ERROR_ROUTES)
-def test_bg_pass_route_unknown_repo_400(client, route):
-    """Routes that resolve repo_id synchronously return 400 for unknown repos."""
-    r = client.post(f"{route}?repo_id=unknown")
-    assert r.status_code == 400, f"{route}: expected 400, got {r.status_code}"
-    assert "Unknown repo" in r.json()["detail"]
-
+# ---- Global-only (custom handler) routes -------------------------------
 
 # -- Health endpoint coverage -------------------------------------------
 

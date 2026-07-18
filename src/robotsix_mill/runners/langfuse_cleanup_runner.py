@@ -150,3 +150,17 @@ def run_langfuse_cleanup_pass(
         return CleanupResult(
             project=label, traces_before=0, traces_deleted=deleted_total
         )
+
+
+def run_langfuse_cleanup_pass_wrapper(
+    session_id: str | None = None,
+    repo_config: object = None,
+    settings: object = None,
+    max_traces: int = 0,
+) -> CleanupResult:  # noqa: ARG001
+    """Wrapper conforming to (session_id, repo_config, **extra) for generic dispatcher."""
+    return run_langfuse_cleanup_pass(
+        settings=settings,  # type: ignore[arg-type]
+        repo_config=repo_config,  # type: ignore[arg-type]
+        max_traces=max_traces,
+    )

@@ -894,14 +894,14 @@ pre {
 .gate-off { background: #3b1f1f; color: #f87171; }
 
 /* ============================================================
-   Agents dropdown (board header)
+   Passes dropdown (board header)
    ============================================================ */
-.agents-dropdown {
+.passes-dropdown {
   position: relative;
   display: inline-block;
   margin-left: 4px;
 }
-.agents-trigger {
+.passes-trigger {
   font-size: 11px;
   padding: 3px 10px;
   background: #374151;
@@ -911,8 +911,8 @@ pre {
   cursor: pointer;
   font-family: ui-monospace, monospace;
 }
-.agents-trigger:hover { background: #4b5563; }
-.agents-menu {
+.passes-trigger:hover { background: #4b5563; }
+.passes-menu {
   display: none;
   position: absolute;
   top: calc(100% + 4px);
@@ -921,16 +921,16 @@ pre {
   border: 1px solid #2a2e37;
   border-radius: 6px;
   padding: 4px;
-  min-width: 180px;
+  min-width: 200px;
   z-index: 100;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
-.agents-menu.open {
+.passes-menu.open {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.agents-menu button {
+.passes-menu button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -946,17 +946,32 @@ pre {
 }
 /* dot is a ::before pseudo so the existing btn.textContent='Running...'
    pattern in run* handlers can't wipe it */
-.agents-menu button::before {
+.passes-menu button::before {
   content: "";
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
-  background: var(--agent-color, #6b7280);
+  background: var(--pass-color, #6b7280);
 }
-.agents-menu button:hover { background: #1d212c; }
-.agents-menu button:disabled { color: #6b7280; cursor: wait; }
+.passes-menu button:hover { background: #1d212c; }
+.passes-menu button:disabled { color: #6b7280; cursor: wait; }
+
+.passes-sep {
+  margin: 4px 8px;
+  border: none;
+  border-top: 1px solid #2a2e37;
+}
+
+.passes-group-label {
+  font-size: 10px;
+  padding: 4px 10px 2px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: ui-monospace, monospace;
+}
 
 /* ============================================================
    CHANGELOG lint advisories (merge info drawer)

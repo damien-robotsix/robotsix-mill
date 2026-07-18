@@ -38,6 +38,16 @@ class TraceHealthResult:
     window_end: str  # ISO 8601
     name_missing_count: int = 0
 
+    @property
+    def summary(self) -> str:
+        parts: list[str] = [
+            f"Unsessoned: {self.unsessioned_count}, "
+            f"unnamed: {self.name_missing_count} / {self.total_traces}"
+        ]
+        if self.draft_created:
+            parts.append(", draft created")
+        return "".join(parts)
+
 
 def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealthResult:
     """Execute one trace-health check.
@@ -193,3 +203,10 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
         window_start=window_start.isoformat(),
         window_end=window_end.isoformat(),
     )
+
+
+def run_trace_health_pass(
+    session_id: str | None = None, repo_config: object = None
+) -> TraceHealthResult:  # noqa: ARG001
+    """Wrapper conforming to (session_id, repo_config) for generic dispatcher."""
+    return run_trace_health_check(repo_config=repo_config)  # type: ignore[arg-type]

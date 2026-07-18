@@ -245,3 +245,10 @@ def run_meta_pass(session_id: str) -> MetaPassResult:
         todo_drafts_created=todo_created,
         session_id=session_id,
     )
+
+
+def run_meta_pass_wrapper(
+    session_id: str | None = None, repo_config: object = None
+) -> MetaPassResult:  # noqa: ARG001
+    """Wrapper conforming to (session_id, repo_config) for generic dispatcher."""
+    return run_meta_pass(session_id=session_id)  # type: ignore[arg-type]
