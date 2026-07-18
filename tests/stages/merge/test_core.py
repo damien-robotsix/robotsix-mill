@@ -5591,8 +5591,9 @@ def test_auto_merge_without_head_sha_in_artifact_is_backward_compat(
     tmp_path,
     monkeypatch,
 ):
-    """When review.md has NO head_sha line (old artifact), the behavior
-    is unchanged — auto_merge_eligible: false still blocks."""
+    """When review.md has NO head_sha line (legacy pre-d42c artifact),
+    the missing SHA is treated as stale — the verdict cannot be trusted
+    and the PR auto-merges through to DONE instead of blocking."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -5610,20 +5611,19 @@ def test_auto_merge_without_head_sha_in_artifact_is_backward_compat(
         "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
-    merge_called = []
     monkeypatch.setattr(
         github.GitHubForge,
         "merge_pr",
-        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
 
     t = _human_mr_approval(ctx)
-    # No head_sha line — backward compat.
+    # No head_sha line — legacy artifact, treated as stale.
     _write_review_artifact(ctx, t, verdict="REQUEST_CHANGES", eligible=False)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-    assert merge_called == []
+    # Legacy artifacts without head_sha are stale → auto-merge to DONE.
+    assert out.next_state is State.DONE
 
 
 def test_waiting_auto_merge_stale_artifact_does_not_bounce(tmp_path, monkeypatch):
@@ -5667,6 +5667,48 @@ def test_waiting_auto_merge_stale_artifact_does_not_bounce(tmp_path, monkeypatch
 
     out = MergeStage().run(t, ctx)
     # Should not bounce — stale artifact is ignored, proceeds to auto-merge.
+    assert out.next_state is State.DONE
+
+
+def test_waiting_auto_merge_legacy_artifact_no_head_sha_does_not_bounce(
+    tmp_path,
+    monkeypatch,
+):
+    """WAITING_AUTO_MERGE poll with a legacy artifact that has NO head_sha
+    line (pre-d42c cache) must not bounce back to HUMAN_MR_APPROVAL —
+    the missing SHA means the verdict is untrusted and the ticket
+    proceeds to auto-merge when CI is green."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "post-push-head-456",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    # Legacy artifact — no head_sha line at all.
+    _write_review_artifact(ctx, t, verdict="REQUEST_CHANGES", eligible=False)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    # Should not bounce — legacy artifact treated as stale, proceeds to auto-merge.
     assert out.next_state is State.DONE
 
 
