@@ -26,6 +26,9 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine.helpers import (
     _advisory_candidate_id,
+    _count_distinct_backtick_paths,
+    _draft_is_near_empty,
+    _fast_path_scope_checks,
     _strip_advisory_block,
     verify_claim,
 )
@@ -178,8 +181,8 @@ def test_resolve_next_state_no_approval_required():
 
 def test_resolve_next_state_degenerate_spec_gated():
     state, note = refine_module._resolve_next_state(_ctx(), "(see spec above)", "t1")
-    assert state is State.HUMAN_ISSUE_APPROVAL
-    assert note is None
+    assert state is State.BLOCKED
+    assert note == "refine produced no spec"
 
 
 def test_resolve_next_state_auto_approve_disabled():
@@ -908,3 +911,113 @@ class TestIsDocOnlyChange:
     def test_unknown_extension_not_doc_only(self):
         draft = "Update `assets/logo.png`"
         assert refine_module._is_doc_only_change(draft) is False
+
+
+# ---------------------------------------------------------------------------
+# _draft_is_near_empty
+# ---------------------------------------------------------------------------
+
+
+class TestDraftIsNearEmpty:
+    def test_empty_string(self):
+        assert _draft_is_near_empty("") is True
+
+    def test_none(self):
+        assert _draft_is_near_empty(None) is True
+
+    def test_whitespace_only(self):
+        assert _draft_is_near_empty("   \n  \t  ") is True
+
+    def test_very_short_under_threshold(self):
+        assert _draft_is_near_empty("Fix bug") is True
+
+    def test_just_over_threshold(self):
+        # 50 chars — at the default threshold boundary
+        draft = "Rename `old_func` to `new_func` in `src/foo/bar.py`."
+        assert len(draft) == 52
+        assert _draft_is_near_empty(draft) is False
+
+    def test_strips_markdown_headings(self):
+        # After stripping headings, content is under threshold
+        draft = "## Problem\n\nx\n\n## Scope\n\ny"
+        assert _draft_is_near_empty(draft) is True
+
+    def test_strips_code_fences(self):
+        draft = "```python\nprint('hello')\n```\n\nfix bug"
+        assert _draft_is_near_empty(draft) is True
+
+    def test_long_draft_passes(self):
+        draft = "This is a substantial draft with enough content. " * 5
+        assert _draft_is_near_empty(draft) is False
+
+    def test_custom_threshold(self):
+        assert _draft_is_near_empty("short", min_chars=10) is True
+        assert _draft_is_near_empty("short", min_chars=3) is False
+
+
+# ---------------------------------------------------------------------------
+# _count_distinct_backtick_paths
+# ---------------------------------------------------------------------------
+
+
+class TestCountDistinctBacktickPaths:
+    def test_no_paths(self):
+        assert _count_distinct_backtick_paths("just some text") == 0
+
+    def test_single_path(self):
+        assert _count_distinct_backtick_paths("Edit `src/foo.py` please") == 1
+
+    def test_multiple_distinct_paths(self):
+        draft = "Edit `src/foo.py`, `tests/test_foo.py`, and `docs/readme.md`"
+        assert _count_distinct_backtick_paths(draft) == 3
+
+    def test_duplicate_paths_counted_once(self):
+        draft = "Edit `src/foo.py` and then check `src/foo.py` again"
+        assert _count_distinct_backtick_paths(draft) == 1
+
+    def test_non_path_backticks_ignored(self):
+        draft = "Run `pytest` and edit `src/foo.py`"
+        assert _count_distinct_backtick_paths(draft) == 1
+
+
+# ---------------------------------------------------------------------------
+# _fast_path_scope_checks
+# ---------------------------------------------------------------------------
+
+
+class TestFastPathScopeChecks:
+    def test_empty_draft_fails_emptiness(self):
+        checks = _fast_path_scope_checks("")
+        assert isinstance(checks["empty"], str)
+        assert checks["empty"].startswith("fail:")
+
+    def test_short_draft_fails_emptiness(self):
+        checks = _fast_path_scope_checks("tiny")
+        assert isinstance(checks["empty"], str)
+        assert checks["empty"].startswith("fail:")
+
+    def test_adequate_draft_passes_emptiness(self):
+        checks = _fast_path_scope_checks(
+            "Rename `old_func` to `new_func` in `src/foo/bar.py`."
+        )
+        assert checks["empty"] == "pass"
+
+    def test_few_files_passes_scope(self):
+        checks = _fast_path_scope_checks(
+            "Edit `src/a.py`, `src/b.py`, `tests/test_c.py` — "
+            "a focused change with enough descriptive content to pass the "
+            "near-empty threshold comfortably."
+        )
+        assert isinstance(checks["scope"], str)
+        assert checks["scope"].startswith("pass")
+
+    def test_many_files_fails_scope(self):
+        paths = " ".join(f"`src/file_{i}.py`" for i in range(10))
+        checks = _fast_path_scope_checks(
+            f"Multi-file refactor touching many modules: {paths}. "
+            "This is a large change with enough descriptive text to pass "
+            "the near-empty threshold."
+        )
+        assert isinstance(checks["scope"], str)
+        assert checks["scope"].startswith("fail:")
+        assert "10 distinct file paths" in checks["scope"]

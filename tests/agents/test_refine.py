@@ -264,10 +264,10 @@ def test_empty_spec_proceeds_to_ready(ctx, service, monkeypatch):
     ).read_text() == "draft"
 
 
-def test_empty_spec_proceeds_to_human_issue_approval_when_gated(
+def test_empty_spec_proceeds_to_blocked_when_gated(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):
-    """Whitespace-only spec + gated → HUMAN_ISSUE_APPROVAL."""
+    """Whitespace-only spec + gated → BLOCKED (refine produced no spec)."""
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
     gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
     gated_ctx = StageContext(
@@ -275,7 +275,8 @@ def test_empty_spec_proceeds_to_human_issue_approval_when_gated(
     )
     t = service.create("x", "draft")
     out = RefineStage().run(t, gated_ctx)
-    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert out.next_state is State.BLOCKED
+    assert "no usable spec" in out.note
     assert service.workspace(t).read_description() == "draft"
 
 
@@ -2270,10 +2271,10 @@ def test_split_empty_children_proceeds(ctx, service, monkeypatch):
     assert service.workspace(t).read_description() == "draft"
 
 
-def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
+def test_split_empty_children_proceeds_to_blocked_when_gated(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):
-    """No children in split + gated → HUMAN_ISSUE_APPROVAL."""
+    """No children in split + gated → BLOCKED (refine produced no spec)."""
     monkeypatch.setattr(
         refining,
         "run_refine_agent",
@@ -2287,7 +2288,7 @@ def test_split_empty_children_proceeds_to_human_issue_approval_when_gated(
 
     t = service.create("Empty split gated", "draft")
     out = RefineStage().run(t, gated_ctx)
-    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert out.next_state is State.BLOCKED
     assert service.workspace(t).read_description() == "draft"
 
 
