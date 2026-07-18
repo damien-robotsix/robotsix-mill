@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Route small mechanical refactors (≤40 lines, no new files) to level-1 review model, reducing review cost for fully-prescribed extraction/move tickets by ~10×.
 - Remove deprecated `env_doc_sync` periodic agent (agent definition, implementation module, route, CLI, board UI, config settings, and all test coverage). Env-var documentation consistency is now governed by robotsix-standards policy with audit enforcement.
 - Remove the `security_posture` periodic agent entirely: delete the agent definition, source module, tests, runner config, CLI entry, HTTP route, board UI button, settings fields, and all code/docs references. Security posture is being codified in robotsix-standards as an auditable standard.
 - Add module-level docstring to `src/robotsix_mill/dev_tooling/__init__.py`.

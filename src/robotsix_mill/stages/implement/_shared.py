@@ -423,6 +423,70 @@ def _is_config_only_change(repo_dir: Path, target_branch: str) -> bool:
     return all(p.lower().endswith(CONFIG_ONLY_EXTENSIONS) for p in changed)
 
 
+def _is_small_mechanical_refactor(repo_dir: Path, target_branch: str) -> bool:
+    """True when the diff against origin/<target_branch> is a small,
+    fully-prescribed mechanical refactor — only modifications to existing
+    files, ≤40 total lines changed (insertions + deletions).
+
+    Fail-closed: returns False on any git error, empty diff, or when
+    new files were added.
+    """
+    # 1. Check for new files (--diff-filter=A lists Added files).
+    added = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--name-only",
+            "--diff-filter=A",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if added.returncode != 0:
+        return False
+    if added.stdout.strip():
+        return False  # new files introduced → not a pure refactor
+
+    # 2. Check total diff size via --shortstat.
+    stat = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--shortstat",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if stat.returncode != 0:
+        return False
+    shortstat = stat.stdout.strip()
+    if not shortstat:
+        return False  # no diff → fail-closed
+
+    # Parse "X files changed, Y insertions(+), Z deletions(-)" or
+    # "X files changed, Y insertions(+)" (no deletions case).
+    total = 0
+    import re as _re
+
+    ins = _re.search(r"(\d+)\s+insertions?\(\+\)", shortstat)
+    if ins:
+        total += int(ins.group(1))
+    dels = _re.search(r"(\d+)\s+deletions?\(-\)", shortstat)
+    if dels:
+        total += int(dels.group(1))
+
+    if total == 0:
+        return False  # no real changes
+
+    return total <= 40
+
+
 # ---------------------------------------------------------------------------
 # Spec-exact code-edit detection (deterministic implement bypass)
 # ---------------------------------------------------------------------------
