@@ -317,6 +317,13 @@ def gates(settings=Depends(get_settings)) -> dict:
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def board() -> str:
+    """Render the Mill board HTML page with card data and live-refresh configuration.
+
+    Returns a server-rendered HTML page: column skeletons are built server-side
+    via ``build_board_skeleton``, while individual ticket cards are hydrated
+    client-side by ``board.js`` (JSON_HYDRATION) polling ``/board/cards`` every
+    5 seconds.
+    """
     adapter = MillBoardAdapter()
     # board.js (JSON_HYDRATION) only diffs cards into existing columns,
     # so the column skeleton is rendered server-side here.
