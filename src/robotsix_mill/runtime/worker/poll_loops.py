@@ -47,6 +47,16 @@ _CI_LOG_FETCH_MAX_DEFERRALS = 3
 
 
 class PollLoopsMixin(_WorkerBase):
+    """Mixin that provides event-driven background poll loops for the ``Worker``.
+
+    The mixin runs multiple periodic poll loops — CI monitor, Dependabot
+    alert ingest, database maintenance, credit-balance checks, timeout
+    escalation, and per-repo periodic-workflow scheduling — on an
+    approximately 60-second tick via :meth:`_start_poll_loop_pass`. Each loop
+    is independently gated by a settings flag and uses deterministic
+    stagger/jitter so passes don't fire simultaneously after a restart.
+    """
+
     def _registry_for(self, repo_config) -> "RunRegistry | None":
         """The RunRegistry a periodic pass should read/write for *repo_config*.
 
