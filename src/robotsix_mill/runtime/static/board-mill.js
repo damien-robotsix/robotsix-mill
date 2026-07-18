@@ -139,20 +139,20 @@
   ];
 
   const STATE_TRACE = {
-    ready: "refine",
+    draft: "refine",
+    ready: "implement",
     human_issue_approval: "refine",
     code_review: "review",
     documenting: "document",
     deliverable: "deliver",
-    implement_complete: "deliver",
+    implement_complete: "merge",
     human_mr_approval: "merge",
     addressing_review: "merge",
     waiting_auto_merge: "merge",
     asked: "answer",
     fixing_ci: "ci_fix",
-    rebasing: "rebase",
-    done: "merge",
-    closed: "retrospect",
+    rebasing: "merge",
+    done: "retrospect",
     answered: "answer",
   };
 
