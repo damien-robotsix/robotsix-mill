@@ -751,6 +751,9 @@ class _CoreSettings(BaseModel):
     # --- command sandbox (always a disposable container; no local mode) ---
     # Image the sandbox runs commands in — must contain the toolchain
     # MILL_TEST_COMMAND needs.
+    # The code default (python:3.14-slim) is a lightweight image for
+    # local development. Production JSON config overrides to
+    # robotsix/mill-sandbox:latest, which includes uv and toolchain.
     sandbox_image: str = Field(
         default="python:3.14-slim",
         description="Docker image for the command sandbox.",

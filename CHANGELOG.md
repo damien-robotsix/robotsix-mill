@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Document `sandbox.image` dev-vs-prod dual default: the Pydantic model default is `python:3.14-slim` for lightweight local development, while the production JSON config overrides to `robotsix/mill-sandbox:latest` (includes `uv` and toolchain). Added inline docstring comment and updated config docs table to match.
 - Update `docs/agents/agent-yaml-schema.md` to match the current `AgentDefinition` model: replace `model` with `level`, replace `web` with `web_knowledge`, add missing field docs (`list_epic_children`, `list_threads`, `ask_user`, `inject_agent_md`, `inject_language_conventions`, `max_tokens`), update category listings and tools table, fix `read_ticket` section.
 - Fixed typo `rebasin` → `rebasing` in the valid State values list in the chat-skill endpoint docstring.
 - Auto-generate board passes dropdown from the pass registry; remove hand-wired routes and buttons for trace_health, langfuse_cleanup, meta, and run_health — all passes now trigger via the generic ``POST /passes/{pass_id}/run`` endpoint.  Passes are grouped by kind (LLM Agents, Runners, Global) in the dropdown.
