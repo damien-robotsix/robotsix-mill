@@ -203,6 +203,9 @@ class CIPollMixin(_MergeStageBase):
         - Both gates pass → HUMAN_MR_APPROVAL (notify human).
         - CI failing → FIXING_CI (defer CI-fix agent).
         - Conflicting → REBASING (defer rebase agent).
+        - CI green but branch behind target → REBASING (defer rebase agent
+          to catch the branch up; a strict up-to-date policy keeps the PR
+          unmergeable until then).
         - CI pending / no data → same-state IMPLEMENT_COMPLETE (re-poll).
         - PR merged while polling → DONE.
         - PR closed → BLOCKED.
@@ -378,10 +381,29 @@ class CIPollMixin(_MergeStageBase):
                 "CI checks green and PR is mergeable — awaiting human merge approval",
             )
 
+        ms = pr.get("mergeable_state")
+        if conclusion == "success" and ms == "behind":
+            # Green CI on a stale head. Under a strict up-to-date branch
+            # policy GitHub reports mergeable_state "behind" and nothing —
+            # not CI, not the forge — will ever change it, so re-polling
+            # waits forever (live: six chat PRs stranded, each auto-merge
+            # pushing the survivors further behind). Route to REBASING so
+            # the rebase agent catches the branch up and surfaces any
+            # semantic conflict; CI reruns on the new head and the gates
+            # re-verify.
+            log.info(
+                "%s: CI green but branch behind target → REBASING",
+                ticket.id,
+            )
+            return Outcome(
+                State.REBASING,
+                "CI green but branch is behind the target; rebase agent "
+                "will catch it up next poll",
+            )
+
         # pending, None, or a premature success (conclusion success but
         # mergeable_state not yet promotable) — keep waiting. Log the precise
         # blocking reason so future stalls are diagnosable.
-        ms = pr.get("mergeable_state")
         pending_checks = ci_status.get("pending", [])
         pending_detail = f", pending checks: {pending_checks}" if pending_checks else ""
         log.info(
@@ -610,6 +632,21 @@ class CIPollMixin(_MergeStageBase):
                 self._maybe_comment(ticket, ctx, eligibility_reason)
                 return Outcome(State.HUMAN_MR_APPROVAL)
 
+        if conclusion == "success" and pr.get("mergeable_state") == "behind":
+            # Green CI on a stale head — the PR cannot merge until the
+            # branch is caught up. Silent fallback to IMPLEMENT_COMPLETE
+            # (mirroring the conflict fallback above) so the gate check
+            # dispatches the rebase agent.
+            log.info(
+                "%s: CI green but branch behind target — falling back to "
+                "IMPLEMENT_COMPLETE",
+                ticket.id,
+            )
+            return Outcome(
+                State.IMPLEMENT_COMPLETE,
+                "branch is behind the target; gates no longer pass",
+            )
+
         # pending, None, or a premature success (mergeable_state not yet
         # "clean") — not yet safe to merge.
         if eligible:
@@ -690,6 +727,8 @@ class CIPollMixin(_MergeStageBase):
         pending. On each poll:
         - CI success → try auto-merge (DONE or HUMAN_MR_APPROVAL on forge reject)
         - CI failure → FIXING_CI
+        - CI green but branch behind target → IMPLEMENT_COMPLETE (the gate
+          check dispatches the rebase agent to catch the branch up)
         - CI still pending → WAITING_AUTO_MERGE (same-state no-op)
         - Eligibility lost → HUMAN_MR_APPROVAL with comment
         """
@@ -806,6 +845,23 @@ class CIPollMixin(_MergeStageBase):
                 result.get("reason", "unknown"),
             )
             return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
+
+        if conclusion == "success" and pr.get("mergeable_state") == "behind":
+            # Green CI on a stale head — auto-merge can never fire under a
+            # strict up-to-date policy until the branch is caught up. Fall
+            # back to IMPLEMENT_COMPLETE so the gate check dispatches the
+            # rebase agent (WAITING_AUTO_MERGE → REBASING is not a legal
+            # transition).
+            log.info(
+                "%s: CI green but branch behind target while waiting for "
+                "auto-merge → IMPLEMENT_COMPLETE",
+                ticket.id,
+            )
+            return Outcome(
+                State.IMPLEMENT_COMPLETE,
+                "CI green but branch is behind the target; rebase needed "
+                "before auto-merge",
+            )
 
         # Pending or None — keep waiting.
         self._maybe_comment(ticket, ctx, "CI pending — will auto-merge when green")
