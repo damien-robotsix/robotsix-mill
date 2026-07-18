@@ -107,19 +107,34 @@ class GitLabForge(
         body: str,
         head_repo: str | None = None,
     ) -> str:
-        if head_repo is not None:
-            raise NotImplementedError(
-                "cross-fork merge requests are not supported by the GitLab "
-                "adapter; cross_repo_target is GitHub-only"
-            )
         s = self.settings
         from ...config import target_branch_for  # lazy: avoid import cycle
 
         project_path = _parse_gitlab_project_path(self._remote_url)
+        target_branch = target_branch_for(s, self._repo_config)
+
+        if head_repo is not None:
+            # Cross-project MR: the MR is created on the source (fork)
+            # project and target_project_id points at the upstream
+            # project.  This is the GitLab equivalent of GitHub's
+            # cross-fork PR.
+            cct = getattr(self._repo_config, "cross_repo_target", None)
+            if cct is not None:
+                target_branch = cct.base_branch
+            target_project_id = self._resolve_project_id(project_path)
+            return self._create_mr(
+                project_path=head_repo,
+                source_branch=source_branch,
+                target_branch=target_branch,
+                title=title,
+                description=body,
+                target_project_id=target_project_id,
+            )
+
         return self._create_mr(
             project_path=project_path,
             source_branch=source_branch,
-            target_branch=target_branch_for(s, self._repo_config),
+            target_branch=target_branch,
             title=title,
             description=body,
         )
@@ -588,15 +603,18 @@ class GitLabForge(
         target_branch: str,
         title: str,
         description: str,
+        target_project_id: int | None = None,
     ) -> str:
         """POST /projects/:id/merge_requests → web_url. Falls back on 409."""
         pid = self._resolve_project_id(project_path)
-        payload = {
+        payload: dict[str, object] = {
             "source_branch": source_branch,
             "target_branch": target_branch,
             "title": title,
             "description": description,
         }
+        if target_project_id is not None:
+            payload["target_project_id"] = target_project_id
         r = self._http.post(
             f"/projects/{pid}/merge_requests",
             json=payload,

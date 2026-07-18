@@ -592,6 +592,7 @@ modules:
       - ARCHITECTURE.md
       - CONTRIBUTING.md
       - CHANGELOG.md
+      - doc-agent-ledger.md
       - LICENSE
       - SECURITY.md
       - AGENT.md
