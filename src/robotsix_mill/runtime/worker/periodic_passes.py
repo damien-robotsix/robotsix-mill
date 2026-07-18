@@ -1024,9 +1024,25 @@ class PeriodicPassesMixin(_WorkerBase):
                     # a zero-arg spawn closure.
                     desired: dict[str, tuple[Any, Any]] = {}
 
+                    # Mill-repo sentinel: a clone is the robotsix-mill repo
+                    # iff it ships the canonical State enum source file.
+                    # Used below to gate ``mill_only`` workflows.
+                    _is_mill = (
+                        clone_dir / "src" / "robotsix_mill" / "core" / "states.py"
+                    ).is_file()
+
                     # (a) Unified per-repo periodic workflows.
                     for wf in discover_periodic_workflows(clone_dir):
                         if not wf.enabled:
+                            continue
+                        if wf.kind == "mill_only" and not _is_mill:
+                            log.warning(
+                                "periodic %s/%s: kind 'mill_only' is only valid "
+                                "for the robotsix-mill repo itself — skipping "
+                                "(presence file in non-mill repo)",
+                                board_id,
+                                wf.name,
+                            )
                             continue
                         if wf.kind in ("llm_agent", "schedule_only", "mill_only"):
                             # Global per-agent kill-switch (fleet-wide off).
