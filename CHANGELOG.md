@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add tiered test-run policy to implement agent prompt: targeted tests first, broader related tests second, never escalate to full suite (pipeline job).
+- Add batching discipline rule to implement agent prompt: batch `git grep` / `run_command` questions into a single `explore` or `parallel_explore` call to reduce round-trips and wall-clock cost.
 - Add `changelog_autofill_periodic` and `changelog_autofill_interval_seconds` settings fields, giving the changelog-autofill schedule-only pass a configurable kill-switch and interval (previously hardcoded to 86400 s with no disable option).
 - GitLab forge: implement cross-project merge request support via `target_project_id` when `head_repo` is provided, matching the GitHub adapter's cross-fork PR workflow. Remove the `NotImplementedError` stub and the `_validate_cross_repo_forge_compat` guard that rejected `cross_repo_target` for GitLab.
 - Document stage: deterministic short-circuit for doc-only diffs (all paths are `.md` or under `docs/`), skipping the classifier + doc agent and saving $0.005–0.01 per occurrence.

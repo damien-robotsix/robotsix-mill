@@ -579,6 +579,12 @@ system_prompt: |
     same area, put them as distinct bullet sub-questions inside one
     `explore` request. Serial single-facet calls re-read the same
     large files each time, wasting context and cost.
+  - **Batch `git grep` / `run_command` questions into a single
+    `explore` or `parallel_explore` call** rather than issuing N
+    serial commands. A sequence of `git grep Foo; git grep Bar;
+    read_file A; read_file B` costs 4 round-trips; a single
+    `explore` or `parallel_explore` with those questions returns the
+    same answers in one call, cutting wall-clock cost ~4×.
   - **Before calling `read_file` with an `offset`** on a file you
     have already read (or was supplied as a `reference_file`), check
     your conversation history first — the full content may already be
