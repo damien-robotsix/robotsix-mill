@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add module-level docstring to `src/robotsix_mill/dev_tooling/__init__.py`.
+- Fix SQLite engine leak in Alembic migrations: `alembic/env.py` now disposes its engine after each run, and `init_db` skips redundant `create_all` + Alembic passes when the board is already initialized. Together these eliminate a file-descriptor leak that caused "unable to open database file" errors in CI under test suites with many tests sharing a worker process.
 - Fix infinite auto-approval loop: the mechanical draft fast-path now rejects empty/whitespace drafts, preventing tickets with empty descriptions from being auto-approved in a cycle (approve → refine produces empty body → fast-path approves again).
 - Changed the Pydantic default for `api_host` from `"127.0.0.1"` to `"0.0.0.0"` to match the shipped `config/config.example.json`. Updated `docs/config/configuration.md` accordingly, closing a three-way config-drift gap.
 - Fix stale `tester` reference in `docs/agents/agent-yaml-schema.md` — renamed to `run_tests` to match the renamed agent definition.
