@@ -9,7 +9,7 @@ implement against.
 
 ## Design rules
 
-- **Required fields are minimal.** Only `name`, `model`, and
+- **Required fields are minimal.** Only `name`, `level`, and
   `system_prompt` are mandatory — everything else has a sensible
   default.
 - **Unknown top-level keys are rejected.** The loader uses strict
@@ -66,7 +66,7 @@ listings, audit output, and documentation.
 The core prompt text that defines the agent's behaviour, persona,
 constraints, and output format. This is the full prompt text — the
 loader concatenates it with a tool-use appendix (generated from
-`tools` + `web` + `report_issue`) before passing it to the model.
+`tools` + `web_knowledge` + `report_issue`) before passing it to the model.
 
 Use YAML block-scalar syntax (`|` or `|-`) for readability.
 
@@ -87,13 +87,14 @@ Which class of agent this is:
   pipeline (refine, implement, review, triage, document, retrospect,
   dedup, epic_breakdown, obsolescence, auto-approve,
   scope_triage, spec-review, run_tests, doc_classifier,
-  pipeline/meta_triage).
+  reviewer-agreement, test_scope, pipeline/meta_triage).
 - **`periodic`** — an agent run on a schedule or as a background task
   (audit, health, survey, test_gap, agent_check, epic_status, bc_check,
-  completeness_check, copy_paste,
-  diagnostic, forge_parity, meta, module_curator, run_health).
+  completeness_check, copy_paste, diagnostic, docstring_coverage,
+  forge_parity, frontend_sync, meta, module_curator,
+  repo_description_sync, run_health, state_sync, triage_boilerplate).
 - **`sub_agent`** — a utility agent called by other agents as a tool
-  (explore, web_research, trace_inspector).
+  (codeql_fp_triage).
 - **`sandboxed`** — an agent that executes in an ephemeral sandbox
   (ci_fix, rebase, review_revision).
 - **`interactive`** — a prompt-to-ticket or Q&A agent triggered by user
@@ -101,55 +102,32 @@ Which class of agent this is:
 
 ---
 
-### `model` (required)
+### `level` (required)
 
 | Attribute | Value |
 |-----------|-------|
-| Type | `string` |
+| Type | `integer` |
 | Required | **yes** |
+| Constraints | `ge=1, le=3` |
+| Example | `level: 2` |
 
-The OpenRouter model identifier. Supports two forms:
+The agent's capability tier, used by `build_agent` to resolve a
+concrete `(transport, model)` pair via llmio's tier defaults. Three
+levels are defined:
 
-1. **Literal model name:**
-   ```yaml
-   model: "openai/gpt-4o-mini"
-   ```
-   Used directly as the model argument.
+| Level | Label | Resolved model |
+|-------|-------|----------------|
+| 1 | flash | Cheapest, fastest model (DeepSeek flash or equivalent) |
+| 2 | pro   | Balanced cost/capability (DeepSeek pro or equivalent) |
+| 3 | opus  | Most capable model (Claude opus or equivalent) |
 
-2. **Environment-variable reference:**
-   ```yaml
-   model: "${MILL_REFINE_MODEL}"
-   ```
-   The loader resolves this to a `Settings` field whose env alias
-   matches the name inside `${…}`. The mapping from `${NAME}` to
-   `Settings` field is:
+The mapping from `level` to concrete model is **not** defined in
+the YAML file — it lives in `Settings` and the tier-resolution
+layer. Agent authors choose a capability tier; operators configure
+which providers serve each tier.
 
-   | `${…}` variable | Settings field | Example default |
-   |---|---|---|
-   | `${MILL_MODEL}` | `model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_EXPLORE_MODEL}` | `explore_model` | `"deepseek/deepseek-v4-flash"` |
-   | `${MILL_TEST_MODEL}` | `test_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_REFINE_MODEL}` | `refine_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_ANSWER_MODEL}` | `answer_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_RETROSPECT_MODEL}` | `retrospect_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_AUDIT_MODEL}` | `audit_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_DEDUP_MODEL}` | `dedup_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_TRIAGE_MODEL}` | `triage_model` | `"openai/gpt-4o-mini"` |
-   | `${MILL_WEB_RESEARCH_MODEL}` | `web_research_model` | `"deepseek/deepseek-v4-flash"` |
-   | `${MILL_AUTO_APPROVE_MODEL}` | `auto_approve_model` | `"openai/gpt-4o-mini"` |
-   | `${MILL_REVIEW_MODEL}` | `review_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_DOC_MODEL}` | `doc_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_DOC_CLASSIFIER_MODEL}` | `doc_classifier_model` | `"openai/gpt-4o-mini"` |
-   | `${MILL_TRACE_INSPECTOR_MODEL}` | `trace_inspector_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_TEST_GAP_MODEL}` | `test_gap_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_AGENT_CHECK_MODEL}` | `agent_check_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_HEALTH_MODEL}` | `health_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_SURVEY_MODEL}` | `survey_model` | `"deepseek/deepseek-v4-pro"` |
-   | `${MILL_COMPLETENESS_CHECK_MODEL}` | `completeness_check_model` | `"deepseek/deepseek-v4-pro"` |
-
-The `model` field is required. Every agent YAML must specify a model,
-either as a literal identifier or as a `${VAR}` reference that the
-loader resolves via `Settings`.
+Every agent YAML must specify a `level`.  There is no default —
+omitting it is a validation error.
 
 ---
 
@@ -168,12 +146,34 @@ match the `__name__` of a tool function registered in the
 | Tool name | Category | Description |
 |-----------|----------|-------------|
 | `explore` | exploration | Ask a sub-agent a complex, multi-step question about the repository |
+| `parallel_explore` | exploration | Run multiple `explore` sub-agents in parallel |
 | `read_file` | fs | Return the text content of a file in the repository |
 | `write_file` | fs | Create or overwrite a file in the repository |
 | `edit_file` | fs | Replace a unique string in a file |
 | `delete_file` | fs | Delete a file from the repository |
 | `list_dir` | fs | List entries of a directory in the repository |
 | `run_command` | shell | Run a shell command against the repository |
+| `validate_artifact` | quality | Validate a generated artifact (schema check, lint) |
+| `detect_duplication` | quality | Detect copy-paste duplication across files |
+| `langfuse_session_summary` | observability | Summarize a Langfuse session |
+| `langfuse_list_traces` | observability | List traces in a Langfuse session |
+| `langfuse_trace_detail` | observability | Fetch detail for a single Langfuse trace |
+| `langfuse_session_cost` | observability | Fetch cost for a Langfuse session |
+| `langfuse_inspect_trace` | observability | Inspect a Langfuse trace for anomalies |
+| `inspect_cost` | observability | Inspect token cost for a run |
+| `query_app_logs` | observability | Query application logs |
+| `git_fetch` | vcs | Fetch from a git remote |
+| `git_remote_sha` | vcs | Resolve a remote ref to a commit SHA |
+| `git_push_with_lease` | vcs | Push with lease safety check |
+| `git_branch_ancestry` | vcs | Check branch ancestry relationship |
+| `wait_for_ci` | ci | Wait for CI checks to complete |
+| `fetch_ci_logs` | ci | Fetch CI run logs |
+| `read_ticket` | tickets | Fetch full ticket details by ID |
+
+This table is illustrative, not exhaustive. The authoritative
+registry of available tools is the `ToolRegistry` wiring in
+`src/robotsix_mill/agents/base.py` and the individual tool modules
+under `src/robotsix_mill/agents/`.
 
 When `tools` is absent or empty, the agent receives no tools. Some
 agents are "classification-only" (triage, auto-approve) and use no
@@ -181,7 +181,7 @@ tools.
 
 ---
 
-### `web` (optional)
+### `web_knowledge` (optional)
 
 | Attribute | Value |
 |-----------|-------|
@@ -189,12 +189,17 @@ tools.
 | Required | no |
 | Default | `false` |
 
-Whether the `web_research` sub-agent tool is injected into the agent's
-tool set. When `true`, the loader appends `web_research` (a cheap
-sub-agent that performs external web lookups and returns a conclusion
-to the parent). This is NOT the OpenRouter `:online` mode — it is a
-dedicated tool that isolates web search cost and latency from the
-primary model call.
+Whether the `ask_web_knowledge` multi-turn sub-agent is injected into
+the agent's tool set. When `true`, the loader appends
+`ask_web_knowledge` — a flash-tier sub-agent that owns a per-repo
+Markdown knowledge base AND a web-search tool, and decides
+autonomously which source to consult.
+
+This is the single gateway for all external knowledge: library docs,
+web searches, and cached lookups all flow through this one tool so
+that cost attribution stays tractable and the knowledge base
+accumulates instead of fragmenting. The old `web` flag (direct
+`web_research` injection) is gone.
 
 ---
 
@@ -230,10 +235,27 @@ of any ticket by ID. This is the safe, read-only counterpart to
 `report_issue` — same wiring, opposite direction.
 
 Periodic agents (`audit`, `health`, `survey`, `test_gap`, `bc_check`,
-`agent_check`, `retrospect`, `config_sync`, `completeness_check`) set this to `true` so they
+`agent_check`, `completeness_check`, `copy_paste`, `docstring_coverage`,
+`forge_parity`, `frontend_sync`, `meta`, `module_curator`, `run_health`,
+`state_sync`, `triage_boilerplate`) set this to `true` so they
 can look up the full context of past proposals when the one-line
 summary in `<recent_proposals>` isn't enough. Pipeline agents and
 other on-demand agents typically leave this `false`.
+
+---
+
+### `list_epic_children` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `false` |
+
+Whether the `list_epic_children` read-only tool is injected. When
+`true`, the agent can list the sibling epic children of the current
+ticket — useful for agents that need to check whether a ticket
+belongs to an epic and what other children exist.
 
 ---
 
@@ -274,6 +296,36 @@ Pipeline agents that address human reviewer feedback (`implement`)
 keep this at the default `true`. Agents that produce one-shot
 structured output (`review`, `refine`, `audit`) set this to `false`
 since they don't need to mark threads as resolved.
+
+---
+
+### `list_threads` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `true` |
+
+Whether the `list_threads` read-only tool is injected. When `true`,
+the agent can list top-level comment threads on the current ticket
+with open/closed status. Pipeline agents that interact with human
+reviewers keep this at the default `true`.
+
+---
+
+### `ask_user` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `true` |
+
+Whether the `ask_user` tool is injected. When `true`, the agent can
+pause the current ticket and ask the operator a clarifying question.
+Agents that must never block on human input (e.g. fully automated
+periodic agents) set this to `false`.
 
 ---
 
@@ -368,6 +420,55 @@ Example:
 ```yaml
 modules: true
 ```
+
+---
+
+### `inject_agent_md` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `true` |
+
+Whether `AGENT.md` (the repo's agent instructions document) is
+injected into the system prompt as a `## Repository Conventions`
+block. When `true`, every agent receives the repo's AGENT.md content
+automatically. Agents that operate outside a repo context (e.g.
+meta, answer) set this to `false`.
+
+---
+
+### `inject_language_conventions` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `boolean` |
+| Required | no |
+| Default | `false` |
+
+Opt-in flag that injects the repo's `## Language conventions` block
+(resolved via `resolve_language_instructions`) into the system prompt
+when a `repo_dir` is available. The refine and implement stages inject
+these themselves; this flag wires the same conventions into
+review-type agents (retrospect, review, audit) so they don't misjudge
+valid version-specific syntax (e.g. PEP-758 `except A, B:` on
+Python 3.14).
+
+---
+
+### `max_tokens` (optional)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | `integer` or `null` |
+| Required | no |
+| Default | `null` |
+
+An explicit cap on model output tokens. When `null` (the default),
+the model's own default applies. Set to a positive integer to
+constrain long responses (useful for classification-only agents
+like triage or auto-approve).
 
 ---
 
@@ -470,9 +571,9 @@ refine agent — the most feature-rich agent in the system. It
 demonstrates:
 
 - A multi-line `system_prompt` using YAML block-scalar syntax
-- Environment-variable model reference (`${MILL_REFINE_MODEL}`)
-- A tool list (`explore`, `read_file`, `list_dir`, `run_command`)
-- `web: true` and `report_issue: true` (the defaults for pipeline agents)
+- `level: 3` — opus-tier capability
+- A tool list (`explore`, `parallel_explore`, `read_file`, `list_dir`, `run_command`, …)
+- `web_knowledge: true` and `report_issue: true` (the defaults for pipeline agents)
 - `output_type: RefineResult` and `retries: 2`
 - `category: pipeline`
 - `module: refining` — explicit module path
@@ -490,5 +591,5 @@ demonstrates:
    YAML files. This catches typos and drift early.
 
 3. **New required fields** must never be added. The set of required
-   fields is permanently `name`, `model`, `system_prompt`. Any new
+   fields is permanently `name`, `level`, `system_prompt`. Any new
    concept must be optional with a sensible default.
