@@ -55,6 +55,9 @@ SecurityPostureResult
 # RepoDescriptionSyncResult — referenced only by string in agent YAML;
 # vulture (60% confidence) cannot trace it.
 RepoDescriptionSyncResult
+# DocstringCoverageResult — type alias (PeriodicAgentResult); used in tests
+# and via agent YAML; vulture (60% confidence) cannot trace the usage.
+DocstringCoverageResult
 model_config
 chunk_size
 max_chunks
@@ -73,6 +76,7 @@ run_survey_agent
 run_test_gap_agent
 run_triage_boilerplate_agent
 run_state_sync_agent
+run_docstring_coverage_agent
 parameters
 web_fetch_budget
 correct_form
@@ -138,6 +142,8 @@ pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
 ci_debt_recheck_periodic
+docstring_coverage_periodic
+docstring_coverage_interval_seconds
 settings_customise_sources
 dotenv_settings
 ci_patterns_file
@@ -283,6 +289,7 @@ run_verify_pass
 run_changelog_autofill_pass
 run_pin_bump_pass
 run_repo_description_sync_pass
+run_docstring_coverage_pass
 
 # -- vcs ---------------------------------------------------------------------
 # Tested git utility with no current production caller: ci_fix's proactive
