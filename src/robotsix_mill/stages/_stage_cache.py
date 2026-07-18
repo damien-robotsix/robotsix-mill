@@ -79,6 +79,13 @@ def _update(ws: Workspace, stage_name: str, input_hash: str, outcome: Outcome) -
     _save(ws, cache)
 
 
+def _invalidate(ws: Workspace, stage_name: str) -> None:
+    """Remove the cached entry for *stage_name*, if present."""
+    cache = _load(ws)
+    cache.pop(stage_name, None)
+    _save(ws, cache)
+
+
 def refine_input_hash(ws: Workspace) -> str:
     """Compute the input hash for the refine stage.
 
