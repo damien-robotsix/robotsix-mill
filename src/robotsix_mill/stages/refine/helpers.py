@@ -353,7 +353,7 @@ def _fast_path_scope_checks(draft: str) -> dict[str, str | bool]:
 
     Checks:
 
-    - **empty/near-empty**: passes when the draft has ≥ 200 chars after
+    - **empty/near-empty**: passes when the draft has ≥ 50 chars after
       stripping headings and code fences.
     - **file count**: passes when the draft mentions ≤ 7 distinct
       backtick-enclosed file paths (a heuristic for single-implement-run
@@ -363,7 +363,7 @@ def _fast_path_scope_checks(draft: str) -> dict[str, str | bool]:
     checks: dict[str, str | bool] = {}
     # --- emptiness ---
     if _draft_is_near_empty(draft):
-        checks["empty"] = "fail: draft is empty or < 200 chars after stripping"
+        checks["empty"] = "fail: draft is empty or < 50 chars after stripping"
     else:
         checks["empty"] = "pass"
 
