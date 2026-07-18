@@ -86,6 +86,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         "report_issue",
         "run_command",
         "spawn_subtask",
+        "verify_diff",
         "write_file",
     ]
     assert fake_ai["name"] == "implement"
