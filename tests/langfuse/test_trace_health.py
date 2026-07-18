@@ -376,13 +376,13 @@ def test_tracing_disabled_noop(tmp_path, monkeypatch):
 
 
 def test_trace_health_endpoint_is_fire_and_forget(client, monkeypatch):
-    """POST /trace-health must return 202 immediately, run in background."""
+    """POST /passes/trace_health/run must return 202 immediately, run in background."""
     from robotsix_mill.runners import trace_health_runner
 
     ran = threading.Event()
     release = threading.Event()
 
-    def slow_check(repo_config=None):
+    def slow_check(session_id=None, repo_config=None):
         ran.set()
         release.wait(5)  # simulate a long run
         return TraceHealthResult(
@@ -393,10 +393,10 @@ def test_trace_health_endpoint_is_fire_and_forget(client, monkeypatch):
             window_end="2024-01-02T00:00:00+00:00",
         )
 
-    monkeypatch.setattr(trace_health_runner, "run_trace_health_check", slow_check)
+    monkeypatch.setattr(trace_health_runner, "run_trace_health_pass", slow_check)
 
     t0 = time.monotonic()
-    r = client.post("/trace-health")
+    r = client.post("/passes/trace_health/run")
     elapsed = time.monotonic() - t0
 
     assert r.status_code == 202

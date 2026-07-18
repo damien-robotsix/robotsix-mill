@@ -318,9 +318,9 @@
     return AGENT_COLORS[k] || '#6b7280';
   }
 
-  function applyAgentColors() {
-    document.querySelectorAll('.agents-menu button[data-agent]').forEach(function(b) {
-      b.style.setProperty('--agent-color', agentColor(b.dataset.agent));
+  function applyPassColors() {
+    document.querySelectorAll('.passes-menu button[data-pass]').forEach(function(b) {
+      b.style.setProperty('--pass-color', agentColor(b.dataset.pass));
     });
   }
 
@@ -342,7 +342,7 @@
     else url.searchParams.set("repo", value);
     window.history.replaceState({}, "", url);
     toggleMetaOnlyButtons();
-    updateAgentsMenu();
+    updatePassesMenu();
     refresh();
   }
 
@@ -1837,413 +1837,141 @@
   // Cost dashboard
   // =========================================================================
   // =========================================================================
-  // Agents menu
+  // Passes menu — dynamically populated from GET /passes
   // =========================================================================
-  function toggleAgentsMenu(ev) {
+  function togglePassesMenu(ev) {
     ev.stopPropagation();
-    var menu = document.getElementById("agents-menu");
+    var menu = document.getElementById("passes-menu");
     if (menu) menu.classList.toggle("open");
   }
 
-  function closeAgentsMenu() {
-    var menu = document.getElementById("agents-menu");
+  function closePassesMenu() {
+    var menu = document.getElementById("passes-menu");
     if (menu) menu.classList.remove("open");
   }
 
   function toggleMetaOnlyButtons() {
     var onMeta = getRepoId() === "meta";
-    document.querySelectorAll(".meta-only").forEach(function(el) { el.style.display = onMeta ? "" : "none"; });
+    document.querySelectorAll("button[data-pass-global]").forEach(function(el) { el.style.display = onMeta ? "" : "none"; });
+    document.querySelectorAll(".passes-global-only").forEach(function(el) { el.style.display = onMeta ? "" : "none"; });
   }
 
-  async function fetchEnabledAgents() {
-    var repoId = getRepoId();
-    if (repoId === "all") return new Set();
-    var list = await jget("/agents?repo_id=" + encodeURIComponent(repoId));
-    return new Set(Array.isArray(list) ? list : []);
-  }
-
-  async function updateAgentsMenu() {
-    var dd = document.querySelector(".agents-dropdown");
+  async function updatePassesMenu() {
+    var dd = document.querySelector(".passes-dropdown");
     var repoId = getRepoId();
     if (repoId === "all") { if (dd) dd.style.display = "none"; return; }
     if (dd) dd.style.display = "";
-    var onMeta = repoId === "meta";
-    var enabled = await fetchEnabledAgents();
+
+    var passes = [];
+    try {
+      var data = await jget("/passes?repo_id=" + encodeURIComponent(repoId));
+      passes = Array.isArray(data) ? data : [];
+    } catch (e) {
+      // Keep existing buttons on fetch failure.
+      return;
+    }
     if (getRepoId() !== repoId) return;
-    document.querySelectorAll("#agents-menu button[data-agent]").forEach(function(btn) {
-      var metaOnly = btn.classList.contains("meta-only");
-      var show = metaOnly ? onMeta : enabled.has(btn.dataset.agent);
-      btn.style.display = show ? "" : "none";
-    });
-  }
 
-  async function runAudit() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var auditUrl = repoId !== "all" ? "/audit?repo_id=" + encodeURIComponent(repoId) : "/audit";
-      var r = await jpost(auditUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Audit started — it runs for a few minutes; new draft tickets will appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Audit failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Audit';
+    var menu = document.getElementById("passes-menu");
+    if (!menu) return;
+
+    // Remove any previously generated dynamic buttons (keep static global-only ones).
+    menu.querySelectorAll("button[data-pass-dynamic]").forEach(function(b) { b.remove(); });
+    menu.querySelectorAll(".passes-group-label").forEach(function(l) { l.remove(); });
+    menu.querySelectorAll(".passes-sep").forEach(function(s) { s.remove(); });
+
+    // Separate by kind.
+    var llmAgents = passes.filter(function(p) { return p.kind === "llm_agent"; });
+    var scheduleOnly = passes.filter(function(p) { return p.kind === "schedule_only"; });
+    var globalOnly = passes.filter(function(p) { return p.kind === "global_only"; });
+
+    // Build groups (llm_agent first, then schedule_only, then global_only), each prefixed with
+    // a group label.  Insert before the first static button (or at end).
+    // global_only passes are only shown on the meta board.
+    var anchor = menu.querySelector("button[data-pass]") || null;
+
+    function insertBeforeAnchor(el) {
+      if (anchor) menu.insertBefore(el, anchor);
+      else menu.appendChild(el);
     }
-  }
 
-  async function runTraceHealth() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var thUrl = repoId !== "all" ? "/trace-health?repo_id=" + encodeURIComponent(repoId) : "/trace-health";
-      var r = await jpost(thUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Trace-health check started — new draft tickets will appear on the board if unsessioned traces are found.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Trace-health check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Trace Health';
+    // -- LLM Agents group --
+    if (llmAgents.length > 0) {
+      var llmLabel = document.createElement("div");
+      llmLabel.className = "passes-group-label";
+      llmLabel.textContent = "LLM Agents";
+      insertBeforeAnchor(llmLabel);
+
+      llmAgents.forEach(function(p) {
+        var btn = document.createElement("button");
+        btn.setAttribute("data-pass-dynamic", "1");
+        btn.setAttribute("data-pass", p.name);
+        btn.textContent = p.label;
+        btn.style.setProperty("--pass-color", agentColor(p.name));
+        btn.onclick = function(ev) { runPass(p.name, ev); };
+        if (!p.enabled) btn.style.display = "none";
+        insertBeforeAnchor(btn);
+      });
     }
-  }
 
-  async function runLangfuseCleanup() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var lcUrl = repoId !== "all" ? "/langfuse-cleanup?repo_id=" + encodeURIComponent(repoId) : "/langfuse-cleanup";
-      var r = await jpost(lcUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Langfuse cleanup started — excess traces will be purged.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Langfuse cleanup failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Langfuse Cleanup';
+    // -- Schedule-only group --
+    if (scheduleOnly.length > 0) {
+      var schedLabel = document.createElement("div");
+      schedLabel.className = "passes-group-label";
+      schedLabel.textContent = "Runners";
+      insertBeforeAnchor(schedLabel);
+
+      scheduleOnly.forEach(function(p) {
+        var btn = document.createElement("button");
+        btn.setAttribute("data-pass-dynamic", "1");
+        btn.setAttribute("data-pass", p.name);
+        btn.textContent = p.label;
+        btn.style.setProperty("--pass-color", agentColor(p.name));
+        btn.onclick = function(ev) { runPass(p.name, ev); };
+        if (!p.enabled) btn.style.display = "none";
+        insertBeforeAnchor(btn);
+      });
     }
-  }
 
-  async function runHealth() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var hUrl = repoId !== "all" ? "/health-check?repo_id=" + encodeURIComponent(repoId) : "/health-check";
-      var r = await jpost(hUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Health check started — new draft tickets will appear on the board if issues are found.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Health check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Health Check';
+    // -- Global-only group (shown only on the meta board) --
+    if (globalOnly.length > 0) {
+      var globalLabel = document.createElement("div");
+      globalLabel.className = "passes-group-label passes-global-only";
+      globalLabel.textContent = "Global";
+      insertBeforeAnchor(globalLabel);
+
+      globalOnly.forEach(function(p) {
+        var btn = document.createElement("button");
+        btn.setAttribute("data-pass-dynamic", "1");
+        btn.setAttribute("data-pass", p.name);
+        btn.setAttribute("data-pass-global", "1");
+        btn.textContent = p.label;
+        btn.style.setProperty("--pass-color", agentColor(p.name));
+        btn.onclick = function(ev) { runPass(p.name, ev); };
+        if (!p.enabled) btn.style.display = "none";
+        insertBeforeAnchor(btn);
+      });
     }
+
   }
 
-  async function runTestGap() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
+  async function runPass(passName, ev) {
+    var btn = ev ? ev.target : document.querySelector('#passes-menu button[data-pass="' + passName + '"]');
+    if (!btn) return;
+    var origText = btn.textContent;
+    btn.disabled = true; btn.textContent = "Running...";
     try {
       var repoId = getRepoId();
-      var tgUrl = repoId !== "all" ? "/test-gap?repo_id=" + encodeURIComponent(repoId) : "/test-gap";
-      var r = await jpost(tgUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Test-gap inspection started — new draft tickets will appear on the board if gaps are found.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Test-gap check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Test Gaps';
-    }
-  }
-
-  async function runDocstringCoverage() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var dcUrl = repoId !== "all" ? "/docstring-coverage?repo_id=" + encodeURIComponent(repoId) : "/docstring-coverage";
-      var r = await jpost(dcUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Docstring-coverage inspection started — new draft tickets will appear on the board if gaps are found.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Docstring-coverage check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Doc Coverage';
-    }
-  }
-
-  async function runAgentCheck() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var acUrl = repoId !== "all" ? "/agent-check?repo_id=" + encodeURIComponent(repoId) : "/agent-check";
-      var r = await jpost(acUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Agent-check started — it inspects every agent's prompt/tools for coherence gaps. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Agent-check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Agent Check';
-    }
-  }
-
-  async function runSurvey() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var sUrl = repoId !== "all" ? "/survey?repo_id=" + encodeURIComponent(repoId) : "/survey";
-      var r = await jpost(sUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Survey started — it discovers similar OSS projects and proposes improvements. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Survey failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Survey';
-    }
-  }
-
-  async function runModuleCurator() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var mcUrl = repoId !== "all" ? "/module-curator?repo_id=" + encodeURIComponent(repoId) : "/module-curator";
-      var r = await jpost(mcUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Module Curator started — it checks the directory tree against docs/modules.yaml and files drafts for unclassified files / stale paths / new modules. New drafts appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Module Curator failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Module Curator';
-    }
-  }
-
-  async function runForgeParity() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var url = repoId !== "all" ? "/forge-parity?repo_id=" + encodeURIComponent(repoId) : "/forge-parity";
+      var url = "/passes/" + encodeURIComponent(passName) + "/run";
+      if (repoId !== "all") url += "?repo_id=" + encodeURIComponent(repoId);
       var r = await jpost(url);
       if (!r.ok) { throw new Error(await r.text()); }
-      alert("Forge Parity started — it compares forge adapter implementations against the Forge ABC, flags drift, and files at most 3 draft tickets per pass. New drafts appear on the board when it finishes.");
+      alert(passName + " started — it runs in the background; results will appear on the board when it finishes.");
       setTimeout(refresh, 4000);
     } catch (e) {
-      alert("Forge Parity failed to start: " + e);
+      alert(passName + " failed to start: " + e);
     } finally {
-      btn.disabled = false; btn.textContent = 'Forge Parity';
-    }
-  }
-
-  async function runCopyPaste() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var url = repoId !== "all" ? "/copy-paste?repo_id=" + encodeURIComponent(repoId) : "/copy-paste";
-      var r = await jpost(url);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Copy-paste detection started — new draft tickets will appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Copy-paste detection failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Copy Paste';
-    }
-  }
-
-  async function runBcCheck() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var bcUrl = repoId !== "all" ? "/bc-check?repo_id=" + encodeURIComponent(repoId) : "/bc-check";
-      var r = await jpost(bcUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("BC-check started — it scans for backward-compat shims and dead-code branches ripe for removal. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("BC-check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'BC Check';
-    }
-  }
-
-  async function runCompletenessCheck() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var ccUrl = repoId !== "all" ? "/completeness-check?repo_id=" + encodeURIComponent(repoId) : "/completeness-check";
-      var r = await jpost(ccUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Completeness-check started — it scans for half-wired features and files draft tickets for discovered gaps. New drafts appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Completeness-check failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Completeness';
-    }
-  }
-
-  async function runRunHealth() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var r = await jpost("/run-health");
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Run-health started — it analyzes recent run outcomes and files health drafts to the mill board.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Run-health failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Run Health';
-    }
-  }
-
-  async function runConfigSync() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var csUrl = repoId !== "all" ? "/config-sync?repo_id=" + encodeURIComponent(repoId) : "/config-sync";
-      var r = await jpost(csUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Config-sync started — it scans for config ↔ .env ↔ docs drift. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Config-sync failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Config Sync';
-    }
-  }
-
-  async function runMemberSync() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var msUrl = repoId !== "all" ? "/member-sync?repo_id=" + encodeURIComponent(repoId) : "/member-sync";
-      var r = await jpost(msUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Member-sync started — it reconciles workspace members against the configured roster. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Member-sync failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Member Sync';
-    }
-  }
-
-  async function runStateSync() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var ssUrl = repoId !== "all" ? "/state-sync?repo_id=" + encodeURIComponent(repoId) : "/state-sync";
-      var r = await jpost(ssUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("State-sync started — it inspects board state consistency. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("State-sync failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'State Sync';
-    }
-  }
-
-  async function runFrontendSync() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var fsUrl = repoId !== "all" ? "/frontend-sync?repo_id=" + encodeURIComponent(repoId) : "/frontend-sync";
-      var r = await jpost(fsUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Frontend-sync started — it aligns the front-end with backend API definitions. New draft tickets appear on the board when it finishes.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Frontend-sync failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Frontend Sync';
-    }
-  }
-
-  async function runTraceReview() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var trUrl = repoId !== "all" ? "/trace-review?repo_id=" + encodeURIComponent(repoId) : "/trace-review";
-      var r = await jpost(trUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Trace review started — scans Langfuse traces since the last run, flags outliers, runs the cheap flash inspector on flagged ones, files draft tickets per finding.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Trace review failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Trace Review';
-    }
-  }
-
-
-  async function runTriageBoilerplate() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var tbUrl = repoId !== "all" ? "/triage-boilerplate?repo_id=" + encodeURIComponent(repoId) : "/triage-boilerplate";
-      var r = await jpost(tbUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Triage-boilerplate started — scans recent triage tickets for recurring patterns and proposes boilerplate response templates.");
-      setTimeout(refresh, 4000);
-    } catch (e) {
-      alert("Triage-boilerplate failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Triage Boilerplate';
-    }
-  }
-  async function runRoadmapSync() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var repoId = getRepoId();
-      var rsUrl = repoId !== "all" ? "/roadmap-sync?repo_id=" + encodeURIComponent(repoId) : "/roadmap-sync";
-      var r = await jpost(rsUrl);
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Roadmap-sync started — it reconciles ROADMAP.md against the board's epics. New epics + a marker-PR appear when it finishes.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Roadmap-sync failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Roadmap Sync';
-    }
-  }
-
-  async function runMeta() {
-    var btn = event.target;
-    btn.disabled = true; btn.textContent = 'Running...';
-    try {
-      var r = await jpost("/meta");
-      if (!r.ok) { throw new Error(await r.text()); }
-      alert("Meta-agent pass started — new extraction and alignment draft tickets will appear on the board when it finishes.");
-      setTimeout(refresh, 3000);
-    } catch (e) {
-      alert("Meta pass failed to start: " + e);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Meta';
+      btn.disabled = false; btn.textContent = origText;
     }
   }
 
@@ -2381,7 +2109,7 @@
     await fetchRepos();
     var repoId = getRepoId();
     toggleMetaOnlyButtons();
-    updateAgentsMenu();
+    updatePassesMenu();
     fetchGates();
     fetchLangfuseStatus();
     fetchCreditStatus();
@@ -2440,7 +2168,7 @@
     fetchLangfuseStatus();
     fetchCreditStatus();
     refreshCandidateBadge();
-    applyAgentColors();
+    applyPassColors();
 
     // Connect WebSocket for live updates
     connectWebSocket();
@@ -2465,19 +2193,19 @@
       }, true); // capture phase ensures mill wins over robotsix-board
     }
 
-    // Agents menu global click-to-close
+    // Passes menu global click-to-close
     document.addEventListener("click", function(ev) {
-      var menu = document.getElementById("agents-menu");
+      var menu = document.getElementById("passes-menu");
       if (!menu || !menu.classList.contains("open")) return;
       if (menu.contains(ev.target)) return;
-      var trigger = document.querySelector(".agents-trigger");
+      var trigger = document.querySelector(".passes-trigger");
       if (trigger && trigger.contains(ev.target)) return;
       menu.classList.remove("open");
     });
 
-    // Escape key closes agents menu
+    // Escape key closes passes menu
     document.addEventListener("keydown", function(ev) {
-      if (ev.key === "Escape") closeAgentsMenu();
+      if (ev.key === "Escape") closePassesMenu();
     });
 
     // 1s tick: refresh drawer content when open, also periodically refresh active labels
@@ -2526,8 +2254,8 @@
   window.moveToBoard = moveToBoard;
   window.generateChildren = generateChildren;
   window.newChildTicket = newChildTicket;
-  window.toggleAgentsMenu = toggleAgentsMenu;
-  window.closeAgentsMenu = closeAgentsMenu;
+  window.togglePassesMenu = togglePassesMenu;
+  window.closePassesMenu = closePassesMenu;
   window.dismissLfStatus = dismissLfStatus;
   window.dismissCreditStatus = dismissCreditStatus;
   window.validateCandidate = validateCandidate;
@@ -2545,28 +2273,6 @@
   window.connectWebSocket = connectWebSocket;
   window.refresh = refresh;
   window.updateMeta = updateMeta;
-  window.runAudit = runAudit;
-  window.runTraceHealth = runTraceHealth;
-  window.runLangfuseCleanup = runLangfuseCleanup;
-  window.runHealth = runHealth;
-  window.runTestGap = runTestGap;
-  window.runAgentCheck = runAgentCheck;
-  window.runSurvey = runSurvey;
-  window.runModuleCurator = runModuleCurator;
-  window.runForgeParity = runForgeParity;
-  window.runCopyPaste = runCopyPaste;
-  window.runStateSync = runStateSync;
-  window.runFrontendSync = runFrontendSync;
-  window.runBcCheck = runBcCheck;
-  window.runCompletenessCheck = runCompletenessCheck;
-  window.runRunHealth = runRunHealth;
-  window.runTriageBoilerplate = runTriageBoilerplate;
-  window.runConfigSync = runConfigSync;
-  window.runMemberSync = runMemberSync;
-  window.runTraceReview = runTraceReview;
-  window.runDocstringCoverage = runDocstringCoverage;
-  window.runRoadmapSync = runRoadmapSync;
-  window.runMeta = runMeta;
 
 
 })();

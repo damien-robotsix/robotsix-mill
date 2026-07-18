@@ -644,30 +644,13 @@ src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Incompatible default for parameter "request" (default has type "None", parameter has type "Request[State]")  [assignment]
-src/robotsix_mill/runtime/routes/_passes.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
-src/robotsix_mill/runtime/routes/_passes.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Incompatible default for parameter "request" (default has type "None", parameter has type "Request[State]")  [assignment]
-src/robotsix_mill/runtime/routes/_passes.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
-src/robotsix_mill/runtime/routes/_passes.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Incompatible default for parameter "request" (default has type "None", parameter has type "Request[State]")  [assignment]
-src/robotsix_mill/runtime/routes/_passes.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
-src/robotsix_mill/runtime/routes/_passes.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Incompatible default for parameter "request" (default has type "None", parameter has type "Request[State]")  [assignment]
-src/robotsix_mill/runtime/routes/_passes.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
-src/robotsix_mill/runtime/routes/_passes.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/runtime/routes/_passes.py:0: error: Incompatible default for parameter "request" (default has type "None", parameter has type "Request[State]")  [assignment]
-src/robotsix_mill/runtime/routes/_passes.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
-src/robotsix_mill/runtime/routes/_passes.py:0: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
 src/robotsix_mill/runtime/routes/_passes.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_health.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/runtime/routes/_health.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
