@@ -101,7 +101,9 @@ class Forge(ABC):
         the PR/MR cannot be resolved."""
 
     @abstractmethod
-    def check_status(self, *, source_branch: str) -> dict | None:
+    def check_status(
+        self, *, source_branch: str, require_checks: bool = False
+    ) -> dict | None:
         """Return remote CI check-run status for the PR of *source_branch*.
 
         Returns ``None`` when no PR exists for the branch.
@@ -128,6 +130,11 @@ class Forge(ABC):
         ``"pending"``  = at least one check is not yet complete and none
                          have failed.
         ``None``       = no checks exist at all.
+
+        When *require_checks* is ``True``, an empty check list (no CI
+        registered yet for the commit) is classified as ``"pending"``
+        rather than ``"success"`` — callers that know the repo MUST have
+        CI (e.g. the ci-fix agent after a push) should pass ``True``.
 
         Summaries are capped at 2000 chars, text at 4000, annotations at
         20 per failing check (adapter-enforced truncation).

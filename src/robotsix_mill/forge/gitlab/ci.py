@@ -66,7 +66,9 @@ class GitLabForgeCIMixin:
     the final class.
     """
 
-    def check_status(self, *, source_branch: str) -> dict | None:
+    def check_status(
+        self, *, source_branch: str, require_checks: bool = False
+    ) -> dict | None:
         try:
             from .core import _parse_gitlab_project_path
 

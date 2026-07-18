@@ -241,7 +241,9 @@ class GitHubForgeCIMixin:
     ``self._repo_config``, ``self._get_pr`` to exist on the final class.
     """
 
-    def check_status(self, *, source_branch: str) -> dict | None:
+    def check_status(
+        self, *, source_branch: str, require_checks: bool = False
+    ) -> dict | None:
         """Return the aggregate CI check status for *source_branch*'s PR head.
 
         Returns a ``dict`` with ``conclusion`` (``"success"`` /
@@ -249,9 +251,17 @@ class GitHubForgeCIMixin:
         check detail dicts, or ``None`` when there is no PR / head SHA to
         gate on. A repo with no CI configured reports ``"success"`` so the
         merge pipeline does not wait forever.
+
+        When *require_checks* is ``True``, an empty check-run list (no CI
+        registered yet for the commit) is classified as ``"pending"``
+        rather than ``"success"`` — callers that know the repo MUST have CI
+        (e.g. the ci-fix agent after a push) should pass ``True`` to avoid
+        a false ``CI_PASSED`` before the first check run materialises.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._check_status(owner=owner, repo=repo, head=source_branch)
+        return self._check_status(
+            owner=owner, repo=repo, head=source_branch, require_checks=require_checks
+        )
 
     def commit_ci_conclusion(self, *, sha: str) -> dict | None:
         """Aggregate CI conclusion for an arbitrary commit SHA (no PR).
@@ -306,7 +316,13 @@ class GitHubForgeCIMixin:
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _check_status(
-        self, *, owner: str, repo: str, head: str, sha: str | None = None
+        self,
+        *,
+        owner: str,
+        repo: str,
+        head: str,
+        sha: str | None = None,
+        require_checks: bool = False,
     ) -> dict | None:
         if sha is None:
             pr = self._get_pr(owner=owner, repo=repo, head=head)  # type: ignore[attr-defined]
@@ -362,10 +378,31 @@ class GitHubForgeCIMixin:
             # App lacks read permission for both endpoints) → there
             # is nothing meaningful to gate on. Treat as success so
             # the merge stage doesn't loop forever.
+            #
+            # When *require_checks* is True the caller knows the repo
+            # MUST have CI (e.g. ci-fix after a push).  An empty list
+            # here means check runs haven't been registered YET, not
+            # that the repo lacks CI — classify as "pending" so the
+            # caller keeps waiting rather than false-passing.
             if not check_runs and not status_runs:
-                return {"conclusion": "success", "failing": [], "pending": []}
+                if require_checks:
+                    return {
+                        "conclusion": "pending",
+                        "failing": [],
+                        "pending": [],
+                        "_no_checks": True,
+                        "_sha": sha,
+                    }
+                return {
+                    "conclusion": "success",
+                    "failing": [],
+                    "pending": [],
+                    "_sha": sha,
+                }
 
-            return _derive_check_conclusion(c, api, owner, repo, headers, check_runs)
+            result = _derive_check_conclusion(c, api, owner, repo, headers, check_runs)
+            result["_sha"] = sha
+            return result
         return None
 
     def _list_workflow_runs(

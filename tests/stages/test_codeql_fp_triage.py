@@ -222,7 +222,7 @@ def test_codeql_only_dismisses_and_unblocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -232,20 +232,20 @@ def test_codeql_only_dismisses_and_unblocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # In-scope alert, non-security.
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             _codeql_alert(42, "src/foo.py", security_severity_level=None)
         ],
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+        lambda self, *, source_branch, require_checks=False: [{"path": "src/foo.py"}],
     )
 
     # Mock agent: dismiss alert 42.
@@ -301,7 +301,7 @@ def test_mixed_failures_still_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []},
@@ -312,7 +312,7 @@ def test_mixed_failures_still_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
 
     triage_called = []
@@ -352,7 +352,7 @@ def test_security_severity_alert_never_dismissed(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -362,20 +362,20 @@ def test_security_severity_alert_never_dismissed(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     # Security-severity alert (high).
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             _codeql_alert(99, "src/foo.py", security_severity_level="high")
         ],
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+        lambda self, *, source_branch, require_checks=False: [{"path": "src/foo.py"}],
     )
 
     triage_called = []
@@ -415,7 +415,7 @@ def test_out_of_scope_alert_not_eligible(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -425,19 +425,19 @@ def test_out_of_scope_alert_not_eligible(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             _codeql_alert(1, "untouched/file.py", security_severity_level=None)
         ],
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+        lambda self, *, source_branch, require_checks=False: [{"path": "src/foo.py"}],
     )
 
     triage_called = []
@@ -476,7 +476,7 @@ def test_agent_abstains_still_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -486,19 +486,19 @@ def test_agent_abstains_still_blocks(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             _codeql_alert(1, "src/foo.py", security_severity_level=None)
         ],
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+        lambda self, *, source_branch, require_checks=False: [{"path": "src/foo.py"}],
     )
 
     # Agent abstains.
@@ -543,7 +543,7 @@ def test_run_once_sentinel_prevents_second_triage(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -553,19 +553,19 @@ def test_run_once_sentinel_prevents_second_triage(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             _codeql_alert(1, "src/foo.py", security_severity_level=None)
         ],
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+        lambda self, *, source_branch, require_checks=False: [{"path": "src/foo.py"}],
     )
 
     triage_called = []
@@ -621,7 +621,7 @@ def test_early_triage_before_attempt_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -631,19 +631,19 @@ def test_early_triage_before_attempt_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [
+        lambda self, *, source_branch, require_checks=False: [
             _codeql_alert(1, "src/foo.py", security_severity_level=None)
         ],
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_files",
-        lambda self, *, source_branch: [{"path": "src/foo.py"}],
+        lambda self, *, source_branch, require_checks=False: [{"path": "src/foo.py"}],
     )
 
     def fake_triage(**kw):
@@ -693,15 +693,19 @@ def test_early_triage_skipped_when_non_codeql_fails(tmp_path, monkeypatch):
         ],
     }
     monkeypatch.setattr(
-        github.GitHubForge, "check_status", lambda self, *, source_branch: ci_fail
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: ci_fail,
     )
     monkeypatch.setattr(
-        github.GitHubForge, "pr_status", lambda self, *, source_branch: {"sha": "abc"}
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc"},
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "list_code_scanning_alerts",
-        lambda self, *, source_branch: [],
+        lambda self, *, source_branch, require_checks=False: [],
     )
 
     triage_called = []
@@ -749,7 +753,7 @@ def test_flag_disabled_skips_triage(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "CodeQL", "summary": "", "text": None, "annotations": []}
@@ -759,7 +763,7 @@ def test_flag_disabled_skips_triage(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch: {"sha": "abc123"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
 
     triage_called = []

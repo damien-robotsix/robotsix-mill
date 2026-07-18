@@ -545,7 +545,7 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     monkeypatch.setattr(
         gh_mod.GitHubForge,
         "check_status",
-        lambda self, *, source_branch: {
+        lambda self, *, source_branch, require_checks=False: {
             "conclusion": "failure",
             "failing": [
                 {"name": "lint", "summary": "err", "text": None, "annotations": []}
