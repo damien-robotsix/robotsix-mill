@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `changelog_autofill_periodic` and `changelog_autofill_interval_seconds` settings fields, giving the changelog-autofill schedule-only pass a configurable kill-switch and interval (previously hardcoded to 86400 s with no disable option).
 - Add class-level docstring to `PeriodicPassesMixin` describing its per-repo periodic pass orchestration.
 - Added docstring to ``health_ready`` endpoint in ``_health.py`` documenting the readiness probe's Args, Returns shape, and 503-on-failure behaviour.
 - Add docstring to `WorkerPool.start()` method in `src/robotsix_mill/runtime/worker/core.py`.

@@ -828,6 +828,17 @@ Configure via environment variables or YAML paths under
 | `periodic.orphaned_pr_check.max_files_per_pass` | `MILL_ORPHANED_PR_MAX_FILES_PER_PASS` | `5` | Per-pass cap on tracking-ticket file actions. Applied in addition to the combined `max_actions_per_pass` cap. |
 | `periodic.orphaned_pr_check.track_foreign_prs` | `MILL_ORPHANED_PR_TRACK_FOREIGN_PRS` | `false` | Also file tracking tickets for non-mill PRs (dependabot/human); never closes them |
 
+#### changelog_autofill
+
+The `changelog_autofill` schedule-only periodic pass reads recently merged PRs
+and writes corresponding entries into `CHANGELOG.md`.  It uses only the
+standard two periodic-agent fields:
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `periodic.changelog_autofill.enabled` | `MILL_CHANGELOG_AUTOFILL_PERIODIC` | `true` | Enable periodic changelog-autofill passes |
+| `periodic.changelog_autofill.interval_seconds` | `MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS` | `86400` | Seconds between changelog-autofill passes (1 day) |
+
 #### Env-var-only periodic agents
 
 `bc_check`, `completeness_check`, and `repo_description_sync` enabled and interval

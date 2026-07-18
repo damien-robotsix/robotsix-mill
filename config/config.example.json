@@ -27,6 +27,8 @@
     "bespoke_periodic": true,
     "board_list_cache_ttl_seconds": 3.0,
     "branch_prefix": "mill/",
+    "changelog_autofill_interval_seconds": 86400,
+    "changelog_autofill_periodic": true,
     "ci_debt_recheck_interval_seconds": 3600,
     "ci_debt_recheck_periodic": true,
     "ci_fix_max_attempts": 2,

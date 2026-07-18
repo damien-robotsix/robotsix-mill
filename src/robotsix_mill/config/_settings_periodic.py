@@ -605,6 +605,21 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between CI-debt recheck passes.",
     )
 
+    # --- changelog-autofill (schedule-only pass that updates changelogs from merged PRs) ---
+    # Master switch for the changelog-autofill schedule-only pass. Defaults to
+    # True (opt-out) — the pass reads merged PRs and writes CHANGELOG entries.
+    changelog_autofill_periodic: bool = Field(
+        default=True,
+        description="When true, run periodic changelog-autofill passes that update changelogs from merged PRs.",
+    )
+    # Seconds between automatic changelog-autofill passes when
+    # MILL_CHANGELOG_AUTOFILL_PERIODIC=true. Default 86400 (1 day). Minimum
+    # enforced at 60 s in the worker loop.
+    changelog_autofill_interval_seconds: int = Field(
+        default=86400,
+        description="Seconds between changelog-autofill passes.",
+    )
+
     # --- diagnostic (daily deterministic diagnostic agent) ---
     # When True, a global daily pass iterates the pluggable diagnostic check
     # registry. Off by default — the skeleton ships with zero checks; later

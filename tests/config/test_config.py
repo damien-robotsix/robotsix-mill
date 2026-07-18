@@ -501,6 +501,14 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- periodic bc_check ---
     ("bc_check_periodic", "MILL_BC_CHECK_PERIODIC", "0", False),
     ("bc_check_interval_seconds", "MILL_BC_CHECK_INTERVAL_SECONDS", "43200", 43200),
+    # --- periodic changelog_autofill ---
+    ("changelog_autofill_periodic", "MILL_CHANGELOG_AUTOFILL_PERIODIC", "0", False),
+    (
+        "changelog_autofill_interval_seconds",
+        "MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS",
+        "43200",
+        43200,
+    ),
     # --- periodic completeness_check ---
     ("completeness_check_periodic", "MILL_COMPLETENESS_CHECK_PERIODIC", "0", False),
     (

@@ -754,6 +754,18 @@
           "title": "Branch Prefix",
           "type": "string"
         },
+        "changelog_autofill_interval_seconds": {
+          "default": 86400,
+          "description": "Seconds between changelog-autofill passes.",
+          "title": "Changelog Autofill Interval Seconds",
+          "type": "integer"
+        },
+        "changelog_autofill_periodic": {
+          "default": true,
+          "description": "When true, run periodic changelog-autofill passes that update changelogs from merged PRs.",
+          "title": "Changelog Autofill Periodic",
+          "type": "boolean"
+        },
         "ci_debt_recheck_interval_seconds": {
           "default": 3600,
           "description": "Seconds between CI-debt recheck passes.",
