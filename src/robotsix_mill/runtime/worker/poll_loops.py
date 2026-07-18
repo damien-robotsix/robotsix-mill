@@ -1,3 +1,11 @@
+"""Worker poll loops — CI monitor, Dependabot ingest, and DB maintenance.
+
+Defines ``PollLoopsMixin``, a mixin for the ``Worker`` class that
+provides event-driven background poll loops: CI status monitoring,
+Dependabot PR ingestion, database vacuum/cleanup, credit-balance
+checks, timeout escalation, and periodic-workflow scheduling.
+"""
+
 from __future__ import annotations
 
 import asyncio

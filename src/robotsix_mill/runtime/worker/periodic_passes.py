@@ -1,3 +1,12 @@
+"""Worker periodic passes — health, cleanup, and background maintenance.
+
+Defines ``PeriodicPassesMixin``, a mixin for the ``Worker`` class that
+provides scheduled background passes: meta-survey, health checks,
+diagnostics, stale-branch cleanup, orphaned-PR detection, sandbox
+reaping, trace health, and CI-debt recheck.  Each pass is gated by a
+``RunRegistry`` and driven by a shared per-repo supervisor loop.
+"""
+
 from __future__ import annotations
 
 import asyncio

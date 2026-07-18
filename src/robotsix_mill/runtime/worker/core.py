@@ -1,3 +1,12 @@
+"""Worker consumer — in-process queue, stage chaining, and lifecycle.
+
+The ``Worker`` class assembles ``PeriodicPassesMixin`` and
+``PollLoopsMixin`` via multiple inheritance to form the complete
+event-driven consumer.  It owns ticket queuing (per-board priority
+queues), consumer-pool lifecycle (start / stop / reconcile), and
+drives the stage chain for each dequeued ticket.
+"""
+
 from __future__ import annotations
 
 import asyncio
