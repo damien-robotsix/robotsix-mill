@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Update `docs/agents/agent-yaml-schema.md` to match the current `AgentDefinition` model: replace `model` with `level`, replace `web` with `web_knowledge`, add missing field docs (`list_epic_children`, `list_threads`, `ask_user`, `inject_agent_md`, `inject_language_conventions`, `max_tokens`), update category listings and tools table, fix `read_ticket` section.
+- Fix `coordinator_timeout_seconds` model default drift: changed from 900 to 600 in `_settings_core.py` to match `config/config.example.json` and documentation.
 - Fixed typo `rebasin` → `rebasing` in the valid State values list in the chat-skill endpoint docstring.
 - Save conversation state on `AgentBudgetError` (budget exhaustion) so
   the implement agent can resume from where it left off instead of
