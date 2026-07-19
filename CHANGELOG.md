@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Correct stale `modules: true` opt-in claim in `AGENT.md`: `refine.yaml` has opted in, `meta.yaml` explicitly sets `modules: false`.
 - Remove dead `.src-security-posture` CSS rule from board-mill.css (no matching SourceKind enum member exists)
 - `human_mr_approval`: discard stale `REQUEST_CHANGES` reviews when the PR head has changed since the review was cast (compare `review.commit_id` against `pr.head.sha`). Prevents the verified 7-cycle verdict-replay loop that dominated tickets where the diff issue was externally remediated.
 - Fix `language_instructions_dir` default to resolve via `importlib.resources` instead of a bare relative `Path`, so the built-in language snippets are found in installed (container) mode. Add a preflight check that hard-blocks when the directory is absent, catching container-only path-resolution gaps before a model pass opens.
