@@ -1,5 +1,6 @@
 """Bounded retry+backoff for transient model/network failures."""
 
+import asyncio
 import json
 
 import httpx
@@ -504,3 +505,40 @@ def test_triage_functions_use_run_agent(monkeypatch):
     retry_run_agent(_Fake(), lambda h: "ok", what="triage-test")
     assert len(run_calls) == 1
     assert run_calls[0]["what"] == "triage-test"
+
+
+# --- running-event-loop guard -------------------------------------------
+# run_sync-style callables end in asyncio.run(), which raises RuntimeError
+# when a loop is already running (worker processing on Python >=3.14, tools
+# on the Claude SDK's loop).  run_agent must delegate the retry session to
+# a thread in that case — same guard as call_with_retry.
+
+
+def test_run_agent_inside_running_loop():
+    async def _payload():
+        return "ok"
+
+    def make_run(_h):
+        # Mirrors pydantic-ai run_sync: creates its own event loop.
+        return asyncio.run(_payload())
+
+    async def main():
+        return run_agent(object(), make_run, sleep=lambda _: None)
+
+    assert asyncio.run(main()) == "ok"
+
+
+def test_run_agent_fallback_inside_running_loop():
+    async def _payload():
+        return "fallback-ok"
+
+    def make_run(_h):
+        raise ModelHTTPError(503, "down")
+
+    def fallback():
+        return asyncio.run(_payload())
+
+    async def main():
+        return run_agent(object(), make_run, fallback_fn=fallback, sleep=lambda _: None)
+
+    assert asyncio.run(main()) == "fallback-ok"
