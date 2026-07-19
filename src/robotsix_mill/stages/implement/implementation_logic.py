@@ -558,40 +558,40 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 if edit_tools:
                     fmt_result = cls._edits_formatter_reverted(repo_dir, new_msgs)
                     if fmt_result is not True:
-                    tool_list = ", ".join(edit_tools)
-                    diag = (
-                        f"{no_change_rationale.strip() or summary}\n\n"
-                        "[Diagnostic] implement was about to close this ticket "
-                        "as ``no_change_needed`` because ``git diff`` is empty "
-                        f"— but the agent invoked file-mutating tools "
-                        f"({tool_list}) during the run, and replaying those "
-                        "edits + formatting still produced a real change (or "
-                        "could not be verified). An empty diff after real edit "
-                        "calls means the work did NOT persist (edits reverted, "
-                        "workspace reset mid-run, or written outside the clone). "
-                        "Closing as no-change would silently lose that work, so "
-                        "the ticket is BLOCKED for inspection. Re-run implement; "
-                        "if the spec genuinely needs no change, the agent must "
-                        "reach that conclusion WITHOUT calling "
-                        "write_file/edit_file/Write/Edit."
-                    )
-                    cls._finalize(
-                        ctx,
-                        ticket,
-                        repo_dir,
-                        branch,
-                        diag,
-                        ok=False,
-                        reference_files=ref_files,
-                        extra_roots=extra_roots,
-                    )
-                    return _SinglePassResult(
-                        next_action="return",
-                        outcome=Outcome(
-                            State.BLOCKED,
-                            "edit-claim contradiction (empty diff after edit calls)",
-                        ),
-                    )
+                        tool_list = ", ".join(edit_tools)
+                        diag = (
+                            f"{no_change_rationale.strip() or summary}\n\n"
+                            "[Diagnostic] implement was about to close this ticket "
+                            "as ``no_change_needed`` because ``git diff`` is empty "
+                            f"— but the agent invoked file-mutating tools "
+                            f"({tool_list}) during the run, and replaying those "
+                            "edits + formatting still produced a real change (or "
+                            "could not be verified). An empty diff after real edit "
+                            "calls means the work did NOT persist (edits reverted, "
+                            "workspace reset mid-run, or written outside the clone). "
+                            "Closing as no-change would silently lose that work, so "
+                            "the ticket is BLOCKED for inspection. Re-run implement; "
+                            "if the spec genuinely needs no change, the agent must "
+                            "reach that conclusion WITHOUT calling "
+                            "write_file/edit_file/Write/Edit."
+                        )
+                        cls._finalize(
+                            ctx,
+                            ticket,
+                            repo_dir,
+                            branch,
+                            diag,
+                            ok=False,
+                            reference_files=ref_files,
+                            extra_roots=extra_roots,
+                        )
+                        return _SinglePassResult(
+                            next_action="return",
+                            outcome=Outcome(
+                                State.BLOCKED,
+                                "edit-claim contradiction (empty diff after edit calls)",
+                            ),
+                        )
                 # No contradiction — close DONE.
                 rationale = no_change_rationale.strip()
                 short = rationale[:400] + ("…" if len(rationale) > 400 else "")
