@@ -244,12 +244,15 @@ def test_default_sandbox_image():
 
 
 def test_default_language_instructions_dir():
-    """language_instructions_dir defaults to
-    agent_definitions/language_instructions."""
+    """language_instructions_dir defaults to the packaged resource dir
+    (resolved via importlib.resources, absolute in both editable and
+    installed modes) now that the example config no longer pins a
+    CWD-relative override."""
+    from robotsix_mill._resources import language_instructions_dir
+
     s = Settings()
-    assert s.language_instructions_dir == Path(
-        "agent_definitions/language_instructions"
-    )
+    assert s.language_instructions_dir == language_instructions_dir()
+    assert s.language_instructions_dir.is_absolute()
 
 
 # ===========================================================================
@@ -759,3 +762,64 @@ def test_example_config_is_container_ready():
     example_path = repo_root / "config" / "config.example.json"
     data = json.loads(example_path.read_text())
     assert data["settings"]["api_host"] == "0.0.0.0"
+
+
+# ===========================================================================
+#  Packaged resource-dir fallback (skills_dir / language_instructions_dir)
+# ===========================================================================
+# A CWD-relative override written for an editable checkout (e.g.
+# ``skills_dir: skills``) doesn't exist inside the container, and the
+# implement preflight then hard-blocked EVERY ticket with "missing skill
+# file" — including the ticket that would fix the config (2026-07-19).
+# The ``effective_*_dir`` helpers resolve to the packaged copy at USE time
+# (not at Settings construction, so a dir created after startup is still
+# honored — several tests configure first and mkdir later).
+
+
+def test_effective_skills_dir_missing_falls_back_to_packaged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from robotsix_mill._resources import (
+        effective_skills_dir,
+        skills_dir as packaged_skills_dir,
+    )
+
+    with caplog.at_level("WARNING", logger="robotsix_mill._resources"):
+        resolved = effective_skills_dir(Path("does-not-exist-anywhere"))
+    assert resolved == packaged_skills_dir()
+    assert any("does-not-exist-anywhere" in r.message for r in caplog.records)
+
+
+def test_effective_language_instructions_dir_missing_falls_back() -> None:
+    from robotsix_mill._resources import (
+        effective_language_instructions_dir,
+        language_instructions_dir as packaged_lang_dir,
+    )
+
+    resolved = effective_language_instructions_dir(Path("nope/language_instructions"))
+    assert resolved == packaged_lang_dir()
+
+
+def test_effective_skills_dir_existing_override_is_preserved(
+    tmp_path: Path,
+) -> None:
+    from robotsix_mill._resources import effective_skills_dir
+
+    custom = tmp_path / "custom-skills"
+    custom.mkdir()
+    assert effective_skills_dir(custom) == custom
+
+
+def test_effective_skills_dir_honors_dir_created_after_first_call(
+    tmp_path: Path,
+) -> None:
+    """Use-time resolution: a configured dir that appears later wins again."""
+    from robotsix_mill._resources import (
+        effective_skills_dir,
+        skills_dir as packaged_skills_dir,
+    )
+
+    custom = tmp_path / "late-skills"
+    assert effective_skills_dir(custom) == packaged_skills_dir()
+    custom.mkdir()
+    assert effective_skills_dir(custom) == custom

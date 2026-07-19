@@ -251,9 +251,20 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         #    definition must exist on disk before the model runs.  A
         #    missing skill silently degrades the system prompt (the
         #    ``compose_prompt`` warning is invisible to the model) and
-        #    produces a no-op loop.
+        #    produces a no-op loop.  Resolved through the same
+        #    packaged-dir fallback ``compose_prompt`` uses, so a stale
+        #    CWD-relative ``skills_dir`` override degrades to the
+        #    bundled skills instead of hard-blocking every ticket
+        #    (2026-07-19: a relative override bricked the whole board,
+        #    including the ticket that would have fixed the config).
+        from robotsix_mill._resources import (
+            effective_language_instructions_dir,
+            effective_skills_dir,
+        )
+
+        skills_root = effective_skills_dir(s.skills_dir)
         for name in definition.skills or ():
-            skill_path = s.skills_dir / name / "SKILL.md"
+            skill_path = skills_root / name / "SKILL.md"
             if not skill_path.is_file():
                 return Outcome(
                     State.BLOCKED,
@@ -264,8 +275,12 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         #    directory (e.g. ``agent_definitions/language_instructions``)
         #    silently returns ``""`` for every language, degrading the
         #    prompt for every non-mill repo that declares a language.
-        #    Surface it here so the operator can fix the path config.
-        if not s.language_instructions_dir.is_dir():
+        #    Checked through the packaged-dir fallback the snippet
+        #    loader uses, so only a genuinely unresolvable directory
+        #    blocks.
+        if not effective_language_instructions_dir(
+            s.language_instructions_dir
+        ).is_dir():
             return Outcome(
                 State.BLOCKED,
                 f"language_instructions_dir not found or not a directory: "

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import importlib.resources
+import logging
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+# Paths already warned about by the effective_* fallbacks — warn once per
+# configured path per process instead of on every prompt composition.
+_warned_missing: set[tuple[str, str]] = set()
 
 
 def _resource_dir(name: str) -> Path:
@@ -42,3 +49,43 @@ def language_instructions_dir() -> Path:
     in editable mode.
     """
     return _resource_dir("agent_definitions") / "language_instructions"
+
+
+def _effective_dir(name: str, configured: Path, packaged: Path) -> Path:
+    """*configured* if it exists, else the *packaged* copy (warn once).
+
+    A CWD-relative override (e.g. ``skills_dir: skills``, written for an
+    editable checkout where CWD is the repo root) resolves against ``/app``
+    inside the container and doesn't exist there — before this fallback the
+    implement preflight then hard-blocked EVERY ticket with "missing skill
+    file", including the ticket that would have fixed the configuration.
+    Resolved at use time (not Settings construction) so a directory created
+    after startup is still honored.
+    """
+    if configured.is_dir() or configured == packaged or not packaged.is_dir():
+        return configured
+    key = (name, str(configured))
+    if key not in _warned_missing:
+        _warned_missing.add(key)
+        log.warning(
+            "%s %r does not exist (CWD-relative override?) — "
+            "falling back to packaged %s",
+            name,
+            str(configured),
+            packaged,
+        )
+    return packaged
+
+
+def effective_skills_dir(configured: Path) -> Path:
+    """The skills directory to actually read from: *configured* if it
+    exists, else the packaged ``skills/`` copy."""
+    return _effective_dir("skills_dir", configured, skills_dir())
+
+
+def effective_language_instructions_dir(configured: Path) -> Path:
+    """The language-instructions directory to actually read from:
+    *configured* if it exists, else the packaged copy."""
+    return _effective_dir(
+        "language_instructions_dir", configured, language_instructions_dir()
+    )

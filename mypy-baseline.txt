@@ -8,7 +8,6 @@ src/robotsix_mill/runtime/run_registry.py:0: error: Missing type arguments for g
 src/robotsix_mill/runtime/stage_retry.py:0: error: Returning Any from function declared to return "float"  [no-any-return]
 src/robotsix_mill/config/repo_settings.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_mill/config/repo_settings.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/config/repo_settings.py:0: error: Returning Any from function declared to return "str"  [no-any-return]
 src/robotsix_mill/config/repo_settings.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/agents/freshness.py:0: error: Unsupported operand types for < ("int" and "None")  [operator]
 src/robotsix_mill/agents/freshness.py:0: note: Left operand is of type "int | None"

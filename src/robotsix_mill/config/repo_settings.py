@@ -256,7 +256,12 @@ def _load_language_snippet(settings, repo_dir: Path | None, lang: str) -> str:
                 return override.read_text(encoding="utf-8")
         except OSError:
             pass
-    builtin = settings.language_instructions_dir / f"{lang}.md"
+    from robotsix_mill._resources import effective_language_instructions_dir
+
+    builtin = (
+        effective_language_instructions_dir(settings.language_instructions_dir)
+        / f"{lang}.md"
+    )
     try:
         return builtin.read_text(encoding="utf-8")
     except OSError:

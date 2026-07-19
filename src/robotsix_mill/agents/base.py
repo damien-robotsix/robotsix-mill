@@ -334,8 +334,11 @@ def compose_prompt(
         logger = logging.getLogger(__name__)
         skill_sections: list[str] = []
 
+        from robotsix_mill._resources import effective_skills_dir
+
+        skills_root = effective_skills_dir(settings.skills_dir)
         for name in skills:
-            skill_path = settings.skills_dir / name / "SKILL.md"
+            skill_path = skills_root / name / "SKILL.md"
             try:
                 raw = skill_path.read_text(encoding="utf-8")
             except FileNotFoundError:

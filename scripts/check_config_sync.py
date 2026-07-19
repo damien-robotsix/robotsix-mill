@@ -97,6 +97,15 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         # -- deploy-freshness gate (optional; only needed when a deploy
         #    server is present and the gate should be active) --
         "deploy_api_url",
+        # -- packaged resource dirs — defaults resolve via
+        #    importlib.resources to machine-specific absolute paths, so a
+        #    committed template value can only be wrong somewhere. A
+        #    CWD-relative template value ("skills") bricked the container
+        #    on 2026-07-19 (implement preflight blocked every ticket with
+        #    "missing skill file"); overrides remain available via env or
+        #    a deployment's own config.json --
+        "skills_dir",
+        "language_instructions_dir",
     }
 )
 
