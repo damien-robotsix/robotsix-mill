@@ -182,6 +182,11 @@ class Forge(ABC):
         ``files`` — list of changed file paths (str). Same source as
             :meth:`pr_files` but returned as a plain list of strings
             for convenience.
+        ``commit_id`` — the commit SHA the determining review was cast
+            against (str, ``""`` when no review has been submitted).
+            Callers can compare this against the PR's current
+            ``head.sha`` to detect stale reviews. Added to support
+            ``human_mr_approval`` stale-verdict detection.
         """
 
     @abstractmethod

@@ -515,3 +515,61 @@ class TestReviewChangesRequestedOutcome:
         assert data["comments"][0]["body"] == "Please fix the signature"
         assert data["comments"][0]["path"] == ""
         assert data["comments"][0]["line"] is None
+
+    # -- stale review (commit_id != pr_head_sha) -------------------------
+
+    def test_stale_review_discarded(self, mixin, ticket, ctx, forge):
+        """CHANGES_REQUESTED review against old commit → discarded (None)."""
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc111",
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+
+    def test_stale_review_no_commit_id_passes_through(self, mixin, ticket, ctx, forge):
+        """Empty commit_id in review (legacy) → not treated as stale."""
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "",
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        # Empty commit_id → no staleness check applied → routes normally
+        assert result is not None
+        assert result.next_state == State.ADDRESSING_REVIEW
+
+    def test_matching_commit_id_not_stale(self, mixin, ticket, ctx, forge):
+        """Matching commit_id → not stale → routes ADDRESSING_REVIEW."""
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc123",
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc123"
+        )
+        assert result is not None
+        assert result.next_state == State.ADDRESSING_REVIEW
+
+    def test_empty_pr_head_sha_not_stale(self, mixin, ticket, ctx, forge):
+        """Empty pr_head_sha (no PR data) → staleness check skipped."""
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc111",
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha=""
+        )
+        assert result is not None
+        assert result.next_state == State.ADDRESSING_REVIEW

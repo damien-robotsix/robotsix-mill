@@ -517,6 +517,7 @@ class CIPollMixin(_MergeStageBase):
             ctx,
             branch=branch,
             forge=get_forge(s, repo_config=ctx.repo_config),
+            pr_head_sha=pr.get("sha", ""),
         )
         if review_outcome is not None:
             return review_outcome
