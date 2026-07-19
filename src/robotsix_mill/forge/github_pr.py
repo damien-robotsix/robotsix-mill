@@ -727,15 +727,18 @@ class GitHubForgePRMixin:
         # Determine aggregate review state from the latest non-dismissed
         # review.  GitHub returns reviews oldest-first; iterate reversed.
         state = "PENDING"
+        review_commit_id = ""
         for rev in reversed(reviews_raw):
             rev_state = rev.get("state", "COMMENTED")
             if rev_state != "DISMISSED":
                 state = rev_state
+                review_commit_id = rev.get("commit_id", "")
                 break
         else:
             # All reviews are DISMISSED — use the latest one.
             if reviews_raw:
                 state = reviews_raw[-1].get("state", "DISMISSED")
+                review_commit_id = reviews_raw[-1].get("commit_id", "")
 
         # Build a review_state lookup: review_id -> state.
         review_state_map: dict[int, str] = {}
@@ -771,4 +774,5 @@ class GitHubForgePRMixin:
             "state": state,
             "comments": comments,
             "files": [f["path"] for f in files],
+            "commit_id": review_commit_id,
         }

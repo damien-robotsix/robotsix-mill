@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- `human_mr_approval`: discard stale `REQUEST_CHANGES` reviews when the PR head has changed since the review was cast (compare `review.commit_id` against `pr.head.sha`). Prevents the verified 7-cycle verdict-replay loop that dominated tickets where the diff issue was externally remediated.
 - Fix `language_instructions_dir` default to resolve via `importlib.resources` instead of a bare relative `Path`, so the built-in language snippets are found in installed (container) mode. Add a preflight check that hard-blocks when the directory is absent, catching container-only path-resolution gaps before a model pass opens.
 - Fix: meta-ticket workspace setup crashes on freshly-created empty repos — `build_meta_workspace` now detects empty remotes and bootstraps them with an initial commit, matching the existing `clone_all_repos` behaviour.
 - Implement stage preflight now hard-blocks (instead of silently degrading) when the agent definition has no tools, a referenced skill file is missing, or the workspace directory is inaccessible. Each failure includes the specific path/condition in the error note, preventing the zero-tool-call no-op loop seen on non-mill boards.

@@ -3313,9 +3313,14 @@ def test__pr_review_status_happy_path(tmp_path, monkeypatch):
     )
 
     reviews_data = [
-        {"id": 1, "state": "CHANGES_REQUESTED", "body": "Please fix X"},
-        {"id": 2, "state": "APPROVED", "body": "LGTM!"},
-        {"id": 3, "state": "DISMISSED", "body": "dismissed"},
+        {
+            "id": 1,
+            "state": "CHANGES_REQUESTED",
+            "body": "Please fix X",
+            "commit_id": "abc111",
+        },
+        {"id": 2, "state": "APPROVED", "body": "LGTM!", "commit_id": "abc222"},
+        {"id": 3, "state": "DISMISSED", "body": "dismissed", "commit_id": "abc333"},
     ]
     comments_data = [
         {
@@ -3355,6 +3360,7 @@ def test__pr_review_status_happy_path(tmp_path, monkeypatch):
 
     # Latest non-dismissed review is APPROVED (id=2, after CHANGES_REQUESTED)
     assert result["state"] == "APPROVED"
+    assert result["commit_id"] == "abc222"
     assert result["files"] == ["src/foo.py", "src/bar.py"]
 
     # Comments: 3 review body comments (all non-empty) + 2 inline
@@ -3528,8 +3534,8 @@ def test__pr_review_status_empty_reviews_defaults_to_pending(tmp_path, monkeypat
 def test__pr_review_status_all_dismissed_uses_latest_state(tmp_path, monkeypatch):
     """All reviews DISMISSED → state is the latest review's state (DISMISSED)."""
     reviews_data = [
-        {"id": 1, "state": "DISMISSED", "body": "stale"},
-        {"id": 2, "state": "DISMISSED", "body": "also stale"},
+        {"id": 1, "state": "DISMISSED", "body": "stale", "commit_id": "abc111"},
+        {"id": 2, "state": "DISMISSED", "body": "also stale", "commit_id": "abc222"},
     ]
     get_map = {
         "pulls/7/reviews": _make_response(200, reviews_data),
@@ -3542,6 +3548,7 @@ def test__pr_review_status_all_dismissed_uses_latest_state(tmp_path, monkeypatch
     result = forge._pr_review_status(owner="o", repo="r", pull_number=7)
 
     assert result["state"] == "DISMISSED"
+    assert result["commit_id"] == "abc222"  # latest dismissed review
     # Both bodies included (non-empty)
     assert len(result["comments"]) == 2
 

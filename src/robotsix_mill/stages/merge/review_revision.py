@@ -200,7 +200,13 @@ class ReviewRevisionMixin(_MergeStageBase):
         )
 
     def _review_changes_requested_outcome(
-        self, ticket: Ticket, ctx: StageContext, *, branch: str, forge: Forge
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        *,
+        branch: str,
+        forge: Forge,
+        pr_head_sha: str = "",
     ) -> Outcome | None:
         """Return ``Outcome(ADDRESSING_REVIEW, ...)`` when the forge reports a
         CHANGES_REQUESTED review with at least one comment for ``branch``;
@@ -212,6 +218,11 @@ class ReviewRevisionMixin(_MergeStageBase):
         review with an empty comment list AND an empty body is a no-op
         (log + return ``None``); if the body is non-empty, one comment is
         synthesized from it so the review still routes to ADDRESSING_REVIEW.
+
+        *pr_head_sha* guards against stale-verdict replay: when non-empty,
+        it is compared against the review's ``commit_id``.  When they
+        differ the PR has been updated since the review was cast — the old
+        verdict is discarded rather than replayed as a fresh rejection.
         """
         if not ctx.settings.review_feedback_enabled:
             return None
@@ -223,6 +234,24 @@ class ReviewRevisionMixin(_MergeStageBase):
 
         if review_status is None or review_status.get("state") != "CHANGES_REQUESTED":
             return None
+
+        # --- stale review guard ---
+        # When the review was cast against a different commit than the
+        # PR's current head, the diff has changed — the old verdict does
+        # not apply.  Discard the stale rejection so the pipeline can
+        # re-evaluate the updated PR from scratch rather than replaying
+        # the old REQUEST_CHANGES.
+        if pr_head_sha and review_status:
+            review_commit_id = review_status.get("commit_id", "")
+            if review_commit_id and pr_head_sha != review_commit_id:
+                log.info(
+                    "%s: CHANGES_REQUESTED review is stale "
+                    "(review commit %.8s != PR head %.8s) — discarding",
+                    ticket.id,
+                    review_commit_id,
+                    pr_head_sha,
+                )
+                return None
 
         comments = review_status.get("comments", [])
         if not comments:
