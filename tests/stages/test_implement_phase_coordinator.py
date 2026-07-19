@@ -1050,3 +1050,116 @@ def test_convergence_backstop_uses_cross_repo_base_branch(
     assert "empty diff" in out2.note.lower()
     # The note must reference the correct base branch.
     assert "origin/develop" in out2.note.lower()
+
+
+def test_resume_guard_branch_green_ci_no_pr_routes_to_implement_complete(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When resuming and the remote branch has green CI but no open PR,
+    skip the implement loop and route to IMPLEMENT_COMPLETE."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Bypass gates that require a real sandbox / API key.
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Run implement once so the local clone + branch exist (resuming=True).
+    def _run_once(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Now the ticket comes back from review (review_rounds > 0) and the
+    # remote branch has green CI but no open PR.  Mock the forge + git
+    # probes so the new resume guard fires.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Mock: remote branch exists with green CI.
+    fake_sha = "abc123def456"
+    monkeypatch.setattr(pc.git_ops, "ls_remote_sha", lambda *a, **kw: fake_sha)
+
+    # Mock: CI conclusion is success.
+    class _FakeForge:
+        def commit_ci_conclusion(self, *, sha):
+            return {"conclusion": "success"}
+
+        def pr_status(self, *, source_branch):
+            return None  # no PR exists
+
+    monkeypatch.setattr(pc, "get_forge", lambda *a, **kw: _FakeForge())
+
+    # Mock: token resolution (called by the guard).
+    monkeypatch.setattr(pc, "github_token", lambda *a, **kw: "fake-token")
+
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.IMPLEMENT_COMPLETE
+    assert "green ci but no open pr" in out2.note.lower()
+
+
+def test_resume_guard_pr_exists_skips_guard(ctx_factory, tmp_path, monkeypatch):
+    """When an open PR already exists for the branch, the resume guard
+    must NOT fire — the merge stage handles PR polling."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _run_once(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+    t = ctx.service.get(t.id)
+
+    fake_sha = "abc123def456"
+    monkeypatch.setattr(pc.git_ops, "ls_remote_sha", lambda *a, **kw: fake_sha)
+
+    # Open PR exists — guard should NOT fire.
+    class _FakeForge:
+        def commit_ci_conclusion(self, *, sha):
+            return {"conclusion": "success"}
+
+        def pr_status(self, *, source_branch):
+            return {"state": "open", "url": "https://example.com/pr/1"}
+
+    monkeypatch.setattr(pc, "get_forge", lambda *a, **kw: _FakeForge())
+    monkeypatch.setattr(pc, "github_token", lambda *a, **kw: "fake-token")
+
+    # The guard should not fire; the loop should run normally.
+    # We mock the agent again so it completes.
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once)
+
+    out2 = ImplementStage().run(t, ctx)
+    # Should NOT be IMPLEMENT_COMPLETE from the guard — should be
+    # CODE_REVIEW (normal agent completion).
+    assert out2.next_state is State.CODE_REVIEW
