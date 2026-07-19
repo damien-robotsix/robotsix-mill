@@ -231,10 +231,9 @@ The Module Map lists each module's `id`, `description`, `paths`, and
 modules (those with no `dependencies`) are shown, with a pointer to
 `docs/modules.yaml` for the rest.
 
-**Currently no agents have opted in** — the `modules` field is absent
-from all agent YAML files. Navigation-heavy agents (e.g. `refine`,
-`implement`, `explore`) are the intended consumers; opt-in happens in a
-separate ticket.
+**`refine.yaml` has opted in** with `modules: true`.  `meta.yaml`
+explicitly sets `modules: false`.  Other navigation-heavy agents
+(e.g. `implement`, `explore`) remain candidates for future opt-in.
 
 ### Adding a new module
 
