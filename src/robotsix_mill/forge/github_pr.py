@@ -300,6 +300,23 @@ class GitHubForgePRMixin:
             pull_number=pr["number"],
         )
 
+    def dismiss_review(self, *, source_branch: str, review_id: int) -> bool:
+        """Dismiss a single PR review by its *review_id*.
+
+        Returns ``True`` on success, ``False`` when the PR or review is
+        not found (or on any API failure). Must NEVER raise.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return False
+        return self._dismiss_review(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+            review_id=review_id,
+        )
+
     def list_review_comments(self, *, source_branch: str) -> list[dict]:
         """Return the inline review comments on *source_branch*'s PR.
 
@@ -696,6 +713,44 @@ class GitHubForgePRMixin:
             fallback=[],
         )
 
+    def _dismiss_review(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
+        review_id: int,
+    ) -> bool:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            r = self._http.put(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals",
+                json={"message": "Stale review — PR head has changed since this review was submitted."},
+            )
+            if r.status_code == 200:
+                return True
+            logger.info(
+                "dismiss_review HTTP %s for %s/%s PR #%d review %d: %s",
+                r.status_code,
+                owner,
+                repo,
+                pull_number,
+                review_id,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "dismiss_review failed for %s/%s PR #%d review %d",
+                owner,
+                repo,
+                pull_number,
+                review_id,
+            )
+            return False
+
     def _pr_review_status(
         self,
         *,
@@ -728,17 +783,20 @@ class GitHubForgePRMixin:
         # review.  GitHub returns reviews oldest-first; iterate reversed.
         state = "PENDING"
         review_commit_id = ""
+        review_id: int | None = None
         for rev in reversed(reviews_raw):
             rev_state = rev.get("state", "COMMENTED")
             if rev_state != "DISMISSED":
                 state = rev_state
                 review_commit_id = rev.get("commit_id", "")
+                review_id = rev.get("id")
                 break
         else:
             # All reviews are DISMISSED — use the latest one.
             if reviews_raw:
                 state = reviews_raw[-1].get("state", "DISMISSED")
                 review_commit_id = reviews_raw[-1].get("commit_id", "")
+                review_id = reviews_raw[-1].get("id")
 
         # Build a review_state lookup: review_id -> state.
         review_state_map: dict[int, str] = {}
@@ -775,4 +833,5 @@ class GitHubForgePRMixin:
             "comments": comments,
             "files": [f["path"] for f in files],
             "commit_id": review_commit_id,
+            "review_id": review_id,
         }

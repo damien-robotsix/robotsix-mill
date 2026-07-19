@@ -187,6 +187,10 @@ class Forge(ABC):
             Callers can compare this against the PR's current
             ``head.sha`` to detect stale reviews. Added to support
             ``human_mr_approval`` stale-verdict detection.
+        ``review_id`` — the GitHub review id of the determining review
+            (int | None).  ``None`` when no review has been submitted.
+            Callers can use this to dismiss a stale review via
+            :meth:`dismiss_review`.
         """
 
     @abstractmethod
@@ -221,6 +225,15 @@ class Forge(ABC):
         Returns ``[]`` when no PR exists for the branch.  Each dict has:
         ``id``, ``author``, ``created_at``, ``body`` (``""`` when the
         review was submitted without a body, never ``None``).
+        """
+
+    @abstractmethod
+    def dismiss_review(self, *, source_branch: str, review_id: int) -> bool:
+        """Dismiss a single PR review by its *review_id*.
+
+        Returns ``True`` on success, ``False`` when the PR or review is
+        not found (or on any API failure). Must NEVER raise — catch all
+        API-level failures and return ``False``.
         """
 
     @abstractmethod

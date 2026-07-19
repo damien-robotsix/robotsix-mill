@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Stale `CHANGES_REQUESTED` forge reviews are now actively dismissed instead of only being silently discarded. Added `dismiss_review` to the Forge interface (`base.py`, `github_pr.py`, `gitlab/core.py`) and extended `_pr_review_status` to return `review_id`. The core fix in `_review_changes_requested_outcome` detects stale reviews regardless of `review_feedback_enabled`, preventing approved MRs from bouncing back to `human_mr_approval` on a stale review artifact.
 - Add `alembic check` drift gate in CI (`mill-specific` job) to catch un-generated migrations when models change.  Also add `make check-migrations` target for local use.
 - Implement stage: edit-claim contradiction guard now retries within the pass
   (with diagnostic feedback) instead of immediately BLOCKING on fresh runs,

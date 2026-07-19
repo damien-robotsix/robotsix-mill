@@ -519,17 +519,21 @@ class TestReviewChangesRequestedOutcome:
     # -- stale review (commit_id != pr_head_sha) -------------------------
 
     def test_stale_review_discarded(self, mixin, ticket, ctx, forge):
-        """CHANGES_REQUESTED review against old commit → discarded (None)."""
+        """CHANGES_REQUESTED review against old commit → dismissed + discarded (None)."""
         forge.pr_review_status.return_value = {
             "state": "CHANGES_REQUESTED",
             "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
             "body": "",
             "commit_id": "abc111",
+            "review_id": 42,
         }
         result = mixin._review_changes_requested_outcome(
             ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
         )
         assert result is None
+        forge.dismiss_review.assert_called_once_with(
+            source_branch="feature/x", review_id=42
+        )
 
     def test_stale_review_no_commit_id_passes_through(self, mixin, ticket, ctx, forge):
         """Empty commit_id in review (legacy) → not treated as stale."""
@@ -538,6 +542,7 @@ class TestReviewChangesRequestedOutcome:
             "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
             "body": "",
             "commit_id": "",
+            "review_id": 42,
         }
         result = mixin._review_changes_requested_outcome(
             ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
@@ -545,6 +550,7 @@ class TestReviewChangesRequestedOutcome:
         # Empty commit_id → no staleness check applied → routes normally
         assert result is not None
         assert result.next_state == State.ADDRESSING_REVIEW
+        forge.dismiss_review.assert_not_called()
 
     def test_matching_commit_id_not_stale(self, mixin, ticket, ctx, forge):
         """Matching commit_id → not stale → routes ADDRESSING_REVIEW."""
@@ -573,3 +579,132 @@ class TestReviewChangesRequestedOutcome:
         )
         assert result is not None
         assert result.next_state == State.ADDRESSING_REVIEW
+
+    # -- stale review dismissal when review_feedback_enabled is False -----
+
+    def test_feedback_disabled_stale_review_dismissed(self, mixin, ticket, ctx, settings, forge):
+        """When review_feedback_enabled=False, a stale CHANGES_REQUESTED
+        review is dismissed on the forge and returns None."""
+        settings.review_feedback_enabled = False
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc111",
+            "review_id": 42,
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+        forge.dismiss_review.assert_called_once_with(
+            source_branch="feature/x", review_id=42
+        )
+
+    def test_feedback_disabled_non_stale_not_dismissed(self, mixin, ticket, ctx, settings, forge):
+        """When review_feedback_enabled=False and the review commit
+        matches the PR head, dismiss_review is NOT called."""
+        settings.review_feedback_enabled = False
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc123",
+            "review_id": 42,
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc123"
+        )
+        assert result is None
+        forge.dismiss_review.assert_not_called()
+
+    def test_feedback_disabled_empty_commit_id_not_dismissed(self, mixin, ticket, ctx, settings, forge):
+        """When review_feedback_enabled=False and review has no
+        commit_id, dismiss_review is NOT called (can't determine staleness)."""
+        settings.review_feedback_enabled = False
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "",
+            "review_id": 42,
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+        forge.dismiss_review.assert_not_called()
+
+    def test_feedback_disabled_not_changes_requested_returns_none(self, mixin, ticket, ctx, settings, forge):
+        """When review_feedback_enabled=False and state is APPROVED,
+        returns None without calling dismiss_review."""
+        settings.review_feedback_enabled = False
+        forge.pr_review_status.return_value = {
+            "state": "APPROVED",
+            "comments": [],
+            "body": "",
+            "commit_id": "abc111",
+            "review_id": 42,
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+        forge.dismiss_review.assert_not_called()
+
+    def test_feedback_disabled_review_status_none_returns_none(self, mixin, ticket, ctx, settings, forge):
+        """When review_feedback_enabled=False and pr_review_status
+        returns None, returns None without calling dismiss_review."""
+        settings.review_feedback_enabled = False
+        forge.pr_review_status.return_value = None
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+        forge.dismiss_review.assert_not_called()
+
+    def test_feedback_disabled_pr_review_status_exception_returns_none(self, mixin, ticket, ctx, settings, forge):
+        """When review_feedback_enabled=False and pr_review_status
+        raises, returns None without crashing."""
+        settings.review_feedback_enabled = False
+        forge.pr_review_status.side_effect = ConnectionError("transient")
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+
+    # -- stale review dismissal when review_feedback_enabled is True ------
+
+    def test_feedback_enabled_stale_review_dismissed(self, mixin, ticket, ctx, forge):
+        """When review_feedback_enabled=True, a stale CHANGES_REQUESTED
+        review is dismissed on the forge and returns None."""
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc111",
+            "review_id": 42,
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+        forge.dismiss_review.assert_called_once_with(
+            source_branch="feature/x", review_id=42
+        )
+
+    def test_feedback_enabled_stale_no_review_id_still_returns_none(self, mixin, ticket, ctx, forge):
+        """When stale but review has no review_id, still returns None
+        (dismiss_review is skipped gracefully)."""
+        forge.pr_review_status.return_value = {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"path": "a.py", "line": 10, "body": "fix this"}],
+            "body": "",
+            "commit_id": "abc111",
+            # no review_id key
+        }
+        result = mixin._review_changes_requested_outcome(
+            ticket, ctx, branch="feature/x", forge=forge, pr_head_sha="abc222"
+        )
+        assert result is None
+        forge.dismiss_review.assert_not_called()

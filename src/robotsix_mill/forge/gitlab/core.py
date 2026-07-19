@@ -205,6 +205,14 @@ class GitLabForge(
             )
             return False
 
+    def dismiss_review(self, *, source_branch: str, review_id: int) -> bool:
+        """Dismiss a single MR review by its *review_id*.
+
+        GitLab does not have a direct equivalent of GitHub's review
+        dismissal API.  Returns ``False`` (not supported).
+        """
+        return False
+
     def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
         """Post a plain comment on the open MR for *source_branch*.
 
