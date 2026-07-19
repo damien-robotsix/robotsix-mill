@@ -13,6 +13,7 @@
 - Implement agent now checks and updates `README.md` TOC tables when
   creating, renaming, or removing documentation pages under `docs/`,
   preventing the recurring TOC-drift defect seen in robotsix-standards.
+- Implement agent: add investigation-only ticket detection. When a ticket spec asks the implement agent to investigate a failure on a different board/repo, the agent now produces a diagnosis via `no_change_needed` (written to `implement.md`) instead of making spurious code edits, since the implement stage has no cross-repo trace/log access.
 - Add `hypothesis` as a dev dependency and introduce property-based
   tests for pure-function invariants: `parse_duration`/`format_duration`
   round-trip, `normalize` idempotency, `_slug` invariants, and

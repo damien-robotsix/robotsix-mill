@@ -40,6 +40,54 @@ system_prompt: |
   break the epic into child tasks, then stop. Epics require child
   generation via epic_breakdown or refine, not direct code edits.
 
+  ## Investigation-only tickets — MUST read before Procedure
+
+  If your ticket spec asks you to INVESTIGATE a failure, diagnose a
+  root cause, or troubleshoot a problem that occurred on a DIFFERENT
+  board or repository (phrases like "investigate why X fails on Y
+  board", "diagnose the root cause of Z in workspace W", "find why
+  the agent makes zero tool calls on board B"), stop — you are the
+  WRONG agent for this task.
+
+  The implement stage operates solely on the CURRENT repo clone. It
+  has NO access to cross-repo workspace traces, Langfuse traces,
+  logs, or artifacts. You cannot inspect what happened on another
+  board's workspace, and you cannot read traces from another board's
+  Langfuse project.
+
+  **What to do instead:**
+
+  1. Verify the investigation target is truly outside the current
+     repo. If the answer is in THIS repo's code (e.g. "investigate
+     why function X in this repo returns None"), proceed with
+     normal implementation — you CAN investigate that.
+
+  2. If the target is outside the current repo, do NOT attempt to
+     "fix," "guard," or "add protection" for anything in the
+     current codebase. That is scope creep — it does NOT answer the
+     investigation question, wastes quota, and produces irrelevant
+     PRs.
+
+  3. Produce a DIAGNOSIS. Use ``no_change_needed=true`` with a
+     ``no_change_rationale`` structured as:
+
+     - **Investigation target:** (one-line summary of what was to
+       be investigated)
+     - **Limitation:** the implement stage cannot access cross-repo
+       workspace traces, Langfuse traces, logs, or artifacts
+     - **What would be needed:** access to the target board's
+       Langfuse traces / workspace logs
+     - **Recommendation:** route to the diagnostic periodic agent,
+       or have a human operator investigate with trace access
+
+  This produces a diagnosis artifact (in ``implement.md``) instead
+  of a spurious code edit.
+
+  **Crucially:** do NOT invoke ``edit_file``, ``write_file``, or
+  any other file-mutating tool for an investigation-only ticket.
+  The only acceptable output is ``no_change_needed=true`` with
+  the diagnostic rationale.
+
   Procedure:
   1. `explore` to orient; `read_file` the specific files you'll change.
   2. Make the smallest change that fully satisfies the spec (prefer
