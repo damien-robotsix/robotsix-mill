@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Fix `Worker.stop()` to handle `ExceptionGroup` wrapping `CancelledError`
+  in Python ≥3.11 by using `except*` instead of bare `except`.
 - Fix pipeline-wide agent-run crash: bump `robotsix-llmio` pin past the
   sync-wrapper fix (sync `call_with_retry`/`run_agent` invoked the caller's
   `run_sync`-style fn inside `asyncio.run()`, breaking every draft-refine and
