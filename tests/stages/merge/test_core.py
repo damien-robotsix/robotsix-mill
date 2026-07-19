@@ -5899,3 +5899,138 @@ def test_stale_verdict_invalidates_review_stage_cache(tmp_path, monkeypatch):
     assert "review" not in cache, (
         "review stage cache entry must be invalidated when stale verdict detected"
     )
+
+
+def test_stale_changes_requested_dismissed_regardless_of_feedback_flag(
+    tmp_path, monkeypatch
+):
+    """Regression: a stale CHANGES_REQUESTED forge review against an old
+    commit is dismissed on the forge and does NOT prevent auto-merge,
+    even when review_feedback_enabled is False.
+
+    Scenario (from ticket b3fb / PR #2446):
+    - MR is approved (review.md with auto_merge_eligible: true)
+    - A new commit is pushed, superseding an earlier CHANGES_REQUESTED review
+    - CI is green on the new head
+    - The merge gate must not bounce back to human_mr_approval
+
+    This test runs with review_feedback_enabled=False to prove the
+    stale-review dismissal path works independently of the feedback gate.
+    """
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    # review_feedback_enabled is NOT set — defaults to False.
+
+    dismissed_ids: list[int] = []
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://gh/o/r/pull/1",
+            "mergeable": True,
+            "sha": "new-head-abc222",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"body": "please fix", "path": "a.py", "line": 1}],
+            "files": ["a.py"],
+            "commit_id": "old-head-abc111",
+            "review_id": 42,
+        },
+    )
+
+    def _dismiss(self, *, source_branch, review_id):
+        dismissed_ids.append(review_id)
+        return True
+
+    monkeypatch.setattr(github.GitHubForge, "dismiss_review", _dismiss)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    # Must auto-merge → DONE; must NOT bounce back to human_mr_approval.
+    assert out.next_state is State.DONE
+    # The stale review must have been dismissed.
+    assert dismissed_ids == [42]
+
+
+def test_stale_changes_requested_dismissed_with_feedback_enabled(tmp_path, monkeypatch):
+    """Same scenario as above but with review_feedback_enabled=True.
+    The stale review is still dismissed and auto-merge proceeds."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+
+    dismissed_ids: list[int] = []
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://gh/o/r/pull/1",
+            "mergeable": True,
+            "sha": "new-head-abc222",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: {
+            "state": "CHANGES_REQUESTED",
+            "comments": [{"body": "please fix", "path": "a.py", "line": 1}],
+            "files": ["a.py"],
+            "commit_id": "old-head-abc111",
+            "review_id": 42,
+        },
+    )
+
+    def _dismiss(self, *, source_branch, review_id):
+        dismissed_ids.append(review_id)
+        return True
+
+    monkeypatch.setattr(github.GitHubForge, "dismiss_review", _dismiss)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    # Must auto-merge → DONE.
+    assert out.next_state is State.DONE
+    # The stale review must have been dismissed.
+    assert dismissed_ids == [42]

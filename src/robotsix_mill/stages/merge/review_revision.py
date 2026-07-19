@@ -225,6 +225,46 @@ class ReviewRevisionMixin(_MergeStageBase):
         verdict is discarded rather than replayed as a fresh rejection.
         """
         if not ctx.settings.review_feedback_enabled:
+            # Even when review-feedback handling is disabled, a stale
+            # CHANGES_REQUESTED forge review must be detected and
+            # dismissed so it cannot block an approved MR from
+            # auto-merging on a subsequent poll.  We still query the
+            # forge for the review status, but only to check for (and
+            # dismiss) stale artifacts — we never route to
+            # ADDRESSING_REVIEW when the feature is off.
+            try:
+                review_status = forge.pr_review_status(source_branch=branch)
+            except Exception:
+                return None
+            if (
+                review_status is None
+                or review_status.get("state") != "CHANGES_REQUESTED"
+            ):
+                return None
+            # Stale review guard: dismiss CHANGES_REQUESTED reviews whose
+            # target commit no longer matches the PR head.
+            if pr_head_sha and review_status:
+                review_commit_id = review_status.get("commit_id", "")
+                if review_commit_id and pr_head_sha != review_commit_id:
+                    log.info(
+                        "%s: dismissing stale CHANGES_REQUESTED review "
+                        "(review commit %.8s != PR head %.8s, "
+                        "review_feedback_enabled=False)",
+                        ticket.id,
+                        review_commit_id,
+                        pr_head_sha,
+                    )
+                    rid = review_status.get("review_id")
+                    if rid is not None:
+                        try:
+                            forge.dismiss_review(source_branch=branch, review_id=rid)
+                        except Exception:
+                            log.warning(
+                                "%s: failed to dismiss stale review %s",
+                                ticket.id,
+                                rid,
+                            )
+                    return None
             return None
         try:
             review_status = forge.pr_review_status(source_branch=branch)
@@ -246,11 +286,21 @@ class ReviewRevisionMixin(_MergeStageBase):
             if review_commit_id and pr_head_sha != review_commit_id:
                 log.info(
                     "%s: CHANGES_REQUESTED review is stale "
-                    "(review commit %.8s != PR head %.8s) — discarding",
+                    "(review commit %.8s != PR head %.8s) — dismissing",
                     ticket.id,
                     review_commit_id,
                     pr_head_sha,
                 )
+                rid = review_status.get("review_id")
+                if rid is not None:
+                    try:
+                        forge.dismiss_review(source_branch=branch, review_id=rid)
+                    except Exception:
+                        log.warning(
+                            "%s: failed to dismiss stale review %s",
+                            ticket.id,
+                            rid,
+                        )
                 return None
 
         comments = review_status.get("comments", [])
