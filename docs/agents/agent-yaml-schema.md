@@ -382,13 +382,25 @@ prompt and the `## Available tools` table. For example:
 
 ```yaml
 skills:
-  - board
+  - board-read
 ```
 
-The only skill shipped today is `board` (board interaction guidance —
-`report_issue` usage rules, `read_ticket` usage rules, and execution-tool
-preference). Additional skills (e.g. `vcs`, `testing`) can be added by
-creating a `skills/<name>/SKILL.md` file with a `name:` frontmatter key.
+Three skills are shipped today under `skills/`:
+
+- **`ask_user_guardrails`** (`skills/ask_user_guardrails/SKILL.md`) —
+  guidance on when to ask the operator for help (good reasons vs.
+  bad reasons, refine- and implement-specific examples).
+
+- **`board-read`** (`skills/board-read/SKILL.md`) — guidance on reading
+  tickets (`read_ticket` tool usage) and the execution-tool preference
+  (CLI outside sandboxes, dedicated tool inside sandboxes).
+
+- **`board-report`** (`skills/board-report/SKILL.md`) — guidance on filing
+  draft tickets (`report_issue` tool usage, dedup guard, evidence param),
+  with the same execution-tool preference pattern.
+
+Additional skills can be added by creating a `skills/<name>/SKILL.md`
+file with a `name:` frontmatter key.
 
 If a skill file is missing, the factory logs a warning and continues
 (no crash).
@@ -578,7 +590,7 @@ demonstrates:
 - `output_type: RefineResult` and `retries: 2`
 - `category: pipeline`
 - `module: refining` — explicit module path
-- `skills: [board]` — the board interaction skill, injected between the system prompt and the tool table
+- `skills: [board-report, ask_user_guardrails]` — the board-report and ask_user_guardrails skills, injected between the system prompt and the tool table
 
 ## Extensibility guarantee
 
