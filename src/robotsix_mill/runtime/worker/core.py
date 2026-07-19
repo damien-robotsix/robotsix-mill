@@ -1043,7 +1043,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         for t in tasks:
             try:
                 await t
-            except asyncio.CancelledError:
+            except* asyncio.CancelledError:
                 pass
         self._tasks = {}
         tracing.flush_tracing()
