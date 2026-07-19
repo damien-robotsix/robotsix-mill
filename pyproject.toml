@@ -101,6 +101,14 @@ filterwarnings = [
     # for an unclosed sqlite3.Connection held internally by the
     # interpreter.  Not actionable in our code.
     "ignore::ResourceWarning",
+    # robotsix-llmio ≥0.1.2: ``_SdkToolAgentHandle._run`` coroutine is
+    # sometimes created but never awaited, leaking at GC time.  Python 3.14
+    # emits ``RuntimeWarning: coroutine '_SdkToolAgentHandle._run' was
+    # never awaited``, which ``filterwarnings = ["error"]`` promotes to a
+    # hard error.  The fix belongs in robotsix-llmio (the coroutine is
+    # properly consumed via ``asyncio.run()`` / ``await`` on the caller
+    # side); until the library is patched, ignore only this one message.
+    "ignore:coroutine '_SdkToolAgentHandle._run' was never awaited:RuntimeWarning",
 ]
 
 [tool.coverage.run]
