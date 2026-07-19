@@ -326,6 +326,12 @@ def run_agent(
     attribute on the current OTel span so the trace inspector and
     cost-analyst can attribute spend without fetching every Langfuse
     observation.
+
+    When called from within a running event loop (e.g. worker processing on
+    Python >=3.14, or a tool on the Claude SDK's loop), *make_run* typically
+    ends in ``run_sync`` → ``asyncio.run()``, which raises RuntimeError.  As in
+    :func:`call_with_retry`, the whole retry session is then delegated to a
+    thread so a fresh event loop can be created safely.
     """
     retry_count = 0
     last_reason = ""
@@ -341,21 +347,36 @@ def run_agent(
             raise
 
     if fallback_fn is not None:
-        result = call_with_retry_and_fallback(
-            _primary,
-            fallback_fn,
-            what=what,
-            sleep=sleep,
-            is_transient_primary=is_transient,
-            is_transient_fallback=is_transient,
-        )
+
+        def _call() -> T:
+            return call_with_retry_and_fallback(
+                _primary,
+                fallback_fn,
+                what=what,
+                sleep=sleep,
+                is_transient_primary=is_transient,
+                is_transient_fallback=is_transient,
+            )
+
     else:
-        result = _lib_call_with_retry(
-            _primary,
-            what=what,
-            sleep=sleep,
-            is_transient_fn=is_transient,
-        )
+
+        def _call() -> T:
+            return _lib_call_with_retry(
+                _primary,
+                what=what,
+                sleep=sleep,
+                is_transient_fn=is_transient,
+            )
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — safe to run on this thread.
+        result = _call()
+    else:
+        # Running loop detected — delegate to a thread.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            result = ex.submit(_call).result()
 
     # Record per-step usage as a span attribute when the result is a
     # pydantic-ai AgentRunResult (has .usage() and .all_messages()).

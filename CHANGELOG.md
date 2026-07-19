@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- Fix pipeline-wide agent-run crash: bump `robotsix-llmio` pin past the
+  sync-wrapper fix (sync `call_with_retry`/`run_agent` invoked the caller's
+  `run_sync`-style fn inside `asyncio.run()`, breaking every draft-refine and
+  triage call), and add a running-loop guard to mill's `run_agent` mirroring
+  #2451: when called with an event loop running (e.g. on the Claude SDK's
+  loop), the retry session is delegated to a thread so `run_sync` can create
+  its own loop.
 - Fix redraft/re-block loop for tickets with existing all-green branches: implement stage now detects when a remote branch has green CI but no open PR and routes to IMPLEMENT_COMPLETE so the deliver stage re-opens the PR instead of re-running the implement loop. Also add a guard ensuring every BLOCKED transition records a reason in the history event.
 - Add deploy-freshness gate to prevent wasted implement attempts on stale worker images. The implement preflight and resume-blocked paths now check ``GET /services/mill`` (when ``deploy_api_url`` is configured) and park tickets with an explicit "awaiting redeploy" note when the running image predates the latest digest.
 - Add `state_sync` to the periodic-agent lists in `docs/agents/agent-yaml-schema.md` (category field reference and `read_ticket` field reference).
