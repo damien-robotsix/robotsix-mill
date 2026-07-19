@@ -5853,8 +5853,9 @@ def test_preflight_blocks_when_workspace_absent(ctx_factory, tmp_path, monkeypat
 def test_preflight_blocks_when_language_instructions_dir_absent(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """When the language_instructions_dir does not exist (e.g. container
-    path-resolution gap), preflight must block with the path in the note."""
+    """When neither the configured language_instructions_dir nor the
+    packaged fallback exists, preflight must block with the path in the
+    note."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -5865,15 +5866,45 @@ def test_preflight_blocks_when_language_instructions_dir_absent(
     t = _ticket(ctx, title="Missing lang dir", body="Implement feature X")
     _write_file_map(ctx, t, "feature.txt")
 
-    # Point language_instructions_dir at a non-existent path.
+    # Point language_instructions_dir at a non-existent path AND make the
+    # packaged fallback unresolvable, so the check genuinely fails.
     missing = tmp_path / "no_lang_instructions_here"
     monkeypatch.setattr(ctx.settings, "language_instructions_dir", missing)
+    monkeypatch.setattr(
+        "robotsix_mill._resources.language_instructions_dir",
+        lambda: tmp_path / "no_packaged_copy_either",
+    )
 
     out = ImplementStage().preflight(t, ctx)
 
     assert out is not None
     assert out.next_state is State.BLOCKED
     assert "language_instructions_dir" in out.note.lower()
+
+
+def test_preflight_missing_language_dir_falls_back_to_packaged(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A stale CWD-relative override (2026-07-19 incident) must NOT block
+    when the packaged snippets exist — the loader falls back to them."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Stale lang dir override", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    missing = tmp_path / "no_lang_instructions_here"
+    monkeypatch.setattr(ctx.settings, "language_instructions_dir", missing)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is None or "language_instructions_dir" not in (out.note or "").lower(), (
+        f"language check must not block: {out.note!r}"
+    )
 
 
 def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeypatch):

@@ -1,5 +1,14 @@
 ## 0.0.0 (unreleased)
 
+- Resolve `skills_dir` / `language_instructions_dir` robustly: skill
+  injection, the language-snippet loader, and the implement preflight now
+  fall back to the packaged resource directories (with a one-time warning)
+  when the configured directory doesn't exist, instead of hard-blocking
+  every ticket with "missing skill file". Also drop the CWD-relative
+  `skills_dir`/`language_instructions_dir` entries from
+  `config.example.json` — they resolve against /app in the container and
+  were the source of the 2026-07-19 board-wide preflight blocks (the fix
+  ticket itself could not run: circular dependency).
 - Fix `Worker.stop()` to handle `ExceptionGroup` wrapping `CancelledError`
   in Python ≥3.11 by using `except*` instead of bare `except`.
 - Fix pipeline-wide agent-run crash: bump `robotsix-llmio` pin past the
