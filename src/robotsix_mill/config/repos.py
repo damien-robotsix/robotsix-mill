@@ -236,17 +236,6 @@ class ReposRegistry(BaseModel):
         return self
 
 
-def _validate_cross_repo_forge_compat(
-    repos: dict[str, RepoConfig], forge_kind: str
-) -> None:
-    """Validate that ``cross_repo_target`` is compatible with the forge kind.
-
-    Both GitHub and GitLab adapters now support cross-fork merge requests
-    (via ``head_repo`` / ``target_project_id``, respectively), so this
-    function is a no-op kept as a hook for future forge-specific checks.
-    """
-
-
 def _split_registry_shape(
     raw: dict[str, object],
 ) -> tuple[dict[str, object], object]:
@@ -356,12 +345,6 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             else 3,
             source="auto" if source_tag == "auto" else "config",
         )
-
-    # Reject a cross_repo_target on any repo when the global forge kind is
-    # GitLab (the GitLab adapter has no cross-fork MR support).
-    from .settings import load_settings
-
-    _validate_cross_repo_forge_compat(repos, load_settings().forge_kind)
 
     # Single global Langfuse project: the langfuse_* keys in the config.yaml secrets block
     # configure observability for EVERY repo and the meta board. There is no

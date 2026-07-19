@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Remove dead no-op function ``_validate_cross_repo_forge_compat`` from
+  ``config/repos.py`` and its lone call site. Both GitHub and GitLab adapters
+  already support cross-fork MRs.
 - Add module-level docstrings to ``cli/ticket.py`` and ``cli/serve.py``.
 - Review stage: ``_verify_action_sha()`` now accepts an optional ``token`` parameter and uses ``git_ops._authed_url()`` to authenticate ``git ls-remote`` calls against private repos — previously unauthenticated calls produced false-positive "SHA not found" errors for private repos like ``damien-robotsix/robotsix-github-workflows``.  Added ``_reusable_workflow_sha_refs_from_diff()`` to extract SHA refs from reusable-workflow ``uses:`` lines (previously skipped by ``_action_refs_from_diff()``).  ``ReviewStage.run()`` fetches the GitHub token and passes it to both the action-ref and reusable-workflow-ref validation loops.
 - Resolve `skills_dir` / `language_instructions_dir` robustly: skill
