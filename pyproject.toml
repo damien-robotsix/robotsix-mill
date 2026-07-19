@@ -61,7 +61,7 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
 default-groups = ["dev"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "73f2d555caa21de47a3732824d776e04719b3011" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "158c8a43c55e080f5c462f1a1daad66e17e1c3b7" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "338cf1698b5f9db9afa232445fb39e298d80ce17" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "d29de204db62910f062456e5055fc2fe232e04a9" }
@@ -101,6 +101,14 @@ filterwarnings = [
     # for an unclosed sqlite3.Connection held internally by the
     # interpreter.  Not actionable in our code.
     "ignore::ResourceWarning",
+    # robotsix-llmio ≥0.1.2: ``_SdkToolAgentHandle._run`` coroutine is
+    # sometimes created but never awaited, leaking at GC time.  Python 3.14
+    # emits ``RuntimeWarning: coroutine '_SdkToolAgentHandle._run' was
+    # never awaited``, which ``filterwarnings = ["error"]`` promotes to a
+    # hard error.  The fix belongs in robotsix-llmio (the coroutine is
+    # properly consumed via ``asyncio.run()`` / ``await`` on the caller
+    # side); until the library is patched, ignore only this one message.
+    "ignore:coroutine '_SdkToolAgentHandle._run' was never awaited:RuntimeWarning",
 ]
 
 [tool.coverage.run]

@@ -16,6 +16,7 @@ reasoning-400 via the re-exported detector.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import random
 import time
@@ -182,14 +183,36 @@ def call_with_retry(
     sleep: Callable[[float], None] = time.sleep,
     fallback_fn: Callable[[], T] | None = None,
 ) -> T:
-    """Run ``fn`` with bounded transient/rate-limit retry."""
-    return _lib_call_with_retry(
-        fn,
-        what=what,
-        sleep=sleep,
-        fallback_fn=fallback_fn,
-        is_transient_fn=is_transient,
-    )
+    """Run ``fn`` with bounded transient/rate-limit retry.
+
+    When called from within a running event loop (e.g. worker processing on
+    Python >=3.14), the library's ``call_with_retry`` cannot use
+    ``asyncio.run()`` (RuntimeError).  In that case the call is delegated to a
+    thread so the library can create its own event loop safely.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — safe to use asyncio.run() directly.
+        return _lib_call_with_retry(
+            fn,
+            what=what,
+            sleep=sleep,
+            fallback_fn=fallback_fn,
+            is_transient_fn=is_transient,
+        )
+
+    # Running loop detected — delegate to a thread.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(
+            _lib_call_with_retry,
+            fn,
+            what=what,
+            sleep=sleep,
+            fallback_fn=fallback_fn,
+            is_transient_fn=is_transient,
+        )
+        return fut.result()
 
 
 async def acall_with_retry(
