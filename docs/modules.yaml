@@ -336,10 +336,10 @@ modules:
       - tests/stages/test_hooks.py
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
-      - tests/stages/test_implement.py
-      - tests/stages/test_implement_validation.py
-      - tests/stages/test_implement_file_operations.py
-      - tests/stages/test_implement_phase_coordinator.py
+      - tests/stages/implement/test_implement.py
+      - tests/stages/implement/test_implement_validation.py
+      - tests/stages/implement/test_implement_file_operations.py
+      - tests/stages/implement/test_implement_phase_coordinator.py
       - tests/stages/test_implement_package_dag.py
       - tests/stages/implement/test_shared.py
       - tests/stages/implement/__init__.py
@@ -376,7 +376,7 @@ modules:
       - tests/stages/test_towncrier.py
       - tests/stages/test_implemented_repos.py
       - tests/stages/test_smoke_gate_browser.py
-      - tests/stages/test_implementation_logic.py
+      - tests/stages/implement/test_implementation_logic.py
       - docs/stages/**/*
     dependencies: [config, core, forge, vcs, agents, runners, langfuse]
 
