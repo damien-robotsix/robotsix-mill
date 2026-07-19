@@ -143,3 +143,11 @@ jobs:
             echo "Run 'make completions' and commit the result."
             exit 1
           }
+
+      - name: Check for un-generated migrations (model/migration drift)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: |
+          DB_URL="sqlite:///${RUNNER_TEMP}/drift-check.db"
+          uv run alembic --sqlalchemy.url="$DB_URL" upgrade head
+          uv run alembic --sqlalchemy.url="$DB_URL" check

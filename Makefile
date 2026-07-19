@@ -87,3 +87,7 @@ migration: install  ## Create new Alembic migration (usage: make migration msg="
 migrate-stamp: install  ## Stamp existing DB as head without running migrations
 	uv run alembic stamp head
 
+check-migrations: install  ## Check for model/migration drift (CI gate)
+	uv run alembic --sqlalchemy.url="sqlite:////tmp/drift-check.db" upgrade head
+	uv run alembic --sqlalchemy.url="sqlite:////tmp/drift-check.db" check
+
