@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 from ..config import Settings, get_repos_config, target_branch_for
 from ..forge.auth import github_token
-from ..vcs import git_ops
+from ..vcs import _bootstrap_empty_repo, _remote_has_branches, git_ops
 
 if TYPE_CHECKING:
     from ..core.models import Ticket
@@ -104,12 +104,49 @@ def build_meta_workspace(
             )
             clones.append(dest)
         except subprocess.CalledProcessError as e:
-            last_clone_error = e
-            log.warning(
-                "build_meta_workspace: clone failed for %r: %s",
-                repo_id,
-                (e.stderr or "")[:200],
-            )
+            stderr = e.stderr or ""
+            if "Remote branch" in stderr and "not found" in stderr:
+                if not _remote_has_branches(rc.forge_remote_url, token):
+                    log.info(
+                        "build_meta_workspace: remote %r has no branches — "
+                        "attempting bootstrap",
+                        repo_id,
+                    )
+                    try:
+                        _bootstrap_empty_repo(
+                            rc.forge_remote_url,
+                            dest,
+                            target_branch_for(settings, rc),
+                            token,
+                            repo_id,
+                        )
+                        clones.append(dest)
+                        log.info(
+                            "build_meta_workspace: bootstrapped empty repo %r",
+                            repo_id,
+                        )
+                        continue
+                    except Exception as bootstrap_err:
+                        log.error(
+                            "build_meta_workspace: failed to bootstrap empty "
+                            "repo %r: %s",
+                            repo_id,
+                            bootstrap_err,
+                        )
+                else:
+                    last_clone_error = e
+                    log.warning(
+                        "build_meta_workspace: remote branch not found for %r "
+                        "(remote has branches, but not the target one)",
+                        repo_id,
+                    )
+            else:
+                last_clone_error = e
+                log.warning(
+                    "build_meta_workspace: clone failed for %r: %s",
+                    repo_id,
+                    stderr[:200],
+                )
 
     # Every clone failed: when the failure is transient (forge 5xx, DNS
     # outage) raise it so the worker retries / outage-parks instead of
