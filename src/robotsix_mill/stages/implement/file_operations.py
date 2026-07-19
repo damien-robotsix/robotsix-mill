@@ -182,6 +182,65 @@ class FileOperationsMixin(_ImplementStageBase):
                 except OSError:
                     pass
 
+    @classmethod
+    def _build_edit_claim_diagnostic(
+        cls,
+        *,
+        tool_list: str,
+        fmt_result: bool | None,
+        no_change_summary: str,
+        new_msgs: bytes | str | None,
+    ) -> str:
+        """Build a diagnostic for an edit-claim contradiction.
+
+        *fmt_result* is the return value of :meth:`_edits_formatter_reverted`:
+        ``None`` means the replay could not be attempted; ``False`` means
+        the replayed edits produced a real change that survived formatting.
+
+        Inspects the raw *new_msgs* to determine WHY the replay could not
+        be attempted (missing args, un-replayable tool kind, etc.) so the
+        agent gets actionable feedback instead of a generic BLOCKED message.
+        """
+        ops = short_circuit_verify.extract_replayable_edits(new_msgs)
+        if ops is None:
+            reason = (
+                "the edit tool-calls could not be extracted from the run "
+                "transcript — the message payload may be malformed or "
+                "contain an un-replayable edit kind (MultiEdit, NotebookEdit)."
+            )
+        elif not ops:
+            reason = (
+                "no replayable edit operations were found in the run "
+                "transcript — the edit tool-calls may be missing required "
+                "arguments (path, old_string, new_string, content)."
+            )
+        elif fmt_result is False:
+            reason = (
+                "the edits WERE replayed onto a clean tree and produced a "
+                "real diff that survived formatting — the agent's changes "
+                "were lost (reverted, workspace reset, or written outside "
+                "the clone) before the diff was checked."
+            )
+        else:
+            reason = (
+                "the replay could not be completed — an edit target file "
+                "may have vanished, the old_string anchor may no longer "
+                "match the base file, or a path may escape the clone."
+            )
+        return (
+            f"{no_change_summary}\n\n"
+            "[Diagnostic] implement produced an empty diff, but the "
+            f"agent invoked file-mutating tools ({tool_list}) during "
+            f"the run.  Root cause: {reason}\n\n"
+            "Action: review the edit tool-calls in the run transcript. "
+            "If the agent used ``edit_file`` with an old_string anchor "
+            "that does not exist in the target file, switch to "
+            "``write_file`` to write the full file content instead. "
+            "If the file path was wrong, correct it.  If the edit was "
+            "reverted by a subsequent tool call (e.g. ``git checkout``), "
+            "remove that call."
+        )
+
     @staticmethod
     def _run_project_formatter(repo_dir: Path, files: list[Path]) -> None:
         """Run ``ruff format`` on *files* with ``cwd=repo_dir`` so the repo's

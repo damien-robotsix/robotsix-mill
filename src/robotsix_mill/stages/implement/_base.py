@@ -42,6 +42,7 @@ class _ImplementStageBase:
         _implement_loop: ClassVar[Any]
         _any_repo_has_changes: ClassVar[Any]
         _edits_formatter_reverted: ClassVar[Any]
+        _build_edit_claim_diagnostic: ClassVar[Any]
         _claimed_gitignored_edits: ClassVar[Any]
         _finalize: ClassVar[Any]
         _clone_and_branch: ClassVar[Any]

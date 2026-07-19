@@ -394,43 +394,40 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 # reports ``no_change_needed``. Replay the edits + format to
                 # tell redundant-no-op from lost-work; only a confirmed no-op
                 # (True) is allowed to close DONE. None/False → BLOCK as before.
-                if edit_tools and (
-                    cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
-                ):
-                    tool_list = ", ".join(edit_tools)
-                    diag = (
-                        f"{no_change_rationale.strip() or summary}\n\n"
-                        "[Diagnostic] implement was about to close this ticket "
-                        "as ``no_change_needed`` because ``git diff`` is empty "
-                        f"— but the agent invoked file-mutating tools "
-                        f"({tool_list}) during the run, and replaying those "
-                        "edits + formatting still produced a real change (or "
-                        "could not be verified). An empty diff after real edit "
-                        "calls means the work did NOT persist (edits reverted, "
-                        "workspace reset mid-run, or written outside the clone). "
-                        "Closing as no-change would silently lose that work, so "
-                        "the ticket is BLOCKED for inspection. Re-run implement; "
-                        "if the spec genuinely needs no change, the agent must "
-                        "reach that conclusion WITHOUT calling "
-                        "write_file/edit_file/Write/Edit."
-                    )
-                    cls._finalize(
-                        ctx,
-                        ticket,
-                        repo_dir,
-                        branch,
-                        diag,
-                        ok=False,
-                        reference_files=ref_files,
-                        extra_roots=extra_roots,
-                    )
-                    return _SinglePassResult(
-                        next_action="return",
-                        outcome=Outcome(
-                            State.BLOCKED,
-                            "edit-claim contradiction (empty diff after edit calls)",
-                        ),
-                    )
+                if edit_tools:
+                    fmt_result = cls._edits_formatter_reverted(repo_dir, new_msgs)
+                    if fmt_result is not True:
+                        tool_list = ", ".join(edit_tools)
+                        diag = cls._build_edit_claim_diagnostic(
+                            tool_list=tool_list,
+                            fmt_result=fmt_result,
+                            no_change_summary=(no_change_rationale.strip() or summary),
+                            new_msgs=new_msgs,
+                        )
+                        diag = (
+                            f"{diag}\n\n"
+                            "Note: the agent signalled ``no_change_needed``. "
+                            "If the spec genuinely needs no change, the agent "
+                            "must reach that conclusion WITHOUT calling "
+                            "write_file/edit_file/Write/Edit."
+                        )
+                        cls._finalize(
+                            ctx,
+                            ticket,
+                            repo_dir,
+                            branch,
+                            diag,
+                            ok=False,
+                            reference_files=ref_files,
+                            extra_roots=extra_roots,
+                        )
+                        return _SinglePassResult(
+                            next_action="return",
+                            outcome=Outcome(
+                                State.BLOCKED,
+                                "edit-claim contradiction (empty diff after edit calls)",
+                            ),
+                        )
                 rationale = no_change_rationale.strip()
                 short = rationale[:400] + ("…" if len(rationale) > 400 else "")
                 cls._finalize(
@@ -523,43 +520,53 @@ class ImplementationLogicMixin(_ImplementStageBase):
                 # Guard (b): edit-claim contradiction. The run invoked
                 # edit tools but nothing survived → likely lost work.
                 # Exempt only a confirmed formatter-reverted / redundant
-                # no-op (True); None/False → BLOCK.
+                # no-op (True); None/False → BLOCK (or retry within-pass
+                # when iterations remain — the agent can try a different
+                # approach instead of looping the same empty-diff failure
+                # across stage-level BLOCKED→READY→BLOCKED cycles).
                 edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
                     has_changes=False, new_messages=new_msgs
                 )
-                if edit_tools and (
-                    cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
-                ):
-                    tool_list = ", ".join(edit_tools)
-                    diag = (
-                        f"{no_change_summary}\n\n"
-                        "[Diagnostic] implement produced an empty diff, but the "
-                        f"agent invoked file-mutating tools ({tool_list}) during "
-                        "the run and replaying those edits + formatting still "
-                        "produced a real change (or could not be verified). An "
-                        "empty diff after real edit calls means the work did NOT "
-                        "persist (edits reverted, workspace reset mid-run, or "
-                        "written outside the clone). Closing as no-change would "
-                        "silently lose that work, so the ticket is BLOCKED for "
-                        "inspection."
-                    )
-                    cls._finalize(
-                        ctx,
-                        ticket,
-                        repo_dir,
-                        branch,
-                        diag,
-                        ok=False,
-                        reference_files=ref_files,
-                        extra_roots=extra_roots,
-                    )
-                    return _SinglePassResult(
-                        next_action="return",
-                        outcome=Outcome(
-                            State.BLOCKED,
-                            "edit-claim contradiction (empty diff after edit calls)",
-                        ),
-                    )
+                if edit_tools:
+                    fmt_result = cls._edits_formatter_reverted(repo_dir, new_msgs)
+                    if fmt_result is not True:
+                        tool_list = ", ".join(edit_tools)
+                        diag = cls._build_edit_claim_diagnostic(
+                            tool_list=tool_list,
+                            fmt_result=fmt_result,
+                            no_change_summary=no_change_summary,
+                            new_msgs=new_msgs,
+                        )
+                        # Retry within the pass when iterations remain —
+                        # the agent sees the diagnostic as feedback and
+                        # can try a different approach (different anchors,
+                        # write_file instead of edit_file, etc.).  Only
+                        # escalate to BLOCKED on the last iteration.
+                        if attempt < max_iters:
+                            new_ic.feedback = diag
+                            return _SinglePassResult(
+                                next_action="retry",
+                                feedback=diag,
+                                ic=new_ic,
+                                new_msgs=new_msgs,
+                            )
+                        cls._finalize(
+                            ctx,
+                            ticket,
+                            repo_dir,
+                            branch,
+                            diag,
+                            ok=False,
+                            reference_files=ref_files,
+                            extra_roots=extra_roots,
+                        )
+                        return _SinglePassResult(
+                            next_action="return",
+                            outcome=Outcome(
+                                State.BLOCKED,
+                                "edit-claim contradiction (empty diff after edit calls)",
+                            ),
+                        )
                 # Genuine no-op: clean working tree, no commits beyond the
                 # base, no gitignored writes, no lost edits. The spec is
                 # already satisfied — terminate DONE instead of looping.

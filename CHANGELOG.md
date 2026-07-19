@@ -1,5 +1,11 @@
 ## 0.0.0 (unreleased)
 
+- Implement stage: edit-claim contradiction guard now retries within the pass
+  (with diagnostic feedback) instead of immediately BLOCKING on fresh runs,
+  preventing the BLOCKED→READY→BLOCKED loop across stage-level retries. The
+  guard also produces a detailed root-cause diagnostic (missing args, lost
+  edits, un-replayable tool kind) via the new ``_build_edit_claim_diagnostic``
+  helper.
 - Remove dead no-op function ``_validate_cross_repo_forge_compat`` from
   ``config/repos.py`` and its lone call site. Both GitHub and GitLab adapters
   already support cross-fork MRs.
