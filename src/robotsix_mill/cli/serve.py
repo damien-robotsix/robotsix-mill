@@ -1,3 +1,5 @@
+"""``robotsix-mill serve`` subcommand — launch the API + worker."""
+
 from __future__ import annotations
 
 import argparse

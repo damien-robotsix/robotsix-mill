@@ -1,3 +1,5 @@
+"""``robotsix-mill ticket`` subcommand — create, list, show, approve, and manage tickets."""
+
 from __future__ import annotations
 
 import argparse
