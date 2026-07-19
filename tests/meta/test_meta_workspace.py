@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -173,3 +174,99 @@ def test_wipes_stale_clone_before_recloning(tmp_path, monkeypatch):
         MagicMock(forge_target_branch="main"), SimpleNamespace(dir=tmp_path), ["mill"]
     )
     assert not (dest / "stale.txt").exists()  # wiped before fresh clone
+
+
+def test_empty_remote_bootstrapped(tmp_path, monkeypatch):
+    """A clone failure due to empty remote triggers bootstrap in build_meta_workspace."""
+    reg = _reg(("empty", "https://gh.com/e.git"))
+    monkeypatch.setattr(meta_workspace, "get_repos_config", lambda: reg)
+    monkeypatch.setattr(
+        meta_workspace, "github_token", lambda settings, repo_config: "tok"
+    )
+    # Pretend the remote has no branches so bootstrap is attempted.
+    monkeypatch.setattr(
+        meta_workspace, "_remote_has_branches", lambda url, token: False
+    )
+
+    clone_call_count = 0
+
+    def fake_clone(url, dest, branch, token):
+        nonlocal clone_call_count
+        clone_call_count += 1
+        raise subprocess.CalledProcessError(
+            128,
+            ["git", "clone"],
+            stderr="fatal: Remote branch main not found in upstream origin",
+        )
+
+    monkeypatch.setattr(meta_workspace.git_ops, "clone", fake_clone)
+
+    bootstrap_calls: list[tuple] = []
+
+    def fake_bootstrap(remote_url, dest, branch, token, repo_id):
+        bootstrap_calls.append((remote_url, str(dest), branch, token, repo_id))
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / ".git").mkdir()
+
+    monkeypatch.setattr(meta_workspace, "_bootstrap_empty_repo", fake_bootstrap)
+
+    ws = SimpleNamespace(dir=tmp_path)
+    repo_dir, extra_roots = meta_workspace.build_meta_workspace(
+        MagicMock(forge_target_branch="main"), ws, ["empty"]
+    )
+
+    assert clone_call_count == 1
+    assert len(bootstrap_calls) == 1
+    assert bootstrap_calls[0][0] == "https://gh.com/e.git"
+    assert bootstrap_calls[0][4] == "empty"
+    assert repo_dir == tmp_path / "repos" / "empty"
+    assert extra_roots == [tmp_path / "repos" / "empty"]
+
+
+def test_non_empty_clone_failure_no_bootstrap(tmp_path, monkeypatch, caplog):
+    """A clone failure NOT caused by empty repo still logs a warning,
+    does NOT attempt bootstrap."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+
+    reg = _reg(("bad", "https://gh.com/bad.git"))
+    monkeypatch.setattr(meta_workspace, "get_repos_config", lambda: reg)
+    monkeypatch.setattr(
+        meta_workspace, "github_token", lambda settings, repo_config: "tok"
+    )
+
+    def fake_clone(url, dest, branch, token):
+        raise subprocess.CalledProcessError(
+            128,
+            ["git", "clone"],
+            stderr="fatal: repository 'https://gh.com/bad.git' not found",
+        )
+
+    monkeypatch.setattr(meta_workspace.git_ops, "clone", fake_clone)
+
+    bootstrap_calls: list[tuple] = []
+
+    def fake_bootstrap(remote_url, dest, branch, token, repo_id):
+        bootstrap_calls.append((remote_url, str(dest), branch, token, repo_id))
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / ".git").mkdir()
+
+    monkeypatch.setattr(meta_workspace, "_bootstrap_empty_repo", fake_bootstrap)
+
+    monkeypatch.setattr(
+        meta_workspace,
+        "_remote_has_branches",
+        lambda url, token: True,
+    )
+
+    ws = SimpleNamespace(dir=tmp_path)
+    repo_dir, extra_roots = meta_workspace.build_meta_workspace(
+        MagicMock(forge_target_branch="main"), ws, ["bad"]
+    )
+
+    assert repo_dir is None
+    assert extra_roots == []
+    assert len(bootstrap_calls) == 0
+    warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("clone failed" in msg for msg in warnings)
