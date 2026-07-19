@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ...agents import prerequisite
 from ...agents.testing import is_network_dependent_failure
-from ...config import target_branch_for
+from ...config import Settings, target_branch_for
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge.base import get_forge
@@ -156,113 +156,18 @@ class ValidationMixin(_ImplementStageBase):
         )
 
         # --- binary-artifact auto-cleanup ---
-        binary_artifacts: list[str] = []
-        text_out_of_scope: list[str] = []
-        for f in out_of_scope:
-            (
-                binary_artifacts
-                if _is_binary_artifact(repo_dir, f, target)
-                else text_out_of_scope
-            ).append(f)
-
-        if binary_artifacts:
-            cleaned: list[str] = []
-            for path in binary_artifacts:
-                # Restore tracked version first (no-op for untracked).
-                try:
-                    subprocess.run(
-                        ["git", "-C", str(repo_dir), "checkout", "--", path],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-                except subprocess.CalledProcessError:
-                    log.debug(
-                        "_run_scope_guardrail: git checkout failed for %s "
-                        "— ignoring git failure",
-                        path,
-                        exc_info=True,
-                    )
-                # If the file still exists on disk, it was untracked
-                # — remove it.
-                file_path = repo_dir / path
-                try:
-                    if file_path.exists():
-                        file_path.unlink()
-                except OSError:
-                    log.warning(
-                        "%s: failed to unlink binary artifact: %s",
-                        ticket.id,
-                        path,
-                        exc_info=True,
-                    )
-                log.warning(
-                    "%s: auto-cleaned binary artifact: %s",
-                    ticket.id,
-                    path,
-                )
-                cleaned.append(path)
-
-            ctx.service.add_step_event(
-                ticket.id,
-                "scope-triage auto-REJECT (binary artifacts): removed "
-                + ", ".join(f"`{f}`" for f in cleaned)
-                + " — runtime artifacts, not real work",
-            )
-
-        if not text_out_of_scope:
-            log.info(
-                "%s: all out-of-scope files were binary artifacts — "
-                "skipping scope-triage LLM call",
-                ticket.id,
-            )
-            return _ScopeGuardrailResult(
-                action="skip_iteration",
-                file_map=file_map,
-                feedback=current_feedback,
-            )
-
-        out_of_scope = text_out_of_scope
+        out_of_scope, binary_skip = cls._clean_binary_artifacts(
+            ctx, ticket, repo_dir, target, out_of_scope, file_map, current_feedback
+        )
+        if binary_skip is not None:
+            return binary_skip
 
         # --- vendored-dep install-directory auto-exclusion ---
-        # Pip/uv/npm vendored-dependency install dirs (`.pip-packages/`,
-        # `local-deps/`, `.deps/`, …) are UNtracked, have no durable
-        # name, and repeatedly flood the out-of-scope set with
-        # `*.dist-info/METADATA`-style files. Detect them by CONTENT
-        # SIGNATURE (distinct dist-info / egg-info / node_modules
-        # markers among path components), gate on UNtracked status so
-        # real source dirs with vendored-looking fixture trees are never
-        # excluded, and log every auto-ignored dir non-silently.
-        vendored_roots = _vendored_dep_roots(repo_dir, out_of_scope, target)
-        if vendored_roots:
-            excluded: dict[str, int] = {}
-            for root in vendored_roots:
-                excluded[root] = sum(
-                    1 for f in out_of_scope if f.startswith(root + "/")
-                )
-            filtered = [
-                f for f in out_of_scope if f.split("/", 1)[0] not in vendored_roots
-            ]
-            for root, count in sorted(excluded.items()):
-                msg = (
-                    f"scope-triage auto-ignored vendored-dep dir by content "
-                    f"signature: `{root}/` ({count} files) — untracked "
-                    f"install target, not scope creep"
-                )
-                log.info("%s: %s", ticket.id, msg)
-                ctx.service.add_step_event(ticket.id, msg)
-            if not filtered:
-                log.info(
-                    "%s: all out-of-scope files were in vendored-dep dirs — "
-                    "skipping scope-triage LLM call",
-                    ticket.id,
-                )
-                return _ScopeGuardrailResult(
-                    action="skip_iteration",
-                    file_map=file_map,
-                    feedback=current_feedback,
-                )
-            out_of_scope = filtered
+        out_of_scope, vendor_skip = cls._filter_vendored_deps(
+            ctx, ticket, repo_dir, target, out_of_scope, file_map, current_feedback
+        )
+        if vendor_skip is not None:
+            return vendor_skip
 
         # --- flood guard (deterministic prompt-size cap) ---
         # When an implement pass leaves an abnormally large out-of-scope
@@ -331,6 +236,184 @@ class ValidationMixin(_ImplementStageBase):
             )
 
         # --- scope-triage enabled path ---
+        return cls._run_scope_triage_classification(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ref_files,
+            target,
+            settings,
+            spec,
+            out_of_scope,
+            file_map,
+            changed,
+        )
+
+    @classmethod
+    def _clean_binary_artifacts(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        target: str,
+        out_of_scope: list[str],
+        file_map: set[str] | None,
+        current_feedback: str | None,
+    ) -> tuple[list[str], _ScopeGuardrailResult | None]:
+        """Split out binary artifacts, clean them, and return text-only files.
+
+        Returns ``(text_out_of_scope, None)`` when text files remain for
+        further processing, or ``(text_out_of_scope, skip_result)`` when
+        ALL out-of-scope files were binary artifacts (caller must return
+        ``skip_result`` immediately).
+        """
+        binary_artifacts: list[str] = []
+        text_out_of_scope: list[str] = []
+        for f in out_of_scope:
+            (
+                binary_artifacts
+                if _is_binary_artifact(repo_dir, f, target)
+                else text_out_of_scope
+            ).append(f)
+
+        if binary_artifacts:
+            cleaned: list[str] = []
+            for path in binary_artifacts:
+                # Restore tracked version first (no-op for untracked).
+                try:
+                    subprocess.run(
+                        ["git", "-C", str(repo_dir), "checkout", "--", path],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                except subprocess.CalledProcessError:
+                    log.debug(
+                        "_clean_binary_artifacts: git checkout failed for %s "
+                        "— ignoring git failure",
+                        path,
+                        exc_info=True,
+                    )
+                # If the file still exists on disk, it was untracked
+                # — remove it.
+                file_path = repo_dir / path
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                except OSError:
+                    log.warning(
+                        "%s: failed to unlink binary artifact: %s",
+                        ticket.id,
+                        path,
+                        exc_info=True,
+                    )
+                log.warning(
+                    "%s: auto-cleaned binary artifact: %s",
+                    ticket.id,
+                    path,
+                )
+                cleaned.append(path)
+
+            ctx.service.add_step_event(
+                ticket.id,
+                "scope-triage auto-REJECT (binary artifacts): removed "
+                + ", ".join(f"`{f}`" for f in cleaned)
+                + " — runtime artifacts, not real work",
+            )
+
+        if not text_out_of_scope:
+            log.info(
+                "%s: all out-of-scope files were binary artifacts — "
+                "skipping scope-triage LLM call",
+                ticket.id,
+            )
+            return text_out_of_scope, _ScopeGuardrailResult(
+                action="skip_iteration",
+                file_map=file_map,
+                feedback=current_feedback,
+            )
+
+        return text_out_of_scope, None
+
+    @classmethod
+    def _filter_vendored_deps(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        target: str,
+        out_of_scope: list[str],
+        file_map: set[str] | None,
+        current_feedback: str | None,
+    ) -> tuple[list[str], _ScopeGuardrailResult | None]:
+        """Exclude vendored-dependency install directories by content signature.
+
+        Pip/uv/npm vendored-dependency install dirs (``.pip-packages/``,
+        ``local-deps/``, ``.deps/``, …) are UNtracked, have no durable
+        name, and repeatedly flood the out-of-scope set with
+        ``*.dist-info/METADATA``-style files. Detect them by CONTENT
+        SIGNATURE, gate on UNtracked status, and log every auto-ignored
+        dir non-silently.
+
+        Returns ``(filtered, None)`` when text files remain for further
+        processing, or ``(filtered, skip_result)`` when ALL out-of-scope
+        files were in vendored-dep dirs.
+        """
+        vendored_roots = _vendored_dep_roots(repo_dir, out_of_scope, target)
+        if not vendored_roots:
+            return out_of_scope, None
+
+        excluded: dict[str, int] = {}
+        for root in vendored_roots:
+            excluded[root] = sum(1 for f in out_of_scope if f.startswith(root + "/"))
+        filtered = [f for f in out_of_scope if f.split("/", 1)[0] not in vendored_roots]
+        for root, count in sorted(excluded.items()):
+            msg = (
+                f"scope-triage auto-ignored vendored-dep dir by content "
+                f"signature: `{root}/` ({count} files) — untracked "
+                f"install target, not scope creep"
+            )
+            log.info("%s: %s", ticket.id, msg)
+            ctx.service.add_step_event(ticket.id, msg)
+        if not filtered:
+            log.info(
+                "%s: all out-of-scope files were in vendored-dep dirs — "
+                "skipping scope-triage LLM call",
+                ticket.id,
+            )
+            return filtered, _ScopeGuardrailResult(
+                action="skip_iteration",
+                file_map=file_map,
+                feedback=current_feedback,
+            )
+        return filtered, None
+
+    @classmethod
+    def _run_scope_triage_classification(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        summary: str,
+        ref_files: list[str] | None,
+        target: str,
+        settings,
+        spec: str,
+        out_of_scope: list[str],
+        file_map: set[str],
+        changed: list[str],
+    ) -> _ScopeGuardrailResult:
+        """Run the scope-triage LLM and route its verdict.
+
+        Builds per-file diff summaries for the out-of-scope files,
+        calls the scope-triage agent, and routes EXPAND / REJECT /
+        ESCALATE verdicts (including finalization for terminal
+        outcomes).
+        """
+        # --- build per-file diff summaries ---
         diff_summaries: dict[str, str] = {}
         for path in out_of_scope:
             raw = subprocess.run(
@@ -349,10 +432,9 @@ class ValidationMixin(_ImplementStageBase):
             if not raw.strip():
                 # NEW (untracked) files produce an EMPTY ``git diff`` — the
                 # triage agent then sees "no visible content", cannot judge
-                # the file, and ESCALATEs to a human (live case: the
-                # worker.py package refactor cb63, whose new submodules all
-                # summarized empty). Show the file head instead so the
-                # agent gets the same 40-line budget of real content.
+                # the file, and ESCALATEs to a human. Show the file head
+                # instead so the agent gets the same 40-line budget of real
+                # content.
                 file_path = repo_dir / path
                 if file_path.is_file():
                     try:
@@ -380,12 +462,10 @@ class ValidationMixin(_ImplementStageBase):
             )
         except Exception as exc:
             log.error("%s: scope-triage agent failed: %s", ticket.id, exc)
-            # Keep the WHAT for the operator-visible note — a bare
-            # "agent error" reads like a scope verdict and sends the
-            # human hunting through logs for a transient model failure.
             triage_error = f"{type(exc).__name__}: {exc}"
             verdict = None  # fall through to ESCALATE
 
+        # --- route verdict ---
         if verdict is not None and verdict.action == "EXPAND":
             new_files = [f for f in verdict.expand_files if f not in file_map]
             if not new_files:
@@ -406,11 +486,6 @@ class ValidationMixin(_ImplementStageBase):
                 ticket.id,
                 verdict.justification,
             )
-            # Pre-v1 this was an add_comment; agent conclusions now
-            # live in history, comments are reserved for ASK_USER +
-            # review threads. The implement state doesn't change
-            # here (the loop continues), so this is a same-state
-            # step event.
             ctx.service.add_step_event(
                 ticket.id,
                 f"scope-triage EXPAND: {verdict.justification} "
@@ -442,12 +517,9 @@ class ValidationMixin(_ImplementStageBase):
             # Dedup guard: if ALL current out-of-scope files were
             # already REJECTed by a prior scope-triage step on this
             # ticket, the agent has seen this diff before and the
-            # operator already has the signal.  Don't emit another
+            # operator already has the signal. Don't emit another
             # event / bounce back to READY — treat as implicit
             # EXPAND so the implement loop can make actual progress.
-            # Pre-v1 this read prior REJECT *comments*; now reads
-            # prior REJECT *history events* since scope-triage is no
-            # longer a commenter.
             prior_rejects = [
                 ev
                 for ev in ctx.service.history(ticket.id)
@@ -486,10 +558,6 @@ class ValidationMixin(_ImplementStageBase):
                 ticket.id,
                 verdict.justification,
             )
-            # Remove the rejected out-of-scope changes from the working
-            # tree BEFORE finalize commits, so the WIP commit (and every
-            # resumed run off it) starts from the spec'd scope only.
-            # Handles both unstaged and already-WIP-committed pollution.
             git_ops.restore_paths(repo_dir, target, out_of_scope)
             cls._finalize(
                 ctx,
@@ -501,9 +569,6 @@ class ValidationMixin(_ImplementStageBase):
                 reference_files=ref_files,
                 extra_roots=None,
             )
-            # Files listed in backticks so the same-pattern dedup
-            # loop (line ~340) keeps working when this REJECT event
-            # is re-scanned next pass.
             file_list = ", ".join(f"`{f}`" for f in out_of_scope)
             return _ScopeGuardrailResult(
                 action="return",
@@ -535,9 +600,6 @@ class ValidationMixin(_ImplementStageBase):
             extra_roots=None,
         )
         file_list = ", ".join(f"`{f}`" for f in out_of_scope)
-        # The reason becomes the transition note; the out-of-scope
-        # file list is included so operators see what triggered the
-        # escalation without digging into artifacts.
         return _ScopeGuardrailResult(
             action="return",
             outcome=Outcome(
@@ -835,7 +897,7 @@ class ValidationMixin(_ImplementStageBase):
         ticket: Ticket,
         diag: str,
         base_sha: str,
-        settings,
+        settings: Settings,
     ) -> Outcome:
         """Spawn (or reuse) a fix ticket for pre-existing baseline failures.
 
