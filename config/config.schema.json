@@ -1114,6 +1114,19 @@
           "title": "Dependabot Ingest Periodic",
           "type": "boolean"
         },
+        "deploy_api_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deploy server management API URL. When set, used to check worker image freshness before resuming blocked tickets.",
+          "title": "Deploy Api Url"
+        },
         "diagnostic_interval_seconds": {
           "default": 604800,
           "description": "Seconds between automatic diagnostic passes.",

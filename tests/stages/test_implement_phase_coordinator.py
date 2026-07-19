@@ -1163,3 +1163,165 @@ def test_resume_guard_pr_exists_skips_guard(ctx_factory, tmp_path, monkeypatch):
     # Should NOT be IMPLEMENT_COMPLETE from the guard — should be
     # CODE_REVIEW (normal agent completion).
     assert out2.next_state is State.CODE_REVIEW
+
+
+# ---------------------------------------------------------------------------
+# Deploy-freshness gate (preflight)
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_deploy_freshness_stale_image_blocks(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When deploy_api_url is set and the deploy server reports a stale
+    image, preflight must block BEFORE a trace opens."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+    # Inject a deploy_api_url so the gate activates.
+    ctx.settings.deploy_api_url = "http://deploy:8080"
+
+    import httpx
+
+    class _FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "running_digest": "sha256:old",
+                "latest_digest": "sha256:new",
+                "update_available": True,
+            }
+
+    class _FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", _FakeClient)
+
+    t = _ticket(ctx, title="Stale image ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "worker image is stale" in out.note.lower()
+    assert "sha256:old" in out.note
+    assert "sha256:new" in out.note
+
+
+def test_preflight_deploy_freshness_current_image_passes(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the deploy server reports a current image, preflight passes."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+    ctx.settings.deploy_api_url = "http://deploy:8080"
+
+    import httpx
+
+    class _FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "running_digest": "sha256:same",
+                "latest_digest": "sha256:same",
+                "update_available": False,
+            }
+
+    class _FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", _FakeClient)
+
+    t = _ticket(ctx, title="Current image ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None  # No block — image is current.
+
+
+def test_preflight_deploy_freshness_unconfigured_passes(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When deploy_api_url is None, the freshness gate is disabled."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+    # deploy_api_url defaults to None in Settings — no explicit set needed.
+
+    t = _ticket(ctx, title="No deploy config", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None  # Gate disabled — no block.
+
+
+def test_preflight_deploy_freshness_server_unreachable_passes(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the deploy server is unreachable, preflight passes (don't block on infra)."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+    ctx.settings.deploy_api_url = "http://deploy:8080"
+
+    import httpx
+
+    class _FakeResponse:
+        status_code = 500
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError("error", request=None, response=self)
+
+    class _FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", _FakeClient)
+
+    t = _ticket(ctx, title="Server down", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None  # Transient infra failure — don't block.

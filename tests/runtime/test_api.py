@@ -730,6 +730,170 @@ def test_resume_blocked_wrong_state_409(client, service):
     assert r.status_code == 409
 
 
+# --- resume-blocked deploy-freshness gate --------------------------------
+
+
+def test_resume_blocked_stale_image_returns_409_with_comment(
+    client, service, settings, monkeypatch
+):
+    """When the deploy server reports a stale image, resume-blocked
+    returns 409 and adds a comment with digest info."""
+    settings.deploy_api_url = "http://deploy:8080"
+
+    import httpx
+
+    class _FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "running_digest": "sha256:old",
+                "latest_digest": "sha256:new",
+                "update_available": True,
+            }
+
+    class _FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", _FakeClient)
+
+    t = service.create("Stale image resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    assert service.get(t.id).state is State.BLOCKED
+
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 409
+    assert "worker image is stale" in r.json()["detail"].lower()
+
+    # Ticket should still be BLOCKED.
+    assert service.get(t.id).state is State.BLOCKED
+
+    # Comment should be recorded with digest info.
+    comments = client.get(f"/tickets/{t.id}/comments").json()
+    stale_comment = [c for c in comments if "worker image is stale" in c["body"]]
+    assert len(stale_comment) == 1
+    assert "sha256:old" in stale_comment[0]["body"]
+    assert "sha256:new" in stale_comment[0]["body"]
+    assert stale_comment[0]["author"] == "system"
+
+
+def test_resume_blocked_current_image_resumes_normally(
+    client, service, settings, monkeypatch
+):
+    """When the deploy server reports a current image, resume-blocked
+    proceeds normally."""
+    settings.deploy_api_url = "http://deploy:8080"
+
+    import httpx
+
+    class _FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "running_digest": "sha256:same",
+                "latest_digest": "sha256:same",
+                "update_available": False,
+            }
+
+    class _FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", _FakeClient)
+
+    t = service.create("Current image resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    assert service.get(t.id).state is State.BLOCKED
+
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+
+
+def test_resume_blocked_deploy_server_unreachable_resumes_normally(
+    client, service, settings, monkeypatch
+):
+    """When the deploy server is unreachable, resume-blocked proceeds
+    (don't block on transient infra)."""
+    settings.deploy_api_url = "http://deploy:8080"
+
+    import httpx
+
+    class _FakeResponse:
+        status_code = 500
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError("error", request=None, response=self)
+
+    class _FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", _FakeClient)
+
+    t = service.create("Server down resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    assert service.get(t.id).state is State.BLOCKED
+
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+
+
+def test_resume_blocked_no_deploy_url_resumes_normally(client, service, settings):
+    """When deploy_api_url is None, resume-blocked proceeds normally
+    (gate disabled)."""
+    # settings fixture has deploy_api_url=None by default
+    assert settings.deploy_api_url is None
+
+    t = service.create("No deploy config resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    assert service.get(t.id).state is State.BLOCKED
+
+    r = client.post(f"/tickets/{t.id}/resume-blocked")
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+
+
 # --- reset-fingerprint endpoint tests ---
 
 

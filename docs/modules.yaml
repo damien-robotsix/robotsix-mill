@@ -93,6 +93,19 @@ modules:
       - docs/deps/**/*
     dependencies: [config]
 
+  - id: deploy
+    description: >-
+      Deploy-server integration: worker-image freshness checks.
+      Queries the deploy server's ``GET /services/mill`` endpoint to
+      compare running vs latest image digests, so the implement
+      preflight and resume-blocked paths can gate on stale images
+      before burning an attempt.
+    paths:
+      - src/robotsix_mill/deploy/__init__.py
+      - tests/deploy/__init__.py
+      - tests/deploy/test_deploy.py
+    dependencies: [config]
+
   # -------------------------------------------------------------------
   # Forge & VCS
   # -------------------------------------------------------------------

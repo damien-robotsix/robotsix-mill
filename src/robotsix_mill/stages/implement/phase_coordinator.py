@@ -12,6 +12,7 @@ from ...agents.yaml_loader import load_agent_definition
 from ...config import effective_target_branch
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
+from ...deploy import check_deploy_freshness
 from ...forge import get_forge
 from ...forge.auth import _resolve_remote_url, github_token
 from ...runners.pass_runner import load_memory
@@ -85,6 +86,21 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 "epic ticket routed to implement stage — epics must "
                 "be broken into child tasks; re-route to epic_breakdown "
                 "or refine for child generation",
+            )
+
+        # 0.5. Deploy-freshness gate: when the deploy server reports an
+        #      image update is available, the running worker predates the
+        #      latest commit.  Any implement attempt on stale code risks
+        #      reproducing bugs already fixed in the newer image.  Park
+        #      the ticket with explicit digest info so the operator can
+        #      trigger a redeploy before retrying.
+        deploy_status = check_deploy_freshness(s.deploy_api_url)
+        if deploy_status is not None and deploy_status.update_available:
+            return Outcome(
+                State.BLOCKED,
+                f"worker image is stale — running {deploy_status.running_digest} "
+                f"predates latest {deploy_status.latest_digest}.  "
+                "Redeploy the mill worker before resuming blocked tickets.",
             )
 
         # 1. Spec must exist and be non-empty — without a spec the agent
