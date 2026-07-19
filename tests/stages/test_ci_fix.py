@@ -2436,3 +2436,65 @@ def test_ci_fix_dedup_removes_extra_fragment_without_invoking_agent(
     # push was called exactly once with the ticket branch.
     assert len(push_calls) == 1
     assert push_calls[0][1] == f"mill/{t.id}"
+
+
+# ---------------------------------------------------------------------------
+# Regression: ci_fix push uses the same github_token() → _authed_url() path
+# as rebase — not a raw FORGE_TOKEN or a sandbox credential.
+# ---------------------------------------------------------------------------
+
+
+def test_ci_fix_agent_push_uses_minted_token_not_raw_forge_token(tmp_path, monkeypatch):
+    """The ci-fix agent push (via post_push_check) must use github_token()
+    — not the raw s.forge_token, which is empty under GitHub App auth.
+    Mirrors ``test_rebase_force_push_uses_minted_token_not_raw_forge_token``
+    for the rebase stage."""
+    ctx = _gh(tmp_path)  # FORGE_TOKEN="t" (raw); minted token differs
+    _failing_check_status(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.github_token",
+        lambda s, repo_config=None: "MINTED-APP-TOK",
+    )
+    seen = {}
+
+    def fake_post_check(repo, branch, target, remote_url, token):
+        seen.update(token=token, remote_url=remote_url)
+        return git_ops.PostPushResult.PASS
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        fake_post_check,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert seen.get("token") == "MINTED-APP-TOK"  # not the raw "t"
+    # The remote URL must also come from _resolve_remote_url, not be empty.
+    assert seen.get("remote_url") == "https://github.com/o/r.git"
+
+
+def test_ci_fix_and_rebase_use_same_token_function(
+    tmp_path,
+    monkeypatch,
+):
+    """Both ci_fix and rebase resolve tokens through the SAME
+    ``github_token()`` function — there is no separate sandbox or
+    pipeline push path."""
+    import robotsix_mill.stages.ci_fix as ci_fix_mod
+    import robotsix_mill.stages.merge as merge_mod
+
+    # Both modules must import github_token from the same source.
+    assert ci_fix_mod.github_token is merge_mod.github_token
+
+    # Verify the shared source is forge.auth.github_token.
+    from robotsix_mill.forge.auth import github_token as canonical
+
+    assert ci_fix_mod.github_token is canonical
+    assert merge_mod.github_token is canonical
