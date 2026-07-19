@@ -605,6 +605,7 @@ modules:
       - ARCHITECTURE.md
       - CONTRIBUTING.md
       - CHANGELOG.md
+      - changelog.d/*.md
       - doc-agent-ledger.md
       - LICENSE
       - SECURITY.md
