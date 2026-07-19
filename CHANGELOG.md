@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `alembic check` drift gate in CI (`mill-specific` job) to catch un-generated migrations when models change.  Also add `make check-migrations` target for local use.
 - Implement stage: edit-claim contradiction guard now retries within the pass
   (with diagnostic feedback) instead of immediately BLOCKING on fresh runs,
   preventing the BLOCKED→READY→BLOCKED loop across stage-level retries. The
