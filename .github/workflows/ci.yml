@@ -149,5 +149,6 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: |
           DB_URL="sqlite:///${RUNNER_TEMP}/drift-check.db"
-          uv run alembic --sqlalchemy.url="$DB_URL" upgrade head
-          uv run alembic --sqlalchemy.url="$DB_URL" check
+          sed -i "s|^sqlalchemy\.url = .*|sqlalchemy.url = $DB_URL|" alembic.ini
+          uv run alembic upgrade head
+          uv run alembic check
