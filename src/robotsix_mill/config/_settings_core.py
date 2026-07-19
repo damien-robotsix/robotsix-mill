@@ -795,3 +795,14 @@ class _CoreSettings(BaseModel):
         default=None,
         description="Host path for bind-mounted .data directory. Overrides data_volume.",
     )
+    # URL of the deploy server's management API (e.g.
+    # ``http://deploy-server:8080``).  When set, the implement stage
+    # checks ``GET /services/mill`` for ``running_digest`` vs
+    # ``latest_digest`` before burning an attempt on a ticket that may
+    # have been blocked by a code bug already fixed in a newer image.
+    # ``None`` → freshness gate disabled (safe default when no deploy
+    # server is available).
+    deploy_api_url: str | None = Field(
+        default=None,
+        description="Deploy server management API URL. When set, used to check worker image freshness before resuming blocked tickets.",
+    )

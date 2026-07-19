@@ -10,6 +10,7 @@ from ...config import Settings
 from ...core.models import CommentCreate, TicketRead
 from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
+from ...deploy import check_deploy_freshness
 from ..deps import (
     enrich_ticket_read,
     get_service,
@@ -168,6 +169,29 @@ def resume_blocked(
 
     if ticket.state is State.BLOCKED:
         note = str(body.get("note", "") or "")
+
+        # Deploy-freshness gate: before resuming a blocked ticket,
+        # verify the running worker image is current.  A stale image
+        # means any fix merged since the last deploy hasn't taken
+        # effect — resuming would just burn another implement attempt
+        # on the same bug.  Park the ticket with explicit digest info.
+        deploy_status = check_deploy_freshness(settings.deploy_api_url)
+        if deploy_status is not None and deploy_status.update_available:
+            svc.add_comment(
+                ticket_id,
+                f"resume blocked: worker image is stale — "
+                f"running {deploy_status.running_digest} predates "
+                f"latest {deploy_status.latest_digest}.  "
+                "Redeploy the mill worker before resuming.",
+                author="system",
+            )
+            raise HTTPException(
+                409,
+                f"worker image is stale (running {deploy_status.running_digest}, "
+                f"latest {deploy_status.latest_digest}).  "
+                "Redeploy the mill worker before resuming blocked tickets.",
+            )
+
         try:
             ticket = svc.resume_blocked(ticket_id, note=note)
         except KeyError:

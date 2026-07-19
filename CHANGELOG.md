@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Fix redraft/re-block loop for tickets with existing all-green branches: implement stage now detects when a remote branch has green CI but no open PR and routes to IMPLEMENT_COMPLETE so the deliver stage re-opens the PR instead of re-running the implement loop. Also add a guard ensuring every BLOCKED transition records a reason in the history event.
+- Add deploy-freshness gate to prevent wasted implement attempts on stale worker images. The implement preflight and resume-blocked paths now check ``GET /services/mill`` (when ``deploy_api_url`` is configured) and park tickets with an explicit "awaiting redeploy" note when the running image predates the latest digest.
 - Add `state_sync` to the periodic-agent lists in `docs/agents/agent-yaml-schema.md` (category field reference and `read_ticket` field reference).
 - Update `docs/agents/agent-yaml-schema.md`: replace stale `board` skill references with the three actual skills (`ask_user_guardrails`, `board-read`, `board-report`) and reflect `refine.yaml`'s real `skills` list
 - Implement stage now bootstraps empty remote repos (no commits, no branches) with an initial README commit instead of blocking the ticket. Ports the cd2c pattern from the periodic meta agent's `clone_all_repos` path.
