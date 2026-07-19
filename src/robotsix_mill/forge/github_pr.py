@@ -727,7 +727,9 @@ class GitHubForgePRMixin:
         try:
             r = self._http.put(  # type: ignore[attr-defined]
                 f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals",
-                json={"message": "Stale review — PR head has changed since this review was submitted."},
+                json={
+                    "message": "Stale review — PR head has changed since this review was submitted."
+                },
             )
             if r.status_code == 200:
                 return True

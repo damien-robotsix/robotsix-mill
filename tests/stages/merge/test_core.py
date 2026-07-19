@@ -5973,9 +5973,7 @@ def test_stale_changes_requested_dismissed_regardless_of_feedback_flag(
     assert dismissed_ids == [42]
 
 
-def test_stale_changes_requested_dismissed_with_feedback_enabled(
-    tmp_path, monkeypatch
-):
+def test_stale_changes_requested_dismissed_with_feedback_enabled(tmp_path, monkeypatch):
     """Same scenario as above but with review_feedback_enabled=True.
     The stale review is still dismissed and auto-merge proceeds."""
     ctx = _gh(

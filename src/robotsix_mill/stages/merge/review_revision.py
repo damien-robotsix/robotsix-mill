@@ -236,7 +236,10 @@ class ReviewRevisionMixin(_MergeStageBase):
                 review_status = forge.pr_review_status(source_branch=branch)
             except Exception:
                 return None
-            if review_status is None or review_status.get("state") != "CHANGES_REQUESTED":
+            if (
+                review_status is None
+                or review_status.get("state") != "CHANGES_REQUESTED"
+            ):
                 return None
             # Stale review guard: dismiss CHANGES_REQUESTED reviews whose
             # target commit no longer matches the PR head.
@@ -254,9 +257,7 @@ class ReviewRevisionMixin(_MergeStageBase):
                     rid = review_status.get("review_id")
                     if rid is not None:
                         try:
-                            forge.dismiss_review(
-                                source_branch=branch, review_id=rid
-                            )
+                            forge.dismiss_review(source_branch=branch, review_id=rid)
                         except Exception:
                             log.warning(
                                 "%s: failed to dismiss stale review %s",
@@ -293,9 +294,7 @@ class ReviewRevisionMixin(_MergeStageBase):
                 rid = review_status.get("review_id")
                 if rid is not None:
                     try:
-                        forge.dismiss_review(
-                            source_branch=branch, review_id=rid
-                        )
+                        forge.dismiss_review(source_branch=branch, review_id=rid)
                     except Exception:
                         log.warning(
                             "%s: failed to dismiss stale review %s",

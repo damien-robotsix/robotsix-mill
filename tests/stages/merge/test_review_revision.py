@@ -582,7 +582,9 @@ class TestReviewChangesRequestedOutcome:
 
     # -- stale review dismissal when review_feedback_enabled is False -----
 
-    def test_feedback_disabled_stale_review_dismissed(self, mixin, ticket, ctx, settings, forge):
+    def test_feedback_disabled_stale_review_dismissed(
+        self, mixin, ticket, ctx, settings, forge
+    ):
         """When review_feedback_enabled=False, a stale CHANGES_REQUESTED
         review is dismissed on the forge and returns None."""
         settings.review_feedback_enabled = False
@@ -601,7 +603,9 @@ class TestReviewChangesRequestedOutcome:
             source_branch="feature/x", review_id=42
         )
 
-    def test_feedback_disabled_non_stale_not_dismissed(self, mixin, ticket, ctx, settings, forge):
+    def test_feedback_disabled_non_stale_not_dismissed(
+        self, mixin, ticket, ctx, settings, forge
+    ):
         """When review_feedback_enabled=False and the review commit
         matches the PR head, dismiss_review is NOT called."""
         settings.review_feedback_enabled = False
@@ -618,7 +622,9 @@ class TestReviewChangesRequestedOutcome:
         assert result is None
         forge.dismiss_review.assert_not_called()
 
-    def test_feedback_disabled_empty_commit_id_not_dismissed(self, mixin, ticket, ctx, settings, forge):
+    def test_feedback_disabled_empty_commit_id_not_dismissed(
+        self, mixin, ticket, ctx, settings, forge
+    ):
         """When review_feedback_enabled=False and review has no
         commit_id, dismiss_review is NOT called (can't determine staleness)."""
         settings.review_feedback_enabled = False
@@ -635,7 +641,9 @@ class TestReviewChangesRequestedOutcome:
         assert result is None
         forge.dismiss_review.assert_not_called()
 
-    def test_feedback_disabled_not_changes_requested_returns_none(self, mixin, ticket, ctx, settings, forge):
+    def test_feedback_disabled_not_changes_requested_returns_none(
+        self, mixin, ticket, ctx, settings, forge
+    ):
         """When review_feedback_enabled=False and state is APPROVED,
         returns None without calling dismiss_review."""
         settings.review_feedback_enabled = False
@@ -652,7 +660,9 @@ class TestReviewChangesRequestedOutcome:
         assert result is None
         forge.dismiss_review.assert_not_called()
 
-    def test_feedback_disabled_review_status_none_returns_none(self, mixin, ticket, ctx, settings, forge):
+    def test_feedback_disabled_review_status_none_returns_none(
+        self, mixin, ticket, ctx, settings, forge
+    ):
         """When review_feedback_enabled=False and pr_review_status
         returns None, returns None without calling dismiss_review."""
         settings.review_feedback_enabled = False
@@ -663,7 +673,9 @@ class TestReviewChangesRequestedOutcome:
         assert result is None
         forge.dismiss_review.assert_not_called()
 
-    def test_feedback_disabled_pr_review_status_exception_returns_none(self, mixin, ticket, ctx, settings, forge):
+    def test_feedback_disabled_pr_review_status_exception_returns_none(
+        self, mixin, ticket, ctx, settings, forge
+    ):
         """When review_feedback_enabled=False and pr_review_status
         raises, returns None without crashing."""
         settings.review_feedback_enabled = False
@@ -693,7 +705,9 @@ class TestReviewChangesRequestedOutcome:
             source_branch="feature/x", review_id=42
         )
 
-    def test_feedback_enabled_stale_no_review_id_still_returns_none(self, mixin, ticket, ctx, forge):
+    def test_feedback_enabled_stale_no_review_id_still_returns_none(
+        self, mixin, ticket, ctx, forge
+    ):
         """When stale but review has no review_id, still returns None
         (dismiss_review is skipped gracefully)."""
         forge.pr_review_status.return_value = {
