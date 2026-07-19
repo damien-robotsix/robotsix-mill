@@ -12,7 +12,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from robotsix_mill._resources import skills_dir as _resources_skills_dir
+from robotsix_mill._resources import (
+    language_instructions_dir as _resources_language_instructions_dir,
+    skills_dir as _resources_skills_dir,
+)
 
 
 class _StagesSettings(BaseModel):
@@ -146,11 +149,12 @@ class _StagesSettings(BaseModel):
     )
     # Directory of per-language instruction Markdown snippets
     # (agent_definitions/language_instructions/<language>.md) injected
-    # into the implement agent's system prompt. Relative to CWD (/app
-    # in the container, repo root locally).
+    # into the implement agent's system prompt. Resolved via
+    # importlib.resources so it works in both editable and installed
+    # (container) modes.
     language_instructions_dir: Path = Field(
         description="Directory of per-language instruction Markdown snippets.",
-        default=Path("agent_definitions/language_instructions"),
+        default_factory=_resources_language_instructions_dir,
     )
 
     # --- human approval gate (refine -> implement) ---

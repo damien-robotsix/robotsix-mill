@@ -5850,6 +5850,32 @@ def test_preflight_blocks_when_workspace_absent(ctx_factory, tmp_path, monkeypat
     assert "workspace directory absent or inaccessible" in out.note.lower()
 
 
+def test_preflight_blocks_when_language_instructions_dir_absent(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the language_instructions_dir does not exist (e.g. container
+    path-resolution gap), preflight must block with the path in the note."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Missing lang dir", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Point language_instructions_dir at a non-existent path.
+    missing = tmp_path / "no_lang_instructions_here"
+    monkeypatch.setattr(ctx.settings, "language_instructions_dir", missing)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "language_instructions_dir" in out.note.lower()
+
+
 def test_convergence_backstop_writes_implement_md(ctx_factory, tmp_path, monkeypatch):
     """When the convergence backstop fires (empty diff after review) it
     now terminates DONE (already satisfied). implement.md must still be

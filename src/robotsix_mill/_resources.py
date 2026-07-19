@@ -32,3 +32,13 @@ def expert_definitions_dir() -> Path:
 def skills_dir() -> Path:
     """Return the path to the skills directory."""
     return _resource_dir("skills")
+
+
+def language_instructions_dir() -> Path:
+    """Return the path to the per-language instruction Markdown snippets.
+
+    These live under ``agent_definitions/language_instructions/``,
+    bundled inside the package in installed mode and at the repo root
+    in editable mode.
+    """
+    return _resource_dir("agent_definitions") / "language_instructions"
