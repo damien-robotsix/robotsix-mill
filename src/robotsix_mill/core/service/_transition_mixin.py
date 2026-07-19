@@ -265,6 +265,18 @@ class _TransitionMixin(_ServiceBase):
             # BLOCKED (regardless of resume or override path).
             if dst is State.BLOCKED:
                 ticket.blocked_from = ticket.state.value
+                # Guard: every BLOCKED transition must carry a reason in
+                # the history event.  A blocked ticket with no note is an
+                # unrecoverable diagnostic gap — default to a generic note
+                # that surfaces the originating state so operators can
+                # understand why the ticket was blocked.
+                if not note or not note.strip():
+                    note = f"blocked from {ticket.state.value} (no reason recorded)"
+                    log.warning(
+                        "%s: BLOCKED transition with no note — "
+                        "defaulting to generic reason",
+                        ticket_id,
+                    )
             elif ticket.state is State.BLOCKED:
                 ticket.blocked_from = None
             # Record originating state when pausing mid-stage; clear when

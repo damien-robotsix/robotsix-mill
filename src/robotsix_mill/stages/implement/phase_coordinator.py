@@ -12,7 +12,8 @@ from ...agents.yaml_loader import load_agent_definition
 from ...config import effective_target_branch
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
-from ...forge.auth import _resolve_remote_url
+from ...forge import get_forge
+from ...forge.auth import _resolve_remote_url, github_token
 from ...runners.pass_runner import load_memory
 from ...vcs import git_ops
 from .. import short_circuit_verify
@@ -456,6 +457,42 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     extra_roots=extra_roots,
                 )
                 return Outcome(State.DONE, note)
+
+        # --- existing-branch resume guard ---
+        # When resuming from a prior implement run (local branch already
+        # exists), check whether the remote branch carries commits with
+        # all-green CI but no open PR.  If so, skip the implement loop
+        # and route to IMPLEMENT_COMPLETE so the deliver stage re-opens
+        # a PR from the existing branch.  This prevents a redraft/re-block
+        # loop where re-implementing an already-complete branch triggers
+        # the stale-spec guard or produces unnecessary additional commits.
+        if resuming:
+            try:
+                remote_url = _resolve_remote_url(s, ctx.repo_config)
+                if remote_url:
+                    token = github_token(s, repo_config=ctx.repo_config)
+                    sha = git_ops.ls_remote_sha(
+                        remote_url, f"refs/heads/{branch}", token
+                    )
+                    if sha is not None:
+                        forge = get_forge(s, repo_config=ctx.repo_config)
+                        ci = forge.commit_ci_conclusion(sha=sha)
+                        if ci is not None and ci.get("conclusion") == "success":
+                            pr = forge.pr_status(source_branch=branch)
+                            if pr is None or pr.get("state") != "open":
+                                note = (
+                                    "branch exists with green CI but no open PR — "
+                                    "re-routing to IMPLEMENT_COMPLETE so deliver "
+                                    "stage re-opens PR"
+                                )
+                                log.info("%s: %s", ticket.id, note)
+                                return Outcome(State.IMPLEMENT_COMPLETE, note)
+            except Exception:
+                log.warning(
+                    "%s: branch/PR resume check failed — proceeding normally",
+                    ticket.id,
+                    exc_info=True,
+                )
 
         # Phase 2: deterministic, stage-owned implement loop.
         return self._implement_loop(
