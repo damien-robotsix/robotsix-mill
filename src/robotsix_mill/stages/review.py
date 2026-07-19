@@ -203,8 +203,81 @@ def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
     return results
 
 
-def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
+def _reusable_workflow_sha_refs_from_diff(
+    diff: str,
+) -> list[tuple[str, str, str, str]]:
+    """Extract SHA-pinned refs from reusable-workflow ``uses:`` lines.
+
+    ``_action_refs_from_diff()`` skips reusable-workflow lines (those
+    whose slug contains ``.github/workflows/`` or ``.github/actions/``)
+    because they are validated differently — tag refs like ``@main`` are
+    valid for reusable workflows and do not need a SHA existence check.
+
+    This function captures only 40-char hex SHA refs from those
+    skipped lines so they can be validated via :func:`_verify_action_sha`.
+
+    Returns ``[(file_path, slug, sha, comment), ...]`` — same shape as
+    :func:`_action_refs_from_diff` so the caller can feed both into the
+    same validation pipeline.
+
+    >>> _reusable_workflow_sha_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: damien-robotsix/robotsix-github-workflows/'
+    ...     '.github/workflows/docker-release.yml'
+    ...     '@43309967ea8011400212a8995d33ca900ee2afed\\n'
+    ... )
+    [('.github/workflows/ci.yml', 'damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml', '43309967ea8011400212a8995d33ca900ee2afed', '')]
+
+    >>> # Tag refs are skipped — valid for reusable workflows, no check needed.
+    >>> _reusable_workflow_sha_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@main\\n'
+    ... )
+    []
+
+    >>> # .github/actions/ is also matched.
+    >>> _reusable_workflow_sha_refs_from_diff(
+    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+    uses: my-org/my-repo/.github/actions/composite-action'
+    ...     '@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\\n'
+    ... )
+    [('.github/workflows/ci.yml', 'my-org/my-repo/.github/actions/composite-action', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0', '')]
+    """
+    results: list[tuple[str, str, str, str]] = []
+    current_file: str | None = None
+    for line in diff.splitlines():
+        if line.startswith("+++ b/") and not line.startswith("+++ b/dev/null"):
+            current_file = line[6:].strip()
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        if current_file is None:
+            continue
+        m = _ACTION_USES_RE.search(line)
+        if not m:
+            continue
+        slug, ref, comment = m.group(1), m.group(2), (m.group(3) or "").strip()
+        # Only reusable-workflow / reusable-action refs.
+        if "/.github/workflows/" not in slug and "/.github/actions/" not in slug:
+            continue
+        # Only 40-char hex SHAs — tag refs (@main, @v1) are valid and
+        # do not need an existence check.
+        if not _SHA_RE.match(ref):
+            continue
+        results.append((current_file, slug, ref, comment))
+    return results
+
+
+def _verify_action_sha(
+    owner_repo: str, sha: str, token: str | None = None
+) -> bool | None:
     """Best-effort verify *sha* exists in *owner_repo* via ``git ls-remote``.
+
+    When *token* is provided, the URL is constructed via
+    :func:`git_ops._authed_url` so ``git ls-remote`` can access private
+    repos.  When *token* is ``None`` (e.g. test environment or no token
+    configured), the public URL is used and private repos will return
+    ``None`` (could not check) rather than a false-positive ``False``.
 
     Returns True when confirmed, False when the SHA is absent from
     ``ls-remote`` output, None when the check could not be performed
@@ -232,6 +305,8 @@ def _verify_action_sha(owner_repo: str, sha: str) -> bool | None:
         safe_owner = shlex.quote(owner)
         safe_repo = shlex.quote(repo)
         url = f"https://github.com/{safe_owner}/{safe_repo}.git"
+        if token:
+            url = git_ops._authed_url(url, token)
         result = subprocess.run(  # noqa: S603
             ["git", "ls-remote", url],  # noqa: S607
             capture_output=True,
@@ -589,6 +664,17 @@ class ReviewStage(Stage):
         modified_paths = git_ops._paths_from_diff(diff)
         workflow_refs = _workflow_refs_from_diff(diff)
         action_refs = _action_refs_from_diff(diff)
+        reusable_workflow_refs = _reusable_workflow_sha_refs_from_diff(diff)
+
+        # Fetch a GitHub token for authenticated SHA verification against
+        # private repos.  When no token is configured (e.g. test
+        # environments), ``gh_token`` stays ``None`` and
+        # ``_verify_action_sha`` uses the public URL — which degrades
+        # gracefully (returns ``None`` = could not check).
+        try:
+            gh_token = github_token(s, ctx.repo_config)
+        except Exception:
+            gh_token = None
 
         # Bound the combined diff before it reaches the review prompt. The
         # raw ``git diff origin/<target>...HEAD`` can balloon to megabytes
@@ -783,7 +869,7 @@ class ReviewStage(Stage):
                 parts = slug.split("/")
                 if len(parts) >= 2:
                     owner_repo = f"{parts[0]}/{parts[1]}"
-                    exists = _verify_action_sha(owner_repo, ref)
+                    exists = _verify_action_sha(owner_repo, ref, gh_token)
                     if exists is False:
                         action_violations.append(
                             {
@@ -793,6 +879,26 @@ class ReviewStage(Stage):
                                 "comment": comment,
                             }
                         )
+
+        # Validate SHA refs from reusable-workflow ``uses:`` lines
+        # (previously skipped by ``_action_refs_from_diff``).  Same
+        # pattern as the action-ref loop above — only 40-char hex SHAs
+        # reach this point (tag refs are already filtered by
+        # ``_reusable_workflow_sha_refs_from_diff``).
+        for file_path, slug, ref, comment in reusable_workflow_refs:
+            parts = slug.split("/")
+            if len(parts) >= 2:
+                owner_repo = f"{parts[0]}/{parts[1]}"
+                exists = _verify_action_sha(owner_repo, ref, gh_token)
+                if exists is False:
+                    action_violations.append(
+                        {
+                            "file": file_path,
+                            "slug": slug,
+                            "ref": ref,
+                            "comment": comment,
+                        }
+                    )
 
         if action_violations:
             synthetic_asks: list[ReviewAsk] = []
