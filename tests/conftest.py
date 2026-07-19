@@ -115,6 +115,11 @@ def _no_dotenv(monkeypatch):
         # _repo_mount from the named-volume branch to the bind branch,
         # breaking test_sandbox argv assertions in-container.
         "MILL_SANDBOX_DATA_MOUNT",
+        # Claude Agent SDK credentials — stripped so level-3 agents
+        # fail fast (no auth) instead of trying to use OAuth from a
+        # local config file and leaking coroutines in CI.
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
     ):
         monkeypatch.delenv(var, raising=False)
 
