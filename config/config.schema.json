@@ -1333,7 +1333,6 @@
           "type": "boolean"
         },
         "language_instructions_dir": {
-          "default": "agent_definitions/language_instructions",
           "description": "Directory of per-language instruction Markdown snippets.",
           "format": "path",
           "title": "Language Instructions Dir",

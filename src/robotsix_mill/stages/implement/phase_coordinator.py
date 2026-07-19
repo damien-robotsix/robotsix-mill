@@ -243,7 +243,19 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     f"missing skill file: {skill_path}",
                 )
 
-        # 7. Workspace integrity: the ticket workspace directory must
+        # 7. Language-instruction integrity: a missing built-in snippet
+        #    directory (e.g. ``agent_definitions/language_instructions``)
+        #    silently returns ``""`` for every language, degrading the
+        #    prompt for every non-mill repo that declares a language.
+        #    Surface it here so the operator can fix the path config.
+        if not s.language_instructions_dir.is_dir():
+            return Outcome(
+                State.BLOCKED,
+                f"language_instructions_dir not found or not a directory: "
+                f"{s.language_instructions_dir}",
+            )
+
+        # 8. Workspace integrity: the ticket workspace directory must
         #    be present and accessible.  If the workspace root has been
         #    deleted or the filesystem is unavailable, fail fast
         #    instead of spinning a model pass that cannot persist
