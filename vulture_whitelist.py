@@ -416,6 +416,10 @@ input_state
 # and via RefineStage class inheritance; vulture (60% confidence) doesn't trace test calls.
 _review_spec_conciseness
 _short_circuit_for_internal_failure
+# _build_edit_claim_diagnostic — @classmethod on FileOperationsMixin called via
+# cls._build_edit_claim_diagnostic(...) from ImplementationLogicMixin; vulture
+# (60% confidence) cannot trace cross-mixin classmethod dispatch.
+_build_edit_claim_diagnostic
 # *_memory_path fields consumed dynamically via Settings.memory_file_for()
 # (getattr(f"{name}_memory_path")) — invisible to vulture's static scan.
 implement_memory_path
