@@ -169,8 +169,14 @@ compatibility with single-repo deployments.
 
 ## Notes
 
-- The minted installation token lives only in the **mill** process,
-  cached ~50 min, used for the git push + the PR API call. The
+- **Push authentication uses a fresh, scoped token.** Under App mode,
+  git push operations (ci-fix, rebase, review-revision) do *not* reuse
+  the cached installation token. Instead they call
+  `github_push_token()`, which mints a **fresh** installation token
+  scoped to `contents: write` on the target repository. Every push gets
+  its own token — no long-lived PAT is stored or reused.
+- The API-call installation token (from `github_token()`) lives only in
+  the **mill** process, cached ~50 min, used for the PR API call. The
   implement agent runs in the separate `--network none` sandbox and
   cannot read it (see [docker-architecture.md](docker-architecture.md)).
 - `GITHUB_APP_PRIVATE_KEY*` and `FORGE_TOKEN` are secrets — keep them in

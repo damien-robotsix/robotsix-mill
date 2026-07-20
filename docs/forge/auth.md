@@ -80,6 +80,45 @@ secrets:
 | Code scanning alerts | Read-only | Read CodeQL alert details |
 | Metadata | Read-only | Required by GitHub |
 
+## Push authentication (`github_push_token`)
+
+**Added in:** 2026-07 (supersedes PAT-based push credentials).
+
+**Git push operations** (ci-fix, rebase, review-revision) authenticate
+with a **separate, freshly-minted token** — *never* the cached
+installation token used for API calls.
+
+| Auth mode | Push token source |
+|-----------|------------------|
+| `token` | Falls back to the same static `FORGE_TOKEN` (PAT). |
+| `app` | Calls `github_push_token()`, which mints a **fresh** installation token scoped to `contents: write` on the target repository. No caching — every push gets its own token. |
+
+### Why a separate push token?
+
+- **No long-lived PAT in push credentials.** Under the old PAT-based
+  design, the token stored in the remote URL could expire or be revoked
+  and silently dead-end every push. Installation tokens are short-lived
+  (~1 hour) and minted per run — they cannot "expire and dead-end."
+- **Least privilege.** The push token is scoped to exactly
+  `contents: write` on a single repository. No admin, org, or
+  delete-repo permissions.
+- **Each push gets its own token.** `github_push_token()` always talks
+  to the GitHub API — there is no cache. This ensures the token is as
+  fresh as possible and the scope never grows stale.
+
+### Flow (App mode)
+
+Identical to `_mint_installation_token` except:
+
+1. `GET /repos/{owner}/{repo}/installation` — discovers the
+   installation ID.
+2. `POST /app/installations/{iid}/access_tokens` — requests a token
+   with `{"permissions": {"contents": "write"}, "repositories": [repo]}`,
+   restricting the token to exactly one repo and `contents: write`.
+
+If the App is not installed on the target repo, raises
+`GitHubAppNotInstalledError` — the operator must install the App.
+
 ## Per-repo tokens
 
 When `RepoConfig.forge_remote_url` is set, the adapter resolves the

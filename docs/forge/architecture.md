@@ -390,6 +390,54 @@ When `forge_repo_create_token` is set, it is used instead of the main
 token for `POST /orgs/{owner}/repos` and `POST /user/repos`.  Falls
 back to the normal `github_token()` when not set.
 
+### 4.6 Push authentication (`github_push_token`)
+
+**Module:** `src/robotsix_mill/forge/auth.py`, function `github_push_token()`
+
+Git push operations (ci-fix, rebase, review-revision) authenticate with a
+separate, freshly-minted token rather than the cached API token.
+
+**Why separate?** The original design used a static PAT embedded in the
+git remote URL.  PATs expire, get revoked, or are over-scoped — any of
+these silently dead-ends every push.  `github_push_token()` eliminates
+the stored credential entirely:
+
+| Aspect | Old (PAT) | New (App token) |
+|--------|-----------|-----------------|
+| Token source | Long-lived static PAT | Freshly-minted installation token |
+| Scope | `repo` (full access) | `contents: write` on one repo |
+| Lifetime | Until manually revoked | ~1 hour |
+| Storage | Secret on disk | Never stored; minted per push |
+| Cache | N/A | Not cached — each call mints once |
+
+**Flow:**
+
+1. **Fallback:** When `forge_auth != "app"`, delegates to
+   `github_token()` (returns the static PAT).
+2. **JWT:** Calls `_build_app_jwt()` — same JWT header construction
+   used by `_mint_installation_token()`.
+3. **Installation lookup:** `GET /repos/{owner}/{repo}/installation` —
+   raises `GitHubAppNotInstalledError` on 404.
+4. **Scoped access token:**
+   `POST /app/installations/{iid}/access_tokens` with
+   `{"permissions": {"contents": "write"}, "repositories": [repo]}` —
+   requests a token scoped to exactly one repo and one permission.
+
+**No caching:** Unlike `github_token()` which caches in `_cache` for
+~50 minutes, `github_push_token()` always hits the API.  This is
+deliberate — push tokens are so short-lived that caching saves little,
+and every push wants the freshest possible credential.
+
+**Call sites** (all in `stages/`):
+
+| File | Context |
+|------|---------|
+| `ci_fix.py` | Rebase-onto-main before CI scan; agent push; post-push check |
+| `merge/ci_fix_mixin.py` | Multi-repo ci-fix inline recovery |
+| `merge/multi_repo.py` | Multi-repo rebase inline recovery |
+| `merge/rebase.py` | Single-repo rebase agent push + post-push check |
+| `merge/review_revision.py` | Review-revision agent reconcile + push |
+
 ---
 
 ## 5. Configuration surface

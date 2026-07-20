@@ -182,7 +182,7 @@ class RebaseMixin(_MergeStageBase):
             stack.enter_context(_facade.tracing.trace_stage("rebase"))
             with stack:
                 remote_url = _facade._resolve_remote_url(s, repo_config)
-                token = _facade.github_token(s, repo_config=repo_config)
+                token = _facade.github_push_token(s, repo_config=repo_config)
 
                 # Reconcile with the remote PR branch first so the
                 # rebase agent operates on a branch that includes any
@@ -246,7 +246,7 @@ class RebaseMixin(_MergeStageBase):
         target = target_branch_for(s, ctx.repo_config)
 
         remote_url = _facade._resolve_remote_url(s, ctx.repo_config)
-        token = _facade.github_token(s, repo_config=ctx.repo_config)
+        token = _facade.github_push_token(s, repo_config=ctx.repo_config)
 
         check = _facade.git_ops.post_push_check(
             Path(repo_dir),

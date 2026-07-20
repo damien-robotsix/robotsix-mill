@@ -500,7 +500,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `forge.kind` | `FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, `auto`, or `none`. `auto` detects the kind from the remote URL hostname (`github.com` → GitHub, `gitlab.com` → GitLab); custom domains raise an error and require an explicit setting. |
 | `forge.remote_url` | `FORGE_REMOTE_URL` | `None` | Remote URL for clone + push |
 | `forge.target_branch` | `FORGE_TARGET_BRANCH` | `main` | Target branch for PRs |
-| `forge.auth_mode` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App) |
+| `forge.auth_mode` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App). Under `app` mode, `github_push_token()` mints a fresh `contents: write`-scoped installation token per push — no PAT is stored or reused for git push operations. |
 | `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
 | `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
 | `forge.github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | `None` | Host path to GitHub App private-key `.pem` file |
