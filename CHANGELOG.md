@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- `github_push_token()` now requests `workflows:write` alongside
+  `contents:write` when minting a GitHub App installation access
+  token, fixing push failures for pushes that touch
+  `.github/workflows/` files.
 - `doc_classifier` system prompt refined with explicit user-facing criteria (new public API, config field changes, exception contracts, CLI changes) and standardized classification format with examples
 - `review_revision.py`: migrate from unscoped `github_token()` to `github_push_token()` (scoped `contents:write`) for force-push and pre-push reconcile fetch, matching the ci_fix/rebase push paths (PR #2483).
 - Expand sandbox-path guard in doc and review agent prompts: the old

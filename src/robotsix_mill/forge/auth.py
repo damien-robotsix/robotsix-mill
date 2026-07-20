@@ -199,7 +199,10 @@ def github_push_token(settings: Settings, repo_config: RepoConfig | None = None)
         tok = c.post(
             f"{api}/app/installations/{iid}/access_tokens",
             headers=h,
-            json={"permissions": {"contents": "write"}, "repositories": [repo]},
+            json={
+                "permissions": {"contents": "write", "workflows": "write"},
+                "repositories": [repo],
+            },
         )
         tok.raise_for_status()
         data = tok.json()

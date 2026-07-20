@@ -248,11 +248,14 @@ def test_push_token_app_mode_mints_fresh_with_contents_write(tmp_path, monkeypat
     assert t2 == "ghs_push_minted"
     assert len(mint_calls) == 4  # 2 × (GET installation + POST access_token)
 
-    # Verify the POST body includes contents:write + repositories.
+    # Verify the POST body includes contents:write, workflows:write + repos.
     post_bodies = [m[2] for m in mint_calls if m[0] == "post"]
     assert len(post_bodies) == 2
     for body in post_bodies:
-        assert body == {"permissions": {"contents": "write"}, "repositories": ["r"]}
+        assert body == {
+            "permissions": {"contents": "write", "workflows": "write"},
+            "repositories": ["r"],
+        }
 
 
 def test_push_token_not_installed_raises(tmp_path, monkeypatch):
