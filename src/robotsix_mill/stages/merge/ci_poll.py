@@ -666,11 +666,10 @@ class CIPollMixin(_MergeStageBase):
         *eligible* is True when ALL of the following hold:
         1. ``settings.auto_merge_enabled`` is True
         2. ``settings.review_enabled`` is True
-        3. Review artifact exists at ``{workspace}/artifacts/review.md``
-        4. Artifact contains the literal string ``"auto_merge_eligible: true"``
-        5. Artifact's ``head_sha`` matches *pr_head_sha* (when both are
-           present); a mismatch means the review is stale — it was
-           produced against a different branch tip.
+
+        The review artifact is no longer required — the upstream
+        ``human_mr_approval`` operator gate is the authoritative,
+        traceable review decision point.
 
         *reason* explains the blocking condition when eligible is False.
         """
@@ -679,52 +678,6 @@ class CIPollMixin(_MergeStageBase):
             return False, "auto-merge disabled in config"
         if not s.review_enabled:
             return False, "review gate disabled — human approval required"
-
-        review_artifact = ctx.service.workspace(ticket).artifacts_dir / "review.md"
-        if not review_artifact.exists():
-            return False, "no review artifact — human approval required"
-
-        review_text = review_artifact.read_text(encoding="utf-8")
-
-        # --- head SHA freshness gate ---
-        # When the artifact's head_sha differs from the current PR tip,
-        # the review is stale — the branch has been rebased or force-
-        # pushed since the review ran.  A stale verdict is never re-posted
-        # or used to block auto-merge: treat as eligible regardless of
-        # the old verdict, so the ticket can proceed.
-        artifact_head_sha = ""
-        for line in review_text.splitlines():
-            if line.startswith("head_sha:"):
-                artifact_head_sha = line[len("head_sha:") :].strip()
-                break
-        if pr_head_sha and (not artifact_head_sha or pr_head_sha != artifact_head_sha):
-            # Invalidate the review stage cache so that if the ticket
-            # ever re-enters CODE_REVIEW (e.g. after a future rebase
-            # that returns READY), the review re-runs against the
-            # current diff rather than replaying a cached outcome.
-            from robotsix_mill.stages._stage_cache import _invalidate
-
-            _invalidate(ctx.service.workspace(ticket), "review")
-            return True, (
-                "stale review verdict — branch head changed since last"
-                " review; treating as eligible"
-            )
-
-        if "auto_merge_eligible: true" not in review_text:
-            # Try to read the verdict line for context.
-            verdict_note = ""
-            comment_note = ""
-            for line in review_text.splitlines():
-                if line.startswith("verdict:"):
-                    verdict_note = " (" + line[len("verdict:") :].strip()[:200] + ")"
-                elif line.startswith("comment:"):
-                    raw = line[len("comment:") :].strip()
-                    if raw and raw != "(no details)":
-                        comment_note = " — " + raw[:300]
-            return (
-                False,
-                "reviewer marked not auto-merge eligible" + verdict_note + comment_note,
-            )
 
         return True, "eligible"
 

@@ -2134,7 +2134,7 @@ def test_auto_merge_skipped_when_review_disabled(tmp_path, monkeypatch):
 
 
 def test_auto_merge_skipped_when_no_review_artifact(tmp_path, monkeypatch):
-    """Artifact file doesn't exist → HUMAN_MR_APPROVAL."""
+    """No review artifact — auto-merge still fires (artifact gate removed)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2163,12 +2163,13 @@ def test_auto_merge_skipped_when_no_review_artifact(tmp_path, monkeypatch):
     # NO review artifact written
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-    assert merge_called == []
+    assert out.next_state is State.DONE
+    assert merge_called == [1]
 
 
-def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
-    """Artifact says auto_merge_eligible: false → HUMAN_MR_APPROVAL."""
+def test_auto_merge_fires_regardless_of_artifact_verdict(tmp_path, monkeypatch):
+    """Artifact auto_merge_eligible: false no longer blocks — the upstream
+    human_mr_approval gate is the authoritative review decision."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2197,8 +2198,8 @@ def test_auto_merge_skipped_when_not_eligible(tmp_path, monkeypatch):
     _write_review_artifact(ctx, t, eligible=False)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-    assert merge_called == []
+    assert out.next_state is State.DONE
+    assert merge_called == [1]
 
 
 def test_auto_merge_skipped_when_ci_pending(tmp_path, monkeypatch):
@@ -2553,10 +2554,8 @@ def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
     assert "review gate disabled" in (merge_events[0].note or "")
 
 
-def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
-    tmp_path, monkeypatch
-):
-    """No review artifact → HUMAN_MR_APPROVAL + comment."""
+def test_no_review_artifact_auto_merges_when_eligible(tmp_path, monkeypatch):
+    """No review artifact — auto-merge still fires (artifact check removed)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2572,27 +2571,22 @@ def test_not_eligible_artifact_missing_stays_human_mr_approval_with_comment(
         github.GitHubForge,
         "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True},
     )
 
     t = _human_mr_approval(ctx)
     # NO review artifact
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-
-    merge_events = [
-        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
-    ]
-
-    assert len(merge_events) == 1
-
-    assert "no review artifact" in (merge_events[0].note or "")
+    assert out.next_state is State.DONE
 
 
-def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
-    tmp_path, monkeypatch
-):
-    """auto_merge_eligible: false → HUMAN_MR_APPROVAL + comment."""
+def test_not_eligible_flagged_false_auto_merges_anyway(tmp_path, monkeypatch):
+    """auto_merge_eligible: false no longer blocks — auto-merge fires."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2608,31 +2602,23 @@ def test_not_eligible_flagged_false_stays_human_mr_approval_with_comment(
         github.GitHubForge,
         "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True},
     )
 
     t = _human_mr_approval(ctx)
     _write_review_artifact(ctx, t, eligible=False, comment="risky migration")
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-
-    merge_events = [
-        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
-    ]
-
-    assert len(merge_events) == 1
-
-    note = merge_events[0].note or ""
-    assert "not auto-merge eligible" in note
-    assert "risky migration" in note
-    assert " — " in note  # separator between verdict and comment
+    assert out.next_state is State.DONE
 
 
-def test_not_eligible_flagged_false_no_comment_line_backward_compat(
-    tmp_path, monkeypatch
-):
-    """When review.md has no comment: line (pre-existing artifact),
-    the reason is unchanged — no comment suffix, no ' — ' separator."""
+def test_not_eligible_no_comment_line_auto_merges_anyway(tmp_path, monkeypatch):
+    """Review artifact with eligible=False and no comment — auto-merge
+    still fires (artifact check removed)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2649,22 +2635,17 @@ def test_not_eligible_flagged_false_no_comment_line_backward_compat(
         "check_status",
         lambda self, *, source_branch: {"conclusion": "success", "failing": []},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True},
+    )
 
     t = _human_mr_approval(ctx)
     _write_review_artifact(ctx, t, eligible=False)  # no comment
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-
-    merge_events = [
-        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
-    ]
-
-    assert len(merge_events) == 1
-
-    note = merge_events[0].note or ""
-    assert "not auto-merge eligible" in note
-    assert " — " not in note  # no comment separator when no comment
+    assert out.next_state is State.DONE
 
 
 def test_comment_dedup_same_reason_no_duplicate(tmp_path, monkeypatch):
@@ -2781,11 +2762,9 @@ def test_waiting_auto_merge_becomes_implement_complete_on_ci_failure(
     assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
-    tmp_path, monkeypatch
-):
-    """WAITING_AUTO_MERGE poll where artifact now says not eligible
-    → HUMAN_MR_APPROVAL."""
+def test_waiting_auto_merge_stays_waiting_when_ci_pending(tmp_path, monkeypatch):
+    """WAITING_AUTO_MERGE poll with CI still pending → stays WAITING_AUTO_MERGE
+    (artifact verdict no longer affects eligibility)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2804,23 +2783,17 @@ def test_waiting_auto_merge_becomes_human_when_eligibility_changes(
     )
 
     t = _human_mr_approval(ctx)
-    # First write the artifact as eligible so the WAITING_AUTO_MERGE
+    # Write the artifact as eligible so the WAITING_AUTO_MERGE
     # transition is plausible.
     _write_review_artifact(ctx, t, eligible=True)
     ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
     t = ctx.service.get(t.id)
 
-    # Now change the artifact to not eligible.
+    # Now change the artifact to not eligible — this no longer matters.
     _write_review_artifact(ctx, t, eligible=False)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-
-    merge_events = [
-        e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
-    ]
-    assert len(merge_events) == 1
-    assert "not auto-merge eligible" in (merge_events[0].note or "")
+    assert out.next_state is State.WAITING_AUTO_MERGE
 
 
 def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
@@ -3911,9 +3884,9 @@ def test_multi_repo_all_green_auto_merges_when_eligible(tmp_path, monkeypatch):
     assert sorted(merged_calls) == [remote_a, remote_b]
 
 
-def test_multi_repo_all_green_holds_when_not_eligible(tmp_path, monkeypatch):
-    """All PRs green but no auto-merge-eligible review → no merges, surface
-    HUMAN_MR_APPROVAL so a human can merge via merge-now."""
+def test_multi_repo_all_green_auto_merges_without_artifact(tmp_path, monkeypatch):
+    """All PRs green — auto-merge fires without a review artifact
+    (artifact check removed)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     remote_a = "https://github.com/o/a.git"
     _install_multirepo_registry([("repo-a", remote_a)])
@@ -3938,12 +3911,12 @@ def test_multi_repo_all_green_holds_when_not_eligible(tmp_path, monkeypatch):
     monkeypatch.setattr(github.GitHubForge, "merge_pr", _fake_merge)
     t = _make_meta_ticket(ctx)
     branch = f"mill/{t.id}"
-    # No review.md → not eligible.
+    # No review.md — was previously not eligible, now auto-merges.
     _write_pr_urls(ctx, t, [{"repo_id": "repo-a", "branch": branch, "url": "u-a"}])
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-    assert merged_calls == []  # nothing merged without an eligible review
+    assert out.next_state is State.IMPLEMENT_COMPLETE  # re-poll → next sees DONE
+    assert merged_calls == [1]
 
 
 def test_multi_repo_unknown_repo_id_blocks(tmp_path, monkeypatch):
@@ -5622,12 +5595,12 @@ def test_auto_merge_not_blocked_by_stale_artifact_head_sha(tmp_path, monkeypatch
     assert out.next_state is State.DONE
 
 
-def test_auto_merge_blocked_by_current_artifact_same_head_sha(
+def test_auto_merge_not_blocked_by_current_artifact_same_head_sha(
     tmp_path,
     monkeypatch,
 ):
     """When review.md has the SAME head_sha as the current PR, the
-    verdict is current and must still block (existing behavior)."""
+    verdict is current but no longer blocks — auto-merge fires."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -5662,9 +5635,9 @@ def test_auto_merge_blocked_by_current_artifact_same_head_sha(
     )
 
     out = MergeStage().run(t, ctx)
-    # Same head SHA → current verdict → still blocks.
-    assert out.next_state is State.HUMAN_MR_APPROVAL
-    assert merge_called == []
+    # Artifact check removed — auto-merge proceeds.
+    assert out.next_state is State.DONE
+    assert merge_called == [1]
 
 
 def test_auto_merge_without_head_sha_in_artifact_is_backward_compat(
@@ -5792,12 +5765,13 @@ def test_waiting_auto_merge_legacy_artifact_no_head_sha_does_not_bounce(
     assert out.next_state is State.DONE
 
 
-def test_waiting_auto_merge_current_artifact_still_bounces_if_not_eligible(
+def test_waiting_auto_merge_current_artifact_no_longer_bounces(
     tmp_path,
     monkeypatch,
 ):
     """WAITING_AUTO_MERGE poll with a CURRENT artifact (same head_sha)
-    that is not eligible should still bounce to HUMAN_MR_APPROVAL."""
+    that is not eligible — artifact check removed, stays WAITING_AUTO_MERGE
+    when CI is pending."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -5828,15 +5802,13 @@ def test_waiting_auto_merge_current_artifact_still_bounces_if_not_eligible(
     t = ctx.service.get(t.id)
 
     out = MergeStage().run(t, ctx)
-    # Same head SHA → current verdict → still bounces.
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    # Artifact check removed — stays in WAITING_AUTO_MERGE (CI pending).
+    assert out.next_state is State.WAITING_AUTO_MERGE
 
 
-def test_stale_verdict_invalidates_review_stage_cache(tmp_path, monkeypatch):
-    """When _auto_merge_eligible detects a stale review (head_sha
-    mismatch), it must invalidate the review stage-outcome cache so
-    that a future CODE_REVIEW pass re-evaluates against the current
-    diff rather than replaying the cached outcome."""
+def test_stale_artifact_no_longer_blocks_auto_merge(tmp_path, monkeypatch):
+    """When a stale review artifact exists (head_sha mismatch), auto-merge
+    still fires — the artifact check has been removed entirely."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -5886,19 +5858,8 @@ def test_stale_verdict_invalidates_review_stage_cache(tmp_path, monkeypatch):
     )
 
     out = MergeStage().run(t, ctx)
-    # Stale verdict → eligible → auto-merge to DONE.
+    # Artifact check removed — auto-merge to DONE.
     assert out.next_state is State.DONE
-
-    # The review stage cache entry must have been cleared by the
-    # stale-verdict path in _auto_merge_eligible.
-    cache = (
-        json.loads(cache_path.read_text(encoding="utf-8"))
-        if cache_path.exists()
-        else {}
-    )
-    assert "review" not in cache, (
-        "review stage cache entry must be invalidated when stale verdict detected"
-    )
 
 
 def test_stale_changes_requested_dismissed_regardless_of_feedback_flag(

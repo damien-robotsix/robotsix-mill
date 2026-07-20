@@ -2,6 +2,12 @@
 
 - Add `module_size` to the periodic-agent lists in `docs/agents/agent-yaml-schema.md` (category and read_ticket fields).
 - Stale `CHANGES_REQUESTED` forge reviews are now actively dismissed instead of only being silently discarded. Added `dismiss_review` to the Forge interface (`base.py`, `github_pr.py`, `gitlab/core.py`) and extended `_pr_review_status` to return `review_id`. The core fix in `_review_changes_requested_outcome` detects stale reviews regardless of `review_feedback_enabled`, preventing approved MRs from bouncing back to `human_mr_approval` on a stale review artifact.
+- Remove the review-artifact requirement from the auto-merge eligibility gate.
+  The upstream `human_mr_approval` operator gate is the authoritative review
+  decision point; the redundant downstream artifact check in
+  `_auto_merge_eligible()` has been removed.  Approved, CI-green tickets in
+  `waiting_auto_merge` now merge to `done` without bouncing back to
+  `human_mr_approval`.
 - Add `alembic check` drift gate in CI (`mill-specific` job) to catch un-generated migrations when models change.  Also add `make check-migrations` target for local use.
 - Implement stage: edit-claim contradiction guard now retries within the pass
   (with diagnostic feedback) instead of immediately BLOCKING on fresh runs,
