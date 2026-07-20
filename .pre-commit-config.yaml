@@ -65,6 +65,11 @@ repos:
         args: ["--config", "lychee.toml", "--no-progress"]
         files: ^docs/.*\.md$
         types: [markdown]
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
   - repo: local
     hooks:
       - id: validate-module-taxonomy
