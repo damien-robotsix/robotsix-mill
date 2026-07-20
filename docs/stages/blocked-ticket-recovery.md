@@ -12,6 +12,28 @@ was blocked *from* is recorded. You can recover in three ways:
   This transitions `BLOCKED → <blocked_from>` (e.g. `BLOCKED → DONE`
   to re-run retrospect, skipping implement and refine).
 
+  When resuming back to `READY` (the implement stage), `resume-blocked`
+  performs additional cleanup:
+  - **Clears the stale-spec guard** (`artifacts/implement.md`) so the
+    preflight fingerprint check does not instantly re-block the ticket
+    on an unchanged spec.
+  - **Clears cached artifacts** (`implement_summary.md`,
+    `reference_files.json`, `implement_conversation_state.json`) so the
+    next implement cycle starts with a blank context — the agent does
+    **not** receive its own prior summary as the `<previous_attempt>`
+    block, which was the root cause of byte-identical replay across
+    consecutive blocked cycles.
+  - **Preserves stall-detection state** in
+    `artifacts/implement_stall_state.json` so the cross-spawn stall
+    guard (which blocks after N consecutive byte-identical summaries)
+    survives the artifact clear-out.  Without this continuity,
+    resuming a ticket that hit the stall guard would silently reset
+    the counter, allowing another N identical cycles before re-blocking.
+  - **Resets the spawn counter** only when the ticket was blocked at
+    the spawn limit (counter ≥ `implement_max_spawns_per_ticket`),
+    giving the ticket a fresh budget.  Other blocked-from-READY tickets
+    keep their counter intact.
+
 - **Manual override** (re-runs the full downstream chain):
   - `BLOCKED → READY` (re-runs implement → deliver → merge → retrospect)
   - `BLOCKED → DRAFT` (re-runs refine → implement → ...)
