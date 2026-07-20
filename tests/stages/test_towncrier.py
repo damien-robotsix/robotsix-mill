@@ -43,7 +43,7 @@ def test_default_directory_fragment_created(tmp_path: Path) -> None:
     assert result is True
     fragment = tmp_path / "changes" / "TICKET-1.misc.md"
     assert fragment.is_file()
-    assert fragment.read_text() == "Fix bug"
+    assert fragment.read_text() == "Fix bug\n"
 
 
 # -- Valid config, custom directory -----------------------------------
@@ -57,7 +57,7 @@ def test_custom_directory_fragment_created(tmp_path: Path) -> None:
     assert result is True
     fragment = tmp_path / "news" / "TICKET-2.misc.md"
     assert fragment.is_file()
-    assert fragment.read_text() == "Add feature"
+    assert fragment.read_text() == "Add feature\n"
 
 
 # -- Nested directory creation ----------------------------------------
@@ -71,7 +71,7 @@ def test_nested_directory_created(tmp_path: Path) -> None:
     assert result is True
     fragment = tmp_path / "changelog" / "fragments" / "TICKET-3.misc.md"
     assert fragment.is_file()
-    assert fragment.read_text() == "Deep nested"
+    assert fragment.read_text() == "Deep nested\n"
 
 
 # -- Empty title -------------------------------------------------------
@@ -85,7 +85,7 @@ def test_empty_title_fragment_created(tmp_path: Path) -> None:
     assert result is True
     fragment = tmp_path / "changes" / "TICKET-4.misc.md"
     assert fragment.is_file()
-    assert fragment.read_text() == ""
+    assert fragment.read_text() == "\n"
 
 
 # -- Duplicate fragment (existing <id>.*.md) --------------------------

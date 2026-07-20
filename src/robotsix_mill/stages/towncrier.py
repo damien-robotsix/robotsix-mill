@@ -71,7 +71,7 @@ def maybe_generate_towncrier_fragment(
             return False
 
         fragment_file = fragment_dir / f"{ticket_id}.misc.md"
-        fragment_file.write_text(title, encoding="utf-8")
+        fragment_file.write_text(title + "\n", encoding="utf-8")
     except OSError:
         log.warning(
             "towncrier: failed to write fragment for ticket %s",

@@ -796,7 +796,7 @@ def test_finalize_generates_towncrier_fragment_when_configured(
 
     fragment = repo_dir / "changes" / f"{t.id}.misc.md"
     assert fragment.is_file()
-    assert fragment.read_text(encoding="utf-8") == "Implement foo bar baz"
+    assert fragment.read_text(encoding="utf-8") == "Implement foo bar baz\n"
 
 
 def test_finalize_skips_towncrier_when_not_configured(
@@ -867,7 +867,7 @@ def test_finalize_towncrier_respects_custom_directory(
 
     fragment = repo_dir / "news" / f"{t.id}.misc.md"
     assert fragment.is_file()
-    assert fragment.read_text(encoding="utf-8") == "Custom dir test"
+    assert fragment.read_text(encoding="utf-8") == "Custom dir test\n"
     # Default directory must NOT exist.
     assert not (repo_dir / "changes").exists()
 
