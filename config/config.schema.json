@@ -1518,6 +1518,39 @@
           "title": "Module Curator Request Limit",
           "type": "integer"
         },
+        "module_size_interval_seconds": {
+          "default": 604800,
+          "description": "Seconds between periodic module-size passes.",
+          "title": "Module Size Interval Seconds",
+          "type": "integer"
+        },
+        "module_size_max_errors": {
+          "default": 20,
+          "description": "Hard cap on tool-call errors before auto-termination of module_size agent.",
+          "minimum": 0,
+          "title": "Module Size Max Errors",
+          "type": "integer"
+        },
+        "module_size_max_tool_calls": {
+          "default": 80,
+          "description": "Hard cap on total tool calls per module_size trace.",
+          "minimum": 1,
+          "title": "Module Size Max Tool Calls",
+          "type": "integer"
+        },
+        "module_size_periodic": {
+          "default": true,
+          "description": "When true, run periodic module-size passes for oversized-file oversight.",
+          "title": "Module Size Periodic",
+          "type": "boolean"
+        },
+        "module_size_request_limit": {
+          "default": 60,
+          "description": "Per-call request cap for the module-size agent's tool loop.",
+          "minimum": 1,
+          "title": "Module Size Request Limit",
+          "type": "integer"
+        },
         "network_outage_retry_seconds": {
           "default": 120,
           "description": "Seconds between re-poll attempts during a detected network outage.",
