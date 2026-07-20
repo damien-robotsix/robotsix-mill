@@ -52,7 +52,13 @@ _initialized: set[str] = set()
 # different tests inside the same xdist worker) race on that registry
 # and raise KeyError: 'config' in _remove_proxy when one call's
 # cleanup removes a proxy that another call still references.
+#
+# The per-board lock serializes access per board (so the fast-path
+# double-check works).  The global _alembic_lock serializes ALL
+# _run_alembic_migrations calls — Alembic's proxy registry is
+# process-global, so even calls for DIFFERENT boards must not race.
 _init_locks: dict[str, threading.Lock] = {}
+_alembic_lock: threading.Lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Disk-full defence: retry-on-disk-full context manager
@@ -369,7 +375,11 @@ def init_db(settings: Settings, board_id: str) -> None:
 
                 # Run Alembic migrations — stamps fresh databases as ``head``,
                 # applies pending migrations on existing ones.
-                _run_alembic_migrations(settings, board_id, engine)
+                # Alembic's proxy registry is process-global and not
+                # thread-safe; the global _alembic_lock serializes ALL
+                # migration calls regardless of board.
+                with _alembic_lock:
+                    _run_alembic_migrations(settings, board_id, engine)
 
                 _initialized.add(board_id)
 
