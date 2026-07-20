@@ -97,6 +97,13 @@ class CaseTolerantEnum(TypeDecorator[str]):
     def process_bind_param(
         self, value: StrEnum | str | None, dialect: object
     ) -> str | None:
+        """Convert *value* to its canonical uppercase member name for DB storage.
+
+        Accepts ``None`` (pass-through), an existing ``StrEnum`` member (stores
+        its ``.name``), or a ``str`` of any case (resolved to the canonical
+        member name via uppercase lookup).  Raises ``ValueError`` when the
+        string does not match any member of the enum class.
+        """
         if value is None:
             return None
         if isinstance(value, self.enum_cls):
