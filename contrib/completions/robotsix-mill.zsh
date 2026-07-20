@@ -22,6 +22,7 @@ _shtab_robotsix_mill_commands() {
     "member-sync:"
     "meta:"
     "module-curator:"
+    "module-size:"
     "repos:"
     "roadmap-sync:"
     "run-health:"
@@ -218,6 +219,14 @@ _shtab_robotsix_mill_module_curator_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_module_curator_defaults_added=0
 
+_shtab_robotsix_mill_module_size_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_module_size_defaults_added=0
+
 _shtab_robotsix_mill_repos_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
 )
@@ -402,6 +411,7 @@ _shtab_robotsix_mill() {
         member-sync) _arguments -C -s $_shtab_robotsix_mill_member_sync_options ;;
         meta) _arguments -C -s $_shtab_robotsix_mill_meta_options ;;
         module-curator) _arguments -C -s $_shtab_robotsix_mill_module_curator_options ;;
+        module-size) _arguments -C -s $_shtab_robotsix_mill_module_size_options ;;
         repos) _shtab_robotsix_mill_repos ;;
         roadmap-sync) _arguments -C -s $_shtab_robotsix_mill_roadmap_sync_options ;;
         run-health) _arguments -C -s $_shtab_robotsix_mill_run_health_options ;;

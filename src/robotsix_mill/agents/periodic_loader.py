@@ -83,6 +83,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "test_gap": "llm_agent",
     "docstring_coverage": "llm_agent",
     "module_curator": "llm_agent",
+    "module_size": "llm_agent",
     "forge_parity": "llm_agent",
     "state_sync": "mill_only",
     "frontend_sync": "mill_only",

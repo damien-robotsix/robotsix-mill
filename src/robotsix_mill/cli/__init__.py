@@ -155,6 +155,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Module-curator pass",
         "format": "memory_drafts",
     },
+    "module-size": {
+        "module": "runners.periodic_runner",
+        "function": "run_module_size_pass",
+        "label": "Module-size pass",
+        "format": "memory_drafts",
+    },
     "roadmap-sync": {
         "module": "runners.roadmap_sync_runner",
         "function": "run_roadmap_sync_pass",
@@ -833,6 +839,14 @@ def build_parser() -> argparse.ArgumentParser:
         "module-curator", help="run a module taxonomy drift detection pass"
     )
     p_module_curator.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- module-size command ---
+    p_module_size = sub.add_parser("module-size", help="run a module size audit pass")
+    p_module_size.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
