@@ -13,7 +13,7 @@ BIN    := $(VENV)/bin
 
 SOURCES ?= src/ tests/ scripts/ vulture_whitelist.py deploy/split_config.py dev/
 
-.PHONY: help install test format lint serve dev docker clean docs-serve docs-build migrate completions migration migrate-stamp
+.PHONY: help install test format lint lint-sh serve dev docker clean docs-serve docs-build migrate completions migration migrate-stamp
 
 $(BIN)/activate:
 	$(PYTHON) -m venv $(VENV)
@@ -32,6 +32,10 @@ lint: install  ## Lint Python source files (check only)
 	uv run ruff check $(SOURCES)
 	uv run ruff format --check $(SOURCES)
 	uv run mypy src/ --strict
+	$(MAKE) lint-sh
+
+lint-sh:  ## Lint shell scripts with ShellCheck
+	shellcheck --severity=warning scripts/*.sh dev/*.sh entrypoint.sh
 
 serve: install  ## Run the service as in production (reads ./.env, ./.mill-data)
 	$(BIN)/robotsix-mill serve
