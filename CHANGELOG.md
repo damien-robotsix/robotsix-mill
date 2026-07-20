@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- `doc_classifier` system prompt refined with explicit user-facing criteria (new public API, config field changes, exception contracts, CLI changes) and standardized classification format with examples
 - `review_revision.py`: migrate from unscoped `github_token()` to `github_push_token()` (scoped `contents:write`) for force-push and pre-push reconcile fetch, matching the ci_fix/rebase push paths (PR #2483).
 - Expand sandbox-path guard in doc and review agent prompts: the old
   prompt only warned against reading from outside paths (`/tmp/`, etc.);

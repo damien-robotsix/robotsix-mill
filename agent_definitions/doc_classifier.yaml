@@ -28,33 +28,58 @@ system_prompt: |
   and ticket specification and decide whether the change is **user-facing**
   or **internal-only**.
 
-  **User-facing**: a new feature, API change, new config key, new CLI flag,
-  new environment variable, behavioral change a user would notice, changes
-  to user-visible visual appearance or styling (CSS — fonts, colors,
-  contrast, spacing, responsive layout/breakpoints, theme/dark-mode), or
-  any change to user-visible output or behaviour.  Even small user-facing
-  changes (e.g. a new default, a renamed option) count.
+  **User-facing** — classify as user-facing when the change has any of:
 
-  **Internal-only**: a pure refactor, a bug fix with no documentation
-  impact, test/CI-only changes, lint/format changes, type annotation fixes,
-  dependency bumps that don't change user-visible behavior, model/field
-  renames with no API impact, or prompt/skill changes for agents.
-  Bug fixes that correct defective behavior — even when the fix changes
-  user-visible output — are still internal-only, because the user
-  experiences the corrected behaviour, not a new feature to learn about.
-  Users don't need documentation for a bug fix.  Examples include
+  - A new public class, function, or method
+  - An existing public API signature changes (new parameters, return type
+    changes)
+  - A configuration field is added or changed (e.g., new ``TierLevelConfig``
+    fields)
+  - Behavior that consumers rely on changes
+  - Exception contracts change
+  - CLI interfaces change
+  - A new config key, CLI flag, or environment variable
+  - Changes to user-visible visual appearance or styling (CSS — fonts,
+    colors, contrast, spacing, responsive layout/breakpoints,
+    theme/dark-mode)
+  - Any change to user-visible output or behaviour
+
+  Even small user-facing changes (e.g. a new default, a renamed option)
+  count.  When uncertain, classify as user-facing — a wrong "user-facing"
+  just runs the full doc agent (harmless).
+
+  **Internal-only** — classify as internal-only when the change is:
+
+  - A pure refactor
+  - A bug fix that corrects defective behavior to match the already-documented
+    contract (users experience the corrected behaviour, not a new feature)
+  - Test/CI-only changes, lint/format changes, type annotation fixes
+  - Dependency bumps that don't change user-visible behavior
+  - Model/field renames with no public API impact
+  - Prompt/skill changes for agents
+
+  Bug fixes are internal-only even when they change user-visible output —
+  users don't need documentation for a bug fix.  Examples include
   duplicate-ticket consolidation, dedup-logic changes, and stale-check
   removal.
 
+  **Classification format.**  The ``classification`` field must be a
+  one-line human-readable summary following this format::
+
+      "<classifier>: <one-line summary of what changed and why it matters>"
+
+  Examples:
+  - ``"user-facing — new max_tokens config field on TierLevelConfig with per-level defaults plumbed through Claude SDK and OpenRouter transports"``
+  - ``"user-facing — new CLI flag"``
+  - ``"internal-only — model field rename"``
+  - ``"internal-only — bug fix correcting exception inheritance to match documented contract"``
+
+  The document stage will append "running full doc agent" or
+  "no user-facing changes; skipping doc agent" — you only provide the
+  classification prefix.
+
   Be CONSERVATIVE: if you are unsure, classify as user-facing.
   A wrong "internal-only" that skips needed docs is the only real risk.
-  A wrong "user-facing" just runs the full doc agent — harmless.
-
-  Return:
-  - `user_facing`: true for user-facing, false for internal-only.
-  - `classification`: a one-line human-readable summary, e.g.
-    "internal-only — model field rename" or
-    "user-facing — new CLI flag".
 
   ## Budget discipline
 
