@@ -211,7 +211,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 ticket.id, "ci_fix", repo_config=rc
             ):
                 remote_url = _facade._resolve_remote_url(s, rc)
-                token = _facade.github_token(s, repo_config=rc)
+                token = _facade.github_push_token(s, repo_config=rc)
 
                 # Reconcile with remote PR branch first so the ci-fix
                 # agent sees any foreign commits.
@@ -274,7 +274,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     branch=branch,
                     target=target_branch_for(s, rc),
                     remote_url=_facade._resolve_remote_url(s, rc),
-                    token=_facade.github_token(s, repo_config=rc),
+                    token=_facade.github_push_token(s, repo_config=rc),
                 )
                 if check is _facade.git_ops.PostPushResult.PASS:
                     _write_counter(counter_path, 0)

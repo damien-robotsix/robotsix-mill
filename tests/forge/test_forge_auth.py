@@ -300,11 +300,10 @@ def test_push_token_requires_app_config(tmp_path):
         auth.github_push_token(S(tmp_path, FORGE_AUTH="app"))
 
 
-def test_build_app_jwt_returns_valid_jwt(tmp_path):
+def test_build_app_jwt_returns_valid_jwt(tmp_path, monkeypatch):
     """_build_app_jwt returns a JWT string with the app id as issuer."""
     import jwt as jwt_module
 
-    monkeypatch = pytest.MonkeyPatch()
     S(
         tmp_path,
         GITHUB_APP_ID="456",
