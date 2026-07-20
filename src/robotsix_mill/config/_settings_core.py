@@ -433,6 +433,26 @@ class _CoreSettings(BaseModel):
         ge=0,
         description="Hard cap on tool-call errors before auto-termination of test_gap agent.",
     )
+    # Per-call cap for the module-size agent's tool loop.  The module-size
+    # agent does a bounded file-count scan and is lighter than audit/health;
+    # 60 requests gives comfortable headroom for a typical repo.
+    module_size_request_limit: int = Field(
+        default=60,
+        ge=1,
+        description="Per-call request cap for the module-size agent's tool loop.",
+    )
+    # Hard cap on total tool calls per module_size trace.
+    module_size_max_tool_calls: int = Field(
+        default=80,
+        ge=1,
+        description="Hard cap on total tool calls per module_size trace.",
+    )
+    # Hard cap on tool-call errors before auto-termination.
+    module_size_max_errors: int = Field(
+        default=20,
+        ge=0,
+        description="Hard cap on tool-call errors before auto-termination of module_size agent.",
+    )
     # Hard cap on total tool calls per refine trace. A hard ceiling above
     # any legitimate refine run (the request cap is 80; 120 tool calls is a
     # generous headroom that still terminates the 100+-call broken loops).

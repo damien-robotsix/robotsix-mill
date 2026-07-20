@@ -484,6 +484,17 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=_clone_token,
         requires_repo=True,
     ),
+    "module_size": PeriodicPassConfig(
+        label="module_size",
+        source_kind=SourceKind.MODULE_SIZE,
+        agent_module_attr="module_size",
+        agent_fn_name="run_module_size_agent",
+        memory_filename="module_size_memory.md",
+        workspace_subdir="module_size_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=None,  # uses forge_token (raises on missing)
+        requires_repo=True,
+    ),
 }
 
 
@@ -576,3 +587,4 @@ run_state_sync_pass = _make_entry("state_sync")
 run_frontend_sync_pass = _make_entry("frontend_sync")
 run_triage_boilerplate_pass = _make_entry("triage_boilerplate")
 run_docstring_coverage_pass = _make_entry("docstring_coverage")
+run_module_size_pass = _make_entry("module_size")

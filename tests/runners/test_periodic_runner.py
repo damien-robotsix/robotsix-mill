@@ -661,6 +661,7 @@ def test_periodic_pass_configs_registry_has_all_sixteen_entries():
         "config_sync",
         "health",
         "module_curator",
+        "module_size",
         "test_gap",
         "state_sync",
         "frontend_sync",
@@ -681,6 +682,7 @@ def test_periodic_pass_configs_requires_repo():
         if key in (
             "docstring_coverage",
             "module_curator",
+            "module_size",
             "test_gap",
             "state_sync",
             "frontend_sync",
