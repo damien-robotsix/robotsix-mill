@@ -47,9 +47,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
-        with:
-          version: "0.8.15"
+      - name: Install uv
+        run: pip install uv==0.8.15
 
       - name: Install dev deps
         # `dev` is a PEP 735 dependency-group pulled in automatically via
