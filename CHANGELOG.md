@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Fix ``_validate_changelog_fragments``: import validation logic in-process
+  from ``_changelog_validate`` instead of shelling out to a script
+  resolved via ``parents[3]`` (which pointed at ``src/``, not the repo
+  root, so the validation never ran in production).
 - Add docstring to `CaseTolerantEnum.process_bind_param` in `src/robotsix_mill/core/models.py`.
 - Add docstring to `CaseTolerantEnum.process_result_value` in `src/robotsix_mill/core/models.py`.
 - Add ``scripts/validate-changelog.py`` — pre-commit changelog fragment validator that ensures trailing newlines and ``docs/modules.yaml`` registration, called automatically by the implement stage's ``_finalize`` before committing. Also fixes a missing trailing newline in ``maybe_generate_towncrier_fragment``.

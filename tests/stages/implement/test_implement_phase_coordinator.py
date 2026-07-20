@@ -914,7 +914,7 @@ def test_finalize_skips_towncrier_when_fragment_already_exists(
     changes_dir = repo_dir / "changes"
     changes_dir.mkdir()
     feature_fragment = changes_dir / f"{t.id}.feature.md"
-    feature_content = "Add new feature to the system"
+    feature_content = "Add new feature to the system\n"
     feature_fragment.write_text(feature_content, encoding="utf-8")
 
     fake = _FakeGitOps(changed={repo_dir})
@@ -927,7 +927,7 @@ def test_finalize_skips_towncrier_when_fragment_already_exists(
     # .misc.md must NOT exist (skipped because .feature.md already exists).
     assert not (changes_dir / f"{t.id}.misc.md").exists()
 
-    # .feature.md must be unchanged.
+    # .feature.md must be unchanged (still has trailing newline).
     assert feature_fragment.read_text(encoding="utf-8") == feature_content
 
     # Exactly one commit happened (the agent's other changes still get committed).
@@ -1681,3 +1681,96 @@ def test_resume_clears_cached_summary_and_ref_files(ctx_factory, tmp_path, monke
     )
     assert ss["stall_count"] == 1
     assert ss["summary_fingerprint"] == "cafebabe00000000"
+
+
+# --- _validate_changelog_fragments ---------------------------------------
+
+
+def test_validate_changelog_fragments_fixes_trailing_newlines(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
+    """``_validate_changelog_fragments`` calls ``validate_changelog``
+    in-process and auto-fixes missing trailing newlines on fragment
+    files without shelling out to a subprocess."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "changelog.d").mkdir()
+    frag = repo_dir / "changelog.d" / f"{t.id}.misc.md"
+    frag.write_text("Some change", encoding="utf-8")  # no trailing newline
+    # Also create docs/modules.yaml so _modules_yaml_check doesn't no-op
+    # (we care about trailing-newline fix here).
+    (repo_dir / "docs").mkdir()
+    (repo_dir / "docs" / "modules.yaml").write_text(
+        "modules:\n"
+        "  - id: core\n"
+        "    description: core\n"
+        "    paths:\n"
+        "      - src/foo.py\n"
+        "    dependencies: []\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.stages.implement"):
+        ImplementStage._validate_changelog_fragments(repo_dir)
+
+    # Fragment file should now have a trailing newline.
+    assert frag.read_bytes().endswith(b"\n")
+    # The diagnostic should be logged.
+    assert any("appended missing trailing newline" in m for m in caplog.messages), (
+        f"missing diagnostic in: {caplog.messages}"
+    )
+
+
+def test_validate_changelog_fragments_no_op_when_clean(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
+    """When fragment files already have trailing newlines,
+    ``_validate_changelog_fragments`` logs nothing and returns cleanly."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "changelog.d").mkdir()
+    frag = repo_dir / "changelog.d" / f"{t.id}.misc.md"
+    frag.write_text("Some change\n", encoding="utf-8")
+    (repo_dir / "docs").mkdir()
+    (repo_dir / "docs" / "modules.yaml").write_text(
+        "modules:\n"
+        "  - id: core\n"
+        "    description: core\n"
+        "    paths:\n"
+        "      - changelog.d/*.md\n"
+        "      - src/foo.py\n"
+        "    dependencies: []\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.stages.implement"):
+        ImplementStage._validate_changelog_fragments(repo_dir)
+
+    assert not any("validate-changelog:" in m for m in caplog.messages), (
+        f"unexpected log messages: {caplog.messages}"
+    )
+
+
+def test_validate_changelog_fragments_handles_missing_dirs_gracefully(
+    ctx_factory, tmp_path, monkeypatch, caplog
+):
+    """When ``changelog.d/`` and ``docs/modules.yaml`` are absent,
+    ``_validate_changelog_fragments`` returns cleanly without error."""
+    ctx = ctx_factory()
+    _ticket(ctx)  # create a ticket for workspace setup
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    # No changelog.d, no docs/modules.yaml.
+
+    # Must not raise.
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.stages.implement"):
+        ImplementStage._validate_changelog_fragments(repo_dir)
+
+    # No diagnostics logged.
+    assert not any("validate-changelog:" in m for m in caplog.messages), (
+        f"unexpected log messages: {caplog.messages}"
+    )
