@@ -1367,26 +1367,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         auto-fix commit.
         """
         try:
-            import subprocess
+            from .._changelog_validate import validate_changelog
 
-            script = Path(__file__).parents[3] / "scripts" / "validate-changelog.py"
-            if not script.is_file():
-                log.debug(
-                    "validate-changelog: script not found at %s — skipping", script
-                )
-                return
-            result = subprocess.run(
-                ["python3", str(script), str(repo_dir)],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            if result.stderr:
-                for line in result.stderr.strip().splitlines():
-                    log.info(
-                        "validate-changelog: %s",
-                        line.removeprefix("validate-changelog: "),
-                    )
+            msgs = validate_changelog(repo_dir)
+            for m in msgs:
+                log.info("validate-changelog: %s", m)
         except Exception:
             log.warning(
                 "%s: validate_changelog failed — continuing without validation",
