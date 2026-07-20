@@ -100,7 +100,7 @@ class ReviewRevisionMixin(_MergeStageBase):
                 # Reconcile with remote PR branch first so the agent
                 # sees any foreign commits.
                 remote_url = _facade._resolve_remote_url(s, ctx.repo_config)
-                token = _facade.github_token(s, repo_config=ctx.repo_config)
+                token = _facade.github_push_token(s, repo_config=ctx.repo_config)
                 blocked = _reconcile_with_remote_pr(
                     _facade, repo_dir, remote_url, branch, token, ticket.id
                 )
@@ -164,7 +164,7 @@ class ReviewRevisionMixin(_MergeStageBase):
                     Path(repo_dir),
                     branch=branch,
                     remote_url=_facade._resolve_remote_url(s, ctx.repo_config),
-                    token=_facade.github_token(s, repo_config=ctx.repo_config),
+                    token=_facade.github_push_token(s, repo_config=ctx.repo_config),
                 )
             except Exception as e:  # noqa: BLE001
                 log.exception(

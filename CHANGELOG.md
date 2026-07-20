@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- `review_revision.py`: migrate from unscoped `github_token()` to `github_push_token()` (scoped `contents:write`) for force-push and pre-push reconcile fetch, matching the ci_fix/rebase push paths (PR #2483).
 - git push operations (ci_fix, rebase) now use `github_push_token()`, which mints a fresh, least-privilege GitHub App installation token scoped to `contents: write` on the target repository — eliminating the dependency on long-lived, expiring PATs for push authentication.
 - Fix: implement stage now clears stale conversation state on spawn-limit BLOCK and resume_blocked, so corrective operator feedback is loaded into a fresh agent conversation instead of being drowned out by a replayed prior transcript.
 - Fingerprint guard now respects operator force-retry: `resume-blocked` with a justification note (or any BLOCKED→READY transition with a note) clears the stale-spec guard for exactly one implement cycle, instead of silently re-blocking on an unchanged fingerprint.
