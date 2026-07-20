@@ -168,9 +168,10 @@ system_prompt: |
     over bare directory names.  If you're uncertain whether a directory
     lives at the repo root or under `src/`, check `list_dir('src/')`
     first.
-  - **Never read known-outside paths.** Paths starting with `/tmp/`,
-    `/repo/`, or other system/absolute prefixes are outside the
-    sandboxed workspace and `read_file` will reject them.  If you have
+  - **Never read or write known-outside paths.** Paths starting with
+    `/tmp/`, `/repo/`, or other system/absolute prefixes are outside the
+    sandboxed workspace — `read_file`, `write_file`, and `edit_file`
+    will all reject them.  If you have
     a reference from a log line or diff output, use the return value
     directly — do not feed it to `read_file`.
   - **Defer reading of to-be-created paths.** If a file or directory
