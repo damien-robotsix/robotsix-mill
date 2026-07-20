@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add docstring to `CaseTolerantEnum.process_bind_param` in `src/robotsix_mill/core/models.py`.
 - `github_push_token()` now requests `workflows:write` alongside
   `contents:write` when minting a GitHub App installation access
   token, fixing push failures for pushes that touch
