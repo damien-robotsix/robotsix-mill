@@ -4,6 +4,7 @@
   `contents:write` when minting a GitHub App installation access
   token, fixing push failures for pushes that touch
   `.github/workflows/` files.
+- Add docstring to `RunEntry` dataclass in `run_registry.py` documenting all seven fields and lifecycle semantics.
 - `doc_classifier` system prompt refined with explicit user-facing criteria (new public API, config field changes, exception contracts, CLI changes) and standardized classification format with examples
 - Implement stage: clear cached summary and reference files on resume-blocked to prevent the agent from being fed its own prior output as context, which caused byte-identical replay across cycles.  Preserve stall-detection state in `implement_stall_state.json` so the cross-spawn stall guard survives operator-initiated resume/reset cycles.  The preflight stall guard now falls back to this JSON file when `implement.md` is absent.
 - `review_revision.py`: migrate from unscoped `github_token()` to `github_push_token()` (scoped `contents:write`) for force-push and pre-push reconcile fetch, matching the ci_fix/rebase push paths (PR #2483).

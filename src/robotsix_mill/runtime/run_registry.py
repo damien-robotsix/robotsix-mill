@@ -15,6 +15,28 @@ MAX_ENTRIES = 50
 
 @dataclass
 class RunEntry:
+    """A single run entry in the registry.
+
+    Each entry represents one background run (audit, health check, survey, etc.)
+    with its lifecycle tracked via ``status`` (running → ok|error).  Entries
+    are persisted as JSON and loaded on startup, where ``running`` entries
+    from a prior crash are reconciled to ``error``.
+
+    Attributes:
+        id: Unique hex identifier (``uuid.uuid4().hex``).
+        kind: Labels matching ``registry.start(\"...\")`` call sites. Both
+            hyphenated and underscored forms are accepted for backward
+            compatibility (e.g. ``\"bc-check\"`` and ``\"bc_check\"``).
+        started_at: ISO-8601 UTC timestamp of when the run started.
+        finished_at: ISO-8601 UTC timestamp of when the run finished, or
+            ``None`` for in-flight entries.
+        status: One of ``\"running\"``, ``\"ok\"``, ``\"error\"``.
+        summary: Human-readable summary of the run's outcome.
+        error: Error detail when ``status == \"error\"``, else ``None``.
+        repo_id: Scoping repo identifier for per-repo periodic runs;
+            ``\"\"`` for legacy global entries.
+    """
+
     id: str
     # Mirrors every label string passed to ``registry.start(label)``.
     # The codebase mixes hyphens (older callers) with underscores
