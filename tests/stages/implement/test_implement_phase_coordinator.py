@@ -1533,3 +1533,151 @@ def test_preflight_deploy_freshness_server_unreachable_passes(
 
     out = ImplementStage().preflight(t, ctx)
     assert out is None  # Transient infra failure — don't block.
+
+
+# --- stall-state survival across resume-blocked ---------------------------
+
+
+def test_finalize_stall_state_reads_from_json_when_md_absent(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When implement.md is absent (cleared by resume-blocked) but
+    implement_stall_state.json persists, _finalize picks up the old
+    summary-fingerprint and stall-count so the cross-spawn stall guard
+    continues accumulating across operator-initiated resumes."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _FakeGitOps(changed=set())
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    summary = "agent could not complete — blocked on missing dependency"
+
+    # Cycle 1: BLOCKED.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl1_md = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 0" in impl1_md
+    assert (ws.artifacts_dir / "implement_stall_state.json").exists()
+
+    # Cycle 2: BLOCKED again, SAME summary → stall_count → 1.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl2_md = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 1" in impl2_md
+
+    # Simulate resume-blocked: clear implement.md (as
+    # _clear_stale_implement_guard does) but leave
+    # implement_stall_state.json intact.
+    (ws.artifacts_dir / "implement.md").unlink()
+    (ws.artifacts_dir / "implement_summary.md").unlink()
+    assert not (ws.artifacts_dir / "implement.md").exists()
+
+    # Cycle 3 (post-resume): same summary → stall_count should be 2
+    # (continuing from the persisted state, NOT resetting to 0).
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl3_md = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 2" in impl3_md, (
+        "stall count must survive resume — expected 2, got text:\n" + impl3_md
+    )
+
+    summary3 = (ws.artifacts_dir / "implement_summary.md").read_text()
+    assert summary3.startswith("STALL DETECTED"), (
+        "third identical summary post-resume must trigger stall detection"
+    )
+
+
+def test_preflight_stall_guard_reads_json_fallback(ctx_factory, tmp_path, monkeypatch):
+    """When implement.md is absent but implement_stall_state.json
+    records a stall-count at or above the threshold, the preflight
+    stall guard (section 4.5) must block without requiring
+    implement.md to exist."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    # Write ONLY the JSON stall state — simulate a post-resume state
+    # where _clear_stale_implement_guard deleted implement.md but the
+    # stall state was persisted.
+    (ws.artifacts_dir / "implement_stall_state.json").write_text(
+        json.dumps({"summary_fingerprint": "deadbeef00000000", "stall_count": 2})
+    )
+    # Also write implement_summary.md with the STALL DETECTED prefix
+    # so the guard can surface the diagnostic.
+    (ws.artifacts_dir / "implement_summary.md").write_text(
+        "STALL DETECTED — 2 consecutive implement cycles produced "
+        "no meaningful change.  Consider re-scoping or splitting.",
+        encoding="utf-8",
+    )
+
+    # Write a spec so preflight doesn't bail on empty-spec.
+    _write_file_map(ctx, t, "feature.txt")
+    ws.write_description("Add feature X")
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None, "stall guard must fire from JSON fallback"
+    assert out.next_state is State.BLOCKED
+    assert "STALL DETECTED" in out.note
+
+
+def test_resume_clears_cached_summary_and_ref_files(ctx_factory, tmp_path, monkeypatch):
+    """After resume-blocked (with note, dst=READY), implement_summary.md
+    and reference_files.json are deleted so the next implement cycle
+    does not feed the agent its own prior summary as context.  The stall
+    state survives in implement_stall_state.json."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    # Set up a ticket that was BLOCKED from READY with all the artifacts
+    # present (simulating a post-spawn-limit block).
+    ctx.service.transition(t.id, State.BLOCKED, note="stuck in implement")
+    (ws.artifacts_dir / "implement_spawn_count").write_text("3", encoding="utf-8")
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: mill/test\n"
+        "spec-fingerprint: deadbeef00000000\n"
+        "summary-fingerprint: cafebabe00000000\n"
+        "stall-count: 1\n"
+        "\nprior summary text\n",
+        encoding="utf-8",
+    )
+    (ws.artifacts_dir / "implement_summary.md").write_text(
+        "prior summary text", encoding="utf-8"
+    )
+    (ws.artifacts_dir / "reference_files.json").write_text(
+        json.dumps([{"path": "src/foo.py"}]), encoding="utf-8"
+    )
+    (ws.artifacts_dir / "implement_conversation_state.json").write_text(
+        '{"messages":[]}', encoding="utf-8"
+    )
+
+    resumed = ctx.service.resume_blocked(t.id, note="operator retry")
+    assert resumed.state is State.READY
+
+    # implement.md is deleted (stale-spec guard clear).
+    assert not (ws.artifacts_dir / "implement.md").exists()
+    # implement_summary.md is deleted (prevents context bias).
+    assert not (ws.artifacts_dir / "implement_summary.md").exists(), (
+        "implement_summary.md must be cleared on resume to prevent "
+        "the agent from seeing its own prior summary as <previous_attempt>"
+    )
+    # reference_files.json is deleted.
+    assert not (ws.artifacts_dir / "reference_files.json").exists()
+    # Conversation state is cleared.
+    assert not (ws.artifacts_dir / "implement_conversation_state.json").exists()
+    # Spawn counter is reset.
+    assert not (ws.artifacts_dir / "implement_spawn_count").exists()
+    # Stall state survives in JSON.
+    assert (ws.artifacts_dir / "implement_stall_state.json").exists()
+    ss = json.loads(
+        (ws.artifacts_dir / "implement_stall_state.json").read_text(encoding="utf-8")
+    )
+    assert ss["stall_count"] == 1
+    assert ss["summary_fingerprint"] == "cafebabe00000000"

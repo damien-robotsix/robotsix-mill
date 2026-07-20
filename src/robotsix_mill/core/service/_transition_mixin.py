@@ -35,11 +35,58 @@ def _clear_stale_implement_guard(ws: Workspace) -> None:
 
     Best-effort and silent when absent — an operator override note is
     the explicit signal that a retry is wanted despite the guard.
+
+    Before deleting, the stall-detection state (summary-fingerprint
+    and stall-count) is extracted from ``implement.md`` and persisted
+    to ``implement_stall_state.json`` so the cross-spawn stall guard
+    survives operator-initiated resume/reset cycles.
     """
+    _persist_stall_state_from_implement_md(ws)
     try:
         (ws.artifacts_dir / "implement.md").unlink()
     except FileNotFoundError:
         pass
+
+
+def _persist_stall_state_from_implement_md(ws: Workspace) -> None:
+    """Extract ``summary-fingerprint`` and ``stall-count`` from
+    ``artifacts/implement.md`` and persist them to
+    ``artifacts/implement_stall_state.json``.
+
+    Best-effort — silently no-ops when ``implement.md`` is absent or
+    unreadable.  The JSON file provides stall-detection continuity
+    across operator-initiated resume-blocked cycles where
+    ``implement.md`` is cleared by ``_clear_stale_implement_guard``.
+    """
+    import json
+
+    md_path = ws.artifacts_dir / "implement.md"
+    if not md_path.exists():
+        return
+    try:
+        md_content = md_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    summary_fp = ""
+    stall_count = 0
+    for line in md_content.splitlines():
+        if line.startswith("summary-fingerprint: "):
+            summary_fp = line.split("summary-fingerprint: ", 1)[1].strip()
+        elif line.startswith("stall-count: "):
+            try:
+                stall_count = int(line.split("stall-count: ", 1)[1].strip())
+            except ValueError:
+                stall_count = 0
+    if summary_fp or stall_count:
+        try:
+            (ws.artifacts_dir / "implement_stall_state.json").write_text(
+                json.dumps(
+                    {"summary_fingerprint": summary_fp, "stall_count": stall_count}
+                ),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
 
 
 # A ticket auto-unblocks its ``unblocks`` targets when it reaches one of
@@ -428,10 +475,28 @@ class _TransitionMixin(_ServiceBase):
             # blocked→READY resume starts a fresh agent conversation
             # instead of replaying the prior transcript (which would
             # drown out corrective feedback loaded from comments).
+            # Also clear the cached implement summary and reference-files
+            # list — feeding the agent its own prior summary biases it
+            # toward producing byte-identical output instead of reading
+            # the updated (corrective) spec.  The stall state is
+            # persisted to implement_stall_state.json so the cross-spawn
+            # stall guard survives this reset.
             if dst is State.READY:
                 from ...stages.pause import clear_conversation_state
 
                 clear_conversation_state(self.workspace(ticket), "implement")
+                ws = self.workspace(ticket)
+                # Persist stall state from implement.md before we
+                # potentially delete it above — and also when no note
+                # is provided (implement.md survives, but the JSON
+                # ensures continuity across future resets).
+                _persist_stall_state_from_implement_md(ws)
+                for _fname in ("implement_summary.md", "reference_files.json"):
+                    _p = ws.artifacts_dir / _fname
+                    try:
+                        _p.unlink()
+                    except FileNotFoundError:
+                        pass
             if spawn_reset and counter_path is not None:
                 try:
                     counter_path.unlink()
