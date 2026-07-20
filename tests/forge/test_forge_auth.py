@@ -186,3 +186,134 @@ def test_gitlab_token_raises_when_not_set(tmp_path):
     S(tmp_path)
     with pytest.raises(RuntimeError, match="FORGE_TOKEN not set"):
         auth.gitlab_token()
+
+
+# ---------------------------------------------------------------------------
+# github_push_token
+# ---------------------------------------------------------------------------
+
+
+def test_push_token_pat_fallback(tmp_path):
+    """When forge_auth != 'app', github_push_token falls back to the PAT."""
+    assert auth.github_push_token(S(tmp_path, FORGE_TOKEN="pat123")) == "pat123"
+
+
+def test_push_token_app_mode_mints_fresh_with_contents_write(tmp_path, monkeypatch):
+    """github_push_token mints a fresh token with contents:write permission
+    and does NOT cache — each call issues a fresh mint."""
+    import httpx
+    import jwt as jwt_module
+
+    auth._cache.clear()
+    mint_calls = []
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            mint_calls.append(("get", url))
+            return httpx.Response(200, json={"id": 42})
+
+        def post(self, url, headers=None, json=None, **kwargs):
+            mint_calls.append(("post", url, json))
+            return httpx.Response(
+                201,
+                json={"token": "ghs_push_minted", "expires_at": "..."},
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    monkeypatch.setattr(auth, "_private_key", lambda: "fake-key")
+    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
+
+    s = S(
+        tmp_path,
+        FORGE_AUTH="app",
+        GITHUB_APP_ID="123",
+        GITHUB_APP_PRIVATE_KEY="KEY",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+    )
+
+    # Two calls → two mints (no caching).
+    t1 = auth.github_push_token(s)
+    t2 = auth.github_push_token(s)
+    assert t1 == "ghs_push_minted"
+    assert t2 == "ghs_push_minted"
+    assert len(mint_calls) == 4  # 2 × (GET installation + POST access_token)
+
+    # Verify the POST body includes contents:write + repositories.
+    post_bodies = [m[2] for m in mint_calls if m[0] == "post"]
+    assert len(post_bodies) == 2
+    for body in post_bodies:
+        assert body == {"permissions": {"contents": "write"}, "repositories": ["r"]}
+
+
+def test_push_token_not_installed_raises(tmp_path, monkeypatch):
+    """github_push_token raises GitHubAppNotInstalledError when the App
+    is not installed on the target repo (404 from /installation)."""
+    import httpx
+    import jwt as jwt_module
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, headers=None, **kwargs):
+            return httpx.Response(404, json={"message": "Not Found"})
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    monkeypatch.setattr(auth, "_private_key", lambda: "fake-key")
+    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
+
+    s = S(
+        tmp_path,
+        FORGE_AUTH="app",
+        GITHUB_APP_ID="123",
+        GITHUB_APP_PRIVATE_KEY="KEY",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+    )
+    with pytest.raises(auth.GitHubAppNotInstalledError) as exc:
+        auth.github_push_token(s)
+    assert exc.value.owner == "o"
+    assert exc.value.repo == "r"
+
+
+def test_push_token_requires_app_config(tmp_path):
+    """github_push_token raises RuntimeError when FORGE_AUTH=app but
+    no GitHub App credentials are configured."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="FORGE_AUTH=app requires"):
+        auth.github_push_token(S(tmp_path, FORGE_AUTH="app"))
+
+
+def test_build_app_jwt_returns_valid_jwt(tmp_path):
+    """_build_app_jwt returns a JWT string with the app id as issuer."""
+    import jwt as jwt_module
+
+    monkeypatch = pytest.MonkeyPatch()
+    S(
+        tmp_path,
+        GITHUB_APP_ID="456",
+        GITHUB_APP_PRIVATE_KEY="test-key",
+    )
+
+    # Let _build_app_jwt run for real — need a real key to sign.
+    # Since we don't have a real RSA key, monkeypatch jwt.encode
+    # to return a predictable token.
+    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
+    token = auth._build_app_jwt(S(tmp_path))
+    assert token == "fake-jwt"

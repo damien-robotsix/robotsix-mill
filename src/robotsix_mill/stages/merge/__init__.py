@@ -60,7 +60,7 @@ from __future__ import annotations
 from ...agents.ci_fixing import run_ci_fix_agent
 from ...agents.rebasing import run_rebase_agent
 from ...agents.review_revision import run_review_revision_agent
-from ...forge.auth import _resolve_remote_url, github_token
+from ...forge.auth import _resolve_remote_url, github_push_token, github_token
 from ...runners.pass_runner import load_memory, persist_memory
 from ...runtime import tracing
 from ...vcs import git_ops
@@ -99,6 +99,7 @@ __all__ = [
     # patchable seams
     "_resolve_remote_url",
     "github_token",
+    "github_push_token",
     "load_memory",
     "persist_memory",
     # constants

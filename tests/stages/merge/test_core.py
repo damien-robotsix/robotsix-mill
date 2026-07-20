@@ -1624,7 +1624,7 @@ def test_counter_read_write(tmp_path):
 
 
 def test_rebase_force_push_uses_minted_token_not_raw_forge_token(tmp_path, monkeypatch):
-    """Regression: the post-rebase force-push must use github_token()
+    """Regression: the post-rebase force-push must use github_push_token()
     (the minted App/PAT token) — not the raw s.forge_token, which is
     empty under GitHub App auth -> unauthenticated push -> git exit 128
     -> ticket BLOCKED. The rebase+push moved to the REBASING-state path
@@ -1637,6 +1637,10 @@ def test_rebase_force_push_uses_minted_token_not_raw_forge_token(tmp_path, monke
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.fetch",
         lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.github_push_token",
+        lambda s, repo_config=None: "MINTED-APP-TOK",
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.github_token",

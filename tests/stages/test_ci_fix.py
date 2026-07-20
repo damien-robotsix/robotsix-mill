@@ -2445,7 +2445,7 @@ def test_ci_fix_dedup_removes_extra_fragment_without_invoking_agent(
 
 
 def test_ci_fix_agent_push_uses_minted_token_not_raw_forge_token(tmp_path, monkeypatch):
-    """The ci-fix agent push (via post_push_check) must use github_token()
+    """The ci-fix agent push (via post_push_check) must use github_push_token()
     — not the raw s.forge_token, which is empty under GitHub App auth.
     Mirrors ``test_rebase_force_push_uses_minted_token_not_raw_forge_token``
     for the rebase stage."""
@@ -2454,6 +2454,10 @@ def test_ci_fix_agent_push_uses_minted_token_not_raw_forge_token(tmp_path, monke
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
         lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.github_push_token",
+        lambda s, repo_config=None: "MINTED-APP-TOK",
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.github_token",

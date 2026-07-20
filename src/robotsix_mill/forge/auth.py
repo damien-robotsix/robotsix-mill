@@ -57,6 +57,23 @@ def _private_key() -> str:
     return key.replace("\\n", "\n")
 
 
+def _build_app_jwt(settings: Settings) -> str:
+    """Build a JWT bearer token for the GitHub App, valid 9 min.
+
+    Shared by :func:`_mint_installation_token` and
+    :func:`github_push_token` so the JWT header construction is
+    not duplicated.
+    """
+    import jwt
+
+    now = int(time.time())
+    return jwt.encode(
+        {"iat": now - 60, "exp": now + 9 * 60, "iss": get_secrets().github_app_id},
+        _private_key(),
+        algorithm="RS256",
+    )
+
+
 def _resolve_remote_url(
     settings: Settings, repo_config: RepoConfig | None = None
 ) -> str:
@@ -75,19 +92,13 @@ def _mint_installation_token(
 ) -> tuple[str, float]:
     """Returns (token, unix_expiry). Seam: tests monkeypatch this."""
     import httpx
-    import jwt
 
     from .github import _parse_owner_repo  # lazy: avoid import cycle
 
     api = settings.github_api_url.rstrip("/")
     remote_url = _resolve_remote_url(settings, repo_config)
     owner, repo = _parse_owner_repo(remote_url)
-    now = int(time.time())
-    bearer = jwt.encode(
-        {"iat": now - 60, "exp": now + 9 * 60, "iss": get_secrets().github_app_id},
-        _private_key(),
-        algorithm="RS256",
-    )
+    bearer = _build_app_jwt(settings)
     h = {
         "Authorization": f"Bearer {bearer}",
         "Accept": "application/vnd.github+json",
@@ -142,6 +153,58 @@ def invalidate_and_backoff(
     """
     invalidate_github_token(settings, repo_config)
     time.sleep(2)
+
+
+def github_push_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
+    """Return a token scoped for git push operations.
+
+    When ``settings.forge_auth != "app"``, falls back to the static
+    ``FORGE_TOKEN`` (PAT) — identical to :func:`github_token`.
+
+    When ``forge_auth == "app"``, bypasses the cached installation
+    token from :func:`github_token` and mints a **fresh** token
+    scoped to ``contents: write`` on the target repository.  This
+    ensures every push authenticates with a short-lived,
+    least-privilege token — no long-lived PAT is stored or reused.
+    """
+    if settings.forge_auth != "app":
+        return github_token(settings, repo_config)
+
+    if not get_secrets().github_app_id or not (
+        get_secrets().github_app_private_key
+        or get_secrets().github_app_private_key_path
+    ):
+        raise RuntimeError(
+            "FORGE_AUTH=app needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY[_PATH]"
+        )
+
+    import httpx
+
+    from .github import _parse_owner_repo  # lazy: avoid import cycle
+
+    api = settings.github_api_url.rstrip("/")
+    remote_url = _resolve_remote_url(settings, repo_config)
+    owner, repo = _parse_owner_repo(remote_url)
+    bearer = _build_app_jwt(settings)
+    h = {
+        "Authorization": f"Bearer {bearer}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    with httpx.Client(timeout=30) as c:
+        inst = c.get(f"{api}/repos/{owner}/{repo}/installation", headers=h)
+        if not inst.is_success:
+            raise GitHubAppNotInstalledError(owner, repo)
+        iid = inst.json()["id"]
+        tok = c.post(
+            f"{api}/app/installations/{iid}/access_tokens",
+            headers=h,
+            json={"permissions": {"contents": "write"}, "repositories": [repo]},
+        )
+        tok.raise_for_status()
+        data = tok.json()
+    token: str = data["token"]
+    return token
 
 
 def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:

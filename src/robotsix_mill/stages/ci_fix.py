@@ -22,7 +22,7 @@ from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge import get_forge
-from ..forge.auth import _resolve_remote_url, github_token
+from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
@@ -182,7 +182,7 @@ class CIFixStage(Stage):
         # upstream issue has already been resolved.
         _target = target_branch_for(s, ctx.repo_config)
         _remote_url = _resolve_remote_url(s, ctx.repo_config)
-        _token = github_token(s, repo_config=ctx.repo_config)
+        _token = github_push_token(s, repo_config=ctx.repo_config)
         try:
             _did_rebase = git_ops.try_rebase_onto(
                 Path(repo_dir),
@@ -525,7 +525,7 @@ class CIFixStage(Stage):
 
                 # 7. Push.
                 remote_url = _resolve_remote_url(ctx.settings, ctx.repo_config)
-                token = github_token(ctx.settings, repo_config=ctx.repo_config)
+                token = github_push_token(ctx.settings, repo_config=ctx.repo_config)
                 git_ops.push(repo_path, branch, remote_url, token)
 
             # 8. Success — no agent needed.
@@ -569,7 +569,7 @@ class CIFixStage(Stage):
         # Reconcile with remote PR branch before running the agent so it
         # works from the latest remote state (includes any foreign commits).
         remote_url = _resolve_remote_url(s, ctx.repo_config)
-        token = github_token(s, repo_config=ctx.repo_config)
+        token = github_push_token(s, repo_config=ctx.repo_config)
         reconciled = git_ops.reconcile_with_remote_pr(
             Path(repo_dir), remote_url, branch, token
         )
@@ -729,7 +729,7 @@ class CIFixStage(Stage):
                 # The token is captured in the closure and NEVER exposed
                 # to the sandbox or the agent's prompt.
                 remote_url = _resolve_remote_url(s, ctx.repo_config)
-                token = github_token(s, repo_config=ctx.repo_config)
+                token = github_push_token(s, repo_config=ctx.repo_config)
                 target = target_branch_for(s, ctx.repo_config)
 
                 result = run_ci_fix_agent(
@@ -989,7 +989,7 @@ class CIFixStage(Stage):
         """
         s = ctx.settings
         remote_url = _resolve_remote_url(s, ctx.repo_config)
-        token = github_token(s, repo_config=ctx.repo_config)
+        token = github_push_token(s, repo_config=ctx.repo_config)
         target = target_branch_for(s, ctx.repo_config)
 
         # Deterministic post-check: verify the agent's push actually
