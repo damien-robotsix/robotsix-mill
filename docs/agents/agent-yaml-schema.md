@@ -91,7 +91,7 @@ Which class of agent this is:
 - **`periodic`** — an agent run on a schedule or as a background task
   (audit, health, survey, test_gap, agent_check, epic_status, bc_check,
   completeness_check, copy_paste, diagnostic, docstring_coverage,
-  forge_parity, frontend_sync, meta, module_curator,
+  forge_parity, frontend_sync, meta, module_size, module_curator,
   repo_description_sync, run_health, state_sync,
   triage_boilerplate).
 - **`sub_agent`** — a utility agent called by other agents as a tool
@@ -237,7 +237,7 @@ of any ticket by ID. This is the safe, read-only counterpart to
 
 Periodic agents (`audit`, `health`, `survey`, `test_gap`, `bc_check`,
 `agent_check`, `completeness_check`, `copy_paste`, `docstring_coverage`,
-`forge_parity`, `frontend_sync`, `meta`, `module_curator`, `run_health`,
+`forge_parity`, `frontend_sync`, `meta`, `module_curator`, `module_size`, `run_health`,
 `state_sync`, `triage_boilerplate`) set this to `true` so they
 can look up the full context of past proposals when the one-line
 summary in `<recent_proposals>` isn't enough. Pipeline agents and
