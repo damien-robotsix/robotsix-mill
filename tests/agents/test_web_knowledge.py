@@ -25,6 +25,13 @@ from datetime import datetime, timezone
 
 import pytest
 
+try:
+    from hypothesis import assume, given, strategies as st
+
+    _HYPOTHESIS_AVAILABLE = True
+except ImportError:
+    _HYPOTHESIS_AVAILABLE = False
+
 from robotsix_mill.agents import web_knowledge
 from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.agents.web_knowledge import (
@@ -888,3 +895,31 @@ def test_trace_stage_ask_web_knowledge_nests_under_parent(
     out = asyncio.run(run_web_knowledge(settings=s, question="q"))
     assert out == "the answer"
     assert spans == ["ask_web_knowledge"]
+
+
+# ---------------------------------------------------------------------------
+# property-based invariants
+# ---------------------------------------------------------------------------
+
+
+if _HYPOTHESIS_AVAILABLE:
+
+    @given(st.text())
+    def test_slug_is_idempotent(s):
+        assert _slug(_slug(s)) == _slug(s)
+
+
+    @given(st.text())
+    def test_slug_is_ascii_and_nonempty_and_no_leading_dash(s):
+        result = _slug(s)
+        assert result.isascii()
+        assert len(result) > 0
+        assert not result.startswith("-")
+
+
+    @given(st.text(), st.text(max_size=200))
+    def test_stamp_parse_roundtrip_recovers_body(library, body):
+        assume("\n---" not in library)
+        stamped = _stamp_frontmatter(library, body)
+        meta = _parse_frontmatter(stamped)
+        assert meta.body == body

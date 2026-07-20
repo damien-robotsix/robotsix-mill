@@ -14,6 +14,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlmodel import select as _select
 
+try:
+    from hypothesis import given, strategies as st
+
+    _HYPOTHESIS_AVAILABLE = True
+except ImportError:
+    _HYPOTHESIS_AVAILABLE = False
+
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.db import session as db_session
 from robotsix_mill.core.models import SourceKind, Ticket, TicketKind
@@ -85,6 +92,13 @@ def _now():
 
 def test_normalize_strips_punctuation_and_case():
     assert normalize("Trace-Review: Tool Errors!") == "trace review tool errors"
+
+
+if _HYPOTHESIS_AVAILABLE:
+
+    @given(st.text())
+    def test_normalize_is_idempotent(s):
+        assert normalize(normalize(s)) == normalize(s)
 
 
 # ---------------------------------------------------------------------------

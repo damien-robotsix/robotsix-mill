@@ -3,6 +3,13 @@ parsing/formatting."""
 
 import pytest
 
+try:
+    from hypothesis import given, strategies as st
+
+    _HYPOTHESIS_AVAILABLE = True
+except ImportError:
+    _HYPOTHESIS_AVAILABLE = False
+
 from robotsix_mill.core.duration import format_duration, parse_duration
 
 
@@ -102,3 +109,21 @@ def test_format_duration_negative_raises():
 )
 def test_round_trip(n):
     assert parse_duration(format_duration(n)) == n
+
+
+# ---------------------------------------------------------------------------
+# property-based round-trip and format invariants
+# ---------------------------------------------------------------------------
+
+
+if _HYPOTHESIS_AVAILABLE:
+
+    @given(st.integers(min_value=0, max_value=10**9))
+    def test_duration_roundtrip_value(n):
+        assert parse_duration(format_duration(n)) == n
+
+
+    @given(st.integers(min_value=0, max_value=10**9))
+    def test_duration_format_is_reparseable_string(n):
+        s = format_duration(n)
+        assert parse_duration(s) == n
