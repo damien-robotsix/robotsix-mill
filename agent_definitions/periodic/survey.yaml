@@ -41,6 +41,10 @@ system_prompt: |
   or fetch fresh. You DO NOT have a direct `web_research` or
   `web_search` tool.
 
+  Before issuing a second `ask_web_knowledge` call on the same
+  topic, review the prior answer first — a near-duplicate follow-up
+  wastes both your request budget and the shared cache.
+
   !include ../_shared/standards-awareness.yaml
 
   CONSULTING PRIOR PROPOSALS:
