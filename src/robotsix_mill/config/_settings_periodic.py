@@ -133,6 +133,18 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between periodic test-gap passes.",
     )
 
+    # --- module-size agent (oversized-file oversight) ---
+    # When True, the worker runs periodic module-size passes.
+    module_size_periodic: bool = Field(
+        default=True,
+        description="When true, run periodic module-size passes for oversized-file oversight.",
+    )
+    # Interval between periodic module-size passes (seconds).
+    module_size_interval_seconds: int = Field(
+        default=604800,  # 7d — weekly default; per-repo override via YAML
+        description="Seconds between periodic module-size passes.",
+    )
+
     # --- agent-check agent (agent-definition coherence) ---
     # Opt-in periodic agent-check pass. Defaults to False (off); flip
     # to true to schedule the pass every ``agent_check_interval_seconds``

@@ -58,6 +58,9 @@ RepoDescriptionSyncResult
 # DocstringCoverageResult — type alias (PeriodicAgentResult); used in tests
 # and via agent YAML; vulture (60% confidence) cannot trace the usage.
 DocstringCoverageResult
+# ModuleSizeResult — type alias (PeriodicAgentResult); used in tests and
+# via agent YAML; vulture (60% confidence) cannot trace the usage.
+ModuleSizeResult
 model_config
 chunk_size
 max_chunks
@@ -77,6 +80,7 @@ run_test_gap_agent
 run_triage_boilerplate_agent
 run_state_sync_agent
 run_docstring_coverage_agent
+run_module_size_agent
 parameters
 web_fetch_budget
 correct_form
@@ -146,6 +150,8 @@ changelog_autofill_interval_seconds
 ci_debt_recheck_periodic
 docstring_coverage_periodic
 docstring_coverage_interval_seconds
+module_size_periodic
+module_size_interval_seconds
 settings_customise_sources
 dotenv_settings
 ci_patterns_file
@@ -295,6 +301,7 @@ run_changelog_autofill_pass
 run_pin_bump_pass
 run_repo_description_sync_pass
 run_docstring_coverage_pass
+run_module_size_pass
 # run_langfuse_cleanup_pass_wrapper — called from _passes.py via
 # _run_periodic_pass wrapper; vulture (60% confidence) cannot trace it.
 run_langfuse_cleanup_pass_wrapper
