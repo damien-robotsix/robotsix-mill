@@ -424,6 +424,14 @@ class _TransitionMixin(_ServiceBase):
             s.refresh(ticket)
             if note and dst is State.READY:
                 _clear_stale_implement_guard(self.workspace(ticket))
+            # Clear any stale implement conversation state so that a
+            # blocked→READY resume starts a fresh agent conversation
+            # instead of replaying the prior transcript (which would
+            # drown out corrective feedback loaded from comments).
+            if dst is State.READY:
+                from ...stages.pause import clear_conversation_state
+
+                clear_conversation_state(self.workspace(ticket), "implement")
             if spawn_reset and counter_path is not None:
                 try:
                     counter_path.unlink()

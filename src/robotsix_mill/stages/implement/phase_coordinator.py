@@ -22,6 +22,7 @@ from ..base import Outcome, StageContext
 from ..pause import (
     build_compact_resume_message_history,
     check_for_pause,
+    clear_conversation_state,
     load_conversation_state,
     save_conversation_state,
 )
@@ -153,6 +154,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         tail = summary_text[-500:].strip()
                         if tail:
                             note += f"\n\nLast attempt summary tail:\n{tail}"
+                # Discard any stale conversation state so a
+                # resume-blocked restart begins a fresh agent
+                # conversation instead of replaying the prior
+                # transcript.
+                clear_conversation_state(ws, "implement")
                 return Outcome(State.BLOCKED, note)
             # Only increment on genuine re-spawns, not transient
             # infrastructure retries.  Transient failures (sandbox EOF,
