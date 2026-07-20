@@ -220,8 +220,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         "implement attempt "
                         f"(fingerprint {current_fp}) — "
                         "re-implementing would produce the same "
-                        "result.  Update the specification or use "
-                        "the reset-fingerprint endpoint to clear.",
+                        "result.  Update the specification to change "
+                        "the fingerprint, or force a retry via "
+                        "resume-blocked with a justification note, or "
+                        "use the reset-fingerprint endpoint to clear "
+                        "the guard.",
                     )
 
         # 5. Agent tool-definition integrity: the assembled tool list
