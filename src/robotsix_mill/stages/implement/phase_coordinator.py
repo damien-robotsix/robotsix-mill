@@ -268,6 +268,8 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                                 encoding="utf-8"
                             ).strip()
                         except OSError:
+                            # _stall_summary is already ""; the file is
+                            # non-critical — swallow and continue.
                             pass
                     if _stall_summary and _stall_summary.startswith("STALL DETECTED"):
                         return Outcome(State.BLOCKED, _stall_summary)
