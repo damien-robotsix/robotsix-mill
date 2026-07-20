@@ -2,6 +2,7 @@
 
 - Add docstring to `CaseTolerantEnum.process_bind_param` in `src/robotsix_mill/core/models.py`.
 - Add docstring to `CaseTolerantEnum.process_result_value` in `src/robotsix_mill/core/models.py`.
+- Add ``scripts/validate-changelog.py`` — pre-commit changelog fragment validator that ensures trailing newlines and ``docs/modules.yaml`` registration, called automatically by the implement stage's ``_finalize`` before committing. Also fixes a missing trailing newline in ``maybe_generate_towncrier_fragment``.
 - `github_push_token()` now requests `workflows:write` alongside
   `contents:write` when minting a GitHub App installation access
   token, fixing push failures for pushes that touch

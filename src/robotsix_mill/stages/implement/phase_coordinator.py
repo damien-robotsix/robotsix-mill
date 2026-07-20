@@ -1325,6 +1325,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             from ..towncrier import maybe_generate_towncrier_fragment
 
             maybe_generate_towncrier_fragment(repo_dir, ticket.id, ticket.title)
+            cls._validate_changelog_fragments(repo_dir)
             git_ops.commit_all(repo_dir, commit_message)
         # Commit extra repos (skip primary — already done above).
         if extra_roots is not None:
@@ -1337,6 +1338,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     maybe_generate_towncrier_fragment(
                         repo_path, ticket.id, ticket.title
                     )
+                    cls._validate_changelog_fragments(repo_path)
                     git_ops.commit_all(repo_path, commit_message)
             # Write the artifact — even if empty (no-change-needed path).
             try:
@@ -1350,3 +1352,44 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     ticket.id,
                     exc_info=True,
                 )
+
+    # ------------------------------------------------------------------
+    # Changelog validation (pre-commit guard)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _validate_changelog_fragments(cls, repo_dir: Path) -> None:
+        """Validate changelog fragment files before committing.
+
+        Ensures trailing newlines and ``docs/modules.yaml`` registration
+        so that pre-commit hooks (``end-of-file-fixer`` and
+        ``robotsix-modules check-registration``) pass in CI without an
+        auto-fix commit.
+        """
+        try:
+            import subprocess
+
+            script = Path(__file__).parents[3] / "scripts" / "validate-changelog.py"
+            if not script.is_file():
+                log.debug(
+                    "validate-changelog: script not found at %s — skipping", script
+                )
+                return
+            result = subprocess.run(
+                ["python3", str(script), str(repo_dir)],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.stderr:
+                for line in result.stderr.strip().splitlines():
+                    log.info(
+                        "validate-changelog: %s",
+                        line.removeprefix("validate-changelog: "),
+                    )
+        except Exception:
+            log.warning(
+                "%s: validate_changelog failed — continuing without validation",
+                repo_dir,
+                exc_info=True,
+            )

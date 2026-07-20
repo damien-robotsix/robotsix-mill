@@ -79,6 +79,7 @@ modules:
       - tests/core/test_repo_layout.py
       - tests/core/test_tool_wrappers.py
       - tests/core/test_delta_context.py
+      - changelog.d/*.md
     dependencies: [config]
 
   - id: deps
@@ -606,7 +607,6 @@ modules:
       - ARCHITECTURE.md
       - CONTRIBUTING.md
       - CHANGELOG.md
-      - changelog.d/*.md
       - doc-agent-ledger.md
       - LICENSE
       - SECURITY.md
