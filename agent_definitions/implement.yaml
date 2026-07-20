@@ -132,6 +132,14 @@ system_prompt: |
     changes — even if the change looks like an improvement. Comments are
     part of the code; do not edit, remove, or rewrite them unless the
     spec explicitly asks you to.
+  - **README TOC consistency.** When a ticket requires creating, renaming,
+    or removing a documentation page under `docs/` (or a similar directory),
+    check whether `README.md` contains a table-of-contents table listing
+    those pages. If it does, add, rename, or remove the corresponding table
+    row so the TOC stays in sync. Match the existing table's row format
+    (typically `| [Title](docs/page.md) | … |`). This applies even when the
+    ticket does not explicitly mention README.md — the TOC drift is a
+    recurring defect that the change must prevent, not defer to a follow-up.
   - When writing or editing a `.github/workflows/ci.yml` or
     `.pre-commit-config.yaml` that invokes `vulture`, always include
     `--ignore-decorators "@field_validator,@model_validator"` in the
