@@ -1327,6 +1327,13 @@
           "description": "Path to the implement agent's Markdown memory ledger. When unset, derives from data_dir/board/implement_memory.md.",
           "title": "Implement Memory Path"
         },
+        "implement_stall_threshold": {
+          "default": 2,
+          "description": "Consecutive no-progress BLOCKED cycles before stall guard fires. 0 disables.",
+          "minimum": 0,
+          "title": "Implement Stall Threshold",
+          "type": "integer"
+        },
         "langfuse_cleanup_interval_seconds": {
           "default": 86400,
           "description": "Seconds between Langfuse trace cleanup passes.",

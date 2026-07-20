@@ -420,6 +420,18 @@ class _StagesSettings(BaseModel):
         default=3,
         ge=0,
     )
+    # Number of consecutive no-progress BLOCKED implement cycles after
+    # which the stall guard fires with an actionable diagnostic instead
+    # of silently consuming another spawn round.  A cycle is "no-progress"
+    # when the implement agent's summary is byte-identical to the previous
+    # blocked attempt.  Default 2 means: after two consecutive cycles with
+    # the same summary (and no file changes), the third attempt is blocked
+    # BEFORE opening a trace.  Set to 0 to disable.
+    implement_stall_threshold: int = Field(
+        description="Consecutive no-progress BLOCKED cycles before stall guard fires. 0 disables.",
+        default=2,
+        ge=0,
+    )
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
     # 20 (original) then 40 each routinely BLOCKED medium PRs with

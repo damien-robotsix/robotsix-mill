@@ -934,6 +934,214 @@ def test_finalize_skips_towncrier_when_fragment_already_exists(
     assert len(fake.commits) == 1
 
 
+# --- cross-spawn stall detection -----------------------------------------
+
+
+def test_finalize_stall_detection_identical_summary(ctx_factory, tmp_path, monkeypatch):
+    """Two consecutive BLOCKED cycles with the SAME summary → stall counter
+    reaches threshold (default 2) → diagnostic prepended to block note
+    and includes open review comment ids."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _FakeGitOps(changed=set())
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    summary = "agent could not complete — blocked on missing dependency"
+
+    # Cycle 1: BLOCKED.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl1 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "BLOCKED — resumable" in impl1
+    assert "stall-count: 0" in impl1
+    assert "summary-fingerprint:" in impl1
+    assert (ws.artifacts_dir / "implement_summary.md").read_text() == summary
+
+    # Add an open review comment (simulating corrective feedback).
+    ctx.service.add_comment(
+        t.id, "please fix the import path — use src.foo.bar", author="reviewer"
+    )
+    comments = ctx.service.list_comments(t.id)
+    review_id = str(comments[0].id)
+
+    # Cycle 2: BLOCKED again, SAME summary → stall_count → 1 (not yet threshold).
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl2 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "BLOCKED — resumable" in impl2
+    assert "stall-count: 1" in impl2
+    # Summary unchanged (stall_count < threshold, no diagnostic prepended).
+    assert (ws.artifacts_dir / "implement_summary.md").read_text() == summary
+
+    # Cycle 3: BLOCKED again, SAME summary → stall_count → 2 → THRESHOLD.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl3 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "BLOCKED — resumable" in impl3
+    assert "stall-count: 2" in impl3
+
+    summary3 = (ws.artifacts_dir / "implement_summary.md").read_text()
+    assert summary3.startswith("STALL DETECTED")
+    assert "2 consecutive implement cycles" in summary3
+    assert f"#{review_id}" in summary3
+    assert "re-scoping or splitting" in summary3
+    # Original summary still present after the diagnostic.
+    assert summary in summary3
+
+
+def test_finalize_stall_resets_on_different_summary(ctx_factory, tmp_path, monkeypatch):
+    """A BLOCKED cycle with a DIFFERENT summary resets the stall counter."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _FakeGitOps(changed=set())
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    # Cycle 1: BLOCKED with summary A.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "summary A", ok=False, reference_files=None
+    )
+    impl1 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 0" in impl1
+
+    # Cycle 2: BLOCKED with summary B (different) → counter resets to 0.
+    ImplementStage._finalize(
+        ctx,
+        t,
+        repo_dir,
+        "mill/x",
+        "summary B — different",
+        ok=False,
+        reference_files=None,
+    )
+    impl2 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 0" in impl2
+    summary2 = (ws.artifacts_dir / "implement_summary.md").read_text()
+    assert "STALL DETECTED" not in summary2
+
+
+def test_finalize_stall_resets_on_success(ctx_factory, tmp_path, monkeypatch):
+    """A passed cycle (ok=True) resets the stall counter even after
+    a prior BLOCKED attempt with matching summary."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _FakeGitOps(changed={repo_dir})  # has changes → commit
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    summary = "some summary"
+
+    # Build up stall_count to 1.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl_before = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 1" in impl_before
+
+    # Now a success → counter resets.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=True, reference_files=None
+    )
+    impl_after = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 0" in impl_after
+
+
+def test_finalize_stall_untouched_by_transient(ctx_factory, tmp_path, monkeypatch):
+    """A transient (env-error) cycle does NOT affect the stall counter."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _FakeGitOps(changed=set())
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    summary = "env error summary"
+
+    # Cycle 1: BLOCKED → stall_count = 0.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl1 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 0" in impl1
+
+    # Cycle 2: TRANSIENT (same summary) → stall_count unchanged at 0.
+    ImplementStage._finalize(
+        ctx,
+        t,
+        repo_dir,
+        "mill/x",
+        summary,
+        ok=False,
+        transient=True,
+        reference_files=None,
+    )
+    impl2 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 0" in impl2
+
+    # Cycle 3: BLOCKED again (same summary) → stall_count → 1 (transient
+    # didn't count, so this is only the second BLOCKED non-transient cycle).
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    impl3 = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "stall-count: 1" in impl3
+
+
+def test_preflight_stall_guard_blocks_before_spawn(ctx_factory, tmp_path):
+    """When implement.md already carries a stall-count at or above
+    threshold, preflight() blocks with the stall diagnostic.
+
+    The spawn counter may already carry a count from prior cycles;
+    the guard prevents further spawn consumption by blocking the
+    ticket before the agent ever runs."""
+    ctx = ctx_factory(implement_stall_threshold=2)
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    # Write a pre-seeded implement.md with stall already tripped.
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: mill/x\n"
+        "spec-fingerprint: abc123\n"
+        "summary-fingerprint: def456\n"
+        "stall-count: 2\n"
+        "\n"
+        "STALL DETECTED — 2 consecutive implement cycles produced no "
+        "meaningful change...\n",
+        encoding="utf-8",
+    )
+    (ws.artifacts_dir / "implement_summary.md").write_text(
+        "STALL DETECTED — 2 consecutive implement cycles produced no "
+        "meaningful change (identical summary, no new diff). "
+        "Unaddressed review comment(s): #42. "
+        "The implement agent is not making progress despite corrective "
+        "feedback.  Consider re-scoping or splitting the ticket, or "
+        "hand-applying the fix.",
+        encoding="utf-8",
+    )
+
+    outcome = ImplementStage().preflight(t, ctx)
+
+    assert outcome is not None
+    assert outcome.next_state == State.BLOCKED
+    assert "STALL DETECTED" in (outcome.note or "")
+    assert "#42" in (outcome.note or "")
+
+
 # --- convergence backstop with cross_repo_target ------------------------
 
 

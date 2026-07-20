@@ -233,6 +233,54 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         "the guard.",
                     )
 
+        # 4.5. Cross-spawn stall guard: if a prior implement cycle
+        #      already tripped the stall detector (summary unchanged
+        #      across consecutive BLOCKED attempts despite open review
+        #      feedback), block BEFORE incrementing the spawn counter
+        #      so a manual resume doesn't silently burn another round.
+        #      The stall note (written by _finalize) lives in
+        #      implement.md and implement_summary.md — surface it here
+        #      as an early gate.
+        if implement_md.exists():
+            try:
+                _md_stall = implement_md.read_text(encoding="utf-8")
+            except OSError:
+                _md_stall = ""
+            _stall_count = 0
+            for _line in _md_stall.splitlines():
+                if _line.startswith("stall-count: "):
+                    try:
+                        _stall_count = int(_line.split("stall-count: ", 1)[1].strip())
+                    except ValueError:
+                        _stall_count = 0
+                    break
+            if _stall_count > 0:
+                _threshold = getattr(s, "implement_stall_threshold", 2)
+                if _threshold > 0 and _stall_count >= _threshold:
+                    # Surface the stall diagnostic from the last
+                    # attempt's summary — it already includes review
+                    # comment ids and the recommended remedy.
+                    _stall_summary = ""
+                    _summary_path = ws.artifacts_dir / "implement_summary.md"
+                    if _summary_path.exists():
+                        try:
+                            _stall_summary = _summary_path.read_text(
+                                encoding="utf-8"
+                            ).strip()
+                        except OSError:
+                            # _stall_summary is already ""; the file is
+                            # non-critical — swallow and continue.
+                            pass
+                    if _stall_summary and _stall_summary.startswith("STALL DETECTED"):
+                        return Outcome(State.BLOCKED, _stall_summary)
+                    return Outcome(
+                        State.BLOCKED,
+                        f"stall guard — {_stall_count} consecutive "
+                        "no-progress implement cycles detected.  "
+                        "The implement agent is not converging.  "
+                        "Consider re-scoping or splitting the ticket.",
+                    )
+
         # 5. Agent tool-definition integrity: the assembled tool list
         #    must be non-empty before we open a trace.  Load the agent-
         #    definition YAML and verify it declares at least one tool.
@@ -1068,6 +1116,89 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             if epic_ctx:
                 effective = epic_ctx + "\n\n" + effective
 
+        # --- cross-spawn stall detection ---------------------------------
+        # Detect when the implement agent's output is byte-identical to
+        # the previous blocked attempt — a sign that corrective review
+        # feedback is being ignored and the agent is stuck in a
+        # convergence loop.  Track via summary-fingerprint comparison
+        # and a stall counter persisted alongside the spec fingerprint.
+        implement_md_path = ws.artifacts_dir / "implement.md"
+        old_summary_fp = ""
+        old_stall_count = 0
+        if implement_md_path.exists():
+            try:
+                old_md = implement_md_path.read_text(encoding="utf-8")
+            except OSError:
+                old_md = ""
+            for line in old_md.splitlines():
+                if line.startswith("summary-fingerprint: "):
+                    old_summary_fp = line.split("summary-fingerprint: ", 1)[1].strip()
+                elif line.startswith("stall-count: "):
+                    try:
+                        old_stall_count = int(line.split("stall-count: ", 1)[1].strip())
+                    except ValueError:
+                        old_stall_count = 0
+
+        new_summary_fp = hashlib.sha256(summary.encode("utf-8")).hexdigest()[:16]
+
+        # Manage stall counter: increment on no-progress BLOCKED cycles,
+        # reset on progress or success, leave untouched for transient errors.
+        stall_count = old_stall_count
+        if transient:
+            pass  # don't touch — transient env errors aren't agent failures
+        elif ok:
+            stall_count = 0
+        else:
+            # BLOCKED — resumable: compare with previous attempt
+            if old_summary_fp and old_summary_fp == new_summary_fp:
+                stall_count += 1
+            else:
+                stall_count = 0
+
+        # Check against threshold and build stall diagnostic when tripped.
+        stall_threshold = getattr(ctx.settings, "implement_stall_threshold", 2)
+        if stall_threshold > 0 and stall_count >= stall_threshold:
+            # Fetch open (non-system) review comment ids for the diagnostic
+            # so the operator knows which corrective instructions went
+            # unapplied — this distinguishes a convergence loop from a
+            # resourcing problem.
+            review_ids: list[str] = []
+            try:
+                _NON_FEEDBACK = {"mill", "system"}
+                comments = ctx.service.list_comments(ticket.id)
+                for c in comments:
+                    if (
+                        c.parent_id is None
+                        and c.closed_at is None
+                        and c.author not in _NON_FEEDBACK
+                    ):
+                        review_ids.append(str(c.id))
+            except Exception:
+                log.warning(
+                    "%s: failed to list comments for stall diagnostic",
+                    ticket.id,
+                    exc_info=True,
+                )
+
+            stall_note = (
+                f"STALL DETECTED — {stall_count} consecutive implement "
+                "cycles produced no meaningful change (identical summary, "
+                "no new diff). "
+            )
+            if review_ids:
+                stall_note += (
+                    "Unaddressed review comment(s): "
+                    + ", ".join(f"#{rid}" for rid in review_ids)
+                    + ". "
+                )
+            stall_note += (
+                "The implement agent is not making progress despite "
+                "corrective feedback.  Consider re-scoping or splitting "
+                "the ticket, or hand-applying the fix."
+            )
+            summary = stall_note + "\n\n" + summary
+        # --- end stall detection -----------------------------------------
+
         if transient:
             # Transient/environmental abort — do NOT persist a spec
             # fingerprint.  Writing one would poison the next pass
@@ -1082,8 +1213,12 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             header = "BLOCKED — resumable"
             fp_line = f"spec-fingerprint: {hashlib.sha256(effective.encode('utf-8')).hexdigest()[:16]}\n"
 
+        summary_fp_line = f"summary-fingerprint: {new_summary_fp}\n"
+        stall_line = f"stall-count: {stall_count}\n"
+
         (ws.artifacts_dir / "implement.md").write_text(
-            f"# Implement ({header})\nbranch: {branch}\n{fp_line}\n{summary}\n",
+            f"# Implement ({header})\nbranch: {branch}\n"
+            f"{fp_line}{summary_fp_line}{stall_line}\n{summary}\n",
             encoding="utf-8",
         )
         # Persist agent-curated reference_files (paths-only) for retry
