@@ -110,6 +110,7 @@
     "health_interval_seconds": 604800,
     "health_periodic": true,
     "implement_max_spawns_per_ticket": 3,
+    "implement_stall_threshold": 2,
     "implement_memory_path": null,
     "langfuse_cleanup_interval_seconds": 86400,
     "langfuse_cleanup_max_traces": 5000,

@@ -8,6 +8,7 @@
   waste from agents attempting to write to unreachable paths.
 - git push operations (ci_fix, rebase) now use `github_push_token()`, which mints a fresh, least-privilege GitHub App installation token scoped to `contents: write` on the target repository — eliminating the dependency on long-lived, expiring PATs for push authentication.
 - Fix: implement stage now clears stale conversation state on spawn-limit BLOCK and resume_blocked, so corrective operator feedback is loaded into a fresh agent conversation instead of being drowned out by a replayed prior transcript.
+- Add cross-spawn stall guard to implement stage: detects when the agent's output is byte-identical across consecutive BLOCKED cycles, stops consuming spawn rounds before the limit is exhausted, and blocks with an actionable diagnostic that surfaces unaddressed review comment IDs.  Controlled by new ``implement_stall_threshold`` setting (default 2).
 - Fingerprint guard now respects operator force-retry: `resume-blocked` with a justification note (or any BLOCKED→READY transition with a note) clears the stale-spec guard for exactly one implement cycle, instead of silently re-blocking on an unchanged fingerprint.
   The automatic-refusal diagnostic now names `resume-blocked` as a remedy alongside the existing spec-update and reset-fingerprint options.
 - Register the `module_size` periodic agent in all three registration points: ``_BUILTIN_KINDS`` (periodic loader), ``_PASS_REGISTRY`` (passes API), and CLI ``_RUNNERS`` + ``add_parser`` (``robotsix-mill module-size`` subcommand).
