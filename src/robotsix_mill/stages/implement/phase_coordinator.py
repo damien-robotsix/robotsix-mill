@@ -238,15 +238,15 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         #      across consecutive BLOCKED attempts despite open review
         #      feedback), block BEFORE incrementing the spawn counter
         #      so a manual resume doesn't silently burn another round.
-        #      The stall note (written by _finalize) lives in
-        #      implement.md and implement_summary.md — surface it here
-        #      as an early gate.
+        #      The stall state lives in implement.md and, for continuity
+        #      across resume-blocked cycles, in implement_stall_state.json.
+        _stall_count = 0
+        _stall_summary = ""
         if implement_md.exists():
             try:
                 _md_stall = implement_md.read_text(encoding="utf-8")
             except OSError:
                 _md_stall = ""
-            _stall_count = 0
             for _line in _md_stall.splitlines():
                 if _line.startswith("stall-count: "):
                     try:
@@ -254,32 +254,41 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     except ValueError:
                         _stall_count = 0
                     break
-            if _stall_count > 0:
-                _threshold = getattr(s, "implement_stall_threshold", 2)
-                if _threshold > 0 and _stall_count >= _threshold:
-                    # Surface the stall diagnostic from the last
-                    # attempt's summary — it already includes review
-                    # comment ids and the recommended remedy.
-                    _stall_summary = ""
-                    _summary_path = ws.artifacts_dir / "implement_summary.md"
-                    if _summary_path.exists():
-                        try:
-                            _stall_summary = _summary_path.read_text(
-                                encoding="utf-8"
-                            ).strip()
-                        except OSError:
-                            # _stall_summary is already ""; the file is
-                            # non-critical — swallow and continue.
-                            pass
-                    if _stall_summary and _stall_summary.startswith("STALL DETECTED"):
-                        return Outcome(State.BLOCKED, _stall_summary)
-                    return Outcome(
-                        State.BLOCKED,
-                        f"stall guard — {_stall_count} consecutive "
-                        "no-progress implement cycles detected.  "
-                        "The implement agent is not converging.  "
-                        "Consider re-scoping or splitting the ticket.",
-                    )
+        # Fall back to the persisted JSON stall state — survives
+        # _clear_stale_implement_guard on resume-blocked.
+        if _stall_count == 0:
+            _ss_path = ws.artifacts_dir / "implement_stall_state.json"
+            if _ss_path.exists():
+                try:
+                    _ss = json.loads(_ss_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError, OSError:
+                    _ss = {}
+                _stall_count = _ss.get("stall_count", 0)
+        if _stall_count > 0:
+            _threshold = getattr(s, "implement_stall_threshold", 2)
+            if _threshold > 0 and _stall_count >= _threshold:
+                # Surface the stall diagnostic from the last
+                # attempt's summary — it already includes review
+                # comment ids and the recommended remedy.
+                _summary_path = ws.artifacts_dir / "implement_summary.md"
+                if _summary_path.exists():
+                    try:
+                        _stall_summary = _summary_path.read_text(
+                            encoding="utf-8"
+                        ).strip()
+                    except OSError:
+                        # _stall_summary is already ""; the file is
+                        # non-critical — swallow and continue.
+                        pass
+                if _stall_summary and _stall_summary.startswith("STALL DETECTED"):
+                    return Outcome(State.BLOCKED, _stall_summary)
+                return Outcome(
+                    State.BLOCKED,
+                    f"stall guard — {_stall_count} consecutive "
+                    "no-progress implement cycles detected.  "
+                    "The implement agent is not converging.  "
+                    "Consider re-scoping or splitting the ticket.",
+                )
 
         # 5. Agent tool-definition integrity: the assembled tool list
         #    must be non-empty before we open a trace.  Load the agent-
@@ -1123,6 +1132,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # convergence loop.  Track via summary-fingerprint comparison
         # and a stall counter persisted alongside the spec fingerprint.
         implement_md_path = ws.artifacts_dir / "implement.md"
+        stall_state_path = ws.artifacts_dir / "implement_stall_state.json"
         old_summary_fp = ""
         old_stall_count = 0
         if implement_md_path.exists():
@@ -1138,6 +1148,15 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         old_stall_count = int(line.split("stall-count: ", 1)[1].strip())
                     except ValueError:
                         old_stall_count = 0
+        elif stall_state_path.exists():
+            # Fall back to the persisted stall state (survives
+            # operator-initiated resume-blocked clears of implement.md).
+            try:
+                _stall = json.loads(stall_state_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError, OSError:
+                _stall = {}
+            old_summary_fp = _stall.get("summary_fingerprint", "")
+            old_stall_count = _stall.get("stall_count", 0)
 
         new_summary_fp = hashlib.sha256(summary.encode("utf-8")).hexdigest()[:16]
 
@@ -1221,6 +1240,25 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             f"{fp_line}{summary_fp_line}{stall_line}\n{summary}\n",
             encoding="utf-8",
         )
+        # Persist stall-detection state to a standalone JSON file so the
+        # cross-spawn stall guard survives operator-initiated resume-blocked
+        # clears of implement.md (which wipes the stall metadata).
+        try:
+            (ws.artifacts_dir / "implement_stall_state.json").write_text(
+                json.dumps(
+                    {
+                        "summary_fingerprint": new_summary_fp,
+                        "stall_count": stall_count,
+                    }
+                ),
+                encoding="utf-8",
+            )
+        except OSError:
+            log.warning(
+                "%s: failed to write implement_stall_state.json",
+                ticket.id,
+                exc_info=True,
+            )
         # Persist agent-curated reference_files (paths-only) for retry
         # pre-seeding. Overwrite refine's version unconditionally.
         try:
