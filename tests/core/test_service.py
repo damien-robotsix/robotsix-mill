@@ -280,9 +280,10 @@ def test_resume_blocked_back_to_originating_state(service):
 
 def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(service):
     """resume_blocked(note=...) persists the note as a comment and, when
-    resuming back into READY, deletes a stale artifacts/implement.md and
-    artifacts/implement_spawn_count so neither guard immediately re-blocks
-    the retry."""
+    resuming back into READY, deletes a stale artifacts/implement.md,
+    artifacts/implement_spawn_count, and implement_conversation_state.json
+    so no guard immediately re-blocks the retry and the agent starts a
+    fresh conversation that can read corrective feedback."""
     t = service.create("resume with note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -292,11 +293,14 @@ def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(ser
     stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
     spawn_counter = ws.artifacts_dir / "implement_spawn_count"
     spawn_counter.write_text("3", encoding="utf-8")
+    conv_state = ws.artifacts_dir / "implement_conversation_state.json"
+    conv_state.write_text('{"messages":[]}')
 
     resumed = service.resume_blocked(t.id, note="retry — prior failure was a flake")
     assert resumed.state is State.READY
     assert not stale.exists()
     assert not spawn_counter.exists()
+    assert not conv_state.exists()
 
     comments = service.list_comments(t.id)
     assert any(
@@ -307,14 +311,14 @@ def test_resume_blocked_with_note_records_comment_and_clears_implement_guard(ser
     assert "override: retry — prior failure was a flake" in (hist[-1].note or "")
 
 
-def test_resume_blocked_without_note_clears_spawn_counter_but_not_implement_guard(
+def test_resume_blocked_without_note_clears_spawn_counter_and_conversation_state(
     service,
 ):
-    """resume_blocked with no note still clears artifacts/implement_spawn_count
-    when the counter is at/above the spawn limit (explicit operator resume IS
-    the human inspection the block asked for) but leaves the stale-spec guard
-    (artifacts/implement.md) untouched — that guard still requires an explicit
-    note."""
+    """resume_blocked with no note clears artifacts/implement_spawn_count
+    when the counter is at/above the spawn limit and clears
+    implement_conversation_state.json (any READY resume starts a fresh
+    conversation) but leaves the stale-spec guard (artifacts/implement.md)
+    untouched — that guard still requires an explicit note."""
     t = service.create("resume without note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -324,11 +328,14 @@ def test_resume_blocked_without_note_clears_spawn_counter_but_not_implement_guar
     stale.write_text("BLOCKED — resumable\nspec-fingerprint: deadbeef\n")
     spawn_counter = ws.artifacts_dir / "implement_spawn_count"
     spawn_counter.write_text("5", encoding="utf-8")
+    conv_state = ws.artifacts_dir / "implement_conversation_state.json"
+    conv_state.write_text('{"messages":[]}')
 
     resumed = service.resume_blocked(t.id)
     assert resumed.state is State.READY
     assert stale.exists()
     assert not spawn_counter.exists()
+    assert not conv_state.exists()
     assert service.list_comments(t.id) == []
     hist = service.history(t.id)
     assert "spawn counter reset via resume-blocked" in (hist[-1].note or "")

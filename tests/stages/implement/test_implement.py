@@ -5315,12 +5315,17 @@ def test_spawn_counter_blocks_after_limit(ctx_factory, tmp_path, monkeypatch):
     # Seed the counter at the limit — next preflight trips the gate.
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    # Also seed a stale conversation state — the block should clear it.
+    conv_state = ws.artifacts_dir / "implement_conversation_state.json"
+    conv_state.write_text('{"messages":[]}')
 
     out = ImplementStage().preflight(t, ctx)
 
     assert out is not None
     assert out.next_state is State.BLOCKED
     assert "spawn limit reached" in out.note.lower()
+    # Conversation state must be cleared so a resume starts fresh.
+    assert not conv_state.exists()
 
 
 def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
@@ -5460,6 +5465,9 @@ def test_spawn_counter_blocked_note_includes_summary_tail(
         "Try upgrading the SDK or using a different model tier.\n"
     )
     (ws.artifacts_dir / "implement_summary.md").write_text(summary, encoding="utf-8")
+    # Seed a stale conversation state — spawn-limit block must clear it.
+    conv_state = ws.artifacts_dir / "implement_conversation_state.json"
+    conv_state.write_text('{"messages":[]}')
 
     out = ImplementStage().preflight(t, ctx)
 
@@ -5468,6 +5476,7 @@ def test_spawn_counter_blocked_note_includes_summary_tail(
     assert "spawn limit reached" in out.note.lower()
     assert "Last attempt summary tail:" in out.note
     assert "RunContext tools are not available" in out.note
+    assert not conv_state.exists()
 
 
 def test_spawn_counter_blocked_note_no_summary_when_file_missing(ctx_factory, tmp_path):
