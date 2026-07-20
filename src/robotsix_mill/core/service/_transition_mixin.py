@@ -279,6 +279,17 @@ class _TransitionMixin(_ServiceBase):
                     )
             elif ticket.state is State.BLOCKED:
                 ticket.blocked_from = None
+                # When an operator forces a blocked ticket back into
+                # READY with an explicit justification note, clear the
+                # implement stage's stale-spec guard so the fingerprint-
+                # collision refusal (phase_coordinator.preflight guard
+                # #4) doesn't silently re-block the ticket.  This
+                # mirrors resume_blocked's note-gated clearing and
+                # ensures ANY operator-forced transition into READY
+                # (not just the resume-blocked endpoint) satisfies the
+                # "operator-authorized retry" requirement.
+                if dst is State.READY and note and note.strip():
+                    _clear_stale_implement_guard(self.workspace(ticket))
             # Record originating state when pausing mid-stage; clear when
             # leaving AWAITING_USER_REPLY (resume path).
             if dst is State.AWAITING_USER_REPLY:

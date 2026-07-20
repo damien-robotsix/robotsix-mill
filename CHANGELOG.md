@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Fingerprint guard now respects operator force-retry: `resume-blocked` with a justification note (or any BLOCKED→READY transition with a note) clears the stale-spec guard for exactly one implement cycle, instead of silently re-blocking on an unchanged fingerprint.
+  The automatic-refusal diagnostic now names `resume-blocked` as a remedy alongside the existing spec-update and reset-fingerprint options.
 - Add `.shellcheckrc` with Bash dialect and external-sources settings for consistent shellcheck behavior across scripts.
 - Add shellcheck pre-commit hook (`shellcheck-py`, severity=warning) to lint shell scripts at commit time.
 - Add `lint-sh` Makefile target that runs `shellcheck` on all shell scripts, and chain it into the `lint` target.

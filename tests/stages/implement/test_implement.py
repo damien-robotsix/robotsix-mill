@@ -6311,3 +6311,237 @@ def test_spec_determined_blocked_persists_fingerprint_and_guards(
     assert out.next_state is State.BLOCKED
     assert "spec-determined" in out.note.lower()
     assert fp in out.note
+
+
+# --- fingerprint collision + operator force-retry integration ------------
+
+
+def test_resume_blocked_with_note_allows_implement_after_fingerprint_match(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A blocked ticket with an unchanged spec, resumed with an operator
+    justification note, must proceed to a fresh implement cycle exactly
+    once and must not immediately re-block on the fingerprint match."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Force-retry ticket", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # --- Phase 1: write a stale implement.md simulating a prior BLOCKED ---
+    # outcome with the current spec's fingerprint.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    # Preflight should block — fingerprint matches unchanged spec.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spec unchanged" in out.note.lower()
+    assert fp in out.note
+
+    # Transition the ticket to BLOCKED (simulating what the worker would do).
+    ctx.service.transition(t.id, State.BLOCKED, out.note)
+    t = ctx.service.get(t.id)
+    assert t.state is State.BLOCKED
+
+    # --- Phase 2: operator force-retry via resume_blocked with note ---
+    # This should clear the stale implement guard.
+    resumed = ctx.service.resume_blocked(t.id, note="operator force retry — flake")
+    assert resumed.state is State.READY
+    assert not (ws.artifacts_dir / "implement.md").exists(), (
+        "resume_blocked with note must clear the stale implement guard"
+    )
+
+    # --- Phase 3: preflight must now ALLOW the re-spawn ---
+    # (implement.md was deleted, so the guard has nothing to match against).
+    t = ctx.service.get(t.id)
+    out3 = ImplementStage().preflight(t, ctx)
+    assert out3 is None, f"preflight must allow after force-retry, got: {out3}"
+
+    # --- Phase 4: after ONE implement cycle (which fails again), ---
+    # the guard re-arms — the next automatic retry should be blocked.
+    def _agent_noop(*, repo_dir, spec, **kwargs):
+        return ("did nothing", [], "", None, None, True, "nothing to do")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent_noop)
+
+    out4 = ImplementStage().run(t, ctx)
+    assert out4.next_state is State.DONE  # no_change_needed → DONE
+
+    # Write a fresh implement.md with matching fingerprint (simulating a
+    # new BLOCKED outcome from a subsequent re-spawn).
+    ctx.service.transition(t.id, State.BLOCKED, "test re-block")
+    ctx.service.transition(t.id, State.READY, "test re-block")
+    t = ctx.service.get(t.id)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    # Preflight should block again — the guard re-armed after one cycle.
+    out5 = ImplementStage().preflight(t, ctx)
+    assert out5 is not None
+    assert out5.next_state is State.BLOCKED
+
+
+def test_resume_blocked_without_note_does_not_clear_fingerprint_guard(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """resume_blocked without a note leaves the fingerprint guard intact —
+    the next preflight must still block on an unchanged spec."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="No-note retry", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Write implement.md with matching fingerprint and block the ticket.
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    ctx.service.transition(t.id, State.BLOCKED, "fingerprint match")
+    t = ctx.service.get(t.id)
+    assert t.state is State.BLOCKED
+
+    # Resume WITHOUT a note — the guard should NOT be cleared.
+    resumed = ctx.service.resume_blocked(t.id)
+    assert resumed.state is State.READY
+    assert (ws.artifacts_dir / "implement.md").exists(), (
+        "resume_blocked without note must NOT clear the implement guard"
+    )
+
+    # Preflight should still block.
+    t = ctx.service.get(t.id)
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+
+
+def test_transition_blocked_to_ready_with_note_clears_fingerprint_guard(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """An operator-forced BLOCKED→READY transition with a justification
+    note also clears the fingerprint guard (equivalent to resume_blocked)."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Transition retry", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    ctx.service.transition(t.id, State.BLOCKED, "fingerprint match")
+    t = ctx.service.get(t.id)
+    assert t.state is State.BLOCKED
+
+    # Force-retry via direct transition with a note (not resume_blocked).
+    ctx.service.transition(
+        t.id, State.READY, note="operator force retry — environmental flake"
+    )
+    t = ctx.service.get(t.id)
+    assert t.state is State.READY
+    assert not (ws.artifacts_dir / "implement.md").exists(), (
+        "BLOCKED→READY transition with note must clear the implement guard"
+    )
+
+    # Preflight must now allow the re-spawn.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow after transition with note, got: {out}"
+
+
+def test_automatic_fingerprint_refusal_message_includes_force_retry_remedy(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the fingerprint guard blocks an automatic retry, the diagnostic
+    message must name resume-blocked as an operator remedy."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Message check", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    # The message must mention both the old remedies AND the new one.
+    assert "resume-blocked" in out.note, (
+        f"diagnostic must mention resume-blocked as a remedy, got: {out.note}"
+    )
+    assert "fingerprint" in out.note
+    assert "spec unchanged" in out.note.lower()
