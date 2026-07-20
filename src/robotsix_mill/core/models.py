@@ -119,6 +119,12 @@ class CaseTolerantEnum(TypeDecorator[str]):
     def process_result_value(
         self, value: str | None, dialect: object
     ) -> StrEnum | None:
+        """Restore a DB string to the corresponding ``StrEnum`` member.
+
+        Accepts ``None`` (pass-through) or a ``str`` — uppercased and resolved
+        against ``self.enum_cls``.  Raises ``ValueError`` when the string does
+        not match any member name.
+        """
         if value is None:
             return None
         try:
