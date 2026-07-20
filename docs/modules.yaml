@@ -562,6 +562,7 @@ modules:
       - docker-compose.override.example.yml
       - deploy/docker-compose.yml
       - .dockerignore
+      - .shellcheckrc
       - .hadolint.yaml
       - pyproject.toml
       - uv.lock

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `.shellcheckrc` with Bash dialect and external-sources settings for consistent shellcheck behavior across scripts.
 - Add `module_size` to the periodic-agent lists in `docs/agents/agent-yaml-schema.md` (category and read_ticket fields).
 - Stale `CHANGES_REQUESTED` forge reviews are now actively dismissed instead of only being silently discarded. Added `dismiss_review` to the Forge interface (`base.py`, `github_pr.py`, `gitlab/core.py`) and extended `_pr_review_status` to return `review_id`. The core fix in `_review_changes_requested_outcome` detects stale reviews regardless of `review_feedback_enabled`, preventing approved MRs from bouncing back to `human_mr_approval` on a stale review artifact.
 - Remove the review-artifact requirement from the auto-merge eligibility gate.
