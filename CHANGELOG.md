@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Extract `_persist_artifacts_and_run_guardrail` helper from duplicated block in `_handle_rename_only_change` and `_handle_spec_exact_edits` (copy-paste cleanup).
 - Add deterministic programmatic gates (meta runner + refine stage) that reject tickets proposing to enable internal (non-portable) periodic workflows on managed repos, using the data-driven portability map in `workflow_portability.py` — stops `state_sync` and other mill-only workflows from being proposed for non-mill repos before implement is ever reached.
 - Annotate advanced/expert-only config settings with `"advanced": true` in the JSON schema so the deploy UI can hide them behind an "Show advanced settings" toggle. Common operator-facing settings (URLs, feature toggles, secrets, paths) remain visible.
 - Add workflow portability classification (`is_portable`, `render_workflow_portability`) to the periodic loader, derived from the existing `_BUILTIN_KINDS` kind map. Refine and meta agents now receive a data-driven **Workflow Portability** table and gate internal-workflow enablement proposals (e.g. `state_sync`, `frontend_sync`) instead of hardcoding individual workflow names.
