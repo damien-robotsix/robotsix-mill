@@ -86,6 +86,8 @@
     "diagnostic_monitored_repo_ids": [],
     "diagnostic_periodic": false,
     "diagnostic_target_repo_id": "robotsix-mill",
+    "diagnostic_events_path": null,
+    "diagnostic_ci_failure_threshold": 3,
     "doc_classifier_diff_max_chars": 6000,
     "doc_classifier_request_limit": 3,
     "doc_memory_path": null,

@@ -90,3 +90,4 @@ def get_registered_checks() -> list[DiagnosticCheck]:
 # runs exactly once. The back-reference from diagnostic_check_errors to
 # this module resolves against the already-populated module above.
 from . import diagnostic_check_errors  # noqa: E402,F401
+from . import diagnostic_check_recurring_ci  # noqa: E402,F401

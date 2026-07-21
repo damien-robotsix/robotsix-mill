@@ -263,6 +263,50 @@ def _ci_failure_fingerprint(
     return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
 
 
+def _normalize_ci_failure_reason(
+    failing: list[dict[str, Any]], failing_summary: str = ""
+) -> str:
+    """Compute a stable, deterministic normalized-reason key for a CI failure.
+
+    The key strips transient detail — job-log output, file paths, line
+    numbers, timestamps — so that genuinely recurring failure modes
+    (e.g. "ruff check on every ticket") cluster under the same key
+    across different tickets and commits.
+
+    The algorithm:
+    1. Joins the sorted failing check names into a namespaces prefix.
+    2. Takes the summary text up to (but excluding) the ``**Job logs:**``
+       marker — the structured part.
+    3. Strips annotation lines (``path:line: message``) and timestamps.
+    4. Returns the first 16 hex digits of the SHA-256 hash of the result.
+    """
+    import re
+
+    names = sorted(chk.get("name", "unknown") for chk in failing)
+    names_key = "|".join(names)
+
+    marker = "**Job logs:**"
+    idx = failing_summary.find(marker)
+    core = failing_summary[:idx].rstrip() if idx != -1 else failing_summary[:2000]
+
+    # Strip annotation-level file-path and line-number detail — those are
+    # inherently per-ticket and prevent clustering.
+    core = re.sub(r"\n\s*- \[.*?\] .*?:\d+: .*", "", core)
+    core = re.sub(r"\[.*?\] .*?:\d+: .*", "", core)
+    # Strip ISO-8601 timestamps and run IDs (e.g. "run 1234567890").
+    core = re.sub(
+        r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?",
+        "",
+        core,
+    )
+    core = re.sub(r"run \d{8,}", "", core)
+    # Collapse whitespace for stability.
+    core = re.sub(r"\s+", " ", core).strip()
+
+    combined = f"{names_key}\n{core}"
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
+
+
 class _FailingContext(NamedTuple):
     """Data the counter/agent phases need once CI is confirmed failing."""
 

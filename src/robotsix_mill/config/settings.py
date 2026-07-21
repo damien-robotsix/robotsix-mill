@@ -162,6 +162,18 @@ class Settings(
             return self.data_dir / board_id / "ci_patterns.json"
         return self.data_dir / "ci_patterns.json"
 
+    def diagnostic_events_file_for(self, board_id: str = "") -> Path:
+        """Per-repo resolved path for the diagnostic event store.
+
+        Honors ``diagnostic_events_path`` override (env / YAML);
+        otherwise routes to ``<data_dir>/<board_id>/diagnostic_events.jsonl``.
+        """
+        if self.diagnostic_events_path is not None:
+            return self.diagnostic_events_path
+        if board_id:
+            return self.data_dir / board_id / "diagnostic_events.jsonl"
+        return self.data_dir / "diagnostic_events.jsonl"
+
     # ------------------------------------------------------------------
     #  Validators
     # ------------------------------------------------------------------

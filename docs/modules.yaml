@@ -241,6 +241,8 @@ modules:
       - src/robotsix_mill/runners/diagnostic_checks.py
       - src/robotsix_mill/runners/diagnostic_check_errors.py
       - src/robotsix_mill/runners/diagnostic_data.py
+      - src/robotsix_mill/runners/diagnostic_events.py
+      - src/robotsix_mill/runners/diagnostic_check_recurring_ci.py
       - src/robotsix_mill/runners/member_sync_runner.py
       - src/robotsix_mill/runners/roadmap_sync_runner.py
       - src/robotsix_mill/runners/timeout_escalation_runner.py
@@ -265,6 +267,7 @@ modules:
       - tests/runners/test_diagnostic_runner.py
       - tests/runners/test_diagnostic_check_errors.py
       - tests/runners/test_diagnostic_data.py
+      - tests/runners/test_diagnostic_events.py
       - tests/runners/test_config_sync_runner.py
       - tests/runners/test_member_sync_runner.py
       - tests/runners/test_orphaned_pr_check.py

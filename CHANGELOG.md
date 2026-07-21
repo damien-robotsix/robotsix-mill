@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add `vulture` (dead-code detection) to the implement stage's mandatory pre-flight checks, alongside ruff, mypy, and deptry, so lint failures are caught locally before the PR/CI round-trip.
+- Emit `CI_FAILURE` diagnostic events on every ticket entering `fixing_ci`, with a stable normalized failure key so recurring failure modes cluster. Add `RecurringCIFailureCheck` diagnostic check that auto-files fix-proposal draft tickets when a failure key has been hit by enough distinct tickets (threshold configurable via `diagnostic_ci_failure_threshold`, default 3).
 - Remove outdated per-repo `langfuse:` blocks from `docs/config/configuration.md` — Langfuse credentials are configured globally in the `secrets:` block, not per-repo.
 - Extract special-case edit handlers from `implementation_logic.py` into new `implementation_editing.py` module — `_verify_repo_changes`, `_handle_rename_only_change`, `_handle_spec_exact_edits`, and `_find_insertion_point` now live in `_ImplementationEditingMixin` (~565 lines moved).
 - Extract scope-guardrail + preflight tests (~1238 lines) from

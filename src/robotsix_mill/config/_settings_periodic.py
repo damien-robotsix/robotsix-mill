@@ -658,6 +658,25 @@ class _PeriodicSettings(BaseModel):
         description="Repos the daily diagnostic agent monitors each pass.",
     )
 
+    # --- diagnostic event store ---
+    # Explicit file path for the JSONL diagnostic event store.  When
+    # unset (default) the path is derived per-repo:
+    # ``<data_dir>/<board_id>/diagnostic_events.jsonl``.
+    diagnostic_events_path: Path | None = Field(
+        default=None,
+        description="Explicit path for the diagnostic event store JSONL file.",
+    )
+
+    # --- recurring CI failure fix-proposal generation ---
+    # Number of distinct tickets that must hit the same normalized
+    # CI failure key before the recurring-CI diagnostic check auto-files
+    # a fix-proposal draft ticket.  Set to 0 to disable.
+    diagnostic_ci_failure_threshold: int = Field(
+        default=3,
+        ge=0,
+        description="Distinct-ticket threshold for auto-filing CI fix proposals.",
+    )
+
     # --- orphaned-PR check (deterministic per-repo stale-PR cleanup) ---
     # Master switch for the orphaned-PR check pass. Defaults to False
     # (opt-in) — closing PRs and filing tracking tickets are destructive
