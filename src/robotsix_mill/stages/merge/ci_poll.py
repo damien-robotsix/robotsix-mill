@@ -43,6 +43,59 @@ def _extract_tracked_pr_url(description: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _emit_ci_failure_diagnostic_event(
+    ticket: Ticket,
+    ctx: StageContext,
+    ci_status: dict[str, Any],
+) -> None:
+    """Emit a ``CI_FAILURE`` diagnostic event when a ticket enters
+    ``FIXING_CI``.
+
+    Extracts the failing check names from *ci_status* and normalizes them
+    into a stable ``sub_category`` so genuinely recurring failure modes
+    cluster together (sorted, comma-joined failing check names).  The
+    full CI conclusion + failing check detail is recorded as the
+    ``reason``.
+
+    The emission is deduped on ``ticket_id`` + ``sub_category`` — retries
+    of the same failure on the same ticket don't create duplicate events.
+    Best-effort: any error during emission is logged and swallowed so it
+    never blocks the state transition.
+    """
+    try:
+        failing = ci_status.get("failing") or []
+        names = sorted({(chk.get("name") or "unnamed") for chk in failing})
+        sub_category = ", ".join(names) if names else "CI_FAILURE"
+
+        reason_parts = ["CI failure detected:"]
+        for i, chk in enumerate(failing):
+            name = chk.get("name", "unnamed")
+            summary = chk.get("summary", "")
+            reason_parts.append(f"  [{i + 1}] {name}")
+            if summary:
+                reason_parts.append(f"      {summary}")
+        reason = (
+            "\n".join(reason_parts)
+            if failing
+            else "CI failure detected (no check detail)"
+        )
+
+        repo_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        ctx.service.emit_diagnostic_event(
+            ticket_id=ticket.id,
+            category="CI_FAILURE",
+            sub_category=sub_category,
+            reason=reason,
+            repo_id=repo_id,
+        )
+    except Exception:  # noqa: BLE001 — never block a state transition on event emission
+        log.warning(
+            "%s: failed to emit CI_FAILURE diagnostic event",
+            ticket.id,
+            exc_info=True,
+        )
+
+
 class CIPollMixin(_MergeStageBase):
     """CI polling: gate-check, mergeability, auto-merge eligibility, main-branch debt detection."""
 
@@ -328,6 +381,13 @@ class CIPollMixin(_MergeStageBase):
             )
             if ping_pong_result is not None:
                 return ping_pong_result
+
+            # --- Emit CI_FAILURE diagnostic event ---
+            # Capture the CI failure signal at the source so the
+            # recurring-category → fix-proposal pipeline can cluster
+            # failures and auto-generate fix proposals once a failure
+            # mode recurs across enough distinct tickets.
+            _emit_ci_failure_diagnostic_event(ticket, ctx, ci_status)
 
             log.info("%s: CI failing → FIXING_CI", ticket.id)
             return Outcome(State.FIXING_CI)

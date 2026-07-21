@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Emit `CI_FAILURE` diagnostic events when a ticket enters `fixing_ci`, capturing the failing check names as a normalized sub-category for recurrence clustering.  Also introduces `DiagnosticEvent` (SQLModel table), `list_diagnostic_events` / `check_recurring_categories` service methods, and a `RecurringCategoryCheck` diagnostic check that auto-generates fix-proposal tickets when a failure mode recurs across enough distinct tickets.
 - Fix Alembic proxy-registry race condition: add global ``_alembic_lock`` to serialize all ``_run_alembic_migrations`` calls across boards, preventing ``KeyError: 'config'`` when concurrent ``init_db`` calls collide on Alembic's process-global proxy registry (observed as CI flake in ``test_generate_children_applies_epic_body`` under xdist).
 - Replace cached `github_token()` with on-demand `github_push_token()` in deliver and periodic runner push paths (changelog autofill, roadmap sync, pin bump), following the same per-push App-token renewal pattern already used by ci_fix/rebase. Eliminates stale-token push failures when a cached App installation token expires mid-flight.
 - Implement agent now checks and updates `README.md` TOC tables when

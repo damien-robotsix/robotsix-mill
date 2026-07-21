@@ -92,6 +92,12 @@ def run_diagnostic_pass(session_id: str) -> DiagnosticPassResult:
     ]
     valid, invalid = _accessible_repos(monitored)
 
+    # Import concrete checks so they self-register before we query the
+    # registry.  Imported here (not at module top) to avoid circular
+    # imports with diagnostic_checks.
+    from . import diagnostic_check_errors  # noqa: F401
+    from . import diagnostic_check_recurring  # noqa: F401
+
     checks = get_registered_checks()
     log.info(
         "Diagnostic pass starting (session=%s): monitoring %d repo(s): %s, checks=%d",

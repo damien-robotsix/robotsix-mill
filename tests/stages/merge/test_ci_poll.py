@@ -1358,3 +1358,110 @@ def test_tracker_ticket_merged_pr_blocks(tmp_path, monkeypatch):
     outcome = MergeStage()._poll_implement_complete(t, ctx)
     assert outcome.next_state is State.BLOCKED
     assert "merged" in outcome.note.lower()
+
+
+# --- CI_FAILURE diagnostic event emission tests ---
+
+
+def test_ci_failure_emits_diagnostic_event(tmp_path, monkeypatch):
+    """Transition into FIXING_CI emits a CI_FAILURE DiagnosticEvent."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    t = _implement_complete(ctx)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    outcome = MergeStage()._poll_implement_complete(t, ctx)
+    assert outcome.next_state is State.FIXING_CI
+
+    events = ctx.service.list_diagnostic_events(category="CI_FAILURE")
+    assert len(events) == 1
+    event = events[0]
+    assert event.ticket_id == t.id
+    assert event.category == "CI_FAILURE"
+    assert event.sub_category == "lint"
+    assert "lint" in event.reason
+
+
+def test_ci_failure_diagnostic_event_deduped_on_retry(tmp_path, monkeypatch):
+    """Second entry into FIXING_CI for the same ticket+sub_category does not
+    duplicate the diagnostic event."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    t = _implement_complete(ctx)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    # First transition emits the event.
+    outcome = MergeStage()._poll_implement_complete(t, ctx)
+    assert outcome.next_state is State.FIXING_CI
+    assert len(ctx.service.list_diagnostic_events(category="CI_FAILURE")) == 1
+
+    # Simulate a second entry (e.g. ticket was re-routed through
+    # IMPLEMENT_COMPLETE and hit CI failure again).
+    outcome2 = MergeStage()._poll_implement_complete(t, ctx)
+    assert outcome2.next_state is State.FIXING_CI
+    # Still exactly one event — deduped.
+    events = ctx.service.list_diagnostic_events(category="CI_FAILURE")
+    assert len(events) == 1
+
+
+def test_ci_failure_diagnostic_event_different_sub_category_creates_new(
+    tmp_path,
+    monkeypatch,
+):
+    """A different failure mode on the same ticket creates a second event."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    t = _implement_complete(ctx)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    # First failure: lint.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+
+    outcome = MergeStage()._poll_implement_complete(t, ctx)
+    assert outcome.next_state is State.FIXING_CI
+    assert len(ctx.service.list_diagnostic_events(category="CI_FAILURE")) == 1
+
+    # Second failure: type-check (different sub_category).
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "type-check", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+
+    outcome2 = MergeStage()._poll_implement_complete(t, ctx)
+    assert outcome2.next_state is State.FIXING_CI
+
+    events = ctx.service.list_diagnostic_events(category="CI_FAILURE")
+    assert len(events) == 2
+    sub_cats = {e.sub_category for e in events}
+    assert sub_cats == {"lint", "type-check"}
