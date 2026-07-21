@@ -4,6 +4,10 @@
 - Implement agent now checks and updates `README.md` TOC tables when
   creating, renaming, or removing documentation pages under `docs/`,
   preventing the recurring TOC-drift defect seen in robotsix-standards.
+- Add `hypothesis` as a dev dependency and introduce property-based
+  tests for pure-function invariants: `parse_duration`/`format_duration`
+  round-trip, `normalize` idempotency, `_slug` invariants, and
+  `_stamp_frontmatter`/`_parse_frontmatter` body-lossless round-trip.
 - Add docstring to `CaseTolerantEnum.process_bind_param` in `src/robotsix_mill/core/models.py`.
 - Add docstring to `CaseTolerantEnum.process_result_value` in `src/robotsix_mill/core/models.py`.
 - Add ``scripts/validate-changelog.py`` — pre-commit changelog fragment validator that ensures trailing newlines and ``docs/modules.yaml`` registration, called automatically by the implement stage's ``_finalize`` before committing. Also fixes a missing trailing newline in ``maybe_generate_towncrier_fragment``.

@@ -1,5 +1,12 @@
 import pytest
 
+try:
+    from hypothesis import settings
+
+    _HYPOTHESIS_AVAILABLE = True
+except ImportError:
+    _HYPOTHESIS_AVAILABLE = False
+
 from robotsix_mill.core import db
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.core.service import TicketService
@@ -164,6 +171,12 @@ def _restore_tool_registry():
     finally:
         ToolRegistry._tools.clear()
         ToolRegistry._tools.update(snapshot)
+
+
+# Hypothesis — CI profile (must register before test collection)
+if _HYPOTHESIS_AVAILABLE:
+    settings.register_profile("ci", derandomize=True, deadline=None)
+    settings.load_profile("ci")
 
 
 @pytest.fixture
