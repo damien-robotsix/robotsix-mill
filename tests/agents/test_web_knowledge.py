@@ -908,14 +908,12 @@ if _HYPOTHESIS_AVAILABLE:
     def test_slug_is_idempotent(s):
         assert _slug(_slug(s)) == _slug(s)
 
-
     @given(st.text())
     def test_slug_is_ascii_and_nonempty_and_no_leading_dash(s):
         result = _slug(s)
         assert result.isascii()
         assert len(result) > 0
         assert not result.startswith("-")
-
 
     @given(st.text(), st.text(max_size=200))
     def test_stamp_parse_roundtrip_recovers_body(library, body):

@@ -122,7 +122,6 @@ if _HYPOTHESIS_AVAILABLE:
     def test_duration_roundtrip_value(n):
         assert parse_duration(format_duration(n)) == n
 
-
     @given(st.integers(min_value=0, max_value=10**9))
     def test_duration_format_is_reparseable_string(n):
         s = format_duration(n)
