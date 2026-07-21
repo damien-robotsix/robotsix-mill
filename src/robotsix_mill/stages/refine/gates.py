@@ -30,6 +30,7 @@ from .helpers import (
     FRESHNESS_STALE_PREFIX,
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OBSOLESCENCE_GAP_PREFIX,
+    WORKFLOW_PORTABILITY_GATE_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
     _advisory_candidate_id,
@@ -877,7 +878,7 @@ class RefineGatesMixin:
                 )
                 return Outcome(
                     State.DONE,
-                    f"internal workflow gate: {name!r} is not portable — "
+                    f"{WORKFLOW_PORTABILITY_GATE_PREFIX} {name!r} is not portable — "
                     "cannot be enabled on a managed repo via a "
                     ".robotsix-mill/periodic/ presence file",
                 )

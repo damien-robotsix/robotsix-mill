@@ -22,11 +22,13 @@ DEDUP_DUPLICATE_PREFIX: str = "duplicate of "
 DEDUP_ALREADY_DONE_PREFIX: str = "already implemented in "
 FRESHNESS_STALE_PREFIX: str = "stale or invalid finding"
 OBSOLESCENCE_GAP_PREFIX: str = "obsolete — gap already resolved"
+WORKFLOW_PORTABILITY_GATE_PREFIX: str = "internal workflow gate:"
 NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
     DEDUP_DUPLICATE_PREFIX,
     DEDUP_ALREADY_DONE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
+    WORKFLOW_PORTABILITY_GATE_PREFIX,
 )
 
 # File extensions that are likely binary — should be skipped during
