@@ -268,6 +268,22 @@ langfuse_host
 ready
 
 # -- runners -----------------------------------------------------------------
+# DiagnosticEvent dataclass — consumed via list_diagnostic_events() and
+# emit_diagnostic_event(); vulture (60%) cannot trace the import chain
+# through diagnostic_check_recurring_ci → diagnostic_events.
+DiagnosticEvent
+# emit_diagnostic_event — called from ci_fix.py::_emit_ci_failure_event();
+# vulture (60%) cannot trace the cross-module call site.
+emit_diagnostic_event
+# RecurringCIFailureCheck — registered via register_check() in
+# diagnostic_check_recurring_ci.py (bottom-of-file side effect); vulture
+# (60%) cannot trace the registration call.  Its .run() method is invoked
+# polymorphically through the DiagnosticCheck protocol.
+RecurringCIFailureCheck
+# RecurringCIFailureCheck.run — invoked polymorphically through the
+# DiagnosticCheck protocol by the diagnostic runner; vulture (60%)
+# cannot trace protocol dispatch.
+run
 run_agent_check_pass
 run_audit_pass
 run_bc_check_pass

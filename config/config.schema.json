@@ -1127,6 +1127,27 @@
           "description": "Deploy server management API URL. When set, used to check worker image freshness before resuming blocked tickets.",
           "title": "Deploy Api Url"
         },
+        "diagnostic_ci_failure_threshold": {
+          "default": 3,
+          "description": "Distinct-ticket threshold for auto-filing CI fix proposals.",
+          "minimum": 0,
+          "title": "Diagnostic Ci Failure Threshold",
+          "type": "integer"
+        },
+        "diagnostic_events_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit path for the diagnostic event store JSONL file.",
+          "title": "Diagnostic Events Path"
+        },
         "diagnostic_interval_seconds": {
           "default": 604800,
           "description": "Seconds between automatic diagnostic passes.",

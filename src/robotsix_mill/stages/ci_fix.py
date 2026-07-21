@@ -24,6 +24,7 @@ from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
+from ..runners.diagnostic_events import emit_diagnostic_event
 from ..runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
@@ -44,6 +45,7 @@ from .ci_fix_helpers import (
     _build_failing_summary,
     _ci_failure_fingerprint,
     _format_alert_refs,
+    _normalize_ci_failure_reason,
     _pr_changed_paths,
     _read_counter,
     _write_counter,
@@ -52,6 +54,42 @@ from .ci_fix_helpers import (
 )
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
+
+
+def _emit_ci_failure_event(
+    ticket: Ticket,
+    ctx: StageContext,
+    failing: list[dict[str, Any]],
+    failing_summary: str,
+) -> None:
+    """Emit a ``CI_FAILURE`` diagnostic event for the current failure.
+
+    Uses the existing :func:`_normalize_ci_failure_reason` to compute a
+    stable key so recurring failure modes cluster.  Deduplicates on
+    ``(ticket.id, normalized_key)`` so retries of the same failure on
+    the same ticket do not flood the category.
+    """
+    try:
+        board_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        if not board_id:
+            log.warning(
+                "%s: no board_id available — skipping CI_FAILURE event",
+                ticket.id,
+            )
+            return
+        normalized_key = _normalize_ci_failure_reason(failing, failing_summary)
+        names = [chk.get("name", "?") for chk in failing]
+        reason = f"failing checks: {', '.join(names)}"
+        emit_diagnostic_event(
+            ctx.settings,
+            board_id,
+            category="CI_FAILURE",
+            ticket_id=ticket.id,
+            reason=reason,
+            normalized_key=normalized_key,
+        )
+    except Exception:  # noqa: BLE001 — event emission must never block CI fix
+        log.exception("%s: failed to emit CI_FAILURE event", ticket.id)
 
 
 class CIFixStage(Stage):
@@ -77,6 +115,12 @@ class CIFixStage(Stage):
             alerts_unreadable,
             head_sha,
         ) = resolved
+
+        # --- Emit CI_FAILURE diagnostic event ---
+        # Every time the stage confirms CI is genuinely failing, record a
+        # diagnostic event so the recurring-category check can detect
+        # systemic failures and auto-file fix-proposal tickets.
+        _emit_ci_failure_event(ticket, ctx, failing, failing_summary)
 
         # --- Early guard: CodeQL failing but alerts unreadable (403) ---
         # When CodeQL is among the failing checks and the alerts API
