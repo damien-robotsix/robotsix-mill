@@ -38,7 +38,8 @@ def _qualified(session_id: str, repo_config: RepoConfig | None) -> str:
     ticket id — so every lookup matched nothing and read ``$0``. Qualifying
     here (idempotent, and a no-op when no repo is known) repairs that for
     all callers and keeps the cost-cache key consistent between the
-    blocking and cache-only reads."""
+    blocking and cache-only reads.
+    """
     if repo_config is None:
         return session_id
     from ..runtime.tracing import qualify_session
@@ -57,7 +58,8 @@ def _build_read_client(
     GETs.  Mill only decides *which* credentials to feed it: a per-repo
     override when *repo_config* is given, else the global
     :class:`Secrets` singleton (kept for backward compatibility during
-    the transition to per-repo credentials)."""
+    the transition to per-repo credentials).
+    """
     if repo_config is None:
         if not settings.tracing_enabled:
             return None
@@ -92,7 +94,8 @@ def _langfuse_api_get(
     session endpoints — on top.
 
     Returns the JSON-decoded response body, or ``None`` when Langfuse is
-    unconfigured / unreachable / the request fails."""
+    unconfigured / unreachable / the request fails.
+    """
     client = _build_read_client(settings, repo_config)
     if client is None:
         return None
@@ -118,7 +121,8 @@ def session_total_cost(
 ) -> float | None:
     """Return the total USD cost for a Langfuse session (sum of
     ``totalCost`` across all its traces), or ``None`` when Langfuse
-    is unconfigured / unreachable / returns no data."""
+    is unconfigured / unreachable / returns no data.
+    """
     session_id = _qualified(session_id, repo_config)
     data = _langfuse_api_get(
         settings,
@@ -236,7 +240,8 @@ def effective_cost(total: float, baseline: float) -> float:
     lifetime; ``baseline`` is the snapshot captured at the most recent
     redraft. Subtracting it (clamped at zero) yields the cost spent
     since that redraft — the value used for the dollar-cap limit and the
-    primary ``cost_usd`` display."""
+    primary ``cost_usd`` display.
+    """
     return max(0.0, total - (baseline or 0.0))
 
 
@@ -253,7 +258,8 @@ def session_cost_cached(
 
     *repo_config* must match the one passed to ``session_cost`` so the
     cache key (the repo-qualified session id) lines up — otherwise this
-    reads a different key and always misses."""
+    reads a different key and always misses.
+    """
     hit = _cost_cache.get(_qualified(session_id, repo_config))
     if hit is None:
         return 0.0
@@ -420,7 +426,8 @@ def list_recent_traces(
         """A trace is 'ready for review' iff its root span has closed
         and propagated a name. In-flight traces show as unnamed/null
         until completion — they shouldn't appear in the picker since
-        deep review can't analyse a partial observation tree anyway."""
+        deep review can't analyse a partial observation tree anyway.
+        """
         n = t.get("name")
         return isinstance(n, str) and n.strip() != ""
 

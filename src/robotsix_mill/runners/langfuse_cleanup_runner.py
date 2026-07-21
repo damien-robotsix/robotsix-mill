@@ -25,6 +25,8 @@ _PAGE_SIZE = 100  # Langfuse API page-size cap
 
 @dataclass
 class CleanupResult:
+    """Result of a Langfuse trace-cleanup pass for one project."""
+
     project: str
     traces_before: int
     traces_deleted: int

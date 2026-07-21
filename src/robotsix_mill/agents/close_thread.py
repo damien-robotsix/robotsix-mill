@@ -91,7 +91,7 @@ def make_close_thread_tool(
     """
 
     def close_thread(comment_id: int) -> str:
-        """Close a top-level comment thread on the current ticket.
+        r"""Close a top-level comment thread on the current ticket.
 
         Call ``list_threads`` first to discover valid ``comment_id``
         values — do not guess or hardcode IDs.  Idempotent:

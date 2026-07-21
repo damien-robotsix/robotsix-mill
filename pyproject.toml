@@ -141,6 +141,7 @@ extend-select = [
     "DTZ001", "DTZ002", "DTZ003",
     "C90",
     "B",
+    "D",
     "SIM",
     "C4",
     "LOG",
@@ -150,9 +151,13 @@ extend-select = [
     "RUF",
     "PT",
 ]
+ignore = ["D105", "D107", "D205", "D415"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 # Security asserts, fixture credentials, and subprocess helpers are
@@ -167,6 +172,7 @@ max-complexity = 10
 # test suite that are not worth fixing individually.
 "tests/**" = [
     "S",
+    "D",
     "PT",
     "SIM",
     "RUF059",
@@ -180,8 +186,9 @@ max-complexity = 10
     "B018",
     "B017",
 ]
-"dev/**" = ["S", "SIM103"]
-"scripts/**" = ["S", "RUF001", "RUF002", "RUF003", "ERA001", "SIM"]
+"alembic/**" = ["D"]
+"dev/**" = ["S", "D", "SIM103"]
+"scripts/**" = ["S", "D", "RUF001", "RUF002", "RUF003", "ERA001", "SIM"]
 # Ambiguous-unicode characters (en/em dashes, multiplication sign,
 # narrow no-break space, etc.) are intentional in docstrings, comments,
 # and string literals — they're used for formatting CLI help, log
@@ -197,7 +204,7 @@ max-complexity = 10
 # (bare-name expressions marking "used" identifiers for vulture's
 # dead-code scanner) triggers B018 ("useless expression") and F821
 # ("undefined name") on every entry.  Both are the intended API.
-"vulture_whitelist.py" = ["B018", "F821"]
+"vulture_whitelist.py" = ["B018", "F821", "D"]
 # test_datetime_utils.py exercises TZDateTime's handling of naive
 # datetime inputs on purpose — DTZ001 (no tzinfo) is the contract
 # under test, not a defect.
@@ -248,7 +255,7 @@ max-complexity = 10
 "src/robotsix_mill/runtime/routes/_tickets.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/routes/_tickets_merge.py" = ["C901", "S110", "SIM105"]
 "src/robotsix_mill/runtime/routes/_traces.py" = ["C901"]
-"src/robotsix_mill/runtime/worker/*.py" = ["C901", "S110", "S603", "S607", "RUF012"]
+"src/robotsix_mill/runtime/worker/*.py" = ["C901", "S110", "S603", "S607", "D102", "RUF012"]  # FIXME: add method docstrings
 "src/robotsix_mill/stages/implement/*.py" = ["C901", "S603", "S607", "SIM102", "SIM105"]
 "src/robotsix_mill/stages/refine/*.py" = ["C901", "S603", "S607", "SIM108"]
 "src/robotsix_mill/stages/retrospect.py" = ["F821", "C901", "S112"]
@@ -257,11 +264,11 @@ max-complexity = 10
 "src/robotsix_mill/stages/deliver.py" = ["C901", "SIM105", "S607", "F821"]
 "src/robotsix_mill/stages/code_reviewing.py" = ["C901"]
 "src/robotsix_mill/forge/github.py" = ["C901", "S110"]
-"src/robotsix_mill/forge/github_pr.py" = ["C901", "S110"]
+"src/robotsix_mill/forge/github_pr.py" = ["C901", "S110", "D102"]  # FIXME: add method docstrings
 "src/robotsix_mill/forge/github_ci.py" = ["C901", "S110"]
 "src/robotsix_mill/forge/github_code_scanning.py" = ["C901", "S110"]
 "src/robotsix_mill/core/service/*.py" = ["F821", "C901", "S110", "S603", "S607", "RUF012", "SIM102", "SIM105", "E711"]
-"src/robotsix_mill/runners/pass_runner.py" = ["C901", "SIM102"]
+"src/robotsix_mill/runners/pass_runner.py" = ["C901", "D417", "SIM102"]  # FIXME: add Args descriptions
 "src/robotsix_mill/agents/coding.py" = ["C901"]
 "src/robotsix_mill/agents/bespoke.py" = ["C901"]
 "src/robotsix_mill/runners/timeout_escalation_runner.py" = ["C901", "S110"]
@@ -269,7 +276,7 @@ max-complexity = 10
 "src/robotsix_mill/agents/dedup.py" = ["C901"]
 "src/robotsix_mill/agents/web_research.py" = ["C901"]
 "src/robotsix_mill/runners/trace_review_runner.py" = ["C901"]
-"src/robotsix_mill/runners/trace_health_runner.py" = ["C901"]
+"src/robotsix_mill/runners/trace_health_runner.py" = ["C901", "D102"]  # FIXME: add method docstrings
 "src/robotsix_mill/runners/verify_runner.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/tracing.py" = ["C901"]
 "src/robotsix_mill/stages/merge/*.py" = ["C901", "S603", "S607"]
@@ -300,6 +307,20 @@ max-complexity = 10
 # input) — same safe git-subprocess pattern as git_ops above.
 "src/robotsix_mill/meta/agent.py" = ["S603", "S607"]
 "src/robotsix_mill/meta/todo_scan.py" = ["S603", "S607"]
+
+# --- src/ D rules pending docstring coverage (FIXME) --------------------------
+# D102: missing method docstrings — document each public method.
+"src/robotsix_mill/config/json_source.py" = ["D102"]
+"src/robotsix_mill/core/datetime_utils.py" = ["D102"]
+"src/robotsix_mill/forge/gitlab/*.py" = ["D102"]
+"src/robotsix_mill/runners/diagnostic_check_errors.py" = ["D102"]
+"src/robotsix_mill/runners/diagnostic_check_recurring_ci.py" = ["D102"]
+"src/robotsix_mill/runtime/middleware.py" = ["D102"]
+"src/robotsix_mill/runtime/run_registry.py" = ["D102"]
+# D417: missing argument descriptions — add Args: sections.
+"src/robotsix_mill/agents/agent_check.py" = ["D417"]
+"src/robotsix_mill/agents/module_curator.py" = ["D417"]
+"src/robotsix_mill/runners/periodic_runner.py" = ["D417"]
 
 # --- expanded lint rules: pre-existing violations ---------------------------
 # SIM102 (collapsible-if), SIM105 (suppressible-exception), SIM108

@@ -37,7 +37,8 @@ def request_changes(
     settings=Depends(get_settings),
 ) -> dict:
     """Add a comment AND transition from human_issue_approval back to draft
-    in one atomic operation."""
+    in one atomic operation.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         comment, ticket = svc.request_changes(ticket_id, body.body, author=body.author)
@@ -98,7 +99,8 @@ def redraft(
     settings=Depends(get_settings),
 ) -> dict:
     """Redraft a ticket from any active state back to DRAFT with an
-    optional comment."""
+    optional comment.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     try:
         comment, ticket = svc.redraft(

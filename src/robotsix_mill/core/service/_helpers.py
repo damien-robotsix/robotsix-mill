@@ -96,7 +96,8 @@ def _slug(text: str) -> str:
 
 def _parse_depends_on_str(raw: str | None) -> list[str]:
     """Parse a JSON-encoded list of ticket IDs from the depends_on
-    column. Returns an empty list for ``None`` or malformed input."""
+    column. Returns an empty list for ``None`` or malformed input.
+    """
     if not raw:
         return []
     try:
@@ -110,7 +111,8 @@ def _parse_depends_on_str(raw: str | None) -> list[str]:
 
 def _parse_labels(raw: str | None) -> list[str]:
     """Parse a JSON-encoded list of label strings from the labels
-    column. Returns an empty list for ``None`` or malformed input."""
+    column. Returns an empty list for ``None`` or malformed input.
+    """
     if not raw:
         return []
     try:

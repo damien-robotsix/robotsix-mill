@@ -112,7 +112,8 @@ class RetrospectResult(BaseModel):
 def _is_structural_quote_end(text: str, quote_idx: int) -> bool:
     """Return True if the double-quote at *quote_idx* is followed by a
     JSON structural terminator (``}`` or ``,`` then ``"`` or ``}``)
-    after optional whitespace."""
+    after optional whitespace.
+    """
     j = quote_idx + 1
     while j < len(text) and text[j] in " \t\n\r":
         j += 1

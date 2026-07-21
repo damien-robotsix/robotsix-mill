@@ -62,7 +62,8 @@ def _fetch_session_traces(
 ) -> list[dict[str, Any]]:
     """Pull all traces (any name) for a single session — picks up
     `retrospect` plus `trace_inspect` sub-calls that share the
-    session_id."""
+    session_id.
+    """
     r = _langfuse_api_get(
         settings,
         "/api/public/traces",
@@ -76,7 +77,8 @@ def _fetch_observations(
     settings, trace_id: str, repo_config=None
 ) -> list[dict[str, Any]]:
     """Pull the observation tree for one trace.  Generations carry the
-    per-call model name + token usage."""
+    per-call model name + token usage.
+    """
     r = _langfuse_api_get(
         settings,
         f"/api/public/traces/{trace_id}",

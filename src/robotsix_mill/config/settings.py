@@ -102,7 +102,8 @@ class Settings(
 
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. *board_id* is required —
-        raises ``ValueError`` when empty."""
+        raises ``ValueError`` when empty.
+        """
         if not board_id:
             raise ValueError(
                 "workspaces_dir_for: board_id is required. "

@@ -82,7 +82,8 @@ def _count_inflight_prs(service: "TicketService") -> int:
     one of the four stuck ~6 h with a conflicting PR, another with its
     pr_url lost). Fail-safe: a ticket whose ``updated_at`` is missing or
     unreadable is COUNTED, so a parsing edge case can never silently
-    disable the cap."""
+    disable the cap.
+    """
     now = datetime.now(timezone.utc)
     n = 0
     for t in service.list():
@@ -523,8 +524,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         silently. After ``max_stuck_cycles`` such cycles, escalate to
         BLOCKED (resumable) and notify. Poll stages (merge/deliver,
         traced=False) are exempt: human_mr_approval/rebasing legitimately waits
-        on a PR or rebase cycle."""
-
+        on a PR or rebase cycle.
+        """
         # --- retrying-ticket exemption: tickets in explicit backoff
         # must not be counted as stuck (they're waiting on an external
         # outage, not churning). ---
@@ -681,7 +682,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         chain carries each ticket as far as it can in one pass), and
         robust to any current/future draft-creating path. States with
         no automated stage (e.g. human_issue_approval) are untouched —
-        they correctly wait for a human."""
+        they correctly wait for a human.
+        """
         from ...config import get_repos_config
         from ...core.service import TicketService
 
@@ -1061,7 +1063,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
     async def _requeue_unfinished_drip(self) -> None:
         """Background coroutine: enumerate all boards, collect
         unfinished ticket ids, then enqueue them in rate-limited
-        batches."""
+        batches.
+        """
         from ...config import get_repos_config
         from ...core.service import TicketService
 

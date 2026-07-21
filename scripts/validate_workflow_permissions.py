@@ -75,7 +75,8 @@ def _reusable_basename(uses: str) -> str | None:
 def _required_workflows() -> set[str]:
     """Reusable-workflow basenames whose callers must grant the SARIF scope:
     the well-known set plus any LOCAL reusable workflow that declares
-    ``security-events: write`` on one of its own jobs."""
+    ``security-events: write`` on one of its own jobs.
+    """
     required = set(_KNOWN_SARIF_REUSABLE)
     for wf in _WORKFLOWS_DIR.glob("*.y*ml"):
         data = _load(wf)

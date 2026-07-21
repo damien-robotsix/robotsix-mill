@@ -1,3 +1,5 @@
+"""CLI subcommand for inquiring about the ticket pipeline."""
+
 from __future__ import annotations
 
 import argparse

@@ -110,7 +110,8 @@ def load_repo_smoke_paths(repo_dir: Path | None) -> list[str]:
     ONLY — it does NOT restrict which paths agent-stage filesystem
     tools (read_file, list_dir, run_command) can access.  The agent
     sandbox always mounts the full repo checkout; the globs here only
-    decide whether the post-implement smoke command fires."""
+    decide whether the post-implement smoke command fires.
+    """
     raw = _load_repo_config_dict(repo_dir)
     if raw is None:
         return []
@@ -152,7 +153,8 @@ def _load_repo_config_dict(repo_dir: Path | None) -> dict | None:
     Shared hardened reader: returns the parsed top-level mapping, or
     ``None`` when the dir is absent / file missing / unreadable / invalid
     YAML / not a mapping. Never raises (a managed repo must not be able to
-    crash mill by committing a broken file)."""
+    crash mill by committing a broken file).
+    """
     if repo_dir is None:
         return None
     path = Path(repo_dir) / ".robotsix-mill" / "config.yaml"
@@ -176,7 +178,8 @@ def load_repo_languages(repo_dir: Path | None) -> list[str]:
     Accepts either ``languages: [python, rust]`` (a list) or the singular
     ``language: python`` (a string), normalising both to a list of
     non-empty, stripped strings. ``languages`` takes precedence when both
-    are present. Never raises — a malformed value yields ``[]``."""
+    are present. Never raises — a malformed value yields ``[]``.
+    """
     raw = _load_repo_config_dict(repo_dir)
     if raw is None:
         return []
@@ -213,7 +216,8 @@ def load_extra_sandbox_packages(repo_dir: Path | None) -> list[str]:
     Declaring any apt package (prefixed or bare) makes the sandbox drop
     ``--read-only`` and add tmpfs mounts for apt's state directories so
     the install can write to the root filesystem; pip-only package sets
-    keep the read-only root."""
+    keep the read-only root.
+    """
     raw = _load_repo_config_dict(repo_dir)
     if raw is None:
         return []
@@ -233,7 +237,8 @@ def warn_if_deprecated_log_folder(repo_dir: Path | None) -> None:
     is now an operator-controlled per-repo key in mill's central
     ``config/repos.yaml`` (it is a deployment-specific host path that must
     not be committed into the managed repo). This helper only nudges the
-    operator to migrate; it never raises and returns nothing."""
+    operator to migrate; it never raises and returns nothing.
+    """
     raw = _load_repo_config_dict(repo_dir)
     if raw is not None and "deployed_log_folder" in raw:
         log.warning(
@@ -246,7 +251,8 @@ def warn_if_deprecated_log_folder(repo_dir: Path | None) -> None:
 def _load_language_snippet(settings, repo_dir: Path | None, lang: str) -> str:
     """Resolve the instruction snippet for one language, repo override
     first then the mill's built-in library. Returns ``""`` if neither
-    exists."""
+    exists.
+    """
     if repo_dir is not None:
         override = (
             Path(repo_dir) / ".robotsix-mill" / "language_instructions" / f"{lang}.md"
@@ -287,7 +293,8 @@ def resolve_language_instructions(settings, repo_dir) -> str:
     present, else the mill's built-in
     ``agent_definitions/language_instructions/<lang>.md``. Snippets for
     multiple languages are concatenated. Returns ``""`` when no language is
-    declared or no snippets resolve."""
+    declared or no snippets resolve.
+    """
     langs = load_repo_languages(repo_dir)
     blocks = [
         text.strip()

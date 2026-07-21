@@ -88,7 +88,8 @@ class GitHubForge(
 ):
     """GitHub adapter — opens PRs, queries checks/reviews/files, merges,
     fetches workflow logs, and manages code-scanning and Dependabot alerts
-    via the GitHub REST API."""
+    via the GitHub REST API.
+    """
 
     def __init__(self, settings, repo_config=None):
         super().__init__(settings)
@@ -116,7 +117,8 @@ class GitHubForge(
         For a repo with a ``cross_repo_target`` the effective remote is
         the *upstream* repo PRs are opened against — so PR create,
         status polling and merge all naturally target upstream. The
-        push (to the fork) is driven separately by the deliver stage."""
+        push (to the fork) is driven separately by the deliver stage.
+        """
         if self._repo_config is not None:
             cct = getattr(self._repo_config, "cross_repo_target", None)
             if cct is not None and cct.upstream_remote_url:

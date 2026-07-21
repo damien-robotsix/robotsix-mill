@@ -29,7 +29,8 @@ import yaml
 
 class ConfigError(Exception):
     """Raised for config-loading failures — missing required files,
-    JSON parse errors, etc."""
+    JSON parse errors, etc.
+    """
 
     pass
 

@@ -72,7 +72,7 @@ _REF_VALUE_RE = re.compile(
 class WorkflowCallerFinding:
     """A single broken-caller finding.
 
-    Attributes
+    Attributes:
     ----------
     file:
         Repo-relative POSIX path of the offending workflow file.
@@ -183,7 +183,8 @@ def _scan_missing_permission(
     line_index: dict[tuple[str, str, str], int],
 ) -> list[WorkflowCallerFinding]:
     """YAML pass: flag every job whose ``permissions:`` block does not grant
-    the scopes its called reusable workflow requires."""
+    the scopes its called reusable workflow requires.
+    """
     import yaml
 
     try:
@@ -302,7 +303,8 @@ def make_workflow_caller_audit_tool(repo_dir: Path) -> Callable[[], str]:
         """Scan the repository's .github/workflows/ for reusable-workflow
         callers that use the wrong org or omit the required per-job
         permissions, returning each finding with file, line, and the exact
-        correct form."""
+        correct form.
+        """
         with trace_stage("audit_workflow_callers"):
             return _render_findings(audit_workflow_callers(repo_dir))
 

@@ -55,7 +55,8 @@ class CrossRepoTarget(BaseModel):
 class RepoConfig(BaseModel):
     """Configuration for a single repository — its board identity,
     Langfuse observability project credentials, and per-repo CI
-    monitor settings."""
+    monitor settings.
+    """
 
     repo_id: str = Field(
         description="Unique identifier for this repository (e.g. 'robotsix-mill'). Must match the key in repos.yaml."
@@ -418,7 +419,8 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
 
 def get_repos_config() -> ReposRegistry:
     """Return a cached :class:`ReposRegistry` singleton, constructing it
-    on first call."""
+    on first call.
+    """
     import robotsix_mill.config as _pkg
 
     cached = _pkg._repos_config
@@ -448,7 +450,8 @@ def get_repo_config(repo_id: str) -> RepoConfig:
 
 def target_branch_for(settings: Settings, repo_config: RepoConfig | None) -> str:
     """Effective target branch: repo_config.working_branch when set,
-    else settings.forge_target_branch (zero change for existing boards)."""
+    else settings.forge_target_branch (zero change for existing boards).
+    """
     if repo_config is not None and repo_config.working_branch:
         return repo_config.working_branch
     return settings.forge_target_branch

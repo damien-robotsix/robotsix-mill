@@ -15,7 +15,7 @@ MAX_ENTRIES = 50
 
 @dataclass
 class RunEntry:
-    """A single run entry in the registry.
+    r"""A single run entry in the registry.
 
     Each entry represents one background run (audit, health check, survey, etc.)
     with its lifecycle tracked via ``status`` (running → ok|error).  Entries

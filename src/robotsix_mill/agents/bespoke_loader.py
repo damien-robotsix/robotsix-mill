@@ -35,7 +35,8 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 
 class BespokeAgentDefinition(BaseModel):
     """One bespoke per-repo periodic agent loaded from
-    ``.robotsix-mill/agents/<name>.yaml``."""
+    ``.robotsix-mill/agents/<name>.yaml``.
+    """
 
     name: str = Field(
         description="kebab-case slug used as the agent's identity",

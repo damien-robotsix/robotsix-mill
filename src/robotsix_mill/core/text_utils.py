@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def truncate_at_boundary(text: str, max_chars: int) -> str:
-    """Truncate *text* at the last strong boundary before *max_chars*.
+    r"""Truncate *text* at the last strong boundary before *max_chars*.
 
     If ``len(text) <= max_chars`` the string is returned unchanged.
     Otherwise the function scans ``text[:max_chars]`` for the **last**

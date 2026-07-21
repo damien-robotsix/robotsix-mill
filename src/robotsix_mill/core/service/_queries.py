@@ -329,7 +329,8 @@ class _QueryMixin(_ServiceBase):
     def get_epic_context(self, ticket: Ticket) -> str:
         """Return the epic description wrapped in an ``epic-context``
         fenced block if *ticket* has a parent whose ``kind`` is
-        ``"epic"``, or ``""`` otherwise."""
+        ``"epic"``, or ``""`` otherwise.
+        """
         if ticket.parent_id is None:
             return ""
         parent = self.get(ticket.parent_id)
@@ -392,7 +393,8 @@ class _QueryMixin(_ServiceBase):
     # --- comments ---
     def list_comments(self, ticket_id: str) -> list[Comment]:
         """Return all comments for *ticket_id*, ordered oldest-first.
-        Raises ``KeyError`` if the ticket does not exist."""
+        Raises ``KeyError`` if the ticket does not exist.
+        """
         with db.session(self.settings, self._board_for(ticket_id)) as s:
             _get_ticket(s, ticket_id)
             stmt = (

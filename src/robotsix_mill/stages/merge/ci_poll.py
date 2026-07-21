@@ -831,7 +831,8 @@ class CIPollMixin(_MergeStageBase):
     ) -> set[str]:
         """Return the failing-workflow names explained by pre-existing main debt,
         or an empty set when the failure is NOT (fully) main debt. Best-effort:
-        any error / missing data → empty set (never block on uncertainty)."""
+        any error / missing data → empty set (never block on uncertainty).
+        """
         try:
             head_sha = (pr or {}).get("sha", "")
             if not head_sha:

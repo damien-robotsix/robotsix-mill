@@ -151,7 +151,8 @@ def run_doc_agent(
 
     A persistent memory ledger (``settings.memory_file_for("doc", board_id)``) records
     the repo's doc layout across runs so subsequent passes don't have
-    to re-explore the structure from scratch."""
+    to re-explore the structure from scratch.
+    """
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition

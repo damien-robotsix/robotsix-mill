@@ -466,7 +466,8 @@ class GitHubForgePRMixin:
         ``mergeable_state`` → ``mergeable`` normalization). Used by
         ``pr_status_by_url`` to resolve a recorded PR url even after the
         head branch was auto-deleted on merge (which makes the
-        branch-keyed ``_get_pr`` list come back empty)."""
+        branch-keyed ``_get_pr`` list come back empty).
+        """
         r = self._http.get(f"/repos/{owner}/{repo}/pulls/{number}")  # type: ignore[attr-defined]
         r.raise_for_status()
         pr = r.json()

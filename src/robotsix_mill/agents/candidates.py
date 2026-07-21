@@ -58,7 +58,8 @@ class Candidate:
 
 def candidates_path(data_dir: Path, board_id: str) -> Path:
     """Mirror retrospect.py's filename rule so a single source of truth
-    backs both the writer and the UI reader."""
+    backs both the writer and the UI reader.
+    """
     return (
         data_dir / board_id / "AGENT_CANDIDATES.md"
         if board_id
@@ -68,7 +69,8 @@ def candidates_path(data_dir: Path, board_id: str) -> Path:
 
 def _stable_id(rule: str, proposed_at: str) -> str:
     """8-char content hash. Stable across re-orderings; collision-safe
-    enough for a per-board file with at most dozens of entries."""
+    enough for a per-board file with at most dozens of entries.
+    """
     h = hashlib.sha256(f"{rule}\x00{proposed_at}".encode("utf-8")).hexdigest()
     return h[:8]
 
@@ -76,7 +78,8 @@ def _stable_id(rule: str, proposed_at: str) -> str:
 def _parse_block(raw: str) -> Candidate | None:
     """Parse one ``###`` block. Returns ``None`` on malformed input —
     retrospect's writer guarantees the format but a hand-edited file
-    might not."""
+    might not.
+    """
     raw = raw.strip()
     if not raw:
         return None
@@ -107,7 +110,8 @@ def _parse_block(raw: str) -> Candidate | None:
 
 def load_candidates(path: Path) -> list[Candidate]:
     """Parse every block in ``path``. Returns ``[]`` when the file
-    doesn't exist or is empty — the UI just shows an empty list."""
+    doesn't exist or is empty — the UI just shows an empty list.
+    """
     if not path.is_file():
         return []
     try:
@@ -133,7 +137,8 @@ def _format_status_line(status: str, filed: str | None) -> str:
 def _rewrite_block_status(block: str, new_status: str, filed_ticket: str | None) -> str:
     """Return *block* with its Status line replaced (or appended). The
     new line sits between **Proposed:** and the trailing block, so the
-    block stays human-readable."""
+    block stays human-readable.
+    """
     new_line = _format_status_line(new_status, filed_ticket)
     if _STATUS_RE.search(block):
         return _STATUS_RE.sub(new_line, block, count=1)
@@ -211,7 +216,7 @@ def update_status(
 def _classify_for_prune(
     raw_blocks: list[str],
 ) -> tuple[list[int], list[int], list[int]]:
-    """Bucket block indices into (pending, resolved, blank) by file order.
+    r"""Bucket block indices into (pending, resolved, blank) by file order.
 
     A purely blank fragment (the trailing piece left by the final
     ``\\n---\\n``) is tracked separately so an unchanged file round-trips
@@ -305,7 +310,8 @@ def to_ticket_payload(c: Candidate) -> tuple[str, str]:
     """Render the audited-repo ticket title + body for a validated
     candidate. Title stays short (~80 chars); body restates the rule,
     rationale, target section, and provenance so refine has full
-    context when it runs."""
+    context when it runs.
+    """
     rule_short = c.rule.splitlines()[0].strip()
     if len(rule_short) > 80:
         rule_short = rule_short[:77] + "..."

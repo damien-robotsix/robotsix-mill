@@ -738,7 +738,8 @@ class ValidationMixin(_ImplementStageBase):
         """Resolve the concatenated per-language instruction block, or
         ``""``. The repo's own ``.robotsix-mill/config.yaml`` ``languages``
         declaration (+ optional ``.robotsix-mill/language_instructions/``
-        overrides) win over the central ``repos.yaml`` ``language``."""
+        overrides) win over the central ``repos.yaml`` ``language``.
+        """
         from ...config.repo_settings import resolve_language_instructions
 
         repo_dir = ctx.service.workspace(ticket).dir / "repo"
@@ -1006,7 +1007,8 @@ class ValidationMixin(_ImplementStageBase):
     @classmethod
     def _baseline_fix_already_resolved(cls, ctx, ticket, fix_title) -> str | None:
         """Return the id of an already-completed baseline-fix this ticket
-        depends on (same title => same base_sha), else None."""
+        depends on (same title => same base_sha), else None.
+        """
         for dep_id in ctx.service._parse_depends_on(ticket):
             dep = ctx.service.get(dep_id)
             if (

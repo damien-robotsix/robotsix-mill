@@ -304,7 +304,8 @@ def run_coordinator(
     which is appended to the prompt as a ``<test_failure>`` block. The
     partial edits from earlier passes persist on disk in ``repo_dir``,
     so a retry continues from the current working tree. The seam tests
-    monkeypatch this."""
+    monkeypatch this.
+    """
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition

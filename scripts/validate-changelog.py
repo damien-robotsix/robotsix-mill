@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate changelog fragment files before commit.
+r"""Validate changelog fragment files before commit.
 
 Ensures every changelog fragment file under ``changelog.d/`` (and other
 common fragment directories) satisfies two invariants:
@@ -151,7 +151,8 @@ def _modules_yaml_check(repo_dir: Path) -> list[str]:
 
 def validate_changelog(repo_dir: Path) -> list[str]:
     """Run all changelog validation checks.  Returns diagnostic messages
-    for anything that was auto-fixed (empty list means clean)."""
+    for anything that was auto-fixed (empty list means clean).
+    """
     msgs: list[str] = []
     msgs.extend(_trailing_newline_errors(repo_dir))
     msgs.extend(_modules_yaml_check(repo_dir))

@@ -34,7 +34,8 @@ T = TypeVar("T")
 
 def _has_tool_calls(result: Any) -> bool:
     """Return True when any ``tool-call`` or ``tool-return`` part exists
-    in *result*'s message history."""
+    in *result*'s message history.
+    """
     try:
         messages = result.all_messages()
     except Exception:

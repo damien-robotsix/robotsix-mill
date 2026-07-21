@@ -1,3 +1,5 @@
+"""CLI subcommand for listing epic children."""
+
 from __future__ import annotations
 
 import argparse

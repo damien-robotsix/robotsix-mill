@@ -129,7 +129,8 @@ class _MetadataMixin(_ServiceBase):
 
     def set_parent(self, ticket_id: str, parent_id: str) -> None:
         """Link a spawned ticket to the ticket it originated from
-        (e.g. a retrospect improvement draft -> the reviewed ticket)."""
+        (e.g. a retrospect improvement draft -> the reviewed ticket).
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.parent_id = parent_id
@@ -139,7 +140,8 @@ class _MetadataMixin(_ServiceBase):
 
     def set_title(self, ticket_id: str, title: str) -> None:
         """Update the title of a ticket. Raises :class:`KeyError` if
-        the ticket does not exist."""
+        the ticket does not exist.
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.title = title
@@ -149,7 +151,8 @@ class _MetadataMixin(_ServiceBase):
 
     def set_content_hash(self, ticket_id: str, content_hash: str) -> None:
         """Keep the DB pointer in sync after a stage rewrites the
-        file-canonical description (so it isn't seen as an external edit)."""
+        file-canonical description (so it isn't seen as an external edit).
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.content_hash = content_hash
@@ -191,7 +194,8 @@ class _MetadataMixin(_ServiceBase):
 
         Tracks total implement passes across all review rounds
         (ticket lifetime).  Used by the implement↔review convergence
-        backstop."""
+        backstop.
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.implement_cycles = value
@@ -205,7 +209,8 @@ class _MetadataMixin(_ServiceBase):
         Tracks total refine passes (ticket lifetime).  Used by the
         refine convergence backstop — when this reaches
         ``max_refine_passes_per_ticket`` without convergence, the
-        ticket is escalated to BLOCKED."""
+        ticket is escalated to BLOCKED.
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.refine_passes = value
@@ -216,7 +221,8 @@ class _MetadataMixin(_ServiceBase):
     def set_refine_output_hash(self, ticket_id: str, output_hash: str) -> None:
         """Record the hash of the description.md produced by the most recent
         refine pass.  Compared against subsequent passes to detect
-        convergence (unchanged output → the refine loop has stabilised)."""
+        convergence (unchanged output → the refine loop has stabilised).
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.refine_output_hash = output_hash
@@ -230,7 +236,8 @@ class _MetadataMixin(_ServiceBase):
         Used by the trace-count circuit breaker: the baseline is
         subtracted from the live session trace count so only traces
         accrued after the last operator resume count toward the
-        ``max_traces_per_ticket`` cap."""
+        ``max_traces_per_ticket`` cap.
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.pre_redraft_trace_count = value
@@ -241,7 +248,8 @@ class _MetadataMixin(_ServiceBase):
     def set_depends_on(self, ticket_id: str, depends_on_ids: list[str]) -> None:
         """Set the ``depends_on`` field for *ticket_id* to a JSON-encoded
         list of ticket IDs.  Raises :class:`ValueError` if *ticket_id*
-        appears in *depends_on_ids* (self-dependency)."""
+        appears in *depends_on_ids* (self-dependency).
+        """
         if ticket_id in depends_on_ids:
             raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
         raw = json.dumps(depends_on_ids) if depends_on_ids else None
@@ -257,7 +265,7 @@ class _MetadataMixin(_ServiceBase):
     # ------------------------------------------------------------------
 
     def _compute_spec_fingerprint(self, ticket: Ticket) -> str:
-        """Compute the effective spec fingerprint for *ticket*.
+        r"""Compute the effective spec fingerprint for *ticket*.
 
         Matches the fingerprint computation in the implement stage's
         preflight guard and ``_write_implement_result``: SHA-256 of

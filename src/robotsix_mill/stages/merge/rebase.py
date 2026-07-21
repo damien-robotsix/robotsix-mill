@@ -157,7 +157,8 @@ class RebaseMixin(_MergeStageBase):
         note so a human sees the actual conflict, not a generic message).
         May instead return an ``Outcome`` to return directly (e.g. BLOCKED
         when the remote PR branch has diverged and must not be force-pushed
-        over)."""
+        over).
+        """
         from robotsix_mill.stages import merge as _facade
 
         try:
@@ -365,7 +366,8 @@ class RebaseMixin(_MergeStageBase):
         could not resolve the conflict. On the final (BLOCKED) attempt this
         is combined with a deterministic list of still-conflicted files so
         the operator sees exactly which files need manual resolution instead
-        of a generic "manual conflict resolution required"."""
+        of a generic "manual conflict resolution required".
+        """
         if attempt < max_attempts:
             _write_counter(counter_path, attempt)
             log.warning(

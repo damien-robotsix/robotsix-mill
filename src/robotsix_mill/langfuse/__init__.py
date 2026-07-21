@@ -1,6 +1,7 @@
 """Langfuse observability client: session-level cost tracking and
 trace-fetch helpers consumed by the runtime tracing layer, the
-retrospect stage, and several agents."""
+retrospect stage, and several agents.
+"""
 
 from .client import (
     fetch_trace_detail,

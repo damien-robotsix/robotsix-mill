@@ -109,7 +109,7 @@ _OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
 
 
 def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
-    """Extract action ``uses:`` references from added diff lines.
+    r"""Extract action ``uses:`` references from added diff lines.
 
     Scans ``^\\+`` lines (excluding the ``+++`` header) for ``uses:``
     directives of the form ``uses: <owner>/<repo>[/<subpath>]@<ref>``.
@@ -207,7 +207,7 @@ def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
 def _reusable_workflow_sha_refs_from_diff(
     diff: str,
 ) -> list[tuple[str, str, str, str]]:
-    """Extract SHA-pinned refs from reusable-workflow ``uses:`` lines.
+    r"""Extract SHA-pinned refs from reusable-workflow ``uses:`` lines.
 
     ``_action_refs_from_diff()`` skips reusable-workflow lines (those
     whose slug contains ``.github/workflows/`` or ``.github/actions/``)
@@ -503,7 +503,8 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
     from the last round into a ``prior-context`` fenced block.
 
-    Returns ``None`` when neither source has content (first review round)."""
+    Returns ``None`` when neither source has content (first review round).
+    """
     from ..agents.prompt_blocks import section
     from ..core.text_utils import tail_keep
 

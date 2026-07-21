@@ -141,7 +141,8 @@ def _upsert_members(
     result: MemberSyncResult,
 ) -> set[str]:
     """Upsert each detected member into *repos*, recording the outcome on
-    *result*. Returns the set of repo_ids the manifest currently declares."""
+    *result*. Returns the set of repo_ids the manifest currently declares.
+    """
     member_ids: set[str] = set()
     for member in members:
         repo_id = _member_repo_id(member.path)
@@ -183,7 +184,8 @@ def _flag_vanished(
 ) -> None:
     """Flag this master's member entries that vanished from the manifest for
     operator removal (``pending_removal: true``), never auto-deleting them —
-    the board + history stay put."""
+    the board + history stay put.
+    """
     for repo_id, entry in repos.items():
         if (
             isinstance(entry, dict)

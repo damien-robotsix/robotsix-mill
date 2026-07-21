@@ -161,7 +161,8 @@ def _read_body(service: TicketService, ticket: Ticket) -> str:
 
 def _normalize_body(text: str) -> str:
     """Body comparator — strip trailing whitespace per-line so a stray
-    space at end-of-line doesn't trigger a spurious update."""
+    space at end-of-line doesn't trigger a spurious update.
+    """
     return "\n".join(line.rstrip() for line in text.splitlines()).strip()
 
 
@@ -245,7 +246,8 @@ def _commit_and_open_pr(
     """Commit ROADMAP.md, push a fresh branch, open a PR. Returns the
     PR URL on success or ``None`` when remote/credentials aren't
     configured (the marker patch stays local — operator can commit
-    by hand)."""
+    by hand).
+    """
     remote_url = _resolve_remote_url(settings, repo_config)
     if not remote_url:
         log.info("roadmap-sync: no remote configured — markers left local")

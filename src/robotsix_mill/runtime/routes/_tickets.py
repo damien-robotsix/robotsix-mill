@@ -261,7 +261,8 @@ def _list_tickets_compute(
 ) -> list[TicketRead]:
     """Build the enriched ticket list for :func:`list_tickets` (the cache
     miss / cache-disabled path). Kept separate so the cache wrapper stays
-    a thin, obviously-correct guard around the expensive all-board fanout."""
+    a thin, obviously-correct guard around the expensive all-board fanout.
+    """
     exclude = None
     if not include_closed:
         exclude = set(_LIST_TERMINAL_STATES)
@@ -503,7 +504,8 @@ def get_retrospect(
     retrospect has not run yet (or the artifact was lost). Lets the
     board surface what retrospect actually wrote — without this the
     DONE -> CLOSED transition looks like it happened with no
-    reflection, even when retrospect did run and write real analysis."""
+    reflection, even when retrospect did run and write real analysis.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
@@ -547,7 +549,8 @@ def list_artifacts(
     Returns ``{"artifacts": [{"name": str, "size": int, "mtime": str},
     ...]}`` sorted by mtime ascending. Used by the board UI's drawer
     to surface each agent's output — pre-v1 the implement / refine /
-    retrospect markdowns only existed on disk."""
+    retrospect markdowns only existed on disk.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
@@ -590,7 +593,8 @@ def get_artifact(
     Refuses path-traversal (``..``, ``/``) so the route only serves
     files directly under the ticket's ``artifacts_dir``. Binary files
     return decoded-with-replace text since the drawer renders
-    markdown / JSON; a hex viewer can be added later if needed."""
+    markdown / JSON; a hex viewer can be added later if needed.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     if "/" in name or ".." in name or name.startswith("."):
         raise HTTPException(400, "invalid artifact name")
@@ -613,7 +617,8 @@ def delete_ticket(
     svc=Depends(get_service),
 ) -> None:
     """Hard-delete a ticket (row + history + workspace). Irreversible.
-    404 if it doesn't exist."""
+    404 if it doesn't exist.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     if not svc.delete(ticket_id):
         raise HTTPException(404, "ticket not found")

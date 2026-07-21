@@ -355,7 +355,8 @@ class MultiRepoMixin(_MergeStageBase):
         """Auto-merge the green multi-repo PRs when the review gate marks the
         ticket eligible. Held in HUMAN_MR_APPROVAL when not eligible, so a human
         can merge instead (mirrors the single-repo gate path). Partial merges
-        are fine — the next poll continues."""
+        are fine — the next poll continues.
+        """
         s = ctx.settings
 
         # --- Review feedback check (opt-in): if any repo's PR has a late

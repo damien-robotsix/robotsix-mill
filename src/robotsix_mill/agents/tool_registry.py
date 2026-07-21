@@ -49,7 +49,8 @@ class ToolRegistry:
     @classmethod
     def register(cls, tool: ToolInfo) -> None:
         """Insert *tool* by name.  Overwrites on duplicate name (last
-        registration wins)."""
+        registration wins).
+        """
         cls._tools[tool.name] = tool
 
     @classmethod

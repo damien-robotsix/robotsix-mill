@@ -379,7 +379,8 @@ def run_test_agent(
     are empty the gate short-circuits to PASS — repos without a test
     suite (doc-only, etc.) need no opt-out flag. (``repo_config`` no
     longer carries a per-repo ``test_command``; it moved to the repo's
-    own ``.robotsix-mill/config.yaml``.)"""
+    own ``.robotsix-mill/config.yaml``.)
+    """
     cmd = ((load_repo_test_command(repo_dir) or "") or settings.test_command).strip()
     if not cmd:
         return True, "no test gate configured (treated as passing)"
@@ -409,7 +410,8 @@ def smoke_paths_match(changed_files: list[str], smoke_paths: list[str]) -> bool:
     :meth:`pathlib.PurePath.match` against POSIX-style relative paths (as
     returned by ``git_ops.introduced_files``) so directory-recursive
     patterns like ``src/robotsix_mill/runtime/**`` and shallow patterns
-    like ``src/robotsix_mill/runtime/static/*.css`` both work."""
+    like ``src/robotsix_mill/runtime/static/*.css`` both work.
+    """
     if not smoke_paths:
         return True
     for path in changed_files:
@@ -452,7 +454,8 @@ def run_smoke_agent(
     a failure (mirrors the test-gate flake guard).
 
     ``file_map``: mirrors :func:`run_test_agent` — auto-discovered from
-    the sibling ``artifacts/file_map.json`` when ``None``."""
+    the sibling ``artifacts/file_map.json`` when ``None``.
+    """
     cmd = ((load_repo_smoke_command(repo_dir) or "") or settings.smoke_command).strip()
     if not cmd:
         return True, "no smoke gate configured (treated as passing)"
@@ -480,7 +483,8 @@ def _distill_failure(
 ) -> str:
     """Distill a raw failing-test log into a short, actionable diagnosis
     via a CHEAP model. Degrades to the raw tail when no model key is set
-    or the distill agent errors."""
+    or the distill agent errors.
+    """
     tail = out[-6000:]
 
     scope_note = ""

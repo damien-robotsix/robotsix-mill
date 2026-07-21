@@ -84,7 +84,8 @@ class FileOperationsMixin(_ImplementStageBase):
         mill fs tools emit repo-relative paths; the Claude SDK editors emit
         absolute paths (which, for the agent's own clone, live under
         *repo_dir*). Anything resolving outside *repo_dir* is rejected so the
-        replay never touches the host filesystem."""
+        replay never touches the host filesystem.
+        """
         root = repo_dir.resolve()
         p = Path(raw_path)
         cand = (p if p.is_absolute() else root / p).resolve()
@@ -247,7 +248,8 @@ class FileOperationsMixin(_ImplementStageBase):
         own ``pyproject`` config (e.g. ``target-version``) applies — mirroring
         what CI and the agent run. Best-effort: a missing/failing ruff leaves
         the files as the raw replay wrote them (the caller's diff check then
-        treats a surviving raw edit conservatively as work)."""
+        treats a surviving raw edit conservatively as work).
+        """
         rels = [str(f) for f in files]
         try:
             subprocess.run(

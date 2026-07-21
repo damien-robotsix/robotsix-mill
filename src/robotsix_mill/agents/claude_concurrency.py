@@ -60,7 +60,8 @@ class _BoundedClaudeHandle:
     """Wrap a Claude SDK agent handle so ``run_sync`` acquires the global
     concurrency semaphore for the duration of the run. Every other access — the
     async ``run``, ``close``, ``.output``-bearing results, etc. — delegates
-    unchanged to the wrapped handle."""
+    unchanged to the wrapped handle.
+    """
 
     def __init__(self, handle: Any, semaphore: threading.BoundedSemaphore) -> None:
         # Set via the instance dict directly so __getattr__ (which reads
@@ -80,5 +81,6 @@ class _BoundedClaudeHandle:
 
 def bound_claude_handle(handle: Any, limit: int) -> _BoundedClaudeHandle:
     """Wrap *handle* so its top-level ``run_sync`` calls share the process-wide
-    Claude-run semaphore sized to *limit*."""
+    Claude-run semaphore sized to *limit*.
+    """
     return _BoundedClaudeHandle(handle, get_claude_run_semaphore(limit))

@@ -122,7 +122,8 @@ def _matches_degradation(summary: str) -> bool:
 def _normalize_signature(text: str) -> str:
     """Collapse transient specifics (paths, hex ids, digits, timestamps) so
     a recurring failure normalizes to one stable signature. Built on
-    :func:`dedup.normalize`; clipped to ~80 chars."""
+    :func:`dedup.normalize`; clipped to ~80 chars.
+    """
     s = (text or "").lower()
     s = re.sub(r"\S*/\S*", " ", s)  # path-like tokens (clone paths, urls)
     s = re.sub(r"\b[0-9a-f]{6,}\b", " ", s)  # hex ids / uuids
@@ -132,7 +133,8 @@ def _normalize_signature(text: str) -> str:
 
 def _collect_candidates(settings: Settings) -> list[_Candidate]:
     """Read every board's registry, flag candidates, and group them by
-    ``(kind, normalized signature)``."""
+    ``(kind, normalized signature)``.
+    """
     window = float(settings.run_health_window_hours)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=window)
     groups: dict[tuple[str, str], _Candidate] = {}
@@ -235,7 +237,8 @@ def _ticket_body(service: TicketService, ticket: object) -> str:
 
 def _existing_markers(service: TicketService) -> tuple[set[str], set[str]]:
     """Normalized titles + embedded gap-ids of recent run-health tickets — a
-    backstop against re-filing a proposal the agent already has."""
+    backstop against re-filing a proposal the agent already has.
+    """
     title_keys: set[str] = set()
     gap_ids: set[str] = set()
     for t in service.recent_proposals_for(SourceKind.RUN_HEALTH, limit=200):
@@ -290,6 +293,8 @@ def _file_drafts(
 
 @dataclass
 class RunHealthPassResult:
+    """Result of a run-health periodic pass."""
+
     updated_memory: str
     drafts_created: list[dict]
     session_id: str

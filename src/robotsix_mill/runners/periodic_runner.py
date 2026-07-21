@@ -94,7 +94,8 @@ def _clone_token(settings, repo_config) -> str | None:
 def _forge_token(settings, repo_config) -> str | None:
     """Resolve the forge token via ``get_secrets().forge_token``.
     Raises if the secret is missing — used by health, test_gap,
-    config_sync, and completeness_check runners."""
+    config_sync, and completeness_check runners.
+    """
     return get_secrets().forge_token
 
 
@@ -197,7 +198,6 @@ def run_periodic_pass(
         An instance of ``config.result_dataclass`` with
         ``updated_memory``, ``drafts_created``, and ``session_id``.
     """
-
     clone_dir: Path | None = None
     forge_remote_url = settings.forge_remote_url
 
@@ -559,7 +559,8 @@ def run_periodic_pass_entry(
 
 def _make_entry(key: str) -> Callable[[str, RepoConfig | None], PeriodicPassResult]:
     """Return a callable ``(session_id, repo_config=None) -> PeriodicPassResult``
-    with a descriptive ``__name__`` for each periodic pass key."""
+    with a descriptive ``__name__`` for each periodic pass key.
+    """
 
     def _entry(
         session_id: str,

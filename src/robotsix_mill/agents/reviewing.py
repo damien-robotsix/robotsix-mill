@@ -140,7 +140,8 @@ def _is_token_limit_error(exc: BaseException) -> bool:
 
 def _is_output_token_exhaustion(exc: BaseException) -> bool:
     """True when *exc* indicates output-token exhaustion (max_tokens too
-    low for reasoning output), NOT input context overflow."""
+    low for reasoning output), NOT input context overflow.
+    """
     msg = str(exc).lower()
     return any(sig in msg for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS)
 
@@ -164,7 +165,8 @@ def _review_attempt(
 ) -> object:
     """Build the prompt and run one review pass, returning the
     agent's (possibly re-prompted) output. Raises on token-limit
-    overflow so the caller can decide whether to degrade."""
+    overflow so the caller can decide whether to degrade.
+    """
     from .prompt_blocks import section
     from .structured_output_guard import reprompt_if_unstructured
     from .retry import run_agent
@@ -307,7 +309,8 @@ def run_review_agent(
     diff. On the default DeepSeek path (no Claude SDK routing) the image
     is never attached — DeepSeek has no vision and would reject an image
     block. A missing/unreadable screenshot degrades silently to the
-    text-only path; it never alters routing or crashes review."""
+    text-only path; it never alters routing or crashes review.
+    """
     import functools
 
     from pydantic_ai.usage import UsageLimits

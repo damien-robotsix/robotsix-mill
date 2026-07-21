@@ -32,7 +32,8 @@ class _CommentMixin(_ServiceBase):
 
         When *parent_id* is given, validates that the parent Comment
         exists and belongs to the same ticket, raising ``ValueError``
-        otherwise."""
+        otherwise.
+        """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             _get_ticket(s, ticket_id)
             if parent_id is not None:
@@ -166,7 +167,8 @@ class _CommentMixin(_ServiceBase):
     ) -> None:
         """If *ticket_id* is in ``AWAITING_USER_REPLY`` and every
         top-level ``[ASK_USER]`` comment thread on it is closed,
-        transition the ticket back to its ``paused_from`` state."""
+        transition the ticket back to its ``paused_from`` state.
+        """
         with retry_on_db_full(self.settings, board) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None or ticket.state is not State.AWAITING_USER_REPLY:
@@ -252,7 +254,8 @@ class _CommentMixin(_ServiceBase):
     ) -> Comment:
         """Reopen a closed top-level comment thread.  Raises
         ``KeyError`` if the comment does not exist, ``ValueError`` if
-        it is a reply (non-NULL parent_id) or is not currently closed."""
+        it is a reply (non-NULL parent_id) or is not currently closed.
+        """
         with retry_on_db_full(
             self.settings, self._board_for_comment(comment_id, ticket_id)
         ) as s:

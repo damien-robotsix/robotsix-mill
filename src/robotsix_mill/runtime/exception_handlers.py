@@ -19,6 +19,7 @@ from .tracing import get_current_trace_id
 async def transition_error_handler(
     request: Request, exc: TransitionError
 ) -> JSONResponse:
+    """Return a 409 JSON response for invalid ticket-state transitions."""
     return JSONResponse(
         status_code=409,
         content=ProblemDetail(
@@ -34,6 +35,7 @@ async def transition_error_handler(
 async def ambiguous_ticket_id_handler(
     request: Request, exc: AmbiguousTicketId
 ) -> JSONResponse:
+    """Return a 409 JSON response for ambiguous ticket-id lookups."""
     return JSONResponse(
         status_code=409,
         content=ProblemDetail(
@@ -49,6 +51,7 @@ async def ambiguous_ticket_id_handler(
 async def not_configured_error_handler(
     request: Request, exc: NotConfiguredError
 ) -> JSONResponse:
+    """Return a 503 JSON response for not-configured service errors."""
     return JSONResponse(
         status_code=503,
         content=ProblemDetail(

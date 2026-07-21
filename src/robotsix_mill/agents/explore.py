@@ -54,7 +54,8 @@ def is_explore_budget_exhausted() -> bool:
 
 def reset_explore_budget_exhausted() -> None:
     """Reset the explore-budget-exhausted sentinel for the next
-    coordinator run."""
+    coordinator run.
+    """
     global _explore_budget_exhausted
     _explore_budget_exhausted = False
 
@@ -354,7 +355,8 @@ async def run_explore(
     coordinator: under the Claude SDK backend the ``explore`` tool callback
     fires inside the SDK's already-running loop, so the sub-agent is awaited
     via pydantic-ai's async ``agent.run`` rather than ``run_sync`` (which
-    would call ``asyncio.run`` and raise "event loop is already running")."""
+    would call ``asyncio.run`` and raise "event loop is already running").
+    """
     if not get_secrets().openrouter_api_key:
         return "explore unavailable: OPENROUTER_API_KEY is not set"
     if not repo_dir.exists():
@@ -475,7 +477,8 @@ def make_explore_tool(
         already know) so the scout can short-circuit redundant
         exploration instead of re-discovering them. Keep it terse — paths
         and symbols, not whole file dumps. Leave it unset when you have
-        nothing relevant to share."""
+        nothing relevant to share.
+        """
         # Only forward known_context / pre_seeded_paths when populated, so
         # the default call shape (and existing seam fakes) stays unchanged.
         extra: dict[str, object] = (

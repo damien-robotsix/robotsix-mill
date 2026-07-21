@@ -174,7 +174,8 @@ class _CreateMixin(_ServiceBase):
 
     def _has_active_child(self, ticket_id: str) -> bool:
         """Return True if *ticket_id* has at least one child whose
-        state is NOT in ``_ARCHIVABLE_STATES``."""
+        state is NOT in ``_ARCHIVABLE_STATES``.
+        """
         with db.session(self.settings, self.board_id) as s:
             stmt = (
                 select(Ticket)
@@ -222,7 +223,8 @@ class _CreateMixin(_ServiceBase):
         self, ticket_id: str, session: Session
     ) -> list[Comment]:
         """Return open top-level ``[ASK_USER]`` comment threads on
-        *ticket_id* (those with ``closed_at IS NULL``)."""
+        *ticket_id* (those with ``closed_at IS NULL``).
+        """
         stmt = select(Comment).where(
             Comment.ticket_id == ticket_id,
             Comment.parent_id.is_(None),

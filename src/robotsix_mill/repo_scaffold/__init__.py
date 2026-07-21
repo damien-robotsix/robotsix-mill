@@ -269,7 +269,8 @@ def _write_python_skeleton(repo_dir: Path, name: str) -> None:
     ``src/{pkg}/__init__.py`` (``pkg`` = import-safe name), and
     ``tests/__init__.py``. The wheel target is declared explicitly so
     hatchling can always resolve the package regardless of how it
-    normalizes the distribution name."""
+    normalizes the distribution name.
+    """
     pkg_name = _python_package_name(name)
     pyproject = f"""[build-system]
 requires = ["hatchling"]
@@ -359,7 +360,8 @@ jobs:
 
 def _write_repo_config(repo_dir: Path, language: str) -> None:
     """Write the new repo's ``.robotsix-mill/config.yaml`` declaring its
-    ``test_command`` + ``languages`` — the repo owns these (not repos.yaml)."""
+    ``test_command`` + ``languages`` — the repo owns these (not repos.yaml).
+    """
     cfg_dir = repo_dir / ".robotsix-mill"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     test_command = "pytest -q" if language == "python" else ""
@@ -391,7 +393,8 @@ def _write_periodic_presence_files(repo_dir: Path) -> None:
 
 def _sanitize_repo_id(name: str) -> str:
     """Derive a safe ``repo_id`` from a repo name: lowercase, hyphens
-    for non-alphanumeric characters."""
+    for non-alphanumeric characters.
+    """
     sanitized = []
     for ch in name.lower():
         if ch.isascii() and ch.isalnum():
@@ -430,7 +433,8 @@ def _append_repo_config(
     repo_info: RepoInfo, params: dict[str, Any], settings: Settings
 ) -> None:
     """Append a :class:`RepoConfig` stanza to the machine-owned overlay
-    for the newly created repository."""
+    for the newly created repository.
+    """
     path = _repos_yaml_path(settings)
     if path is None:
         log.info("MILL_REPOS_FILE is empty — skipping repos.yaml append")

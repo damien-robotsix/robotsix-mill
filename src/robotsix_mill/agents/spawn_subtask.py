@@ -165,7 +165,8 @@ async def run_spawn_subtask(
 
 def make_spawn_subtask_tool(settings: Settings, repo_dir: Path):
     """Build the ``spawn_subtask`` tool exposed to the implement
-    coordinator. Returns a callable the agent invokes by name."""
+    coordinator. Returns a callable the agent invokes by name.
+    """
 
     async def spawn_subtask(
         name: str,

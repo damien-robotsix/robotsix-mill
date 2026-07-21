@@ -62,7 +62,8 @@ def make_validate_artifact_tool(repo_dir: Path) -> Callable[[str], str]:
         exists in the cloned repo, returning ``EXISTS: <path> (file)``,
         ``EXISTS: <path> (directory)``, or ``MISSING: <path> ...``. Use
         this to confirm an artifact's path before filing a draft about
-        it; never resolves outside the clone."""
+        it; never resolves outside the clone.
+        """
         with trace_stage("validate_artifact"):
             return validate_artifact_path(repo_dir, path)
 

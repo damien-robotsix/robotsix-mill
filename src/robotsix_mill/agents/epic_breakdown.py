@@ -116,7 +116,8 @@ def _build_child_repo_map(
 
 def _build_package_repo_map(repo_ids: set[str]) -> dict[str, str]:
     """Build a package-name → repo_id map using the hyphen→underscore
-    convention (e.g. 'robotsix-llmio' → 'robotsix_llmio')."""
+    convention (e.g. 'robotsix-llmio' → 'robotsix_llmio').
+    """
     package_to_repo: dict[str, str] = {}
     for rid in repo_ids:
         pkg = rid.lower().replace("-", "_")

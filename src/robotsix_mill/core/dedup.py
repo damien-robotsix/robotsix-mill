@@ -31,7 +31,8 @@ log = logging.getLogger("robotsix_mill.core.dedup")
 
 def normalize(s: str) -> str:
     """Lower-case *s* and collapse every run of non-alphanumeric
-    characters into a single space, stripping the ends."""
+    characters into a single space, stripping the ends.
+    """
     return re.sub(r"[^a-z0-9]+", " ", s.casefold()).strip()
 
 
@@ -384,7 +385,8 @@ def _extract_concern_tokens(text: str) -> set[str]:
 
 def _extract_paths(text: str) -> list[str]:
     """Extract de-duplicated path-like tokens from *text*, preserving
-    first-seen order."""
+    first-seen order.
+    """
     out: list[str] = []
     for tok in _PATH_TOKEN_RE.findall(text or ""):
         if tok not in out:
@@ -413,7 +415,8 @@ def paths_excluding_out_of_scope(text: str) -> list[str]:
     occurrence).  De-duplicated, first-seen order.
 
     Total/defensive: any parsing failure logs and returns an empty list
-    rather than raising into the caller."""
+    rather than raising into the caller.
+    """
     try:
         captured: list[str] = []
         excluding = False
@@ -486,7 +489,8 @@ def _scope_paths(text: str) -> set[str]:
     free prose / problem-statement paragraphs are likewise excluded.
 
     Total/defensive: any parsing failure logs and returns an empty set
-    rather than raising into the caller."""
+    rather than raising into the caller.
+    """
     try:
         captured: list[str] = []
         capturing = False
@@ -590,7 +594,8 @@ def annotate_child_body(
     overlap to *body* so a later refine cycle sees the flag and can
     close-as-duplicate cheaply. Surfaces the overlap without dropping the
     work. *source_desc* names the producer of the flag (e.g.
-    ``"draft-intake pre-refine dedup"`` for independent drafts)."""
+    ``"draft-intake pre-refine dedup"`` for independent drafts).
+    """
     block = (
         f"> [!warning] {note}\n"
         ">\n"

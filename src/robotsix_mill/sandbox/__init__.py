@@ -46,7 +46,8 @@ log = logging.getLogger("robotsix_mill.sandbox")
 
 class SandboxError(RuntimeError):
     """Infrastructure failure (no Docker, daemon/image error) — distinct
-    from the command itself exiting non-zero."""
+    from the command itself exiting non-zero.
+    """
 
 
 # Deploy-mode (central-deploy) helpers --------------------------------------
@@ -194,7 +195,8 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     """Mount ONLY this ticket's repo sub-tree into the sandbox — never
     the data-dir root (which holds ``mill.db``, the memory ledgers and
     every other ticket's workspace). Target = the repo's real path so
-    ``-w`` and any absolute path in the repo still resolve."""
+    ``-w`` and any absolute path in the repo still resolve.
+    """
     # Resolve both to absolute up-front. Docker's `-w` and the volume
     # target both REQUIRE absolute paths; the default settings.data_dir
     # is the relative Path(".data"), so without resolution the
@@ -316,7 +318,8 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
 
     Build/runtime deps that are already baked into the image are simply
     re-resolved as already-satisfied — cheap. The win is the deps the
-    image lacks (the ticket's newly-added ones)."""
+    image lacks (the ticket's newly-added ones).
+    """
     if not settings.sandbox_proxy_url:
         return command
     if not (repo_dir / "pyproject.toml").exists():
@@ -422,7 +425,8 @@ def run(
     ``ModuleNotFoundError`` no matter how the agent edits the code —
     because nothing ever installs the declared dependency. See
     ``_maybe_install_prefix`` for how the install is made
-    read-only-safe."""
+    read-only-safe.
+    """
     # Callers (e.g. the merge stage) may pass a str. We also resolve to
     # an absolute path because Docker's `-w` rejects relative arguments
     # (see _repo_mount for the same reason).
@@ -610,7 +614,8 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
     to exfiltrate), non-root, read-only, caps dropped, no-new-privs,
     fixed ``curl`` (not a shell — the URL is a plain argv item, no
     injection), size/time capped. Residual risk: an agent can encode
-    data into the URL it asks to fetch. http(s) only."""
+    data into the URL it asks to fetch. http(s) only.
+    """
     if not (url.startswith("http://") or url.startswith("https://")):
         return 1, f"refused: only http(s) URLs allowed: {url!r}"
 
@@ -704,7 +709,8 @@ def _list_sandbox_containers() -> list[tuple[str, str]]:
     running at boot) sweep these leftovers. The age-gated periodic reaper
     still skips ``Created`` containers (they have no StartedAt → treated as
     "leave alone"), so it can't race a sandbox the worker just created.
-    Best-effort: an empty list on any Docker CLI failure."""
+    Best-effort: an empty list on any Docker CLI failure.
+    """
     filters: list[str] = []
     for prefix in _SANDBOX_CONTAINER_PREFIXES:
         filters += ["--filter", f"name={prefix}"]
