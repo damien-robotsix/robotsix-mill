@@ -168,12 +168,14 @@ class RecurringCIFailureCheck:
             "```",
             "",
             "### Action",
-            "Review the recurring CI failure pattern above. If a systemic "
-            "fix is appropriate (e.g. a pre-commit hook, a CI workflow "
-            "change, or a lint rule adjustment), draft a task ticket for "
-            "the fix. Once the root cause is resolved, this diagnostic "
-            "will stop filing for this key — existing events age out "
-            "naturally as new tickets cycle through CI.",
+            (
+                "Review the recurring CI failure pattern above. If a systemic "
+                "fix is appropriate (e.g. a pre-commit hook, a CI workflow "
+                "change, or a lint rule adjustment), draft a task ticket for "
+                "the fix. Once the root cause is resolved, this diagnostic "
+                "will stop filing for this key — existing events age out "
+                "naturally as new tickets cycle through CI."
+            ),
         ]
         return "\n".join(lines) + "\n"
 

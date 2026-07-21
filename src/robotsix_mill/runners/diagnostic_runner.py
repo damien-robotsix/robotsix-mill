@@ -28,6 +28,13 @@ from .diagnostic_checks import (
     get_registered_checks,
 )
 
+# Import concrete check modules for their register_check side-effect.
+# These live here (not in diagnostic_checks) to avoid a cyclic import:
+# each check module imports from diagnostic_checks, so importing them
+# from diagnostic_checks would create a cycle.
+from . import diagnostic_check_errors  # noqa: E402,F401
+from . import diagnostic_check_recurring_ci  # noqa: E402,F401
+
 log = logging.getLogger(__name__)
 
 
