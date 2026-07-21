@@ -488,7 +488,7 @@ def test_run_completeness_check_pass_clones_and_passes_repo_dir(tmp_path, monkey
     )
     seen = {"clone": 0, "repo_dir": "unset"}
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 

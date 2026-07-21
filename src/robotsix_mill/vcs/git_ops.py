@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import subprocess
+import tempfile
 from enum import Enum
 from pathlib import Path
 
@@ -114,8 +116,82 @@ def _git_redacted(repo: Path, *args: str) -> str:
         ) from None
 
 
-def clone(remote_url: str, dest: Path, branch: str, token: str | None = None) -> None:
+def _remote_has_branches(remote_url: str, token: str | None) -> bool:
+    """Return ``True`` if *remote_url* has at least one branch (``git
+    ls-remote --heads`` returns non-empty output).
+
+    A ``CalledProcessError`` (network error, permission denied, …) is
+    treated as "unknown" and returns ``True`` — the caller should not
+    attempt a bootstrap when it cannot verify emptiness.
+    """
+    try:
+        result = subprocess.run(  # noqa: S603 — remote_url from repo config, token from env
+            [  # noqa: S607 — git is on PATH
+                "git",
+                "ls-remote",
+                "--quiet",
+                "--heads",
+                _authed_url(remote_url, token),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        # Can't determine — assume non-empty to avoid dangerous bootstrap.
+        return True
+    return bool(result.stdout.strip())
+
+
+def _bootstrap_empty_repo(
+    remote_url: str,
+    dest: Path,
+    branch: str,
+    token: str | None,
+    repo_id: str,
+) -> None:
+    """Bootstrap an empty remote repo by pushing an initial commit.
+
+    Creates a temporary local repo with a minimal README, force-pushes
+    it to *remote_url*, and then moves the repo to *dest* so it behaves
+    like a fresh clone.  Raises :class:`subprocess.CalledProcessError`
+    (or :class:`OSError`) on failure — callers must catch and log.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="bootstrap_"))
+    try:
+        init_repo(tmp, branch)
+        (tmp / "README.md").write_text(
+            f"# {repo_id}\n\nMill-managed repository — bootstrapped automatically.\n",
+            encoding="utf-8",
+        )
+        commit_all(tmp, "Initial bootstrap commit")
+        push(tmp, branch, remote_url, token)
+
+        # Ensure destination is clean (clone may have left partial state).
+        if dest.exists():
+            shutil.rmtree(dest, ignore_errors=True)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(tmp), str(dest))
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+
+def clone(
+    remote_url: str,
+    dest: Path,
+    branch: str,
+    token: str | None = None,
+    *,
+    repo_id: str = "",
+) -> None:
     """Single-branch clone of ``branch`` into ``dest`` (fresh per ticket).
+
+    When the remote has no branches at all (truly empty repo — no commits
+    yet), this function bootstraps the remote by pushing an initial commit
+    and then behaves as if the clone succeeded.  *repo_id* is used for the
+    bootstrap README content (defaults to *dest*'s directory name when
+    empty).
 
     On failure raises :class:`subprocess.CalledProcessError` with the
     tokenized URL redacted from ``cmd`` and ``stderr`` — the repr of this
@@ -137,12 +213,54 @@ def clone(remote_url: str, dest: Path, branch: str, token: str | None = None) ->
             text=True,
         )
     except subprocess.CalledProcessError as exc:
-        raise subprocess.CalledProcessError(
-            exc.returncode,
-            [redact_credentials(str(a)) for a in exc.cmd],
-            output=redact_credentials(exc.output or ""),
-            stderr=redact_credentials(exc.stderr or ""),
-        ) from None
+        stderr_str = redact_credentials(exc.stderr or "")
+        # When git reports the branch doesn't exist on the remote, the
+        # remote might be truly empty (no branches at all — a freshly
+        # created GitHub repo with auto_init=false).  Verify emptiness
+        # via ``git ls-remote --heads`` (the actual signal, not a
+        # brittle string match) and bootstrap only when confirmed empty.
+        if "Remote branch" in stderr_str and "not found" in stderr_str:
+            if not _remote_has_branches(remote_url, token):
+                log.info("clone: remote has no branches — bootstrapping empty repo")
+                try:
+                    _bootstrap_empty_repo(
+                        remote_url,
+                        dest,
+                        branch,
+                        token,
+                        repo_id or dest.name,
+                    )
+                    # Bootstrap succeeded — the repo is now at dest as if
+                    # a normal clone happened.  Fall through to configure
+                    # git identity (no early return — the bootstrap's
+                    # init_repo already configured identity, but let's be
+                    # safe and reconfigure on the moved directory).
+                except Exception as bootstrap_err:
+                    raise subprocess.CalledProcessError(
+                        exc.returncode,
+                        [redact_credentials(str(a)) for a in exc.cmd],
+                        output=redact_credentials(exc.output or ""),
+                        stderr=redact_credentials(
+                            f"{stderr_str}\n"
+                            f"(empty-repo bootstrap also failed: {bootstrap_err})"
+                        ),
+                    ) from None
+            else:
+                # Remote has branches but not the target one — a
+                # configuration mismatch, not an empty repo.
+                raise subprocess.CalledProcessError(
+                    exc.returncode,
+                    [redact_credentials(str(a)) for a in exc.cmd],
+                    output=redact_credentials(exc.output or ""),
+                    stderr=stderr_str,
+                ) from None
+        else:
+            raise subprocess.CalledProcessError(
+                exc.returncode,
+                [redact_credentials(str(a)) for a in exc.cmd],
+                output=redact_credentials(exc.output or ""),
+                stderr=stderr_str,
+            ) from None
     _git(dest, "config", "user.email", "mill@robotsix.local")
     _git(dest, "config", "user.name", "robotsix-mill")
 

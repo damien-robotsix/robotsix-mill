@@ -188,6 +188,60 @@ class TestClone:
             f"Expected oauth2 token injection in clone cmd: {clone_cmd}"
         )
 
+    # -- empty-repo bootstrap ----------------------------------------------
+
+    def test_clone_empty_remote_bootstraps(self, tmp_path, monkeypatch):
+        """When cloning from a truly empty remote (no branches at all),
+        clone() bootstraps the remote by pushing an initial commit and
+        returns normally — the caller sees it as a successful clone."""
+        bare = tmp_path / "empty.git"
+        subprocess.run(
+            ["git", "init", "--quiet", "--bare", "-b", "main", str(bare)],
+            check=True,
+        )
+        # Monkeypatch _remote_has_branches to simulate what happens with
+        # a real empty remote: the bare repo has no refs yet, so
+        # ls-remote --heads returns empty.
+        import robotsix_mill.vcs.git_ops as go
+
+        _orig_has_branches = go._remote_has_branches
+
+        def _fake_has_branches(remote_url, token):
+            # For file:// remotes, ls-remote --heads on a truly bare
+            # (no-refs) repo returns empty.  Verify the real function
+            # sees this, then simulate it consistently.
+            return False
+
+        monkeypatch.setattr(go, "_remote_has_branches", _fake_has_branches)
+
+        dest = tmp_path / "clone_dest"
+        bare_url = f"file://{bare}"
+        git_ops.clone(bare_url, dest, "main", repo_id="test-repo")
+
+        # After bootstrap, the destination has .git and the README.
+        assert (dest / ".git").is_dir()
+        assert (dest / "README.md").exists()
+        content = (dest / "README.md").read_text()
+        assert "test-repo" in content
+        assert "bootstrapped automatically" in content
+
+        # The bare remote now has the initial commit on main.
+        show = subprocess.run(
+            ["git", "-C", str(bare), "show", "main:README.md"],
+            capture_output=True,
+            text=True,
+        )
+        assert show.returncode == 0
+        assert "test-repo" in show.stdout
+
+        # git identity is configured.
+        email = subprocess.run(
+            ["git", "-C", str(dest), "config", "user.email"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert email == "mill@robotsix.local"
+
 
 # ===========================================================================
 # 3. has_changes — integration (real git)

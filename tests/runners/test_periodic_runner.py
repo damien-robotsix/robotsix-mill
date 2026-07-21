@@ -259,7 +259,7 @@ def test_run_periodic_pass_clone_failure_sets_repo_dir_none(tmp_path, monkeypatc
         FORGE_TARGET_BRANCH="main",
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         raise subprocess.CalledProcessError(1, "git")
 
     from robotsix_mill.vcs import git_ops
@@ -305,7 +305,7 @@ def test_run_periodic_pass_clone_failure_logs_warning(tmp_path, monkeypatch, cap
         FORGE_TARGET_BRANCH="main",
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         raise subprocess.CalledProcessError(1, "git")
 
     from robotsix_mill.vcs import git_ops
@@ -336,7 +336,7 @@ def test_run_periodic_pass_uses_clone_token_fn_when_configured(tmp_path, monkeyp
         FORGE_TARGET_BRANCH="main",
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         (dest / ".git").mkdir(parents=True)
 
     from robotsix_mill.vcs import git_ops
@@ -380,7 +380,7 @@ def test_run_periodic_pass_uses_forge_token_when_clone_token_fn_none(
         FORGE_TARGET_BRANCH="main",
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         (dest / ".git").mkdir(parents=True)
 
     from robotsix_mill.vcs import git_ops
@@ -539,7 +539,7 @@ def test_run_periodic_pass_no_forge_remote_skips_clone(tmp_path, monkeypatch):
 
     clone_attempted = []
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         clone_attempted.append(True)
 
     from robotsix_mill.vcs import git_ops
@@ -579,7 +579,7 @@ def test_run_periodic_pass_requires_repo_short_circuits_on_clone_failure(
         FORGE_TARGET_BRANCH="main",
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         raise subprocess.CalledProcessError(1, "git")
 
     from robotsix_mill.vcs import git_ops
@@ -620,7 +620,7 @@ def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
         FORGE_TARGET_BRANCH="main",
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         raise subprocess.CalledProcessError(1, "git")
 
     from robotsix_mill.vcs import git_ops

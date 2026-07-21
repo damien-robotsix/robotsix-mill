@@ -387,7 +387,7 @@ class TestCloneAndBranch:
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.clone",
-            lambda remote_url, repo_dir, target, token: _track("clone"),
+            lambda remote_url, repo_dir, target, token, **kwargs: _track("clone"),
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.create_branch",
@@ -504,7 +504,7 @@ class TestCloneAndBranch:
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.clone",
-            lambda remote_url, repo_dir, target, token: calls.append("clone"),
+            lambda remote_url, repo_dir, target, token, **kwargs: calls.append("clone"),
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.create_branch",
@@ -644,7 +644,7 @@ class TestCloneAndBranch:
         # Capture the remote_url passed to git_ops.clone.
         captured_remote = []
 
-        def _capture_clone(remote_url, repo_dir, target, token):
+        def _capture_clone(remote_url, repo_dir, target, token, **kwargs):
             captured_remote.append(remote_url)
             # Create .git so the hard-invariant guard does not re-clone.
             (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
@@ -678,7 +678,7 @@ class TestCloneAndBranch:
         self._mock_git_ops_clone_chain(monkeypatch, calls)
         captured_target = []
 
-        def _capture_clone(remote_url, repo_dir, target, token):
+        def _capture_clone(remote_url, repo_dir, target, token, **kwargs):
             captured_target.append(target)
             (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
 
@@ -735,9 +735,9 @@ class TestCloneAndBranch:
         # Override clone to create .git so the hard-invariant doesn't fire.
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.clone",
-            lambda remote_url, repo_dir, target, token: (repo_dir / ".git").mkdir(
-                parents=True, exist_ok=True
-            ),
+            lambda remote_url, repo_dir, target, token, **kwargs: (
+                repo_dir / ".git"
+            ).mkdir(parents=True, exist_ok=True),
         )
         captured_rebase_remote = []
 
@@ -766,21 +766,18 @@ class TestCloneAndBranch:
     # -- empty-repo bootstrap ----------------------------------------------
 
     def test_empty_repo_bootstrap_succeeds(self, monkeypatch, tmp_path):
-        """When clone fails because the remote has no branches, bootstrap
-        the repo with an initial commit so the agent can proceed."""
+        """When the remote is empty, git_ops.clone() bootstraps internally
+        and returns normally — _clone_and_branch proceeds without blocking."""
         ctx = _ctx(tmp_path)
         ticket = _ticket(ctx)
         calls = []
         self._mock_git_ops_clone_chain(monkeypatch, calls)
         self._mock_forge_auth(monkeypatch)
 
-        # Override clone to raise the empty-remote error.
+        # Override clone to simulate an empty-repo bootstrap: clone
+        # succeeds (internally bootstrapped) and creates .git.
         def fake_clone(*a, **kw):
-            raise subprocess.CalledProcessError(
-                128,
-                "git clone",
-                stderr="fatal: Remote branch main not found in upstream origin",
-            )
+            calls.append("clone")
 
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.clone",
@@ -789,34 +786,18 @@ class TestCloneAndBranch:
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
             lambda path, ignore_errors=False: None,
-        )
-
-        bootstrap_called = []
-
-        def fake_bootstrap(remote_url, dest, branch, token, repo_id):
-            bootstrap_called.append(True)
-            (dest / ".git").mkdir(parents=True, exist_ok=True)
-
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._remote_has_branches",
-            lambda remote_url, token: False,
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._bootstrap_empty_repo",
-            fake_bootstrap,
         )
 
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, tuple)
         repo_dir, branch, resuming = result
         assert resuming is False
-        assert len(bootstrap_called) == 1
-        assert "clone" not in calls  # clone raised, never tracked
+        assert "clone" in calls
         assert "create_branch" in calls
         assert "try_rebase_onto" in calls
 
     def test_empty_repo_bootstrap_fails_returns_blocked(self, monkeypatch, tmp_path):
-        """When bootstrap itself fails, return BLOCKED."""
+        """When clone() raises (e.g. bootstrap also failed), return BLOCKED."""
         ctx = _ctx(tmp_path)
         ticket = _ticket(ctx)
         self._mock_git_ops_clone_chain(monkeypatch)
@@ -826,7 +807,8 @@ class TestCloneAndBranch:
             raise subprocess.CalledProcessError(
                 128,
                 "git clone",
-                stderr="fatal: Remote branch main not found in upstream origin",
+                stderr="fatal: Remote branch main not found in upstream origin\n"
+                "(empty-repo bootstrap also failed: Permission denied)",
             )
 
         monkeypatch.setattr(
@@ -836,65 +818,48 @@ class TestCloneAndBranch:
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
             lambda path, ignore_errors=False: None,
-        )
-
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._remote_has_branches",
-            lambda remote_url, token: False,
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._bootstrap_empty_repo",
-            lambda remote_url, dest, branch, token, repo_id: (_ for _ in ()).throw(
-                subprocess.CalledProcessError(1, "git push", stderr="denied")
-            ),
-        )
-
-        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
-        assert isinstance(result, Outcome)
-        assert result.next_state == State.BLOCKED
-        assert "bootstrap also failed" in (result.note or "")
-
-    def test_empty_repo_remote_has_branches_returns_blocked(
-        self, monkeypatch, tmp_path
-    ):
-        """When clone fails with 'branch not found' but the remote DOES have
-        branches (different default branch), do NOT bootstrap — return BLOCKED."""
-        ctx = _ctx(tmp_path)
-        ticket = _ticket(ctx)
-        self._mock_git_ops_clone_chain(monkeypatch)
-        self._mock_forge_auth(monkeypatch)
-
-        def fake_clone(*a, **kw):
-            raise subprocess.CalledProcessError(
-                128,
-                "git clone",
-                stderr="fatal: Remote branch main not found in upstream origin",
-            )
-
-        monkeypatch.setattr(
-            "robotsix_mill.stages.implement.file_operations.git_ops.clone",
-            fake_clone,
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
-            lambda path, ignore_errors=False: None,
-        )
-
-        # Remote HAS branches — just not the target one.
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._remote_has_branches",
-            lambda remote_url, token: True,
         )
 
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, Outcome)
         assert result.next_state == State.BLOCKED
         assert "clone failed" in (result.note or "")
-        assert "bootstrap" not in (result.note or "")
+
+    def test_empty_repo_remote_has_branches_returns_blocked(
+        self, monkeypatch, tmp_path
+    ):
+        """When clone fails with 'branch not found' but the remote DOES have
+        branches (different default branch), clone() still raises — and
+        _clone_and_branch returns BLOCKED."""
+        ctx = _ctx(tmp_path)
+        ticket = _ticket(ctx)
+        self._mock_git_ops_clone_chain(monkeypatch)
+        self._mock_forge_auth(monkeypatch)
+
+        def fake_clone(*a, **kw):
+            raise subprocess.CalledProcessError(
+                128,
+                "git clone",
+                stderr="fatal: Remote branch main not found in upstream origin",
+            )
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.clone",
+            fake_clone,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.shutil.rmtree",
+            lambda path, ignore_errors=False: None,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        assert isinstance(result, Outcome)
+        assert result.next_state == State.BLOCKED
+        assert "clone failed" in (result.note or "")
 
     def test_empty_repo_hard_invariant_bootstrap_succeeds(self, monkeypatch, tmp_path):
-        """Hard-invariant path: .git missing, re-clone fails with empty-remote,
-        bootstrap succeeds — agent proceeds."""
+        """Hard-invariant path: .git missing, re-clone succeeds (internally
+        bootstrapped by clone()) — agent proceeds."""
         ctx = _ctx(tmp_path)
         ticket = _ticket(ctx)
         calls = []
@@ -906,19 +871,14 @@ class TestCloneAndBranch:
         )
 
         # First clone "succeeds" but doesn't create .git → hard-invariant fires.
-        # The invariant clone then fails with the empty-remote error.
         clone_count = [0]
 
         def fake_clone(*a, **kw):
             clone_count[0] += 1
             if clone_count[0] == 1:
                 return  # first clone "succeeds" without creating .git
-            # Second clone (invariant) raises empty-remote error.
-            raise subprocess.CalledProcessError(
-                128,
-                "git clone",
-                stderr="fatal: Remote branch main not found in upstream origin",
-            )
+            # Second clone (invariant) also succeeds (internally bootstrapped).
+            calls.append("clone")
 
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.file_operations.git_ops.clone",
@@ -931,27 +891,12 @@ class TestCloneAndBranch:
             lambda repo_dir, target, *, remote_url=None, token=None: True,
         )
 
-        bootstrap_called = []
-
-        def fake_bootstrap(remote_url, dest, branch, token, repo_id):
-            bootstrap_called.append(True)
-            (dest / ".git").mkdir(parents=True, exist_ok=True)
-
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._remote_has_branches",
-            lambda remote_url, token: False,
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._bootstrap_empty_repo",
-            fake_bootstrap,
-        )
-
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, tuple)
-        assert len(bootstrap_called) == 1
         # create_branch should be called twice: once after the first
-        # (no-op) clone, and once after the invariant bootstrap.
+        # (no-op) clone, and once after the invariant fallback clone.
         assert calls.count("create_branch") >= 2
+        assert "clone" in calls
 
 
 # ---------------------------------------------------------------------------

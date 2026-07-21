@@ -366,7 +366,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     ctx.settings.forge_target_branch = "main"
     seen = {"clone": 0, "repo_dir": "unset"}
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         seen["clone"] += 1
         (dest / ".git").mkdir(parents=True)
 
@@ -417,7 +417,7 @@ def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
     refine_called = []
 
-    def boom_clone(url, dest, branch, token):
+    def boom_clone(url, dest, branch, token, **kwargs):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
     def fake_refine(
@@ -1204,7 +1204,7 @@ def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
     dedup_called = False
 
-    def boom_clone(url, dest, branch, token):
+    def boom_clone(url, dest, branch, token, **kwargs):
         raise subprocess.CalledProcessError(128, "git", stderr="no access")
 
     def fake_dedup(
