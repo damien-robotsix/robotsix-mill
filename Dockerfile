@@ -107,6 +107,7 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
         ca-certificates=20250419* \
         nodejs=20.19.2+dfsg-1+deb13u2 \
         npm=9.2.0~ds1-3 \
+        tini=0.19.0-* \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
@@ -193,7 +194,7 @@ EXPOSE 8077
 HEALTHCHECK --interval=30s --timeout=25s --start-period=10s --retries=3 \
     CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8077/health')" || exit 1
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/app/entrypoint.sh"]
 
 # =============================================================================
 # Stage 3: dev — extends base for local sandbox use.
