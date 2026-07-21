@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate config/config.schema.json from pydantic models."""
+
 import sys
-sys.path.insert(0, '/repo')
+
+sys.path.insert(0, "/repo")
 
 import copy
 import json
@@ -15,6 +17,7 @@ SCHEMA_PATH = Path("/repo/config/config.schema.json")
 
 root_defs = {}
 
+
 def hoist_defs(schema, root_defs):
     local_defs = schema.pop("$defs", None)
     if isinstance(local_defs, dict):
@@ -22,6 +25,7 @@ def hoist_defs(schema, root_defs):
             if def_name not in root_defs:
                 root_defs[def_name] = def_schema
     return schema
+
 
 settings_schema = Settings.model_json_schema()
 hoist_defs(settings_schema, root_defs)
