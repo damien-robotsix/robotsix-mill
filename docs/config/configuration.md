@@ -944,11 +944,8 @@ repos:
   my-repo:
     board_id: "my-board"
     # forge_remote_url: "https://github.com/your-org/your-repo.git"  # optional — defaults to FORGE_REMOTE_URL
-    langfuse:
-      project_name: "my-repo"
-      public_key: "pk-lf-..."
-      secret_key: "sk-lf-..."
-      base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
+    # Langfuse credentials are configured globally in the `secrets:` block —
+    # there is no per-repo langfuse configuration.
 ```
 
 After editing, verify the config is valid and uses real (non-placeholder)
@@ -1001,10 +998,7 @@ Source: the `"repos"` key of `config/config.json` (overridable via the
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
 | `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
 | `repos.<id>.working_branch` | no | — | Per-repo target branch for clone/baseline/deliver operations. When set, overrides the global `forge_target_branch`. Use this for repos whose default branch is not `main` (e.g. `rolling`, `lyrical`, `develop`). Automatically populated by member-sync from the manifest `version` field. |
-| `repos.<id>.langfuse.project_name` | yes | — | Langfuse project name for this repo's traces |
-| `repos.<id>.langfuse.public_key` | yes | — | Langfuse public key for this repo's project |
-| `repos.<id>.langfuse.secret_key` | yes | — | Langfuse secret key for this repo's project |
-| `repos.<id>.langfuse.base_url` | no | `https://cloud.langfuse.com` | Langfuse base URL |
+
 
 Each repo ID must be unique and non-empty. The `board_id` must also be
 non-empty. The registry validates that every entry's `repo_id` matches
@@ -1028,10 +1022,6 @@ repos:
     board_id: "example-interfaces"
     forge_remote_url: "https://github.com/damien-robotsix/example_interfaces.git"
     working_branch: lyrical  # This repo's default branch is 'lyrical', not 'main'
-    langfuse:
-      project_name: "example-interfaces"
-      public_key: "pk-lf-..."
-      secret_key: "sk-lf-..."
 ```
 
 With this configuration, the mill will:
