@@ -58,6 +58,7 @@ class SourceKind(StrEnum):
     IMPLEMENT_BASELINE_DEPENDENCY = "implement_baseline_dependency"
     ORPHANED_PR_CHECK = "orphaned_pr_check"
     REPO_DESCRIPTION_SYNC = "repo_description_sync"
+    RECURRING_CATEGORY = "recurring_category"
 
 
 class TicketKind(StrEnum):
@@ -371,6 +372,36 @@ class CommentRead(SQLModel):
 
 
 # --- Agent memory ledger (DB-backed, with retention) ---
+
+
+class DiagnosticEvent(SQLModel, table=True):
+    """Per-ticket diagnostic event emitted at key pipeline transitions.
+
+    Stored in a separate table from TicketEvent so it can be queried
+    independently — by category across tickets, by repo, by normalized
+    sub_category — without scanning the full event history.
+
+    The recurring-category checker (see
+    :meth:`~.service._DiagnosticMixin.check_recurring_categories`)
+    aggregates these events to detect failure-mode clusters and
+    auto-generate fix proposals once a category crosses the configured
+    threshold.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    ticket_id: str = Field(foreign_key="ticket.id", index=True)
+    repo_id: str = Field(default="", index=True)
+    # e.g. "CI_FAILURE"
+    category: str = Field(index=True)
+    # stable, normalized sub-key for de-duplication and clustering
+    # (e.g. a truncated CI failure fingerprint)
+    sub_category: str = Field(default="", index=True)
+    # full human-readable description of the event
+    reason: str = Field(default="")
+    created_at: datetime = Field(
+        default_factory=_now,
+        sa_column=Column(TZDateTime()),
+    )
 
 
 class Memory(SQLModel, table=True):

@@ -29,6 +29,7 @@ from ..workspace import Workspace
 from ._comments import _CommentMixin
 from ._create_mixin import _CreateMixin
 from ._delete_mixin import _DeleteMixin
+from ._diagnostic_mixin import _DiagnosticMixin
 from ._helpers import AmbiguousTicketId, TransitionError
 from ._helpers import _event_hash as _event_hash
 from ._helpers import _make_event as _make_event
@@ -54,6 +55,7 @@ class TicketService(
     _QueryMixin,
     _MetadataMixin,
     _CommentMixin,
+    _DiagnosticMixin,
 ):
     """Manage the ticket lifecycle over per-repo SQLite databases.
 

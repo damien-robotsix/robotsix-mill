@@ -3482,3 +3482,152 @@ def test_resolve_by_suffix_exact_full_id(service):
     t = service.create("full id suffix test")
     result = service.resolve_by_suffix(t.id)
     assert result == t.id
+
+
+# --- DiagnosticEvent tests ---
+
+
+def test_emit_diagnostic_event_creates_row(service):
+    """emit_diagnostic_event creates a DiagnosticEvent row."""
+    t = service.create("emit test")
+    event = service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="CI_FAILURE",
+        sub_category="lint",
+        reason="flake8 failed",
+    )
+    assert event is not None
+    assert event.ticket_id == t.id
+    assert event.category == "CI_FAILURE"
+    assert event.sub_category == "lint"
+    assert event.reason == "flake8 failed"
+    assert event.repo_id == "test-board"
+
+
+def test_emit_diagnostic_event_dedup_same_ticket_and_sub_category(service):
+    """Second emit with same ticket_id + sub_category is skipped (dedup)."""
+    t = service.create("dedup test")
+    first = service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="CI_FAILURE",
+        sub_category="lint",
+        reason="flake8 failed",
+    )
+    assert first is not None
+    second = service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="CI_FAILURE",
+        sub_category="lint",
+        reason="flake8 failed again",  # different reason but same sub_category
+    )
+    assert second is None
+
+
+def test_emit_diagnostic_event_different_sub_category_allowed(service):
+    """Different sub_category on the same ticket creates a second event."""
+    t = service.create("multi sub test")
+    e1 = service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="CI_FAILURE",
+        sub_category="lint",
+        reason="flake8",
+    )
+    assert e1 is not None
+    e2 = service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="CI_FAILURE",
+        sub_category="type-check",
+        reason="mypy",
+    )
+    assert e2 is not None
+    assert e1.id != e2.id
+
+
+def test_list_diagnostic_events_filter_by_category(service):
+    """list_diagnostic_events filters by category."""
+    t = service.create("list test")
+    service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="CI_FAILURE",
+        sub_category="lint",
+        reason="flake8",
+    )
+    service.emit_diagnostic_event(
+        ticket_id=t.id,
+        category="OTHER",
+        sub_category="foo",
+        reason="bar",
+    )
+    ci_events = service.list_diagnostic_events(category="CI_FAILURE")
+    assert len(ci_events) == 1
+    assert ci_events[0].category == "CI_FAILURE"
+
+
+def test_list_diagnostic_events_filter_by_ticket_id(service):
+    """list_diagnostic_events filters by ticket_id."""
+    t1 = service.create("t1")
+    t2 = service.create("t2")
+    service.emit_diagnostic_event(
+        ticket_id=t1.id, category="CI_FAILURE", sub_category="a", reason="r1"
+    )
+    service.emit_diagnostic_event(
+        ticket_id=t2.id, category="CI_FAILURE", sub_category="b", reason="r2"
+    )
+    assert len(service.list_diagnostic_events(ticket_id=t1.id)) == 1
+    assert len(service.list_diagnostic_events(ticket_id=t2.id)) == 1
+
+
+def test_list_diagnostic_events_filter_by_sub_category(service):
+    """list_diagnostic_events filters by sub_category."""
+    t = service.create("sub filter test")
+    service.emit_diagnostic_event(
+        ticket_id=t.id, category="CI_FAILURE", sub_category="lint", reason="r1"
+    )
+    service.emit_diagnostic_event(
+        ticket_id=t.id, category="CI_FAILURE", sub_category="type", reason="r2"
+    )
+    assert len(service.list_diagnostic_events(sub_category="lint")) == 1
+    assert len(service.list_diagnostic_events(sub_category="type")) == 1
+
+
+def test_check_recurring_categories_below_threshold(service):
+    """check_recurring_categories returns empty when no group crosses threshold."""
+    t = service.create("below threshold")
+    service.emit_diagnostic_event(
+        ticket_id=t.id, category="CI_FAILURE", sub_category="lint", reason="r"
+    )
+    groups = service.check_recurring_categories("CI_FAILURE", threshold=2)
+    assert groups == []
+
+
+def test_check_recurring_categories_above_threshold(service):
+    """check_recurring_categories returns groups at or above threshold."""
+    t1 = service.create("above t1")
+    t2 = service.create("above t2")
+    t3 = service.create("above t3")
+    for t_obj in (t1, t2, t3):
+        service.emit_diagnostic_event(
+            ticket_id=t_obj.id,
+            category="CI_FAILURE",
+            sub_category="lint",
+            reason="flake8",
+        )
+    groups = service.check_recurring_categories("CI_FAILURE", threshold=2)
+    assert len(groups) == 1  # lint group
+    assert groups[0]["distinct_tickets"] == 3
+    assert groups[0]["sub_category"] == "lint"
+
+
+def test_count_distinct_tickets_for_category(service):
+    """count_distinct_tickets_for_category returns correct count."""
+    t1 = service.create("count t1")
+    t2 = service.create("count t2")
+    for t_obj in (t1, t2):
+        service.emit_diagnostic_event(
+            ticket_id=t_obj.id,
+            category="CI_FAILURE",
+            sub_category="lint",
+            reason="r",
+        )
+    assert service.count_distinct_tickets_for_category("CI_FAILURE", "lint") == 2
+    assert service.count_distinct_tickets_for_category("CI_FAILURE", "nonexistent") == 0
