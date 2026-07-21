@@ -224,11 +224,63 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             f" — {renamed_preview}" if renamed_preview else ""
         )
 
+        ref_files = all_changed
+        guardrail_result = cls._persist_artifacts_and_run_guardrail(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            summary,
+            ref_files,
+        )
+        if isinstance(guardrail_result, _SinglePassResult):
+            return guardrail_result
+        new_ic = guardrail_result
+
+        # Route to test evaluation (which will skip via _should_skip_test_gate).
+        return cls._evaluate_test_results(  # type: ignore[no-any-return]
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            new_ic,
+            summary,
+            ref_files,
+            None,  # new_msgs
+            False,  # no_change_needed
+            "",  # no_change_rationale
+            False,  # resuming
+            1,  # attempt
+            max(1, settings.max_fix_iterations),  # max_iters
+            extra_roots,
+        )
+
+    @classmethod
+    def _persist_artifacts_and_run_guardrail(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings: Settings,
+        ic: _ImplementContext,
+        summary: str,
+        ref_files: list[str],
+    ) -> _SinglePassResult | _ImplementContext:
+        """Persist artifacts, run scope guardrail, and dispatch on guardrail action.
+
+        Returns a ``_SinglePassResult`` for ``"return"`` and ``"continue"``
+        actions, or the rebuilt ``_ImplementContext`` for the caller to
+        continue processing (e.g. route to test evaluation).
+        """
         ws = ctx.service.workspace(ticket)
         memory_board_id = cls._memory_board_id(ctx, ticket)
 
         # Persist artifacts (no memory update — no agent ran).
-        ref_files = all_changed
         cls._persist_pass_artifacts(
             ws,
             ticket,
@@ -276,25 +328,7 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         if guardrail.action == "continue":
             return _SinglePassResult(next_action="retry", feedback=None, ic=new_ic)
 
-        # Route to test evaluation (which will skip via _should_skip_test_gate).
-        return cls._evaluate_test_results(  # type: ignore[no-any-return]
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            settings,
-            ic,
-            new_ic,
-            summary,
-            ref_files,
-            None,  # new_msgs
-            False,  # no_change_needed
-            "",  # no_change_rationale
-            False,  # resuming
-            1,  # attempt
-            max(1, settings.max_fix_iterations),  # max_iters
-            extra_roots,
-        )
+        return new_ic
 
     @classmethod
     def _handle_spec_exact_edits(
@@ -444,58 +478,20 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         if failed:
             summary += f" ({len(failed)} block(s) skipped)"
 
-        ws = ctx.service.workspace(ticket)
-        memory_board_id = cls._memory_board_id(ctx, ticket)
-
         ref_files = sorted(changed_files)
-
-        # Persist artifacts (no memory update — no agent ran).
-        cls._persist_pass_artifacts(
-            ws,
-            ticket,
-            ic,
-            summary,
-            ref_files,
-            "",
-            settings,
-            memory_board_id,
-        )
-
-        # Run scope guardrail.
-        guardrail = cls._run_scope_guardrail(
+        guardrail_result = cls._persist_artifacts_and_run_guardrail(
             ctx,
             ticket,
             repo_dir,
             branch,
+            settings,
+            ic,
             summary,
             ref_files,
-            ic.file_map,
-            settings,
-            ic.spec,
-            ic.feedback,
         )
-        if guardrail.action == "return":
-            return _SinglePassResult(next_action="return", outcome=guardrail.outcome)
-
-        new_file_map = (
-            guardrail.file_map if guardrail.file_map is not None else ic.file_map
-        )
-        new_feedback = (
-            guardrail.feedback
-            if guardrail.action in ("continue", "skip_iteration")
-            else ic.feedback
-        )
-        new_ic = _ImplementContext(
-            spec=ic.spec,
-            memory_text=ic.memory_text,
-            reference_files=[{"path": p} for p in ref_files],
-            file_map=new_file_map,
-            feedback=new_feedback,
-            previous_attempt_summary=summary,
-            open_thread_ids=ic.open_thread_ids,
-        )
-        if guardrail.action == "continue":
-            return _SinglePassResult(next_action="retry", feedback=None, ic=new_ic)
+        if isinstance(guardrail_result, _SinglePassResult):
+            return guardrail_result
+        new_ic = guardrail_result
 
         # Route to test evaluation.
         return cls._evaluate_test_results(  # type: ignore[no-any-return]
