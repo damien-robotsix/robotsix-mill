@@ -22,8 +22,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..config import Settings
-from . import diagnostic_check_errors  # noqa: F401  # register check
-from . import diagnostic_check_recurring  # noqa: F401  # register check
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,
@@ -93,6 +91,12 @@ def run_diagnostic_pass(session_id: str) -> DiagnosticPassResult:
         settings.diagnostic_target_repo_id
     ]
     valid, invalid = _accessible_repos(monitored)
+
+    # Import concrete checks so they self-register before we query the
+    # registry.  Imported here (not at module top) to avoid circular
+    # imports with diagnostic_checks and unused-import warnings.
+    from . import diagnostic_check_errors as _  # noqa: F401
+    from . import diagnostic_check_recurring as _  # noqa: F401
 
     checks = get_registered_checks()
     log.info(
