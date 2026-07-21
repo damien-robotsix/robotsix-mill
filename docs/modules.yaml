@@ -339,6 +339,7 @@ modules:
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
       - tests/stages/implement/test_implement.py
+      - tests/stages/implement/test_implement_preflight.py
       - tests/stages/implement/test_implement_validation.py
       - tests/stages/implement/test_implement_file_operations.py
       - tests/stages/implement/test_implement_phase_coordinator.py
