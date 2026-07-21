@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..config import Settings
+from . import diagnostic_check_errors  # noqa: F401  # register check
+from . import diagnostic_check_recurring  # noqa: F401  # register check
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,

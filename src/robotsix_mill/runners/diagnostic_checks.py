@@ -85,9 +85,8 @@ def get_registered_checks() -> list[DiagnosticCheck]:
     return list(DIAGNOSTIC_CHECKS)
 
 
-# Register concrete checks via import side-effect. Placed at the bottom so
-# register_check is already defined; the import is cached so registration
-# runs exactly once. The back-reference from diagnostic_check_errors to
-# this module resolves against the already-populated module above.
-from . import diagnostic_check_errors  # noqa: E402,F401
-from . import diagnostic_check_recurring  # noqa: E402,F401
+# Concrete checks (diagnostic_check_errors, diagnostic_check_recurring,
+# …) self-register via ``register_check`` at their own module level.
+# The runner (diagnostic_runner) imports them for their side-effect so
+# that ``get_registered_checks()`` sees the full registry without
+# creating a circular import back into this module.
