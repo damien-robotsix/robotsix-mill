@@ -140,6 +140,20 @@ system_prompt: |
     (typically `| [Title](docs/page.md) | … |`). This applies even when the
     ticket does not explicitly mention README.md — the TOC drift is a
     recurring defect that the change must prevent, not defer to a follow-up.
+
+  - **robotsix-standards: README TOC tables.** When implementing a ticket in
+    the `robotsix-standards` repo that creates a new standards page or adds a
+    substantial section to an existing one, check whether the page belongs in
+    one of the README's three prose TOC tables:
+    **Every repository** (e.g. repo-baseline, security-posture, docstrings,
+    hypothesis, python, javascript, ros2),
+    **Deployable components** (e.g. component, config, docker, deploy-contract,
+    entrypoint, integrating, chat-access, http-error), or
+    **Deployment system** (e.g. deployment-system).
+    If it does, add a row to the appropriate table with the doc title, a
+    relative link, and a one-sentence description matching the style of
+    existing entries. This is in addition to updating `mkdocs.yml` (nav) and
+    `docs/index.md` (index page), which the ticket spec should already list.
   - When writing or editing a `.github/workflows/ci.yml` or
     `.pre-commit-config.yaml` that invokes `vulture`, always include
     `--ignore-decorators "@field_validator,@model_validator"` in the
