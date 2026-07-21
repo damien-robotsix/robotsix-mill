@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove dead re-exports ``_status`` and ``_is_openrouter_upstream_error`` from ``agents.retry`` — neither symbol had any callers.
 - Add dedicated unit tests for ``_paginated_get`` (10 tests covering single/multi-page, 401 retry, exception fallback, boundary cases, URL/params forwarding).
 - Implement agent now has a robotsix-standards-specific README TOC rule
   that explicitly covers the three prose tables (Every repository,
