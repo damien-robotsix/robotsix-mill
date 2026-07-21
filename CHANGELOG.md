@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Remove outdated per-repo `langfuse:` blocks from `docs/config/configuration.md` — Langfuse credentials are configured globally in the `secrets:` block, not per-repo.
 - Extract special-case edit handlers from `implementation_logic.py` into new `implementation_editing.py` module — `_verify_repo_changes`, `_handle_rename_only_change`, `_handle_spec_exact_edits`, and `_find_insertion_point` now live in `_ImplementationEditingMixin` (~565 lines moved).
 - Extract scope-guardrail + preflight tests (~1238 lines) from
   `tests/stages/implement/test_implement.py` into new
