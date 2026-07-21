@@ -113,6 +113,16 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, doc_only, ws, input_hash
             )
 
+        # Phase 2.16: workflow-portability gate — deterministic check
+        # that short-circuits tickets proposing to enable an internal
+        # (non-portable) periodic workflow on a non-mill repo.  Runs
+        # before any LLM-invoking gate.
+        wp_gate = RefineStage._run_workflow_portability_gate(ctx, ticket, draft, title)
+        if wp_gate is not None:
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, wp_gate, ws, input_hash
+            )
+
         # Phase 2.2: triage classifier — a single cheap LLM call that
         # classifies the draft as SKIP / NO_CHANGE / REFINE.
         # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,

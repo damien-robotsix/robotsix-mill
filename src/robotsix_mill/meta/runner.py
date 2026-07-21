@@ -43,6 +43,37 @@ class MetaPassResult:
 # ---------------------------------------------------------------------------
 
 
+def _is_internal_workflow_proposal(
+    title: str, body: str, target_repo_id: str
+) -> str | None:
+    """Return the workflow name if *title* + *body* propose enabling a
+    non-portable (internal) workflow on a non-mill repo, else ``None``.
+
+    This is a deterministic, data-driven gate — it inspects draft text
+    for ``.robotsix-mill/periodic/<name>.yaml`` presence-file patterns
+    and cross-references every matched ``<name>`` against the portability
+    map.  Internal workflows proposed for managed repos are caught here
+    before a ticket is ever created, regardless of what the LLM prompt
+    says.
+    """
+    # Only filter non-mill repos — internal workflows ARE valid for mill.
+    if target_repo_id == "robotsix-mill":
+        return None
+
+    text = f"{title}\n{body}"
+
+    # Pattern: .robotsix-mill/periodic/<name>.yaml
+    for m in re.finditer(r"\.robotsix-mill/periodic/([a-z][a-z0-9_]*)\.yaml", text):
+        name = m.group(1)
+        # Defer the import so the module stays importable at the top level.
+        from ..agents.workflow_portability import _BUILTIN_KINDS, is_portable
+
+        if name in _BUILTIN_KINDS and not is_portable(name):
+            return name
+
+    return None
+
+
 def _slugify_title(title: str) -> str:
     """Turn *title* into a short slug for gap-id markers."""
     return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
@@ -112,6 +143,26 @@ def _file_repo_drafts(
                 "meta_pass: %s draft %r targets unknown repo_id %r — skipping",
                 label,
                 draft.title,
+                draft.target_repo_id,
+            )
+            continue
+
+        # ------------------------------------------------------------------
+        # Deterministic workflow-portability gate: skip drafts that propose
+        # enabling an internal (non-portable) workflow on a managed repo.
+        # The meta-agent prompt already carries this rule, but LLMs are
+        # imperfect — this catches any that slip through before a ticket
+        # is ever created.
+        internal_wf = _is_internal_workflow_proposal(
+            draft.title, draft.body, draft.target_repo_id
+        )
+        if internal_wf:
+            log.warning(
+                "meta_pass: %s draft %r proposes enabling internal workflow "
+                "%r on non-mill repo %r — skipping",
+                label,
+                draft.title,
+                internal_wf,
                 draft.target_repo_id,
             )
             continue
