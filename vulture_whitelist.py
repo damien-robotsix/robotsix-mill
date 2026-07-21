@@ -160,6 +160,10 @@ get_field_value
 # -- core --------------------------------------------------------------------
 # resolve_under_src — called from tests only; vulture cannot trace test calls.
 resolve_under_src
+# list_diagnostic_events, count_distinct_tickets_for_category — DiagnosticMixin
+# methods called from tests only; vulture (60% confidence) cannot trace test calls.
+list_diagnostic_events
+count_distinct_tickets_for_category
 # paths_excluding_out_of_scope — callers removed when ticket-based maintenance
 # flow was retired; kept as reusable dedup utility.
 paths_excluding_out_of_scope
