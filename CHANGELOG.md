@@ -1,7 +1,9 @@
 ## 0.0.0 (unreleased)
 
 - Extract special-case edit handlers from `implementation_logic.py` into new `implementation_editing.py` module — `_verify_repo_changes`, `_handle_rename_only_change`, `_handle_spec_exact_edits`, and `_find_insertion_point` now live in `_ImplementationEditingMixin` (~565 lines moved).
-- Extract special-case edit handlers from `implementation_logic.py` into new `implementation_editing.py` module — `_verify_repo_changes`, `_handle_rename_only_change`, `_handle_spec_exact_edits`, and `_find_insertion_point` now live in `_ImplementationEditingMixin` (~565 lines moved).
+- Extract scope-guardrail + preflight tests (~1238 lines) from
+  `tests/stages/implement/test_implement.py` into new
+  `tests/stages/implement/test_implement_preflight.py` (module-size split)
 - Enable `module_size` periodic agent by adding its per-repo presence file (`.robotsix-mill/periodic/module_size.yaml`).
 - Fix Alembic proxy-registry race condition: add global ``_alembic_lock`` to serialize all ``_run_alembic_migrations`` calls across boards, preventing ``KeyError: 'config'`` when concurrent ``init_db`` calls collide on Alembic's process-global proxy registry (observed as CI flake in ``test_generate_children_applies_epic_body`` under xdist).
 - Replace cached `github_token()` with on-demand `github_push_token()` in deliver and periodic runner push paths (changelog autofill, roadmap sync, pin bump), following the same per-push App-token renewal pattern already used by ci_fix/rebase. Eliminates stale-token push failures when a cached App installation token expires mid-flight.
