@@ -400,7 +400,7 @@ class DiagnosticEvent(SQLModel, table=True):
     reason: str = Field(default="")
     created_at: datetime = Field(
         default_factory=_now,
-        sa_column=Column(TZDateTime()),
+        sa_column=Column(TZDateTime(), nullable=False),
     )
 
 
