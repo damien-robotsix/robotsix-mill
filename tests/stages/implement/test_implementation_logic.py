@@ -503,6 +503,19 @@ class TestEvaluateTestResults:
             "robotsix_mill.stages.implement.implementation_logic.acknowledge_unanswered_threads",
             lambda *a: None,
         )
+        # _verify_repo_changes moved to implementation_editing.py;
+        # patch its direct imports too.
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_editing.short_circuit_verify",
+            _simple_namespace(
+                detect_missing_claimed_files=lambda **kw: [],
+                analyze_pass_progress=lambda new_msgs: {"total": 1},
+            ),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_editing.git_ops",
+            _simple_namespace(introduced_files=lambda rd, tgt: []),
+        )
 
     @staticmethod
     def _call(monkeypatch, **overrides):
@@ -686,6 +699,10 @@ class TestEvaluateTestResults:
             "robotsix_mill.stages.implement.implementation_logic.git_ops",
             _simple_namespace(introduced_files=_fake_introduced_files),
         )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_editing.git_ops",
+            _simple_namespace(introduced_files=_fake_introduced_files),
+        )
 
         # Per-repo target: repo-a → "custom", repo-b → "develop".
         def _fake_target_branch_for(settings, rc):
@@ -695,6 +712,10 @@ class TestEvaluateTestResults:
 
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.implementation_logic.target_branch_for",
+            _fake_target_branch_for,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_editing.target_branch_for",
             _fake_target_branch_for,
         )
 
@@ -712,7 +733,7 @@ class TestEvaluateTestResults:
             return _configs[repo_id]
 
         monkeypatch.setattr(
-            "robotsix_mill.stages.implement.implementation_logic.get_repo_config",
+            "robotsix_mill.stages.implement.implementation_editing.get_repo_config",
             _fake_get_repo_config,
         )
 
