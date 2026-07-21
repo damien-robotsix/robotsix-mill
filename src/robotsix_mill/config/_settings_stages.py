@@ -34,6 +34,7 @@ class _StagesSettings(BaseModel):
         description="Request budget for the web_research sub-agent spawned by refine/implement.",
         default=8,
         ge=1,
+        json_schema_extra={"advanced": True},
     )
     # web_fetch runs in its OWN container: network ON, but NO repo/data
     # mount, non-root, read-only, fixed curl. Trade-off accepted: an
@@ -41,12 +42,19 @@ class _StagesSettings(BaseModel):
     fetch_image: str = Field(
         description="Docker image used for isolated web_fetch calls (curl-based, network-only, no repo mount).",
         default="curlimages/curl:8.17.0",
+        json_schema_extra={"advanced": True},
     )
     web_fetch_max_bytes: int = Field(
-        description="Maximum raw bytes per web_fetch call.", default=2_000_000, ge=0
+        description="Maximum raw bytes per web_fetch call.",
+        default=2_000_000,
+        ge=0,
+        json_schema_extra={"advanced": True},
     )
     web_fetch_timeout: int = Field(
-        description="Timeout (seconds) per web_fetch call.", default=30, gt=0
+        description="Timeout (seconds) per web_fetch call.",
+        default=30,
+        gt=0,
+        json_schema_extra={"advanced": True},
     )
     # Post-extraction cap, applied AFTER HTML→text stripping. The
     # network-level ``web_fetch_max_bytes`` bounds raw bytes; this
@@ -57,6 +65,7 @@ class _StagesSettings(BaseModel):
     web_fetch_max_text_bytes: int = Field(
         default=40_000,
         description="Post-extraction character cap per web_fetch (after HTML-to-text stripping).",
+        json_schema_extra={"advanced": True},
     )
     # When True, web_fetch returns the raw response body verbatim
     # (no HTML→text stripping, no per-run URL dedupe). Operator
@@ -67,6 +76,7 @@ class _StagesSettings(BaseModel):
     web_fetch_raw: bool = Field(
         default=False,
         description="When true, web_fetch returns the raw response body verbatim (no HTML stripping, no per-run URL dedupe).",
+        json_schema_extra={"advanced": True},
     )
     # Bounded web-fetch budget, reset once per ``ask_web_knowledge``
     # consult and shared across every ``web_research`` sub-agent it
@@ -82,6 +92,7 @@ class _StagesSettings(BaseModel):
         description="Maximum real (cache-miss) web_fetch calls per web_knowledge consultation.",
         default=15,
         ge=1,
+        json_schema_extra={"advanced": True},
     )
     # Cumulative ceiling on returned (post-extraction, post-cap) text
     # bytes per consult; ``0`` disables the byte ceiling.
@@ -90,6 +101,7 @@ class _StagesSettings(BaseModel):
         description="Cumulative ceiling on returned text bytes per web_knowledge consultation. 0 disables.",
         default=2_000_000,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Per-TRACE (cross-consult) web budget for the refine stage,
     # mirroring the proven survey caps. The per-consult ``web_fetch_max_*``
@@ -102,16 +114,21 @@ class _StagesSettings(BaseModel):
         description="Maximum real web_fetch calls across one refine trace.",
         default=5,
         ge=1,
+        json_schema_extra={"advanced": True},
     )
     # Max fetch bytes across one refine trace; ``0`` disables the ceiling.
     refine_web_fetch_max_total_bytes: int = Field(
         description="Maximum fetch bytes across one refine trace. 0 disables.",
         default=500_000,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Max web_search calls across one refine trace.
     refine_web_search_max_calls: int = Field(
-        description="Maximum web_search calls across one refine trace.", default=5, ge=1
+        description="Maximum web_search calls across one refine trace.",
+        default=5,
+        ge=1,
+        json_schema_extra={"advanced": True},
     )
     # Pre-write Python syntax check on `write_file` / `edit_file`. When
     # True (default) a SyntaxError aborts the edit and the agent gets
@@ -139,6 +156,7 @@ class _StagesSettings(BaseModel):
         description="Character cap on implicit full read_file payloads. 0 disables.",
         default=50_000,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Directory of skill docs (skills/<name>/SKILL.md) injected into the
     # refine + implement agents' system prompt. Relative to CWD (/app in
@@ -202,6 +220,7 @@ class _StagesSettings(BaseModel):
     auto_merge_main_debt_detection_enabled: bool = Field(
         description="When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # When True, the board's ticket detail drawer renders description.md
     # below the comments with a collapsible "Hide" toggle (the frontend
@@ -234,6 +253,7 @@ class _StagesSettings(BaseModel):
     refine_prescriptive_spec_code_lines_threshold: int = Field(
         description="Drafts with more than this many fenced code lines skip refine entirely.",
         default=50,
+        json_schema_extra={"advanced": True},
     )
     # When True (default), the refine stage detects specs whose
     # implementation section already contains complete file-path +
@@ -246,6 +266,7 @@ class _StagesSettings(BaseModel):
     refine_skip_llm_on_impl_ready_spec: bool = Field(
         description="When true, implementation-ready specs skip the expensive LLM refine agent.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # When True (default), a pre-Opus guard checks whether the reviewer's
     # feedback on a sendback ticket already agrees with the draft's
@@ -255,6 +276,7 @@ class _StagesSettings(BaseModel):
     reviewer_agreement_gate_enabled: bool = Field(
         description="When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # When True (default), the cheap advisory-dedup-verification gate runs
     # after the inflight-advisory phase and before the expensive refine
@@ -267,6 +289,7 @@ class _StagesSettings(BaseModel):
     refine_advisory_dedup_enabled: bool = Field(
         description="When true, a cheap advisory-dedup-verification gate runs after inflight-advisory phase.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # When True, a deterministic pre-refine gate verifies that file paths
     # and line ranges cited in the ticket draft still exist on the
@@ -370,12 +393,14 @@ class _StagesSettings(BaseModel):
     stale_branch_cleanup_interval_seconds: int = Field(
         description="Seconds between automatic stale-branch cleanup passes.",
         default=86400,
+        json_schema_extra={"advanced": True},
     )
     # A branch is eligible for cleanup only if its last commit is older than
     # this many days. Default 30 days.
     stale_branch_max_age_days: int = Field(
         description="Branch is eligible for cleanup only if its last commit is older than this many days.",
         default=30,
+        json_schema_extra={"advanced": True},
     )
     # When True, only delete branches whose name starts with ``branch_prefix``
     # (the "old mill" branches). When False, also reap any other stale branch
@@ -383,6 +408,7 @@ class _StagesSettings(BaseModel):
     stale_branch_cleanup_prefix_only: bool = Field(
         description="When true, only delete branches matching branch_prefix.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
@@ -392,6 +418,7 @@ class _StagesSettings(BaseModel):
         description="Maximum CODE_REVIEW to READY to DOCUMENTING to CODE_REVIEW round-trips before escalation.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Backstop ceiling on total implement passes per ticket (across all
@@ -405,6 +432,7 @@ class _StagesSettings(BaseModel):
         description="Ceiling on total implement passes per ticket across all review rounds. 0 disables.",
         default=10,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of times the implement stage may be entered (spawned)
     # for a single ticket — counted across all review rounds and resumptions.
@@ -419,6 +447,7 @@ class _StagesSettings(BaseModel):
         description="Maximum times the implement stage may be entered per ticket. 0 disables.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Number of consecutive no-progress BLOCKED implement cycles after
     # which the stall guard fires with an actionable diagnostic instead
@@ -431,6 +460,7 @@ class _StagesSettings(BaseModel):
         description="Consecutive no-progress BLOCKED cycles before stall guard fires. 0 disables.",
         default=2,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
@@ -446,7 +476,9 @@ class _StagesSettings(BaseModel):
     # ~$0.03-0.09 and the per-ticket spend cap is the real backstop). See
     # ticket bc6d.
     review_request_limit: int = Field(
-        description="Per-call request cap for the review agent.", default=80
+        description="Per-call request cap for the review agent.",
+        default=80,
+        json_schema_extra={"advanced": True},
     )
     # Maximum characters of the re-review prior-context block (prior
     # review comments + the implement rebuttal) fed to the review agent.
@@ -457,6 +489,7 @@ class _StagesSettings(BaseModel):
         description="Maximum characters of prior review context fed to the review agent. 0 disables.",
         default=8000,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Maximum characters of the combined git diff injected into the review
     # prompt. The raw ``git diff origin/<target>...HEAD`` can balloon to
@@ -470,6 +503,7 @@ class _StagesSettings(BaseModel):
         description="Maximum characters of the combined git diff injected into the review prompt. 0 disables.",
         default=200_000,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Output token budget for the review agent retry when the primary
     # attempt exhausts its max_tokens before generating a response
@@ -481,6 +515,7 @@ class _StagesSettings(BaseModel):
         description="Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
         default=65536,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of out-of-scope TEXT files fed into the scope-triage
     # prompt. When an implement pass leaves MORE than this many out-of-scope
@@ -493,10 +528,13 @@ class _StagesSettings(BaseModel):
         default=50,
         ge=0,
         alias="MILL_SCOPE_TRIAGE_MAX_FILES",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(
-        description="Per-call request cap for the pre-refine triage agent.", default=8
+        description="Per-call request cap for the pre-refine triage agent.",
+        default=8,
+        json_schema_extra={"advanced": True},
     )
 
     # --- retrospect stage (done -> reviewed) ---
@@ -530,14 +568,17 @@ class _StagesSettings(BaseModel):
     trace_review_cost_multiplier: float = Field(
         description="Cost outlier multiplier: traces exceeding batch median x this are flagged for inspection.",
         default=3.0,
+        json_schema_extra={"advanced": True},
     )
     trace_review_per_obs_cost_threshold: float = Field(
         description="Per-observation cost threshold for trace-review outlier detection.",
         default=0.001,
+        json_schema_extra={"advanced": True},
     )
     trace_review_obs_multiplier: float = Field(
         description="Observation count multiplier: traces exceeding batch median x this are flagged.",
         default=3.0,
+        json_schema_extra={"advanced": True},
     )
     # ``repeated_tool`` stays an absolute threshold because each tool
     # has its own "normal" usage profile — making it relative would
@@ -546,6 +587,7 @@ class _StagesSettings(BaseModel):
     trace_review_max_repeated_tool: int = Field(
         description="Absolute threshold for repeated-tool-call flagging in trace review.",
         default=50,
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on the total number of tool calls the trace inspector
     # may make per trace.  100 tool calls is far beyond what any
@@ -555,6 +597,7 @@ class _StagesSettings(BaseModel):
     trace_review_max_tool_calls: int = Field(
         description="Hard cap on total tool calls per trace inspector run.",
         default=100,
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on the number of tool-call errors before the trace
     # inspector is auto-terminated.  A healthy inspection should have
@@ -562,6 +605,7 @@ class _StagesSettings(BaseModel):
     trace_review_max_errors: int = Field(
         description="Hard cap on tool-call errors before the trace inspector is auto-terminated.",
         default=20,
+        json_schema_extra={"advanced": True},
     )
     # Model tier for the trace inspector.  Level 1 = DeepSeek flash
     # (cheapest), the default; raising it costs more and is opt-in only.
@@ -570,6 +614,7 @@ class _StagesSettings(BaseModel):
         default=1,
         ge=1,
         le=3,
+        json_schema_extra={"advanced": True},
     )
     # When True (default), triage-trivial tickets are routed to
     # ``refine_trivial_model_level`` instead of the YAML default (3 / Opus).
@@ -577,6 +622,7 @@ class _StagesSettings(BaseModel):
     refine_trivial_routing_enabled: bool = Field(
         description="When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # Model level used for trivial-scope refines.  Default 3 = flat-cost
     # Claude subscription (marginal $0).  Set to 1 or 2 to roll back to
@@ -586,6 +632,7 @@ class _StagesSettings(BaseModel):
         default=3,
         ge=1,
         le=3,
+        json_schema_extra={"advanced": True},
     )
     # Claude model alias used when a trivial/forced-cheap refine routes to
     # the level-3 subscription.  ``sonnet`` is the cheapest alias already
@@ -594,6 +641,7 @@ class _StagesSettings(BaseModel):
     refine_trivial_subscription_model: str = Field(
         description="Claude model alias for trivial/forced-cheap refines on the subscription tier.",
         default="sonnet",
+        json_schema_extra={"advanced": True},
     )
     # When True (default), non-trivial level-3 refines route to a cheaper
     # Claude alias (sonnet) for "simple" tickets and keep Opus only for
@@ -602,18 +650,21 @@ class _StagesSettings(BaseModel):
     refine_subscription_tier_routing_enabled: bool = Field(
         description="When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # Claude model alias for non-escalated level-3 refines (complexity="simple").
     # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
     refine_subscription_model_default: str = Field(
         description="Claude model alias for non-escalated level-3 refines (complexity=simple).",
         default="sonnet",
+        json_schema_extra={"advanced": True},
     )
     # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
     # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
     refine_subscription_model_complex: str = Field(
         description="Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
         default="opus",
+        json_schema_extra={"advanced": True},
     )
     # When True (default), a non-trivial level-3 refine that WOULD route to
     # Opus (complexity="needs-exploration") is downgraded to a cheaper Claude
@@ -624,6 +675,7 @@ class _StagesSettings(BaseModel):
     refine_findings_downgrade_enabled: bool = Field(
         description="When true, Opus refines with substantial triage findings downgrade to a cheaper model.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # Minimum stripped-character length of the triage exploration findings for
     # the Opus->cheaper downgrade above to fire. Below this, findings are
@@ -632,6 +684,7 @@ class _StagesSettings(BaseModel):
         description="Minimum stripped-character length of triage findings for the Opus-to-cheaper downgrade.",
         default=150,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Claude model alias used when the findings-present downgrade fires.
     # Defaults to sonnet (same tier the "simple" path already trusts). Only
@@ -639,6 +692,7 @@ class _StagesSettings(BaseModel):
     refine_subscription_model_findings: str = Field(
         description="Claude model alias used when the findings-present downgrade fires.",
         default="sonnet",
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of "changes requested" re-refine rounds before the
     # refine agent is forced to the cheap model (``refine_trivial_model_level``)
@@ -649,6 +703,7 @@ class _StagesSettings(BaseModel):
         description="Sendback re-refine rounds before forcing the cheap model. 0 disables.",
         default=2,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # Per-ticket ceiling on total refine passes before escalating to BLOCKED
     # for human review.  Guards against unbounded re-refinement loops (e.g.
@@ -658,6 +713,7 @@ class _StagesSettings(BaseModel):
         description="Per-ticket ceiling on total refine passes before escalating to BLOCKED. 0 disables.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     # When True, a refine run re-entered after an operator sendback
     # ("changes requested:") reuses the prior refined description.md as the
@@ -667,6 +723,7 @@ class _StagesSettings(BaseModel):
     refine_delta_reuse_enabled: bool = Field(
         description="When true, re-refines reuse the prior description.md and apply only the operator's delta.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # When True, retry/audit/re-refine passes on the same ticket receive
     # only the delta (failing item + minimal spec) rather than the full
@@ -677,6 +734,7 @@ class _StagesSettings(BaseModel):
     delta_context_retry_enabled: bool = Field(
         description="When true, retry/audit/re-refine passes receive only the delta rather than full context.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # ---------- trace inspector dynamic budget ----------
     # Floor for the tools-on request budget.  Even a tiny trace gets
@@ -685,12 +743,14 @@ class _StagesSettings(BaseModel):
     trace_review_inspector_min_requests: int = Field(
         description="Floor for the trace inspector's tools-on request budget.",
         default=20,
+        json_schema_extra={"advanced": True},
     )
     # Ceiling for the tools-on request budget.  Caps the formula so
     # a trace with 10 000 observations doesn't get an absurd budget.
     trace_review_inspector_max_requests: int = Field(
         description="Ceiling for the trace inspector's tools-on request budget.",
         default=80,
+        json_schema_extra={"advanced": True},
     )
     # Requests granted per observation before clamping to min/max.
     # 0.1 → every 10 observations earn one request.  A 235-obs trace
@@ -698,6 +758,7 @@ class _StagesSettings(BaseModel):
     trace_review_inspector_requests_per_obs: float = Field(
         description="Requests granted per trace observation before clamping to min/max.",
         default=0.1,
+        json_schema_extra={"advanced": True},
     )
     # Observation count above which the inspector drops code-access
     # tools and uses the cheap tool-less summary path instead.  A
@@ -705,11 +766,13 @@ class _StagesSettings(BaseModel):
     trace_review_inspector_max_obs_for_tools: int = Field(
         description="Observation count above which the inspector drops code-access tools.",
         default=200,
+        json_schema_extra={"advanced": True},
     )
     # Request budget for the tool-less (summary-only) path.
     trace_review_inspector_toolless_requests: int = Field(
         description="Request budget for the tool-less (summary-only) inspector path.",
         default=3,
+        json_schema_extra={"advanced": True},
     )
     # Request budget for the interactive ``langfuse_inspect_trace``
     # tool path (invoked by the refine/answer agent).  Ad-hoc
@@ -719,6 +782,7 @@ class _StagesSettings(BaseModel):
     trace_review_tool_request_limit: int = Field(
         description="Request budget for the interactive langfuse_inspect_trace tool.",
         default=15,
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on the total number of drafts a single trace-review
     # pass may file. The inspector emits one finding per flagged trace
@@ -730,6 +794,7 @@ class _StagesSettings(BaseModel):
     trace_review_max_drafts_per_run: int = Field(
         description="Hard cap on total drafts a single trace-review pass may file.",
         default=5,
+        json_schema_extra={"advanced": True},
     )
     # Minimum inspector confidence for a finding to be filed as a draft.
     # The inspector deliberately downgrades weak/uncertain/non-concrete
@@ -745,6 +810,7 @@ class _StagesSettings(BaseModel):
     trace_review_min_confidence: Literal["high", "medium", "low"] = Field(
         default="medium",
         description="Minimum inspector confidence for a finding to be filed as a draft.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on the number of LLM inspector calls per trace-review
     # run.  Directly bounds LLM spend independently of the draft cap
@@ -753,6 +819,7 @@ class _StagesSettings(BaseModel):
     trace_review_max_inspections_per_run: int = Field(
         description="Hard cap on LLM inspector calls per trace-review run. 0 disables.",
         default=5,
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on how many traces a single trace-review run pulls full
     # detail for (and holds in memory at once). The runner pre-loads every
@@ -765,11 +832,13 @@ class _StagesSettings(BaseModel):
     trace_review_max_traces_per_run: int = Field(
         description="Hard cap on how many traces a single trace-review run pulls full detail for. 0 disables.",
         default=300,
+        json_schema_extra={"advanced": True},
     )
     # First-run lookback window when no watermark exists yet (hours).
     trace_review_initial_lookback_hours: int = Field(
         description="First-run lookback window (hours) when no watermark exists yet.",
         default=24,
+        json_schema_extra={"advanced": True},
     )
     # When set, every trace-review draft lands on THIS repo's board,
     # regardless of which repo the source trace lived on. Trace-review
@@ -790,6 +859,7 @@ class _StagesSettings(BaseModel):
     trace_review_restart_correlation_window_seconds: int = Field(
         description="Window (seconds) for correlating incomplete traces with process restarts.",
         default=60,
+        json_schema_extra={"advanced": True},
     )
     # Recency window (days) for the pre-filing duplicate check in the
     # trace-review runner.  A candidate prior ticket is considered for
@@ -800,6 +870,7 @@ class _StagesSettings(BaseModel):
     trace_review_dedup_lookback_days: int = Field(
         description="Recency window (days) for pre-filing duplicate check in trace-review.",
         default=7,
+        json_schema_extra={"advanced": True},
     )
     # Recency window (days) for the advisory pre-filing duplicate check in
     # epic decomposition (``dedup.find_child_overlaps``).  A proposed child
@@ -809,6 +880,7 @@ class _StagesSettings(BaseModel):
     epic_dedup_lookback_days: int = Field(
         description="Recency window (days) for advisory duplicate detection in epic decomposition.",
         default=7,
+        json_schema_extra={"advanced": True},
     )
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
@@ -822,12 +894,14 @@ class _StagesSettings(BaseModel):
         description="Re-check cadence (seconds) for human_mr_approval (PR open) waiting for external merge.",
         default=120,
         gt=0,
+        json_schema_extra={"advanced": True},
     )
     # When true (default), the workspace's clone (repo/) is removed on
     # close to save disk space.
     prune_clone_on_close: bool = Field(
         description="When true, the workspace clone (repo/) is removed on ticket close.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of terminal-state tickets (CLOSED, ANSWERED,
     # EPIC_CLOSED) to retain.  When a ticket transitions to a terminal
@@ -838,6 +912,7 @@ class _StagesSettings(BaseModel):
         description="Maximum terminal-state tickets to retain. 0 disables purging.",
         default=40,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # --- db maintenance (periodic archive purge + per-ticket event cap) ---
@@ -850,7 +925,9 @@ class _StagesSettings(BaseModel):
         default=True,
     )
     db_maintenance_interval_seconds: int = Field(
-        description="Seconds between periodic DB maintenance passes.", default=86400
+        description="Seconds between periodic DB maintenance passes.",
+        default=86400,
+        json_schema_extra={"advanced": True},
     )
 
     # --- sandbox reaper (periodic orphan-container cleanup) ---
@@ -866,7 +943,9 @@ class _StagesSettings(BaseModel):
         default=True,
     )
     sandbox_reaper_interval_seconds: int = Field(
-        description="Seconds between sandbox reaper passes.", default=3600
+        description="Seconds between sandbox reaper passes.",
+        default=3600,
+        json_schema_extra={"advanced": True},
     )
     # Maximum TicketEvent rows to retain per non-terminal ticket.
     # Events beyond this cap are pruned (oldest first).  Set to 0 to disable
@@ -875,6 +954,7 @@ class _StagesSettings(BaseModel):
         description="Maximum TicketEvent rows per non-terminal ticket. 0 disables capping.",
         default=200,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Maximum Comment rows to retain per non-terminal ticket. Comments
@@ -885,6 +965,7 @@ class _StagesSettings(BaseModel):
         description="Maximum Comment rows per non-terminal ticket. Open threads are never pruned. 0 disables.",
         default=500,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # --- merge stage: auto-rebase of stale PRs ---
@@ -896,6 +977,7 @@ class _StagesSettings(BaseModel):
         description="Maximum rebase attempts per ticket before escalating to BLOCKED.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # --- merge stage: auto-fix of failing remote CI ---
@@ -915,6 +997,7 @@ class _StagesSettings(BaseModel):
         description="Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
         default=5,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Multi-repo merge path only (MultiRepoCiFixMixin): that path still runs
@@ -925,11 +1008,13 @@ class _StagesSettings(BaseModel):
         description="Multi-repo merge path only: max ci-fix attempts per cycle.",
         default=2,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
     ci_fix_max_cycles: int = Field(
         description="Multi-repo merge path only: max ci-fix cycles per ticket.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Number of consecutive identical-failure cycles before escalating to
@@ -941,6 +1026,7 @@ class _StagesSettings(BaseModel):
         description="Consecutive identical CI failure cycles before escalating. 0 disables.",
         default=2,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Number of consecutive identical merge-guard blocks before escalating
@@ -954,6 +1040,7 @@ class _StagesSettings(BaseModel):
         description="Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
         default=2,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # How often (seconds) wait_for_ci polls the forge for the branch's CI
@@ -962,6 +1049,7 @@ class _StagesSettings(BaseModel):
         description="Seconds between CI conclusion polls during wait_for_ci.",
         default=30.0,
         gt=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Maximum seconds a single wait_for_ci call blocks before returning a
@@ -971,6 +1059,7 @@ class _StagesSettings(BaseModel):
         description="Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
         default=1500.0,
         gt=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Per-run request budget for the ci-fix agent.  Must cover ALL the agent's
@@ -982,6 +1071,7 @@ class _StagesSettings(BaseModel):
         description="Per-run request budget for the ci-fix agent. 0 disables.",
         default=120,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Per-ticket ceiling on how many times the worker may re-dispatch the
@@ -996,6 +1086,7 @@ class _StagesSettings(BaseModel):
         description="Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # When True (default), ci_fix may invoke a conservative codeql_fp_triage
@@ -1006,6 +1097,7 @@ class _StagesSettings(BaseModel):
     codeql_fp_triage_enabled: bool = Field(
         description="When true, ci_fix may invoke codeql_fp_triage to dismiss high-confidence CodeQL false positives.",
         default=True,
+        json_schema_extra={"advanced": True},
     )
 
     # Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without
@@ -1019,6 +1111,7 @@ class _StagesSettings(BaseModel):
         description="Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without green CI. 0 disables.",
         default=6,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Ceiling on REBASING ↔ FIXING_CI alternations (ping-pong) before
@@ -1031,6 +1124,7 @@ class _StagesSettings(BaseModel):
         description="Ceiling on REBASING to FIXING_CI alternations before escalating. 0 disables.",
         default=3,
         ge=0,
+        json_schema_extra={"advanced": True},
     )
 
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
@@ -1038,6 +1132,7 @@ class _StagesSettings(BaseModel):
         description="Maximum review-revision attempts per ticket before escalating to BLOCKED.",
         default=2,
         ge=1,
+        json_schema_extra={"advanced": True},
     )
 
     # --- target-branch CI monitor ---
@@ -1047,6 +1142,7 @@ class _StagesSettings(BaseModel):
     ci_log_max_bytes: int = Field(
         description="Maximum bytes of CI log output to capture per check run.",
         default=65536,
+        json_schema_extra={"advanced": True},
     )
 
     # --- langfuse cleanup (caps trace count for the shared workspace project) ---
@@ -1058,17 +1154,21 @@ class _StagesSettings(BaseModel):
         default=True,
     )
     langfuse_cleanup_interval_seconds: int = Field(
-        description="Seconds between Langfuse trace cleanup passes.", default=86400
+        description="Seconds between Langfuse trace cleanup passes.",
+        default=86400,
+        json_schema_extra={"advanced": True},
     )
     langfuse_cleanup_max_traces: int = Field(
         description="Maximum traces to retain in the Langfuse project during cleanup.",
         default=5000,
+        json_schema_extra={"advanced": True},
     )
     sandbox_op_timeout: int = Field(
         description="Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
         default=300,
         ge=0,
         alias="MILL_SANDBOX_OP_TIMEOUT",
+        json_schema_extra={"advanced": True},
     )
     implement_pass_timeout: int = Field(
         description="Progress-reset watchdog (seconds) for the implement agent. "
@@ -1079,4 +1179,5 @@ class _StagesSettings(BaseModel):
         default=300,
         ge=0,
         alias="MILL_IMPLEMENT_PASS_TIMEOUT",
+        json_schema_extra={"advanced": True},
     )

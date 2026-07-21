@@ -103,6 +103,7 @@ class RepoConfig(BaseModel):
     deployed_log_folder: str | None = Field(
         None,
         description="Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
+        json_schema_extra={"advanced": True},
     )
     # Optional pinned working branch. When set, member repos branch from
     # and open PRs into this branch (e.g. "lyrical") instead of the fork's
@@ -111,6 +112,7 @@ class RepoConfig(BaseModel):
     working_branch: str | None = Field(
         None,
         description="Pinned working branch for member repos. When set, branches fork from and PR into this branch instead of the default.",
+        json_schema_extra={"advanced": True},
     )
     # Optional per-repo sandbox image override. When set, this repo's
     # sandbox executions (test/smoke gates + the implement coordinator's
@@ -127,6 +129,7 @@ class RepoConfig(BaseModel):
     sandbox_image: str | None = Field(
         None,
         description="Per-repo Docker sandbox image override. Unset falls back to settings.sandbox_image.",
+        json_schema_extra={"advanced": True},
     )
     # Optional cross-repo target: when set, deliver pushes the ticket
     # branch to ``fork_remote_url`` and opens a fork→upstream PR against
@@ -135,6 +138,7 @@ class RepoConfig(BaseModel):
     cross_repo_target: CrossRepoTarget | None = Field(
         None,
         description="Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery.",
+        json_schema_extra={"advanced": True},
     )
     ci_monitor_enabled: bool = Field(
         True,
@@ -146,6 +150,7 @@ class RepoConfig(BaseModel):
     ci_monitor_interval_seconds: int = Field(
         900,
         description="Seconds between CI monitor polls for this repo (minimum 60).",
+        json_schema_extra={"advanced": True},
     )
     # Number of tickets from THIS repo the worker will process in
     # parallel. Per-repo isolation: each repo gets its own consumer
@@ -154,6 +159,7 @@ class RepoConfig(BaseModel):
     max_concurrency: int = Field(
         1,
         description="Maximum number of tickets from this repo processed in parallel (minimum 1).",
+        json_schema_extra={"advanced": True},
     )
     # Max number of in-flight PR tickets (DELIVERABLE through ADDRESSING_REVIEW)
     # before the worker stops dispatching new READY/DRAFT work for this repo.
@@ -162,6 +168,7 @@ class RepoConfig(BaseModel):
     max_inflight_prs: int = Field(
         3,
         description="Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
+        json_schema_extra={"advanced": True},
     )
     # Source discriminator: ``"config"`` for operator-configured entries,
     # ``"auto"`` for machine-registered overlay entries.
