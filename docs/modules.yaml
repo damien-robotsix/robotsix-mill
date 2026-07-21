@@ -156,6 +156,7 @@ modules:
       - tests/forge/test_forge_base.py
       - tests/forge/test_github.py
       - tests/forge/test_github_dependabot.py
+      - tests/forge/test_github_pagination.py
       - tests/forge/test_github_security.py
       - tests/forge/test_gitlab.py
       - tests/forge/test_http.py
