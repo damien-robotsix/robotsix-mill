@@ -294,39 +294,9 @@ class ImplementationLogicMixin(_ImplementStageBase):
         # entirely unless a smoke command is set (repo file wins over the
         # global fallback), and skipped when the ticket's introduced
         # files don't match the repo's smoke_paths globs.
-        if passed:
-            smoke_cmd = (
-                load_repo_smoke_command(repo_dir) or settings.smoke_command
-            ).strip()
-            if smoke_cmd:
-                changed = git_ops.introduced_files(repo_dir, target)
-                smoke_paths = _facade.load_repo_smoke_paths(repo_dir)
-                if smoke_paths_match(changed, smoke_paths):
-                    smoke_passed, smoke_diag = _facade.run_smoke_agent(
-                        settings=settings,
-                        repo_dir=repo_dir,
-                        repo_config=ctx.repo_config,
-                    )
-                    # The board browser smoke writes its screenshot to
-                    # ``<clone>/artifacts/board.png`` (BOARD_SMOKE_SCREENSHOT,
-                    # relative to the sandbox cwd = the repo clone, the only
-                    # writable mount). The review stage reads it from the
-                    # workspace artifacts dir — a sibling of the clone, outside
-                    # the sandbox mount — so lift it out here. Absent for
-                    # non-board smokes / a failed render → review stays
-                    # text-only, unchanged.
-                    # MOVE (not copy) so the screenshot never lingers in
-                    # the clone's working tree — otherwise ``_finalize``'s
-                    # ``git add -A`` would stage and commit it into the
-                    # feature branch (``.png`` is not a binary artifact and
-                    # the smoke runs past the scope guardrail).
-                    ws = ctx.service.workspace(ticket)
-                    src_png = repo_dir / "artifacts" / "board.png"
-                    if src_png.exists():
-                        shutil.move(str(src_png), str(ws.artifacts_dir / "board.png"))
-                    if not smoke_passed:
-                        passed = False
-                        diag = smoke_diag
+        passed, diag = cls._run_smoke_gate(
+            ctx, ticket, repo_dir, target, settings, passed, diag
+        )
         if not passed and diag.startswith("sandbox unavailable"):
             cls._finalize(
                 ctx,
@@ -366,362 +336,50 @@ class ImplementationLogicMixin(_ImplementStageBase):
             # workspace — it never reaches deliver, no PR is opened.
             # Treat that as a normal proceed instead of a no-change
             # bypass; deliver will pick it up.
-            if (
-                not cls._any_repo_has_changes(
-                    repo_dir, extra_roots, target, settings=settings
-                )
-                and no_change_needed
-                and no_change_rationale.strip()
-            ):
-                # Edit-claim contradiction guard: the agent signalled
-                # ``no_change_needed`` (with a rationale) yet the working
-                # tree is empty. If the run actually INVOKED file-mutating
-                # tools, the edits never persisted (reverted, workspace
-                # reset mid-run, or written outside the clone) — closing as
-                # DONE would silently lose real work and falsely complete the
-                # ticket. This is exactly how ticket 904a (the ticket that
-                # was meant to ADD this guard) was lost. BLOCK for inspection
-                # instead of short-circuiting.
-                edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
-                    has_changes=False, new_messages=new_msgs
-                )
-                # An empty diff after edit calls is usually lost work (BLOCK).
-                # But it is legitimate when the edits were redundant or the
-                # project formatter normalises them away — the canonical case
-                # being a ticket that "fixes" valid PEP-758 ``except A, B:`` to
-                # ``except (A, B):``, which ``ruff format`` reverts on a 3.14
-                # target, so every edit nets to zero and the agent correctly
-                # reports ``no_change_needed``. Replay the edits + format to
-                # tell redundant-no-op from lost-work; only a confirmed no-op
-                # (True) is allowed to close DONE. None/False → BLOCK as before.
-                if edit_tools:
-                    fmt_result = cls._edits_formatter_reverted(repo_dir, new_msgs)
-                    if fmt_result is not True:
-                        tool_list = ", ".join(edit_tools)
-                        diag = cls._build_edit_claim_diagnostic(
-                            tool_list=tool_list,
-                            fmt_result=fmt_result,
-                            no_change_summary=(no_change_rationale.strip() or summary),
-                            new_msgs=new_msgs,
-                        )
-                        diag = (
-                            f"{diag}\n\n"
-                            "Note: the agent signalled ``no_change_needed``. "
-                            "If the spec genuinely needs no change, the agent "
-                            "must reach that conclusion WITHOUT calling "
-                            "write_file/edit_file/Write/Edit."
-                        )
-                        cls._finalize(
-                            ctx,
-                            ticket,
-                            repo_dir,
-                            branch,
-                            diag,
-                            ok=False,
-                            reference_files=ref_files,
-                            extra_roots=extra_roots,
-                        )
-                        return _SinglePassResult(
-                            next_action="return",
-                            outcome=Outcome(
-                                State.BLOCKED,
-                                "edit-claim contradiction (empty diff after edit calls)",
-                            ),
-                        )
-                rationale = no_change_rationale.strip()
-                short = rationale[:400] + ("…" if len(rationale) > 400 else "")
-                cls._finalize(
-                    ctx,
-                    ticket,
-                    repo_dir,
-                    branch,
-                    f"no change needed — {rationale}",
-                    ok=True,
-                    reference_files=ref_files,
-                    extra_roots=extra_roots,
-                )
-                return _SinglePassResult(
-                    next_action="return",
-                    outcome=Outcome(State.DONE, f"no change needed — {short}"),
-                )
-            if (
-                not cls._any_repo_has_changes(
-                    repo_dir, extra_roots, target, settings=settings
-                )
-                and not resuming
-            ):
-                # Empty diff on a fresh run: the working tree is clean AND
-                # the branch has no commits beyond ``origin/<target>`` —
-                # there is genuinely nothing to merge. This is the single
-                # biggest source of BLOCKED-loop tickets: a spec already
-                # satisfied on main loops implement → empty PR → close →
-                # BLOCKED → resume forever. Resolve it deterministically
-                # here — but ONLY when the empty diff is genuinely a
-                # no-op, never when real work may have been lost.
-                #
-                # Two guards protect against silently closing real work:
-                #
-                #   (a) gitignored edits — real writes into a gitignored
-                #       path are invisible to ``git status`` and surface
-                #       as an opaque empty diff. Closing DONE would lose
-                #       deliverable work → BLOCK.
-                #   (b) edit-claim contradiction — the run invoked
-                #       file-mutating tools yet nothing landed (edits
-                #       reverted, workspace reset mid-run, or written off
-                #       clone). Closing DONE would lose that work → BLOCK.
-                #       A confirmed formatter-reverted / redundant edit
-                #       (``_edits_formatter_reverted`` is True) is a true
-                #       no-op and is exempt (mirrors the ``no_change_needed``
-                #       guard above).
-                #
-                # When NEITHER guard fires, the agent looked and made no
-                # (surviving) edits: the spec is already satisfied. Close
-                # DONE with a clear terminal note instead of looping.
-                no_change_summary = summary or (
-                    "Agent finished without producing any file edits and "
-                    "without explanation. Check artifacts/implement_messages.json "
-                    "for the full transcript."
-                )
-                # Guard (a): gitignored-edit detector. Real writes into a
-                # gitignored path (e.g. a manifest board whose ``.gitignore``
-                # carries ``/src/*`` for vcs-imported sub-repos) are
-                # invisible to ``git status`` and must NOT be closed as a
-                # no-op.
-                ignored_hits = cls._claimed_gitignored_edits(repo_dir, new_msgs)
-                if ignored_hits:
-                    hit_list = ", ".join(f"`{p}`" for p in ignored_hits)
-                    no_change_summary = (
-                        f"edits landed in gitignored path(s): {hit_list} — the "
-                        "files exist on disk but git cannot see them, so this "
-                        "board cannot deliver them (vcs-imported / vendored "
-                        "sub-tree). The spec must target git-tracked files, or "
-                        "the board needs manifest-aware delivery for that "
-                        f"sub-tree.\n\n{no_change_summary}"
-                    )
-                    cls._finalize(
-                        ctx,
-                        ticket,
-                        repo_dir,
-                        branch,
-                        no_change_summary,
-                        ok=False,
-                        reference_files=ref_files,
-                        extra_roots=extra_roots,
-                    )
-                    reason = " ".join(no_change_summary.split())
-                    return _SinglePassResult(
-                        next_action="return",
-                        outcome=Outcome(
-                            State.BLOCKED,
-                            f"no changes produced — {reason[:300]}"
-                            + ("… (see implement.md)" if len(reason) > 300 else ""),
-                        ),
-                    )
-                # Guard (b): edit-claim contradiction. The run invoked
-                # edit tools but nothing survived → likely lost work.
-                # Exempt only a confirmed formatter-reverted / redundant
-                # no-op (True); None/False → BLOCK (or retry within-pass
-                # when iterations remain — the agent can try a different
-                # approach instead of looping the same empty-diff failure
-                # across stage-level BLOCKED→READY→BLOCKED cycles).
-                edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
-                    has_changes=False, new_messages=new_msgs
-                )
-                if edit_tools:
-                    fmt_result = cls._edits_formatter_reverted(repo_dir, new_msgs)
-                    if fmt_result is not True:
-                        tool_list = ", ".join(edit_tools)
-                        diag = cls._build_edit_claim_diagnostic(
-                            tool_list=tool_list,
-                            fmt_result=fmt_result,
-                            no_change_summary=no_change_summary,
-                            new_msgs=new_msgs,
-                        )
-                        # Retry within the pass when iterations remain —
-                        # the agent sees the diagnostic as feedback and
-                        # can try a different approach (different anchors,
-                        # write_file instead of edit_file, etc.).  Only
-                        # escalate to BLOCKED on the last iteration.
-                        if attempt < max_iters:
-                            new_ic.feedback = diag
-                            return _SinglePassResult(
-                                next_action="retry",
-                                feedback=diag,
-                                ic=new_ic,
-                                new_msgs=new_msgs,
-                            )
-                        cls._finalize(
-                            ctx,
-                            ticket,
-                            repo_dir,
-                            branch,
-                            diag,
-                            ok=False,
-                            reference_files=ref_files,
-                            extra_roots=extra_roots,
-                        )
-                        return _SinglePassResult(
-                            next_action="return",
-                            outcome=Outcome(
-                                State.BLOCKED,
-                                "edit-claim contradiction (empty diff after edit calls)",
-                            ),
-                        )
-                # Genuine no-op: clean working tree, no commits beyond the
-                # base, no gitignored writes, no lost edits. The spec is
-                # already satisfied — terminate DONE instead of looping.
-                done_note = "already satisfied — no changes needed (empty diff vs base)"
-                cls._finalize(
-                    ctx,
-                    ticket,
-                    repo_dir,
-                    branch,
-                    f"{done_note}\n\n{no_change_summary}",
-                    ok=True,
-                    reference_files=ref_files,
-                    extra_roots=extra_roots,
-                )
-                log.info(
-                    "%s: empty diff on fresh run with no lost work — DONE "
-                    "(already satisfied)",
-                    ticket.id,
-                )
-                return _SinglePassResult(
-                    next_action="return",
-                    outcome=Outcome(State.DONE, done_note),
-                )
-            # --- per-claimed-file edit-claim verification ---
-            # We reach here only on a non-empty-diff proceed (the two
-            # no-change branches above returned when
-            # ``_any_repo_has_changes`` was False). The sibling
-            # ``detect_edit_claim_contradiction`` guard only fires on a
-            # WHOLLY empty diff; it does NOT catch the case where the bulk
-            # of the work is real but a few specifically-named sub-fixes
-            # lag the summary/thread-reply (edits reverted, written outside
-            # the clone, or simply never made). When that slips through,
-            # the agent posts a comment asserting edits the diff lacks and
-            # review re-flags the persisting issue, burning extra
-            # review→implement rounds. Catch it HERE — before the comment
-            # is posted (acknowledge_unanswered_threads) and before the
-            # handoff to review — anchored deterministically on the
-            # edit-tool-call path args cross-referenced against the net
-            # diff (no NL/symbol parsing).
-            changed = git_ops.introduced_files(repo_dir, target)
-            if extra_roots:
-                for repo_path in extra_roots:
-                    # Mirror _any_repo_has_changes: the primary repo is
-                    # already covered above; skip the duplicate entry.
-                    if repo_path == repo_dir:
-                        continue
-                    try:
-                        rc = get_repo_config(repo_path.name)
-                    except ConfigError:
-                        rc = None
-                    repo_target = target_branch_for(settings, rc)
-                    changed = list(
-                        set(changed)
-                        | set(git_ops.introduced_files(repo_path, repo_target))
-                    )
-            missing = short_circuit_verify.detect_missing_claimed_files(
-                changed_files=changed,
-                new_messages=new_msgs,
-                summary=summary,
+            # --- no-change contradiction detection ---
+            # Two branches: (a) agent explicitly signalled no_change_needed,
+            # (b) empty diff on a fresh run.  Both route through the same
+            # edit-claim / gitignored-edit / formatter-reverted guards.
+            no_change_result = cls._detect_no_change_contradiction(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                summary,
+                ref_files,
+                new_msgs,
+                no_change_needed,
+                no_change_rationale,
+                resuming,
+                target,
+                extra_roots,
+                attempt=attempt,
+                max_iters=max_iters,
+                new_ic=new_ic,
             )
-            if missing:
-                file_list = ", ".join(missing)
-                diag = (
-                    "[Diagnostic] Your summary / thread-reply claims edits to "
-                    f"the following file(s) — {file_list} — but they are ABSENT "
-                    "from the net diff vs "
-                    f"origin/{target}. An edit-tool-call "
-                    "targeted each of them and your summary names them as fixed, "
-                    "yet the working tree does not contain those changes (edits "
-                    "reverted, written outside the clone, or never applied). "
-                    "Before completing, actually apply those edits so they land "
-                    "in the diff — OR correct your summary so it does not claim "
-                    "edits you did not make. Do not hand un-landed claims to "
-                    "review."
-                )
-                if attempt < max_iters:
-                    # Iterations remain → re-prompt via the established retry
-                    # path; it loops back into _run_single_implement_pass.
-                    new_ic.feedback = diag
-                    return _SinglePassResult(
-                        next_action="retry",
-                        feedback=diag,
-                        ic=new_ic,
-                        new_msgs=new_msgs,
-                    )
-                # Iterations exhausted → do NOT hand un-landed claims to
-                # review. BLOCK for inspection, mirroring the empty-diff
-                # contradiction guard's shape.
-                cls._finalize(
-                    ctx,
-                    ticket,
-                    repo_dir,
-                    branch,
-                    diag,
-                    ok=False,
-                    reference_files=ref_files,
-                    extra_roots=extra_roots,
-                )
-                return _SinglePassResult(
-                    next_action="return",
-                    outcome=Outcome(
-                        State.BLOCKED,
-                        "edit-claim contradiction (claimed files absent from diff)",
-                    ),
-                )
-
-            # --- zero-tool-call guard for resumed passes ---
-            # When resuming and the agent issued zero tool calls with no
-            # diff, surface a distinct error instead of silently routing
-            # to CODE_REVIEW with an empty working tree.  A non-resume
-            # empty-diff is caught by the "already satisfied" DONE branch
-            # above; a resume with tool calls but no surviving diff is
-            # caught by the per-pass stuck-loop detection in
-            # ``_implement_loop`` (which fires on ``retry`` paths).  This
-            # guard catches the remaining gap: resume + 0 tool calls +
-            # test-gate-passed → would otherwise hand an empty diff to
-            # CODE_REVIEW.
-            if (
-                resuming
-                and not changed
-                and not cls._any_repo_has_changes(
-                    repo_dir, extra_roots, target, settings=settings
-                )
-            ):
-                progress = short_circuit_verify.analyze_pass_progress(new_msgs)
-                if progress["total"] == 0:
-                    diag = (
-                        "zero tool calls on resume — the implement agent "
-                        "completed this pass without issuing a single tool "
-                        "call and produced no file changes.  The previous "
-                        "implement session left no surviving diff either, so "
-                        "there is nothing to hand to code review.  This "
-                        "indicates a prompt/context assembly failure, "
-                        "workspace inaccessibility, or a spec the agent "
-                        "cannot act on."
-                    )
-                    cls._finalize(
-                        ctx,
-                        ticket,
-                        repo_dir,
-                        branch,
-                        diag,
-                        ok=False,
-                        reference_files=ref_files,
-                        extra_roots=extra_roots,
-                    )
-                    return _SinglePassResult(
-                        next_action="return",
-                        outcome=Outcome(
-                            State.BLOCKED,
-                            f"zero tool calls on resume — "
-                            f"{diag[:200]}"
-                            + ("… (see implement.md)" if len(diag) > 200 else ""),
-                        ),
-                    )
+            if no_change_result is not None:
+                return no_change_result
+            # --- per-claimed-file & zero-tool-call guards ---
+            verify_result = cls._verify_repo_changes(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                summary,
+                ref_files,
+                new_msgs,
+                new_ic,
+                ic,
+                target,
+                extra_roots,
+                resuming,
+                attempt,
+                max_iters,
+            )
+            if verify_result is not None:
+                return verify_result
 
             # --- post-agent thread acknowledgment ---
             if ic.open_thread_ids and ic.feedback:
@@ -795,6 +453,408 @@ class ImplementationLogicMixin(_ImplementStageBase):
             ic=new_ic,
             new_msgs=new_msgs,
         )
+
+    @classmethod
+    def _run_smoke_gate(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        target: str,
+        settings: Settings,
+        passed: bool,
+        diag: str,
+    ) -> tuple[bool, str]:
+        """Run the smoke-test gate when unit tests pass.
+
+        Opt-in per-repo via ``smoke_command`` and ``smoke_paths``;
+        skipped entirely when the ticket's introduced files don't
+        match the repo's ``smoke_paths`` globs.
+
+        Returns ``(passed, diag)`` unchanged when the smoke gate is
+        skipped or passes; folds a smoke failure into
+        ``(False, smoke_diag)``.
+        """
+        if not passed:
+            return passed, diag
+        smoke_cmd = (
+            load_repo_smoke_command(repo_dir) or settings.smoke_command
+        ).strip()
+        if not smoke_cmd:
+            return passed, diag
+        from robotsix_mill.stages import implement as _facade
+
+        changed = git_ops.introduced_files(repo_dir, target)
+        smoke_paths = _facade.load_repo_smoke_paths(repo_dir)
+        if not smoke_paths_match(changed, smoke_paths):
+            return passed, diag
+        smoke_passed, smoke_diag = _facade.run_smoke_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            repo_config=ctx.repo_config,
+        )
+        # The board browser smoke writes its screenshot to
+        # ``<clone>/artifacts/board.png`` (BOARD_SMOKE_SCREENSHOT,
+        # relative to the sandbox cwd = the repo clone, the only
+        # writable mount). The review stage reads it from the
+        # workspace artifacts dir — a sibling of the clone, outside
+        # the sandbox mount — so lift it out here. Absent for
+        # non-board smokes / a failed render → review stays
+        # text-only, unchanged.
+        # MOVE (not copy) so the screenshot never lingers in
+        # the clone's working tree — otherwise ``_finalize``'s
+        # ``git add -A`` would stage and commit it into the
+        # feature branch (``.png`` is not a binary artifact and
+        # the smoke runs past the scope guardrail).
+        ws = ctx.service.workspace(ticket)
+        src_png = repo_dir / "artifacts" / "board.png"
+        if src_png.exists():
+            shutil.move(str(src_png), str(ws.artifacts_dir / "board.png"))
+        if not smoke_passed:
+            return False, smoke_diag
+        return passed, diag
+
+    @classmethod
+    def _detect_no_change_contradiction(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings: Settings,
+        summary: str,
+        ref_files: list[str] | None,
+        new_msgs: bytes | None,
+        no_change_needed: bool,
+        no_change_rationale: str,
+        resuming: bool,
+        target: str,
+        extra_roots: list[Path] | None,
+        attempt: int = 1,
+        max_iters: int = 1,
+        new_ic: _ImplementContext | None = None,
+    ) -> _SinglePassResult | None:
+        """Check for edit-claim contradictions when the diff is empty.
+
+        An agent that invokes file-mutating tools yet claims
+        ``no_change_needed`` (or produces an empty diff on a fresh
+        run) is signalling lost work — BLOCK for inspection instead
+        of closing DONE.  A confirmed formatter-reverted / redundant
+        edit is exempt (a true no-op).
+
+        Returns a ``_SinglePassResult`` when a contradiction is found
+        (caller must return it immediately); ``None`` when the empty
+        diff is legitimate and the caller should close DONE.
+        """
+        _ = settings  # unused in this helper
+        if not cls._any_repo_has_changes(
+            repo_dir, extra_roots, target, settings=settings
+        ):
+            if no_change_needed and no_change_rationale.strip():
+                # Agent explicitly signalled no_change_needed.
+                edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
+                    has_changes=False, new_messages=new_msgs
+                )
+                if edit_tools:
+                    fmt_result = cls._edits_formatter_reverted(repo_dir, new_msgs)
+                    if fmt_result is not True:
+                        tool_list = ", ".join(edit_tools)
+                        diag = (
+                            f"{no_change_rationale.strip() or summary}\n\n"
+                            "[Diagnostic] implement was about to close this ticket "
+                            "as ``no_change_needed`` because ``git diff`` is empty "
+                            f"— but the agent invoked file-mutating tools "
+                            f"({tool_list}) during the run, and replaying those "
+                            "edits + formatting still produced a real change (or "
+                            "could not be verified). An empty diff after real edit "
+                            "calls means the work did NOT persist (edits reverted, "
+                            "workspace reset mid-run, or written outside the clone). "
+                            "Closing as no-change would silently lose that work, so "
+                            "the ticket is BLOCKED for inspection. Re-run implement; "
+                            "if the spec genuinely needs no change, the agent must "
+                            "reach that conclusion WITHOUT calling "
+                            "write_file/edit_file/Write/Edit."
+                        )
+                        cls._finalize(
+                            ctx,
+                            ticket,
+                            repo_dir,
+                            branch,
+                            diag,
+                            ok=False,
+                            reference_files=ref_files,
+                            extra_roots=extra_roots,
+                        )
+                        return _SinglePassResult(
+                            next_action="return",
+                            outcome=Outcome(
+                                State.BLOCKED,
+                                "edit-claim contradiction (empty diff after edit calls)",
+                            ),
+                        )
+                # No contradiction — close DONE.
+                rationale = no_change_rationale.strip()
+                short = rationale[:400] + ("…" if len(rationale) > 400 else "")
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    f"no change needed — {rationale}",
+                    ok=True,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(State.DONE, f"no change needed — {short}"),
+                )
+            if not resuming:
+                # Empty diff on a fresh run: the working tree is clean AND
+                # the branch has no commits beyond ``origin/<target>`` —
+                # there is genuinely nothing to merge.
+                #
+                # Two guards protect against silently closing real work:
+                #   (a) gitignored edits — real writes into a gitignored
+                #       path are invisible to ``git status`` and surface
+                #       as an opaque empty diff. Closing DONE would lose
+                #       deliverable work → BLOCK.
+                #   (b) edit-claim contradiction — the run invoked
+                #       file-mutating tools yet nothing landed (edits
+                #       reverted, workspace reset mid-run, or written off
+                #       clone). Closing DONE would lose that work → BLOCK.
+                #       A confirmed formatter-reverted / redundant edit
+                #       (``_edits_formatter_reverted`` is True) is a true
+                #       no-op and is exempt.
+                no_change_summary = summary or (
+                    "Agent finished without producing any file edits and "
+                    "without explanation. Check artifacts/implement_messages.json "
+                    "for the full transcript."
+                )
+                # Guard (a): gitignored-edit detector.
+                ignored_hits = cls._claimed_gitignored_edits(repo_dir, new_msgs)
+                if ignored_hits:
+                    hit_list = ", ".join(f"`{p}`" for p in ignored_hits)
+                    no_change_summary = (
+                        f"edits landed in gitignored path(s): {hit_list} — the "
+                        "files exist on disk but git cannot see them, so this "
+                        "board cannot deliver them (vcs-imported / vendored "
+                        "sub-tree). The spec must target git-tracked files, or "
+                        "the board needs manifest-aware delivery for that "
+                        f"sub-tree.\n\n{no_change_summary}"
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        no_change_summary,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    reason = " ".join(no_change_summary.split())
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            f"no changes produced — {reason[:300]}"
+                            + ("… (see implement.md)" if len(reason) > 300 else ""),
+                        ),
+                    )
+                # Guard (b): edit-claim contradiction.
+                edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
+                    has_changes=False, new_messages=new_msgs
+                )
+                if edit_tools and (
+                    cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
+                ):
+                    tool_list = ", ".join(edit_tools)
+                    diag = (
+                        f"{no_change_summary}\n\n"
+                        "[Diagnostic] implement produced an empty diff, but the "
+                        f"agent invoked file-mutating tools ({tool_list}) during "
+                        "the run and replaying those edits + formatting still "
+                        "produced a real change (or could not be verified). An "
+                        "empty diff after real edit calls means the work did NOT "
+                        "persist (edits reverted, workspace reset mid-run, or "
+                        "written outside the clone). Closing as no-change would "
+                        "silently lose that work, so the ticket is BLOCKED for "
+                        "inspection."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "edit-claim contradiction (empty diff after edit calls)",
+                        ),
+                    )
+                # Genuine no-op: clean working tree, no commits beyond the
+                # base, no gitignored writes, no lost edits. The spec is
+                # already satisfied — terminate DONE instead of looping.
+                done_note = "already satisfied — no changes needed (empty diff vs base)"
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    f"{done_note}\n\n{no_change_summary}",
+                    ok=True,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                log.info(
+                    "%s: empty diff on fresh run with no lost work — DONE "
+                    "(already satisfied)",
+                    ticket.id,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(State.DONE, done_note),
+                )
+        return None
+
+    @classmethod
+    def _verify_repo_changes(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings: Settings,
+        summary: str,
+        ref_files: list[str] | None,
+        new_msgs: bytes | None,
+        new_ic: _ImplementContext,
+        ic: _ImplementContext,
+        target: str,
+        extra_roots: list[Path] | None,
+        resuming: bool,
+        attempt: int,
+        max_iters: int,
+    ) -> _SinglePassResult | None:
+        """Verify that claimed file edits actually landed in the diff.
+
+        Two guards:
+        1. **Per-claimed-file check** — when the summary names files
+           that are absent from the net diff, surface a contradiction
+           before handing off to review.
+        2. **Zero-tool-call resume guard** — when resuming and no tool
+           calls were issued with an empty diff, surface a distinct
+           error instead of routing to CODE_REVIEW with no work.
+
+        Returns a ``_SinglePassResult`` when a guard fires (caller must
+        return it); ``None`` when all checks pass.
+        """
+        changed = git_ops.introduced_files(repo_dir, target)
+        if extra_roots:
+            for repo_path in extra_roots:
+                if repo_path == repo_dir:
+                    continue
+                try:
+                    rc = get_repo_config(repo_path.name)
+                except ConfigError:
+                    rc = None
+                repo_target = target_branch_for(settings, rc)
+                changed = list(
+                    set(changed) | set(git_ops.introduced_files(repo_path, repo_target))
+                )
+        missing = short_circuit_verify.detect_missing_claimed_files(
+            changed_files=changed,
+            new_messages=new_msgs,
+            summary=summary,
+        )
+        if missing:
+            file_list = ", ".join(missing)
+            diag = (
+                "[Diagnostic] Your summary / thread-reply claims edits to "
+                f"the following file(s) — {file_list} — but they are ABSENT "
+                "from the net diff vs "
+                f"origin/{target}. An edit-tool-call "
+                "targeted each of them and your summary names them as fixed, "
+                "yet the working tree does not contain those changes (edits "
+                "reverted, written outside the clone, or never applied). "
+                "Before completing, actually apply those edits so they land "
+                "in the diff — OR correct your summary so it does not claim "
+                "edits you did not make. Do not hand un-landed claims to "
+                "review."
+            )
+            if attempt < max_iters:
+                new_ic.feedback = diag
+                return _SinglePassResult(
+                    next_action="retry",
+                    feedback=diag,
+                    ic=new_ic,
+                    new_msgs=new_msgs,
+                )
+            cls._finalize(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                diag,
+                ok=False,
+                reference_files=ref_files,
+                extra_roots=extra_roots,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(
+                    State.BLOCKED,
+                    "edit-claim contradiction (claimed files absent from diff)",
+                ),
+            )
+
+        # Zero-tool-call guard for resumed passes.
+        if (
+            resuming
+            and not changed
+            and not cls._any_repo_has_changes(
+                repo_dir, extra_roots, target, settings=settings
+            )
+        ):
+            progress = short_circuit_verify.analyze_pass_progress(new_msgs)
+            if progress["total"] == 0:
+                diag = (
+                    "zero tool calls on resume — the implement agent "
+                    "completed this pass without issuing a single tool "
+                    "call and produced no file changes.  The previous "
+                    "implement session left no surviving diff either, so "
+                    "there is nothing to hand to code review.  This "
+                    "indicates a prompt/context assembly failure, "
+                    "workspace inaccessibility, or a spec the agent "
+                    "cannot act on."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        f"zero tool calls on resume — "
+                        f"{diag[:200]}"
+                        + ("… (see implement.md)" if len(diag) > 200 else ""),
+                    ),
+                )
+        return None
 
     @classmethod
     def _handle_rename_only_change(
