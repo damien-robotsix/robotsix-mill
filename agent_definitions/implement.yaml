@@ -351,9 +351,9 @@ system_prompt: |
 
   **When ``PY_FILES=1`` (Python files touched) — full toolchain:**
 
-  **Retry loop:** run the three checks below.  If ANY tool reports
+  **Retry loop:** run the four checks below.  If ANY tool reports
   violations, fix them in the source files (``edit_file``), then re-run
-  ALL three checks.  Repeat until clean or until you have attempted
+  ALL four checks.  Repeat until clean or until you have attempted
   **3 full cycles** (initial run + 2 retries).  If you hit the retry
   limit and violations remain, stop and note the remaining failures in
   your summary — do NOT loop indefinitely.
@@ -367,7 +367,16 @@ system_prompt: |
 
   # 3. Import / dependency hygiene
   deptry .
+
+  # 4. Dead code
+  uv run vulture --ignore-decorators "@field_validator,@model_validator" src/ vulture_whitelist.py
   ```
+
+  **Gate report in summary:** your final ``summary`` MUST include a
+  brief note listing every local quality gate you ran (ruff, mypy,
+  deptry, vulture) and its pass/fail result, so that a still-red CI
+  afterwards is known to be a CI-only failure rather than an un-run
+  local gate.
 
   **When ``PY_FILES=0`` (no Python files touched):** skip ruff, mypy,
   and deptry entirely.  Run only the module-registration check (which
