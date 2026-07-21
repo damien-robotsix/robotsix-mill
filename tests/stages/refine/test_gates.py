@@ -1335,6 +1335,68 @@ def test_doc_only_gate_writes_artifacts(ctx_factory):
     assert file_map.exists()
 
 
+# ===========================================================================
+# Workflow portability gate
+# ===========================================================================
+
+
+def test_workflow_portability_gate_detects_state_sync(ctx_factory):
+    """Gate catches state_sync proposal on a non-mill board."""
+    ctx = ctx_factory()
+    body = (
+        "Add a `.robotsix-mill/periodic/state_sync.yaml` presence file "
+        "to enable state syncing on the cf82 repo."
+    )
+    t = _ticket(ctx, title="Enable state_sync on cf82", body=body)
+    # Simulate a non-mill board_id (the gate reads ticket.board_id).
+    t.board_id = "cf82"
+
+    out = RefineStage._run_workflow_portability_gate(ctx, t, body, t.title)
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert "state_sync" in out.note
+    assert "not portable" in out.note
+
+
+def test_workflow_portability_gate_allows_mill_board(ctx_factory):
+    """Internal workflows ARE valid on the robotsix-mill board."""
+    ctx = ctx_factory()
+    body = (
+        "Add a `.robotsix-mill/periodic/state_sync.yaml` presence file "
+        "to enable state syncing."
+    )
+    t = _ticket(ctx, title="Enable state_sync", body=body)
+    t.board_id = "robotsix-mill"
+
+    out = RefineStage._run_workflow_portability_gate(ctx, t, body, t.title)
+    assert out is None
+
+
+def test_workflow_portability_gate_allows_portable_workflow(ctx_factory):
+    """Portable workflows are not blocked on any board."""
+    ctx = ctx_factory()
+    body = (
+        "Add a `.robotsix-mill/periodic/audit.yaml` presence file "
+        "to enable auditing on the cf82 repo."
+    )
+    t = _ticket(ctx, title="Enable audit on cf82", body=body)
+    t.board_id = "cf82"
+
+    out = RefineStage._run_workflow_portability_gate(ctx, t, body, t.title)
+    assert out is None
+
+
+def test_workflow_portability_gate_no_match_returns_none(ctx_factory):
+    """Drafts without presence-file patterns pass through."""
+    ctx = ctx_factory()
+    body = "Update src/foo.py to fix the widget retry loop"
+    t = _ticket(ctx, title="Fix a bug", body=body)
+    t.board_id = "cf82"
+
+    out = RefineStage._run_workflow_portability_gate(ctx, t, body, t.title)
+    assert out is None
+
+
 def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
     ctx = ctx_factory(auto_approve_enabled=True)
     body = "Update `docs/api.md` and fix `src/api.py` handler"

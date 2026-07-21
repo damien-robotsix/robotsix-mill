@@ -30,6 +30,7 @@ from .helpers import (
     FRESHNESS_STALE_PREFIX,
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OBSOLESCENCE_GAP_PREFIX,
+    WORKFLOW_PORTABILITY_GATE_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
     _advisory_candidate_id,
@@ -833,6 +834,55 @@ class RefineGatesMixin:
             ticket.id,
             result.get("reason", ""),
         )
+        return None
+
+    @staticmethod
+    def _run_workflow_portability_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        title: str,
+    ) -> Outcome | None:
+        """Deterministic workflow-portability gate — reject tickets that
+        propose enabling an internal (non-portable) periodic workflow on a
+        non-mill repo.
+
+        Inspects the draft for ``.robotsix-mill/periodic/<name>.yaml``
+        presence-file patterns and cross-references every matched
+        ``<name>`` against the data-driven portability map.  Internal
+        workflows proposed for managed repos are short-circuited to
+        ``DONE`` before any LLM budget is spent.
+
+        Returns ``None`` when the draft does not propose an internal
+        workflow on a non-mill repo (fall through to normal refine).
+        """
+        import re
+
+        # Only gate non-mill boards — internal workflows ARE valid for mill.
+        if ticket.board_id == "robotsix-mill":
+            return None
+
+        text = f"{title}\n{draft}"
+
+        for m in re.finditer(r"\.robotsix-mill/periodic/([a-z][a-z0-9_]*)\.yaml", text):
+            name = m.group(1)
+            from ...agents.workflow_portability import _BUILTIN_KINDS, is_portable
+
+            if name in _BUILTIN_KINDS and not is_portable(name):
+                log.info(
+                    "%s: workflow-portability gate — draft proposes enabling "
+                    "internal workflow %r on non-mill board %r; short-circuiting",
+                    ticket.id,
+                    name,
+                    ticket.board_id,
+                )
+                return Outcome(
+                    State.DONE,
+                    f"{WORKFLOW_PORTABILITY_GATE_PREFIX} {name!r} is not portable — "
+                    "cannot be enabled on a managed repo via a "
+                    ".robotsix-mill/periodic/ presence file",
+                )
+
         return None
 
     @staticmethod

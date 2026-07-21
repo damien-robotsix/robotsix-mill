@@ -126,6 +126,67 @@ def test_state_sync_in_builtin_kinds():
     assert _BUILTIN_KINDS["state_sync"] == "mill_only"
 
 
+# --- Workflow portability gate (meta runner) ---
+
+
+def test_is_internal_workflow_proposal_detects_state_sync():
+    """_is_internal_workflow_proposal catches state_sync on a non-mill repo."""
+    from robotsix_mill.meta.runner import _is_internal_workflow_proposal
+
+    title = "Enable state_sync periodic workflow on cf82"
+    body = (
+        "Add a `.robotsix-mill/periodic/state_sync.yaml` presence file "
+        "to enable state syncing on the cf82 repo."
+    )
+    result = _is_internal_workflow_proposal(title, body, "cf82")
+    assert result == "state_sync"
+
+
+def test_is_internal_workflow_proposal_allows_mill_repo():
+    """Internal workflows ARE valid for robotsix-mill itself."""
+    from robotsix_mill.meta.runner import _is_internal_workflow_proposal
+
+    title = "Enable state_sync periodic workflow on mill"
+    body = (
+        "Add a `.robotsix-mill/periodic/state_sync.yaml` presence file "
+        "to enable state syncing."
+    )
+    result = _is_internal_workflow_proposal(title, body, "robotsix-mill")
+    assert result is None
+
+
+def test_is_internal_workflow_proposal_allows_portable():
+    """Portable workflows are allowed on any repo."""
+    from robotsix_mill.meta.runner import _is_internal_workflow_proposal
+
+    title = "Enable audit periodic workflow on cf82"
+    body = (
+        "Add a `.robotsix-mill/periodic/audit.yaml` presence file "
+        "to enable auditing on the cf82 repo."
+    )
+    result = _is_internal_workflow_proposal(title, body, "cf82")
+    assert result is None
+
+
+def test_is_internal_workflow_proposal_no_match_returns_none():
+    """Drafts without presence-file patterns return None."""
+    from robotsix_mill.meta.runner import _is_internal_workflow_proposal
+
+    result = _is_internal_workflow_proposal(
+        "Add a new lint rule", "Update pyproject.toml", "cf82"
+    )
+    assert result is None
+
+
+def test_is_internal_workflow_proposal_detects_frontend_sync():
+    """frontend_sync (mill_only) is caught on non-mill repos."""
+    from robotsix_mill.meta.runner import _is_internal_workflow_proposal
+
+    body = "Create `.robotsix-mill/periodic/frontend_sync.yaml` on 7efb"
+    result = _is_internal_workflow_proposal("", body, "7efb")
+    assert result == "frontend_sync"
+
+
 def test_state_sync_presence_file(tmp_path):
     """The per-repo presence file at .robotsix-mill/periodic/state_sync.yaml
     is well-formed."""
