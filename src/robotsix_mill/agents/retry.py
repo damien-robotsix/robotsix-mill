@@ -32,12 +32,8 @@ from robotsix_llmio.core import (
 )
 from robotsix_llmio.core import constants as _constants
 from robotsix_llmio.core import is_rate_limited
-from robotsix_llmio.core.retry import _status
 from robotsix_llmio.openrouter.transient import (
     is_openrouter_transient as _is_openrouter_transient,
-)
-from robotsix_llmio.openrouter.transient import (
-    is_openrouter_upstream_error as _is_openrouter_upstream_error,
 )
 
 
@@ -171,8 +167,6 @@ __all__ = [
     "run_agent",
     "is_transient",
     "is_rate_limited",
-    "_status",
-    "_is_openrouter_upstream_error",
 ]
 
 
