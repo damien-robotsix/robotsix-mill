@@ -63,7 +63,7 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..core.workspace import read_counter, write_counter
 from ..forge import get_forge
-from ..forge.auth import _resolve_remote_url, github_token
+from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
 from .base import Outcome, Stage, StageContext
@@ -682,7 +682,7 @@ class DeliverStage(Stage):
         else:
             remote_url = _resolve_remote_url(s, repo_config)
         try:
-            token = github_token(s, repo_config=repo_config)
+            token = github_push_token(s, repo_config=repo_config)
         except RuntimeError as e:
             return None, Outcome(
                 State.BLOCKED,

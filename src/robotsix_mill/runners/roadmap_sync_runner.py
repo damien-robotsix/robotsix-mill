@@ -36,7 +36,7 @@ from ..config import RepoConfig, Settings, target_branch_for
 from ..core.models import SourceKind, Ticket, TicketKind
 from ..core.service import TicketService
 from ..forge import get_forge
-from ..forge.auth import _resolve_remote_url, github_token
+from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.roadmap_sync")
@@ -251,7 +251,7 @@ def _commit_and_open_pr(
         log.info("roadmap-sync: no remote configured — markers left local")
         return None
     try:
-        token = github_token(settings, repo_config=repo_config)
+        token = github_push_token(settings, repo_config=repo_config)
     except RuntimeError as e:
         log.warning("roadmap-sync: forge auth missing (%s) — markers left local", e)
         return None

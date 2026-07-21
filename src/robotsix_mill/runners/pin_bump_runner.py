@@ -28,7 +28,7 @@ from robotsix_mill.deps.internal_graph import (
     build_internal_dep_graph,
 )
 from robotsix_mill.forge import Forge, get_forge
-from robotsix_mill.forge.auth import github_token
+from robotsix_mill.forge.auth import github_push_token, github_token
 from robotsix_mill.vcs import git_ops
 
 log = logging.getLogger(__name__)
@@ -282,7 +282,7 @@ def _bump_pins_for_repos(
             continue
 
         try:
-            push_token = github_token(settings, repo_config=rc)
+            push_token = github_push_token(settings, repo_config=rc)
         except RuntimeError as exc:
             log.warning("pin_bump: no forge token for %s — skipping (%s)", repo_id, exc)
             continue
