@@ -22,9 +22,7 @@ class _FakeResponse:
     """A response whose ``status_code``, ``.json()``, and
     ``.raise_for_status()`` are fully controlled."""
 
-    def __init__(
-        self, status_code: int, json_data: list[dict[str, object]]
-    ) -> None:
+    def __init__(self, status_code: int, json_data: list[dict[str, object]]) -> None:
         self.status_code = status_code
         self._json = json_data
 
@@ -54,9 +52,7 @@ class _MockClient:
     def get(
         self, url: str, headers: object = None, params: object = None
     ) -> _FakeResponse:
-        self.calls.append(
-            {"url": url, "headers": headers, "params": params}
-        )
+        self.calls.append({"url": url, "headers": headers, "params": params})
         if not self._pages:
             return _FakeResponse(200, [])
         return self._pages.pop(0)
@@ -83,16 +79,17 @@ def _make_http(
                 if on_retry is not None:
                     on_retry()
                     on_retry_log.append(retry_idx)
-                responses = [
-                    _FakeResponse(sc, data) for sc, data in pages
-                ]
+                responses = [_FakeResponse(sc, data) for sc, data in pages]
                 clients: list[_MockClient] = []
                 client = _MockClient(responses)
                 clients.append(client)
                 all_clients.append(clients)
-                yield retry_idx, client, "https://api.github.com", {
-                    "Authorization": "Bearer tok"
-                }
+                yield (
+                    retry_idx,
+                    client,
+                    "https://api.github.com",
+                    {"Authorization": "Bearer tok"},
+                )
                 # Control returns here when caller *continues* (401).
                 # Nothing to do in the mock — sleep + token invalidation
                 # aren't visible to _paginated_get.
@@ -122,9 +119,7 @@ def test_single_page_less_than_100():
     items = [{"name": f"item-{i}"} for i in range(50)]
     http, _ = _make_http([(200, items)])
 
-    result = _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    result = _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     assert result == [f"item-{i}" for i in range(50)]
 
@@ -139,9 +134,7 @@ def test_multi_page():
     page3 = [{"name": f"c-{i}"} for i in range(50)]
     http, _ = _make_http([(200, page1), (200, page2), (200, page3)])
 
-    result = _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    result = _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     assert len(result) == 250
     assert result[:100] == [f"a-{i}" for i in range(100)]
@@ -160,9 +153,7 @@ def test_exactly_100_on_last_page():
     page3: list[dict[str, object]] = []  # third page is empty
     http, _ = _make_http([(200, page1), (200, page2), (200, page3)])
 
-    result = _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    result = _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     assert len(result) == 200
     assert result[:100] == [f"p1-{i}" for i in range(100)]
@@ -183,13 +174,11 @@ def test_401_on_page_2_clears_and_retries():
     page2b = [{"name": f"retry2-{i}"} for i in range(30)]
 
     http, all_clients = _make_http(
-        [(200, page1a), page2_401],       # first retry: page 1 OK, page 2 401
-        [(200, page1b), (200, page2b)],   # second retry: both OK
+        [(200, page1a), page2_401],  # first retry: page 1 OK, page 2 401
+        [(200, page1b), (200, page2b)],  # second retry: both OK
     )
 
-    result = _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    result = _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     # on_retry should have been called twice (once per retry attempt)
     assert http._on_retry_log == [0, 1]  # type: ignore[attr-defined]
@@ -217,7 +206,8 @@ def test_non_401_exception_returns_fallback():
     http, _ = _make_http([(200, page1), page2_500])
 
     result = _paginated_get(
-        http, "/repos/o/r/pulls",
+        http,
+        "/repos/o/r/pulls",
         item_fn=_item_fn,
         fallback=["fallback-value"],
     )
@@ -232,7 +222,8 @@ def test_non_401_exception_returns_typed_fallback():
     http, _ = _make_http([page1_500])
 
     result = _paginated_get(
-        http, "/repos/o/r/pulls",
+        http,
+        "/repos/o/r/pulls",
         item_fn=_item_fn,
         fallback=None,
     )
@@ -247,9 +238,7 @@ def test_empty_result():
     """First page returns 0 items → loop breaks immediately, returns []."""
     http, _ = _make_http([(200, [])])
 
-    result = _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    result = _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     assert result == []
 
@@ -273,8 +262,7 @@ def test_url_suffix_and_params_are_forwarded():
     calls = all_clients[0][0].calls
     assert len(calls) == 1
     assert calls[0]["url"] == (
-        "https://api.github.com"
-        "/repos/owner/repo/issues/42/labels"
+        "https://api.github.com/repos/owner/repo/issues/42/labels"
     )
     assert calls[0]["params"] == {
         "per_page": 100,
@@ -293,9 +281,7 @@ def test_fallback_defaults_to_none():
     page1: list[dict[str, object]] = [{"name": "a"}]
     http, _ = _make_http([(200, page1)])
 
-    result = _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    result = _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     # No fallback provided — normal path returns the list
     assert result == ["a"]
@@ -311,9 +297,7 @@ def test_page_counter_increments():
     page3 = [{"name": f"c-{i}"} for i in range(50)]
     http, all_clients = _make_http([(200, page1), (200, page2), (200, page3)])
 
-    _paginated_get(
-        http, "/repos/o/r/pulls", item_fn=_item_fn
-    )
+    _paginated_get(http, "/repos/o/r/pulls", item_fn=_item_fn)
 
     calls = all_clients[0][0].calls
     assert len(calls) == 3
