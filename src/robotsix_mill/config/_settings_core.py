@@ -39,6 +39,7 @@ class _CoreSettings(BaseModel):
         alias="MILL_CLAUDE_MAX_CONCURRENCY",
         ge=1,
         description="Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
+        json_schema_extra={"advanced": True},
     )
     # Host-level cap on total concurrently-running stages across ALL boards,
     # applied on top of each board's own ``max_concurrency``.  Default 12 sits
@@ -50,6 +51,7 @@ class _CoreSettings(BaseModel):
         alias="MILL_MAX_GLOBAL_CONCURRENCY",
         ge=1,
         description="Host-level cap on total concurrently-running stages across ALL boards.",
+        json_schema_extra={"advanced": True},
     )
     # Capability gate for inline-image (vision) input on the Claude SDK
     # transport. Default False: the installed robotsix-llmio claude_sdk
@@ -63,6 +65,7 @@ class _CoreSettings(BaseModel):
     claude_sdk_vision_enabled: bool = Field(
         default=False,
         description="Enable inline-image (vision) input on the Claude SDK transport. Requires a robotsix-llmio pin bump with real image-input support.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on explore/parallel_explore sub-agent calls per refine run.
     # Calls beyond this cap are rejected with a clear message. Default 4
@@ -72,6 +75,7 @@ class _CoreSettings(BaseModel):
         default=4,
         ge=0,
         description="Hard cap on explore/parallel_explore sub-agent calls per refine run. Set to 0 to disable exploration entirely.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on read_file calls per refine/triage agent run. Calls
     # beyond this cap are rejected with a clear message. Default 10
@@ -83,6 +87,7 @@ class _CoreSettings(BaseModel):
         default=10,
         ge=0,
         description="Hard cap on read_file calls per refine/triage agent run. Set to 0 to disable the cap.",
+        json_schema_extra={"advanced": True},
     )
     # When true, the POST /repos API endpoint is allowed to hot-register
     # repos at runtime. When false (default), only repos listed in the
@@ -100,6 +105,7 @@ class _CoreSettings(BaseModel):
     web_knowledge_stale_days: int = Field(
         default=30,
         description="Days before a cached web_knowledge .md file is considered stale and eligible for refresh.",
+        json_schema_extra={"advanced": True},
     )
     # How long since the last ``last_verified`` touch before a cached
     # knowledge file is flagged as stale in the index (hours). When a
@@ -108,6 +114,7 @@ class _CoreSettings(BaseModel):
     web_knowledge_cache_ttl_hours: int = Field(
         default=72,
         description="Hours since last_verified before a cached knowledge file is flagged as stale in the index.",
+        json_schema_extra={"advanced": True},
     )
     # Bound on the web_knowledge sub-agent's tool requests per
     # consultation. Each request is one Markdown read, one web_search,
@@ -115,6 +122,7 @@ class _CoreSettings(BaseModel):
     web_knowledge_request_limit: int = Field(
         default=12,
         description="Request budget for the web_knowledge sub-agent per consultation.",
+        json_schema_extra={"advanced": True},
     )
     # Web-knowledge gateway sub-agent model. Defaults to the llmio
     # tier-1 flash model; override to route this agent to a different
@@ -122,6 +130,7 @@ class _CoreSettings(BaseModel):
     web_knowledge_model: str = Field(
         default="deepseek/deepseek-v4-flash",
         description="Model alias for the web-knowledge gateway sub-agent.",
+        json_schema_extra={"advanced": True},
     )
     # Per-pass request budget for the implement (coordinator) agent.
     # Default 500 — high enough that normal-sized tickets finish in a
@@ -137,6 +146,7 @@ class _CoreSettings(BaseModel):
         le=5000,
         alias="MILL_PER_PASS_REQUEST_BUDGET",
         description="Per-pass request budget for the implement (coordinator) agent. Default 500.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on total tool calls per coordinator (implement) trace.
     # The request cap defaults to 500; this ceiling sits generously
@@ -147,6 +157,7 @@ class _CoreSettings(BaseModel):
         default=300,
         ge=1,
         description="Hard cap on total tool calls per coordinator (implement) trace.",
+        json_schema_extra={"advanced": True},
     )
     # Wall-clock timeout (seconds) for a single implement agent pass.
     # When the agent exceeds this duration the pass is terminated and
@@ -159,6 +170,7 @@ class _CoreSettings(BaseModel):
         ge=60,
         alias="MILL_COORDINATOR_TIMEOUT_SECONDS",
         description="Wall-clock timeout (seconds) for a single implement agent pass.",
+        json_schema_extra={"advanced": True},
     )
     # Per-stage overrides for the coordinator (implement) timeout.
     # Keys are stage names; values are seconds.  Falls back to
@@ -167,6 +179,7 @@ class _CoreSettings(BaseModel):
     coordinator_timeout_overrides: dict[str, int] = Field(
         default_factory=dict,
         description="Per-stage coordinator timeout overrides (dict). Keys are stage names, values are seconds.",
+        json_schema_extra={"advanced": True},
     )
     # Per-subtask request budget when the coordinator delegates via
     # ``spawn_subtask``. The parent's ``coordinator_request_limit``
@@ -175,6 +188,7 @@ class _CoreSettings(BaseModel):
     subtask_request_limit: int = Field(
         default=30,
         description="Per-subtask request budget when the coordinator delegates via spawn_subtask.",
+        json_schema_extra={"advanced": True},
     )
     # The test agent inspects failing output, reads the relevant
     # sources, and distills the cause — exploration-heavy work that
@@ -194,6 +208,7 @@ class _CoreSettings(BaseModel):
         default=30,
         ge=1,
         description="Request budget for the test agent when diagnosing failures.",
+        json_schema_extra={"advanced": True},
     )
     # Max implement→test fix iterations before BLOCKing. Complex
     # tickets may need several correction rounds.
@@ -201,6 +216,7 @@ class _CoreSettings(BaseModel):
         default=8,
         ge=0,
         description="Maximum implement→test fix iterations before the ticket is BLOCKED.",
+        json_schema_extra={"advanced": True},
     )
     # Bounded retry for TRANSIENT model/network failures (HTTP 429,
     # HTTP 5xx, connection/read timeouts) — used by every model call
@@ -238,6 +254,7 @@ class _CoreSettings(BaseModel):
         default=3600,
         ge=60,
         description="Seconds between proactive OpenRouter credit-balance polls.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- startup re-queue & periodic first-tick jitter ---
@@ -246,12 +263,14 @@ class _CoreSettings(BaseModel):
         default=5,
         ge=1,
         description="Tickets enqueued per batch in the startup re-queue drip feed.",
+        json_schema_extra={"advanced": True},
     )
     # Pause (seconds) between batches in the startup re-queue drip feed.
     requeue_batch_pause_seconds: float = Field(
         default=2.0,
         ge=0.0,
         description="Pause (seconds) between batches in the startup re-queue drip feed.",
+        json_schema_extra={"advanced": True},
     )
     # Max random spread (seconds) added to the per-repo periodic pass
     # first-tick delay, spreading the initial fire across a window so
@@ -260,6 +279,7 @@ class _CoreSettings(BaseModel):
         default=30,
         ge=0,
         description="Max random jitter (seconds) added to per-repo periodic pass first-tick delay.",
+        json_schema_extra={"advanced": True},
     )
 
     # Short-TTL cache for the board-poll GET /tickets endpoint (seconds).
@@ -274,6 +294,7 @@ class _CoreSettings(BaseModel):
         default=0.0,
         ge=0.0,
         description="Short-TTL cache for the board-poll GET /tickets endpoint (seconds). 0.0 disables.",
+        json_schema_extra={"advanced": True},
     )
 
     # Retry policy for stage-level transient errors (httpx.ConnectError,
@@ -284,14 +305,17 @@ class _CoreSettings(BaseModel):
     stage_retry_max_attempts: int = Field(
         default=5,
         description="Maximum stage-level retry attempts for transient errors before escalating.",
+        json_schema_extra={"advanced": True},
     )
     stage_retry_base_delay: float = Field(
         default=2.0,
         description="Base delay (seconds) for exponential backoff between stage retries.",
+        json_schema_extra={"advanced": True},
     )
     stage_retry_max_delay: float = Field(
         default=60.0,
         description="Maximum delay (seconds) for exponential backoff between stage retries.",
+        json_schema_extra={"advanced": True},
     )
     # Global-network-outage parking. When a stage fails with a
     # host-resolution error AND this probe host doesn't resolve either,
@@ -307,6 +331,7 @@ class _CoreSettings(BaseModel):
         default=120,
         ge=1,
         description="Seconds between re-poll attempts during a detected network outage.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
@@ -316,16 +341,19 @@ class _CoreSettings(BaseModel):
         default=15,
         ge=1,
         description="Per-call request cap for the domain-expert consultation sub-agent.",
+        json_schema_extra={"advanced": True},
     )
     explore_request_limit: int = Field(
         default=100,
         ge=1,
         description="Per-call request cap for the exploration sub-agent.",
+        json_schema_extra={"advanced": True},
     )
     explore_max_tokens: int = Field(
         default=4096,
         ge=1,
         description="Maximum output tokens for the exploration sub-agent.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
@@ -345,6 +373,7 @@ class _CoreSettings(BaseModel):
         default=80,
         ge=1,
         description="Per-call request cap for the refine agent's tool loop.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for non-escalated (simple/sonnet) refine runs.
     # Lower than the main cap (80) because simple tickets need fewer
@@ -353,6 +382,7 @@ class _CoreSettings(BaseModel):
         default=40,
         ge=1,
         description="Per-call request cap for non-escalated (simple/sonnet) refine runs.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the dedup check — the agent reads candidate
     # ticket bodies to verify matches, so allow a slightly larger
@@ -362,6 +392,7 @@ class _CoreSettings(BaseModel):
         default=12,
         ge=1,
         description="Per-call request cap for the pre-refine dedup check.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the obsolescence gate — the agent reads a few
     # cited files to verify the gap, so allow a slightly larger budget
@@ -370,6 +401,7 @@ class _CoreSettings(BaseModel):
         default=6,
         ge=1,
         description="Per-call request cap for the obsolescence gate.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the periodic audit agent's tool loop. The audit
     # agent does broad work (license scan, pip-audit, coverage
@@ -380,6 +412,7 @@ class _CoreSettings(BaseModel):
         default=80,
         ge=1,
         description="Per-call request cap for the periodic audit agent's tool loop.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the docstring-coverage agent's tool loop. The
     # docstring-coverage agent does broad work (explore storms scanning
@@ -390,6 +423,7 @@ class _CoreSettings(BaseModel):
         default=80,
         ge=1,
         description="Per-call request cap for the docstring-coverage agent's tool loop.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on total tool calls per docstring_coverage trace. 100 tool
     # calls is far beyond what any legitimate docstring scan requires —
@@ -398,6 +432,7 @@ class _CoreSettings(BaseModel):
         default=100,
         ge=1,
         description="Hard cap on total tool calls per docstring_coverage trace.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on tool-call errors before auto-termination. A healthy
     # inspection should have near-zero errors; 20 indicates a broken
@@ -406,6 +441,7 @@ class _CoreSettings(BaseModel):
         default=20,
         ge=0,
         description="Hard cap on tool-call errors before auto-termination of docstring_coverage agent.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the test-gap agent's tool loop. The test-gap
     # agent does broad work (explore storms scanning the full repo for
@@ -416,6 +452,7 @@ class _CoreSettings(BaseModel):
         default=80,
         ge=1,
         description="Per-call request cap for the test-gap agent's tool loop.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on total tool calls per test_gap trace. 100 tool calls
     # is far beyond what any legitimate test-coverage scan requires —
@@ -424,6 +461,7 @@ class _CoreSettings(BaseModel):
         default=100,
         ge=1,
         description="Hard cap on total tool calls per test_gap trace.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on tool-call errors before auto-termination. A healthy
     # inspection should have near-zero errors; 20 indicates a broken
@@ -432,6 +470,7 @@ class _CoreSettings(BaseModel):
         default=20,
         ge=0,
         description="Hard cap on tool-call errors before auto-termination of test_gap agent.",
+        json_schema_extra={"advanced": True},
     )
     # Per-call cap for the module-size agent's tool loop.  The module-size
     # agent does a bounded file-count scan and is lighter than audit/health;
@@ -440,18 +479,21 @@ class _CoreSettings(BaseModel):
         default=60,
         ge=1,
         description="Per-call request cap for the module-size agent's tool loop.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on total tool calls per module_size trace.
     module_size_max_tool_calls: int = Field(
         default=80,
         ge=1,
         description="Hard cap on total tool calls per module_size trace.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on tool-call errors before auto-termination.
     module_size_max_errors: int = Field(
         default=20,
         ge=0,
         description="Hard cap on tool-call errors before auto-termination of module_size agent.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on total tool calls per refine trace. A hard ceiling above
     # any legitimate refine run (the request cap is 80; 120 tool calls is a
@@ -460,6 +502,7 @@ class _CoreSettings(BaseModel):
         default=120,
         ge=1,
         description="Hard cap on total tool calls per refine trace.",
+        json_schema_extra={"advanced": True},
     )
     # Hard cap on tool-call errors before auto-termination. Matches the
     # test_gap/trace_inspector default; a healthy refine has near-zero
@@ -468,6 +511,7 @@ class _CoreSettings(BaseModel):
         default=20,
         ge=0,
         description="Hard cap on tool-call errors before auto-termination of refine agent.",
+        json_schema_extra={"advanced": True},
     )
     # Dynamic request-limit multiplier for large/complex specs.
     # When the draft exceeds refine_dynamic_limit_spec_chars (default
@@ -478,16 +522,19 @@ class _CoreSettings(BaseModel):
         default=1.5,
         gt=1.0,
         description="Multiplier for dynamic request-limit on large/complex specs.",
+        json_schema_extra={"advanced": True},
     )
     refine_dynamic_limit_min: int = Field(
         default=12,
         ge=1,
         description="Floor for dynamic request-limit on large/complex specs.",
+        json_schema_extra={"advanced": True},
     )
     refine_dynamic_limit_spec_chars: int = Field(
         default=3000,
         ge=1,
         description="Character threshold above which the dynamic request-limit multiplier activates.",
+        json_schema_extra={"advanced": True},
     )
     # Emit a warning when the refine agent consumes more than this
     # fraction (0.0–1.0) of its request_limit, so near-exhaustion
@@ -497,14 +544,17 @@ class _CoreSettings(BaseModel):
         gt=0.0,
         le=1.0,
         description="Fraction (0.0–1.0) of request_limit at which a near-exhaustion warning is emitted.",
+        json_schema_extra={"advanced": True},
     )
     doc_request_limit: int = Field(
         default=32,
         description="Per-call request cap for the document agent.",
+        json_schema_extra={"advanced": True},
     )
     doc_classifier_request_limit: int = Field(
         default=3,
         description="Per-call request cap for the cheap doc-classifier gate.",
+        json_schema_extra={"advanced": True},
     )
     # Caps the git diff fed to the cheap doc-classifier gate. Truncation
     # is safe here: the classifier is conservatively biased toward
@@ -514,6 +564,7 @@ class _CoreSettings(BaseModel):
     doc_classifier_diff_max_chars: int = Field(
         default=6000,
         description="Character cap on the git diff fed to the doc-classifier gate.",
+        json_schema_extra={"advanced": True},
     )
     # Maximum characters of the memory ledger to load per agent pass.
     # When the file exceeds this, the oldest entries are dropped from the
@@ -524,6 +575,7 @@ class _CoreSettings(BaseModel):
         default=8000,
         ge=0,
         description="Maximum characters of the memory ledger to load per agent pass. 0 disables capping.",
+        json_schema_extra={"advanced": True},
     )
     # Maximum characters of the retrospect stage's history + comments
     # logs fed to the agent. These are chronological, so the most-recent
@@ -532,6 +584,7 @@ class _CoreSettings(BaseModel):
         default=12000,
         ge=0,
         description="Maximum characters of history+comments logs fed to the retrospect agent. 0 disables.",
+        json_schema_extra={"advanced": True},
     )
     # Max number of entries retained in AGENT_CANDIDATES.md (the per-board
     # append-only queue of proposed AGENT.md rule additions). Pending
@@ -541,12 +594,14 @@ class _CoreSettings(BaseModel):
         default=100,
         ge=0,
         description="Max entries retained in AGENT_CANDIDATES.md. 0 disables pruning.",
+        json_schema_extra={"advanced": True},
     )
     # How many days back closed tickets are considered as duplicate
     # candidates by the pre-refine dedup check.
     dedup_lookback_days: int = Field(
         default=7,
         description="Days back closed tickets are considered as duplicate candidates.",
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of candidates to pass to the dedup LLM after
     # similarity-based pre-filtering.  Caps the token budget regardless
@@ -555,6 +610,7 @@ class _CoreSettings(BaseModel):
         default=8,
         ge=1,
         description="Maximum candidate tickets passed to the dedup LLM after similarity pre-filtering.",
+        json_schema_extra={"advanced": True},
     )
     # When True (default), the pre-refine dedup LLM call is skipped
     # entirely when the draft shares zero meaningful token overlap with
@@ -563,6 +619,7 @@ class _CoreSettings(BaseModel):
     dedup_skip_on_no_overlap: bool = Field(
         default=True,
         description="When true, skip the dedup LLM call when the draft shares zero token overlap with all candidates.",
+        json_schema_extra={"advanced": True},
     )
     # Caps each candidate body fed to the dedup prompt (mirrors
     # doc_classifier_diff_max_chars). Generous by default so it only
@@ -570,6 +627,7 @@ class _CoreSettings(BaseModel):
     dedup_candidate_body_max_chars: int = Field(
         default=4000,
         description="Character cap on each candidate body fed to the dedup prompt.",
+        json_schema_extra={"advanced": True},
     )
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
@@ -694,6 +752,7 @@ class _CoreSettings(BaseModel):
         default=1800,
         gt=0,
         description="Wall-clock cap (seconds) for shell tool and test command execution.",
+        json_schema_extra={"advanced": True},
     )
     # Safety net: if a ticket re-enters the *same* model-driven stage
     # this many times without ever progressing (e.g. its run keeps being
@@ -704,6 +763,7 @@ class _CoreSettings(BaseModel):
         default=3,
         ge=0,
         description="Maximum re-entries to the same stage without progress before escalating to BLOCKED.",
+        json_schema_extra={"advanced": True},
     )
     # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
     # LLM spend exceeds this value (across all stages), the worker
@@ -723,6 +783,7 @@ class _CoreSettings(BaseModel):
         default=15,
         ge=0,
         description="Maximum Langfuse traces per ticket. 0 disables.",
+        json_schema_extra={"advanced": True},
     )
     max_openrouter_marginal_usd_per_ticket: float = Field(
         default=3.0,
@@ -737,6 +798,7 @@ class _CoreSettings(BaseModel):
     stage_timeout_seconds: int = Field(
         default=2400,
         description="Per-stage wall-clock timeout (seconds). 0 disables.",
+        json_schema_extra={"advanced": True},
     )
     # Per-stage timeout overrides (JSON dict via env var, e.g.
     # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"refine":1200}').
@@ -754,6 +816,7 @@ class _CoreSettings(BaseModel):
     stage_timeout_overrides: dict[str, int] = Field(
         default_factory=lambda: {"refine": 900},
         description="Per-stage timeout overrides (dict). Keys are stage names, values are seconds.",
+        json_schema_extra={"advanced": True},
     )
     # Maximum seconds to wait for in-flight periodic-agent passes
     # (survey, audit, health, …) to finish before tearing the worker
@@ -765,6 +828,7 @@ class _CoreSettings(BaseModel):
     shutdown_grace_seconds: int = Field(
         default=1800,
         description="Maximum seconds to wait for in-flight periodic passes before teardown.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- command sandbox (always a disposable container; no local mode) ---
@@ -780,14 +844,17 @@ class _CoreSettings(BaseModel):
     sandbox_memory: str = Field(
         default="2g",
         description="Memory limit for sandbox containers.",
+        json_schema_extra={"advanced": True},
     )
     sandbox_pids_limit: int = Field(
         default=512,
         description="PID limit for sandbox containers.",
+        json_schema_extra={"advanced": True},
     )
     sandbox_readonly: bool = Field(
         default=True,
         description="When true, sandbox containers run with read-only root filesystem.",
+        json_schema_extra={"advanced": True},
     )
     # Docker network sandbox containers connect to. The network must be
     # internal (no direct internet) with a filtering proxy attached —
@@ -795,6 +862,7 @@ class _CoreSettings(BaseModel):
     sandbox_network: str = Field(
         default="mill-sandbox-net",
         description="Docker network sandbox containers connect to.",
+        json_schema_extra={"advanced": True},
     )
     # URL of the egress proxy. Sandbox containers receive HTTP_PROXY,
     # HTTPS_PROXY, http_proxy, and https_proxy set to this value.

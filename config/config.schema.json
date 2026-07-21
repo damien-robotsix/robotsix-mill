@@ -48,12 +48,14 @@
           "type": "boolean"
         },
         "ci_monitor_interval_seconds": {
+          "advanced": true,
           "default": 900,
           "description": "Seconds between CI monitor polls for this repo (minimum 60).",
           "title": "Ci Monitor Interval Seconds",
           "type": "integer"
         },
         "cross_repo_target": {
+          "advanced": true,
           "anyOf": [
             {
               "$ref": "#/$defs/CrossRepoTarget"
@@ -66,6 +68,7 @@
           "description": "Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery."
         },
         "deployed_log_folder": {
+          "advanced": true,
           "anyOf": [
             {
               "type": "string"
@@ -119,12 +122,14 @@
           "type": "string"
         },
         "max_concurrency": {
+          "advanced": true,
           "default": 1,
           "description": "Maximum number of tickets from this repo processed in parallel (minimum 1).",
           "title": "Max Concurrency",
           "type": "integer"
         },
         "max_inflight_prs": {
+          "advanced": true,
           "default": 3,
           "description": "Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
           "title": "Max Inflight Prs",
@@ -149,6 +154,7 @@
           "type": "string"
         },
         "sandbox_image": {
+          "advanced": true,
           "anyOf": [
             {
               "type": "string"
@@ -172,6 +178,7 @@
           "type": "string"
         },
         "working_branch": {
+          "advanced": true,
           "anyOf": [
             {
               "type": "string"
@@ -541,6 +548,7 @@
           "title": "Github App Private Key Path"
         },
         "MILL_CLAUDE_MAX_CONCURRENCY": {
+          "advanced": true,
           "default": 4,
           "description": "Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
           "minimum": 1,
@@ -548,6 +556,7 @@
           "type": "integer"
         },
         "MILL_COORDINATOR_TIMEOUT_SECONDS": {
+          "advanced": true,
           "default": 600,
           "description": "Wall-clock timeout (seconds) for a single implement agent pass.",
           "minimum": 60,
@@ -555,6 +564,7 @@
           "type": "integer"
         },
         "MILL_IMPLEMENT_PASS_TIMEOUT": {
+          "advanced": true,
           "default": 300,
           "description": "Progress-reset watchdog (seconds) for the implement agent. The timer resets on every tool call (read_file, write_file, explore, etc.) \u2014 the agent is killed only after this many seconds of NO progress. 0 disables the watchdog and falls back to the flat coordinator_timeout_seconds cap.",
           "minimum": 0,
@@ -568,6 +578,7 @@
           "type": "boolean"
         },
         "MILL_MAX_GLOBAL_CONCURRENCY": {
+          "advanced": true,
           "default": 12,
           "description": "Host-level cap on total concurrently-running stages across ALL boards.",
           "minimum": 1,
@@ -575,6 +586,7 @@
           "type": "integer"
         },
         "MILL_PER_PASS_REQUEST_BUDGET": {
+          "advanced": true,
           "default": 500,
           "description": "Per-pass request budget for the implement (coordinator) agent. Default 500.",
           "maximum": 5000,
@@ -605,6 +617,7 @@
           "type": "boolean"
         },
         "MILL_SANDBOX_OP_TIMEOUT": {
+          "advanced": true,
           "default": 300,
           "description": "Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
           "minimum": 0,
@@ -618,6 +631,7 @@
           "type": "boolean"
         },
         "MILL_SCOPE_TRIAGE_MAX_FILES": {
+          "advanced": true,
           "default": 50,
           "description": "Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
           "minimum": 0,
@@ -637,6 +651,7 @@
           "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic agent-check passes.",
           "title": "Agent Check Interval Seconds",
@@ -674,6 +689,7 @@
           "type": "string"
         },
         "audit_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic audit passes.",
           "title": "Audit Interval Seconds",
@@ -686,6 +702,7 @@
           "type": "boolean"
         },
         "audit_request_limit": {
+          "advanced": true,
           "default": 80,
           "description": "Per-call request cap for the periodic audit agent's tool loop.",
           "minimum": 1,
@@ -699,6 +716,7 @@
           "type": "boolean"
         },
         "auto_fix_max_cycles": {
+          "advanced": true,
           "default": 6,
           "description": "Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without green CI. 0 disables.",
           "minimum": 0,
@@ -712,12 +730,14 @@
           "type": "boolean"
         },
         "auto_merge_main_debt_detection_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
           "title": "Auto Merge Main Debt Detection Enabled",
           "type": "boolean"
         },
         "bc_check_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic bc-check passes.",
           "title": "Bc Check Interval Seconds",
@@ -730,6 +750,7 @@
           "type": "boolean"
         },
         "bespoke_discovery_interval_seconds": {
+          "advanced": true,
           "default": 600,
           "description": "Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles.",
           "title": "Bespoke Discovery Interval Seconds",
@@ -742,6 +763,7 @@
           "type": "boolean"
         },
         "board_list_cache_ttl_seconds": {
+          "advanced": true,
           "default": 0.0,
           "description": "Short-TTL cache for the board-poll GET /tickets endpoint (seconds). 0.0 disables.",
           "minimum": 0.0,
@@ -755,6 +777,7 @@
           "type": "string"
         },
         "changelog_autofill_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between changelog-autofill passes.",
           "title": "Changelog Autofill Interval Seconds",
@@ -767,6 +790,7 @@
           "type": "boolean"
         },
         "ci_debt_recheck_interval_seconds": {
+          "advanced": true,
           "default": 3600,
           "description": "Seconds between CI-debt recheck passes.",
           "title": "Ci Debt Recheck Interval Seconds",
@@ -779,6 +803,7 @@
           "type": "boolean"
         },
         "ci_fix_max_attempts": {
+          "advanced": true,
           "default": 2,
           "description": "Multi-repo merge path only: max ci-fix attempts per cycle.",
           "minimum": 0,
@@ -786,6 +811,7 @@
           "type": "integer"
         },
         "ci_fix_max_cycles": {
+          "advanced": true,
           "default": 3,
           "description": "Multi-repo merge path only: max ci-fix cycles per ticket.",
           "minimum": 0,
@@ -793,6 +819,7 @@
           "type": "integer"
         },
         "ci_fix_max_identical_failures": {
+          "advanced": true,
           "default": 2,
           "description": "Consecutive identical CI failure cycles before escalating. 0 disables.",
           "minimum": 0,
@@ -800,6 +827,7 @@
           "type": "integer"
         },
         "ci_fix_max_iterations": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
           "minimum": 0,
@@ -821,6 +849,7 @@
           "title": "Ci Fix Memory Path"
         },
         "ci_fix_request_limit": {
+          "advanced": true,
           "default": 120,
           "description": "Per-run request budget for the ci-fix agent. 0 disables.",
           "minimum": 0,
@@ -828,6 +857,7 @@
           "type": "integer"
         },
         "ci_fix_wait_poll_interval_s": {
+          "advanced": true,
           "default": 30.0,
           "description": "Seconds between CI conclusion polls during wait_for_ci.",
           "exclusiveMinimum": 0,
@@ -835,6 +865,7 @@
           "type": "number"
         },
         "ci_fix_wait_timeout_s": {
+          "advanced": true,
           "default": 1500.0,
           "description": "Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
           "exclusiveMinimum": 0,
@@ -842,6 +873,7 @@
           "type": "number"
         },
         "ci_log_max_bytes": {
+          "advanced": true,
           "default": 65536,
           "description": "Maximum bytes of CI log output to capture per check run.",
           "title": "Ci Log Max Bytes",
@@ -862,18 +894,21 @@
           "title": "Ci Patterns Path"
         },
         "claude_sdk_vision_enabled": {
+          "advanced": true,
           "default": false,
           "description": "Enable inline-image (vision) input on the Claude SDK transport. Requires a robotsix-llmio pin bump with real image-input support.",
           "title": "Claude Sdk Vision Enabled",
           "type": "boolean"
         },
         "codeql_fp_triage_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, ci_fix may invoke codeql_fp_triage to dismiss high-confidence CodeQL false positives.",
           "title": "Codeql Fp Triage Enabled",
           "type": "boolean"
         },
         "command_timeout": {
+          "advanced": true,
           "default": 1800,
           "description": "Wall-clock cap (seconds) for shell tool and test command execution.",
           "exclusiveMinimum": 0,
@@ -887,6 +922,7 @@
           "type": "boolean"
         },
         "completeness_check_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic completeness-check passes.",
           "title": "Completeness Check Interval Seconds",
@@ -899,12 +935,14 @@
           "type": "boolean"
         },
         "completeness_check_request_limit": {
+          "advanced": true,
           "default": 80,
           "description": "Request budget for the completeness-check agent.",
           "title": "Completeness Check Request Limit",
           "type": "integer"
         },
         "config_sync_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between automatic config-sync passes.",
           "title": "Config Sync Interval Seconds",
@@ -917,6 +955,7 @@
           "type": "boolean"
         },
         "consult_request_limit": {
+          "advanced": true,
           "default": 15,
           "description": "Per-call request cap for the domain-expert consultation sub-agent.",
           "minimum": 1,
@@ -924,6 +963,7 @@
           "type": "integer"
         },
         "coordinator_max_tool_calls": {
+          "advanced": true,
           "default": 300,
           "description": "Hard cap on total tool calls per coordinator (implement) trace.",
           "minimum": 1,
@@ -934,11 +974,13 @@
           "additionalProperties": {
             "type": "integer"
           },
+          "advanced": true,
           "description": "Per-stage coordinator timeout overrides (dict). Keys are stage names, values are seconds.",
           "title": "Coordinator Timeout Overrides",
           "type": "object"
         },
         "copy_paste_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic copy-paste passes.",
           "title": "Copy Paste Interval Seconds",
@@ -958,6 +1000,7 @@
           "type": "string"
         },
         "data_dir_gc_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between periodic data-dir GC passes.",
           "title": "Data Dir Gc Interval Seconds",
@@ -976,6 +1019,7 @@
           "type": "boolean"
         },
         "data_dir_gc_prune_closed_age_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Minimum age (seconds) of a terminal ticket before its workspace is eligible for GC.",
           "minimum": 0,
@@ -1001,6 +1045,7 @@
           "type": "boolean"
         },
         "data_dir_gc_prune_orphans_age_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Minimum age (seconds) of an orphan workspace before GC.",
           "minimum": 0,
@@ -1014,6 +1059,7 @@
           "type": "boolean"
         },
         "data_dir_gc_prune_terminal_clones_age_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Minimum age (seconds) before terminal-ticket clones are pruned.",
           "minimum": 0,
@@ -1027,6 +1073,7 @@
           "type": "string"
         },
         "db_maintenance_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between periodic DB maintenance passes.",
           "title": "Db Maintenance Interval Seconds",
@@ -1039,18 +1086,21 @@
           "type": "boolean"
         },
         "dedup_candidate_body_max_chars": {
+          "advanced": true,
           "default": 4000,
           "description": "Character cap on each candidate body fed to the dedup prompt.",
           "title": "Dedup Candidate Body Max Chars",
           "type": "integer"
         },
         "dedup_lookback_days": {
+          "advanced": true,
           "default": 7,
           "description": "Days back closed tickets are considered as duplicate candidates.",
           "title": "Dedup Lookback Days",
           "type": "integer"
         },
         "dedup_max_candidates": {
+          "advanced": true,
           "default": 8,
           "description": "Maximum candidate tickets passed to the dedup LLM after similarity pre-filtering.",
           "minimum": 1,
@@ -1058,6 +1108,7 @@
           "type": "integer"
         },
         "dedup_request_limit": {
+          "advanced": true,
           "default": 12,
           "description": "Per-call request cap for the pre-refine dedup check.",
           "minimum": 1,
@@ -1065,6 +1116,7 @@
           "type": "integer"
         },
         "dedup_skip_on_no_overlap": {
+          "advanced": true,
           "default": true,
           "description": "When true, skip the dedup LLM call when the draft shares zero token overlap with all candidates.",
           "title": "Dedup Skip On No Overlap",
@@ -1083,6 +1135,7 @@
           "type": "boolean"
         },
         "deliver_max_identical_blocks": {
+          "advanced": true,
           "default": 2,
           "description": "Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
           "minimum": 0,
@@ -1090,18 +1143,21 @@
           "type": "integer"
         },
         "delta_context_retry_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, retry/audit/re-refine passes receive only the delta rather than full context.",
           "title": "Delta Context Retry Enabled",
           "type": "boolean"
         },
         "dependabot_ingest_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between Dependabot ingest passes.",
           "title": "Dependabot Ingest Interval Seconds",
           "type": "integer"
         },
         "dependabot_ingest_max_drafts_per_pass": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum Dependabot drafts per ingest pass. 0 disables.",
           "minimum": 0,
@@ -1128,6 +1184,7 @@
           "title": "Deploy Api Url"
         },
         "diagnostic_ci_failure_threshold": {
+          "advanced": true,
           "default": 3,
           "description": "Distinct-ticket threshold for auto-filing CI fix proposals.",
           "minimum": 0,
@@ -1149,6 +1206,7 @@
           "title": "Diagnostic Events Path"
         },
         "diagnostic_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between automatic diagnostic passes.",
           "title": "Diagnostic Interval Seconds",
@@ -1175,12 +1233,14 @@
           "type": "string"
         },
         "doc_classifier_diff_max_chars": {
+          "advanced": true,
           "default": 6000,
           "description": "Character cap on the git diff fed to the doc-classifier gate.",
           "title": "Doc Classifier Diff Max Chars",
           "type": "integer"
         },
         "doc_classifier_request_limit": {
+          "advanced": true,
           "default": 3,
           "description": "Per-call request cap for the cheap doc-classifier gate.",
           "title": "Doc Classifier Request Limit",
@@ -1201,18 +1261,21 @@
           "title": "Doc Memory Path"
         },
         "doc_request_limit": {
+          "advanced": true,
           "default": 32,
           "description": "Per-call request cap for the document agent.",
           "title": "Doc Request Limit",
           "type": "integer"
         },
         "docstring_coverage_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic docstring-coverage passes.",
           "title": "Docstring Coverage Interval Seconds",
           "type": "integer"
         },
         "docstring_coverage_max_errors": {
+          "advanced": true,
           "default": 20,
           "description": "Hard cap on tool-call errors before auto-termination of docstring_coverage agent.",
           "minimum": 0,
@@ -1220,6 +1283,7 @@
           "type": "integer"
         },
         "docstring_coverage_max_tool_calls": {
+          "advanced": true,
           "default": 100,
           "description": "Hard cap on total tool calls per docstring_coverage trace.",
           "minimum": 1,
@@ -1233,6 +1297,7 @@
           "type": "boolean"
         },
         "docstring_coverage_request_limit": {
+          "advanced": true,
           "default": 80,
           "description": "Per-call request cap for the docstring-coverage agent's tool loop.",
           "minimum": 1,
@@ -1246,12 +1311,14 @@
           "type": "boolean"
         },
         "epic_dedup_lookback_days": {
+          "advanced": true,
           "default": 7,
           "description": "Recency window (days) for advisory duplicate detection in epic decomposition.",
           "title": "Epic Dedup Lookback Days",
           "type": "integer"
         },
         "explore_max_tokens": {
+          "advanced": true,
           "default": 4096,
           "description": "Maximum output tokens for the exploration sub-agent.",
           "minimum": 1,
@@ -1259,6 +1326,7 @@
           "type": "integer"
         },
         "explore_request_limit": {
+          "advanced": true,
           "default": 100,
           "description": "Per-call request cap for the exploration sub-agent.",
           "minimum": 1,
@@ -1266,12 +1334,14 @@
           "type": "integer"
         },
         "fetch_image": {
+          "advanced": true,
           "default": "curlimages/curl:8.17.0",
           "description": "Docker image used for isolated web_fetch calls (curl-based, network-only, no repo mount).",
           "title": "Fetch Image",
           "type": "string"
         },
         "forge_parity_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic forge-parity passes.",
           "title": "Forge Parity Interval Seconds",
@@ -1290,6 +1360,7 @@
           "type": "boolean"
         },
         "frontend_sync_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic frontend-sync passes.",
           "title": "Frontend Sync Interval Seconds",
@@ -1316,6 +1387,7 @@
           "type": "string"
         },
         "health_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic health passes.",
           "title": "Health Interval Seconds",
@@ -1328,6 +1400,7 @@
           "type": "boolean"
         },
         "implement_max_spawns_per_ticket": {
+          "advanced": true,
           "default": 3,
           "description": "Maximum times the implement stage may be entered per ticket. 0 disables.",
           "minimum": 0,
@@ -1349,6 +1422,7 @@
           "title": "Implement Memory Path"
         },
         "implement_stall_threshold": {
+          "advanced": true,
           "default": 2,
           "description": "Consecutive no-progress BLOCKED cycles before stall guard fires. 0 disables.",
           "minimum": 0,
@@ -1356,12 +1430,14 @@
           "type": "integer"
         },
         "langfuse_cleanup_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between Langfuse trace cleanup passes.",
           "title": "Langfuse Cleanup Interval Seconds",
           "type": "integer"
         },
         "langfuse_cleanup_max_traces": {
+          "advanced": true,
           "default": 5000,
           "description": "Maximum traces to retain in the Langfuse project during cleanup.",
           "title": "Langfuse Cleanup Max Traces",
@@ -1386,6 +1462,7 @@
           "type": "boolean"
         },
         "low_credit_poll_interval_seconds": {
+          "advanced": true,
           "default": 3600,
           "description": "Seconds between proactive OpenRouter credit-balance polls.",
           "minimum": 60,
@@ -1400,6 +1477,7 @@
           "type": "number"
         },
         "max_archived_tickets": {
+          "advanced": true,
           "default": 40,
           "description": "Maximum terminal-state tickets to retain. 0 disables purging.",
           "minimum": 0,
@@ -1407,6 +1485,7 @@
           "type": "integer"
         },
         "max_comments_per_ticket": {
+          "advanced": true,
           "default": 500,
           "description": "Maximum Comment rows per non-terminal ticket. Open threads are never pruned. 0 disables.",
           "minimum": 0,
@@ -1414,6 +1493,7 @@
           "type": "integer"
         },
         "max_events_per_ticket": {
+          "advanced": true,
           "default": 200,
           "description": "Maximum TicketEvent rows per non-terminal ticket. 0 disables capping.",
           "minimum": 0,
@@ -1421,6 +1501,7 @@
           "type": "integer"
         },
         "max_fix_iterations": {
+          "advanced": true,
           "default": 8,
           "description": "Maximum implement\u2192test fix iterations before the ticket is BLOCKED.",
           "minimum": 0,
@@ -1428,6 +1509,7 @@
           "type": "integer"
         },
         "max_implement_review_cycles": {
+          "advanced": true,
           "default": 10,
           "description": "Ceiling on total implement passes per ticket across all review rounds. 0 disables.",
           "minimum": 0,
@@ -1435,6 +1517,7 @@
           "type": "integer"
         },
         "max_memory_chars": {
+          "advanced": true,
           "default": 8000,
           "description": "Maximum characters of the memory ledger to load per agent pass. 0 disables capping.",
           "minimum": 0,
@@ -1449,6 +1532,7 @@
           "type": "number"
         },
         "max_re_refine_cycles_before_cheap": {
+          "advanced": true,
           "default": 2,
           "description": "Sendback re-refine rounds before forcing the cheap model. 0 disables.",
           "minimum": 0,
@@ -1456,6 +1540,7 @@
           "type": "integer"
         },
         "max_refine_explore_calls": {
+          "advanced": true,
           "default": 4,
           "description": "Hard cap on explore/parallel_explore sub-agent calls per refine run. Set to 0 to disable exploration entirely.",
           "minimum": 0,
@@ -1463,6 +1548,7 @@
           "type": "integer"
         },
         "max_refine_passes_per_ticket": {
+          "advanced": true,
           "default": 3,
           "description": "Per-ticket ceiling on total refine passes before escalating to BLOCKED. 0 disables.",
           "minimum": 0,
@@ -1470,6 +1556,7 @@
           "type": "integer"
         },
         "max_refine_read_file_calls": {
+          "advanced": true,
           "default": 10,
           "description": "Hard cap on read_file calls per refine/triage agent run. Set to 0 to disable the cap.",
           "minimum": 0,
@@ -1483,6 +1570,7 @@
           "type": "number"
         },
         "max_stuck_cycles": {
+          "advanced": true,
           "default": 3,
           "description": "Maximum re-entries to the same stage without progress before escalating to BLOCKED.",
           "minimum": 0,
@@ -1490,6 +1578,7 @@
           "type": "integer"
         },
         "max_traces_per_ticket": {
+          "advanced": true,
           "default": 15,
           "description": "Maximum Langfuse traces per ticket. 0 disables.",
           "minimum": 0,
@@ -1497,6 +1586,7 @@
           "type": "integer"
         },
         "member_sync_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between automatic member-sync passes.",
           "title": "Member Sync Interval Seconds",
@@ -1509,6 +1599,7 @@
           "type": "boolean"
         },
         "merge_poll_seconds": {
+          "advanced": true,
           "default": 120,
           "description": "Re-check cadence (seconds) for human_mr_approval (PR open) waiting for external merge.",
           "exclusiveMinimum": 0,
@@ -1516,6 +1607,7 @@
           "type": "integer"
         },
         "meta_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between automatic meta-agent passes.",
           "title": "Meta Interval Seconds",
@@ -1528,6 +1620,7 @@
           "type": "boolean"
         },
         "module_curator_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic module-curator passes.",
           "title": "Module Curator Interval Seconds",
@@ -1540,6 +1633,7 @@
           "type": "boolean"
         },
         "module_curator_request_limit": {
+          "advanced": true,
           "default": 120,
           "description": "Request budget for the module-curator agent.",
           "minimum": 1,
@@ -1547,12 +1641,14 @@
           "type": "integer"
         },
         "module_size_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic module-size passes.",
           "title": "Module Size Interval Seconds",
           "type": "integer"
         },
         "module_size_max_errors": {
+          "advanced": true,
           "default": 20,
           "description": "Hard cap on tool-call errors before auto-termination of module_size agent.",
           "minimum": 0,
@@ -1560,6 +1656,7 @@
           "type": "integer"
         },
         "module_size_max_tool_calls": {
+          "advanced": true,
           "default": 80,
           "description": "Hard cap on total tool calls per module_size trace.",
           "minimum": 1,
@@ -1573,6 +1670,7 @@
           "type": "boolean"
         },
         "module_size_request_limit": {
+          "advanced": true,
           "default": 60,
           "description": "Per-call request cap for the module-size agent's tool loop.",
           "minimum": 1,
@@ -1580,6 +1678,7 @@
           "type": "integer"
         },
         "network_outage_retry_seconds": {
+          "advanced": true,
           "default": 120,
           "description": "Seconds between re-poll attempts during a detected network outage.",
           "minimum": 1,
@@ -1599,6 +1698,7 @@
           "type": "boolean"
         },
         "obsolescence_request_limit": {
+          "advanced": true,
           "default": 6,
           "description": "Per-call request cap for the obsolescence gate.",
           "minimum": 1,
@@ -1614,6 +1714,7 @@
           "type": "array"
         },
         "orphaned_pr_check_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between orphaned-PR check passes.",
           "title": "Orphaned Pr Check Interval Seconds",
@@ -1632,6 +1733,7 @@
           "type": "boolean"
         },
         "orphaned_pr_max_actions_per_pass": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum combined close+file actions per orphaned-PR pass.",
           "minimum": 1,
@@ -1639,6 +1741,7 @@
           "type": "integer"
         },
         "orphaned_pr_max_closes_per_pass": {
+          "advanced": true,
           "default": 10,
           "description": "Maximum close actions per orphaned-PR pass (in addition to combined cap).",
           "minimum": 1,
@@ -1646,6 +1749,7 @@
           "type": "integer"
         },
         "orphaned_pr_max_files_per_pass": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum file-ticket actions per orphaned-PR pass (in addition to combined cap).",
           "minimum": 1,
@@ -1653,6 +1757,7 @@
           "type": "integer"
         },
         "orphaned_pr_min_age_hours": {
+          "advanced": true,
           "default": 4,
           "description": "Minimum ticket age (hours) before its PR is considered for orphan classification.",
           "minimum": 1,
@@ -1666,6 +1771,7 @@
           "type": "boolean"
         },
         "pin_bump_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between periodic pin-bump passes.",
           "title": "Pin Bump Interval Seconds",
@@ -1678,6 +1784,7 @@
           "type": "boolean"
         },
         "ping_pong_max_alternations": {
+          "advanced": true,
           "default": 3,
           "description": "Ceiling on REBASING to FIXING_CI alternations before escalating. 0 disables.",
           "minimum": 0,
@@ -1691,12 +1798,14 @@
           "type": "boolean"
         },
         "prune_clone_on_close": {
+          "advanced": true,
           "default": true,
           "description": "When true, the workspace clone (repo/) is removed on ticket close.",
           "title": "Prune Clone On Close",
           "type": "boolean"
         },
         "read_file_max_chars": {
+          "advanced": true,
           "default": 50000,
           "description": "Character cap on implicit full read_file payloads. 0 disables.",
           "minimum": 0,
@@ -1704,6 +1813,7 @@
           "type": "integer"
         },
         "rebase_max_attempts": {
+          "advanced": true,
           "default": 3,
           "description": "Maximum rebase attempts per ticket before escalating to BLOCKED.",
           "minimum": 0,
@@ -1725,18 +1835,21 @@
           "title": "Rebase Memory Path"
         },
         "refine_advisory_dedup_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, a cheap advisory-dedup-verification gate runs after inflight-advisory phase.",
           "title": "Refine Advisory Dedup Enabled",
           "type": "boolean"
         },
         "refine_delta_reuse_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, re-refines reuse the prior description.md and apply only the operator's delta.",
           "title": "Refine Delta Reuse Enabled",
           "type": "boolean"
         },
         "refine_dynamic_limit_min": {
+          "advanced": true,
           "default": 12,
           "description": "Floor for dynamic request-limit on large/complex specs.",
           "minimum": 1,
@@ -1744,6 +1857,7 @@
           "type": "integer"
         },
         "refine_dynamic_limit_multiplier": {
+          "advanced": true,
           "default": 1.5,
           "description": "Multiplier for dynamic request-limit on large/complex specs.",
           "exclusiveMinimum": 1.0,
@@ -1751,6 +1865,7 @@
           "type": "number"
         },
         "refine_dynamic_limit_spec_chars": {
+          "advanced": true,
           "default": 3000,
           "description": "Character threshold above which the dynamic request-limit multiplier activates.",
           "minimum": 1,
@@ -1758,12 +1873,14 @@
           "type": "integer"
         },
         "refine_findings_downgrade_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, Opus refines with substantial triage findings downgrade to a cheaper model.",
           "title": "Refine Findings Downgrade Enabled",
           "type": "boolean"
         },
         "refine_findings_downgrade_min_chars": {
+          "advanced": true,
           "default": 150,
           "description": "Minimum stripped-character length of triage findings for the Opus-to-cheaper downgrade.",
           "minimum": 0,
@@ -1771,6 +1888,7 @@
           "type": "integer"
         },
         "refine_max_errors": {
+          "advanced": true,
           "default": 20,
           "description": "Hard cap on tool-call errors before auto-termination of refine agent.",
           "minimum": 0,
@@ -1778,6 +1896,7 @@
           "type": "integer"
         },
         "refine_max_tool_calls": {
+          "advanced": true,
           "default": 120,
           "description": "Hard cap on total tool calls per refine trace.",
           "minimum": 1,
@@ -1799,12 +1918,14 @@
           "title": "Refine Memory Path"
         },
         "refine_prescriptive_spec_code_lines_threshold": {
+          "advanced": true,
           "default": 50,
           "description": "Drafts with more than this many fenced code lines skip refine entirely.",
           "title": "Refine Prescriptive Spec Code Lines Threshold",
           "type": "integer"
         },
         "refine_request_limit": {
+          "advanced": true,
           "default": 80,
           "description": "Per-call request cap for the refine agent's tool loop.",
           "minimum": 1,
@@ -1812,6 +1933,7 @@
           "type": "integer"
         },
         "refine_request_limit_simple": {
+          "advanced": true,
           "default": 40,
           "description": "Per-call request cap for non-escalated (simple/sonnet) refine runs.",
           "minimum": 1,
@@ -1819,30 +1941,35 @@
           "type": "integer"
         },
         "refine_skip_llm_on_impl_ready_spec": {
+          "advanced": true,
           "default": true,
           "description": "When true, implementation-ready specs skip the expensive LLM refine agent.",
           "title": "Refine Skip Llm On Impl Ready Spec",
           "type": "boolean"
         },
         "refine_subscription_model_complex": {
+          "advanced": true,
           "default": "opus",
           "description": "Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
           "title": "Refine Subscription Model Complex",
           "type": "string"
         },
         "refine_subscription_model_default": {
+          "advanced": true,
           "default": "sonnet",
           "description": "Claude model alias for non-escalated level-3 refines (complexity=simple).",
           "title": "Refine Subscription Model Default",
           "type": "string"
         },
         "refine_subscription_model_findings": {
+          "advanced": true,
           "default": "sonnet",
           "description": "Claude model alias used when the findings-present downgrade fires.",
           "title": "Refine Subscription Model Findings",
           "type": "string"
         },
         "refine_subscription_tier_routing_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
           "title": "Refine Subscription Tier Routing Enabled",
@@ -1855,6 +1982,7 @@
           "type": "boolean"
         },
         "refine_trivial_model_level": {
+          "advanced": true,
           "default": 3,
           "description": "Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
           "maximum": 3,
@@ -1863,18 +1991,21 @@
           "type": "integer"
         },
         "refine_trivial_routing_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
           "title": "Refine Trivial Routing Enabled",
           "type": "boolean"
         },
         "refine_trivial_subscription_model": {
+          "advanced": true,
           "default": "sonnet",
           "description": "Claude model alias for trivial/forced-cheap refines on the subscription tier.",
           "title": "Refine Trivial Subscription Model",
           "type": "string"
         },
         "refine_usage_warning_threshold": {
+          "advanced": true,
           "default": 0.8,
           "description": "Fraction (0.0\u20131.0) of request_limit at which a near-exhaustion warning is emitted.",
           "exclusiveMinimum": 0.0,
@@ -1883,6 +2014,7 @@
           "type": "number"
         },
         "refine_web_fetch_max_calls": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum real web_fetch calls across one refine trace.",
           "minimum": 1,
@@ -1890,6 +2022,7 @@
           "type": "integer"
         },
         "refine_web_fetch_max_total_bytes": {
+          "advanced": true,
           "default": 500000,
           "description": "Maximum fetch bytes across one refine trace. 0 disables.",
           "minimum": 0,
@@ -1897,6 +2030,7 @@
           "type": "integer"
         },
         "refine_web_search_max_calls": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum web_search calls across one refine trace.",
           "minimum": 1,
@@ -1904,6 +2038,7 @@
           "type": "integer"
         },
         "repo_description_sync_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between repo-description-sync passes.",
           "title": "Repo Description Sync Interval Seconds",
@@ -1916,6 +2051,7 @@
           "type": "boolean"
         },
         "requeue_batch_pause_seconds": {
+          "advanced": true,
           "default": 2.0,
           "description": "Pause (seconds) between batches in the startup re-queue drip feed.",
           "minimum": 0.0,
@@ -1923,6 +2059,7 @@
           "type": "number"
         },
         "requeue_batch_size": {
+          "advanced": true,
           "default": 5,
           "description": "Tickets enqueued per batch in the startup re-queue drip feed.",
           "minimum": 1,
@@ -1936,6 +2073,7 @@
           "type": "boolean"
         },
         "retrospect_candidates_max_entries": {
+          "advanced": true,
           "default": 100,
           "description": "Max entries retained in AGENT_CANDIDATES.md. 0 disables pruning.",
           "minimum": 0,
@@ -1943,6 +2081,7 @@
           "type": "integer"
         },
         "retrospect_log_max_chars": {
+          "advanced": true,
           "default": 12000,
           "description": "Maximum characters of history+comments logs fed to the retrospect agent. 0 disables.",
           "minimum": 0,
@@ -1970,6 +2109,7 @@
           "type": "boolean"
         },
         "review_diff_max_chars": {
+          "advanced": true,
           "default": 200000,
           "description": "Maximum characters of the combined git diff injected into the review prompt. 0 disables.",
           "minimum": 0,
@@ -1989,6 +2129,7 @@
           "type": "boolean"
         },
         "review_max_rounds": {
+          "advanced": true,
           "default": 3,
           "description": "Maximum CODE_REVIEW to READY to DOCUMENTING to CODE_REVIEW round-trips before escalation.",
           "minimum": 0,
@@ -1996,6 +2137,7 @@
           "type": "integer"
         },
         "review_output_token_budget": {
+          "advanced": true,
           "default": 65536,
           "description": "Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
           "minimum": 0,
@@ -2003,6 +2145,7 @@
           "type": "integer"
         },
         "review_prior_context_max_chars": {
+          "advanced": true,
           "default": 8000,
           "description": "Maximum characters of prior review context fed to the review agent. 0 disables.",
           "minimum": 0,
@@ -2010,12 +2153,14 @@
           "type": "integer"
         },
         "review_request_limit": {
+          "advanced": true,
           "default": 80,
           "description": "Per-call request cap for the review agent.",
           "title": "Review Request Limit",
           "type": "integer"
         },
         "review_revision_max_attempts": {
+          "advanced": true,
           "default": 2,
           "description": "Maximum review-revision attempts per ticket before escalating to BLOCKED.",
           "minimum": 1,
@@ -2037,12 +2182,14 @@
           "title": "Review Revision Memory Path"
         },
         "reviewer_agreement_gate_enabled": {
+          "advanced": true,
           "default": true,
           "description": "When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
           "title": "Reviewer Agreement Gate Enabled",
           "type": "boolean"
         },
         "run_health_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between automatic run-health passes.",
           "title": "Run Health Interval Seconds",
@@ -2075,6 +2222,7 @@
           "type": "string"
         },
         "run_health_window_hours": {
+          "advanced": true,
           "default": 168,
           "description": "Lookback window (hours) for run-registry scans.",
           "title": "Run Health Window Hours",
@@ -2100,18 +2248,21 @@
           "type": "string"
         },
         "sandbox_memory": {
+          "advanced": true,
           "default": "2g",
           "description": "Memory limit for sandbox containers.",
           "title": "Sandbox Memory",
           "type": "string"
         },
         "sandbox_network": {
+          "advanced": true,
           "default": "mill-sandbox-net",
           "description": "Docker network sandbox containers connect to.",
           "title": "Sandbox Network",
           "type": "string"
         },
         "sandbox_pids_limit": {
+          "advanced": true,
           "default": 512,
           "description": "PID limit for sandbox containers.",
           "title": "Sandbox Pids Limit",
@@ -2124,12 +2275,14 @@
           "type": "string"
         },
         "sandbox_readonly": {
+          "advanced": true,
           "default": true,
           "description": "When true, sandbox containers run with read-only root filesystem.",
           "title": "Sandbox Readonly",
           "type": "boolean"
         },
         "sandbox_reaper_interval_seconds": {
+          "advanced": true,
           "default": 3600,
           "description": "Seconds between sandbox reaper passes.",
           "title": "Sandbox Reaper Interval Seconds",
@@ -2142,6 +2295,7 @@
           "type": "boolean"
         },
         "shutdown_grace_seconds": {
+          "advanced": true,
           "default": 1800,
           "description": "Maximum seconds to wait for in-flight periodic passes before teardown.",
           "title": "Shutdown Grace Seconds",
@@ -2166,18 +2320,21 @@
           "type": "boolean"
         },
         "stage_retry_base_delay": {
+          "advanced": true,
           "default": 2.0,
           "description": "Base delay (seconds) for exponential backoff between stage retries.",
           "title": "Stage Retry Base Delay",
           "type": "number"
         },
         "stage_retry_max_attempts": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum stage-level retry attempts for transient errors before escalating.",
           "title": "Stage Retry Max Attempts",
           "type": "integer"
         },
         "stage_retry_max_delay": {
+          "advanced": true,
           "default": 60.0,
           "description": "Maximum delay (seconds) for exponential backoff between stage retries.",
           "title": "Stage Retry Max Delay",
@@ -2187,17 +2344,20 @@
           "additionalProperties": {
             "type": "integer"
           },
+          "advanced": true,
           "description": "Per-stage timeout overrides (dict). Keys are stage names, values are seconds.",
           "title": "Stage Timeout Overrides",
           "type": "object"
         },
         "stage_timeout_seconds": {
+          "advanced": true,
           "default": 2400,
           "description": "Per-stage wall-clock timeout (seconds). 0 disables.",
           "title": "Stage Timeout Seconds",
           "type": "integer"
         },
         "stale_branch_cleanup_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between automatic stale-branch cleanup passes.",
           "title": "Stale Branch Cleanup Interval Seconds",
@@ -2210,18 +2370,21 @@
           "type": "boolean"
         },
         "stale_branch_cleanup_prefix_only": {
+          "advanced": true,
           "default": true,
           "description": "When true, only delete branches matching branch_prefix.",
           "title": "Stale Branch Cleanup Prefix Only",
           "type": "boolean"
         },
         "stale_branch_max_age_days": {
+          "advanced": true,
           "default": 30,
           "description": "Branch is eligible for cleanup only if its last commit is older than this many days.",
           "title": "Stale Branch Max Age Days",
           "type": "integer"
         },
         "startup_jitter_seconds": {
+          "advanced": true,
           "default": 30,
           "description": "Max random jitter (seconds) added to per-repo periodic pass first-tick delay.",
           "minimum": 0,
@@ -2229,6 +2392,7 @@
           "type": "integer"
         },
         "state_sync_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic state-sync passes.",
           "title": "State Sync Interval Seconds",
@@ -2241,12 +2405,14 @@
           "type": "boolean"
         },
         "subtask_request_limit": {
+          "advanced": true,
           "default": 30,
           "description": "Per-subtask request budget when the coordinator delegates via spawn_subtask.",
           "title": "Subtask Request Limit",
           "type": "integer"
         },
         "survey_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between automatic survey passes.",
           "title": "Survey Interval Seconds",
@@ -2259,12 +2425,14 @@
           "type": "boolean"
         },
         "survey_request_limit": {
+          "advanced": true,
           "default": 40,
           "description": "Per-call request budget for the survey agent.",
           "title": "Survey Request Limit",
           "type": "integer"
         },
         "survey_web_fetch_max_calls": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum web_fetch calls per survey run.",
           "minimum": 1,
@@ -2272,6 +2440,7 @@
           "type": "integer"
         },
         "survey_web_fetch_max_total_bytes": {
+          "advanced": true,
           "default": 500000,
           "description": "Maximum fetch bytes per survey run. 0 disables.",
           "minimum": 0,
@@ -2279,6 +2448,7 @@
           "type": "integer"
         },
         "survey_web_search_max_calls": {
+          "advanced": true,
           "default": 5,
           "description": "Maximum web_search calls per survey run.",
           "minimum": 1,
@@ -2292,12 +2462,14 @@
           "type": "string"
         },
         "test_gap_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic test-gap passes.",
           "title": "Test Gap Interval Seconds",
           "type": "integer"
         },
         "test_gap_max_errors": {
+          "advanced": true,
           "default": 20,
           "description": "Hard cap on tool-call errors before auto-termination of test_gap agent.",
           "minimum": 0,
@@ -2305,6 +2477,7 @@
           "type": "integer"
         },
         "test_gap_max_tool_calls": {
+          "advanced": true,
           "default": 100,
           "description": "Hard cap on total tool calls per test_gap trace.",
           "minimum": 1,
@@ -2318,6 +2491,7 @@
           "type": "boolean"
         },
         "test_gap_request_limit": {
+          "advanced": true,
           "default": 80,
           "description": "Per-call request cap for the test-gap agent's tool loop.",
           "minimum": 1,
@@ -2325,6 +2499,7 @@
           "type": "integer"
         },
         "test_request_limit": {
+          "advanced": true,
           "default": 30,
           "description": "Request budget for the test agent when diagnosing failures.",
           "minimum": 1,
@@ -2332,6 +2507,7 @@
           "type": "integer"
         },
         "ticket_state_cycle_limit": {
+          "advanced": true,
           "default": 3,
           "description": "Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
           "minimum": 0,
@@ -2339,6 +2515,7 @@
           "type": "integer"
         },
         "timeout_escalation_interval_seconds": {
+          "advanced": true,
           "default": 3600,
           "description": "Seconds between timeout-escalation passes.",
           "title": "Timeout Escalation Interval Seconds",
@@ -2351,12 +2528,14 @@
           "type": "boolean"
         },
         "timeout_escalation_threshold_seconds": {
+          "advanced": true,
           "default": 259200,
           "description": "Staleness threshold: tickets in AWAITING_USER_REPLY older than this are escalated to BLOCKED.",
           "title": "Timeout Escalation Threshold Seconds",
           "type": "integer"
         },
         "trace_health_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between automatic trace-health checks.",
           "title": "Trace Health Interval Seconds",
@@ -2369,96 +2548,112 @@
           "type": "boolean"
         },
         "trace_review_cost_multiplier": {
+          "advanced": true,
           "default": 3.0,
           "description": "Cost outlier multiplier: traces exceeding batch median x this are flagged for inspection.",
           "title": "Trace Review Cost Multiplier",
           "type": "number"
         },
         "trace_review_dedup_lookback_days": {
+          "advanced": true,
           "default": 7,
           "description": "Recency window (days) for pre-filing duplicate check in trace-review.",
           "title": "Trace Review Dedup Lookback Days",
           "type": "integer"
         },
         "trace_review_initial_lookback_hours": {
+          "advanced": true,
           "default": 24,
           "description": "First-run lookback window (hours) when no watermark exists yet.",
           "title": "Trace Review Initial Lookback Hours",
           "type": "integer"
         },
         "trace_review_inspector_max_obs_for_tools": {
+          "advanced": true,
           "default": 200,
           "description": "Observation count above which the inspector drops code-access tools.",
           "title": "Trace Review Inspector Max Obs For Tools",
           "type": "integer"
         },
         "trace_review_inspector_max_requests": {
+          "advanced": true,
           "default": 80,
           "description": "Ceiling for the trace inspector's tools-on request budget.",
           "title": "Trace Review Inspector Max Requests",
           "type": "integer"
         },
         "trace_review_inspector_min_requests": {
+          "advanced": true,
           "default": 20,
           "description": "Floor for the trace inspector's tools-on request budget.",
           "title": "Trace Review Inspector Min Requests",
           "type": "integer"
         },
         "trace_review_inspector_requests_per_obs": {
+          "advanced": true,
           "default": 0.1,
           "description": "Requests granted per trace observation before clamping to min/max.",
           "title": "Trace Review Inspector Requests Per Obs",
           "type": "number"
         },
         "trace_review_inspector_toolless_requests": {
+          "advanced": true,
           "default": 3,
           "description": "Request budget for the tool-less (summary-only) inspector path.",
           "title": "Trace Review Inspector Toolless Requests",
           "type": "integer"
         },
         "trace_review_interval_seconds": {
+          "advanced": true,
           "default": 86400,
           "description": "Seconds between automatic trace-review passes.",
           "title": "Trace Review Interval Seconds",
           "type": "integer"
         },
         "trace_review_max_drafts_per_run": {
+          "advanced": true,
           "default": 5,
           "description": "Hard cap on total drafts a single trace-review pass may file.",
           "title": "Trace Review Max Drafts Per Run",
           "type": "integer"
         },
         "trace_review_max_errors": {
+          "advanced": true,
           "default": 20,
           "description": "Hard cap on tool-call errors before the trace inspector is auto-terminated.",
           "title": "Trace Review Max Errors",
           "type": "integer"
         },
         "trace_review_max_inspections_per_run": {
+          "advanced": true,
           "default": 5,
           "description": "Hard cap on LLM inspector calls per trace-review run. 0 disables.",
           "title": "Trace Review Max Inspections Per Run",
           "type": "integer"
         },
         "trace_review_max_repeated_tool": {
+          "advanced": true,
           "default": 50,
           "description": "Absolute threshold for repeated-tool-call flagging in trace review.",
           "title": "Trace Review Max Repeated Tool",
           "type": "integer"
         },
         "trace_review_max_tool_calls": {
+          "advanced": true,
           "default": 100,
           "description": "Hard cap on total tool calls per trace inspector run.",
           "title": "Trace Review Max Tool Calls",
           "type": "integer"
         },
         "trace_review_max_traces_per_run": {
+          "advanced": true,
           "default": 300,
           "description": "Hard cap on how many traces a single trace-review run pulls full detail for. 0 disables.",
           "title": "Trace Review Max Traces Per Run",
           "type": "integer"
         },
         "trace_review_min_confidence": {
+          "advanced": true,
           "default": "medium",
           "description": "Minimum inspector confidence for a finding to be filed as a draft.",
           "enum": [
@@ -2470,6 +2665,7 @@
           "type": "string"
         },
         "trace_review_model_level": {
+          "advanced": true,
           "default": 1,
           "description": "Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
           "maximum": 3,
@@ -2478,12 +2674,14 @@
           "type": "integer"
         },
         "trace_review_obs_multiplier": {
+          "advanced": true,
           "default": 3.0,
           "description": "Observation count multiplier: traces exceeding batch median x this are flagged.",
           "title": "Trace Review Obs Multiplier",
           "type": "number"
         },
         "trace_review_per_obs_cost_threshold": {
+          "advanced": true,
           "default": 0.001,
           "description": "Per-observation cost threshold for trace-review outlier detection.",
           "title": "Trace Review Per Obs Cost Threshold",
@@ -2496,6 +2694,7 @@
           "type": "boolean"
         },
         "trace_review_restart_correlation_window_seconds": {
+          "advanced": true,
           "default": 60,
           "description": "Window (seconds) for correlating incomplete traces with process restarts.",
           "title": "Trace Review Restart Correlation Window Seconds",
@@ -2508,12 +2707,14 @@
           "type": "string"
         },
         "trace_review_tool_request_limit": {
+          "advanced": true,
           "default": 15,
           "description": "Request budget for the interactive langfuse_inspect_trace tool.",
           "title": "Trace Review Tool Request Limit",
           "type": "integer"
         },
         "triage_boilerplate_interval_seconds": {
+          "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic triage-boilerplate passes.",
           "title": "Triage Boilerplate Interval Seconds",
@@ -2526,12 +2727,14 @@
           "type": "boolean"
         },
         "triage_request_limit": {
+          "advanced": true,
           "default": 8,
           "description": "Per-call request cap for the pre-refine triage agent.",
           "title": "Triage Request Limit",
           "type": "integer"
         },
         "web_fetch_max_bytes": {
+          "advanced": true,
           "default": 2000000,
           "description": "Maximum raw bytes per web_fetch call.",
           "minimum": 0,
@@ -2539,6 +2742,7 @@
           "type": "integer"
         },
         "web_fetch_max_calls": {
+          "advanced": true,
           "default": 15,
           "description": "Maximum real (cache-miss) web_fetch calls per web_knowledge consultation.",
           "minimum": 1,
@@ -2546,12 +2750,14 @@
           "type": "integer"
         },
         "web_fetch_max_text_bytes": {
+          "advanced": true,
           "default": 40000,
           "description": "Post-extraction character cap per web_fetch (after HTML-to-text stripping).",
           "title": "Web Fetch Max Text Bytes",
           "type": "integer"
         },
         "web_fetch_max_total_bytes": {
+          "advanced": true,
           "default": 2000000,
           "description": "Cumulative ceiling on returned text bytes per web_knowledge consultation. 0 disables.",
           "minimum": 0,
@@ -2559,12 +2765,14 @@
           "type": "integer"
         },
         "web_fetch_raw": {
+          "advanced": true,
           "default": false,
           "description": "When true, web_fetch returns the raw response body verbatim (no HTML stripping, no per-run URL dedupe).",
           "title": "Web Fetch Raw",
           "type": "boolean"
         },
         "web_fetch_timeout": {
+          "advanced": true,
           "default": 30,
           "description": "Timeout (seconds) per web_fetch call.",
           "exclusiveMinimum": 0,
@@ -2572,30 +2780,35 @@
           "type": "integer"
         },
         "web_knowledge_cache_ttl_hours": {
+          "advanced": true,
           "default": 72,
           "description": "Hours since last_verified before a cached knowledge file is flagged as stale in the index.",
           "title": "Web Knowledge Cache Ttl Hours",
           "type": "integer"
         },
         "web_knowledge_model": {
+          "advanced": true,
           "default": "deepseek/deepseek-v4-flash",
           "description": "Model alias for the web-knowledge gateway sub-agent.",
           "title": "Web Knowledge Model",
           "type": "string"
         },
         "web_knowledge_request_limit": {
+          "advanced": true,
           "default": 12,
           "description": "Request budget for the web_knowledge sub-agent per consultation.",
           "title": "Web Knowledge Request Limit",
           "type": "integer"
         },
         "web_knowledge_stale_days": {
+          "advanced": true,
           "default": 30,
           "description": "Days before a cached web_knowledge .md file is considered stale and eligible for refresh.",
           "title": "Web Knowledge Stale Days",
           "type": "integer"
         },
         "web_research_request_limit": {
+          "advanced": true,
           "default": 8,
           "description": "Request budget for the web_research sub-agent spawned by refine/implement.",
           "minimum": 1,

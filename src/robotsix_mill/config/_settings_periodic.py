@@ -29,6 +29,7 @@ class _PeriodicSettings(BaseModel):
     bespoke_discovery_interval_seconds: int = Field(
         default=600,
         description="Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- audit agent (meta-audit for quality/security coverage) ---
@@ -43,6 +44,7 @@ class _PeriodicSettings(BaseModel):
     audit_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic audit passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- trace-health check ---
@@ -58,6 +60,7 @@ class _PeriodicSettings(BaseModel):
     trace_health_interval_seconds: int = Field(
         default=86400,
         description="Seconds between automatic trace-health checks.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- trace-review ---
@@ -77,6 +80,7 @@ class _PeriodicSettings(BaseModel):
     trace_review_interval_seconds: int = Field(
         default=86400,
         description="Seconds between automatic trace-review passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # (cost-cache warming is no longer a backend daemon — the board's
@@ -95,6 +99,7 @@ class _PeriodicSettings(BaseModel):
     timeout_escalation_interval_seconds: int = Field(
         default=3600,
         description="Seconds between timeout-escalation passes.",
+        json_schema_extra={"advanced": True},
     )
     # Staleness threshold: tickets in AWAITING_USER_REPLY with updated_at
     # older than this many seconds are escalated to BLOCKED.
@@ -103,6 +108,7 @@ class _PeriodicSettings(BaseModel):
     timeout_escalation_threshold_seconds: int = Field(
         default=259200,
         description="Staleness threshold: tickets in AWAITING_USER_REPLY older than this are escalated to BLOCKED.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- docstring-coverage agent (public-API documentation oversight) ---
@@ -115,6 +121,7 @@ class _PeriodicSettings(BaseModel):
     docstring_coverage_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic docstring-coverage passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- test-gap agent (dedicated test-coverage oversight) ---
@@ -131,6 +138,7 @@ class _PeriodicSettings(BaseModel):
     test_gap_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic test-gap passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- module-size agent (oversized-file oversight) ---
@@ -143,6 +151,7 @@ class _PeriodicSettings(BaseModel):
     module_size_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic module-size passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- agent-check agent (agent-definition coherence) ---
@@ -159,6 +168,7 @@ class _PeriodicSettings(BaseModel):
     agent_check_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic agent-check passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- health agent (codebase-health inspection) ---
@@ -175,6 +185,7 @@ class _PeriodicSettings(BaseModel):
     health_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic health passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- survey agent (OSS project discovery) ---
@@ -206,6 +217,7 @@ class _PeriodicSettings(BaseModel):
     survey_request_limit: int = Field(
         default=40,
         description="Per-call request budget for the survey agent.",
+        json_schema_extra={"advanced": True},
     )
     # Per-survey-run web_fetch budget — a second tier of budget tracking
     # that spans the entire survey run (not reset between ask_web_knowledge
@@ -215,11 +227,13 @@ class _PeriodicSettings(BaseModel):
         default=5,
         ge=1,
         description="Maximum web_fetch calls per survey run.",
+        json_schema_extra={"advanced": True},
     )
     survey_web_fetch_max_total_bytes: int = Field(
         default=500_000,
         ge=0,
         description="Maximum fetch bytes per survey run. 0 disables.",
+        json_schema_extra={"advanced": True},
     )
     # Per-survey-run web_search budget — caps web_search invocations at 5
     # per survey run regardless of how many ask_web_knowledge consults.
@@ -227,6 +241,7 @@ class _PeriodicSettings(BaseModel):
         default=5,
         ge=1,
         description="Maximum web_search calls per survey run.",
+        json_schema_extra={"advanced": True},
     )
     # Opt-in periodic survey pass. Defaults to True (on by default —
     # "default yes"). Flip to false to disable the automatic weekly
@@ -242,6 +257,7 @@ class _PeriodicSettings(BaseModel):
     survey_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic survey passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- bc_check agent (backward-compatibility inspection) ---
@@ -258,6 +274,7 @@ class _PeriodicSettings(BaseModel):
     bc_check_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic bc-check passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- module_curator agent (module-taxonomy drift detection) ---
@@ -274,6 +291,7 @@ class _PeriodicSettings(BaseModel):
     module_curator_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic module-curator passes.",
+        json_schema_extra={"advanced": True},
     )
     # Request budget for the module-curator run.  The agent walks the
     # repo tree, reads docs/modules.yaml, calls validate_artifact on
@@ -285,6 +303,7 @@ class _PeriodicSettings(BaseModel):
         default=120,
         ge=1,
         description="Request budget for the module-curator agent.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- data-dir GC — deterministic periodic disk reclamation ---
@@ -300,6 +319,7 @@ class _PeriodicSettings(BaseModel):
     data_dir_gc_interval_seconds: int = Field(
         default=86400,
         description="Seconds between periodic data-dir GC passes.",
+        json_schema_extra={"advanced": True},
     )
     # Opt-in GC: prune workspace directories of tickets in a terminal
     # state (CLOSED / EPIC_CLOSED / ANSWERED) during the data-dir GC
@@ -318,6 +338,7 @@ class _PeriodicSettings(BaseModel):
         default=604_800,
         ge=0,
         description="Minimum age (seconds) of a terminal ticket before its workspace is eligible for GC.",
+        json_schema_extra={"advanced": True},
     )
     # Default-on GC: prune the reproducible git clones (``repo/`` and
     # ``repos/``) inside workspaces of terminal-state tickets at the
@@ -338,6 +359,7 @@ class _PeriodicSettings(BaseModel):
         default=86_400,
         ge=0,
         description="Minimum age (seconds) before terminal-ticket clones are pruned.",
+        json_schema_extra={"advanced": True},
     )
     # Default-on DB row GC: purge oldest terminal-ticket rows (and their
     # associated events, comments, and proposed actions) when the count
@@ -378,6 +400,7 @@ class _PeriodicSettings(BaseModel):
         default=86_400,
         ge=0,
         description="Minimum age (seconds) of an orphan workspace before GC.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- dependabot-alert ingest (deterministic cross-repo poll) ---
@@ -397,6 +420,7 @@ class _PeriodicSettings(BaseModel):
     dependabot_ingest_interval_seconds: int = Field(
         default=86_400,
         description="Seconds between Dependabot ingest passes.",
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of Dependabot drafts created per ingest pass (across all
     # repos in that pass). Findings beyond this cap are dropped and
@@ -406,6 +430,7 @@ class _PeriodicSettings(BaseModel):
         default=5,
         ge=0,
         description="Maximum Dependabot drafts per ingest pass. 0 disables.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- completeness_check agent (feature-wiring completeness) ---
@@ -423,10 +448,12 @@ class _PeriodicSettings(BaseModel):
     completeness_check_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic completeness-check passes.",
+        json_schema_extra={"advanced": True},
     )
     completeness_check_request_limit: int = Field(
         default=80,
         description="Request budget for the completeness-check agent.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- forge-parity agent (forge adapter drift detection) ---
@@ -442,6 +469,7 @@ class _PeriodicSettings(BaseModel):
     forge_parity_interval_seconds: int = Field(
         default=604800,
         description="Seconds between periodic forge-parity passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- copy-paste agent (deterministic clone detection and triage) ---
@@ -457,6 +485,7 @@ class _PeriodicSettings(BaseModel):
     copy_paste_interval_seconds: int = Field(
         default=604800,
         description="Seconds between periodic copy-paste passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- state-sync agent (cross-surface State enum consistency) ---
@@ -472,6 +501,7 @@ class _PeriodicSettings(BaseModel):
     state_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic state-sync passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- frontend-sync agent (board frontend → ticket system sync) ---
@@ -487,6 +517,7 @@ class _PeriodicSettings(BaseModel):
     frontend_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic frontend-sync passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- pin-bump agent (scheduled dependency pin-bump PR actuator) ---
@@ -503,6 +534,7 @@ class _PeriodicSettings(BaseModel):
     pin_bump_interval_seconds: int = Field(
         default=86400,
         description="Seconds between periodic pin-bump passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- triage-boilerplate agent (recurring triage pattern detection) ---
@@ -518,6 +550,7 @@ class _PeriodicSettings(BaseModel):
     triage_boilerplate_interval_seconds: int = Field(
         default=604800,
         description="Seconds between periodic triage-boilerplate passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
@@ -533,6 +566,7 @@ class _PeriodicSettings(BaseModel):
     config_sync_interval_seconds: int = Field(
         default=86400,
         description="Seconds between automatic config-sync passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- member-sync (deterministic workspace-member discovery/registration) ---
@@ -549,6 +583,7 @@ class _PeriodicSettings(BaseModel):
     member_sync_interval_seconds: int = Field(
         default=86400,
         description="Seconds between automatic member-sync passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- meta-agent (cross-repo extraction/alignment survey) ---
@@ -564,6 +599,7 @@ class _PeriodicSettings(BaseModel):
     meta_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic meta-agent passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- run-health (global, cross-board run-registry monitor) ---
@@ -581,11 +617,13 @@ class _PeriodicSettings(BaseModel):
     run_health_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic run-health passes.",
+        json_schema_extra={"advanced": True},
     )
     # Lookback window (hours) over which run registries are scanned.
     run_health_window_hours: int = Field(
         default=168,
         description="Lookback window (hours) for run-registry scans.",
+        json_schema_extra={"advanced": True},
     )
     # Board the run-health agent files its drafts to (the mill board).
     run_health_target_repo_id: str = Field(
@@ -615,6 +653,7 @@ class _PeriodicSettings(BaseModel):
     ci_debt_recheck_interval_seconds: int = Field(
         default=3600,
         description="Seconds between CI-debt recheck passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- changelog-autofill (schedule-only pass that updates changelogs from merged PRs) ---
@@ -630,6 +669,7 @@ class _PeriodicSettings(BaseModel):
     changelog_autofill_interval_seconds: int = Field(
         default=86400,
         description="Seconds between changelog-autofill passes.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- diagnostic (daily deterministic diagnostic agent) ---
@@ -644,6 +684,7 @@ class _PeriodicSettings(BaseModel):
     diagnostic_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic diagnostic passes.",
+        json_schema_extra={"advanced": True},
     )
     # Board the diagnostic agent routes board/trace activity to.
     diagnostic_target_repo_id: str = Field(
@@ -675,6 +716,7 @@ class _PeriodicSettings(BaseModel):
         default=3,
         ge=0,
         description="Distinct-ticket threshold for auto-filing CI fix proposals.",
+        json_schema_extra={"advanced": True},
     )
 
     # --- orphaned-PR check (deterministic per-repo stale-PR cleanup) ---
@@ -691,6 +733,7 @@ class _PeriodicSettings(BaseModel):
     orphaned_pr_check_interval_seconds: int = Field(
         default=86400,
         description="Seconds between orphaned-PR check passes.",
+        json_schema_extra={"advanced": True},
     )
     # Minimum age (hours) of a ticket before its PR is considered for
     # orphan classification.  Skips tickets younger than this to avoid
@@ -699,6 +742,7 @@ class _PeriodicSettings(BaseModel):
         default=4,
         ge=1,
         description="Minimum ticket age (hours) before its PR is considered for orphan classification.",
+        json_schema_extra={"advanced": True},
     )
     # Maximum number of combined close+file actions per pass run.
     # Findings beyond this cap are deferred to the next scheduled pass.
@@ -706,6 +750,7 @@ class _PeriodicSettings(BaseModel):
         default=5,
         ge=1,
         description="Maximum combined close+file actions per orphaned-PR pass.",
+        json_schema_extra={"advanced": True},
     )
     # Dry-run mode: log intent only, make zero forge mutations.
     # Default True for safety — flip to False to enable real actions.
@@ -730,11 +775,13 @@ class _PeriodicSettings(BaseModel):
         default=10,
         ge=1,
         description="Maximum close actions per orphaned-PR pass (in addition to combined cap).",
+        json_schema_extra={"advanced": True},
     )
     orphaned_pr_max_files_per_pass: int = Field(
         default=5,
         ge=1,
         description="Maximum file-ticket actions per orphaned-PR pass (in addition to combined cap).",
+        json_schema_extra={"advanced": True},
     )
     # Opt-in: also file a tracking ticket for FOREIGN (non-board) open PRs —
     # those whose head branch does NOT start with ``settings.branch_prefix``
@@ -760,4 +807,5 @@ class _PeriodicSettings(BaseModel):
     repo_description_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between repo-description-sync passes.",
+        json_schema_extra={"advanced": True},
     )
