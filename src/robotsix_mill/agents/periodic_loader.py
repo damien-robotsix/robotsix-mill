@@ -146,6 +146,69 @@ def validate_periodic_file_content(
 
 
 # ---------------------------------------------------------------------------
+# Workflow portability — data-driven classification for agents
+# ---------------------------------------------------------------------------
+
+# Kinds that are enable-able on managed repos via a presence file.
+_PORTABLE_KINDS: frozenset[str] = frozenset({"llm_agent", "schedule_only"})
+
+
+def is_portable(name: str) -> bool:
+    """Return ``True`` iff *name* can be enabled on a managed repo via a
+    ``.robotsix-mill/periodic/<name>.yaml`` presence file.
+
+    ``bespoke`` workflows (names absent from ``_BUILTIN_KINDS``) are
+    treated as **not portable** because they require a ``system_prompt``
+    and are repo-specific — agents should not propose them blindly.
+    """
+    return kind_for(name) in _PORTABLE_KINDS
+
+
+def render_workflow_portability() -> str:
+    """Render a compact workflow-portability reference block for agent prompts.
+
+    Returns a Markdown table listing every built-in workflow with its
+    portability classification and a one-line note.  Agents use this to
+    gate workflow-enablement proposals: **internal** workflows MUST NOT be
+    proposed for managed repos; **portable** workflows are safe to propose.
+    """
+    lines: list[str] = [
+        "## Workflow Portability",
+        "",
+        "Only **portable** workflows can be enabled on managed repos via a",
+        "`.robotsix-mill/periodic/<name>.yaml` presence file.  **Internal**",
+        "workflows cannot — they run inside the mill itself or are cross-repo",
+        "infra, not per-repo presence-managed.  Tickets proposing to enable an",
+        "**internal** workflow on a managed repo MUST be rejected (auto-closed",
+        "at refine time or never filed).",
+        "",
+        "| Workflow | Portability | Notes |",
+        "|----------|-------------|-------|",
+    ]
+
+    # Internal-first sort so the "can't enable these" signal is prominent.
+    for name in sorted(_BUILTIN_KINDS, key=lambda n: (is_portable(n), n)):
+        kind = _BUILTIN_KINDS[name]
+        portable = is_portable(name)
+        label = "**portable**" if portable else "**internal**"
+
+        if kind == "mill_only":
+            note = "Mill-only: hardcoded to robotsix-mill source paths"
+        elif kind == "global_only":
+            note = "Cross-repo infra, not per-repo presence-managed"
+        elif kind == "schedule_only":
+            note = "Deterministic schedule task"
+        elif kind == "llm_agent":
+            note = "LLM periodic agent, enable-able on any repo"
+        else:
+            note = ""
+
+        lines.append(f"| `{name}` | {label} | {note} |")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Per-repo override file schema
 # ---------------------------------------------------------------------------
 

@@ -70,6 +70,7 @@ class AgentDefinition(BaseModel):
     module: str | None = None
     skills: list[str] = []
     modules: bool = False
+    workflows: bool = False
     inject_agent_md: bool = True
     # Opt-in: inject the repo's ``## Language conventions`` block (resolved
     # via ``resolve_language_instructions``) into the system prompt when a

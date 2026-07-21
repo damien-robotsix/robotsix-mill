@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add workflow portability classification (`is_portable`, `render_workflow_portability`) to the periodic loader, derived from the existing `_BUILTIN_KINDS` kind map. Refine and meta agents now receive a data-driven **Workflow Portability** table and gate internal-workflow enablement proposals (e.g. `state_sync`, `frontend_sync`) instead of hardcoding individual workflow names.
 - Add `vulture` (dead-code detection) to the implement stage's mandatory pre-flight checks, alongside ruff, mypy, and deptry, so lint failures are caught locally before the PR/CI round-trip.
 - Emit `CI_FAILURE` diagnostic events on every ticket entering `fixing_ci`, with a stable normalized failure key so recurring failure modes cluster. Add `RecurringCIFailureCheck` diagnostic check that auto-files fix-proposal draft tickets when a failure key has been hit by enough distinct tickets (threshold configurable via `diagnostic_ci_failure_threshold`, default 3).
 - Remove outdated per-repo `langfuse:` blocks from `docs/config/configuration.md` — Langfuse credentials are configured globally in the `secrets:` block, not per-repo.
