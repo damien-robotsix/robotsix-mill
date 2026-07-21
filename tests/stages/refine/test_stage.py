@@ -674,7 +674,7 @@ def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monke
 
     _apply_default_mocks(
         monkeypatch,
-        clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
+        clone=lambda remote_url, dest, branch, token, **kwargs: (_ for _ in ()).throw(
             subprocess.CalledProcessError(
                 1, "git", stderr=b"fatal: repository not found"
             )
@@ -734,11 +734,11 @@ def test_successful_refine_with_title_override(ctx_factory, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _clone_with_src_gitignore(remote_url, dest, branch, token=None):
+def _clone_with_src_gitignore(remote_url, dest, branch, token=None, **kwargs):
     """Mock clone that materialises a real repo whose ``.gitignore``
     carries ``/src/*`` — the manifest-board (robotsix-mill-ros2) layout
     where ``/src`` holds vcs-imported sub-repos invisible to git."""
-    del remote_url, branch, token
+    del remote_url, branch, token, kwargs
     git_ops.init_repo(dest, "main")
     (dest / ".gitignore").write_text("/src/*\n")
     git_ops.commit_all(dest, "init gitignore")
@@ -3035,7 +3035,7 @@ def test_clone_failure_transient_reraises_for_worker_retry(ctx_factory, monkeypa
 
     _apply_default_mocks(
         monkeypatch,
-        clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
+        clone=lambda remote_url, dest, branch, token, **kwargs: (_ for _ in ()).throw(
             subprocess.CalledProcessError(
                 128,
                 "git",
@@ -3061,7 +3061,7 @@ def test_clone_failure_note_redacts_credentials(ctx_factory, monkeypatch):
 
     _apply_default_mocks(
         monkeypatch,
-        clone=lambda remote_url, dest, branch, token: (_ for _ in ()).throw(
+        clone=lambda remote_url, dest, branch, token, **kwargs: (_ for _ in ()).throw(
             subprocess.CalledProcessError(
                 128,
                 "git",
@@ -3141,7 +3141,7 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
     # Intercept the clone call to capture the remote URL.
     clone_args: dict = {}
 
-    def _capture_clone(remote_url, dest, branch, token):
+    def _capture_clone(remote_url, dest, branch, token, **kwargs):
         clone_args["remote_url"] = remote_url
         clone_args["dest"] = dest
         clone_args["branch"] = branch
@@ -3213,7 +3213,7 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
 
     clone_args: dict = {}
 
-    def _capture(remote_url, dest, branch, token):
+    def _capture(remote_url, dest, branch, token, **kwargs):
         clone_args["remote_url"] = remote_url
         clone_args["dest"] = str(dest)
 
@@ -3281,7 +3281,7 @@ def test_clone_or_resume_cross_repo_target_uses_fork_url_and_base_branch(
 
     clone_args: dict = {}
 
-    def _capture(remote_url, dest, branch, token):
+    def _capture(remote_url, dest, branch, token, **kwargs):
         clone_args["remote_url"] = remote_url
         clone_args["dest"] = str(dest)
         clone_args["branch"] = branch

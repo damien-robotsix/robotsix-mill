@@ -50,7 +50,7 @@ class TestCloneAllRepos:
 
         call_args: list = []
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             call_args.append((remote_url, dest, branch, token))
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
@@ -85,7 +85,7 @@ class TestCloneAllRepos:
 
         call_args: list = []
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             call_args.append((remote_url, dest, branch, token))
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
@@ -114,7 +114,7 @@ class TestCloneAllRepos:
 
         call_args: list = []
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             call_args.append((remote_url, dest, branch, token))
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
@@ -153,7 +153,7 @@ class TestCloneAllRepos:
 
         call_args: list = []
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             call_args.append((remote_url, dest, branch, token))
             if "bad" in remote_url:
                 raise subprocess.CalledProcessError(
@@ -188,7 +188,7 @@ class TestCloneAllRepos:
 
         call_args: list = []
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             call_args.append((remote_url, dest, branch, token))
             # clone fails because no token (public repo would work, but
             # we simulate a private-repo failure)
@@ -221,7 +221,7 @@ class TestCloneAllRepos:
 
         call_args: list = []
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             call_args.append((remote_url, dest, branch, token))
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
@@ -238,7 +238,8 @@ class TestCloneAllRepos:
         assert len(call_args) == 3
 
     def test_empty_repo_bootstrapped(self, settings: Settings, monkeypatch):
-        """A clone failure due to missing remote branch triggers bootstrap."""
+        """clone() handles empty repos internally — clone_all_repos just
+        sees a successful clone and includes the repo in the result."""
         reg = ReposRegistry(
             repos={
                 "empty": _repo("empty", forge_remote_url="https://gh.com/e.git"),
@@ -249,62 +250,32 @@ class TestCloneAllRepos:
             "robotsix_mill.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
-        # Pretend the remote has no branches so bootstrap is attempted.
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._remote_has_branches",
-            lambda url, token: False,
-        )
 
         clone_call_count = 0
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             nonlocal clone_call_count
             clone_call_count += 1
-            raise subprocess.CalledProcessError(
-                128,
-                ["git", "clone"],
-                stderr="fatal: Remote branch main not found in upstream origin",
-            )
+            # Simulate a successful clone (internally bootstrapped).
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            (dest / ".git").mkdir(parents=True, exist_ok=True)
 
         monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
-
-        init_calls = []
-        commit_calls = []
-        push_calls = []
-
-        def _fake_init_repo(dest, branch):
-            init_calls.append((str(dest), branch))
-            dest.mkdir(parents=True, exist_ok=True)
-            (dest / ".git").mkdir()
-
-        def _fake_commit_all(repo, message):
-            commit_calls.append((str(repo), message))
-
-        def _fake_push(repo, branch, remote_url, token):
-            push_calls.append((str(repo), branch, remote_url, token))
-
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.init_repo", _fake_init_repo)
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.commit_all", _fake_commit_all)
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.push", _fake_push)
 
         result = clone_all_repos(settings)
 
         assert clone_call_count == 1
         assert set(result.keys()) == {"empty"}
-        assert len(init_calls) == 1
-        assert len(commit_calls) == 1
-        assert commit_calls[0][1] == "Initial bootstrap commit"
-        assert len(push_calls) == 1
-        assert push_calls[0][1] == "main"
-        assert push_calls[0][2] == "https://gh.com/e.git"
 
     def test_bootstrap_failure_logs_error(
         self, settings: Settings, caplog, monkeypatch
     ):
-        """When bootstrap fails, an ERROR is logged (not just WARNING)."""
+        """When clone() raises (bootstrap also failed), a WARNING is logged
+        (clone_all_repos treats it as a standard clone failure — the bootstrap
+        failure details are in the stderr)."""
         import logging
 
-        caplog.set_level(logging.ERROR)
+        caplog.set_level(logging.WARNING)
 
         reg = ReposRegistry(
             repos={
@@ -316,47 +287,26 @@ class TestCloneAllRepos:
             "robotsix_mill.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
-        # Pretend the remote has no branches so bootstrap is attempted.
-        monkeypatch.setattr(
-            "robotsix_mill.vcs._remote_has_branches",
-            lambda url, token: False,
-        )
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             raise subprocess.CalledProcessError(
                 128,
                 ["git", "clone"],
-                stderr="fatal: Remote branch main not found in upstream origin",
+                stderr="fatal: Remote branch main not found in upstream origin\n"
+                "(empty-repo bootstrap also failed: Permission denied)",
             )
 
         monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
 
-        def _failing_push(repo, branch, remote_url, token):
-            raise subprocess.CalledProcessError(
-                128,
-                ["git", "push"],
-                stderr="remote: Permission denied",
-            )
-
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.push", _failing_push)
-
-        # init + commit succeed
-        monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.init_repo",
-            lambda dest, branch: dest.mkdir(parents=True, exist_ok=True),
-        )
-        monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.commit_all",
-            lambda repo, message: None,
-        )
-
         result = clone_all_repos(settings)
 
         assert result == {}
-        errors = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
-        assert len(errors) >= 1
-        assert any("failed to bootstrap" in msg for msg in errors)
-        assert any("empty" in msg for msg in errors)
+        warnings = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert len(warnings) >= 1
+        assert any(
+            "remote branch not found" in msg or "clone failed" in msg
+            for msg in warnings
+        )
 
     def test_non_empty_clone_failure_still_logs_warning(
         self, settings: Settings, caplog, monkeypatch
@@ -377,7 +327,7 @@ class TestCloneAllRepos:
             lambda _settings, repo_config: "tok",
         )
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             raise subprocess.CalledProcessError(
                 128,
                 ["git", "clone"],
@@ -410,7 +360,7 @@ class TestCloneAllRepos:
             lambda _settings, repo_config: "tok",
         )
 
-        def _fake_clone(remote_url, dest, branch, token):
+        def _fake_clone(remote_url, dest, branch, token, **kwargs):
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
 

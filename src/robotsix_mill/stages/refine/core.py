@@ -423,5 +423,6 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             cand,
             target,
             token,
+            repo_id=repo_config.repo_id if repo_config is not None else "",
         )
         return cand

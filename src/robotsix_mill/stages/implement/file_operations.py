@@ -335,49 +335,17 @@ class FileOperationsMixin(_ImplementStageBase):
                     repo_dir,
                     target,
                     token,
+                    repo_id=ctx.repo_config.repo_id,
                 )
             except subprocess.CalledProcessError as e:
                 from ...runtime.transient_errors import reraise_if_transient
 
                 reraise_if_transient(e)
                 stderr_str = _decode_stderr(e.stderr)
-                bootstrapped = False
-                if "Remote branch" in stderr_str and "not found" in stderr_str:
-                    from ...vcs import (
-                        _bootstrap_empty_repo,
-                        _remote_has_branches,
-                    )
-
-                    if not _remote_has_branches(remote_url, token):
-                        log.info(
-                            "%s: remote has no branches — bootstrapping empty repo",
-                            ticket.id,
-                        )
-                        try:
-                            _bootstrap_empty_repo(
-                                remote_url,
-                                repo_dir,
-                                target,
-                                token,
-                                ctx.repo_config.repo_id,
-                            )
-                            bootstrapped = True
-                        except Exception as bootstrap_err:
-                            log.error(
-                                "%s: bootstrap failed: %s",
-                                ticket.id,
-                                bootstrap_err,
-                            )
-                            return Outcome(
-                                State.BLOCKED,
-                                "clone failed (empty repo bootstrap also failed): "
-                                + git_ops.redact_credentials(str(bootstrap_err))[:250],
-                            )
-                if not bootstrapped:
-                    return Outcome(
-                        State.BLOCKED,
-                        "clone failed: " + git_ops.redact_credentials(stderr_str)[:300],
-                    )
+                return Outcome(
+                    State.BLOCKED,
+                    "clone failed: " + git_ops.redact_credentials(stderr_str)[:300],
+                )
             git_ops.create_branch(repo_dir, branch)
 
         # Refresh against current origin/<target> so the agent never
@@ -426,6 +394,7 @@ class FileOperationsMixin(_ImplementStageBase):
                     repo_dir,
                     target,
                     token,
+                    repo_id=ctx.repo_config.repo_id,
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:
@@ -433,44 +402,10 @@ class FileOperationsMixin(_ImplementStageBase):
 
                 reraise_if_transient(e)
                 stderr_str = _decode_stderr(e.stderr)
-                bootstrapped = False
-                if "Remote branch" in stderr_str and "not found" in stderr_str:
-                    from ...vcs import (
-                        _bootstrap_empty_repo,
-                        _remote_has_branches,
-                    )
-
-                    if not _remote_has_branches(remote_url, token):
-                        log.info(
-                            "%s: remote has no branches — bootstrapping empty repo (invariant fallback)",
-                            ticket.id,
-                        )
-                        try:
-                            _bootstrap_empty_repo(
-                                remote_url,
-                                repo_dir,
-                                target,
-                                token,
-                                ctx.repo_config.repo_id,
-                            )
-                            bootstrapped = True
-                            git_ops.create_branch(repo_dir, branch)
-                        except Exception as bootstrap_err:
-                            log.error(
-                                "%s: bootstrap failed (invariant fallback): %s",
-                                ticket.id,
-                                bootstrap_err,
-                            )
-                            return Outcome(
-                                State.BLOCKED,
-                                "repo clone missing, re-clone failed, and bootstrap also failed: "
-                                + git_ops.redact_credentials(str(bootstrap_err))[:200],
-                            )
-                if not bootstrapped:
-                    return Outcome(
-                        State.BLOCKED,
-                        "repo clone missing and re-clone failed — resumable: "
-                        + git_ops.redact_credentials(stderr_str)[:200],
-                    )
+                return Outcome(
+                    State.BLOCKED,
+                    "repo clone missing and re-clone failed — resumable: "
+                    + git_ops.redact_credentials(stderr_str)[:200],
+                )
         ctx.service.set_branch(ticket.id, branch)
         return (repo_dir, branch, resuming)

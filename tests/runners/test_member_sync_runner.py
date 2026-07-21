@@ -56,7 +56,7 @@ def _install_seams(monkeypatch, settings, manifest: str | None):
         lambda _s, _rc: None,
     )
 
-    def fake_clone(url, dest, branch, token):
+    def fake_clone(url, dest, branch, token, **kwargs):
         dest = Path(dest)
         dest.mkdir(parents=True, exist_ok=True)
         if manifest is not None:
