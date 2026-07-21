@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Enable `module_size` periodic agent by adding its per-repo presence file (`.robotsix-mill/periodic/module_size.yaml`).
 - Fix Alembic proxy-registry race condition: add global ``_alembic_lock`` to serialize all ``_run_alembic_migrations`` calls across boards, preventing ``KeyError: 'config'`` when concurrent ``init_db`` calls collide on Alembic's process-global proxy registry (observed as CI flake in ``test_generate_children_applies_epic_body`` under xdist).
 - Replace cached `github_token()` with on-demand `github_push_token()` in deliver and periodic runner push paths (changelog autofill, roadmap sync, pin bump), following the same per-push App-token renewal pattern already used by ci_fix/rebase. Eliminates stale-token push failures when a cached App installation token expires mid-flight.
 - Implement agent now checks and updates `README.md` TOC tables when

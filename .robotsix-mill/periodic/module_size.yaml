@@ -1,0 +1,3 @@
+# Presence enables module_size for this repo. Tracks module file sizes
+# over time and files a ticket when growth exceeds thresholds.
+name: module_size
