@@ -22,7 +22,7 @@ from typing import Any
 from robotsix_mill.agents.changelog_tool import _insert_changelog_entry
 from robotsix_mill.config.repos import RepoConfig
 from robotsix_mill.config.settings import Settings
-from robotsix_mill.forge.auth import github_token
+from robotsix_mill.forge.auth import github_push_token
 from robotsix_mill.forge.base import Forge, get_forge
 from robotsix_mill.vcs import git_ops
 
@@ -56,7 +56,7 @@ def run_changelog_autofill_pass(
         return
 
     try:
-        token = github_token(settings, repo_config=repo_config)
+        token = github_push_token(settings, repo_config=repo_config)
     except RuntimeError as exc:
         log.warning(
             "changelog_autofill: no forge token for %s — skipping (%s)",

@@ -68,7 +68,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -100,7 +100,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -131,7 +131,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -166,7 +166,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -203,7 +203,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -244,7 +244,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -283,7 +283,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -329,7 +329,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -371,7 +371,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -412,7 +412,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -442,7 +442,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 return_value="tok",
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -458,7 +458,7 @@ class TestRunChangelogAutofillPass:
         mock_git.clone.assert_not_called()
 
     def test_token_error_returns_early(self):
-        """github_token raises RuntimeError → function returns without iterating PRs."""
+        """github_push_token raises RuntimeError → function returns without iterating PRs."""
         mock_forge = MagicMock()
 
         with (
@@ -467,7 +467,7 @@ class TestRunChangelogAutofillPass:
                 return_value=mock_forge,
             ),
             patch(
-                "robotsix_mill.runners.changelog_autofill_runner.github_token",
+                "robotsix_mill.runners.changelog_autofill_runner.github_push_token",
                 side_effect=RuntimeError("no token"),
             ),
             patch("robotsix_mill.runners.changelog_autofill_runner.Settings"),
@@ -480,7 +480,7 @@ class TestRunChangelogAutofillPass:
                 repo_config=MagicMock(forge_remote_url="https://example.com/repo"),
             )
 
-        # list_open_prs is called before github_token, but no PRs should be
+        # list_open_prs is called before github_push_token, but no PRs should be
         # processed because we return early on token error.
         mock_forge.check_status.assert_not_called()
         mock_git.clone.assert_not_called()
