@@ -95,7 +95,7 @@ def _available_periodic_catalog() -> str:
     when present, else a generic fallback for the prompt-less schedule/
     schedule tasks.
     """
-    from ..agents.periodic_loader import _BUILTIN_KINDS
+    from ..agents.workflow_portability import _BUILTIN_KINDS
 
     defs_dir = agent_definitions_dir() / "periodic"
     lines: list[str] = []
@@ -129,7 +129,7 @@ def _workflow_portability() -> str:
     portability classification so the meta-agent can gate its proposals
     against a data-driven source of truth rather than a hardcoded name.
     """
-    from ..agents.periodic_loader import render_workflow_portability
+    from ..agents.workflow_portability import render_workflow_portability
 
     return render_workflow_portability()
 

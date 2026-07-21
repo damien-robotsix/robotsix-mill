@@ -384,7 +384,7 @@ def compose_prompt(  # noqa: C901
 
         logger = logging.getLogger(__name__)
         try:
-            from robotsix_mill.agents.periodic_loader import (
+            from robotsix_mill.agents.workflow_portability import (
                 render_workflow_portability,
             )
 

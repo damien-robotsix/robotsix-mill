@@ -412,7 +412,9 @@ def test_build_agent_composes_prompt(monkeypatch, settings):
 
     captured_compose: list[dict] = []
 
-    def fake_compose_prompt(settings, system_prompt, skills=None, modules=False, workflows=False):
+    def fake_compose_prompt(
+        settings, system_prompt, skills=None, modules=False, workflows=False
+    ):
         captured_compose.append(
             dict(
                 system_prompt=system_prompt,
