@@ -64,6 +64,7 @@ report_issue: true
 reply_to_thread: false
 close_thread: false
 modules: true
+workflows: true
 web_knowledge: true
 list_epic_children: true
 
@@ -94,6 +95,15 @@ system_prompt: |
     pyproject.toml")`. Normalize both names (lowercase, `-` → `_`). If
     they don't match, return `no_change_needed=True` with rationale
     naming both repos. One `run_command` cost; no further tool calls.
+  - **Workflow portability gate:** If the ticket proposes creating a
+    `.robotsix-mill/periodic/<name>.yaml` presence file to enable a
+    periodic workflow on a managed repo, consult the **Workflow
+    Portability** table in your system prompt.  If the workflow is
+    marked **internal**, return `no_change_needed=True` with a
+    rationale explaining that this workflow is not portable and cannot
+    be enabled on managed repos via a presence file — do NOT pass the
+    ticket to implement.  If the workflow is **portable**, proceed
+    normally.
   - Ground the spec in the ACTUAL codebase — real file paths, existing
     patterns/conventions, and constraints. Do NOT web-fetch the
     project's own files.

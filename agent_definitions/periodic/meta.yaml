@@ -101,12 +101,15 @@ system_prompt: |
      risk, what it ships), emit an alignment draft proposing to add that
      presence file. Justify each suggestion from the repo's actual context
      — skip workflows that don't apply; never propose blanket parity.
-     MILL-ONLY EXCLUSION: never propose enabling
-     `frontend_sync` for any repo whose name is not `robotsix-mill`. These
-     agents' prompts are hardcoded to mill's own source paths
-     (`src/robotsix_mill/config/`, `board-mill.{css,js}`) and produce only
-     errors or false-positive tickets on any other repo. If you are running
-     against robotsix-mill itself, these are valid proposals.
+     MILL-ONLY EXCLUSION: never propose enabling a workflow that the
+     `<workflow-portability>` block marks as **internal** on any repo
+     other than `robotsix-mill`. These workflows' prompts are hardcoded
+     to mill's own source paths or are cross-repo infra, not per-repo
+     presence-managed — they produce only errors or false-positive
+     tickets on any other repo. If you are running against robotsix-mill
+     itself, internal workflows are valid proposals.  The
+     `<workflow-portability>` block is the data-driven source of truth;
+     do NOT hardcode individual workflow names.
 
      NEVER propose enabling a periodic workflow under a name absent from
      `<available-periodic-workflows>` unless the presence YAML includes a

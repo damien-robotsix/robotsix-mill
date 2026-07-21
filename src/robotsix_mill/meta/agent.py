@@ -95,7 +95,7 @@ def _available_periodic_catalog() -> str:
     when present, else a generic fallback for the prompt-less schedule/
     schedule tasks.
     """
-    from ..agents.periodic_loader import _BUILTIN_KINDS
+    from ..agents.workflow_portability import _BUILTIN_KINDS
 
     defs_dir = agent_definitions_dir() / "periodic"
     lines: list[str] = []
@@ -119,6 +119,19 @@ def _available_periodic_catalog() -> str:
         "are silently rejected by the loader."
     )
     return "\n".join(lines)
+
+
+def _workflow_portability() -> str:
+    """Render the full workflow-portability reference for the meta prompt.
+
+    Unlike ``_available_periodic_catalog`` (which only lists per-repo-
+    enable-able workflows), this lists EVERY built-in workflow with its
+    portability classification so the meta-agent can gate its proposals
+    against a data-driven source of truth rather than a hardcoded name.
+    """
+    from ..agents.workflow_portability import render_workflow_portability
+
+    return render_workflow_portability()
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +393,9 @@ def run_meta_agent(
     # Hand the agent the full periodic-workflow catalogue so it can check each
     # repo for missing-but-valuable workflows without rediscovering the list.
     prompt += section("available-periodic-workflows", _available_periodic_catalog())
+    # Workflow portability schedule — data-driven source of truth for which
+    # workflows are portable (enable-able on managed repos) vs internal.
+    prompt += section("workflow-portability", _workflow_portability())
     # Deterministic ground-truth blocks: discovery the agent reliably skips,
     # pre-computed so it only has to judge (see the helpers' docstrings).
     _todo_scan = scan_outstanding_todos(repo_clones)

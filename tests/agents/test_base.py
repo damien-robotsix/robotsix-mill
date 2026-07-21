@@ -412,12 +412,15 @@ def test_build_agent_composes_prompt(monkeypatch, settings):
 
     captured_compose: list[dict] = []
 
-    def fake_compose_prompt(settings, system_prompt, skills=None, modules=False):
+    def fake_compose_prompt(
+        settings, system_prompt, skills=None, modules=False, workflows=False
+    ):
         captured_compose.append(
             dict(
                 system_prompt=system_prompt,
                 skills=skills,
                 modules=modules,
+                workflows=workflows,
             )
         )
         return system_prompt
@@ -438,6 +441,7 @@ def test_build_agent_composes_prompt(monkeypatch, settings):
     assert captured_compose[0]["system_prompt"] == "Raw prompt."
     assert captured_compose[0]["skills"] == ["board"]
     assert captured_compose[0]["modules"] is True
+    assert captured_compose[0]["workflows"] is False
 
 
 def test_build_agent_unregistered_tool_in_prompt_raises(monkeypatch, settings):

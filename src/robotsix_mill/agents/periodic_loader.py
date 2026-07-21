@@ -38,6 +38,10 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from robotsix_mill._resources import agent_definitions_dir
 from ..core.duration import parse_duration
 from .overlays import apply_overlay
+from .workflow_portability import (
+    _BUILTIN_KINDS,
+    kind_for,
+)
 from .yaml_loader import AgentDefinition, load_agent_definition
 
 log = logging.getLogger("robotsix_mill.periodic_loader")
@@ -49,66 +53,6 @@ PERIODIC_DIR = (".robotsix-mill", "periodic")
 # bespoke workflows — no path separators or colons. Allows snake_case (built-in
 # names like cost_warmer, agent_check) and kebab-case (bespoke slugs).
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-
-
-# ---------------------------------------------------------------------------
-# Workflow kinds + the canonical built-in kind map
-# ---------------------------------------------------------------------------
-
-# kind values (kept as plain strings for trivial serialization/compare):
-#   "llm_agent"     — built-in LLM periodic agent with a prompt yaml in
-#                     agent_definitions/periodic/<name>.yaml; the per-repo
-#                     file partial-merges over it.
-#   "schedule_only" — built-in pass with NO prompt yaml (or a deterministic
-#                     runner): the per-repo file only carries presence +
-#                     interval_seconds/enabled; prompt fields are ignored.
-#   "bespoke"       — brand-new repo-specific agent (name matches no
-#                     built-in); requires system_prompt.
-#   "global_only"   — recognized built-in that is NOT per-repo presence
-#                     managed (cross-repo or always-on infra); a per-repo
-#                     file for it is ignored with a warning.
-#   "mill_only"     — recognized built-in that is ONLY valid for the
-#                     robotsix-mill repo itself; its system prompt is
-#                     hardcoded to mill's own source paths. A per-repo
-#                     presence file for it on any OTHER repo is rejected.
-_BUILTIN_KINDS: dict[str, str] = {
-    # LLM periodic agents (prompt yaml + partial-merge override).
-    "audit": "llm_agent",
-    "health": "llm_agent",
-    "agent_check": "llm_agent",
-    "bc_check": "llm_agent",
-    "completeness_check": "llm_agent",
-    "copy_paste": "llm_agent",
-    "survey": "llm_agent",
-    "test_gap": "llm_agent",
-    "docstring_coverage": "llm_agent",
-    "module_curator": "llm_agent",
-    "module_size": "llm_agent",
-    "forge_parity": "llm_agent",
-    "state_sync": "mill_only",
-    "frontend_sync": "mill_only",
-    "repo_description_sync": "schedule_only",
-    "triage_boilerplate": "llm_agent",
-    # Schedule-only passes (no prompt yaml / deterministic runner).
-    "diagnostic": "schedule_only",
-    "trace_review": "schedule_only",
-    "config_sync": "schedule_only",
-    "member_sync": "schedule_only",
-    "data_dir_gc": "schedule_only",
-    "changelog_autofill": "schedule_only",
-    "pin_bump": "schedule_only",
-    # Recognized but NOT per-repo-presence managed (cross-repo / always-on).
-    "langfuse_cleanup": "global_only",
-    "meta": "global_only",
-    "run_health": "global_only",
-    "timeout_escalation": "global_only",
-    "trace_health": "global_only",
-}
-
-
-def kind_for(name: str) -> str:
-    """Return the workflow kind for *name* (``"bespoke"`` when unknown)."""
-    return _BUILTIN_KINDS.get(name, "bespoke")
 
 
 def validate_periodic_file_content(

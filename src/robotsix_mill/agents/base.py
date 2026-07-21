@@ -210,6 +210,7 @@ def build_agent_from_definition(
         output_type=resolved_output_type,
         skills=definition.skills,
         modules=definition.modules,
+        workflows=definition.workflows,
         web_knowledge_block_reason=web_knowledge_block_reason,
     )
     kwargs.update(overrides)
@@ -310,11 +311,12 @@ def _render_module_map(module_list: list[dict]) -> str:
     return rendered
 
 
-def compose_prompt(
+def compose_prompt(  # noqa: C901
     settings: Settings,
     system_prompt: str,
     skills: list[str] | None = None,
     modules: bool = False,
+    workflows: bool = False,
 ) -> str:
     """Compose the final system prompt: the YAML ``system_prompt`` plus
     any ``skills`` sections.
@@ -377,6 +379,19 @@ def compose_prompt(
                 block = _render_module_map(module_list)
                 prompt += "\n\n" + block
 
+    if workflows:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            from robotsix_mill.agents.workflow_portability import (
+                render_workflow_portability,
+            )
+
+            prompt += "\n\n" + render_workflow_portability()
+        except Exception as exc:
+            logger.warning("Cannot render workflow portability: %s", exc)
+
     return prompt
 
 
@@ -438,6 +453,7 @@ def build_agent(  # noqa: C901
     max_tokens: int | None = None,
     skills: list[str] | None = None,
     modules: bool = False,
+    workflows: bool = False,
     board_id: str = "",
     repo_dir: "Path | None" = None,
     web_knowledge_block_reason: str | None = None,
@@ -528,6 +544,7 @@ def build_agent(  # noqa: C901
         system_prompt,
         skills=skills,
         modules=modules,
+        workflows=workflows,
     )
     # Deterministic build-time guard (PR #755, PR #780): the prompt must
     # not instruct the agent to *call* a tool absent from its resolved
