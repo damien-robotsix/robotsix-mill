@@ -725,6 +725,21 @@ class DeliverStage(Stage):
         # Regenerate stale lockfiles so the PR is born with a correct lock.
         _regen_lockfiles(repo_dir, ticket.id)
 
+        # Config-standard footprint validation: reject deployments that
+        # carry out-of-footprint config-standard files (e.g. a stray
+        # _standards/ copy that should not ship to the target repo).
+        from ..deploy import validate_config_standard_footprint
+
+        footprint_violations = validate_config_standard_footprint(repo_dir)
+        if footprint_violations:
+            return None, Outcome(
+                State.BLOCKED,
+                f"config-standard footprint violation in {repo_label}: "
+                f"the following files are outside the approved four-file "
+                f"footprint: {', '.join(footprint_violations)}. "
+                "Remove these files and re-run implement.",
+            )
+
         try:
             git_ops.push(repo_dir, branch, remote_url, token)
         except subprocess.CalledProcessError as e:

@@ -167,6 +167,7 @@ _set_wal  # SQLAlchemy event listener registered via @event.listens_for decorato
 DATA_DIR_GC
 LANGFUSE_CLEANUP
 REPO_DESCRIPTION_SYNC
+CONFIG_STANDARD
 impl
 cache_ok
 process_bind_param

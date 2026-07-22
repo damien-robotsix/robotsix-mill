@@ -118,6 +118,11 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/check_config_sync.py
 
+      - name: Check config-standard footprint
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run python scripts/check_config_standard_footprint.py
+
       - name: Validate config.schema.json sync
         env:
           UV_PROJECT_ENVIRONMENT: system
