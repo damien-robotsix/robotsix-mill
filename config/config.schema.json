@@ -1173,6 +1173,7 @@
         "deploy_api_url": {
           "anyOf": [
             {
+              "pattern": "^https?://",
               "type": "string"
             },
             {
