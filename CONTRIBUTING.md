@@ -361,6 +361,22 @@ pattern as `uv audit --frozen`'s `--ignore-vuln`. Policy lives entirely in the w
 flags and comments — there is intentionally no separate
 `.licenserc`/`.scancode` config file.
 
+**Note on the config-standard footprint check in `ci.yml`:**
+`scripts/check_config_standard_footprint.py` runs on every PR/push.
+It detects config-standard compliance PRs (those adding any of the
+four canonical config-standard files: `config/config.json`,
+`config/config.schema.json`, `deploy/docker-compose.yml`, or
+`CHANGELOG.md`) and **gates** — failing the build — if the diff
+introduces any files outside that approved footprint. Legitimate
+pre-existing repo files that the PR modifies but does not add are
+unaffected. The escape hatch is to split the PR: land the
+config-standard files in one PR (where the gate expects exactly the
+four-file footprint) and any out-of-footprint files in a separate PR.
+This is a hard **gate**, not advisory. See
+`scripts/check_config_standard_footprint.py` for the canonical
+four-file footprint and the rule that repos must not carry local
+`_standards/` copies.
+
 ### Trivy vulnerability scanning
 
 Trivy vulnerability scanning runs as part of the shared reusable

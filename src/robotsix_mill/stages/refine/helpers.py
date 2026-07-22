@@ -765,6 +765,7 @@ _AUTO_APPROVE_SOURCES: set[str] = {
     "completeness_check",
     "module_curator",
     "copy_paste",
+    "config_standard",
 }
 
 # Substrings (lowercased) in a triage note that signal a draft should NOT be

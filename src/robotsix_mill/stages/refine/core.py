@@ -256,6 +256,14 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 new_output_hash[:12],
             )
 
+        # --- config-standard footprint enumeration: when a
+        # config-standard compliance ticket passes refine, inject the
+        # canonical four-file allowlist into the spec so the implement
+        # agent has an authoritative reference and does not add
+        # out-of-footprint files (e.g. a local _standards/ copy).
+        if ticket.source == "config_standard":
+            RefineStage._inject_config_standard_footprint(ws)
+
         # Apply the implementation-DONE guard (defense-in-depth) and
         # clear the error-recovery checkpoint.
         outcome = RefineStage._guard_implementation_done(
@@ -426,3 +434,32 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             repo_id=repo_config.repo_id if repo_config is not None else "",
         )
         return cand
+
+    @staticmethod
+    def _inject_config_standard_footprint(ws: "Workspace") -> None:
+        """Append the canonical config-standard four-file allowlist to the spec.
+
+        Called after refine produces a spec for a ``config_standard``
+        ticket so the implement agent has an authoritative reference
+        and does not add out-of-footprint files (e.g. a local
+        ``_standards/`` copy).
+        """
+        _FOOTPRINT_BLOCK = """
+
+## Config-standard file footprint
+
+This is a **config-standard compliance** ticket. The ONLY files that
+may be added or modified are:
+
+1. ``config/config.json``
+2. ``config/config.schema.json``
+3. ``deploy/docker-compose.yml``
+4. ``CHANGELOG.md``
+
+The canonical standard/doc sources are ``robotsix-config`` and
+``robotsix-standards`` only — do **NOT** add local ``_standards/``
+copies or any other files outside this footprint.
+"""
+        current = ws.read_description()
+        if _FOOTPRINT_BLOCK not in current:
+            ws.write_description(current + _FOOTPRINT_BLOCK)

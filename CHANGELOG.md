@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Config-standard 4-file footprint enforcement: CI gate rejects PRs
+  adding files outside the canonical footprint, deploy-time validation
+  blocks out-of-footprint files before push, and the refine stage
+  enumerates the approved footprint for config-standard tickets.
 - Fix malformed base URL in lifecycle wrapper: `deploy_api_url` now validates the `https?://` scheme at config time, and `check_deploy_freshness()` normalizes bare hostnames by prepending `https://` when a scheme is missing, so httpx never sees a URL it can't parse.
 - Rewrite `docs/langfuse/observability.md` to describe the current global `secrets:` block mechanism instead of the removed per-repo `langfuse:` blocks. Removed all references to `langfuse_from` inheritance.
 - Remove dead re-exports ``_status`` and ``_is_openrouter_upstream_error`` from ``agents.retry`` — neither symbol had any callers.
