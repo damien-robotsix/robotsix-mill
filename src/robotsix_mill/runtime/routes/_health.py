@@ -115,12 +115,81 @@ async def _check_langfuse(settings: Settings) -> dict[str, Any]:
         return {"name": "langfuse", "status": "ok", "latency_ms": elapsed}
 
 
+async def _check_push_access(
+    settings: Settings, remote_url: str | None
+) -> dict[str, Any]:
+    """Probe the sandbox git-push bridge credential.
+
+    Uses ``git ls-remote`` against the forge remote with the
+    push-scoped token to verify the push path works — distinct
+    from the clone/read health checks.  When no forge is configured
+    (``remote_url`` is ``None`` or empty) the probe is skipped.
+    """
+    if not remote_url:
+        return {"name": "push_access", "status": "skipped", "latency_ms": 0}
+
+    from ...forge.auth import github_push_token
+    from ...vcs.git_ops import check_push_access as _git_check_push_access
+
+    try:
+        push_token = await asyncio.to_thread(github_push_token, settings)
+    except Exception as exc:
+        log.warning("health /ready: push_access token resolution failed: %s", exc)
+        return {
+            "name": "push_access",
+            "status": "error",
+            "latency_ms": 0,
+            "detail": f"token resolution failed: {exc}",
+        }
+
+    try:
+        result = await asyncio.to_thread(_git_check_push_access, remote_url, push_token)
+    except Exception as exc:
+        log.warning("health /ready: push_access probe failed: %s", exc)
+        return {
+            "name": "push_access",
+            "status": "error",
+            "latency_ms": 0,
+            "detail": str(exc),
+        }
+
+    status = str(result.get("status", "error"))
+    latency_raw = result.get("latency_ms", 0)
+    latency = int(latency_raw) if isinstance(latency_raw, (int, float)) else 0
+    detail = result.get("detail")
+
+    return {
+        "name": "push_access",
+        "status": "ok" if status == "ok" else "error",
+        "latency_ms": latency,
+        "detail": detail,
+    }
+
+
+def _resolve_push_remote(
+    request: Request, settings: Settings, board_id: str | None
+) -> str | None:
+    """Resolve the forge remote URL for push-access probing.
+
+    Iterates the repos registry to find a repo whose ``board_id``
+    matches *board_id*, falling back to the global
+    ``settings.forge_remote_url`` when no match is found or *board_id*
+    is ``None``.
+    """
+    repos_registry = request.app.state.repos
+    for rc in repos_registry.repos.values():
+        if str(rc.board_id) == board_id:
+            return rc.forge_remote_url or settings.forge_remote_url or None
+    return settings.forge_remote_url or None
+
+
 @router.get("/health/ready", response_model=None)
 async def health_ready(
     request: Request, settings: Settings = Depends(get_settings)
 ) -> JSONResponse | dict[str, Any]:
-    """Health-check endpoint that probes database connectivity and Langfuse
-    observability status, returning a structured readiness response.
+    """Health-check endpoint that probes database connectivity, Langfuse
+    observability status, and sandbox git-push bridge credential validity,
+    returning a structured readiness response.
 
     Args:
         request: The incoming FastAPI request, used to resolve the
@@ -164,6 +233,16 @@ async def health_ready(
         checks.append({"name": "langfuse", "status": "timeout", "latency_ms": 2000})
     else:
         checks.append(lf_result)
+
+    # Push-access check — verifies the sandbox git-push bridge credential
+    # is valid, distinct from the clone/read health checks.
+    _push_remote = _resolve_push_remote(request, settings, board_id)
+
+    push_result = await _with_timeout(_check_push_access(settings, _push_remote))
+    if push_result is None:
+        checks.append({"name": "push_access", "status": "timeout", "latency_ms": 2000})
+    else:
+        checks.append(push_result)
 
     any_down = any(c["status"] in {"error", "timeout"} for c in checks)
     body: dict[str, Any] = {

@@ -314,6 +314,7 @@
   "secrets": {
     "forge_repo_create_token": "SECRET",
     "forge_token": "SECRET",
+    "sandbox_push_token": "SECRET",
     "github_app_id": "SECRET",
     "github_app_private_key": "SECRET",
     "github_app_private_key_path": "SECRET",

@@ -2032,3 +2032,151 @@ class TestPostPushCheck:
             dest, "feature", "main", "https://127.0.0.1:9/none.git", token=None
         )
         assert result == PostPushResult.UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# classify_push_error — auth vs generic failure classification
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyPushError:
+    """``classify_push_error`` distinguishes auth failures from generic errors."""
+
+    def test_auth_invalid_username_or_token(self):
+        assert (
+            git_ops.classify_push_error(
+                "remote: Invalid username or token.\n"
+                "fatal: Authentication failed for 'https://github.com/o/r.git/'"
+            )
+            == "auth"
+        )
+
+    def test_auth_password_not_supported(self):
+        assert (
+            git_ops.classify_push_error(
+                "remote: Password authentication is not supported for Git operations.\n"
+                "fatal: Authentication failed"
+            )
+            == "auth"
+        )
+
+    def test_auth_401(self):
+        assert (
+            git_ops.classify_push_error("The requested URL returned error: 401")
+            == "auth"
+        )
+
+    def test_auth_403(self):
+        assert (
+            git_ops.classify_push_error("The requested URL returned error: 403")
+            == "auth"
+        )
+
+    def test_auth_repository_not_found(self):
+        assert (
+            git_ops.classify_push_error(
+                "remote: Repository not found.\nfatal: repository 'https://...' not found"
+            )
+            == "auth"
+        )
+
+    def test_auth_fatal_authentication_failed(self):
+        assert (
+            git_ops.classify_push_error(
+                "fatal: Authentication failed for 'https://github.com/o/r.git/'"
+            )
+            == "auth"
+        )
+
+    def test_auth_could_not_read_from_remote(self):
+        assert (
+            git_ops.classify_push_error(
+                "fatal: Could not read from remote repository.\n"
+                "Please make sure you have the correct access rights"
+            )
+            == "auth"
+        )
+
+    def test_generic_network_error(self):
+        assert (
+            git_ops.classify_push_error(
+                "fatal: unable to access 'https://github.com/o/r.git/': "
+                "Could not resolve host: github.com"
+            )
+            == "generic"
+        )
+
+    def test_generic_empty_stderr(self):
+        assert git_ops.classify_push_error("") == "generic"
+
+    def test_case_insensitive(self):
+        assert (
+            git_ops.classify_push_error("REMOTE: INVALID USERNAME OR TOKEN.") == "auth"
+        )
+
+
+# ---------------------------------------------------------------------------
+# check_push_access — health-endpoint probe
+# ---------------------------------------------------------------------------
+
+
+class TestCheckPushAccess:
+    """``check_push_access`` runs ``git ls-remote`` and returns a structured dict."""
+
+    def test_ok_with_bare_repo(self, tmp_path):
+        """Against a local bare repo (no auth), the probe succeeds."""
+        from .test_git_ops import make_bare_repo  # noqa: F811 — fixture helper
+
+        url = make_bare_repo(tmp_path)
+        result = git_ops.check_push_access(url, token=None)
+        assert result["ok"] is True
+        assert result["status"] == "ok"
+        assert isinstance(result["latency_ms"], int)
+        assert result["detail"] is not None  # SHA string
+
+    def test_unreachable_remote(self):
+        """An unreachable host returns error, not auth_error."""
+        result = git_ops.check_push_access("https://127.0.0.1:9/none.git", token=None)
+        assert result["ok"] is False
+        assert result["status"] == "error"
+
+    def test_auth_error_classification(self, monkeypatch):
+        """When git ls-remote exits non-zero with an auth message,
+        the result status is ``auth_error``."""
+        import subprocess as sp_mod
+
+        fake = sp_mod.CompletedProcess(
+            args=["git", "ls-remote", "https://oauth2:bad@github.com/o/r.git", "HEAD"],
+            returncode=128,
+            stdout="",
+            stderr="remote: Invalid username or token.\n"
+            "fatal: Authentication failed for 'https://github.com/o/r.git/'\n",
+        )
+
+        monkeypatch.setattr(sp_mod, "run", lambda *a, **kw: fake)
+        result = git_ops.check_push_access("https://github.com/o/r.git", token="bad")
+        assert result["ok"] is False
+        assert result["status"] == "auth_error"
+
+    def test_with_token_in_remote_url(self, tmp_path):
+        """Token passed alongside a bare repo URL still works."""
+        from .test_git_ops import make_bare_repo
+
+        url = make_bare_repo(tmp_path)
+        result = git_ops.check_push_access(url, token="ghs_fake")
+        assert result["ok"] is True
+        assert result["status"] == "ok"
+
+    def test_subprocess_exception_returns_error(self, monkeypatch):
+        """When subprocess.run itself raises (not just non-zero exit),
+        the result is ``error``."""
+        import subprocess as sp_mod
+
+        def _raise(*a, **kw):
+            raise OSError("no git binary")
+
+        monkeypatch.setattr(sp_mod, "run", _raise)
+        result = git_ops.check_push_access("https://github.com/o/r.git")
+        assert result["ok"] is False
+        assert result["status"] == "error"
+        assert "no git binary" in str(result["detail"])

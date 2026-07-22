@@ -104,7 +104,11 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
         - ``LEASE_REJECTED: ...`` — the remote advanced since the lease
           was computed. The agent should inspect ancestry and retry
           (self-authored) or report FAILED (foreign push).
-        - ``PUSH_ERROR: ...`` — some other error (network, auth, etc.).
+        - ``PUSH_AUTH_ERROR: ...`` — the push failed because of an
+          authentication problem (expired/revoked token, invalid
+          credentials).  The agent should report this as a classified
+          diagnostic rather than a code defect.
+        - ``PUSH_ERROR: ...`` — some other error (network, etc.).
 
         Guardrailed: only the ticket's own branch is accepted."""
         with trace_stage("git_push_with_lease"):
@@ -145,6 +149,12 @@ def build_bridged_git_tools(  # noqa: C901 — four inner closures, each ~20 lin
                 )
                 if "stale" in stderr.lower() or "[rejected]" in stderr.lower():
                     return f"LEASE_REJECTED: {git_ops.redact_credentials(stderr)}"
+                # Classify auth failures distinctly so the agent (and its
+                # diagnostic runner) can distinguish a credential blind spot
+                # from a code defect.
+                classification = git_ops.classify_push_error(stderr)
+                if classification == "auth":
+                    return f"PUSH_AUTH_ERROR: {git_ops.redact_credentials(stderr)}"
                 return f"PUSH_ERROR: {git_ops.redact_credentials(str(e))}"
 
     def git_branch_ancestry(branch_name: str, target_branch: str) -> str:

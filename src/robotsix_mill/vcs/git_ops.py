@@ -445,6 +445,110 @@ def ls_remote_sha(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Push-access probe (health endpoint)
+# ---------------------------------------------------------------------------
+
+# Auth-failure substrings that ``git ls-remote`` / ``git push`` emit when
+# the token is expired, revoked, or otherwise invalid.  Case-insensitive
+# match so we catch both lowercase and uppercase variants.
+PUSH_AUTH_FAILURE_SUBSTRINGS: tuple[str, ...] = (
+    "invalid username or token",
+    "password authentication is not supported",
+    "authentication failed",
+    "remote: invalid",
+    "401",
+    "403",
+    "fatal: authentication failed",
+    "could not read from remote repository",
+    "repository not found",
+)
+
+
+def classify_push_error(stderr: str) -> str:
+    """Distinguish an auth failure from a generic push failure.
+
+    Returns ``"auth"`` when *stderr* contains a known auth-failure
+    substring, ``"generic"`` otherwise.
+    """
+    lowered = stderr.lower()
+    for marker in PUSH_AUTH_FAILURE_SUBSTRINGS:
+        if marker in lowered:
+            return "auth"
+    return "generic"
+
+
+def check_push_access(
+    remote_url: str, token: str | None = None, ref: str = "HEAD"
+) -> dict[str, object]:
+    """Verify push-scope access to *remote_url* without side effects.
+
+    Runs ``git ls-remote`` against the remote (a read-only operation
+    that still exercises token auth) and classifies the result:
+
+    Returns a dict with keys:
+    - ``ok`` (bool): ``True`` when the remote is reachable and the
+      token authenticates successfully.
+    - ``status`` (str): ``"ok"``, ``"auth_error"``, or ``"error"``.
+    - ``latency_ms`` (int): wall-clock latency of the git call.
+    - ``detail`` (str | None): human-readable detail (SHA on success,
+      error summary on failure).
+
+    Unlike ``ls_remote_sha`` this function captures and classifies the
+    stderr to distinguish auth failures from transient network errors.
+    """
+    import time as _time
+
+    start = _time.perf_counter()
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", _authed_url(remote_url, token), ref],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except Exception as exc:
+        elapsed = int((_time.perf_counter() - start) * 1000)
+        return {
+            "ok": False,
+            "status": "error",
+            "latency_ms": elapsed,
+            "detail": f"git ls-remote raised: {exc}",
+        }
+
+    elapsed = int((_time.perf_counter() - start) * 1000)
+
+    if result.returncode == 0:
+        sha: str | None = None
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            sha_part, _, _ = line.partition("\t")
+            if sha_part:
+                sha = sha_part
+                break
+        return {
+            "ok": True,
+            "status": "ok",
+            "latency_ms": elapsed,
+            "detail": sha,
+        }
+
+    combined_stderr = result.stderr or ""
+    classification = classify_push_error(combined_stderr)
+
+    return {
+        "ok": False,
+        "status": "auth_error" if classification == "auth" else "error",
+        "latency_ms": elapsed,
+        "detail": redact_credentials(
+            combined_stderr[:200] or f"git ls-remote exit {result.returncode}"
+        ),
+    }
+
+
 def branch_ancestry(repo: Path, branch: str, target: str) -> list[dict[str, str]]:
     """Return commits on ``origin/<branch>`` not on ``origin/<target>``.
 
