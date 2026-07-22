@@ -4,16 +4,17 @@ When robotsix-mill refines a ticket for a managed repo, the **refine
 agent** can consult that repo's runtime observability data to produce a
 better-grounded spec:
 
-- **Per-repo Langfuse traces** — the managed repo's own LLM agents
-  (e.g. robotsix-auto-mail's triage / draft-reply / archive-structure
-  agents) are traced in a Langfuse project. Refine can query recent and
+- **Langfuse traces** — the managed repo's own LLM agents (e.g.
+  robotsix-auto-mail's triage / draft-reply / archive-structure agents)
+  are traced in a global Langfuse project. Refine can query recent and
   relevant traces from that project.
 - **Deployed application logs** — the managed repo's live deployment
   writes log files to a folder mill can read. Refine can grep those for
   actual errors/warnings (ingestion, IMAP, pipeline, …).
 
-This is **strictly opt-in per repo**. A repo with no observability
-configuration behaves exactly as it does today — see
+Langfuse is **global** (one project configured in the `secrets:` block
+of `config/config.json`, applied uniformly to every repo by
+`_apply_global_langfuse`). Deployed logs are **opt-in per repo**. See
 [Graceful degradation](#graceful-degradation-config-missing).
 
 ---
@@ -22,34 +23,34 @@ configuration behaves exactly as it does today — see
 
 Observability has two independent configuration surfaces.
 
-### Langfuse (in `config/repos.yaml`, per repo)
+### Langfuse (global `secrets:` block, applied uniformly)
 
-Each repo's Langfuse project is declared under its entry's `langfuse:`
-block in the operator-managed `config/repos.yaml`. This table mirrors
-the *Field reference* in
-[configuration.md → Repos registry](../config/configuration.md#repos-registry)
-so the two stay consistent:
+Langfuse credentials are configured in a **single global `secrets:` block**
+in `config/config.json` (`MILL_CONFIG_FILE` or `MILL_SECRETS_FILE`). The
+`_apply_global_langfuse()` function in `repos.py` reads these credentials
+and populates every repo's langfuse fields uniformly — there is **no**
+per-repo `langfuse:` block. A per-repo `langfuse:` key in
+`config/repos.yaml` would be silently ignored.
 
-| YAML key | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `repos.<id>.langfuse.project_name` | yes | — | Langfuse project name for this repo's traces |
-| `repos.<id>.langfuse.public_key` | yes | — | Langfuse public key for this repo's project |
-| `repos.<id>.langfuse.secret_key` | yes | — | Langfuse secret key for this repo's project |
-| `repos.<id>.langfuse.base_url` | no | `https://cloud.langfuse.com` | Langfuse base URL |
-| `repos.<id>.langfuse_from` | no | — | Inherit another repo's Langfuse project (whole workspace shares ONE project) |
+The relevant `Secrets` fields (see
+[configuration.md → Secrets reference](../config/configuration.md#secrets-reference)):
 
-**Inheritance with `langfuse_from`.** When `langfuse_from` is set, the
-repo inherits the named master repo's Langfuse project. In that case the
-`langfuse:` block **MUST be omitted** — a repo with `langfuse_from` must
-not carry its own keys. There is **no chaining** (you cannot point at a
-repo that itself inherits) and **no self-reference**. This is the field
-member-sync sets automatically for auto-registered workspace members.
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `langfuse_public_key` | yes | — | Langfuse public key for the shared workspace project |
+| `langfuse_secret_key` | yes | — | Langfuse secret key for the shared workspace project |
+| `langfuse_base_url` | no | `https://cloud.langfuse.com` | Langfuse base URL |
+| `langfuse_project_name` | no | — | Langfuse project name for trace attribution |
+| `langfuse_project_id` | no | — | Langfuse project ID for trace attribution |
+
+All repos share the same project. There is no per-repo project isolation
+and no `langfuse_from` inheritance — the old field has been removed.
 
 ### Deployed logs (in mill's central `config/repos.yaml`)
 
 The operator declares a repo's deployed-log folder as a per-repo key in
 mill's central, **gitignored** `config/repos.yaml` — alongside
-`board_id` / `forge_remote_url` / `langfuse:`. The value is a
+`board_id` / `forge_remote_url`. The value is a
 deployment-specific host path, so it must **not** be committed into the
 managed repo (the old repo-owned `.robotsix-mill/config.yaml` key is
 deprecated and ignored — a deprecation warning is logged if it is still
@@ -65,20 +66,20 @@ present):
 
 The actual mechanism, not an idealized one:
 
-- **Langfuse keys live in `config/repos.yaml`**, which is
-  operator-managed and **gitignored** (exactly like
-  the `config/config.yaml` `secrets:` block) — it is never committed. Keys are read from
-  `RepoConfig` at call time, not stamped onto the global `Secrets`
-  singleton.
-- **`deployed_log_folder` lives in `config/repos.yaml` too** — it is a
+- **Langfuse keys live in the `secrets:` block of `config/config.json`**
+  (overridable via `MILL_SECRETS_FILE`), which is operator-managed and
+  **gitignored** — it is never committed. The `Secrets` fields
+  (`langfuse_public_key`, `langfuse_secret_key`, `langfuse_base_url`,
+  `langfuse_project_id`, `langfuse_project_name`) are read at startup by
+  `_apply_global_langfuse()` and applied uniformly to every repo. There is
+  no per-repo `langfuse:` block — one global project for all repos.
+- **`deployed_log_folder` lives in `config/repos.yaml`** — it is a
   deployment-specific host path, kept central with the (also gitignored)
-  Langfuse keys rather than committed into the managed repo.
-- Use **`langfuse_from`** to avoid duplicating keys across a workspace's
-  member repos — one project, inherited.
+  repo config rather than committed into the managed repo.
 - **No `${ENV_VAR}` interpolation.** `config/repos.yaml` does **not**
   perform environment-variable substitution; the loader does not
-  implement it. Put the literal keys in the (gitignored) file — do not
-  expect `${LANGFUSE_SECRET_KEY}`-style references to be expanded.
+  implement it. Put the literal paths in the (gitignored) file — do not
+  expect `${DEPLOYED_LOG_FOLDER}`-style references to be expanded.
 
 ---
 
@@ -86,12 +87,11 @@ The actual mechanism, not an idealized one:
 
 Using robotsix-auto-mail as the example:
 
-1. **Configure Langfuse in `config/repos.yaml`.** Add or locate the
-   repo's entry and fill its `langfuse:` block (`project_name`,
-   `public_key`, `secret_key`, optional `base_url`). If the repo is a
-   workspace member that should share its master's project, set
-   `langfuse_from: <master-repo-id>` instead and omit the `langfuse:`
-   block.
+1. **Configure Langfuse in `config/config.json`.** Add the global
+   `langfuse_public_key`, `langfuse_secret_key`, and optional
+   `langfuse_project_name`, `langfuse_project_id`, and `langfuse_base_url`
+   to the `"secrets"` block. These are applied uniformly to every repo —
+   there is no per-repo configuration.
 2. **Set `deployed_log_folder` in the repo's `config/repos.yaml`
    entry.** Point it at the directory the live deployment writes its
    logs to (absolute, or relative to the repo root).
@@ -112,11 +112,20 @@ repos:
     board_id: "auto-mail"
     forge_remote_url: "https://github.com/robotsix/robotsix-auto-mail.git"
     deployed_log_folder: /var/log/robotsix-auto-mail
-    langfuse:
-      project_name: "robotsix-auto-mail"
-      public_key: "pk-lf-..."
-      secret_key: "sk-lf-..."
-      base_url: "https://cloud.langfuse.com"  # optional — defaults to cloud
+```
+
+Langfuse credentials go in `config/config.json`'s `"secrets"` block, not here:
+
+```jsonc
+// config/config.json (excerpt)
+{
+  "secrets": {
+    "langfuse_public_key": "pk-lf-...",
+    "langfuse_secret_key": "sk-lf-...",
+    "langfuse_base_url": "https://cloud.langfuse.com",
+    "langfuse_project_name": "robotsix-auto-mail"
+  }
+}
 ```
 
 ---
@@ -138,9 +147,7 @@ Built in `src/robotsix_mill/agents/langfuse_tools.py` and wired in
 - `langfuse_inspect_trace`
 - `inspect_cost`
 
-These use the per-repo `RepoConfig` Langfuse credentials when the
-ticket's repo has them configured; otherwise they fall back to the
-global `Secrets`.
+These use the global `Secrets` Langfuse credentials.
 
 ### `query_app_logs`
 
@@ -168,7 +175,7 @@ drills in with `query_app_logs`.
 Observability is additive — its absence never changes baseline
 behavior:
 
-- **No `langfuse:` / `langfuse_from`** → the refine agent still gets the
+- **No Langfuse secrets configured** → the refine agent still gets the
   Langfuse tools, backed by the **global `Secrets`** credentials.
 - **No resolvable `deployed_log_folder`** (absent, or not pointing at an
   existing directory) → **no** `query_app_logs` tool and **no** log
