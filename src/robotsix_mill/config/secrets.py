@@ -1,185 +1,164 @@
-"""The :class:`Secrets` model and its cached accessors.
+"""Thin accessor for secrets stored as SecretStr fields on Settings.
 
-Secrets are never merged into ``Settings`` — they are kept in a
-separate model with redacted ``repr`` / ``model_dump`` and
-debug-logged attribute access, so they cannot leak through logs,
-trace output, or accidental serialization.
-
-The cached ``_secrets`` singleton lives in ``config/__init__.py`` so
-test fixtures that poke ``robotsix_mill.config._secrets`` are
-observed by the accessors here (which read the package attribute at
-call time).
-
-Secrets are loaded from the ``secrets:`` block of the single mill
-config file (``config/config.json``, else ``config/config.example.json``).
-A value equal to the literal ``SECRET`` sentinel (used throughout
-``config.example.json``) is treated as unset, so the field falls back
-to its ``None`` default.
+Secrets are now first-class fields on :class:`~robotsix_mill.config.Settings`,
+loaded via ``robotsix_config.load_config(Settings)``. This module provides a
+backward-compatible :func:`get_secrets` that unwraps ``SecretStr`` → ``str | None``
+so existing callers (``get_secrets().openrouter_api_key``, etc.) keep working.
 """
 
 from __future__ import annotations
 
-import inspect
 import logging
+from dataclasses import dataclass
 from typing import Any
-
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
-class Secrets(BaseModel):
-    """API keys, tokens, and credentials for external services
-    (OpenRouter, forge, Langfuse, ntfy, etc.).
-    """
+def _resolve_settings():
+    """Return the resolved Settings, using the cached singleton when available."""
+    from .settings import Settings, load_settings
 
-    openrouter_api_key: str | None = Field(
-        default=None,
-        description="API key for OpenRouter model access (https://openrouter.ai/keys). Required for LLM inference.",
-    )
-    forge_token: str | None = Field(
-        default=None,
-        description="Personal access token (PAT) for the forge (GitHub/GitLab). Used for PR creation, branch push, and merge operations.",
-    )
-    # A classic/fine-grained PAT used ONLY for repo creation (POST
-    # /user/repos or /orgs/.../repos). GitHub App installation tokens
-    # cannot create repositories under a personal account ("Resource not
-    # accessible by integration"), so this PAT — with repo-creation
-    # rights — is preferred for that one call while everyday push/PR
-    # keeps using the App token. Falls back to the normal token if unset.
-    forge_repo_create_token: str | None = Field(
-        default=None,
-        description="A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos — use a classic PAT with repo-creation scope.",
-    )
-    sandbox_push_token: str | None = Field(
-        default=None,
-        description="Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token — a broken push token then only blocks pushes, not PR creation or API calls.",
-    )
-    github_app_id: str | None = Field(
-        default=None,
-        description="GitHub App ID for App-based authentication. Required when FORGE_AUTH=app.",
-    )
-    github_app_private_key: str | None = Field(
-        default=None,
-        description="GitHub App private key (PEM string). Alternative to github_app_private_key_path.",
-    )
-    github_app_private_key_path: str | None = Field(
-        default=None,
-        description="Path to the GitHub App private key PEM file. Alternative to github_app_private_key.",
-    )
-    langfuse_public_key: str | None = Field(
-        default=None,
-        description="Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
-    )
-    langfuse_secret_key: str | None = Field(
-        default=None,
-        description="Langfuse secret key for LLM observability tracing.",
-    )
-    langfuse_base_url: str | None = Field(
-        default=None,
-        description="Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
-    )
-    langfuse_project_id: str | None = Field(
-        default=None,
-        description="Langfuse project ID for trace attribution.",
-    )
-    langfuse_project_name: str | None = Field(
-        default=None,
-        description="Langfuse project name for trace attribution.",
-    )
-    openrouter_management_key: str | None = Field(
-        default=None,
-        description="OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
-    )
-    ntfy_url: str | None = Field(
-        default=None,
-        description="ntfy server URL for push notifications (https://ntfy.sh).",
-    )
-    ntfy_token: str | None = Field(
-        default=None,
-        description="ntfy access token for authenticated push notifications.",
-    )
+    import robotsix_mill.config as _pkg
 
-    def __init__(self, _secrets_file: str | None = None, **data: Any) -> None:
-        """Construct a ``Secrets`` instance.
+    cached = getattr(_pkg, "_settings", None)
+    if cached is None:
+        cached = load_settings()
+        _pkg._settings = cached
+    return cached
 
-        If ``_secrets_file`` is provided it is used as the JSON source;
-        otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
-        single mill config file (``config/config.json``, else
-        ``config/config.example.json``).  Its ``secrets:`` block is passed
-        as field defaults, which explicit ``**data`` kwargs can override.
-        """
-        from .loader import load_secrets_json
 
-        file_path: str | None = _secrets_file
-        if file_path is None:
-            import os
+@dataclass(frozen=True)
+class _SecretsView:
+    """Read-only view that unwraps SecretStr → str | None."""
+    _settings: Any  # Settings
 
-            file_path = os.environ.get("MILL_SECRETS_FILE")
-
-        yaml_data = load_secrets_json(file_path)
-        merged = {**yaml_data, **data}
-        super().__init__(**merged)
+    def __getattr__(self, name: str) -> Any:
+        value = getattr(self._settings, name, None)
+        if value is not None and hasattr(value, "get_secret_value"):
+            return value.get_secret_value()
+        return value
 
     def __repr__(self) -> str:
-        field_names = list(type(self).model_fields.keys())
-        inner = ", ".join(f"{name}='***'" for name in field_names)
-        return f"Secrets({inner})"
+        return "Secrets(***)"
+
+
+# Backward-compatible Secrets class for tests that construct Secrets(**overrides).
+# This is NOT the same as the old Secrets model — it wraps Settings.
+class Secrets:
+    """Backward-compatible wrapper that constructs a Settings internally.
+
+    Tests do ``Secrets(openrouter_api_key="sk-...")`` — we build a minimal
+    Settings from those kwargs and return a _SecretsView.
+    """
+    def __init__(self, **data: Any):
+        from .settings import Settings
+
+        # Build Settings from kwargs, using field defaults for everything else
+        self._settings = Settings.model_validate(data)
+
+    @property
+    def openrouter_api_key(self) -> str | None:
+        v = self._settings.openrouter_api_key
+        return v.get_secret_value() if v else None
+
+    @property
+    def forge_token(self) -> str | None:
+        v = self._settings.forge_token
+        return v.get_secret_value() if v else None
+
+    @property
+    def forge_repo_create_token(self) -> str | None:
+        v = self._settings.forge_repo_create_token
+        return v.get_secret_value() if v else None
+
+    @property
+    def sandbox_push_token(self) -> str | None:
+        v = self._settings.sandbox_push_token
+        return v.get_secret_value() if v else None
+
+    @property
+    def github_app_id(self) -> str | None:
+        v = self._settings.github_app_id
+        return v.get_secret_value() if v else None
+
+    @property
+    def github_app_private_key(self) -> str | None:
+        v = self._settings.github_app_private_key
+        return v.get_secret_value() if v else None
+
+    @property
+    def github_app_private_key_path(self) -> str | None:
+        v = self._settings.github_app_private_key_path
+        return v.get_secret_value() if v else None
+
+    @property
+    def langfuse_public_key(self) -> str | None:
+        v = self._settings.langfuse_public_key
+        return v.get_secret_value() if v else None
+
+    @property
+    def langfuse_secret_key(self) -> str | None:
+        v = self._settings.langfuse_secret_key
+        return v.get_secret_value() if v else None
+
+    @property
+    def langfuse_base_url(self) -> str | None:
+        v = self._settings.langfuse_base_url
+        return v.get_secret_value() if v else None
+
+    @property
+    def langfuse_project_id(self) -> str | None:
+        v = self._settings.langfuse_project_id
+        return v.get_secret_value() if v else None
+
+    @property
+    def langfuse_project_name(self) -> str | None:
+        v = self._settings.langfuse_project_name
+        return v.get_secret_value() if v else None
+
+    @property
+    def openrouter_management_key(self) -> str | None:
+        v = self._settings.openrouter_management_key
+        return v.get_secret_value() if v else None
+
+    @property
+    def ntfy_url(self) -> str | None:
+        v = self._settings.ntfy_url
+        return v.get_secret_value() if v else None
+
+    @property
+    def ntfy_token(self) -> str | None:
+        v = self._settings.ntfy_token
+        return v.get_secret_value() if v else None
+
+    def __repr__(self) -> str:
+        return "Secrets(***)"
 
     def model_dump(self, *, redact: bool = True, **kwargs: Any) -> dict[str, Any]:
-        """Dump fields to dict, redacting all values by default."""
-        d: dict[str, Any] = super().model_dump(**kwargs)
         if redact:
-            return {k: "***" for k in d}
-        return d
+            return {k: "***" for k in self._settings.model_fields if self._is_secret_field(k)}
+        return {k: getattr(self, k) for k in self._settings.model_fields if self._is_secret_field(k)}
 
-    def __getattribute__(self, name: str) -> Any:
-        # Log every "public" field access at DEBUG level.
-        # We must bypass our own override for private/special attrs
-        # and for the fields dict itself to avoid infinite recursion.
-        if not name.startswith("_") and name not in (
-            "model_fields",
-            "model_config",
-            "model_dump",
-            "__class__",
-            "__dict__",
-        ):
-            fields = type(self).model_fields
-            if name in fields:
-                frame = inspect.currentframe()
-                if frame is not None:
-                    caller_frame = frame.f_back
-                    if caller_frame is not None:
-                        caller_module = caller_frame.f_globals.get(
-                            "__name__", "unknown"
-                        )
-                    else:
-                        caller_module = "unknown"
-                else:
-                    caller_module = "unknown"
-                # Use a logger scoped to this module so tests can capture it
-                _logger = logging.getLogger(__name__)
-                _logger.debug("Secrets.%s accessed by %s", name, caller_module)
-        try:
-            return super().__getattribute__(name)
-        except AttributeError:
-            # Pydantic v2 field lookup: model_computed_fields etc.
-            return object.__getattribute__(self, name)
+    @staticmethod
+    def _is_secret_field(name: str) -> bool:
+        return name in {
+            "openrouter_api_key", "forge_token", "forge_repo_create_token",
+            "sandbox_push_token", "github_app_id", "github_app_private_key",
+            "github_app_private_key_path", "langfuse_public_key",
+            "langfuse_secret_key", "langfuse_base_url", "langfuse_project_id",
+            "langfuse_project_name", "openrouter_management_key", "ntfy_url",
+            "ntfy_token",
+        }
 
 
 def load_secrets(secrets_file: str | None = None) -> Secrets:
-    """Load and return a :class:`Secrets` instance from JSON.
-
-    If *secrets_file* is provided it is used as the JSON source;
-    otherwise ``MILL_SECRETS_FILE`` is consulted, falling back to the
-    single mill config file (``config/config.json``, else
-    ``config/config.example.json``).
-    """
-    return Secrets(_secrets_file=secrets_file)
+    """Load secrets from Settings. The *secrets_file* arg is ignored."""
+    return Secrets()
 
 
 def get_secrets() -> Secrets:
-    """Return a cached :class:`Secrets` singleton, constructing it on first call."""
+    """Return a cached Secrets wrapper, constructing it on first call."""
     import robotsix_mill.config as _pkg
 
     cached = _pkg._secrets
@@ -190,7 +169,7 @@ def get_secrets() -> Secrets:
 
 
 def _reset_secrets() -> None:
-    """Clear the cached :class:`Secrets` singleton (for tests)."""
+    """Clear the cached Secrets singleton (for tests)."""
     import robotsix_mill.config as _pkg
 
     _pkg._secrets = None
