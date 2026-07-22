@@ -251,6 +251,47 @@ class TestTokenNeverLeaked:
         # fetch was called once before the push.
         mock_fetch.assert_called_once()
 
+    def test_git_push_with_lease_auth_error(self, tmp_path):
+        """When the push fails with an auth message, the tool returns
+        PUSH_AUTH_ERROR (not generic PUSH_ERROR), so the ci_fix agent
+        can emit a classified diagnostic."""
+        _, _, git_push_with_lease, _ = self._build(tmp_path)
+
+        auth_exc = subprocess.CalledProcessError(
+            128,
+            [
+                "git",
+                "push",
+                f"https://oauth2:{self.TOKEN}@github.com/o/r.git",
+                "mill/t-1:mill/t-1",
+            ],
+            output="",
+            stderr=(
+                b"remote: Invalid username or token.\n"
+                b"fatal: Authentication failed for "
+                b"'https://github.com/o/r.git/'\n"
+            ),
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch") as mock_fetch,
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+                side_effect=auth_exc,
+            ),
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert self.TOKEN not in result
+        assert "ghs_" not in result
+        # The auth error is classified distinctly from generic PUSH_ERROR.
+        assert result.startswith("PUSH_AUTH_ERROR:")
+        # The stderr is redacted (the error message itself doesn't contain
+        # a token, but redact_credentials is still called and is a no-op
+        # on token-free text).
+        assert "Invalid username or token" in result
+        mock_fetch.assert_called_once()
+
     # -- error: git_branch_ancestry ----------------------------------------
 
     def test_git_branch_ancestry_error_redacted(self, tmp_path):

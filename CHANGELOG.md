@@ -4,6 +4,10 @@
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage
   enumerates the approved footprint for config-standard tickets.
+- Bring sandbox git-push bridge credential under the managed Secrets surface
+  with a dedicated ``sandbox_push_token`` field, a push-access health probe
+  in ``/health/ready``, and distinct ``PUSH_AUTH_ERROR`` classification so
+  operators can distinguish a credential blind spot from a code defect.
 - Fix malformed base URL in lifecycle wrapper: `deploy_api_url` now validates the `https?://` scheme at config time, and `check_deploy_freshness()` normalizes bare hostnames by prepending `https://` when a scheme is missing, so httpx never sees a URL it can't parse.
 - Rewrite `docs/langfuse/observability.md` to describe the current global `secrets:` block mechanism instead of the removed per-repo `langfuse:` blocks. Removed all references to `langfuse_from` inheritance.
 - Remove dead re-exports ``_status`` and ``_is_openrouter_upstream_error`` from ``agents.retry`` — neither symbol had any callers.

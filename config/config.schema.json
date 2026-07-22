@@ -447,6 +447,21 @@
           "format": "password",
           "title": "Openrouter Management Key",
           "writeOnly": true
+        },
+        "sandbox_push_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token \u2014 a broken push token then only blocks pushes, not PR creation or API calls.",
+          "format": "password",
+          "title": "Sandbox Push Token",
+          "writeOnly": true
         }
       },
       "title": "Secrets",

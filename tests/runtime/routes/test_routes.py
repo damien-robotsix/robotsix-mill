@@ -1259,9 +1259,14 @@ def test_health_ready_all_ok(client, monkeypatch):
     data = r.json()
     assert data["status"] == "ready"
     names = {c["name"] for c in data["checks"]}
-    assert names == {"database", "langfuse"}
+    assert names == {"database", "langfuse", "push_access"}
     for c in data["checks"]:
-        assert c["status"] == "ok"
+        if c["name"] == "push_access":
+            assert c["status"] in ("ok", "skipped"), (
+                f"push_access unexpected status: {c['status']}"
+            )
+        else:
+            assert c["status"] == "ok"
         assert isinstance(c["latency_ms"], int)
         assert c["latency_ms"] >= 0
 

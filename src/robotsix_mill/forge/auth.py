@@ -158,8 +158,13 @@ def invalidate_and_backoff(
 def github_push_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
     """Return a token scoped for git push operations.
 
-    When ``settings.forge_auth != "app"``, falls back to the static
-    ``FORGE_TOKEN`` (PAT) — identical to :func:`github_token`.
+    Resolution order (PAT mode, ``forge_auth != "app"``):
+
+    1. ``SAND杝OX_PUSH_TOKEN`` from secrets — a dedicated push-bridge
+       credential, isolated from the general forge token.  When set,
+       a broken push token only blocks pushes, not PR creation or API
+       calls.
+    2. ``FORGE_TOKEN`` — the general forge PAT (fallback).
 
     When ``forge_auth == "app"``, bypasses the cached installation
     token from :func:`github_token` and mints a **fresh** token
@@ -168,6 +173,10 @@ def github_push_token(settings: Settings, repo_config: RepoConfig | None = None)
     least-privilege token — no long-lived PAT is stored or reused.
     """
     if settings.forge_auth != "app":
+        push_token = get_secrets().sandbox_push_token
+        if push_token:
+            logger.debug("github_push_token: using dedicated sandbox_push_token")
+            return push_token
         return github_token(settings, repo_config)
 
     if not get_secrets().github_app_id or not (
