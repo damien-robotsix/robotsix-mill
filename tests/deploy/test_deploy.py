@@ -172,6 +172,37 @@ def test_check_deploy_freshness_connection_error_returns_none(monkeypatch):
     assert status is None
 
 
+def test_check_deploy_freshness_normalizes_missing_scheme(monkeypatch):
+    """When deploy_api_url lacks a scheme, https:// is prepended automatically."""
+    captured_url: list[str] = []
+
+    class _CaptureClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url):
+            captured_url.append(url)
+            return _FakeResponse(
+                200,
+                {
+                    "running_digest": "sha256:abc",
+                    "latest_digest": "sha256:abc",
+                    "update_available": False,
+                },
+            )
+
+    monkeypatch.setattr(httpx, "Client", _CaptureClient)
+    status = check_deploy_freshness("deploy.example.com:8080")
+    assert status is not None
+    assert captured_url == ["https://deploy.example.com:8080/services/mill"]
+
+
 # ---------------------------------------------------------------------------
 # DeployStatus dataclass
 # ---------------------------------------------------------------------------

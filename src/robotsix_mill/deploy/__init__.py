@@ -51,6 +51,13 @@ def check_deploy_freshness(deploy_api_url: str | None) -> DeployStatus | None:
     if not deploy_api_url:
         return None
 
+    # Normalize: prepend https:// when the URL lacks a scheme so that
+    # downstream httpx calls (and any callers that construct URLs from
+    # this base — e.g. self_restart, component update) don't fail with
+    # UnsupportedProtocol.
+    if "://" not in deploy_api_url:
+        deploy_api_url = f"https://{deploy_api_url}"
+
     api_base = deploy_api_url.rstrip("/")
     url = f"{api_base}/services/mill"
 

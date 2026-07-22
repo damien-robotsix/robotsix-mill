@@ -892,5 +892,6 @@ class _CoreSettings(BaseModel):
     # server is available).
     deploy_api_url: str | None = Field(
         default=None,
+        pattern=r"^https?://",
         description="Deploy server management API URL. When set, used to check worker image freshness before resuming blocked tickets.",
     )
