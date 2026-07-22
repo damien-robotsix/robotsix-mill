@@ -112,8 +112,8 @@
     config_standard: "config-standard",
     dependabot_alerts: "dependabot-alerts",
     implement_baseline_dependency: "implement-baseline-dependency",
-    orphaned_pr_check: "orphaned-pr-check",
     repo_description_sync: "repo-description-sync",
+    orphaned_pr_check: "orphaned-pr-check",
   };
 
   const STATE_ARTIFACT = {
