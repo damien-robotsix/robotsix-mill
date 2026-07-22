@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Enable pytest-xdist parallel test execution: add `-n auto` to CI pytest-args, `parallel = true` to coverage config, and restructure `make test` with `coverage combine` for accurate multi-worker coverage. Add `make test-fast` for no-coverage parallel runs.
 - Fix `test_gap_interval_seconds` documented default in `docs/config/configuration.md`: `86400` → `604800` (7 days), matching the Pydantic model default in `_settings_periodic.py`.
 - Fix stale code comment: survey interval default now correctly stated as 604800 (7 days) in `_settings_periodic.py`.
 - Document `trace_review_min_confidence` in the `trace_review` config table (`docs/config/configuration.md`).
