@@ -27,7 +27,7 @@ jobs:
       install-extras: "tracing"
       cov-package: "robotsix_mill"
       coverage-threshold: 70
-      pytest-args: -m "not docker"
+      pytest-args: -m "not docker" -n auto
       bandit-severity: "medium"
       mypy-advisory: true
 
