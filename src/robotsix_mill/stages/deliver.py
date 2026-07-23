@@ -728,14 +728,22 @@ class DeliverStage(Stage):
         # Config-standard footprint validation: reject deployments that
         # carry out-of-footprint config-standard files (e.g. a stray
         # _standards/ copy that should not ship to the target repo).
-        # Only flag files that the ticket branch actually touched
-        # (added, modified, or deleted) — pre-existing fleet-standard
-        # files like .pre-commit-config.yaml must never block delivery.
+        #
+        # Only inspect files the ticket's branch actually changed
+        # (three-dot diff vs the merge base), NOT every file on disk.
+        # Pre-existing repo files (e.g. .pre-commit-config.yaml) that
+        # the ticket never touched would otherwise block deliverable.
         from ..deploy import validate_config_standard_footprint
 
-        branch_diff_files = set(git_ops.introduced_files(repo_dir, target))
+        try:
+            committed_diff = git_ops._git(
+                repo_dir, "diff", "--name-only", f"origin/{target}...HEAD"
+            )
+        except subprocess.CalledProcessError:
+            committed_diff = ""
+        changed_files = set(committed_diff.split("\n")) if committed_diff else set()
         footprint_violations = validate_config_standard_footprint(
-            repo_dir, diff_files=branch_diff_files
+            repo_dir, changed_files=changed_files
         )
         if footprint_violations:
             return None, Outcome(
