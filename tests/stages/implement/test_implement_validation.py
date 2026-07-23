@@ -1149,3 +1149,27 @@ def test_baseline_check_forge_raises_treated_as_unavailable(tmp_path, monkeypatc
     assert cache_path.exists()
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
     assert cache["passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# _run_baseline_check — write_spec_fingerprint=False propagation
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_check_passes_write_spec_fingerprint_false(tmp_path, monkeypatch):
+    """_run_baseline_check must call _finalize with
+    write_spec_fingerprint=False so baseline failures don't persist a
+    spec fingerprint that would trigger the stale-re-spawn guard on
+    the next preflight."""
+    _install_baseline_seams(monkeypatch, test_result=(False, "boom diag"))
+    rec = _install_spawn_finalize(monkeypatch)
+    _call_baseline(_baseline_ctx(tmp_path))
+
+    # _finalize must have been called.
+    assert rec.finalize_calls
+    # The write_spec_fingerprint kwarg must be False.
+    finalize_kw = rec.finalize_calls[0]
+    assert finalize_kw.get("write_spec_fingerprint") is False, (
+        f"_run_baseline_check must pass write_spec_fingerprint=False, "
+        f"got: {finalize_kw}"
+    )
