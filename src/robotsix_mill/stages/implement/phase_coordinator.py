@@ -57,6 +57,23 @@ _STUCK_MAX_TOOL_CALLS_NO_DIFF = 50
 _STUCK_SAME_TOOL_WINDOW = 5
 
 
+def _commit_or_raise(repo_dir: Path, commit_message: str) -> None:
+    """Call :func:`~robotsix_mill.vcs.git_ops.commit_all` and, on git
+    failure, include stderr in the exception message so ticket history
+    shows diagnostic output instead of just the command line."""
+    try:
+        git_ops.commit_all(repo_dir, commit_message)
+    except subprocess.CalledProcessError as exc:
+        stderr_text = (exc.stderr or "").strip()
+        cmd_str = " ".join(exc.cmd) if isinstance(exc.cmd, list) else str(exc.cmd)
+        msg = f"Command '{cmd_str}' returned non-zero exit status {exc.returncode}."
+        if stderr_text:
+            msg += f"\nstderr: {stderr_text}"
+        raise subprocess.CalledProcessError(
+            exc.returncode, msg, output=exc.output, stderr=exc.stderr
+        ) from exc
+
+
 class PhaseCoordinatorMixin(_ImplementStageBase):
     """Run-loop orchestration for :class:`ImplementStage`."""
 
@@ -1328,7 +1345,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
             maybe_generate_towncrier_fragment(repo_dir, ticket.id, ticket.title)
             cls._validate_changelog_fragments(repo_dir)
-            git_ops.commit_all(repo_dir, commit_message)
+            _commit_or_raise(repo_dir, commit_message)
         # Commit extra repos (skip primary — already done above).
         if extra_roots is not None:
             for repo_path in extra_roots:
@@ -1341,7 +1358,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         repo_path, ticket.id, ticket.title
                     )
                     cls._validate_changelog_fragments(repo_path)
-                    git_ops.commit_all(repo_path, commit_message)
+                    _commit_or_raise(repo_path, commit_message)
             # Write the artifact — even if empty (no-change-needed path).
             try:
                 (ws.artifacts_dir / "touched_repos.json").write_text(
