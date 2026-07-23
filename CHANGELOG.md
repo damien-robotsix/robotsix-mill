@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Enable pytest-xdist parallel test execution: add `-n auto` to CI pytest-args, `parallel = true` to coverage config, and restructure `make test` with `coverage combine` for accurate multi-worker coverage. Add `make test-fast` for no-coverage parallel runs.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage

@@ -21,8 +21,13 @@ $(BIN)/activate:
 install:  ## Install the package, dependencies, and pre-commit for local development
 	uv sync --frozen --extra tracing
 
-test: install  ## Run tests with pytest (coverage ≥ 70%)
-	$(BIN)/python -m pytest -q --cov=robotsix_mill --cov-report=term-missing --cov-fail-under=70
+test: install  ## Run tests with pytest (coverage ≥ 70%, parallel)
+	$(BIN)/python -m pytest -q -n auto --cov=robotsix_mill --cov-report=term-missing
+	$(BIN)/coverage combine
+	$(BIN)/coverage report --fail-under=70
+
+test-fast: install  ## Run tests with max parallelism, no coverage
+	$(BIN)/python -m pytest -q -n auto -p no:cov
 
 format: install  ## Auto-format Python source files
 	uv run ruff check --fix $(SOURCES)
