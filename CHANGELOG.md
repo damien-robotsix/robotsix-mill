@@ -12,6 +12,7 @@
 - Config-standard footprint validation at deliverable stage now only inspects files the ticket's branch actually changed (three-dot diff), ignoring pre-existing repo files that the ticket never touched. Previously, files like `.pre-commit-config.yaml` that exist in the repo but were not part of the ticket's diff would block deliverable.
 - Document `sandbox_push_token` in the Secrets reference table (`docs/config/configuration.md`).
 - `commit_all()` is now no-op-safe: after staging with `git add -A`, it checks `git status --porcelain` and returns silently if nothing is staged, avoiding a `CalledProcessError` from `git commit` on a clean tree (e.g. review-fix passes whose net diff is a pure deletion). The implement stage's `_finalize` also wraps `commit_all()` calls with stderr capture so that git failure diagnostics appear in ticket history instead of just the command line.
+- Periodic agents (survey, audit, health, etc.) now catch the Claude SDK degenerate "error result: success" exception and degrade gracefully to a no-op pass with preserved memory, matching the refine agent's existing guard.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage
