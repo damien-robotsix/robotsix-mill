@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Bump `pypdf` minimum constraint from `>=5` to `>=6.14.2` to pick up fixes for CVE-2026-59935, CVE-2026-59936, CVE-2026-59937, and CVE-2026-59938.
+- Deliverable-stage config-standard footprint check now only flags files that the ticket branch actually touched (added, modified, or deleted). Pre-existing fleet-standard files like `.pre-commit-config.yaml` and `docker-compose.yml` no longer block delivery when they are not part of the branch's change set.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage

@@ -111,12 +111,21 @@ def check_deploy_freshness(deploy_api_url: str | None) -> DeployStatus | None:
     )
 
 
-def validate_config_standard_footprint(repo_dir: str | Path) -> list[str]:
+def validate_config_standard_footprint(
+    repo_dir: str | Path, diff_files: set[str] | None = None
+) -> list[str]:
     """Validate the config-standard file footprint in *repo_dir*.
 
     Returns a list of stray config-standard artifacts (a local
     ``_standards/`` copy) found in *repo_dir*.  An empty list means the
     footprint is clean.
+
+    When *diff_files* is provided, only paths that appear in that set
+    (or whose parent directories appear) are reported — pre-existing
+    files that the ticket branch never touched are silently allowed.
+    This prevents the gate from blocking a ticket for fleet-standard
+    files like ``.pre-commit-config.yaml`` that live in the repo but
+    are not part of the branch's change set.
 
     This is a deploy-time gate — call it before pushing to catch a stray
     ``_standards/`` copy that would otherwise reach the target repo.
@@ -141,6 +150,33 @@ def validate_config_standard_footprint(repo_dir: str | Path) -> list[str]:
     # fleet-wide.
     for suspect in ("_standards", "_standards/"):
         if (repo / suspect).exists():
-            violations.append(suspect)
+            if _is_in_diff(suspect, diff_files):
+                violations.append(suspect)
 
     return violations
+
+
+def _is_in_diff(path: str, diff_files: set[str] | None) -> bool:
+    """Return True when *path* should be checked against the footprint.
+
+    When *diff_files* is ``None``, all paths pass (backward-compatible
+    behaviour — no diff filtering).  When *diff_files* is provided,
+    *path* passes only when it (or any file under it, for directory
+    paths) appears in the diff set.
+    """
+    if diff_files is None:
+        return True
+
+    # Direct match: the exact file path was in the diff.
+    if path in diff_files:
+        return True
+
+    # Directory match: a file inside the directory was in the diff.
+    # e.g. path="_standards" matches diff_files entry
+    # "_standards/foo.yaml".
+    prefix = path.rstrip("/") + "/"
+    for df in diff_files:
+        if df == path or df.startswith(prefix):
+            return True
+
+    return False

@@ -728,16 +728,23 @@ class DeliverStage(Stage):
         # Config-standard footprint validation: reject deployments that
         # carry out-of-footprint config-standard files (e.g. a stray
         # _standards/ copy that should not ship to the target repo).
+        # Only flag files that the ticket branch actually touched
+        # (added, modified, or deleted) — pre-existing fleet-standard
+        # files like .pre-commit-config.yaml must never block delivery.
         from ..deploy import validate_config_standard_footprint
 
-        footprint_violations = validate_config_standard_footprint(repo_dir)
+        branch_diff_files = set(git_ops.introduced_files(repo_dir, target))
+        footprint_violations = validate_config_standard_footprint(
+            repo_dir, diff_files=branch_diff_files
+        )
         if footprint_violations:
             return None, Outcome(
                 State.BLOCKED,
                 f"config-standard footprint violation in {repo_label}: "
-                f"the following files are outside the approved four-file "
-                f"footprint: {', '.join(footprint_violations)}. "
-                "Remove these files and re-run implement.",
+                f"the following diff-touched files are outside the "
+                f"approved four-file footprint: "
+                f"{', '.join(footprint_violations)}. "
+                "Remove these files from the branch and re-run implement.",
             )
 
         try:
