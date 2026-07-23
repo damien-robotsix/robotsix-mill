@@ -7,7 +7,11 @@ from dataclasses import FrozenInstanceError
 import httpx
 import pytest
 
-from robotsix_mill.deploy import DeployStatus, check_deploy_freshness
+from robotsix_mill.deploy import (
+    DeployStatus,
+    check_deploy_freshness,
+    validate_config_standard_footprint,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -224,3 +228,38 @@ def test_deploy_status_equality():
     c = DeployStatus(running_digest="a", latest_digest="a", update_available=False)
     assert a == b
     assert a != c
+
+
+# ---------------------------------------------------------------------------
+# validate_config_standard_footprint
+# ---------------------------------------------------------------------------
+
+
+def test_footprint_clean_repo_with_ordinary_yaml(tmp_path):
+    """Ordinary repo yaml files are NOT footprint violations.
+
+    Regression: an earlier implementation globbed every ``*.yaml``/``*.yml``
+    and flagged any file outside the four-file footprint, which blocked
+    virtually every repo (they all carry unrelated yaml) fleet-wide.
+    """
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "default.yaml").write_text("x: 1\n")
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n")
+    (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+    (tmp_path / "mkdocs.yml").write_text("site_name: x\n")
+
+    assert validate_config_standard_footprint(tmp_path) == []
+
+
+def test_footprint_flags_stray_standards_dir(tmp_path):
+    """A stray ``_standards/`` copy IS flagged as a violation."""
+    (tmp_path / "_standards").mkdir()
+    (tmp_path / "_standards" / "contract.md").write_text("# standards\n")
+
+    violations = validate_config_standard_footprint(tmp_path)
+    assert "_standards" in violations
+
+
+def test_footprint_empty_repo(tmp_path):
+    """An empty repo has a clean footprint."""
+    assert validate_config_standard_footprint(tmp_path) == []

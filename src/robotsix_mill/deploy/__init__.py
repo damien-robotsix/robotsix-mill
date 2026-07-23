@@ -13,17 +13,16 @@ Config-standard footprint validation
 ------------------------------------
 
 The module also provides :func:`validate_config_standard_footprint`,
-a deploy-time gate that rejects deployments carrying config-standard
-files outside the canonical four-file footprint:
+a deploy-time gate that rejects deployments carrying a stray local
+``_standards/`` copy of the standards contract.  The canonical
+standard/doc sources are ``robotsix-config`` and ``robotsix-standards``
+only — individual repos must **NOT** carry local ``_standards/`` copies.
 
-    1. ``config/config.json``
-    2. ``config/config.schema.json``
-    3. ``deploy/docker-compose.yml``
-    4. ``CHANGELOG.md``
-
-The canonical standard/doc sources are ``robotsix-config`` and
-``robotsix-standards`` only — individual repos must **NOT** carry
-local ``_standards/`` copies.
+Note: this gate operates on a checked-out repo tree, so — unlike the
+pre-merge ``scripts/check_config_standard_footprint.py`` diff check — it
+cannot tell whether a change is a config-standard-compliance PR.  It
+therefore only flags the one artifact that is *never* legitimate (a
+``_standards/`` copy) and leaves ordinary repo yaml alone.
 """
 
 from __future__ import annotations
@@ -35,19 +34,6 @@ from pathlib import Path
 import httpx
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-#  Canonical config-standard footprint
-# ---------------------------------------------------------------------------
-
-_CONFIG_STANDARD_FOOTPRINT: frozenset[str] = frozenset(
-    {
-        "config/config.json",
-        "config/config.schema.json",
-        "deploy/docker-compose.yml",
-        "CHANGELOG.md",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -128,38 +114,33 @@ def check_deploy_freshness(deploy_api_url: str | None) -> DeployStatus | None:
 def validate_config_standard_footprint(repo_dir: str | Path) -> list[str]:
     """Validate the config-standard file footprint in *repo_dir*.
 
-    Returns a list of violating file paths (relative to *repo_dir*)
-    that look like config-standard artifacts but are outside the
-    canonical four-file footprint.  An empty list means the footprint
-    is clean.
+    Returns a list of stray config-standard artifacts (a local
+    ``_standards/`` copy) found in *repo_dir*.  An empty list means the
+    footprint is clean.
 
-    This is a deploy-time gate — call it before pushing to catch
-    out-of-footprint files (e.g. a stray ``_standards/`` copy) that
-    would otherwise reach the target repo.
+    This is a deploy-time gate — call it before pushing to catch a stray
+    ``_standards/`` copy that would otherwise reach the target repo.
+    Ordinary repo yaml (``config/default.yaml``, ``docker-compose.yml``,
+    ``.pre-commit-config.yaml``, ``mkdocs.yml``, …) is intentionally left
+    alone; enforcing the four-file footprint against a full checkout would
+    block every normal delivery.
     """
     repo = Path(repo_dir)
     violations: list[str] = []
 
-    # Check for common out-of-footprint patterns.
-    suspects = [
-        "_standards",
-        "_standards/",
-        "standards",
-        "config-standard",
-        "config_standard",
-    ]
-
-    for suspect in suspects:
-        suspect_path = repo / suspect
-        if suspect_path.exists():
+    # Only flag a genuine stray config-standard artifact: a local
+    # ``_standards/`` copy of the standards contract that must not ship
+    # to the target repo.
+    #
+    # We deliberately do NOT glob every ``*.yaml`` / ``*.yml`` file and
+    # flag those outside the four-file footprint: ordinary repos legitimately
+    # carry many unrelated yaml files (``config/default.yaml``, a root
+    # ``docker-compose.yml``, ``.pre-commit-config.yaml``, ``mkdocs.yml``,
+    # GitHub workflow yaml, …). That over-broad rule treated every such file
+    # as an out-of-footprint config-standard artifact and blocked deploys
+    # fleet-wide.
+    for suspect in ("_standards", "_standards/"):
+        if (repo / suspect).exists():
             violations.append(suspect)
-
-    # Also check for any top-level or config/ yaml files that aren't
-    # in the footprint (e.g. a local config-standard.yaml).
-    for glob_pattern in ("config/*.yaml", "config/*.yml", "*.yaml", "*.yml"):
-        for candidate in sorted(repo.glob(glob_pattern)):
-            rel = str(candidate.relative_to(repo))
-            if rel not in _CONFIG_STANDARD_FOOTPRINT:
-                violations.append(rel)
 
     return violations
