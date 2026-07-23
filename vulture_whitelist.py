@@ -142,6 +142,8 @@ orphaned_pr_check_periodic
 orphaned_pr_check_interval_seconds
 repo_description_sync_periodic
 repo_description_sync_interval_seconds
+roadmap_sync_periodic
+roadmap_sync_interval_seconds
 pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic

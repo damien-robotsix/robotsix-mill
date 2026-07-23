@@ -809,3 +809,19 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between repo-description-sync passes.",
         json_schema_extra={"advanced": True},
     )
+
+    # --- roadmap-sync (keeps forge roadmap project in sync with board epics) ---
+    # When True, the worker runs periodic roadmap-sync passes at the
+    # configured interval. Default True (opt-out). Reads the board's epics
+    # and the forge roadmap project, reconciling items bidirectionally.
+    roadmap_sync_periodic: bool = Field(
+        default=True,
+        description="When true, run periodic roadmap-sync passes.",
+    )
+    # Interval between roadmap-sync passes (seconds). Default 86400 (daily).
+    # Enforced minimum 3600s (1 hour) in the worker.
+    roadmap_sync_interval_seconds: int = Field(
+        default=604800,  # 7d — weekly default; per-repo override via YAML
+        description="Seconds between roadmap-sync passes.",
+        json_schema_extra={"advanced": True},
+    )
