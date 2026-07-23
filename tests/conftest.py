@@ -28,21 +28,27 @@ def _isolate_default_data_dir(tmp_path_factory):
     ``load_config()`` itself is NOT patched, so tests that
     inspect raw JSON defaults continue to see ``.data``.
     """
+    import json
+
     sandbox = tmp_path_factory.mktemp("mill-default-data")
-    from robotsix_mill import config as _cfg
+    session_cfg = tmp_path_factory.mktemp("mill-session-config") / "config.json"
+    session_cfg.write_text(json.dumps({"data_dir": str(sandbox)}))
+    # Store so _no_dotenv and friends can see / override it.
+    import tests.conftest as _tc
 
-    real_call = _cfg.JsonSettingsSource.__call__
-
-    def patched(self):
-        result = real_call(self)
-        result["data_dir"] = str(sandbox)
-        return result
-
-    _cfg.JsonSettingsSource.__call__ = patched
+    _tc._SESSION_CONFIG_PATH = session_cfg
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(session_cfg))
     try:
         yield sandbox
     finally:
-        _cfg.JsonSettingsSource.__call__ = real_call
+        monkeypatch.undo()
+        _tc._SESSION_CONFIG_PATH = None
+
+
+# Module-level storage for the session config path (set by the
+# session-scoped fixture above, read by per-test fixtures below).
+_SESSION_CONFIG_PATH = None
 
 
 @pytest.fixture(autouse=True)
@@ -69,36 +75,40 @@ def _no_real_http(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_dotenv(monkeypatch):
+def _no_dotenv(monkeypatch, tmp_path):
     """Hermeticity: never let the developer's ambient env vars leak into
-    tests (they can carry a real OPENROUTER_API_KEY / FORGE_REMOTE_URL and make
-    the suite hit the network). Settings no longer reads .env/secrets.env
-    files; it only reads ``os.environ`` and a single JSON config file
-    (``config/config.json`` or the committed
-    ``config/config.example.json`` template).  Clear EVERY ambient
-    credential/endpoint var — pydantic-settings reads
-    os.environ, so anything exported in the shell *or in the running mill
-    container* (where the implement stage runs the suite as its gate)
-    leaks in. An unstripped LANGFUSE_*/FORGE_*/NTFY_* flips
-    tracing_enabled / forge-config on and makes hermetic tests assert
-    wrong or hit the network — which made the full-suite implement gate
-    fail in-container (76 env-driven failures) and BLOCK essentially
-    every ticket. The suite must be identical green on a clean machine
-    and inside the container.
+    tests.  Settings is now loaded ONLY from a single JSON config file
+    located via ``ROBOTSIX_CONFIG_FILE`` -- there is no env-var overlay,
+    no ``.env``, and no fallback path.
 
-    Pins the config loader to the committed ``config/config.example.json``
-    template (never the gitignored, host-specific ``config/config.json``)
-    by setting ``MILL_CONFIG_FILE`` and ``MILL_SECRETS_FILE`` to empty —
-    the loader treats ``""`` as "use the committed example", whose
-    secrets are all the ``SECRET`` sentinel (i.e. unset).
+    A minimal per-test config file is written with ``data_dir`` pointing
+    into *tmp_path* so every test gets its own isolated data directory.
+    Credential env vars that may leak from the developer's shell are
+    stripped.
     """
-    # Pin to the committed example template (never the gitignored
-    # host-specific config/config.json).  The loader treats empty-string
-    # ``""`` as "use the committed example", whose secrets are all the
-    # ``SECRET`` sentinel (i.e. unset).
-    monkeypatch.setenv("MILL_CONFIG_FILE", "")
-    monkeypatch.setenv("MILL_SECRETS_FILE", "")
-    monkeypatch.setenv("MILL_REPOS_FILE", "")
+    import json
+
+    # Per-test isolated config.  Reuse the session-level one when
+    # available (it already has a safe data_dir), then layer
+    # per-test overrides on top.
+    base = {}
+    import tests.conftest as _tc
+
+    session_path = getattr(_tc, "_SESSION_CONFIG_PATH", None)
+    if session_path is not None and session_path.exists():
+        try:
+            base = json.loads(session_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    base["data_dir"] = str(tmp_path)
+    # Put the config file in the parent of tmp_path so it does not
+    # pollute the test's directory listing.
+    mill_cfg_dir = tmp_path.parent / ".mill_test_cfgs"
+    mill_cfg_dir.mkdir(exist_ok=True)
+    test_cfg = mill_cfg_dir / f"config_{tmp_path.name}.json"
+    test_cfg.write_text(json.dumps(base))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(test_cfg))
+
     monkeypatch.setenv("MILL_BOARD_LIST_CACHE_TTL_SECONDS", "0")
     from robotsix_mill.runtime.routes import _tickets as _tickets_routes
 
@@ -117,20 +127,15 @@ def _no_dotenv(monkeypatch):
         "GITHUB_APP_PRIVATE_KEY_PATH",
         "NTFY_URL",
         "NTFY_TOKEN",
-        # Deployment/DinD-only knob: the container sets this so the
-        # sandbox bind-mounts the host ./data. Leaking it flips
-        # _repo_mount from the named-volume branch to the bind branch,
-        # breaking test_sandbox argv assertions in-container.
         "MILL_SANDBOX_DATA_MOUNT",
-        # Claude Agent SDK credentials — stripped so level-3 agents
-        # fail fast (no auth) instead of trying to use OAuth from a
-        # local config file and leaking coroutines in CI.
         "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_OAUTH_TOKEN",
+        # Old env vars -- strip to prevent confusion
+        "MILL_CONFIG_FILE",
+        "MILL_SECRETS_FILE",
+        "MILL_REPOS_FILE",
     ):
         monkeypatch.delenv(var, raising=False)
-
-
 @pytest.fixture(autouse=True)
 def _reset_secrets_each_test():
     """Clear the cached Secrets singleton before every test so no
