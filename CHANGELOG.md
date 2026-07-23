@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Wire `roadmap_sync` as a fully scheduled periodic pass: add `roadmap_sync_periodic`/`roadmap_sync_interval_seconds` settings fields, register it in `_BUILTIN_KINDS` as `schedule_only`, and add the runner to `_SCHEDULE_ONLY_RUNNERS` so the periodic supervisor can schedule it automatically.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage

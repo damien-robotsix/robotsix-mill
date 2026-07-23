@@ -300,6 +300,7 @@ class PollLoopsMixin(_WorkerBase):
         "changelog_autofill": "robotsix_mill.runners.changelog_autofill_runner:run_changelog_autofill_pass",
         "pin_bump": "robotsix_mill.runners.pin_bump_runner:run_pin_bump_pass",
         "repo_description_sync": "robotsix_mill.runners.repo_description_sync_runner:run_repo_description_sync_pass",
+        "roadmap_sync": "robotsix_mill.runners.roadmap_sync_runner:run_roadmap_sync_pass",
     }
 
     def _build_periodic_workflow_runner(self, wf):
