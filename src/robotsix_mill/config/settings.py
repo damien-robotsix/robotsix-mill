@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import robotsix_config
 
@@ -46,7 +47,7 @@ class Settings(
     _PeriodicSettings,
     _StagesSettings,
     _CoreSettings,
-    BaseModel,
+    BaseSettings,
 ):
     """Runtime settings for robotsix-mill: concurrency limits,
     API endpoints, feature toggles, stage-level controls,
@@ -101,7 +102,16 @@ class Settings(
         description="Repository registry.",
     )
 
-    model_config = {"extra": "forbid", "populate_by_name": True}
+    model_config = SettingsConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        # Disable .env file loading — env vars only.
+        env_file=None,
+        # All non-aliased fields get MILL_ prefix (e.g. MILL_BC_CHECK_PERIODIC).
+        # Fields with explicit aliases (FORGE_AUTH, OPENROUTER_API_KEY, etc.)
+        # use their alias instead, unaffected by this prefix.
+        env_prefix="MILL_",
+    )
 
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. *board_id* is required —

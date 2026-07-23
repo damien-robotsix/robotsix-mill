@@ -201,6 +201,36 @@
       ],
       "title": "RepoConfig",
       "type": "object"
+    },
+    "ReposRegistry": {
+      "description": "Repository registry: maps each repo ID to its per-repo\nconfiguration (board identity, forge remote, Langfuse credentials,\nCI monitor settings).",
+      "properties": {
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepoConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional Langfuse configuration for the synthetic cross-repo meta board."
+        },
+        "repos": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RepoConfig"
+          },
+          "description": "Registry of per-repo configurations keyed by repo_id.",
+          "title": "Repos",
+          "type": "object"
+        }
+      },
+      "required": [
+        "repos"
+      ],
+      "title": "ReposRegistry",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -236,7 +266,6 @@
       "type": "object"
     },
     "secrets": {
-      "description": "API keys, tokens, and credentials for external services\n(OpenRouter, forge, Langfuse, ntfy, etc.).",
       "properties": {
         "forge_repo_create_token": {
           "anyOf": [
@@ -248,7 +277,7 @@
             }
           ],
           "default": null,
-          "description": "A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos \u2014 use a classic PAT with repo-creation scope.",
+          "description": "",
           "format": "password",
           "title": "Forge Repo Create Token",
           "writeOnly": true
@@ -263,7 +292,7 @@
             }
           ],
           "default": null,
-          "description": "Personal access token (PAT) for the forge (GitHub/GitLab). Used for PR creation, branch push, and merge operations.",
+          "description": "",
           "format": "password",
           "title": "Forge Token",
           "writeOnly": true
@@ -278,7 +307,7 @@
             }
           ],
           "default": null,
-          "description": "GitHub App ID for App-based authentication. Required when FORGE_AUTH=app.",
+          "description": "",
           "format": "password",
           "title": "Github App Id",
           "writeOnly": true
@@ -293,7 +322,7 @@
             }
           ],
           "default": null,
-          "description": "GitHub App private key (PEM string). Alternative to github_app_private_key_path.",
+          "description": "",
           "format": "password",
           "title": "Github App Private Key",
           "writeOnly": true
@@ -308,7 +337,7 @@
             }
           ],
           "default": null,
-          "description": "Path to the GitHub App private key PEM file. Alternative to github_app_private_key.",
+          "description": "",
           "format": "password",
           "title": "Github App Private Key Path",
           "writeOnly": true
@@ -323,7 +352,7 @@
             }
           ],
           "default": null,
-          "description": "Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
+          "description": "",
           "format": "password",
           "title": "Langfuse Base Url",
           "writeOnly": true
@@ -338,7 +367,7 @@
             }
           ],
           "default": null,
-          "description": "Langfuse project ID for trace attribution.",
+          "description": "",
           "format": "password",
           "title": "Langfuse Project Id",
           "writeOnly": true
@@ -353,7 +382,7 @@
             }
           ],
           "default": null,
-          "description": "Langfuse project name for trace attribution.",
+          "description": "",
           "format": "password",
           "title": "Langfuse Project Name",
           "writeOnly": true
@@ -368,7 +397,7 @@
             }
           ],
           "default": null,
-          "description": "Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
+          "description": "",
           "format": "password",
           "title": "Langfuse Public Key",
           "writeOnly": true
@@ -383,7 +412,7 @@
             }
           ],
           "default": null,
-          "description": "Langfuse secret key for LLM observability tracing.",
+          "description": "",
           "format": "password",
           "title": "Langfuse Secret Key",
           "writeOnly": true
@@ -398,7 +427,7 @@
             }
           ],
           "default": null,
-          "description": "ntfy access token for authenticated push notifications.",
+          "description": "",
           "format": "password",
           "title": "Ntfy Token",
           "writeOnly": true
@@ -413,7 +442,7 @@
             }
           ],
           "default": null,
-          "description": "ntfy server URL for push notifications (https://ntfy.sh).",
+          "description": "",
           "format": "password",
           "title": "Ntfy Url",
           "writeOnly": true
@@ -428,7 +457,7 @@
             }
           ],
           "default": null,
-          "description": "API key for OpenRouter model access (https://openrouter.ai/keys). Required for LLM inference.",
+          "description": "",
           "format": "password",
           "title": "Openrouter Api Key",
           "writeOnly": true
@@ -443,7 +472,7 @@
             }
           ],
           "default": null,
-          "description": "OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
+          "description": "",
           "format": "password",
           "title": "Openrouter Management Key",
           "writeOnly": true
@@ -458,7 +487,7 @@
             }
           ],
           "default": null,
-          "description": "Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token \u2014 a broken push token then only blocks pushes, not PR creation or API calls.",
+          "description": "",
           "format": "password",
           "title": "Sandbox Push Token",
           "writeOnly": true
@@ -515,7 +544,9 @@
         "FORGE_TOKEN": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -527,7 +558,9 @@
         "GITHUB_APP_ID": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -540,7 +573,9 @@
         "GITHUB_APP_PRIVATE_KEY": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -552,7 +587,9 @@
         "GITHUB_APP_PRIVATE_KEY_PATH": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -656,7 +693,9 @@
         "OPENROUTER_API_KEY": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"
@@ -1369,6 +1408,21 @@
           "title": "Forge Parity Periodic",
           "type": "boolean"
         },
+        "forge_repo_create_token": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos \u2014 use a classic PAT with repo-creation scope.",
+          "title": "Forge Repo Create Token"
+        },
         "freshness_gate_enabled": {
           "default": false,
           "description": "When true, a pre-refine gate verifies cited file paths and line ranges still exist on HEAD.",
@@ -1445,6 +1499,21 @@
           "title": "Implement Stall Threshold",
           "type": "integer"
         },
+        "langfuse_base_url": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
+          "title": "Langfuse Base Url"
+        },
         "langfuse_cleanup_interval_seconds": {
           "advanced": true,
           "default": 86400,
@@ -1464,6 +1533,66 @@
           "description": "When true, run periodic Langfuse trace cleanup (delete oldest traces).",
           "title": "Langfuse Cleanup Periodic",
           "type": "boolean"
+        },
+        "langfuse_project_id": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Langfuse project ID for trace attribution.",
+          "title": "Langfuse Project Id"
+        },
+        "langfuse_project_name": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Langfuse project name for trace attribution.",
+          "title": "Langfuse Project Name"
+        },
+        "langfuse_public_key": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
+          "title": "Langfuse Public Key"
+        },
+        "langfuse_secret_key": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Langfuse secret key for LLM observability tracing.",
+          "title": "Langfuse Secret Key"
         },
         "language_instructions_dir": {
           "description": "Directory of per-language instruction Markdown snippets.",
@@ -1707,6 +1836,36 @@
           "title": "Network Probe Host",
           "type": "string"
         },
+        "ntfy_token": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ntfy access token for authenticated push notifications.",
+          "title": "Ntfy Token"
+        },
+        "ntfy_url": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ntfy server URL for push notifications (https://ntfy.sh).",
+          "title": "Ntfy Url"
+        },
         "obsolescence_gate_enabled": {
           "default": false,
           "description": "When true, an LLM pre-refine gate re-evaluates whether a cited gap still exists on HEAD.",
@@ -1720,6 +1879,21 @@
           "minimum": 1,
           "title": "Obsolescence Request Limit",
           "type": "integer"
+        },
+        "openrouter_management_key": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
+          "title": "Openrouter Management Key"
         },
         "orphaned_pr_bot_logins": {
           "description": "Bot author logins trusted for orphaned-PR actions. Empty = auto-resolve from forge.",
@@ -2066,6 +2240,18 @@
           "title": "Repo Description Sync Periodic",
           "type": "boolean"
         },
+        "repos": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReposRegistry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Repository registry."
+        },
         "requeue_batch_pause_seconds": {
           "advanced": true,
           "default": 2.0,
@@ -2289,6 +2475,21 @@
           "description": "Egress proxy URL for sandbox containers. Set to empty string to disable.",
           "title": "Sandbox Proxy Url",
           "type": "string"
+        },
+        "sandbox_push_token": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token \u2014 a broken push token then only blocks pushes, not PR creation or API calls.",
+          "title": "Sandbox Push Token"
         },
         "sandbox_readonly": {
           "advanced": true,
