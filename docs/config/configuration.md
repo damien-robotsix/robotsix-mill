@@ -901,6 +901,7 @@ unset.
 | `langfuse_project_name`¹ | — | Langfuse project name (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
 | `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
 | `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
+| `sandbox_push_token` | — | Optional dedicated token for the sandbox git-push bridge. When set, `github_push_token()` prefers this over `forge_token` (PAT mode only). Falls back to `forge_token` if unset. |
 
 Secrets live in the `"secrets"` block of `config/config.json` (overridable
 via `MILL_SECRETS_FILE` env var). Template: the `"secrets"` block of
