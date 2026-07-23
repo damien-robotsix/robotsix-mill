@@ -928,10 +928,11 @@ or `get_repo_config("repo-id")`.
 > that held tickets without a board_id has been removed. For single-repo
 > deployments, configure exactly one repo entry.
 
-Langfuse credentials are read from ``RepoConfig`` at call time (per
-ticket, per operation) — they are **not** stamped onto the global
-``Secrets`` singleton.  Each ticket's ``board_id`` determines which
-repo entry (and thus which Langfuse project) is used for its traces.
+Langfuse credentials are configured globally via the ``secrets:`` block of
+``config/config.json`` — the ``Secrets`` model reads them from that block,
+and ``_apply_global_langfuse`` stamps them onto every ``RepoConfig`` at
+startup.  Per-repo overrides are not supported; all repos share the same
+Langfuse configuration.
 
 ### Set up
 

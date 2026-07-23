@@ -4,7 +4,7 @@
 - Bump `pypdf` minimum constraint from `>=5` to `>=6.14.2` to pick up fixes for CVE-2026-59935, CVE-2026-59936, CVE-2026-59937, and CVE-2026-59938.
 - Deliverable-stage config-standard footprint check now only flags files that the ticket branch actually touched (added, modified, or deleted). Pre-existing fleet-standard files like `.pre-commit-config.yaml` and `docker-compose.yml` no longer block delivery when they are not part of the branch's change set.
 - Add missing `module_size` entry to `SOURCE_CLASS` map in `board-mill.js` and corresponding `.src-module-size` CSS rule in `board-mill.css`, so tickets with `SourceKind.MODULE_SIZE` render with the correct source badge instead of the fallback `.src-user` badge.
-- Fix three stale Langfuse credential descriptions in `docs/config/configuration.md`: the Secrets reference table (5 rows), footnote ¹, and `deployed_log_folder` prose all described the data flow backward. Now correctly describe the global secrets block → `Secrets` → `_apply_global_langfuse` → `RepoConfig` path.
+- Fix four stale Langfuse credential descriptions in `docs/config/configuration.md`: the Secrets reference table (5 rows), footnote ¹, `deployed_log_folder` prose, **and the Repos registry intro paragraph** all described the data flow backward. Now correctly describe the global secrets block → `Secrets` → `_apply_global_langfuse` → `RepoConfig` path, and that all repos share the same global Langfuse configuration.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage
