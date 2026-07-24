@@ -27,6 +27,7 @@ nav:
   - Pipeline:
       - Agent catalog: agents/index.md
       - Approval gate: stages/approval-gate.md
+      - Implement stage: stages/implement.md
       - Dedup guard: core/dedup-guard.md
       - Merge stage: stages/merge-stage.md
       - Epic dedup: epic-dedup.md
