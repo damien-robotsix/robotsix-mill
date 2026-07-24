@@ -123,6 +123,12 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             )
 
         # Zero-tool-call guard for resumed passes.
+        # When resuming with no changes AND the branch has no commits
+        # ahead of the base, the spec is already satisfied — the agent
+        # correctly made zero edits.  Route to DONE instead of BLOCKED:
+        # all verification gates passed (we only reach here from the
+        # "proceed" branch of _evaluate_test_results), and there is
+        # genuinely nothing to deliver.
         if (
             resuming
             and not changed
@@ -132,34 +138,28 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         ):
             progress = short_circuit_verify.analyze_pass_progress(new_msgs)
             if progress["total"] == 0:
-                diag = (
-                    "zero tool calls on resume — the implement agent "
-                    "completed this pass without issuing a single tool "
-                    "call and produced no file changes.  The previous "
-                    "implement session left no surviving diff either, so "
-                    "there is nothing to hand to code review.  This "
-                    "indicates a prompt/context assembly failure, "
-                    "workspace inaccessibility, or a spec the agent "
-                    "cannot act on."
+                done_note = (
+                    "already satisfied — no changes needed "
+                    "(zero tool calls on resume, empty diff vs base)"
                 )
                 cls._finalize(
                     ctx,
                     ticket,
                     repo_dir,
                     branch,
-                    diag,
-                    ok=False,
+                    f"{done_note}\n\n{summary or 'Agent found no work to do.'}",
+                    ok=True,
                     reference_files=ref_files,
                     extra_roots=extra_roots,
                 )
+                log.info(
+                    "%s: zero tool calls on resume with no changes — "
+                    "DONE (already satisfied)",
+                    ticket.id,
+                )
                 return _SinglePassResult(
                     next_action="return",
-                    outcome=Outcome(
-                        State.BLOCKED,
-                        f"zero tool calls on resume — "
-                        f"{diag[:200]}"
-                        + ("… (see implement.md)" if len(diag) > 200 else ""),
-                    ),
+                    outcome=Outcome(State.DONE, done_note),
                 )
         return None
 

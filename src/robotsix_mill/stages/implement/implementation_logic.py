@@ -728,6 +728,72 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                     next_action="return",
                     outcome=Outcome(State.DONE, done_note),
                 )
+            # Resuming with empty diff: the branch already satisfied the
+            # spec in a prior session and the current pass contributed
+            # no new edits.  Route to DONE — just like the fresh-run
+            # path above — instead of falling through to
+            # _verify_repo_changes (which would block on zero tool calls
+            # or route to CODE_REVIEW with an empty diff that delivers
+            # nothing).
+            if resuming:
+                # Apply the same edit-claim contradiction guard as the
+                # fresh-run path — an agent that called edit tools is
+                # signalling lost work.
+                edit_tools_rs = short_circuit_verify.detect_edit_claim_contradiction(
+                    has_changes=False, new_messages=new_msgs
+                )
+                if edit_tools_rs and (
+                    cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
+                ):
+                    tool_list = ", ".join(edit_tools_rs)
+                    diag = (
+                        f"{summary or 'Agent finished without producing file edits.'}\n\n"
+                        "[Diagnostic] implement produced an empty diff on a resuming "
+                        f"run, but the agent invoked file-mutating tools ({tool_list}) "
+                        "and replaying those edits + formatting still produced a real "
+                        "change (or could not be verified).  Blocking for inspection."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "edit-claim contradiction "
+                            "(empty diff after edit calls on resume)",
+                        ),
+                    )
+                resume_done_note = (
+                    "already satisfied — no changes needed "
+                    "(resuming with empty diff vs base)"
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    f"{resume_done_note}\n\n{summary or 'Agent found no work to do.'}",
+                    ok=True,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                log.info(
+                    "%s: empty diff on resuming run with no lost work — "
+                    "DONE (already satisfied)",
+                    ticket.id,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(State.DONE, resume_done_note),
+                )
         return None
 
     @classmethod

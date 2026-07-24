@@ -1407,6 +1407,164 @@ def test_resume_guard_pr_exists_skips_guard(ctx_factory, tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Zero-edit resume detection — branch already satisfied
+# ---------------------------------------------------------------------------
+
+
+def test_resume_zero_edit_green_gates_routes_to_done(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When resuming and the agent makes zero edits with all verification
+    gates passing, the stage must route to DONE instead of re-spawning
+    (which would re-trigger BLOCKED → resume → implement → BLOCKED)."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # Run implement once so the branch exists (resuming=True).
+    def _run_once_edit(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once_edit)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Simulate returning from review: set review_rounds > 0 and RESET
+    # the branch so it has no commits beyond origin/main — just like
+    # a ticket whose sibling already landed the same work.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    branch = f"{ctx.settings.branch_prefix}{t.id}"
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "reset", "--hard", "origin/main"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "checkout", "-B", branch],
+        check=True,
+        capture_output=True,
+    )
+
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Now the agent returns zero edits — it explored, found the spec
+    # already satisfied, and produced no changes (but DID issue tool
+    # calls like explore/read_file).  This should NOT block; it
+    # should route to DONE.
+    def _run_zero_edits(*, repo_dir, **_kwargs):
+        # Agent explored but made no edits — valid no-change pass.
+        return (
+            "spec already satisfied by base code",
+            [],  # no reference_files
+            "",  # no updated_memory
+            None,  # no conversation_state
+            None,  # no new_messages
+            False,  # no_change_needed (agent didn't explicitly set it)
+            "",  # no_change_rationale
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_zero_edits)
+
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.DONE, (
+        f"Expected DONE (already satisfied) but got {out2.next_state}: {out2.note}"
+    )
+    assert "already satisfied" in out2.note.lower()
+
+
+def test_resume_zero_tool_calls_green_gates_routes_to_done(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When resuming with zero tool calls and all gates passing, the
+    stage must route to DONE instead of BLOCKED.
+
+    The previous zero-tool-call guard in _verify_repo_changes would
+    block with "zero tool calls on resume" — but when tests pass and
+    there are no changes to deliver, the spec is already satisfied
+    and DONE is the correct terminal state."""
+    remote = _make_bare_repo_on_branch(tmp_path, "main")
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+        max_implement_review_cycles="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # First run: create a commit on the branch.
+    def _run_once_edit(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_once_edit)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Simulate review round and reset branch so it has NO commits ahead.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    branch = f"{ctx.settings.branch_prefix}{t.id}"
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "reset", "--hard", "origin/main"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "checkout", "-B", branch],
+        check=True,
+        capture_output=True,
+    )
+
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Now the agent produces zero tool calls (e.g., spec is a
+    # no-change cleanup already done by a sibling ticket).  The stage
+    # must route to DONE, not BLOCKED, since all verification gates
+    # passed and there are genuinely no changes to deliver.
+    def _run_zero_tool_calls(*, repo_dir, **_kwargs):
+        return (
+            "already satisfied — nothing to do",
+            [],  # no reference_files
+            "",  # no updated_memory
+            None,  # no conversation_state
+            None,  # no new_messages
+            False,  # no_change_needed
+            "",  # no_change_rationale
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_zero_tool_calls)
+
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.DONE, (
+        f"Expected DONE (already satisfied) but got {out2.next_state}: {out2.note}"
+    )
+    assert "already satisfied" in out2.note.lower()
+
+
+# ---------------------------------------------------------------------------
 # Deploy-freshness gate (preflight)
 # ---------------------------------------------------------------------------
 

@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Implement stage: zero-edit runs with all gates green now route to
+  DONE (already satisfied) instead of re-spawning and eventually
+  hitting the spawn-limit BLOCKED.  Two paths fixed: resuming with
+  empty diff in `_detect_no_change_contradiction`, and resuming with
+  zero tool calls in `_verify_repo_changes`.
 - Pin `pymdown-extensions>=11.0.0` in the docs dependency group to resolve GHSA-9xwg-3r6f-jcx2 (path traversal in the b64 extension, fixed in 11.0.0).
 - **fix:** newly created `ci_fix_dependency` tickets are now transitioned to `READY` immediately so the worker's poll loop picks them up, preventing the silent deadlock where a draft fix ticket was created but never enqueued.
 - Add CI gate (`check_sourcekind_frontend_parity.py`) to prevent Python `SourceKind` / JS `SOURCE_CLASS` / CSS `.src-*` drift. Fix existing drift: add missing `user`, `repo_description_sync`, and `config_standard` JS entries; remove duplicate `docstring_coverage` key.
