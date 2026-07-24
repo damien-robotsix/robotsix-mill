@@ -29,7 +29,7 @@ from .prompt_blocks import section
 
 # Backward-compat re-exports — symbols moved to refine_triage module.
 # New code should import these from ``refine_triage`` directly.
-from .refine_triage import (  # noqa: E402, F401 — re-export
+from .refine_triage import (  # noqa: E402 — re-export
     AutoApproveResult,
     ReviewerAgreementResult,
     SpecReviewResult,
@@ -39,6 +39,17 @@ from .refine_triage import (  # noqa: E402, F401 — re-export
     triage_refine,
     triage_reviewer_agreement,
 )
+
+__all__ = [
+    "AutoApproveResult",
+    "ReviewerAgreementResult",
+    "SpecReviewResult",
+    "TriageResult",
+    "review_spec_for_conciseness",
+    "triage_auto_approve",
+    "triage_refine",
+    "triage_reviewer_agreement",
+]
 
 log = logging.getLogger(__name__)
 
