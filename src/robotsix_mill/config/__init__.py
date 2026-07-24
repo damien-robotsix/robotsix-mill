@@ -56,8 +56,9 @@ _repos_config: ReposRegistry | None = None
 # Rebuild Settings after all referenced types (e.g. ReposRegistry)
 # are available — required because the forward-reference annotation
 # ``ReposRegistry | None`` can only be resolved once the module is
-# fully loaded.
-Settings.model_rebuild()
+# fully loaded.  ReposRegistry is imported under TYPE_CHECKING in
+# settings.py to avoid a CodeQL py/unsafe-cyclic-import.
+Settings.model_rebuild(_types_namespace={"ReposRegistry": ReposRegistry})
 
 __all__ = [
     "ConfigError",
