@@ -313,7 +313,7 @@ def test_real_triage_yaml_parses():
         assert ad.tools == []
         assert ad.output_type == "TriageResult"
         assert ad.retries == 2
-        assert ad.module == "refining"
+        assert ad.module == "refine_triage"
         assert "## Tool: `explore`" in ad.system_prompt
         assert "## Tool: `read_file`" in ad.system_prompt
         assert "`read_file(path)`" in ad.system_prompt
