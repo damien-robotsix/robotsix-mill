@@ -26,7 +26,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
     "pyjwt[crypto]>=2",
-    "pypdf>=5",
+    "pypdf>=6.14.2",
     # Shared kanban-board frontend library: column-per-status board chrome
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
