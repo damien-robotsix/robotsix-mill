@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Pin `pymdown-extensions>=11.0.0` in the docs dependency group to resolve GHSA-9xwg-3r6f-jcx2 (path traversal in the b64 extension, fixed in 11.0.0).
 - **fix:** newly created `ci_fix_dependency` tickets are now transitioned to `READY` immediately so the worker's poll loop picks them up, preventing the silent deadlock where a draft fix ticket was created but never enqueued.
 - Add CI gate (`check_sourcekind_frontend_parity.py`) to prevent Python `SourceKind` / JS `SOURCE_CLASS` / CSS `.src-*` drift. Fix existing drift: add missing `user`, `repo_description_sync`, and `config_standard` JS entries; remove duplicate `docstring_coverage` key.
 - Add `pytest-randomly>=4.1.0` to dev dependencies for randomized test-order detection

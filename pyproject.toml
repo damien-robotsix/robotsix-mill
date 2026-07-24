@@ -53,7 +53,7 @@ tracing = [
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
 dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "pytest-randomly>=4.1.0", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13", "hypothesis>=6"]
-docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27"]
+docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>=11.0.0"]
 
 [tool.uv]
 # `uv sync` pulls the dev group automatically, so CI/contributors don't need
