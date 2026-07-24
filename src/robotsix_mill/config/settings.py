@@ -20,7 +20,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import robotsix_config
@@ -29,7 +29,6 @@ from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
-from .secrets import get_secrets
 
 if TYPE_CHECKING:
     from .repos import ReposRegistry
@@ -149,6 +148,8 @@ class Settings(
     @property
     def tracing_enabled(self) -> bool:
         """True when all three Langfuse credentials are configured."""
+        from .secrets import get_secrets
+
         secrets = get_secrets()
         return bool(
             secrets.langfuse_base_url
@@ -249,3 +250,10 @@ class Settings(
 def load_settings() -> Settings:
     """Load Settings from config/config.json via robotsix_config."""
     return robotsix_config.load_config(Settings)
+
+
+# Import at bottom so ReposRegistry is in the module namespace when
+# pydantic resolves the forward-reference annotation via model_rebuild()
+# (called in config/__init__.py).  Kept after the class body to avoid a
+# circular-import deadlock when repos imports settings at the top level.
+from .repos import ReposRegistry  # noqa: E402

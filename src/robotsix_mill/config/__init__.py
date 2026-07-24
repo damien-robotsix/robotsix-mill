@@ -27,6 +27,14 @@ time.
 from __future__ import annotations
 
 from .loader import ConfigError
+from .secrets import (
+    Secrets,
+    _reset_secrets,
+    get_secrets,
+    load_secrets,
+    logger,
+)
+from .settings import Settings, load_settings
 from .repos import (
     CrossRepoTarget,
     RepoConfig,
@@ -38,14 +46,6 @@ from .repos import (
     load_repos_config,
     target_branch_for,
 )
-from .secrets import (
-    Secrets,
-    _reset_secrets,
-    get_secrets,
-    load_secrets,
-    logger,
-)
-from .settings import Settings, load_settings
 
 # Cached singletons live here so test fixtures poking
 # ``robotsix_mill.config._secrets`` / ``._repos_config`` are visible to
