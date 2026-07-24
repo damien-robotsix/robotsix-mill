@@ -28,6 +28,10 @@ jobs:
       cov-package: "robotsix_mill"
       coverage-threshold: 70
       pytest-args: -m "not docker"
+      # Disable xdist: background worker threads + SQLite + reset_engine()
+      # race under --dist loadscope in CI, producing spurious "database
+      # or disk is full" / "unable to open database file" failures.
+      pytest-numprocesses: "1"
       bandit-severity: "medium"
       mypy-advisory: true
 
