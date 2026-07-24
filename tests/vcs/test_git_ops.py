@@ -372,6 +372,23 @@ class TestCommitAll:
         ).stdout.strip()
         assert "add a.txt" in log
 
+    def test_noop_when_nothing_to_commit(self, tmp_path):
+        """commit_all on a clean repo is a silent no-op — no commit, no error."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # Repo is clean — commit_all should return without raising.
+        git_ops.commit_all(dest, "should be no-op")
+        # Verify no new commit was created (HEAD still at "init").
+        log = subprocess.run(
+            ["git", "-C", str(dest), "log", "--oneline", "-1"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert "init" in log
+        assert "should be no-op" not in log
+
 
 # ===========================================================================
 # 8. push + fetch — integration (real git, file:// remote)

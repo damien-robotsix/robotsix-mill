@@ -597,8 +597,17 @@ def create_branch(repo: Path, name: str) -> None:
 
 
 def commit_all(repo: Path, message: str) -> None:
-    """Stage all changes and commit (``git add -A`` + ``git commit -q -m``)."""
+    """Stage all changes and commit (``git add -A`` + ``git commit -q -m``).
+
+    If the staging area is empty after ``git add -A``, no commit is
+    created and the function returns silently (no-op).  This avoids
+    ``CalledProcessError`` when the working tree has no changes
+    (e.g. a review-fix pass whose net diff is a pure deletion that
+    was already applied in an earlier attempt).
+    """
     _git(repo, "add", "-A")
+    if not _git(repo, "status", "--porcelain"):
+        return
     _git(repo, "commit", "-q", "-m", message)
 
 

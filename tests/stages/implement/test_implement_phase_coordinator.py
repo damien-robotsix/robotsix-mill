@@ -934,6 +934,39 @@ def test_finalize_skips_towncrier_when_fragment_already_exists(
     assert len(fake.commits) == 1
 
 
+def test_finalize_commit_all_failure_includes_stderr(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When commit_all raises CalledProcessError, stderr is included in
+    the re-raised exception message so ticket history shows diagnostics."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    class _FailingGitOps:
+        def has_changes(self, repo):
+            return True
+
+        def commit_all(self, repo, message):
+            raise subprocess.CalledProcessError(
+                1,
+                ["git", "commit", "-m", message],
+                output="",
+                stderr="error: nothing to commit, working tree clean",
+            )
+
+    monkeypatch.setattr(pc, "git_ops", _FailingGitOps())
+
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        ImplementStage._finalize(
+            ctx, t, repo_dir, "mill/x", "summary", ok=True, reference_files=None
+        )
+    msg = str(exc_info.value)
+    assert "nothing to commit" in msg
+    assert "stderr:" in msg
+
+
 # --- cross-spawn stall detection -----------------------------------------
 
 
