@@ -19,7 +19,7 @@ list_threads: false
 ask_user: false
 output_type: TriageResult
 retries: 2
-module: refining
+module: refine_triage
 skills: []
 
 system_prompt: |
