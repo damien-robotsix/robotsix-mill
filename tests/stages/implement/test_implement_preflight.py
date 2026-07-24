@@ -867,7 +867,7 @@ def test_preflight_blocks_when_agent_definition_has_empty_tools(
         tools=[],  # empty tools list
     )
     monkeypatch.setattr(
-        "robotsix_mill.stages.implement.phase_coordinator.load_agent_definition",
+        "robotsix_mill.stages.implement.phase_coordinator_preflight.load_agent_definition",
         lambda _path: empty_def,
     )
 
@@ -895,7 +895,7 @@ def test_preflight_blocks_when_agent_definition_fails_to_load(
     _write_file_map(ctx, t, "feature.txt")
 
     monkeypatch.setattr(
-        "robotsix_mill.stages.implement.phase_coordinator.load_agent_definition",
+        "robotsix_mill.stages.implement.phase_coordinator_preflight.load_agent_definition",
         lambda _path: (_ for _ in ()).throw(FileNotFoundError("no such file")),
     )
 
