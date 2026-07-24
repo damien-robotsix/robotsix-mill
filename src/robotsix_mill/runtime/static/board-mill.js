@@ -2274,5 +2274,319 @@
   window.refresh = refresh;
   window.updateMeta = updateMeta;
 
+  // =========================================================================
+  // Settings panel (config-ownership standard)
+  // =========================================================================
+  var settingsOpen = false;
+  var settingsTab = "fields";  // "fields" | "history"
+  var settingsSchema = null;
+  var settingsConfig = null;
+  var settingsVersion = 0;
+  var settingsVersions = null;
+  var settingsDirty = {};
+
+  function fieldLabel(key) {
+    // Convert UPPER_SNAKE or camelCase to a readable label
+    return key
+      .replace(/_/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
+  function fieldInput(key, value, prop) {
+    var isSecret = prop && prop.writeOnly;
+    var isBool = prop && prop.type === "boolean";
+    var isInt = prop && prop.type === "integer";
+    var isNum = prop && prop.type === "number";
+    var isEnum = prop && Array.isArray(prop.enum);
+    var isObj = prop && prop.type === "object";
+    var isNull = value === null || value === undefined;
+    var displayVal = isNull ? "" : (isSecret ? "**********" : String(value));
+    var disabled = isSecret ? " disabled" : "";
+    var secretBadge = isSecret
+      ? ' <span style="font-size:10px;color:#f59e0b">(env-injected)</span>'
+      : "";
+
+    if (isSecret) {
+      return '<input type="password" value="' + esc(displayVal) + '"' + disabled +
+        ' style="width:100%;font:12px monospace;background:#1d212c;border:1px solid #2c313d;' +
+        'color:#7d828c;border-radius:4px;padding:5px 8px" ' +
+        'data-key="' + esc(key) + '" data-secret="1">' + secretBadge;
+    }
+
+    if (isBool) {
+      var checked = value === true ? " checked" : "";
+      return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" data-key="' + esc(key) + '" data-type="boolean"' +
+        checked + ' onchange="settingsMarkDirty(this)" ' +
+        'style="accent-color:#3b82f6">' +
+        '<span style="font-size:12px;color:#cfd3db">' + (value === true ? "true" : "false") + '</span></label>';
+    }
+
+    if (isEnum) {
+      var opts = prop.enum.map(function(v) {
+        var sel = String(value) === String(v) ? " selected" : "";
+        return '<option value="' + esc(String(v)) + '"' + sel + '>' + esc(String(v)) + '</option>';
+      }).join("");
+      if (isNull) opts = '<option value="" selected>—</option>' + opts;
+      return '<select data-key="' + esc(key) + '" onchange="settingsMarkDirty(this)" ' +
+        'style="width:100%;font:12px monospace;background:#1d212c;border:1px solid #2c313d;' +
+        'color:#cfd3db;border-radius:4px;padding:5px 8px">' + opts + '</select>';
+    }
+
+    if (isInt || isNum) {
+      return '<input type="number" value="' + esc(displayVal) + '"' +
+        ' data-key="' + esc(key) + '" data-type="' + (isInt ? "integer" : "number") + '"' +
+        ' onchange="settingsMarkDirty(this)" ' +
+        (prop.minimum !== undefined ? ' min="' + prop.minimum + '"' : "") +
+        (prop.maximum !== undefined ? ' max="' + prop.maximum + '"' : "") +
+        ' style="width:100%;font:12px monospace;background:#1d212c;border:1px solid #2c313d;' +
+        'color:#cfd3db;border-radius:4px;padding:5px 8px">';
+    }
+
+    if (isObj) {
+      return '<textarea readonly data-key="' + esc(key) + '" ' +
+        'style="width:100%;font:11px monospace;background:#1d212c;border:1px solid #2c313d;' +
+        'color:#7d828c;border-radius:4px;padding:5px 8px;min-height:3em;resize:vertical">' +
+        esc(JSON.stringify(value, null, 2)) + '</textarea>' +
+        ' <span style="font-size:10px;color:#6b7280">(read-only — edit in config.json)</span>';
+    }
+
+    // Default: text input
+    return '<input type="text" value="' + esc(displayVal) + '"' +
+      ' data-key="' + esc(key) + '" onchange="settingsMarkDirty(this)" ' +
+      ' style="width:100%;font:12px monospace;background:#1d212c;border:1px solid #2c313d;' +
+      'color:#cfd3db;border-radius:4px;padding:5px 8px">';
+  }
+
+  async function openSettings() {
+    if (settingsOpen) { close_(); settingsOpen = false; return; }
+    if (sel || runsOpen || candidatesOpen) close_();
+    settingsOpen = true;
+    settingsDirty = {};
+    document.getElementById("drawer").classList.add("open");
+    await renderSettings();
+  }
+
+  async function renderSettings() {
+    var d = document.getElementById("d");
+    d.innerHTML = '<div class="drawer-close-row"><span class="x" onclick="closeSettings()" title="Cancel">&times;</span></div>' +
+      '<h3>⚙ Settings</h3>' +
+      '<div style="display:flex;gap:0;margin:10px 0;border-bottom:1px solid #2a2e37">' +
+      '<button id="settings-tab-fields" onclick="settingsSwitchTab(\'fields\')" ' +
+      'style="font-size:12px;padding:6px 16px;background:transparent;color:#cfd3db;border:none;' +
+      'border-bottom:2px solid ' + (settingsTab === "fields" ? "#3b82f6" : "transparent") + ';cursor:pointer">Fields</button>' +
+      '<button id="settings-tab-history" onclick="settingsSwitchTab(\'history\')" ' +
+      'style="font-size:12px;padding:6px 16px;background:transparent;color:#cfd3db;border:none;' +
+      'border-bottom:2px solid ' + (settingsTab === "history" ? "#3b82f6" : "transparent") + ';cursor:pointer">History</button>' +
+      '</div>' +
+      '<div id="settings-content">loading…</div>';
+
+    if (settingsTab === "fields") {
+      await renderSettingsFields();
+    } else {
+      await renderSettingsVersions();
+    }
+  }
+
+  function settingsSwitchTab(tab) {
+    settingsTab = tab;
+    renderSettings();
+  }
+
+  async function renderSettingsFields() {
+    try {
+      var r = await jget("/config");
+      if (!r) { document.getElementById("settings-content").innerHTML = '<div class="muted">Failed to load config</div>'; return; }
+      settingsSchema = r.schema;
+      settingsConfig = r.config;
+      settingsVersion = r.version;
+    } catch (e) {
+      document.getElementById("settings-content").innerHTML = '<div class="muted">Failed to load config: ' + esc(String(e)) + '</div>';
+      return;
+    }
+
+    var props = settingsSchema && settingsSchema.properties ? settingsSchema.properties : {};
+    var keys = Object.keys(settingsConfig).sort(function(a, b) {
+      // Secrets last
+      var aSec = props[a] && props[a].writeOnly ? 1 : 0;
+      var bSec = props[b] && props[b].writeOnly ? 1 : 0;
+      if (aSec !== bSec) return aSec - bSec;
+      return a.localeCompare(b);
+    });
+
+    var html = '';
+    // Group: regular fields vs secrets
+    var regularKeys = keys.filter(function(k) { return !(props[k] && props[k].writeOnly); });
+    var secretKeys = keys.filter(function(k) { return props[k] && props[k].writeOnly; });
+
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<span class="muted" style="font-size:11px">Version ' + settingsVersion + ' · ' + keys.length + ' fields</span>' +
+      '<button id="settings-save-btn" onclick="saveSettings()" ' +
+      'style="font-size:11px;padding:4px 14px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer"' +
+      (Object.keys(settingsDirty).length === 0 ? ' disabled' : '') + '>' +
+      'Save' + (Object.keys(settingsDirty).length > 0 ? ' (' + Object.keys(settingsDirty).length + ')' : '') + '</button>' +
+      '</div>';
+
+    if (Object.keys(settingsDirty).length > 0) {
+      html += '<div style="background:#2a2010;border-left:3px solid #f59e0b;padding:6px 10px;margin-bottom:10px;border-radius:4px;font-size:11px;color:#fbbf24">' +
+        'Unsaved changes to: ' + Object.keys(settingsDirty).map(function(k) { return '<code>' + esc(k) + '</code>'; }).join(", ") +
+        '</div>';
+    }
+
+    html += '<div style="max-height:60vh;overflow-y:auto">';
+
+    if (regularKeys.length > 0) {
+      regularKeys.forEach(function(key) {
+        var value = settingsConfig[key];
+        var prop = props[key] || {};
+        html += '<div style="margin-bottom:10px;padding:8px;background:#1a1d27;border-radius:6px;border:1px solid #262b36">' +
+          '<label style="display:block;font-size:11px;color:#aab0bd;margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em">' +
+          esc(fieldLabel(key)) + ' <code style="font-size:10px;color:#6b7280">' + esc(key) + '</code>' +
+          (prop.description ? ' <span style="color:#6b7280;font-size:10px;text-transform:none;letter-spacing:0" title="' + esc(prop.description) + '">ℹ</span>' : '') +
+          '</label>' +
+          fieldInput(key, value, prop) +
+          '</div>';
+      });
+    }
+
+    if (secretKeys.length > 0) {
+      html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #2a2e37">' +
+        '<div class="muted" style="font-size:11px;margin-bottom:8px">🔒 Secrets (env-injected — cannot be edited here)</div>';
+      secretKeys.forEach(function(key) {
+        var value = settingsConfig[key];
+        var prop = props[key] || {};
+        html += '<div style="margin-bottom:10px;padding:8px;background:#1a1d27;border-radius:6px;border:1px solid #262b36;opacity:0.75">' +
+          '<label style="display:block;font-size:11px;color:#7d828c;margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em">' +
+          esc(fieldLabel(key)) + ' <code style="font-size:10px;color:#6b7280">' + esc(key) + '</code></label>' +
+          fieldInput(key, value, prop) +
+          '</div>';
+      });
+    }
+
+    html += '</div>';
+
+    document.getElementById("settings-content").innerHTML = html;
+  }
+
+  async function renderSettingsVersions() {
+    try {
+      var r = await jget("/config/versions");
+      settingsVersions = r ? r.versions : [];
+    } catch (e) {
+      document.getElementById("settings-content").innerHTML = '<div class="muted">Failed to load version history</div>';
+      return;
+    }
+
+    if (!settingsVersions || settingsVersions.length === 0) {
+      document.getElementById("settings-content").innerHTML = '<div class="muted" style="padding:12px 0">No version history yet. Save a config change to create the first version.</div>';
+      return;
+    }
+
+    var html = '<div style="max-height:60vh;overflow-y:auto">';
+    settingsVersions.forEach(function(v) {
+      var changed = (v.changed_keys || []).map(function(k) { return '<code style="font-size:10px">' + esc(k) + '</code>'; }).join(", ");
+      html += '<div style="padding:8px 10px;margin-bottom:6px;background:#1a1d27;border-radius:6px;border:1px solid #262b36;display:flex;align-items:center;gap:10px">' +
+        '<span style="font-weight:600;color:#cfd3db;font-size:13px;min-width:30px">v' + v.version + '</span>' +
+        '<span style="font-size:11px;color:#7d828c;min-width:160px">' + esc(v.timestamp || "") + '</span>' +
+        '<span style="font-size:11px;color:#aab0bd;flex:1">' + (changed || '<span class="muted">—</span>') + '</span>' +
+        '<button onclick="rollbackSettings(' + v.version + ')" ' +
+        'style="font-size:10px;padding:3px 10px;background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;cursor:pointer"' +
+        ' title="Rollback to version ' + v.version + '">↩ Rollback</button>' +
+        '</div>';
+    });
+    html += '</div>';
+
+    document.getElementById("settings-content").innerHTML = html;
+  }
+
+  function settingsMarkDirty(el) {
+    var key = el.dataset.key;
+    if (!key || el.dataset.secret === "1") return;
+    var raw = el.type === "checkbox" ? el.checked : el.value;
+    var val;
+    if (el.dataset.type === "boolean") {
+      val = el.checked;
+    } else if (el.dataset.type === "integer") {
+      val = raw === "" ? null : parseInt(raw, 10);
+    } else if (el.dataset.type === "number") {
+      val = raw === "" ? null : parseFloat(raw);
+    } else {
+      val = raw === "" ? null : raw;
+    }
+    settingsDirty[key] = val;
+
+    // Update the save button
+    var btn = document.getElementById("settings-save-btn");
+    if (btn) {
+      var n = Object.keys(settingsDirty).length;
+      btn.textContent = n > 0 ? "Save (" + n + ")" : "Save";
+      btn.disabled = n === 0;
+    }
+  }
+
+  async function saveSettings() {
+    var dirty = Object.assign({}, settingsDirty);
+    if (Object.keys(dirty).length === 0) return;
+
+    var btn = document.getElementById("settings-save-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+
+    try {
+      var r = await _xhr("PUT", "/config", dirty);
+      if (!r.ok) {
+        var msg = await r.text();
+        try {
+          var err = JSON.parse(msg);
+          msg = err.detail || err.title || msg;
+        } catch (_) {}
+        alert("Failed to save config: " + msg);
+        if (btn) { btn.disabled = false; btn.textContent = "Save (" + Object.keys(settingsDirty).length + ")"; }
+        return;
+      }
+      var result = await r.json();
+      settingsDirty = {};
+      settingsConfig = result.config;
+      settingsVersion = result.version;
+      await renderSettingsFields();
+    } catch (e) {
+      alert("Failed to save config: " + e);
+      if (btn) { btn.disabled = false; btn.textContent = "Save (" + Object.keys(settingsDirty).length + ")"; }
+    }
+  }
+
+  async function rollbackSettings(version) {
+    if (!confirm("Rollback to version " + version + "? This creates a new version.")) return;
+    try {
+      var r = await _xhr("POST", "/config/rollback", { version: version });
+      if (!r.ok) {
+        var msg = await r.text();
+        try { var err = JSON.parse(msg); msg = err.detail || err.title || msg; } catch (_) {}
+        alert("Rollback failed: " + msg);
+        return;
+      }
+      var result = await r.json();
+      settingsConfig = result.config;
+      settingsVersion = result.version;
+      settingsDirty = {};
+      settingsTab = "fields";
+      await renderSettings();
+    } catch (e) {
+      alert("Rollback failed: " + e);
+    }
+  }
+
+  function closeSettings() {
+    settingsOpen = false;
+    close_();
+  }
+
+  window.openSettings = openSettings;
+  window.closeSettings = closeSettings;
+  window.settingsSwitchTab = settingsSwitchTab;
+  window.settingsMarkDirty = settingsMarkDirty;
+  window.saveSettings = saveSettings;
+  window.rollbackSettings = rollbackSettings;
+
 
 })();

@@ -23,6 +23,7 @@ from . import _board
 from . import _chat_skill
 from . import _repos
 from . import _tickets_ingest
+from . import _config
 
 router = APIRouter()
 
@@ -40,3 +41,4 @@ router.include_router(_board.router)
 router.include_router(_chat_skill.router)
 router.include_router(_repos.router)
 router.include_router(_tickets_ingest.router)
+router.include_router(_config.router)

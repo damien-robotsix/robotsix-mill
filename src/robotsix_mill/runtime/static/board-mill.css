@@ -1097,3 +1097,16 @@ pre {
   padding: 1px 4px;
   border-radius: 3px;
 }
+
+/* ============================================================
+   Settings panel
+   ============================================================ */
+#settings-content input[type="text"]:focus,
+#settings-content input[type="number"]:focus,
+#settings-content select:focus {
+  border-color: #3b82f6;
+  outline: none;
+}
+#settings-content input[data-secret="1"] {
+  cursor: not-allowed;
+}

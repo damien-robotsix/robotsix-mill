@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Add `pytest-randomly>=4.1.0` to dev dependencies for randomized test-order detection
+- Implement the config-ownership standard component config surface: `GET /config`, `PUT /config` (with validation and secret rejection), `GET /config/versions`, and `POST /config/rollback`. Secrets are always masked as `**********` on read and rejected on write — they remain env-injected by the deploy plane. A Settings panel in the board UI (⚙ Settings) lets operators view and edit component-owned config fields at runtime without a redeploy, with a version-history tab for rollback.
 - Bump `pypdf` minimum constraint from `>=5` to `>=6.14.2` to pick up fixes for CVE-2026-59935, CVE-2026-59936, CVE-2026-59937, and CVE-2026-59938.
 - Deliverable-stage config-standard footprint check now only flags files that the ticket branch actually touched (added, modified, or deleted). Pre-existing fleet-standard files like `.pre-commit-config.yaml` and `docker-compose.yml` no longer block delivery when they are not part of the branch's change set.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs

@@ -193,6 +193,7 @@ modules:
       - src/robotsix_mill/runtime/cost_warm.py
       - src/robotsix_mill/runtime/run_registry.py
       - src/robotsix_mill/runtime/stage_retry.py
+      - src/robotsix_mill/runtime/config_service.py
       - src/robotsix_mill/runtime/static/*
       - docs/runtime/**/*
       - tests/runtime/test_api.py
