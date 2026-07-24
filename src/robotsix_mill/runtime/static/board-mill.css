@@ -116,6 +116,8 @@ h1 {
 .src-ci-fix-dependency              { background: #422006; color: #fdba74; }
 .src-dependabot-alerts              { background: #422006; color: #fdba74; }
 .src-implement-baseline-dependency  { background: #1e293b; color: #94a3b8; }
+.src-repo-description-sync  { background: #164e63; color: #0891b2; }
+.src-config-standard        { background: #1e293b; color: #94a3b8; }
 
 /* ============================================================
    Origin link on cards

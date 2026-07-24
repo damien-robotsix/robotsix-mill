@@ -80,6 +80,7 @@
   };
 
   const SOURCE_CLASS = {
+    user: "user",
     retrospect: "retrospect",
     audit: "audit",
     config_sync: "config-sync",
@@ -101,16 +102,18 @@
     module_curator: "module-curator",
     module_size: "module-size",
     copy_paste: "copy-paste",
-    docstring_coverage: "docstring-coverage",
     state_sync: "state-sync",
     data_dir_gc: "data-dir-gc",
     meta: "meta",
     "run-health": "run-health",
     "langfuse-cleanup": "langfuse-cleanup",
-    triage_boilerplate: "triage-boilerplate",    ci_fix_dependency: "ci-fix-dependency",
+    triage_boilerplate: "triage-boilerplate",
+    ci_fix_dependency: "ci-fix-dependency",
+    config_standard: "config-standard",
     dependabot_alerts: "dependabot-alerts",
     implement_baseline_dependency: "implement-baseline-dependency",
     orphaned_pr_check: "orphaned-pr-check",
+    repo_description_sync: "repo-description-sync",
   };
 
   const STATE_ARTIFACT = {
