@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -157,8 +158,6 @@ class Secrets:
     # --- Instance ------------------------------------------------
 
     def __init__(self, **data: Any):
-        from .settings import Settings
-
         secrets_file = data.pop("_secrets_file", None)
 
         # 1. Build defaults from Settings (reads env / config.json).
