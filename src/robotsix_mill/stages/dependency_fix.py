@@ -94,6 +94,9 @@ def _create_fix(
         except Exception:
             log.debug("could not read labels for new fix ticket %s", fix_id)
         ctx.service.set_labels(fix_id, existing_labels + dedup_labels)
+    ctx.service.transition(
+        fix_id, State.READY, note="Auto-enqueued from dependency fix creation"
+    )
     return fix_id
 
 
