@@ -118,6 +118,11 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/check_config_sync.py
 
+      - name: Validate SourceKind ↔ frontend parity
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run python scripts/check_sourcekind_frontend_parity.py
+
       - name: Check config-standard footprint
         env:
           UV_PROJECT_ENVIRONMENT: system

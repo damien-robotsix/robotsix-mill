@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add CI gate (`check_sourcekind_frontend_parity.py`) to prevent Python `SourceKind` / JS `SOURCE_CLASS` / CSS `.src-*` drift. Fix existing drift: add missing `user`, `repo_description_sync`, and `config_standard` JS entries; remove duplicate `docstring_coverage` key.
 - Add `pytest-randomly>=4.1.0` to dev dependencies for randomized test-order detection
 - Bump `pypdf` minimum constraint from `>=5` to `>=6.14.2` to pick up fixes for CVE-2026-59935, CVE-2026-59936, CVE-2026-59937, and CVE-2026-59938.
 - Deliverable-stage config-standard footprint check now only flags files that the ticket branch actually touched (added, modified, or deleted). Pre-existing fleet-standard files like `.pre-commit-config.yaml` and `docker-compose.yml` no longer block delivery when they are not part of the branch's change set.
