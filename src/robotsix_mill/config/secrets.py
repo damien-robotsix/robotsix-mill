@@ -45,7 +45,7 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
 )
 
 # Sentinel value for unset secrets in example configs.
-_SECRET_SENTINEL = "SECRET"
+_SECRET_SENTINEL = "SECRET"  # noqa: S105
 
 # ---------------------------------------------------------------------------
 #  Pseudo-pydantic model_fields + model_json_schema for backward-compat
