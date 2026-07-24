@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,9 +28,7 @@ from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
-
-if TYPE_CHECKING:
-    from .repos import ReposRegistry
+from .repos import ReposRegistry
 
 log = logging.getLogger(__name__)
 
@@ -250,10 +247,3 @@ class Settings(
 def load_settings() -> Settings:
     """Load Settings from config/config.json via robotsix_config."""
     return robotsix_config.load_config(Settings)
-
-
-# Import at bottom so ReposRegistry is in the module namespace when
-# pydantic resolves the forward-reference annotation via model_rebuild()
-# (called in config/__init__.py).  Kept after the class body to avoid a
-# circular-import deadlock when repos imports settings at the top level.
-from .repos import ReposRegistry  # noqa: E402

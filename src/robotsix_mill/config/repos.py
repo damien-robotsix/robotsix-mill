@@ -11,11 +11,12 @@ here (which read the package attribute at call time).
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .settings import Settings
+if TYPE_CHECKING:
+    from .settings import Settings
 
 
 class CrossRepoTarget(BaseModel):
