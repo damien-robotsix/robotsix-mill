@@ -99,6 +99,7 @@
     forge_parity: "forge-parity",
     frontend_sync: "frontend-sync",
     module_curator: "module-curator",
+    module_size: "module-size",
     copy_paste: "copy-paste",
     docstring_coverage: "docstring-coverage",
     state_sync: "state-sync",
