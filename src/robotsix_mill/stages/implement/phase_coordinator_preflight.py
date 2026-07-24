@@ -108,7 +108,7 @@ def run_preflight_checks(
             if summary_path.exists():
                 try:
                     summary_text = summary_path.read_text(encoding="utf-8")
-                except OSError, UnicodeDecodeError:
+                except (OSError, UnicodeDecodeError):
                     summary_text = ""
                 if summary_text:
                     tail = summary_text[-500:].strip()
@@ -219,7 +219,7 @@ def run_preflight_checks(
         if _ss_path.exists():
             try:
                 _ss = json.loads(_ss_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError, OSError:
+            except (json.JSONDecodeError, OSError):
                 _ss = {}
             _stall_count = _ss.get("stall_count", 0)
     if _stall_count > 0:
