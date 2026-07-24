@@ -262,6 +262,12 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
         "runner_func": "run_changelog_autofill_pass",
         "label": "Changelog Autofill",
     },
+    "diagnostic": {
+        "kind": "schedule_only",
+        "runner_module": "robotsix_mill.runners.diagnostic_runner",
+        "runner_func": "run_diagnostic_pass",
+        "label": "Diagnostic",
+    },
     "config_sync": {
         "kind": "schedule_only",
         "runner_module": "robotsix_mill.runners.periodic_runner",
