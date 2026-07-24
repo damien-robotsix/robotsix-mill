@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,7 +29,9 @@ from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
-from .repos import ReposRegistry
+
+if TYPE_CHECKING:
+    from .repos import ReposRegistry
 
 log = logging.getLogger(__name__)
 
