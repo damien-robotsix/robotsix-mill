@@ -55,9 +55,18 @@ jobs:
           # is never installed & the malicious dep is never pulled.
           # Advisory has since been withdrawn from the OSV database
           # (2026); retained for documentation.
+          #
+          # GHSA-9xwg-3r6f-jcx2 (pymdown-extensions): XSS in the
+          # Arithmatex extension, fixed in 10.14 (Sep 2024).  mill's
+          # lock pins pymdown-extensions 10.21.3 — well above the fix
+          # version — so this is a false positive from the advisory
+          # database.  pymdown-extensions is a transitive docs-only
+          # dependency (mkdocs-material → pymdown-extensions), never
+          # shipped or served to users.  Safe to ignore.
           uv audit --frozen \
             --ignore PYSEC-2025-183 \
-            --ignore MAL-2026-4750
+            --ignore MAL-2026-4750 \
+            --ignore GHSA-9xwg-3r6f-jcx2
 
       - name: Generate SBOM
         if: always()
