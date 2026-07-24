@@ -11,11 +11,9 @@ here (which read the package attribute at call time).
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-
-from .settings import Settings
 
 
 class CrossRepoTarget(BaseModel):
@@ -446,7 +444,7 @@ def get_repo_config(repo_id: str) -> RepoConfig:
         ) from err
 
 
-def target_branch_for(settings: Settings, repo_config: RepoConfig | None) -> str:
+def target_branch_for(settings: Any, repo_config: RepoConfig | None) -> str:
     """Effective target branch: repo_config.working_branch when set,
     else settings.forge_target_branch (zero change for existing boards)."""
     if repo_config is not None and repo_config.working_branch:
@@ -454,7 +452,7 @@ def target_branch_for(settings: Settings, repo_config: RepoConfig | None) -> str
     return settings.forge_target_branch
 
 
-def effective_target_branch(settings: Settings, repo_config: RepoConfig | None) -> str:
+def effective_target_branch(settings: Any, repo_config: RepoConfig | None) -> str:
     """Resolve the effective target branch for git operations.
 
     When *repo_config* has a ``cross_repo_target``, use its

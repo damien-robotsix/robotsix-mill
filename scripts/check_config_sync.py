@@ -81,6 +81,9 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         "openrouter_management_key",
         "ntfy_url",
         "ntfy_token",
+        "sandbox_push_token",
+        # -- Repos registry — not a flat setting field --
+        "repos",
         # -- Fields with no JSON entry (yet) — listed here so the
         #    invariant passes at HEAD; each should eventually gain a
         #    JSON entry or be explicitly documented as env-only --

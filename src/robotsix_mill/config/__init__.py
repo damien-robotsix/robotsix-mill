@@ -27,6 +27,14 @@ time.
 from __future__ import annotations
 
 from .loader import ConfigError
+from .secrets import (
+    Secrets,
+    _reset_secrets,
+    get_secrets,
+    load_secrets,
+    logger,
+)
+from .settings import Settings, load_settings
 from .repos import (
     CrossRepoTarget,
     RepoConfig,
@@ -38,15 +46,6 @@ from .repos import (
     load_repos_config,
     target_branch_for,
 )
-from .secrets import (
-    Secrets,
-    _reset_secrets,
-    get_secrets,
-    load_secrets,
-    logger,
-)
-from .settings import Settings, load_settings
-from .json_source import JsonSettingsSource
 
 # Cached singletons live here so test fixtures poking
 # ``robotsix_mill.config._secrets`` / ``._repos_config`` are visible to
@@ -54,9 +53,15 @@ from .json_source import JsonSettingsSource
 _secrets: Secrets | None = None
 _repos_config: ReposRegistry | None = None
 
+# Rebuild Settings after all referenced types (e.g. ReposRegistry)
+# are available — required because the forward-reference annotation
+# ``ReposRegistry | None`` can only be resolved once the module is
+# fully loaded.  ReposRegistry is imported under TYPE_CHECKING in
+# settings.py to avoid a CodeQL py/unsafe-cyclic-import.
+Settings.model_rebuild(_types_namespace={"ReposRegistry": ReposRegistry})
+
 __all__ = [
     "ConfigError",
-    "JsonSettingsSource",
     "Settings",
     "load_settings",
     "Secrets",

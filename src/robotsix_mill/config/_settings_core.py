@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 
 class _CoreSettings(BaseModel):
@@ -24,7 +24,7 @@ class _CoreSettings(BaseModel):
     # ``build_agent`` via llmio's baked tier defaults — L1 DeepSeek flash,
     # L2 DeepSeek pro, L3 Claude Opus). There is no global backend toggle.
     #
-    openrouter_api_key: str | None = Field(
+    openrouter_api_key: SecretStr | None = Field(
         default=None,
         alias="OPENROUTER_API_KEY",
     )
@@ -680,7 +680,7 @@ class _CoreSettings(BaseModel):
         alias="FORGE_TARGET_BRANCH",
         description="Default target branch for PRs.",
     )
-    forge_token: str | None = Field(
+    forge_token: SecretStr | None = Field(
         default=None,
         alias="FORGE_TOKEN",
     )
@@ -692,16 +692,16 @@ class _CoreSettings(BaseModel):
         alias="FORGE_AUTH",
         description="Forge authentication method: token (PAT) or app (GitHub App installation token).",
     )
-    github_app_id: str | None = Field(
+    github_app_id: SecretStr | None = Field(
         default=None,
         alias="GITHUB_APP_ID",
         description="GitHub App ID for App-based authentication.",
     )
-    github_app_private_key: str | None = Field(
+    github_app_private_key: SecretStr | None = Field(
         default=None,
         alias="GITHUB_APP_PRIVATE_KEY",
     )
-    github_app_private_key_path: str | None = Field(
+    github_app_private_key_path: SecretStr | None = Field(
         default=None,
         alias="GITHUB_APP_PRIVATE_KEY_PATH",
         description="Path to GitHub App private key PEM file.",

@@ -18,20 +18,20 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from pydantic import field_validator, model_validator
-from pydantic_settings import (
-    BaseSettings,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-)
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+import robotsix_config
 
 from ._settings_core import _CoreSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
-from .secrets import get_secrets
-from .json_source import JsonSettingsSource
+
+if TYPE_CHECKING:
+    from .repos import ReposRegistry
 
 log = logging.getLogger(__name__)
 
@@ -53,52 +53,64 @@ class Settings(
     sandbox configuration, and agent budgets.
     """
 
-    model_config = SettingsConfigDict(
-        # ``extra="forbid"``: an unknown kwarg is a typo or a stale
-        # MILL_*-style legacy alias from a feature branch written
-        # before the YAML-only refactor. Silent drops let those
-        # branches "pass" locally and explode in CI after rebase —
-        # exactly the failure mode that BLOCKED ticket ad2f's PR.
-        # Forbidding the unknown kwarg surfaces the typo at the call
-        # site, where the implement agent can see and fix it.
-        #
-        # ``env_prefix="MILL_"``: fields without an explicit
-        # ``Field(alias=...)`` derive their env-var name as
-        # ``MILL_<field_name>`` (e.g. ``model`` → ``MILL_MODEL``).
-        # Fields WITH an explicit alias (e.g. ``FORGE_KIND``,
-        # ``OPENROUTER_API_KEY``) use that alias verbatim — the
-        # prefix is NOT applied.
-        env_prefix="MILL_",
-        env_file_encoding="utf-8",
-        extra="forbid",
-        populate_by_name=True,
+    # --- Secrets (folded into Settings as SecretStr fields) ---
+    forge_repo_create_token: SecretStr | None = Field(
+        default=None,
+        description="A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos — use a classic PAT with repo-creation scope.",
+    )
+    sandbox_push_token: SecretStr | None = Field(
+        default=None,
+        description="Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token — a broken push token then only blocks pushes, not PR creation or API calls.",
+    )
+    langfuse_public_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse secret key for LLM observability tracing.",
+    )
+    langfuse_base_url: SecretStr | None = Field(
+        default=None,
+        description="Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
+    )
+    langfuse_project_id: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project ID for trace attribution.",
+    )
+    langfuse_project_name: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project name for trace attribution.",
+    )
+    openrouter_management_key: SecretStr | None = Field(
+        default=None,
+        description="OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
+    )
+    ntfy_url: SecretStr | None = Field(
+        default=None,
+        description="ntfy server URL for push notifications (https://ntfy.sh).",
+    )
+    ntfy_token: SecretStr | None = Field(
+        default=None,
+        description="ntfy access token for authenticated push notifications.",
     )
 
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Insert JSON source with second-lowest priority (above only
-        Field defaults), so ``os.environ`` still overrides it.
+    # --- Repository registry ---
+    repos: ReposRegistry | None = Field(
+        default=None,
+        description="Repository registry.",
+    )
 
-        Precedence (highest to lowest):
-        1. explicit ``Settings(k=v)`` kwargs
-        2. ``os.environ``
-        3. file secrets
-        4. JSON config file (``config/config.json``)
-        5. Field(default=…) static defaults
-        """
-        return (
-            init_settings,
-            env_settings,
-            file_secret_settings,
-            JsonSettingsSource(settings_cls),
-        )
+    model_config = SettingsConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        # Disable .env file loading — env vars only.
+        env_file=None,
+        # All non-aliased fields get MILL_ prefix (e.g. MILL_BC_CHECK_PERIODIC).
+        # Fields with explicit aliases (FORGE_AUTH, OPENROUTER_API_KEY, etc.)
+        # use their alias instead, unaffected by this prefix.
+        env_prefix="MILL_",
+    )
 
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. *board_id* is required —
@@ -136,11 +148,10 @@ class Settings(
     @property
     def tracing_enabled(self) -> bool:
         """True when all three Langfuse credentials are configured."""
-        secrets = get_secrets()
         return bool(
-            secrets.langfuse_base_url
-            and secrets.langfuse_public_key
-            and secrets.langfuse_secret_key
+            self.langfuse_base_url
+            and self.langfuse_public_key
+            and self.langfuse_secret_key
         )
 
     @property
@@ -209,7 +220,15 @@ class Settings(
 
         # forge_auth=app requires GitHub App credentials
         if self.forge_auth == "app":
-            if not self.github_app_id and not self.github_app_private_key_path:
+            has_app_id = (
+                self.github_app_id is not None
+                and self.github_app_id.get_secret_value()
+            )
+            has_key_path = (
+                self.github_app_private_key_path is not None
+                and self.github_app_private_key_path.get_secret_value()
+            )
+            if not has_app_id and not has_key_path:
                 raise ValueError(
                     "FORGE_AUTH=app requires at least one of github_app_id "
                     "or github_app_private_key_path to be set"
@@ -226,5 +245,5 @@ class Settings(
 
 
 def load_settings() -> Settings:
-    """Load and return a :class:`Settings` instance from env / ``.env`` files."""
-    return Settings()
+    """Load Settings from config/config.json via robotsix_config."""
+    return robotsix_config.load_config(Settings)
