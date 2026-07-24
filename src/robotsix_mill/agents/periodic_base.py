@@ -404,7 +404,7 @@ def run_periodic_agent(  # noqa: C901 — 7-step pipeline, fallback adds 1 branc
     # ------------------------------------------------------------------
     # Step 6 — run with retry
     # ------------------------------------------------------------------
-    from .retry import run_agent
+    from .retry import _is_claude_sdk_degenerate_result, run_agent
 
     _run_kwargs: dict[str, Any] = {}
     if usage_limits is not None:
@@ -425,6 +425,22 @@ def run_periodic_agent(  # noqa: C901 — 7-step pipeline, fallback adds 1 branc
             what=definition_name,
             fallback_fn=_fallback_fn,
         )
+    except Exception as e:
+        if _is_claude_sdk_degenerate_result(e):
+            logger.warning(
+                "Claude SDK degenerate 'success' result in %s agent — "
+                "treating as successful run with no proposals: %s",
+                definition_name,
+                e,
+            )
+            return PeriodicAgentResult(
+                updated_memory=memory,
+                summary=(
+                    "Claude SDK returned degenerate 'error result: success' — "
+                    "pass degraded to a no-op (0 proposals, memory preserved)"
+                ),
+            )
+        raise
     finally:
         _safe_close(agent)
         if fallback_agent is not None:

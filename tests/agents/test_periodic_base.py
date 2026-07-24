@@ -675,3 +675,88 @@ def test_count_active_proposals_no_warning_empty_proposals(
     _, build_kwargs = mocks["build_agent_from_definition"].call_args
     prompt = build_kwargs["system_prompt"]
     assert "## ⚠️ Active Proposals" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Claude SDK degenerate result handling
+# ---------------------------------------------------------------------------
+
+
+def test_claude_sdk_degenerate_result_returns_empty(settings, monkeypatch, tmp_path):
+    """When the Claude SDK raises its degenerate 'error result: success'
+    exception, run_periodic_agent catches it and returns an empty
+    PeriodicAgentResult with preserved memory."""
+    mocks = _setup_patches(monkeypatch)
+
+    # Override run_agent to raise the degenerate Claude SDK exception.
+    degenerate_exc = Exception("Claude Code returned an error result: success")
+    mocks["run_agent"].side_effect = degenerate_exc
+
+    result = run_periodic_agent(
+        settings=settings,
+        definition_name="survey",
+        max_gaps=3,
+        repo_dir=tmp_path,
+        memory="preserved memory",
+        recent_proposals="prior proposals",
+        prompt_tail="Do the thing.",
+        include_forge_url=True,
+    )
+
+    # Should return an empty result with preserved memory.
+    assert result.updated_memory == "preserved memory"
+    assert result.draft_titles == []
+    assert result.draft_bodies == []
+    assert result.gap_ids == []
+    assert "degenerate" in result.summary.lower()
+
+    # Agent was still built and cleaned up.
+    mocks["build_agent_from_definition"].assert_called_once()
+    mocks["_safe_close"].assert_called_once()
+
+
+def test_claude_sdk_degenerate_result_in_cause_chain(settings, monkeypatch, tmp_path):
+    """The degenerate-result detector walks the cause chain, so a wrapped
+    exception should also be caught."""
+    mocks = _setup_patches(monkeypatch)
+
+    degenerate_exc = Exception("Claude Code returned an error result: success")
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = degenerate_exc
+    mocks["run_agent"].side_effect = outer
+
+    result = run_periodic_agent(
+        settings=settings,
+        definition_name="survey",
+        max_gaps=3,
+        repo_dir=tmp_path,
+        memory="preserved memory",
+        recent_proposals="prior proposals",
+        prompt_tail="Do the thing.",
+    )
+
+    assert result.updated_memory == "preserved memory"
+    assert result.draft_titles == []
+    assert "degenerate" in result.summary.lower()
+
+
+def test_non_degenerate_exception_propagates(settings, monkeypatch, tmp_path):
+    """A non-degenerate exception is NOT caught — it propagates normally."""
+    mocks = _setup_patches(monkeypatch)
+
+    real_error = RuntimeError("genuine failure")
+    mocks["run_agent"].side_effect = real_error
+
+    with pytest.raises(RuntimeError, match="genuine failure"):
+        run_periodic_agent(
+            settings=settings,
+            definition_name="survey",
+            max_gaps=3,
+            repo_dir=tmp_path,
+            memory="mem",
+            recent_proposals="props",
+            prompt_tail="Tail.",
+        )
+
+    # Agent cleanup still runs (finally block).
+    mocks["_safe_close"].assert_called_once()
