@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any
 
 import yaml as _yaml
 
@@ -29,27 +29,16 @@ from .prompt_blocks import section
 
 # Backward-compat re-exports — symbols moved to refine_triage module.
 # New code should import these from ``refine_triage`` directly.
-from .refine_triage import (  # noqa: E402 — re-export
-    AutoApproveResult,
-    ReviewerAgreementResult,
-    SpecReviewResult,
-    TriageResult,
-    review_spec_for_conciseness,
-    triage_auto_approve,
-    triage_refine,
-    triage_reviewer_agreement,
-)
+from . import refine_triage as _refine_triage
 
-__all__ = [
-    "AutoApproveResult",
-    "ReviewerAgreementResult",
-    "SpecReviewResult",
-    "TriageResult",
-    "review_spec_for_conciseness",
-    "triage_auto_approve",
-    "triage_refine",
-    "triage_reviewer_agreement",
-]
+AutoApproveResult = _refine_triage.AutoApproveResult
+ReviewerAgreementResult = _refine_triage.ReviewerAgreementResult
+SpecReviewResult = _refine_triage.SpecReviewResult
+TriageResult = _refine_triage.TriageResult
+review_spec_for_conciseness = _refine_triage.review_spec_for_conciseness
+triage_auto_approve = _refine_triage.triage_auto_approve
+triage_refine = _refine_triage.triage_refine
+triage_reviewer_agreement = _refine_triage.triage_reviewer_agreement
 
 log = logging.getLogger(__name__)
 
