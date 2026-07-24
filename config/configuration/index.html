@@ -1,0 +1,6585 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../agents/communication-research/">
+      
+      
+        <link rel="next" href="../../langfuse/observability/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Configuration reference - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#configuration-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Configuration reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-loading-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration loading order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File structure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting started
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common tasks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#change-which-model-an-agent-uses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Change which model an agent uses
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-a-different-database-url-data-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use a different database URL / data directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enable-periodic-audit-and-trace-health-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enable periodic audit and trace-health checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deploy-to-production-with-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploy to production with overrides
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deploy to production with overrides">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-gate-environment-error-circuit-breaker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test gate environment-error circuit breaker
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#smoke-gate-smoke_command-smoke_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smoke gate (smoke_command / smoke_paths)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-language-instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-language instructions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extra-sandbox-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extra sandbox packages
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deployed-log-folder-deployed_log_folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployed log folder (deployed_log_folder)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#set-up-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set up secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-a-new-setting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add a new setting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-drift-prevention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config drift prevention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-setting-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full setting reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full setting reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-capability-levels-model-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Capability levels (model selection)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-worker-pool-retry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Worker pool &amp; retry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-dedup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Dedup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-service-management-plane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Service (management plane)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Forge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Sandbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-web-research" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Web research
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#101-web-knowledge-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 Web knowledge agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#11-pipeline-tail-merge-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Pipeline tail (merge stage)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-stages-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 Stages tuning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-refine-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 Refine routing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-periodic-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Periodic agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Periodic agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trace_review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_review
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data_dir_gc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        data_dir_gc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#db_maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        db_maintenance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#meta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        meta
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sandbox_reaper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sandbox_reaper
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#survey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        survey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#triage_boilerplate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triage_boilerplate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orphaned_pr_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        orphaned_pr_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changelog_autofill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        changelog_autofill
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#env-var-only-periodic-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Env-var-only periodic agents
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stale-branch-cleanup-timeout-escalation-dependabot-ingest-module-curator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stale branch cleanup, timeout escalation, dependabot ingest, module curator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-skills-language-instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Skills &amp; language instructions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#secrets-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Secrets reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repos-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repos registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Repos registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#set-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set up
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#select-a-repo-at-startup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Select a repo at startup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#field-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Field reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-repo-branch-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-repo branch configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-repo branch configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-use-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common use cases
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workspace-member-auto-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workspace member auto-registration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workspace member auto-registration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fields-added-by-auto-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields added by auto-registration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-with-repo-provisioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration with repo provisioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-repo-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-repo behaviour
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/autoupdate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autoupdate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sandbox/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../repo-scaffold/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repo scaffold
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deps/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/implement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implement stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-definitions/expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta/meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/periodic/survey-cross-board-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Survey cross-board routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runtime
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/run-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notify/notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vcs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VCS (git) module
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/pin-bump/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pin bump
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Forge
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/gitlab/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitLab backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/ci-monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/code-scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code scanning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_13" id="__nav_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-loading-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration loading order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File structure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting started
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common tasks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#change-which-model-an-agent-uses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Change which model an agent uses
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-a-different-database-url-data-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use a different database URL / data directory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enable-periodic-audit-and-trace-health-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enable periodic audit and trace-health checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deploy-to-production-with-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploy to production with overrides
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deploy to production with overrides">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-gate-environment-error-circuit-breaker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test gate environment-error circuit breaker
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#smoke-gate-smoke_command-smoke_paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smoke gate (smoke_command / smoke_paths)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-language-instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-language instructions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extra-sandbox-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extra sandbox packages
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deployed-log-folder-deployed_log_folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployed log folder (deployed_log_folder)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#set-up-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set up secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-a-new-setting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add a new setting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-drift-prevention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config drift prevention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-setting-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full setting reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full setting reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-capability-levels-model-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Capability levels (model selection)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-worker-pool-retry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Worker pool &amp; retry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-dedup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Dedup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-service-management-plane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Service (management plane)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Forge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Sandbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-web-research" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Web research
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#101-web-knowledge-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 Web knowledge agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#11-pipeline-tail-merge-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Pipeline tail (merge stage)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-stages-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 Stages tuning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-refine-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 Refine routing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-periodic-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Periodic agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Periodic agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trace_review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_review
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data_dir_gc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        data_dir_gc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run_health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_health
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#db_maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        db_maintenance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#meta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        meta
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sandbox_reaper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sandbox_reaper
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#survey" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        survey
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#triage_boilerplate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triage_boilerplate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orphaned_pr_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        orphaned_pr_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changelog_autofill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        changelog_autofill
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#env-var-only-periodic-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Env-var-only periodic agents
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stale-branch-cleanup-timeout-escalation-dependabot-ingest-module-curator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stale branch cleanup, timeout escalation, dependabot ingest, module curator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-skills-language-instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Skills &amp; language instructions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#secrets-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Secrets reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repos-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repos registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Repos registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#set-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set up
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#select-a-repo-at-startup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Select a repo at startup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#field-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Field reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-repo-branch-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-repo branch configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-repo branch configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-use-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common use cases
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workspace-member-auto-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workspace member auto-registration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workspace member auto-registration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fields-added-by-auto-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields added by auto-registration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-with-repo-provisioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration with repo provisioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-repo-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-repo behaviour
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="configuration-reference">Configuration reference</h1>
+<p>robotsix-mill uses a <strong>single JSON config file</strong>. Every non-secret knob
+plus a top-level <code>"secrets"</code> block (API keys, tokens) live in one
+<code>config/config.json</code>. The committed <code>config/config.example.json</code>
+documents the full structure with safe defaults and <code>"SECRET"</code> sentinel
+placeholders. Secrets are loaded by a dedicated <code>Secrets</code> model — they
+are never logged and their values are redacted in diagnostics.</p>
+<blockquote>
+<p><strong>Note:</strong> The config file is flat alias-keyed JSON (e.g. <code>"MILL_DATA_DIR"</code>,
+<code>"data_dir"</code>), not nested YAML. The "YAML path" column in the setting
+tables below shows the <strong>conceptual</strong> dotted path for readability — the
+actual JSON keys are the flat aliases from the "Env var" column (or their
+unprefixed equivalents). See <a href="#add-a-new-setting">Add a new setting</a> for
+how to wire a new field.</p>
+</blockquote>
+<hr />
+<h2 id="configuration-loading-order">Configuration loading order</h2>
+<p>Settings are resolved from these layers (highest priority first):</p>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (highest)</td>
+<td>Explicit <code>Settings(k=v)</code> kwargs</td>
+<td>Programmatic overrides from callers</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>os.environ</code></td>
+<td>Any <code>MILL_*</code> or unprefixed variable set in the environment</td>
+</tr>
+<tr>
+<td>3</td>
+<td>The config file</td>
+<td><code>config/config.json</code> if present, else the committed <code>config/config.example.json</code></td>
+</tr>
+<tr>
+<td>4 (lowest)</td>
+<td><code>Field(default=...)</code></td>
+<td>Static Python defaults in the Pydantic model</td>
+</tr>
+</tbody>
+</table>
+<p>The non-secret part of the file feeds the <code>Settings</code> model; environment
+variables win over any JSON value. Point <code>MILL_CONFIG_FILE</code> at a
+specific file to override the default resolution (an empty string forces
+the committed example, the hermetic choice used by the test suite).</p>
+<p><strong>Secrets</strong> are loaded from the <code>"secrets"</code> block of the same file
+(path overridable via <code>MILL_SECRETS_FILE</code>). They never participate in
+the Settings merge; access them via <code>get_secrets()</code>. A secret whose
+value is the literal <code>"SECRET"</code> sentinel (as in <code>config.example.json</code>) is
+treated as unset.</p>
+<hr />
+<h2 id="file-structure">File structure</h2>
+<div class="highlight"><pre><span></span><code>config/
+  config.json              # gitignored: THE single config — all knobs + a &quot;secrets&quot; block
+  config.example.json      # committed: template (safe defaults + &quot;SECRET&quot; sentinels)
+  config.schema.json       # committed: JSON Schema for config.json
+  repos.example.yaml       # committed: example entries for the repos: key (see Repos registry below)
+</code></pre></div>
+<h3 id="getting-started">Getting started</h3>
+<p>Copy the committed template and fill in your real values:</p>
+<div class="highlight"><pre><span></span><code>cp<span class="w"> </span>config/config.example.json<span class="w"> </span>config/config.json
+<span class="c1"># edit config/config.json — set the &quot;secrets&quot; block and any host overrides</span>
+chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>config/config.json<span class="w">          </span><span class="c1"># it now holds real credentials</span>
+</code></pre></div>
+<p><code>config/config.json</code> is gitignored and never committed. If it is absent
+(CI, a fresh checkout), the loader falls back to the committed
+<code>config/config.example.json</code>, whose all-<code>"SECRET"</code> secrets resolve to
+"unset".</p>
+<hr />
+<h2 id="common-tasks">Common tasks</h2>
+<h3 id="change-which-model-an-agent-uses">Change which model an agent uses</h3>
+<p>Models are not configured per-agent in the JSON config file. Each agent definition
+(<code>agent_definitions/&lt;name&gt;.yaml</code>) declares a capability <code>level: 1|2|3</code>,
+which resolves to a <code>(transport, model)</code> via robotsix-llmio's tier
+defaults (see <a href="#1-capability-levels-model-selection">§1 Capability levels</a>).
+To change an agent's model, change its <code>level</code> in the definition; to change
+what a level maps to, change the defaults in robotsix-llmio.</p>
+<h3 id="use-a-different-database-url-data-directory">Use a different database URL / data directory</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// config/config.json</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;settings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;MILL_DATA_DIR&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/data/mill-prod&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="enable-periodic-audit-and-trace-health-checks">Enable periodic audit and trace-health checks</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// config/config.json</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;settings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;audit_periodic&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;audit_interval_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">43200</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;trace_health_periodic&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;trace_health_interval_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">86400</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="deploy-to-production-with-overrides">Deploy to production with overrides</h3>
+<p>Put deployment values directly in <code>config/config.json</code> (or point
+<code>MILL_CONFIG_FILE</code> at an alternative single file):</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// config/config.json</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;settings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;MILL_MAX_GLOBAL_CONCURRENCY&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;MILL_MAX_SPEND_USD_PER_TICKET&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">5.0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;FORGE_KIND&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;github&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;FORGE_REMOTE_URL&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://github.com/your-org/your-repo&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;FORGE_TARGET_BRANCH&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;MILL_TEST_COMMAND&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pytest -q --timeout=300&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>This <code>MILL_TEST_COMMAND</code> is the global fallback. A managed repo can
+override it by committing a <code>test_command</code> to its own
+<code>.robotsix-mill/config.yaml</code>, and the operator can override it per repo
+in <code>repos.yaml</code>. The precedence is: per-repo <code>.robotsix-mill/config.yaml</code>
+<code>test_command</code> &gt; <code>repos.yaml</code> per-repo <code>test_command</code> &gt; this global
+<code>MILL_TEST_COMMAND</code>; empty everywhere makes the gate pass.</p>
+<h4 id="test-gate-environment-error-circuit-breaker">Test gate environment-error circuit breaker</h4>
+<p>The test gate has a <strong>circuit breaker</strong> that detects when a test suite
+failure is due to a <strong>missing or inaccessible binary</strong> in the sandbox —
+not a code problem the implement agent can fix by editing the repo. When
+detected, the gate short-circuits with a stable ENV-ERROR diagnosis
+instead of forwarding the failure to the distill agent for analysis.</p>
+<p>The ENV-ERROR circuit breaker fires on:
+- <strong>rc=127</strong> — a binary was not found on PATH (shell standard for "command not found")
+- <strong>rc=126 + Permission denied</strong> on a <code>$HOME/.local/bin</code> path — a
+  <code>pip install --user</code> console script exists but cannot execute because
+  the sandbox's <code>/tmp</code> tmpfs was not mounted with the <code>exec</code> flag (by
+  default Docker mounts tmpfs as <code>noexec</code>). The sandbox has been updated
+  to mount <code>/tmp</code> as <code>exec</code> to allow pip console scripts to run; if a
+  script still fails with rc=126 on a HOME path, the gate reports ENV-ERROR.</p>
+<p>This prevents the implement fix-loop from burning iterations on unfixable
+sandbox issues. The diagnosis is <strong>byte-identical across runs</strong> for the
+same failure (e.g. same missing binary) so the circuit breaker recognizes
+repeated failures and escal​ates instead of retrying forever.</p>
+<p><strong>Sandbox requirements for console scripts:</strong> If your repo uses
+<code>extra_sandbox_packages</code> to install pip packages with CLI entry points
+(e.g. <code>pip:yamllint</code>, <code>pip:vcs</code>), those console scripts are installed
+under <code>$HOME/.local/bin</code> (which maps to <code>/tmp/.local/bin</code> in the sandbox)
+and must be executable. The sandbox's <code>/tmp</code> tmpfs is mounted with the
+<code>exec</code> flag to support this. If a console script cannot execute even
+with <code>exec</code> mounted, the ENV-ERROR circuit breaker will catch it and
+report it as a sandbox regression rather than treating it as a code bug.</p>
+<h3 id="smoke-gate-smoke_command-smoke_paths">Smoke gate (<code>smoke_command</code> / <code>smoke_paths</code>)</h3>
+<p>A repo can declare an optional <strong>path-scoped smoke gate</strong> that runs
+<em>after</em> the unit-test gate passes — a lightweight end-to-end check (e.g.
+booting the server and hitting key routes) that catches breakages a unit
+suite misses:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># .robotsix-mill/config.yaml</span>
+<span class="nt">smoke_command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/smoke_board.sh</span>
+<span class="nt">smoke_paths</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">src/robotsix_mill/runtime/**</span>
+</code></pre></div>
+<ul>
+<li><code>smoke_command</code> — the shell command the gate runs in the sandbox. The
+  per-repo value wins over the global <code>sandbox.smoke_command</code> (env
+  <code>MILL_SMOKE_COMMAND</code>); empty everywhere means <strong>no smoke gate</strong> (the
+  gate short-circuits to PASS). The gate is strictly opt-in — no command
+  set anywhere is a no-op.</li>
+<li><code>smoke_paths</code> — a glob list scoping <em>when</em> the gate runs. When
+  empty/absent the smoke command runs <strong>unconditionally</strong> (whenever it is
+  set); otherwise the gate runs only when the ticket's introduced files
+  match a glob. A pure backend change that touches no listed path skips
+  the gate. <code>smoke_paths</code> is inherently per-repo and has no global
+  counterpart.</li>
+</ul>
+<p>The smoke gate runs <strong>only after unit tests pass</strong> (no point smoking a
+red build), and a smoke failure routes exactly like a unit-test failure
+(retry while iterations remain, escalate on the last, BLOCKED on
+sandbox-unavailable).</p>
+<h3 id="per-language-instructions">Per-language instructions</h3>
+<p>A repo declares the language(s) it uses in the same
+<code>.robotsix-mill/config.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">languages</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">rust</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># or singular: language: python</span>
+</code></pre></div>
+<p>When set, the <strong>implement</strong> and <strong>refine</strong> agents receive a
+<code>## Language conventions</code> block for each declared language, appended to
+their system prompt. Each snippet is resolved per language with this
+precedence: the repo's own
+<code>.robotsix-mill/language_instructions/&lt;lang&gt;.md</code> (house override) if
+present, otherwise the mill's built-in
+<code>agent_definitions/language_instructions/&lt;lang&gt;.md</code>. If neither exists
+the language is silently skipped. The language source itself falls back
+to <code>repos.yaml</code>'s per-repo <code>language</code> when the repo file declares none.</p>
+<h3 id="extra-sandbox-packages">Extra sandbox packages</h3>
+<p>A repo can declare extra OS/pip packages that the sandbox should install
+before running any command (test gate, implement <code>run_command</code>, etc.):</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># .robotsix-mill/config.yaml</span>
+<span class="nt">extra_sandbox_packages</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">colcon</span><span class="w">              </span><span class="c1"># ROS2 build tool (defaults to apt)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip:my-test-lib</span><span class="w">     </span><span class="c1"># Python-only dep via pip</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apt:tree</span><span class="w">            </span><span class="c1"># explicit apt for clarity</span>
+</code></pre></div>
+<p><strong>Entry formats.</strong> Each string in the list is parsed with this
+prefix convention:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Install method</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apt:&lt;name&gt;</code></td>
+<td><code>apt-get install -y</code></td>
+<td><code>apt:colcon</code></td>
+</tr>
+<tr>
+<td><code>pip:&lt;name&gt;</code></td>
+<td><code>pip install --user</code></td>
+<td><code>pip:my-test-lib</code></td>
+</tr>
+<tr>
+<td>bare <code>&lt;name&gt;</code></td>
+<td>defaults to <strong>apt</strong> (the sandbox is Debian-based)</td>
+<td><code>colcon</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Trade-offs.</strong></p>
+<ul>
+<li><strong>Apt packages</strong> cause the sandbox to drop <code>--read-only</code> mode and add
+  tmpfs mounts for apt state directories (<code>/var/cache/apt</code>,
+  <code>/var/lib/apt/lists</code>, <code>/var/lib/dpkg</code>). The container is slightly
+  larger and the first-run setup is slower (<code>apt-get update</code> +
+  <code>apt-get install</code>).</li>
+<li><strong>Pip-only packages</strong> are lighter: they keep <code>--read-only</code> and install
+  into the user site (<code>~/.local</code> via <code>--user</code>), so only a writable
+  <code>/tmp</code> tmpfs is needed.</li>
+<li>Each extra package adds to the per-ticket sandbox startup time — prefer
+  baking common dependencies into the sandbox image when latency matters.</li>
+</ul>
+<p><strong>Resilience.</strong> Installation failures are soft-warnings: the sandbox
+still starts and the command still runs. Malformed values (not a list,
+or non-string items) silently yield an empty package list — a managed
+repo cannot break mill by committing a broken config file.</p>
+<p>Then run:</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w">   </span><span class="c1"># reads config/config.json (or set MILL_CONFIG_FILE)</span>
+</code></pre></div>
+<h3 id="deployed-log-folder-deployed_log_folder">Deployed log folder (<code>deployed_log_folder</code>)</h3>
+<p>The operator can point the refine agent at a repo's live deployment log
+directory by setting a single per-repo field in mill's central,
+gitignored <code>config/repos.yaml</code> (alongside <code>board_id</code> / <code>forge_remote_url</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># config/repos.yaml</span>
+<span class="nt">repos</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">robotsix-auto-mail</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">board_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;...&quot;</span>
+<span class="w">    </span><span class="nt">deployed_log_folder</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var/log/robotsix-auto-mail</span>
+</code></pre></div>
+<ul>
+<li><code>deployed_log_folder</code> — a path (string) to the live deployment's log
+  directory, either <strong>absolute</strong> or <strong>relative to the repo root</strong>
+  (relative paths are resolved against the repo dir, and a warning is
+  logged for relative paths). It is <strong>opt-in</strong>: when absent — or when it
+  does not resolve to an existing directory — the log tooling is
+  silently skipped. When it resolves, it drives the refine agent's
+  <code>query_app_logs</code> tool plus an injected log summary. Because the value
+  is a deployment-specific host path, it lives in the operator's central
+  config — <strong>not</strong> the managed repo's committed
+  <code>.robotsix-mill/config.yaml</code> (the repo-owned key is deprecated and
+  ignored). See <a href="../../langfuse/observability/">observability.md</a> for the full story.</li>
+</ul>
+<h3 id="set-up-secrets">Set up secrets</h3>
+<p>Fill in the <code>"secrets"</code> block of <code>config/config.json</code> (replace each
+<code>"SECRET"</code> sentinel with a real value):</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// config/config.json</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;secrets&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;openrouter_api_key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sk-or-...&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;forge_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghp_...&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>File permissions should be <code>0600</code> (it holds real credentials).</p>
+<h3 id="add-a-new-setting">Add a new setting</h3>
+<ol>
+<li>Add the field to the Pydantic model in <code>src/robotsix_mill/config/</code>
+   (in the appropriate group class if grouped, or on <code>Settings</code> directly).
+   Use <code>Field(alias=...)</code> with a <code>MILL_</code> prefix + uppercase underscore
+   naming convention (e.g. <code>Field(alias="MILL_MY_NEW_FIELD")</code>). The alias
+   is the flat JSON key — there is no nested YAML path.</li>
+<li>Add the alias key and its default value to the <code>"settings"</code> block of
+   <code>config/config.example.json</code>.</li>
+<li>If it's a secret, add it to the <code>Secrets</code> model and to the <code>"secrets"</code>
+   block of <code>config/config.example.json</code> (as a <code>"SECRET"</code> sentinel) instead.</li>
+<li>Access it in code: <code>settings.my_new_field</code> for settings,
+   <code>get_secrets().my_new_secret</code> for secrets.</li>
+</ol>
+<p>Steps 1–3 are enforced deterministically by
+<code>scripts/check_config_sync.py</code>, which runs as a blocking CI step
+("Validate config sync") and as the <code>validate-config-sync</code> pre-commit
+hook. It fails if a <code>"settings"</code> key in <code>config.example.json</code> names a
+non-existent <code>Settings</code> field/alias (or vice-versa), or if the
+<code>"secrets"</code> block drifts from the <code>Secrets</code> model. Intentional gaps
+live in the script's inline-commented exception sets. (Doc-table drift
+is not gated here — the heuristic <code>config_sync</code> agent still covers that.)</p>
+<h2 id="config-drift-prevention">Config drift prevention</h2>
+<p><strong>Rule:</strong> Every new Pydantic settings field added to
+<code>_settings_periodic.py</code> or <code>settings.py</code> MUST have a corresponding
+entry in BOTH <code>config/config.example.json</code> (under the <code>"settings"</code>
+block) AND a <code>Field(alias=...)</code> on the model in the same commit.
+Fields missing from both surfaces are invisible to
+<code>check_config_sync.py</code> — the suite only cross-references JSON keys ↔
+model fields, not Settings-model ↔ surfaces.</p>
+<p><strong>Rationale:</strong> PR #1546 and the still-unfiled prune_orphans gap
+(PR #1533): two instances where Pydantic fields were added to the
+model but never wired to config surfaces. The drift checker could
+not catch either because the gap was symmetric. This rule encodes
+the same convention as the <code>docs/modules.yaml</code> "add the path in
+the same commit" discipline.</p>
+<hr />
+<h2 id="full-setting-reference">Full setting reference</h2>
+<p>Every setting below shows:
+- <strong>YAML path</strong> — the <strong>conceptual</strong> dotted path (for readability). The
+  actual <code>config/config.example.json</code> uses flat alias keys — the "Env var"
+  column shows the real JSON key (the Pydantic field <code>alias</code>).
+- <strong>Env var</strong> — the environment variable override (also the flat JSON key)
+- <strong>Default</strong> — the committed default value
+- <strong>Description</strong> — what it controls</p>
+<h3 id="1-capability-levels-model-selection">1. Capability levels (model selection)</h3>
+<p>Per-agent model selection is declared in each <strong>agent definition's</strong>
+<code>level: 1|2|3</code> field. <code>build_agent</code> resolves a level to a
+<code>(transport, model)</code> pair via robotsix-llmio's baked tier defaults — there
+is no per-agent model config in the JSON config file and no global backend
+toggle. The level <em>is</em> the backend choice.</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Transport</th>
+<th>Model</th>
+<th>Intent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>openrouter[deepseek]</code></td>
+<td><code>deepseek/deepseek-v4-flash</code></td>
+<td>cheap, repetitive (triage, audit, dedup, periodic scanners, …)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>openrouter[deepseek]</code></td>
+<td><code>deepseek/deepseek-v4-pro</code></td>
+<td>intermediate — implement, ci_fix, review, test, …</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>claude-sdk</code></td>
+<td><code>opus</code></td>
+<td>high-level planning — refine, meta_triage, epic_breakdown</td>
+</tr>
+</tbody>
+</table>
+<p>Level-3 agents run on the Claude Agent SDK (subscription auth; needs Node +
+the <code>claude</code> CLI in the container). These knobs govern that path:</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.claude_max_concurrency</code></td>
+<td><code>MILL_CLAUDE_MAX_CONCURRENCY</code></td>
+<td><code>4</code></td>
+<td>Process-wide cap on concurrent Claude SDK runs (each spawns a <code>claude</code> CLI subprocess)</td>
+</tr>
+<tr>
+<td><code>core.claude_sdk_vision_enabled</code></td>
+<td><code>MILL_CLAUDE_SDK_VISION_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Allow inline image (screenshot/vision) input on the Claude SDK path. <strong>Default off</strong>: the installed llmio bridge cannot consume <code>BinaryContent</code> image parts — it stringifies them into a useless repr that hangs the <code>claude</code> CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to <code>true</code> (a one-line change) once the bridge gains real image-input support</td>
+</tr>
+<tr>
+<td>### 2. Request limits</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.limits.coordinator_requests</code></td>
+<td><code>MILL_PER_PASS_REQUEST_BUDGET</code></td>
+<td><code>500</code></td>
+<td>Per-pass request budget for the implement (coordinator) agent. Resets each pass; normal tickets fit in one pass. Hard upper bound 5000</td>
+</tr>
+<tr>
+<td><code>core.limits.subtask_request_limit</code></td>
+<td><code>MILL_SUBTASK_REQUEST_LIMIT</code></td>
+<td><code>30</code></td>
+<td>Per-subtask request cap for <code>spawn_subtask</code> sub-agents delegated by the coordinator</td>
+</tr>
+<tr>
+<td><code>core.limits.explore_requests</code></td>
+<td><code>MILL_EXPLORE_REQUEST_LIMIT</code></td>
+<td><code>100</code></td>
+<td>Per-call request cap for the explore sub-agent</td>
+</tr>
+<tr>
+<td><code>core.limits.explore_max_tokens</code></td>
+<td><code>MILL_EXPLORE_MAX_TOKENS</code></td>
+<td><code>4096</code></td>
+<td>Output token cap for explore sub-agent responses</td>
+</tr>
+<tr>
+<td><code>core.limits.consult_requests</code></td>
+<td><code>MILL_CONSULT_REQUEST_LIMIT</code></td>
+<td><code>15</code></td>
+<td>Per-call request cap for the domain-expert consultation sub-agent</td>
+</tr>
+<tr>
+<td><code>core.limits.test_requests</code></td>
+<td><code>MILL_TEST_REQUEST_LIMIT</code></td>
+<td><code>30</code></td>
+<td>Per-call request cap for the test sub-agent</td>
+</tr>
+<tr>
+<td><code>core.limits.web_research_requests</code></td>
+<td><code>MILL_WEB_RESEARCH_REQUEST_LIMIT</code></td>
+<td><code>8</code></td>
+<td>Per-call request cap for the web-research sub-agent</td>
+</tr>
+<tr>
+<td><code>core.limits.dedup_requests</code></td>
+<td><code>MILL_DEDUP_REQUEST_LIMIT</code></td>
+<td><code>12</code></td>
+<td>Per-call request cap for the dedup check</td>
+</tr>
+<tr>
+<td><code>core.limits.obsolescence_requests</code></td>
+<td><code>MILL_OBSOLESCENCE_REQUEST_LIMIT</code></td>
+<td><code>6</code></td>
+<td>Per-call request cap for the obsolescence gate</td>
+</tr>
+<tr>
+<td><code>core.limits.scope_triage_max_files</code></td>
+<td><code>MILL_SCOPE_TRIAGE_MAX_FILES</code></td>
+<td><code>50</code></td>
+<td>Max out-of-scope text files before the scope-triage flood guard blocks (0 disables)</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_requests</code></td>
+<td><code>MILL_REFINE_REQUEST_LIMIT</code></td>
+<td><code>80</code></td>
+<td>Per-call request cap for the refine agent</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_requests_simple</code></td>
+<td><code>MILL_REFINE_REQUEST_LIMIT_SIMPLE</code></td>
+<td><code>40</code></td>
+<td>Per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off)</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_max_tool_calls</code></td>
+<td><code>MILL_REFINE_MAX_TOOL_CALLS</code></td>
+<td><code>120</code></td>
+<td>(config-file-only) Hard cap on total tool calls per refine trace (runaway-loop backstop)</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_max_errors</code></td>
+<td><code>MILL_REFINE_MAX_ERRORS</code></td>
+<td><code>20</code></td>
+<td>(config-file-only) Max tool-call errors per refine trace before auto-termination</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_web_fetch_max_calls</code></td>
+<td>—</td>
+<td><code>5</code></td>
+<td>(config-file-only) Max real (cache-miss) <code>web_fetch</code> calls across one whole refine trace (cross-consult)</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_web_fetch_max_total_bytes</code></td>
+<td>—</td>
+<td><code>500000</code></td>
+<td>(config-file-only) Cumulative fetch-bytes ceiling across one refine trace; <code>0</code> disables</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_web_search_max_calls</code></td>
+<td>—</td>
+<td><code>5</code></td>
+<td>(config-file-only) Max <code>web_search</code> calls across one whole refine trace (cross-consult)</td>
+</tr>
+<tr>
+<td><code>core.limits.audit_requests</code></td>
+<td><code>MILL_AUDIT_REQUEST_LIMIT</code></td>
+<td><code>80</code></td>
+<td>Per-call request cap for the periodic audit agent</td>
+</tr>
+<tr>
+<td><code>core.limits.doc_requests</code></td>
+<td><code>MILL_DOC_REQUEST_LIMIT</code></td>
+<td><code>32</code></td>
+<td>Per-run request cap for the document agent</td>
+</tr>
+<tr>
+<td><code>core.limits.doc_classifier_requests</code></td>
+<td><code>MILL_DOC_CLASSIFIER_REQUEST_LIMIT</code></td>
+<td><code>3</code></td>
+<td>Per-call request cap for the doc-classifier gate</td>
+</tr>
+<tr>
+<td><code>core.limits.doc_classifier_diff_max_chars</code></td>
+<td><code>MILL_DOC_CLASSIFIER_DIFF_MAX_CHARS</code></td>
+<td><code>6000</code></td>
+<td>Caps the git diff (characters) fed to the doc-classifier gate; truncation is safe as the classifier is biased toward <code>user_facing=True</code>, and the full doc agent still receives the untruncated diff</td>
+</tr>
+<tr>
+<td><code>core.limits.triage_requests</code></td>
+<td><code>MILL_TRIAGE_REQUEST_LIMIT</code></td>
+<td><code>8</code></td>
+<td>Per-call cap for the pre-refine triage agent (main call + tool calls)</td>
+</tr>
+<tr>
+<td><code>core.limits.dedup_max_candidates</code></td>
+<td><code>MILL_DEDUP_MAX_CANDIDATES</code></td>
+<td><code>8</code></td>
+<td>Maximum candidates passed to the dedup LLM after similarity pre-filtering. Caps token budget regardless of repo size</td>
+</tr>
+<tr>
+<td><code>core.limits.coordinator_max_tool_calls</code></td>
+<td><code>MILL_COORDINATOR_MAX_TOOL_CALLS</code></td>
+<td><code>300</code></td>
+<td>Hard cap on total tool calls per implement (coordinator) trace — runaway-loop backstop above the request budget</td>
+</tr>
+<tr>
+<td><code>core.limits.coordinator_timeout_seconds</code></td>
+<td><code>MILL_COORDINATOR_TIMEOUT_SECONDS</code></td>
+<td><code>600</code></td>
+<td>Wall-clock timeout (seconds) for a single implement agent pass. When the agent exceeds this duration the pass is terminated and the stage can retry (with a fresh budget) or escalate. Default 600 s (10 min) caps worst-case stuck-loop burn. Minimum 60 s</td>
+</tr>
+<tr>
+<td><code>core.limits.max_refine_explore_calls</code></td>
+<td><code>MILL_MAX_REFINE_EXPLORE_CALLS</code></td>
+<td><code>4</code></td>
+<td>Hard cap on explore/parallel_explore sub-agent calls per refine run. 0 disables exploration entirely</td>
+</tr>
+<tr>
+<td><code>core.limits.max_refine_read_file_calls</code></td>
+<td><code>MILL_MAX_REFINE_READ_FILE_CALLS</code></td>
+<td><code>10</code></td>
+<td>Hard cap on read_file calls per refine/triage agent run. 0 disables the cap (unbounded reads)</td>
+</tr>
+<tr>
+<td><code>core.limits.review_requests</code></td>
+<td><code>MILL_REVIEW_REQUEST_LIMIT</code></td>
+<td><code>80</code></td>
+<td>Per-run request cap for the review agent</td>
+</tr>
+</tbody>
+</table>
+<h3 id="3-worker-pool-retry">3. Worker pool &amp; retry</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.limits.max_fix_iterations</code></td>
+<td><code>MILL_MAX_FIX_ITERATIONS</code></td>
+<td><code>8</code></td>
+<td>Max implement→test fix loop iterations before BLOCK</td>
+</tr>
+<tr>
+<td><code>core.limits.max_stuck_cycles</code></td>
+<td><code>MILL_MAX_STUCK_CYCLES</code></td>
+<td><code>3</code></td>
+<td>Re-entries to same stage without progress before BLOCK</td>
+</tr>
+<tr>
+<td><code>core.limits.max_spend_usd_per_ticket</code></td>
+<td><code>MILL_MAX_SPEND_USD_PER_TICKET</code></td>
+<td><code>20.0</code></td>
+<td>Dollar cap per ticket (0.0 = disabled)</td>
+</tr>
+<tr>
+<td><code>core.limits.max_traces_per_ticket</code></td>
+<td><code>MILL_MAX_TRACES_PER_TICKET</code></td>
+<td><code>15</code></td>
+<td>Trace-count circuit-breaker (0 = disabled)</td>
+</tr>
+<tr>
+<td><code>core.limits.max_openrouter_marginal_usd_per_ticket</code></td>
+<td><code>MILL_MAX_OPENROUTER_MARGINAL_USD_PER_TICKET</code></td>
+<td><code>3.0</code></td>
+<td>OpenRouter marginal-spend breaker (0.0 = disabled)</td>
+</tr>
+<tr>
+<td><code>core.limits.stage_timeout_seconds</code></td>
+<td><code>MILL_STAGE_TIMEOUT_SECONDS</code></td>
+<td><code>2400</code></td>
+<td>Per-stage wall-clock timeout in seconds; stage that exceeds it is escalated to BLOCKED (≤ 0 disables)</td>
+</tr>
+<tr>
+<td><code>core.limits.stage_timeout_overrides</code></td>
+<td><code>MILL_STAGE_TIMEOUT_OVERRIDES</code></td>
+<td><code>{"refine": 900}</code></td>
+<td>Per-stage overrides as a JSON dict (e.g. <code>{"merge":0,"deliver":0}</code>); keys are stage names, values are seconds; 0 disables timeout for that stage. The built-in default caps the <strong>refine</strong> stage at 900 seconds — add <code>"refine": 0</code> to disable this cap, or override it with a different value.</td>
+</tr>
+<tr>
+<td><code>core.limits.max_global_concurrency</code></td>
+<td><code>MILL_MAX_GLOBAL_CONCURRENCY</code></td>
+<td><code>12</code></td>
+<td>Host-level cap on total concurrently-running stages across ALL boards, applied on top of each board's own <code>max_concurrency</code>. Default 12 provides a genuine backstop without throttling normal operation</td>
+</tr>
+<tr>
+<td><code>core.limits.stage_retry_max_attempts</code></td>
+<td><code>MILL_STAGE_RETRY_MAX_ATTEMPTS</code></td>
+<td><code>5</code></td>
+<td>Max automatic retries for transient stage-level failures (git outage, provider 5xx, connection refused)</td>
+</tr>
+<tr>
+<td><code>core.limits.stage_retry_base_delay</code></td>
+<td><code>MILL_STAGE_RETRY_BASE_DELAY</code></td>
+<td><code>2.0</code></td>
+<td>Base seconds for stage-level exponential backoff</td>
+</tr>
+<tr>
+<td><code>core.limits.stage_retry_max_delay</code></td>
+<td><code>MILL_STAGE_RETRY_MAX_DELAY</code></td>
+<td><code>60.0</code></td>
+<td>Max seconds between stage-level retries</td>
+</tr>
+<tr>
+<td><code>core.low_credit_threshold_usd</code></td>
+<td>—</td>
+<td><code>5.0</code></td>
+<td>OpenRouter credit balance below this value triggers the board warning banner</td>
+</tr>
+<tr>
+<td><code>core.low_credit_poll_enabled</code></td>
+<td>—</td>
+<td><code>true</code></td>
+<td>Enable the proactive OpenRouter credit-balance poll (hourly via <code>GET /api/v1/credits</code>)</td>
+</tr>
+<tr>
+<td><code>core.low_credit_poll_interval_seconds</code></td>
+<td>—</td>
+<td><code>3600</code></td>
+<td>Seconds between proactive credit-balance checks</td>
+</tr>
+<tr>
+<td><code>core.requeue_batch_size</code></td>
+<td><code>MILL_REQUEUE_BATCH_SIZE</code></td>
+<td><code>5</code></td>
+<td>Tickets enqueued per batch in the startup re-queue drip feed</td>
+</tr>
+<tr>
+<td><code>core.requeue_batch_pause_seconds</code></td>
+<td><code>MILL_REQUEUE_BATCH_PAUSE_SECONDS</code></td>
+<td><code>2.0</code></td>
+<td>Pause (seconds) between startup re-queue batches</td>
+</tr>
+<tr>
+<td><code>core.startup_jitter_seconds</code></td>
+<td><code>MILL_STARTUP_JITTER_SECONDS</code></td>
+<td><code>30</code></td>
+<td>Max random jitter (seconds) added to the per-repo periodic pass first-tick delay</td>
+</tr>
+<tr>
+<td><code>core.board_list_cache_ttl_seconds</code></td>
+<td><code>MILL_BOARD_LIST_CACHE_TTL_SECONDS</code></td>
+<td><code>3.0</code></td>
+<td>Short-TTL cache for board-poll GET /tickets endpoint (seconds). Repeated polls within this window return a cached snapshot to avoid stalling the event loop under load. 0.0 disables the cache.</td>
+</tr>
+<tr>
+<td><code>core.limits.network_probe_host</code></td>
+<td><code>MILL_NETWORK_PROBE_HOST</code></td>
+<td><code>"github.com"</code></td>
+<td>Host probed to detect global network outage; when unreachable, stage failures don't consume retry attempts</td>
+</tr>
+<tr>
+<td><code>core.limits.network_outage_retry_seconds</code></td>
+<td><code>MILL_NETWORK_OUTAGE_RETRY_SECONDS</code></td>
+<td><code>120</code></td>
+<td>Seconds between re-polls during a detected network outage</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_dynamic_limit_multiplier</code></td>
+<td><code>MILL_REFINE_DYNAMIC_LIMIT_MULTIPLIER</code></td>
+<td><code>1.5</code></td>
+<td>Dynamic request_limit multiplier applied when draft exceeds <code>refine_dynamic_limit_spec_chars</code> chars; must be &gt; 1.0</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_dynamic_limit_min</code></td>
+<td><code>MILL_REFINE_DYNAMIC_LIMIT_MIN</code></td>
+<td><code>12</code></td>
+<td>Floor for dynamic request_limit (never lower than this even if base × multiplier is lower)</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_dynamic_limit_spec_chars</code></td>
+<td><code>MILL_REFINE_DYNAMIC_LIMIT_SPEC_CHARS</code></td>
+<td><code>3000</code></td>
+<td>Draft character threshold above which the dynamic limit fires</td>
+</tr>
+<tr>
+<td><code>core.limits.refine_usage_warning_threshold</code></td>
+<td><code>MILL_REFINE_USAGE_WARNING_THRESHOLD</code></td>
+<td><code>0.8</code></td>
+<td>Log a warning when more than this fraction of request_limit is consumed during a refine pass</td>
+</tr>
+</tbody>
+</table>
+<h3 id="4-memory">4. Memory</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.memory.max_memory_chars</code></td>
+<td><code>MILL_MAX_MEMORY_CHARS</code></td>
+<td><code>8000</code></td>
+<td>Max characters loaded from any memory ledger per agent pass</td>
+</tr>
+<tr>
+<td><code>core.memory.retrospect_log_max_chars</code></td>
+<td><code>MILL_RETROSPECT_LOG_MAX_CHARS</code></td>
+<td><code>12000</code></td>
+<td>Max characters of the retrospect stage's history + comments logs (keeps most-recent, drops oldest; <code>0</code> disables)</td>
+</tr>
+<tr>
+<td><code>pipeline.implement_memory_path</code></td>
+<td><code>MILL_IMPLEMENT_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for implement memory; defaults to <code>&lt;data_dir&gt;/implement_memory.md</code></td>
+</tr>
+<tr>
+<td><code>pipeline.refine_memory_path</code></td>
+<td><code>MILL_REFINE_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for refine memory; defaults to <code>&lt;data_dir&gt;/refine_memory.md</code></td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_memory_path</code></td>
+<td><code>MILL_CI_FIX_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for CI-fix memory; defaults to <code>&lt;data_dir&gt;/ci_fix_memory.md</code></td>
+</tr>
+<tr>
+<td><code>pipeline.rebase_memory_path</code></td>
+<td><code>MILL_REBASE_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for rebase memory; defaults to <code>&lt;data_dir&gt;/rebase_memory.md</code></td>
+</tr>
+<tr>
+<td><code>pipeline.review_revision_memory_path</code></td>
+<td><code>MILL_REVIEW_REVISION_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for review-revision memory; defaults to <code>&lt;data_dir&gt;/review_revision_memory.md</code></td>
+</tr>
+<tr>
+<td><code>pipeline.ci_patterns_path</code></td>
+<td><code>MILL_CI_PATTERNS_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for the ci-fix agent's structured pattern memory; defaults to <code>&lt;data_dir&gt;/ci_patterns.json</code></td>
+</tr>
+<tr>
+<td><code>pipeline.doc_memory_path</code></td>
+<td><code>MILL_DOC_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for the document agent's Markdown memory ledger; defaults to <code>&lt;data_dir&gt;/doc_memory.md</code></td>
+</tr>
+<tr>
+<td><code>core.memory.retrospect_candidates_max_entries</code></td>
+<td><code>MILL_RETROSPECT_CANDIDATES_MAX_ENTRIES</code></td>
+<td><code>100</code></td>
+<td>Max entries retained in <code>AGENT_CANDIDATES.md</code>; pending entries are always kept; resolved entries are pruned oldest-first. <code>0</code> disables pruning</td>
+</tr>
+</tbody>
+</table>
+<h3 id="5-dedup">5. Dedup</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.memory.dedup_lookback_days</code></td>
+<td><code>MILL_DEDUP_LOOKBACK_DAYS</code></td>
+<td><code>7</code></td>
+<td>Days back to consider closed tickets as dup candidates</td>
+</tr>
+<tr>
+<td><code>epic_dedup_lookback_days</code></td>
+<td><code>MILL_EPIC_DEDUP_LOOKBACK_DAYS</code></td>
+<td><code>7</code></td>
+<td>Recency window (days) for the epic-decomposition pre-filing dedup recent-ticket check (see <a href="../../epic-dedup/">epic-dedup.md</a>)</td>
+</tr>
+<tr>
+<td><code>core.limits.dedup_skip_on_no_overlap</code></td>
+<td><code>MILL_DEDUP_SKIP_ON_NO_OVERLAP</code></td>
+<td><code>true</code></td>
+<td>Skip dedup LLM call when draft shares no token overlap with any candidate — saves cost in the "clearly unrelated" case</td>
+</tr>
+<tr>
+<td><code>core.limits.dedup_candidate_body_max_chars</code></td>
+<td><code>MILL_DEDUP_CANDIDATE_BODY_MAX_CHARS</code></td>
+<td><code>4000</code></td>
+<td>Cap each candidate body fed to dedup prompt; ≤0 disables truncation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="6-service-management-plane">6. Service (management plane)</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>service.data_dir</code></td>
+<td><code>MILL_DATA_DIR</code></td>
+<td><code>.data</code></td>
+<td>Data directory for DB, workspaces, and memory ledgers</td>
+</tr>
+<tr>
+<td><code>service.default_repo_id</code></td>
+<td><code>MILL_DEFAULT_REPO_ID</code></td>
+<td><code>""</code></td>
+<td>Backward-compatibility fallback: board_id assigned to tickets created before the mandatory-board_id migration. Not a substitute for configuring repos.yaml.</td>
+</tr>
+<tr>
+<td><code>service.api_host</code></td>
+<td><code>MILL_API_HOST</code></td>
+<td><code>0.0.0.0</code></td>
+<td>FastAPI listen address</td>
+</tr>
+<tr>
+<td><code>service.api_port</code></td>
+<td><code>MILL_API_PORT</code></td>
+<td><code>8077</code></td>
+<td>FastAPI listen port</td>
+</tr>
+<tr>
+<td><code>service.api_url</code></td>
+<td><code>MILL_API_URL</code></td>
+<td><code>http://127.0.0.1:8077</code></td>
+<td>Base URL the CLI client uses to reach the API</td>
+</tr>
+<tr>
+<td><code>service.shutdown_grace_seconds</code></td>
+<td><code>MILL_SHUTDOWN_GRACE_SECONDS</code></td>
+<td><code>1800</code></td>
+<td>Maximum seconds to wait for in-flight periodic-agent passes to finish before tearing the worker down on container shutdown. 0 = wait forever.</td>
+</tr>
+<tr>
+<td>### 7. Approval &amp; review</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gates.require_approval</code></td>
+<td><code>MILL_REQUIRE_APPROVAL</code></td>
+<td><code>true</code></td>
+<td>Pause after refine for human approval (<code>human_issue_approval</code> state)</td>
+</tr>
+<tr>
+<td><code>gates.auto_approve_enabled</code></td>
+<td><code>MILL_AUTO_APPROVE_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Enable conservative auto-approve triage</td>
+</tr>
+<tr>
+<td><code>gates.review_enabled</code></td>
+<td><code>MILL_REVIEW_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Enable dual-model code review stage before deliver</td>
+</tr>
+<tr>
+<td><code>gates.review_max_rounds</code></td>
+<td><code>MILL_REVIEW_MAX_ROUNDS</code></td>
+<td><code>3</code></td>
+<td>Max CODE_REVIEW round-trips before escalate</td>
+</tr>
+<tr>
+<td><code>gates.max_implement_review_cycles</code></td>
+<td><code>MILL_MAX_IMPLEMENT_REVIEW_CYCLES</code></td>
+<td><code>10</code></td>
+<td>Backstop ceiling on total implement passes per ticket across all review rounds; <code>0</code> disables</td>
+</tr>
+<tr>
+<td><code>gates.refine_triage_enabled</code></td>
+<td><code>MILL_REFINE_TRIAGE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Cheap triage before full refine (skip if precise)</td>
+</tr>
+<tr>
+<td><code>gates.refine_advisory_dedup_enabled</code></td>
+<td><code>MILL_REFINE_ADVISORY_DEDUP_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Cheap advisory-dedup-verification gate: resolves carried <code>Possible duplicate of &lt;id&gt;</code> advisory with a single cheapest-tier <code>run_dedup_check</code></td>
+</tr>
+<tr>
+<td><code>gates.freshness_gate_enabled</code></td>
+<td><code>MILL_FRESHNESS_GATE_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Pre-refine freshness check: verify cited evidence paths exist on HEAD</td>
+</tr>
+<tr>
+<td><code>gates.obsolescence_gate_enabled</code></td>
+<td><code>MILL_OBSOLESCENCE_GATE_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Pre-refine obsolescence check: re-validate spawned-draft gaps (opt-in)</td>
+</tr>
+<tr>
+<td><code>gates.spec_review_enabled</code></td>
+<td><code>MILL_SPEC_REVIEW_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Post-refinement spec narrative stripping</td>
+</tr>
+<tr>
+<td><code>gates.scope_triage_enabled</code></td>
+<td><code>MILL_SCOPE_TRIAGE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Cheap scope-violation triage before blocking (EXPAND/REJECT/ESCALATE)</td>
+</tr>
+<tr>
+<td><code>gates.prerequisite_gate_enabled</code></td>
+<td><code>MILL_PREREQUISITE_GATE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Pre-implement gate: when enabled, verify that external symbols/imports declared in the spec's <code>## Prerequisites</code> block are importable in the cloned repo before invoking the implement agent. When a declared prerequisite is unmet (e.g. an unmerged external port), the ticket is short-circuited to BLOCKED without the expensive coordinator LLM run. This is a no-op for specs without a <code>## Prerequisites</code> block and degrades gracefully on checker errors (always proceeds, never blocks on internal errors).</td>
+</tr>
+<tr>
+<td><code>gates.auto_merge_enabled</code></td>
+<td><code>MILL_AUTO_MERGE_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Auto-merge PR when CI passes</td>
+</tr>
+<tr>
+<td><code>gates.auto_merge_main_debt_detection_enabled</code></td>
+<td><code>MILL_AUTO_MERGE_MAIN_DEBT_DETECTION_ENABLED</code></td>
+<td><code>true</code></td>
+<td>When enabled, the single-repo auto-merge decision detects pre-existing main-branch CI debt: if every workflow failing on the PR head is ALSO failing on the merge target, the failure was not introduced by this PR and the ticket is routed to BLOCKED instead of cycling rebase/ci-fix retries. Safe-by-default — only fires when main is demonstrably red on the same workflow(s); the flag exists so an operator can disable it if needed.</td>
+</tr>
+<tr>
+<td><code>gates.review_feedback_enabled</code></td>
+<td><code>MILL_REVIEW_FEEDBACK_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Enable autonomous review-revision agent (opt-in — implements changes requested by human reviewers)</td>
+</tr>
+<tr>
+<td><code>gates.pr_summary_enabled</code></td>
+<td><code>MILL_PR_SUMMARY_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Generate structured PR body from diff via cheap LLM (opt-in)</td>
+</tr>
+<tr>
+<td><code>gates.comments_after_body</code></td>
+<td><code>MILL_COMMENTS_AFTER_BODY</code></td>
+<td><code>false</code></td>
+<td>Render description.md before comments in ticket detail drawer</td>
+</tr>
+<tr>
+<td><code>gates.reviewer_agreement_gate_enabled</code></td>
+<td><code>MILL_REVIEWER_AGREEMENT_GATE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Pre-Opus guard: when a reviewer's sendback feedback already agrees with the draft's no-change-needed conclusion, the pipeline short-circuits to DONE, skipping the expensive Opus refine agent. Requires <code>refine_triage_enabled=true</code>.</td>
+</tr>
+<tr>
+<td><code>ci.codeql_fp_triage_enabled</code></td>
+<td><code>MILL_CODEQL_FP_TRIAGE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>When enabled, ci_fix may invoke a conservative sub-agent at the hard cycle ceiling to dismiss high-conviction CodeQL false positives, unblocking the ticket</td>
+</tr>
+</tbody>
+</table>
+<h3 id="8-forge">8. Forge</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forge.kind</code></td>
+<td><code>FORGE_KIND</code></td>
+<td><code>none</code></td>
+<td>Forge platform: <code>github</code>, <code>gitlab</code>, <code>auto</code>, or <code>none</code>. <code>auto</code> detects the kind from the remote URL hostname (<code>github.com</code> → GitHub, <code>gitlab.com</code> → GitLab); custom domains raise an error and require an explicit setting.</td>
+</tr>
+<tr>
+<td><code>forge.remote_url</code></td>
+<td><code>FORGE_REMOTE_URL</code></td>
+<td><code>None</code></td>
+<td>Remote URL for clone + push</td>
+</tr>
+<tr>
+<td><code>forge.target_branch</code></td>
+<td><code>FORGE_TARGET_BRANCH</code></td>
+<td><code>main</code></td>
+<td>Target branch for PRs</td>
+</tr>
+<tr>
+<td><code>forge.auth_mode</code></td>
+<td><code>FORGE_AUTH</code></td>
+<td><code>token</code></td>
+<td>Auth mode: <code>token</code> (PAT) or <code>app</code> (GitHub App). Under <code>app</code> mode, <code>github_push_token()</code> mints a fresh <code>contents: write</code>-scoped installation token per push — no PAT is stored or reused for git push operations.</td>
+</tr>
+<tr>
+<td><code>forge.github_api_url</code></td>
+<td><code>MILL_GITHUB_API_URL</code></td>
+<td><code>https://api.github.com</code></td>
+<td>GitHub API base URL (override for GitHub Enterprise)</td>
+</tr>
+<tr>
+<td><code>forge.gitlab_api_url</code></td>
+<td><code>MILL_GITLAB_API_URL</code></td>
+<td><code>https://gitlab.com/api/v4</code></td>
+<td>GitLab API base URL (override for self-hosted GitLab)</td>
+</tr>
+<tr>
+<td><code>forge.github_app_private_key_path</code></td>
+<td><code>GITHUB_APP_PRIVATE_KEY_PATH</code></td>
+<td><code>None</code></td>
+<td>Host path to GitHub App private-key <code>.pem</code> file</td>
+</tr>
+<tr>
+<td><code>core.enable_repo_creation</code></td>
+<td><code>MILL_ENABLE_REPO_CREATION</code></td>
+<td><code>false</code></td>
+<td>Allow the new-repo meta flow to create repositories via the forge API</td>
+</tr>
+<tr>
+<td><code>core.repo_visibility_default</code></td>
+<td><code>MILL_REPO_VISIBILITY_DEFAULT</code></td>
+<td><code>public</code></td>
+<td>Default visibility for newly created repositories. <code>public</code> — repos are public unless the caller specifies private=True. <code>private</code> — repos are private unless the caller specifies private=False.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="9-sandbox">9. Sandbox</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sandbox.image</code></td>
+<td><code>MILL_SANDBOX_IMAGE</code></td>
+<td><code>python:3.14-slim</code></td>
+<td>Docker image for disposable sandbox containers. Code default is a lightweight <code>python:3.14-slim</code> image for local development; production JSON config overrides to <code>robotsix/mill-sandbox:latest</code>, which includes the <code>uv</code> binary and Python toolchain. Customize to a pre-built image that includes any additional tooling (e.g. formatters, linters) your test command needs.</td>
+</tr>
+<tr>
+<td><code>sandbox.memory</code></td>
+<td><code>MILL_SANDBOX_MEMORY</code></td>
+<td><code>2g</code></td>
+<td>Memory limit for sandbox containers</td>
+</tr>
+<tr>
+<td><code>sandbox.pids_limit</code></td>
+<td><code>MILL_SANDBOX_PIDS_LIMIT</code></td>
+<td><code>512</code></td>
+<td>PID limit for sandbox containers</td>
+</tr>
+<tr>
+<td><code>sandbox.readonly</code></td>
+<td><code>MILL_SANDBOX_READONLY</code></td>
+<td><code>true</code></td>
+<td>Mount sandbox rootfs read-only (except tmpfs <code>/tmp</code>)</td>
+</tr>
+<tr>
+<td><code>sandbox.command_timeout</code></td>
+<td><code>MILL_COMMAND_TIMEOUT</code></td>
+<td><code>1800</code></td>
+<td>Wall-clock cap (seconds) for sandbox shell/test commands</td>
+</tr>
+<tr>
+<td><code>sandbox.data_volume</code></td>
+<td><code>MILL_DATA_VOLUME</code></td>
+<td><code>mill_data</code></td>
+<td>Named Docker volume for data (fallback when not bind-mounted)</td>
+</tr>
+<tr>
+<td><code>sandbox.data_mount</code></td>
+<td><code>MILL_SANDBOX_DATA_MOUNT</code></td>
+<td><code>None</code></td>
+<td>Host path for bind-mounted data directory (overrides <code>data_volume</code>)</td>
+</tr>
+<tr>
+<td><code>sandbox.network</code></td>
+<td><code>MILL_SANDBOX_NETWORK</code></td>
+<td><code>mill-sandbox-net</code></td>
+<td>Docker network sandbox containers connect to (internal, filtered through proxy)</td>
+</tr>
+<tr>
+<td><code>sandbox.proxy_url</code></td>
+<td><code>MILL_SANDBOX_PROXY_URL</code></td>
+<td><code>http://sandbox-proxy:8888</code></td>
+<td>Egress proxy URL (empty = no proxy, <code>--network none</code>)</td>
+</tr>
+<tr>
+<td><code>sandbox.test_command</code></td>
+<td><code>MILL_TEST_COMMAND</code></td>
+<td><code>""</code></td>
+<td>Command run to verify the implementation (empty = skip). Global fallback only: a managed repo's own <code>.robotsix-mill/config.yaml</code> <code>test_command</code> takes precedence, then <code>repos.yaml</code> per-repo <code>test_command</code>, then this value (precedence: per-repo file &gt; repos.yaml &gt; global).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="10-web-research">10. Web research</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>web.search_enabled</code></td>
+<td><code>MILL_WEB_SEARCH</code></td>
+<td><code>true</code></td>
+<td>Enable web-search capability (delegated to sub-agent)</td>
+</tr>
+<tr>
+<td><code>web.research_request_limit</code></td>
+<td><code>MILL_WEB_RESEARCH_REQUEST_LIMIT</code></td>
+<td><code>8</code></td>
+<td>Per-call request cap for web research (also reachable via <code>core.limits.web_research_requests</code>)</td>
+</tr>
+<tr>
+<td><code>web.fetch_image</code></td>
+<td><code>MILL_FETCH_IMAGE</code></td>
+<td><code>curlimages/curl:8.17.0</code></td>
+<td>Docker image for isolated <code>web_fetch</code> container</td>
+</tr>
+<tr>
+<td><code>web.fetch_max_bytes</code></td>
+<td><code>MILL_WEB_FETCH_MAX_BYTES</code></td>
+<td><code>2000000</code></td>
+<td>Max bytes fetched per URL</td>
+</tr>
+<tr>
+<td><code>web.fetch_timeout</code></td>
+<td><code>MILL_WEB_FETCH_TIMEOUT</code></td>
+<td><code>30</code></td>
+<td>Timeout (seconds) per web fetch</td>
+</tr>
+<tr>
+<td><code>web.fetch_max_calls</code></td>
+<td>—</td>
+<td><code>15</code></td>
+<td>(config-file-only) Max real (cache-miss) fetches per web-knowledge consult; cache hits and <code>web.fetch_raw</code> returns do NOT count</td>
+</tr>
+<tr>
+<td><code>web.fetch_max_total_bytes</code></td>
+<td>—</td>
+<td><code>2000000</code></td>
+<td>(config-file-only) Cumulative ceiling on returned (post-extraction, post-cap) text bytes per consult; <code>0</code> disables the byte ceiling</td>
+</tr>
+</tbody>
+</table>
+<h3 id="101-web-knowledge-agent">10.1 Web knowledge agent</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>—</td>
+<td><code>MILL_WEB_KNOWLEDGE_MODEL</code></td>
+<td><code>deepseek/deepseek-v4-flash</code></td>
+<td>Web-knowledge gateway sub-agent model — multi-turn flash agent that owns the per-library Markdown knowledge base and decides autonomously whether to answer from cache or web-search. Every agent's route to the internet flows through this gateway.</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>MILL_WEB_KNOWLEDGE_STALE_DAYS</code></td>
+<td><code>30</code></td>
+<td>Days before a cached web-knowledge .md file is considered stale. A consult that hits a stale file is allowed to web-search and update it. Users can tune this to match their tolerance for stale documentation.</td>
+</tr>
+<tr>
+<td><code>core.web_knowledge_cache_ttl_hours</code></td>
+<td>—</td>
+<td><code>72</code></td>
+<td>(config-file-only) Hours since the last <code>last_verified</code> touch before a cached knowledge file is flagged <code>[STALE]</code> in the agent's index. When flagged, the web_knowledge agent's system prompt warns it to cross-check claims with <code>web_search</code> before trusting cached data.</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>MILL_WEB_KNOWLEDGE_REQUEST_LIMIT</code></td>
+<td><code>12</code></td>
+<td>Per-consult request cap for the web-knowledge sub-agent. Each request is one Markdown read, one web-search, or one Markdown write.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="11-pipeline-tail-merge-stage">11. Pipeline tail (merge stage)</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pipeline.merge_poll_seconds</code></td>
+<td><code>MILL_MERGE_POLL_SECONDS</code></td>
+<td><code>120</code></td>
+<td>Poll interval for PR merge/CI status</td>
+</tr>
+<tr>
+<td><code>pipeline.rebase_max_attempts</code></td>
+<td><code>MILL_REBASE_MAX_ATTEMPTS</code></td>
+<td><code>3</code></td>
+<td>Max rebase LLM invocations before BLOCK</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_max_iterations</code></td>
+<td><code>MILL_CI_FIX_MAX_ITERATIONS</code></td>
+<td><code>5</code></td>
+<td>Single-repo ci-fix: max <code>wait_for_ci</code> push-and-recheck iterations the agent may run before BLOCK. The agent owns its fix→push→verify loop; this is its iteration budget. Set to 0 to disable the verify loop.</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_max_attempts</code></td>
+<td><code>MILL_CI_FIX_MAX_ATTEMPTS</code></td>
+<td><code>2</code></td>
+<td>Multi-repo merge ci-fix only: max CI-fix LLM invocations before BLOCK</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_max_cycles</code></td>
+<td><code>MILL_CI_FIX_MAX_CYCLES</code></td>
+<td><code>3</code></td>
+<td>Multi-repo merge ci-fix only: hard ceiling on total ci-fix cycles per repo (reset only when CI turns green). Set to 0 to disable.</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_max_identical_failures</code></td>
+<td><code>MILL_CI_FIX_MAX_IDENTICAL_FAILURES</code></td>
+<td><code>2</code></td>
+<td>Max consecutive identical CI failure cycles before escalating to BLOCKED. When the same failure fingerprint repeats this many times without progress, the stage short-circuits. Set to 0 to disable.</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_wait_poll_interval_s</code></td>
+<td><code>MILL_CI_FIX_WAIT_POLL_INTERVAL_S</code></td>
+<td><code>30.0</code></td>
+<td>How often <code>wait_for_ci</code> polls the forge for CI conclusion while a run is in progress</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_wait_timeout_s</code></td>
+<td><code>MILL_CI_FIX_WAIT_TIMEOUT_S</code></td>
+<td><code>1500.0</code></td>
+<td>Max seconds a single <code>wait_for_ci</code> call blocks before returning a still-pending signal</td>
+</tr>
+<tr>
+<td><code>pipeline.deliver_max_identical_blocks</code></td>
+<td>—</td>
+<td><code>2</code></td>
+<td>(config-file-only) Max consecutive identical merge-guard blocks before escalating the deliver stage's meta-triage-fallback guard to a stronger BLOCKED requiring human intervention. When the same brand-new top-level file fingerprint repeats this many times without progress (e.g. a deterministic resume→block loop), the stage escalates instead of burning cost. Set to 0 to disable.</td>
+</tr>
+<tr>
+<td><code>pipeline.ci_fix_request_limit</code></td>
+<td><code>MILL_CI_FIX_REQUEST_LIMIT</code></td>
+<td><code>120</code></td>
+<td>Per-run request budget for the ci-fix agent (must cover ALL fix→push→verify iterations). When exhausted, pydantic-ai raises <code>UsageLimitExceeded</code>, which the retry layer catches and triggers the fallback model (if configured). Set to 0 to disable.</td>
+</tr>
+<tr>
+<td><code>pipeline.review_revision_max_attempts</code></td>
+<td><code>MILL_REVIEW_REVISION_MAX_ATTEMPTS</code></td>
+<td><code>2</code></td>
+<td>Max review-revision LLM invocations before BLOCK</td>
+</tr>
+<tr>
+<td><code>pipeline.branch_prefix</code></td>
+<td><code>MILL_BRANCH_PREFIX</code></td>
+<td><code>mill/</code></td>
+<td>Prefix for deliver-stage branch names</td>
+</tr>
+<tr>
+<td><code>pipeline.delete_branch_on_merge</code></td>
+<td><code>MILL_DELETE_BRANCH_ON_MERGE</code></td>
+<td><code>true</code></td>
+<td>Delete the per-ticket head branch on the forge after merge to DONE</td>
+</tr>
+<tr>
+<td><code>pipeline.prune_clone_on_close</code></td>
+<td><code>MILL_PRUNE_CLONE_ON_CLOSE</code></td>
+<td><code>true</code></td>
+<td>Delete workspace repo clone on ticket close</td>
+</tr>
+<tr>
+<td><code>pipeline.max_archived_tickets</code></td>
+<td><code>MILL_MAX_ARCHIVED_TICKETS</code></td>
+<td><code>40</code></td>
+<td>Max terminal-state tickets retained (0 = no purge)</td>
+</tr>
+<tr>
+<td><code>pipeline.max_events_per_ticket</code></td>
+<td><code>MILL_MAX_EVENTS_PER_TICKET</code></td>
+<td><code>200</code></td>
+<td>Max TicketEvent rows retained per non-terminal ticket; events beyond this cap are pruned (oldest first). 0 disables per-ticket event capping.</td>
+</tr>
+<tr>
+<td><code>pipeline.max_comments_per_ticket</code></td>
+<td><code>MILL_MAX_COMMENTS_PER_TICKET</code></td>
+<td><code>500</code></td>
+<td>Max Comment rows retained per non-terminal ticket; OPEN threads are never pruned. 0 disables comment capping.</td>
+</tr>
+<tr>
+<td><code>pipeline.auto_fix_max_cycles</code></td>
+<td><code>MILL_AUTO_FIX_MAX_CYCLES</code></td>
+<td><code>6</code></td>
+<td>Cross-stage ceiling on combined REBASING+FIXING_CI dispatches without CI turning green. Reset only when CI is observed green. Set to 0 to disable.</td>
+</tr>
+<tr>
+<td><code>pipeline.ping_pong_max_alternations</code></td>
+<td><code>MILL_PING_PONG_MAX_ALTERNATIONS</code></td>
+<td><code>3</code></td>
+<td>Ceiling on REBASING↔FIXING_CI alternations before escalating to BLOCKED. Reset when CI is observed green. Set to 0 to disable.</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>MILL_TICKET_STATE_CYCLE_LIMIT</code></td>
+<td><code>3</code></td>
+<td>Ceiling on re-dispatches of the same LLM-bearing stage within a single pass before BLOCKED. Set to 0 to disable.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="112-stages-tuning">11.2 Stages tuning</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stages.review.prior_context_max_chars</code></td>
+<td><code>MILL_REVIEW_PRIOR_CONTEXT_MAX_CHARS</code></td>
+<td><code>8000</code></td>
+<td>Max characters of the re-review prior-context block (prior review comments + the implement rebuttal) fed to the review agent. Each component is tail-kept (most-recent content survives) so multi-round reviews don't re-pay for the entire accumulated history. Set to <code>0</code> to disable the cap.</td>
+</tr>
+<tr>
+<td><code>stages.review.diff_max_chars</code></td>
+<td><code>MILL_REVIEW_DIFF_MAX_CHARS</code></td>
+<td><code>200_000</code></td>
+<td>Max characters of the combined git diff injected into the review prompt. The raw <code>git diff origin/&lt;target&gt;...HEAD</code> can balloon to megabytes (divergent base, generated/lockfile churn, branch history) regardless of how few lines the intended change touches, overflowing even a 1M-token model context. When the diff exceeds this limit it is <strong>middle-truncated</strong> (head + tail kept, middle dropped, with a marker stating how many characters were omitted) so both early and late files get representation. ~200K chars ≈ 50K tokens, leaving room for spec + prior context + preseed + tools + the output reservation. Set to <code>0</code> to disable the cap (unbounded diffs).</td>
+</tr>
+<tr>
+<td><code>stages.review.output_token_budget</code></td>
+<td><code>MILL_REVIEW_OUTPUT_TOKEN_BUDGET</code></td>
+<td><code>65536</code></td>
+<td>Output token budget for the review agent retry when the primary attempt exhausts its <code>max_tokens</code> before generating a response (the reasoning model burns output tokens on internal reasoning). This is the <strong>retry</strong> budget; the primary attempt uses the agent definition's <code>max_tokens</code>. Set higher than the agent definition <code>max_tokens</code>. Set to <code>0</code> to disable the output-exhaustion retry (falls straight to <code>NEEDS_DISCUSSION</code>).</td>
+</tr>
+<tr>
+<td><code>core.lint_on_edit</code></td>
+<td><code>MILL_LINT_ON_EDIT</code></td>
+<td><code>true</code></td>
+<td>Pre-write Python syntax check on <code>write_file</code>/<code>edit_file</code>. When True, a SyntaxError aborts the edit before writing broken code. Configured via <code>core.lint_on_edit</code> in the JSON config file.</td>
+</tr>
+<tr>
+<td><code>core.read_file_max_chars</code></td>
+<td><code>MILL_READ_FILE_MAX_CHARS</code></td>
+<td><code>50000</code></td>
+<td>(config-file-only) Character cap on an <em>implicit full</em> <code>read_file</code> (<code>offset=1</code>, <code>limit=None</code>) payload returned to any <code>build_fs_tools</code> agent (implement, review, document). Over the cap the tool returns a head + tail slice plus an elision marker stating the file's total line count and steering the agent to re-read the omitted region with <code>offset</code>/<code>limit</code>; explicit ranged reads are <strong>never</strong> truncated. ~50K chars ≈ 12.5K tokens — above ordinary source modules (returned in full), so only large generated/lock/baseline files are trimmed before they bloat the re-billed prefix. Set to <code>0</code> to disable the cap.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Graceful token-exhaustion handling.</strong> If a token-limit error is hit on
+the first review pass, the review is retried once with no preseed and a
+hard-truncated diff (~40K chars). If that retry also overflows, the
+stage returns a <code>NEEDS_DISCUSSION</code> verdict with an explanatory comment
+rather than crashing — a human can review the PR directly or split the
+change into smaller diffs.</p>
+<h3 id="113-refine-routing">11.3 Refine routing</h3>
+<p>These knobs control how the refine agent selects a model and when it
+routes to cheaper tiers. All values are applied at the start of each
+refinement pass.</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gates.refine_trivial_routing_enabled</code></td>
+<td><code>MILL_REFINE_TRIVIAL_ROUTING_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Route trivial-scope tickets to a cheaper model instead of the full refinement model</td>
+</tr>
+<tr>
+<td><code>gates.refine_trivial_model_level</code></td>
+<td><code>MILL_REFINE_TRIVIAL_MODEL_LEVEL</code></td>
+<td><code>3</code></td>
+<td>Model level for trivial-scope refines (3 = flat-cost Claude subscription; 1/2 = pay-per-token DeepSeek rollback)</td>
+</tr>
+<tr>
+<td><code>gates.refine_trivial_subscription_model</code></td>
+<td><code>MILL_REFINE_TRIVIAL_SUBSCRIPTION_MODEL</code></td>
+<td><code>sonnet</code></td>
+<td>Claude alias for trivial/forced-cheap refines routed to the level-3 subscription</td>
+</tr>
+<tr>
+<td><code>gates.refine_subscription_tier_routing_enabled</code></td>
+<td><code>MILL_REFINE_SUBSCRIPTION_TIER_ROUTING_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Complexity-gated Claude alias routing for level-3 refines (set <code>false</code> for Opus-always rollback)</td>
+</tr>
+<tr>
+<td><code>gates.refine_subscription_model_default</code></td>
+<td><code>MILL_REFINE_SUBSCRIPTION_MODEL_DEFAULT</code></td>
+<td><code>sonnet</code></td>
+<td>Claude alias for non-escalated (simple) level-3 refines</td>
+</tr>
+<tr>
+<td><code>gates.refine_subscription_model_complex</code></td>
+<td><code>MILL_REFINE_SUBSCRIPTION_MODEL_COMPLEX</code></td>
+<td><code>opus</code></td>
+<td>Claude alias for escalated (needs-exploration) level-3 refines</td>
+</tr>
+<tr>
+<td><code>gates.refine_findings_downgrade_enabled</code></td>
+<td><code>MILL_REFINE_FINDINGS_DOWNGRADE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Downgrade Opus → cheaper Claude alias when triage findings are substantial (root cause already known)</td>
+</tr>
+<tr>
+<td><code>gates.refine_findings_downgrade_min_chars</code></td>
+<td><code>MILL_REFINE_FINDINGS_DOWNGRADE_MIN_CHARS</code></td>
+<td><code>150</code></td>
+<td>Minimum stripped-character length of triage findings for the Opus downgrade to fire</td>
+</tr>
+<tr>
+<td><code>gates.refine_subscription_model_findings</code></td>
+<td><code>MILL_REFINE_SUBSCRIPTION_MODEL_FINDINGS</code></td>
+<td><code>sonnet</code></td>
+<td>Claude alias used when the findings-present downgrade fires</td>
+</tr>
+<tr>
+<td><code>gates.max_re_refine_cycles_before_cheap</code></td>
+<td><code>MILL_MAX_RE_REFINE_CYCLES_BEFORE_CHEAP</code></td>
+<td><code>2</code></td>
+<td>Force cheap model after this many "changes requested" sendbacks; <code>0</code> disables</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>MILL_REFINE_DELTA_REUSE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>When re-entering refine after an operator sendback, reuse the prior refined description.md as the starting point instead of refining from scratch</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-periodic-agents">12. Periodic agents</h3>
+<p>Each periodic agent shares this pattern:</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.&lt;name&gt;.enabled</code></td>
+<td><code>MILL_&lt;NAME&gt;_PERIODIC</code></td>
+<td><code>true</code>¹</td>
+<td>Enable periodic passes</td>
+</tr>
+<tr>
+<td><code>periodic.&lt;name&gt;.interval_seconds</code></td>
+<td><code>MILL_&lt;NAME&gt;_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between automatic passes</td>
+</tr>
+</tbody>
+</table>
+<p>Periodic agents: <code>audit</code>, <code>trace_health</code>, <code>trace_review</code>, <code>health</code>, <code>test_gap</code>,
+<code>agent_check</code>, <code>survey</code>, <code>ci_monitor</code>, <code>config_sync</code>, <code>member_sync</code>, <code>meta</code>, <code>bc_check</code>,
+<code>completeness_check</code>, <code>diagnostic</code>, <code>forge_parity</code>, <code>module_curator</code>, <code>orphaned_pr_check</code>,
+<code>copy_paste</code>, <code>timeout_escalation</code>, <code>triage_boilerplate</code>, <code>langfuse_cleanup</code>, <code>data_dir_gc</code>, <code>dependabot_ingest</code>, <code>run_health</code>, <code>stale_branch_cleanup</code>,
+<code>db_maintenance</code>, <code>sandbox_reaper</code>, <code>repo_description_sync</code>.</p>
+<blockquote>
+<p>¹ Most agents default to <code>enabled: true</code>. Exceptions: <code>diagnostic</code>, <code>stale_branch_cleanup</code>, and <code>meta_periodic</code> default to <code>false</code>.</p>
+<p><code>trace_health</code>, <code>ci_monitor</code>, <code>member_sync</code>, and <code>diagnostic</code> write no
+per-agent memory ledger (<code>member_sync</code> and <code>diagnostic</code> are deterministic
+passes with no LLM agent).</p>
+<p>Periodic agents' memory ledger paths are <strong>fixed and not overridable</strong>:
+in multi-repo mode each repo gets its own isolated ledger at
+<code>&lt;data_dir&gt;/&lt;repo_id&gt;/&lt;agent&gt;_memory.md</code>; when no repos are registered
+(single-repo or <code>--repo-id</code> mode), the path falls back to
+<code>&lt;data_dir&gt;/&lt;agent&gt;_memory.md</code>.  The only exception is <code>run_health</code>,
+which keeps a <code>periodic.run_health.memory_path</code> override (see below).</p>
+</blockquote>
+<p>Additional fields:</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.bespoke_periodic</code></td>
+<td><code>MILL_BESPOKE_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Master toggle for the per-repo bespoke periodic agent supervisor (default <code>true</code> — enabled)</td>
+</tr>
+<tr>
+<td><code>periodic.bespoke_discovery_interval_seconds</code></td>
+<td><code>MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS</code></td>
+<td><code>600</code></td>
+<td>Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's <code>.robotsix-mill/agents/</code> lands within this window.</td>
+</tr>
+<tr>
+<td><code>periodic.ci_monitor.log_max_bytes</code></td>
+<td><code>MILL_CI_LOG_MAX_BYTES</code></td>
+<td><code>65536</code></td>
+<td>Max bytes fetched per CI job log</td>
+</tr>
+<tr>
+<td><code>periodic.diagnostic.target_repo_id</code></td>
+<td><code>MILL_DIAGNOSTIC_TARGET_REPO_ID</code></td>
+<td><code>robotsix-mill</code></td>
+<td>Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty</td>
+</tr>
+<tr>
+<td><code>periodic.diagnostic.monitored_repo_ids</code></td>
+<td><code>MILL_DIAGNOSTIC_MONITORED_REPO_IDS</code></td>
+<td><code>[]</code></td>
+<td>Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to <code>target_repo_id</code>. Add/remove repos here — no code change. See <a href="../../agents/diagnostic-agent/">diagnostic-agent.md</a></td>
+</tr>
+<tr>
+<td><code>periodic.langfuse_cleanup.max_traces</code></td>
+<td><code>MILL_LANGFUSE_CLEANUP_MAX_TRACES</code></td>
+<td><code>5000</code></td>
+<td>Max traces retained in the shared workspace Langfuse project when <code>langfuse_cleanup_periodic</code> is enabled; oldest traces are deleted to stay under this cap. Centralized (global-only) — one pass per interval, not per-repo.</td>
+</tr>
+<tr>
+<td><code>pipeline.retrospect_spawn_drafts</code></td>
+<td><code>MILL_RETROSPECT_SPAWN_DRAFTS</code></td>
+<td><code>true</code></td>
+<td>Allow retrospect to file improvement draft tickets</td>
+</tr>
+<tr>
+<td><code>pipeline.retrospect_spawn_agented_proposals</code></td>
+<td><code>MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS</code></td>
+<td><code>true</code></td>
+<td>When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board.</td>
+</tr>
+<tr>
+<td><code>pipeline.retrospect_memory_path</code></td>
+<td><code>MILL_RETROSPECT_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for retrospect memory</td>
+</tr>
+</tbody>
+</table>
+<h4 id="trace_review">trace_review</h4>
+<p>The trace-review periodic agent inspects Langfuse traces for anomalies
+(cost spikes, tool-call errors, repeated-tool storms, explore loops,
+ask_user stalls) and files draft tickets with proposed fixes. Every
+field below is settable via its <code>MILL_TRACE_REVIEW_*</code> environment
+variable and its dotted YAML path.</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.trace_review.enabled</code></td>
+<td><code>MILL_TRACE_REVIEW_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic trace-review passes</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.interval_seconds</code></td>
+<td><code>MILL_TRACE_REVIEW_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between trace-review passes (minimum 3600)</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.cost_multiplier</code></td>
+<td><code>MILL_TRACE_REVIEW_COST_MULTIPLIER</code></td>
+<td><code>3.0</code></td>
+<td>Outlier threshold: cost &gt; batch median × N → flagged</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.per_obs_cost_threshold</code></td>
+<td><code>MILL_TRACE_REVIEW_PER_OBS_COST_THRESHOLD</code></td>
+<td><code>0.001</code></td>
+<td>Per-observation cost threshold for flagging</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.obs_multiplier</code></td>
+<td><code>MILL_TRACE_REVIEW_OBS_MULTIPLIER</code></td>
+<td><code>3.0</code></td>
+<td>Outlier threshold: observation count &gt; batch median × N → flagged</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.max_repeated_tool</code></td>
+<td><code>MILL_TRACE_REVIEW_MAX_REPEATED_TOOL</code></td>
+<td><code>50</code></td>
+<td>Absolute cap on repeated tool calls before flagging</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.max_tool_calls</code></td>
+<td><code>MILL_TRACE_REVIEW_MAX_TOOL_CALLS</code></td>
+<td><code>100</code></td>
+<td>Hard cap on total tool calls per trace inspection</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.max_errors</code></td>
+<td><code>MILL_TRACE_REVIEW_MAX_ERRORS</code></td>
+<td><code>20</code></td>
+<td>Hard cap on tool-call errors before auto-termination</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.model_level</code></td>
+<td><code>MILL_TRACE_REVIEW_MODEL_LEVEL</code></td>
+<td><code>1</code></td>
+<td>Model tier for the trace inspector (1–3)</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.inspector_min_requests</code></td>
+<td><code>MILL_TRACE_REVIEW_INSPECTOR_MIN_REQUESTS</code></td>
+<td><code>20</code></td>
+<td>Floor for the tools-on request budget</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.inspector_max_requests</code></td>
+<td><code>MILL_TRACE_REVIEW_INSPECTOR_MAX_REQUESTS</code></td>
+<td><code>80</code></td>
+<td>Ceiling for the tools-on request budget</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.inspector_requests_per_obs</code></td>
+<td><code>MILL_TRACE_REVIEW_INSPECTOR_REQUESTS_PER_OBS</code></td>
+<td><code>0.1</code></td>
+<td>Requests granted per observation before clamping</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.inspector_max_obs_for_tools</code></td>
+<td><code>MILL_TRACE_REVIEW_INSPECTOR_MAX_OBS_FOR_TOOLS</code></td>
+<td><code>200</code></td>
+<td>Observation count above which code-access tools are dropped</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.inspector_toolless_requests</code></td>
+<td><code>MILL_TRACE_REVIEW_INSPECTOR_TOOLLESS_REQUESTS</code></td>
+<td><code>3</code></td>
+<td>Request budget for the tool-less summary-only path</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.tool_request_limit</code></td>
+<td><code>MILL_TRACE_REVIEW_TOOL_REQUEST_LIMIT</code></td>
+<td><code>15</code></td>
+<td>Request budget for the interactive <code>langfuse_inspect_trace</code> tool</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.max_drafts_per_run</code></td>
+<td><code>MILL_TRACE_REVIEW_MAX_DRAFTS_PER_RUN</code></td>
+<td><code>5</code></td>
+<td>Cap on drafted findings per trace-review pass</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.max_inspections_per_run</code></td>
+<td><code>MILL_TRACE_REVIEW_MAX_INSPECTIONS_PER_RUN</code></td>
+<td><code>5</code></td>
+<td>Hard cap on LLM inspector calls per trace-review run</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.max_traces_per_run</code></td>
+<td><code>MILL_TRACE_REVIEW_MAX_TRACES_PER_RUN</code></td>
+<td><code>300</code></td>
+<td>Hard cap on traces pulled for full detail per run</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.initial_lookback_hours</code></td>
+<td><code>MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS</code></td>
+<td><code>24</code></td>
+<td>First-run lookback window when no watermark exists (hours)</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.restart_correlation_window_seconds</code></td>
+<td><code>MILL_TRACE_REVIEW_RESTART_CORRELATION_WINDOW_SECONDS</code></td>
+<td><code>60</code></td>
+<td>Window for correlating incomplete traces with process restarts (seconds)</td>
+</tr>
+<tr>
+<td><code>periodic.trace_review.dedup_lookback_days</code></td>
+<td><code>MILL_TRACE_REVIEW_DEDUP_LOOKBACK_DAYS</code></td>
+<td><code>7</code></td>
+<td>Recency window (days) for pre-filing duplicate check</td>
+</tr>
+<tr>
+<td><code>pipeline.trace_review_target_repo_id</code></td>
+<td><code>MILL_TRACE_REVIEW_TARGET_REPO_ID</code></td>
+<td><code>""</code></td>
+<td>Target repo for trace-review drafts; empty → source-repo routing</td>
+</tr>
+</tbody>
+</table>
+<h4 id="data_dir_gc">data_dir_gc</h4>
+<p>The <code>data_dir_gc</code> periodic agent reclaims disk space through deterministic GC steps (terminal clone pruning, orphan workspace pruning, closed workspace pruning, DB row purging, and memory ledger truncation). No size scanning or ticket filing — those concerns live in robotsix-central-deploy.</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.data_dir_gc.enabled</code></td>
+<td><code>MILL_DATA_DIR_GC_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Master switch for the periodic data-dir GC pass. Default <code>true</code> — the agent is harmless when idle (nothing to reclaim).</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.interval_seconds</code></td>
+<td><code>MILL_DATA_DIR_GC_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between periodic data-dir GC passes. Minimum enforced at 60 s in the worker loop.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_closed</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_CLOSED</code></td>
+<td><code>false</code></td>
+<td>Opt-in GC: prune workspace directories of terminal-state tickets during the data-dir GC pass. Default <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_closed_age_seconds</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Minimum age (seconds since the ticket entered its terminal state) before its workspace becomes eligible for prune_closed GC. Recent closures are kept for post-mortems. Default 7 days.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_terminal_clones</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES</code></td>
+<td><code>true</code></td>
+<td>Default-on GC: prune the reproducible git clones (<code>repo/</code> and <code>repos/</code>) inside workspaces of terminal-state tickets at the start of each data-dir GC pass.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_terminal_clones_age_seconds</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES_AGE_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Minimum age (seconds since the ticket entered its terminal state) before its clones are pruned. Clones are cheap to recreate, so the guard is short. Default 1 day.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_db_rows</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_DB_ROWS</code></td>
+<td><code>true</code></td>
+<td>Default-on DB row GC: purge oldest terminal-ticket rows (and their associated events, comments, and proposed actions) when the count of terminal tickets exceeds <code>max_archived_tickets</code>.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_memory_ledgers</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_MEMORY_LEDGERS</code></td>
+<td><code>true</code></td>
+<td>Default-on GC: truncate over-cap <code>*_memory.md</code> files on disk, using the same tail_keep primitive the agent already uses at read/write time.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_orphans</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_ORPHANS</code></td>
+<td><code>true</code></td>
+<td>Default-on GC: prune orphan workspace directories (ticket absent from the board DB) older than the configured age at the start of each data-dir GC pass.</td>
+</tr>
+<tr>
+<td><code>periodic.data_dir_gc.prune_orphans_age_seconds</code></td>
+<td><code>MILL_DATA_DIR_GC_PRUNE_ORPHANS_AGE_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Minimum age (seconds since the ticket-ID timestamp) before an orphan workspace becomes eligible for GC. Default 1 day.</td>
+</tr>
+</tbody>
+</table>
+<p>User agent-config YAMLs that set <code>periodic.data_dir_audit.*</code> must be updated to <code>periodic.data_dir_gc.*</code>; unknown keys are silently ignored by the loader.</p>
+<h4 id="run_health">run_health</h4>
+<p>The run-health periodic agent reads every board's run registry over a
+lookback window, flags failed/degraded runs deterministically, runs one
+LLM pass to separate real failures from legitimate empties, and files
+high-confidence draft tickets to the mill board. Every field below is
+settable via its <code>MILL_RUN_HEALTH_*</code> environment variable and its dotted
+YAML path.</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.run_health.enabled</code></td>
+<td><code>MILL_RUN_HEALTH_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic run-health passes</td>
+</tr>
+<tr>
+<td><code>periodic.run_health.interval_seconds</code></td>
+<td><code>MILL_RUN_HEALTH_INTERVAL_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Seconds between run-health passes</td>
+</tr>
+<tr>
+<td><code>periodic.run_health.window_hours</code></td>
+<td><code>MILL_RUN_HEALTH_WINDOW_HOURS</code></td>
+<td><code>168</code></td>
+<td>Lookback window (hours) over which run registries are scanned</td>
+</tr>
+<tr>
+<td><code>periodic.run_health.target_repo_id</code></td>
+<td><code>MILL_RUN_HEALTH_TARGET_REPO_ID</code></td>
+<td><code>robotsix-mill</code></td>
+<td>Board the run-health agent files its drafts to</td>
+</tr>
+<tr>
+<td><code>periodic.run_health.memory_path</code></td>
+<td><code>MILL_RUN_HEALTH_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for the run-health memory ledger; defaults to <code>&lt;data_dir&gt;/&lt;board&gt;/run_health_memory.md</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="db_maintenance">db_maintenance</h4>
+<p>The <code>db_maintenance</code> periodic agent runs SQLite maintenance (<code>VACUUM</code>,
+<code>ANALYZE</code>, WAL checkpoint) to keep the ticket database healthy.  It has
+<strong>no YAML path</strong> — configure it via environment variables only:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_DB_MAINTENANCE_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic database maintenance passes</td>
+</tr>
+<tr>
+<td><code>MILL_DB_MAINTENANCE_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between database maintenance passes</td>
+</tr>
+</tbody>
+</table>
+<h4 id="meta">meta</h4>
+<p>The <code>meta</code> periodic agent is a cross-repo survey agent that clones all
+registered repositories, compares their codebases, and files extraction
+and alignment proposals.  It runs as a single global pass per interval
+(not per-repo).  In addition to the standard <code>periodic</code> fields above,
+these agent-specific settings are available:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_META_PERIODIC</code></td>
+<td><code>false</code></td>
+<td>Master switch for the weekly meta-agent pass. Default <code>false</code> (off) — the operator must register the meta board in <code>repos.yaml</code> first. Flip to <code>true</code> to enable the global weekly schedule.</td>
+</tr>
+<tr>
+<td><code>MILL_META_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="sandbox_reaper">sandbox_reaper</h4>
+<p>The <code>sandbox_reaper</code> periodic agent prunes stopped Docker sandbox
+containers left behind by the implement stage.  YAML paths
+(<code>periodic.sandbox_reaper.enabled</code>, <code>periodic.sandbox_reaper.interval_seconds</code>)
+and environment variables are both available:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SANDBOX_REAPER_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic sandbox-container reaping</td>
+</tr>
+<tr>
+<td><code>MILL_SANDBOX_REAPER_INTERVAL_SECONDS</code></td>
+<td><code>3600</code></td>
+<td>Seconds between sandbox-reaper passes</td>
+</tr>
+</tbody>
+</table>
+<h4 id="survey">survey</h4>
+<p>The <code>survey</code> periodic agent searches for library/ecosystem news and files
+draft tickets with findings. Four extra fields beyond the generic periodic
+pattern control its tool-call and web-fetch budgets:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_SURVEY_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic survey passes</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between survey passes</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_REQUEST_LIMIT</code></td>
+<td><code>40</code></td>
+<td>Per-call request cap for the survey agent</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_WEB_FETCH_MAX_CALLS</code></td>
+<td><code>5</code></td>
+<td>Max real (cache-miss) web_fetch calls per survey run</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES</code></td>
+<td><code>500000</code></td>
+<td>Cumulative ceiling on returned fetch bytes per survey run</td>
+</tr>
+<tr>
+<td><code>MILL_SURVEY_WEB_SEARCH_MAX_CALLS</code></td>
+<td><code>5</code></td>
+<td>Max web_search invocations per survey run</td>
+</tr>
+</tbody>
+</table>
+<h4 id="audit">audit</h4>
+<p>The <code>audit</code> periodic agent performs broad repository audits (license
+scanning, pip-audit, coverage introspection) and files draft tickets
+with findings. One extra field beyond the generic periodic pattern
+controls its request budget:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_AUDIT_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic audit passes</td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between audit passes</td>
+</tr>
+<tr>
+<td><code>MILL_AUDIT_REQUEST_LIMIT</code></td>
+<td><code>80</code></td>
+<td>Per-call request cap for the audit agent</td>
+</tr>
+</tbody>
+</table>
+<h4 id="test_gap">test_gap</h4>
+<p>The <code>test_gap</code> periodic agent scans the repository for test-coverage
+gaps and files draft tickets when coverage is insufficient. Three
+extra fields beyond the generic periodic pattern control its request
+budget and tool-call guardrails:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_TEST_GAP_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic test-gap passes</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between test-gap passes</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_REQUEST_LIMIT</code></td>
+<td><code>80</code></td>
+<td>Per-call request cap for the test-gap agent</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_MAX_TOOL_CALLS</code></td>
+<td><code>100</code></td>
+<td>Hard cap on total tool calls per test-gap trace</td>
+</tr>
+<tr>
+<td><code>MILL_TEST_GAP_MAX_ERRORS</code></td>
+<td><code>20</code></td>
+<td>Hard cap on tool-call errors before auto-termination</td>
+</tr>
+</tbody>
+</table>
+<h4 id="triage_boilerplate">triage_boilerplate</h4>
+<p>The <code>triage_boilerplate</code> periodic agent determines boilerplate for new-ticket
+triage, scanning the board for recurring triage patterns.  It uses only the
+standard two periodic-agent fields:</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.triage_boilerplate.enabled</code></td>
+<td><code>MILL_TRIAGE_BOILERPLATE_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic triage-boilerplate passes</td>
+</tr>
+<tr>
+<td><code>periodic.triage_boilerplate.interval_seconds</code></td>
+<td><code>MILL_TRIAGE_BOILERPLATE_INTERVAL_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Seconds between triage-boilerplate passes (1 week)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="orphaned_pr_check">orphaned_pr_check</h4>
+<p>The <code>orphaned_pr_check</code> periodic agent scans tickets for stale PRs whose
+branch has been deleted or whose associated ticket has been resolved, and
+either auto-closes the PR or files a tracking ticket. It defaults to <code>false</code>
+(opt-in) because closing PRs and filing tickets are destructive actions.
+It is a deterministic pass with no LLM agent and writes no memory ledger.
+Configure via environment variables or YAML paths under
+<code>periodic.orphaned_pr_check.&lt;field&gt;</code>:</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.orphaned_pr_check.enabled</code></td>
+<td><code>MILL_ORPHANED_PR_CHECK_PERIODIC</code></td>
+<td><code>false</code></td>
+<td>Master switch for the orphaned-PR check pass. Default <code>false</code> (opt-in) — closing PRs and filing tracking tickets are destructive actions.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.interval_seconds</code></td>
+<td><code>MILL_ORPHANED_PR_CHECK_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between orphaned-PR check passes. Minimum enforced at 3600 s (1 hour) in the worker loop.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.min_age_hours</code></td>
+<td><code>MILL_ORPHANED_PR_MIN_AGE_HOURS</code></td>
+<td><code>4</code></td>
+<td>Minimum age (hours) of a ticket before its PR is considered for orphan classification. Skips tickets younger than this to avoid racing the deliver stage.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.max_actions_per_pass</code></td>
+<td><code>MILL_ORPHANED_PR_MAX_ACTIONS_PER_PASS</code></td>
+<td><code>5</code></td>
+<td>Maximum number of combined close+file actions per pass run. Findings beyond this cap are deferred to the next scheduled pass.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.dry_run</code></td>
+<td><code>MILL_ORPHANED_PR_DRY_RUN</code></td>
+<td><code>true</code></td>
+<td>Dry-run mode: log intent only, make zero forge mutations. Default <code>true</code> for safety — flip to <code>false</code> to enable real actions.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.bot_logins</code></td>
+<td><code>MILL_ORPHANED_PR_BOT_LOGINS</code></td>
+<td><code>[]</code></td>
+<td>Bot author logins trusted for orphaned-PR actions. When non-empty, only PRs whose author is in this list are eligible. When empty, the runner resolves the bot login from the forge and uses that; if that also returns empty, the author guard is bypassed (fail-open).</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.max_closes_per_pass</code></td>
+<td><code>MILL_ORPHANED_PR_MAX_CLOSES_PER_PASS</code></td>
+<td><code>10</code></td>
+<td>Per-pass cap on PR close actions. Applied in addition to the combined <code>max_actions_per_pass</code> cap.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.max_files_per_pass</code></td>
+<td><code>MILL_ORPHANED_PR_MAX_FILES_PER_PASS</code></td>
+<td><code>5</code></td>
+<td>Per-pass cap on tracking-ticket file actions. Applied in addition to the combined <code>max_actions_per_pass</code> cap.</td>
+</tr>
+<tr>
+<td><code>periodic.orphaned_pr_check.track_foreign_prs</code></td>
+<td><code>MILL_ORPHANED_PR_TRACK_FOREIGN_PRS</code></td>
+<td><code>false</code></td>
+<td>Also file tracking tickets for non-mill PRs (dependabot/human); never closes them</td>
+</tr>
+</tbody>
+</table>
+<h4 id="changelog_autofill">changelog_autofill</h4>
+<p>The <code>changelog_autofill</code> schedule-only periodic pass reads recently merged PRs
+and writes corresponding entries into <code>CHANGELOG.md</code>.  It uses only the
+standard two periodic-agent fields:</p>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>periodic.changelog_autofill.enabled</code></td>
+<td><code>MILL_CHANGELOG_AUTOFILL_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic changelog-autofill passes</td>
+</tr>
+<tr>
+<td><code>periodic.changelog_autofill.interval_seconds</code></td>
+<td><code>MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between changelog-autofill passes (1 day)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="env-var-only-periodic-agents">Env-var-only periodic agents</h4>
+<p><code>bc_check</code>, <code>completeness_check</code>, and <code>repo_description_sync</code> enabled and interval
+fields are available as YAML paths (<code>periodic.bc_check.*</code>, <code>periodic.completeness_check.*</code>, <code>periodic.repo_description_sync.*</code>)
+and as environment variables:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_BC_CHECK_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic backward-compatibility inspection</td>
+</tr>
+<tr>
+<td><code>MILL_BC_CHECK_INTERVAL_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Seconds between bc-check passes</td>
+</tr>
+<tr>
+<td><code>MILL_COMPLETENESS_CHECK_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic feature-wiring completeness inspection</td>
+</tr>
+<tr>
+<td><code>MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Seconds between completeness-check passes</td>
+</tr>
+<tr>
+<td><code>MILL_COMPLETENESS_CHECK_REQUEST_LIMIT</code></td>
+<td><code>80</code></td>
+<td>Per-call request cap for the completeness-check agent</td>
+</tr>
+<tr>
+<td><code>MILL_STATE_SYNC_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic state-sync passes</td>
+</tr>
+<tr>
+<td><code>MILL_STATE_SYNC_INTERVAL_SECONDS</code></td>
+<td><code>86400</code></td>
+<td>Seconds between state-sync passes</td>
+</tr>
+<tr>
+<td><code>MILL_REPO_DESCRIPTION_SYNC_PERIODIC</code></td>
+<td><code>true</code></td>
+<td>Enable periodic repo-description-sync passes</td>
+</tr>
+<tr>
+<td><code>MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Seconds between repo-description-sync passes</td>
+</tr>
+</tbody>
+</table>
+<h4 id="stale-branch-cleanup-timeout-escalation-dependabot-ingest-module-curator">Stale branch cleanup, timeout escalation, dependabot ingest, module curator</h4>
+<p>These four periodic agents each carry one or two extra fields beyond the generic periodic pattern (periodic, interval). The following env vars configure those agent-specific extras:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MILL_STALE_BRANCH_MAX_AGE_DAYS</code></td>
+<td><code>30</code></td>
+<td>A branch is eligible for cleanup only if its last commit is older than this many days</td>
+</tr>
+<tr>
+<td><code>MILL_STALE_BRANCH_CLEANUP_PREFIX_ONLY</code></td>
+<td><code>true</code></td>
+<td>When <code>true</code>, only delete branches whose name starts with <code>branch_prefix</code> ("old mill" branches); when <code>false</code>, also reap any other stale branch ("stale dev")</td>
+</tr>
+<tr>
+<td><code>MILL_TIMEOUT_ESCALATION_THRESHOLD_SECONDS</code></td>
+<td><code>259200</code></td>
+<td>Tickets in <code>AWAITING_USER_REPLY</code> with <code>updated_at</code> older than this many seconds are escalated to <code>BLOCKED</code>; set ≤ 0 to disable escalation</td>
+</tr>
+<tr>
+<td><code>MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS</code></td>
+<td><code>5</code></td>
+<td>Maximum number of Dependabot drafts created per ingest pass (across all repos)</td>
+</tr>
+<tr>
+<td><code>MILL_MODULE_CURATOR_REQUEST_LIMIT</code></td>
+<td><code>120</code></td>
+<td>Per-call request budget for the module-curator agent</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-skills-language-instructions">13. Skills &amp; language instructions</h3>
+<table>
+<thead>
+<tr>
+<th>YAML path</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sandbox.skills_dir</code></td>
+<td><code>MILL_SKILLS_DIR</code></td>
+<td><code>skills</code></td>
+<td>Directory of skill docs injected into agent system prompts</td>
+</tr>
+<tr>
+<td><code>core.language_instructions_dir</code></td>
+<td><code>MILL_LANGUAGE_INSTRUCTIONS_DIR</code></td>
+<td><code>agent_definitions/language_instructions</code></td>
+<td>Directory of per-language instruction Markdown snippets injected into the implement agent's system prompt</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="secrets-reference">Secrets reference</h2>
+<p>Secrets are loaded from the <code>"secrets"</code> block of <code>config/config.json</code> by
+a separate <code>Secrets</code> Pydantic model. They are <strong>not</strong> merged into
+<code>Settings</code> — access them via <code>get_secrets()</code>. A value equal to the
+literal <code>"SECRET"</code> sentinel (as in <code>config.example.json</code>) is treated as
+unset.</p>
+<table>
+<thead>
+<tr>
+<th>JSON key</th>
+<th>Env var override</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>openrouter_api_key</code></td>
+<td><code>OPENROUTER_API_KEY</code></td>
+<td>OpenRouter API key (required for any LLM call)</td>
+</tr>
+<tr>
+<td><code>openrouter_management_key</code></td>
+<td>—</td>
+<td>OpenRouter management API key for credit balance checks (<code>GET /api/v1/activity</code>). Separate from the inference key; leave blank to skip OpenRouter-side fetching.</td>
+</tr>
+<tr>
+<td><code>forge_token</code></td>
+<td><code>FORGE_TOKEN</code></td>
+<td>PAT for forge authentication</td>
+</tr>
+<tr>
+<td><code>forge_repo_create_token</code></td>
+<td>—</td>
+<td>Fine-grained PAT used ONLY for repo creation. Falls back to <code>forge_token</code> if unset.</td>
+</tr>
+<tr>
+<td><code>github_app_id</code></td>
+<td><code>GITHUB_APP_ID</code></td>
+<td>GitHub App ID (when <code>FORGE_AUTH=app</code>)</td>
+</tr>
+<tr>
+<td><code>github_app_private_key</code></td>
+<td><code>GITHUB_APP_PRIVATE_KEY</code></td>
+<td>GitHub App private key (inline PEM, newlines as <code>\n</code>)</td>
+</tr>
+<tr>
+<td><code>github_app_private_key_path</code></td>
+<td><code>GITHUB_APP_PRIVATE_KEY_PATH</code></td>
+<td>Alternative: host path to GitHub App private-key <code>.pem</code> file</td>
+</tr>
+<tr>
+<td><code>langfuse_public_key</code>¹</td>
+<td>—</td>
+<td>Langfuse public key (configured via the <code>secrets:</code> block of <code>config/config.json</code>; read by <code>Secrets</code> model and stamped onto every <code>RepoConfig</code> at startup)</td>
+</tr>
+<tr>
+<td><code>langfuse_secret_key</code>¹</td>
+<td>—</td>
+<td>Langfuse secret key (configured via the <code>secrets:</code> block of <code>config/config.json</code>; read by <code>Secrets</code> model and stamped onto every <code>RepoConfig</code> at startup)</td>
+</tr>
+<tr>
+<td><code>langfuse_base_url</code>¹</td>
+<td>—</td>
+<td>Langfuse base URL (configured via the <code>secrets:</code> block of <code>config/config.json</code>; read by <code>Secrets</code> model and stamped onto every <code>RepoConfig</code> at startup)</td>
+</tr>
+<tr>
+<td><code>langfuse_project_id</code>¹</td>
+<td>—</td>
+<td>Langfuse project ID (configured via the <code>secrets:</code> block of <code>config/config.json</code>; read by <code>Secrets</code> model and stamped onto every <code>RepoConfig</code> at startup)</td>
+</tr>
+<tr>
+<td><code>langfuse_project_name</code>¹</td>
+<td>—</td>
+<td>Langfuse project name (configured via the <code>secrets:</code> block of <code>config/config.json</code>; read by <code>Secrets</code> model and stamped onto every <code>RepoConfig</code> at startup)</td>
+</tr>
+<tr>
+<td><code>ntfy_url</code></td>
+<td><code>NTFY_URL</code></td>
+<td>ntfy.sh topic URL for notifications</td>
+</tr>
+<tr>
+<td><code>ntfy_token</code></td>
+<td><code>NTFY_TOKEN</code></td>
+<td>ntfy.sh bearer token (optional)</td>
+</tr>
+<tr>
+<td><code>sandbox_push_token</code></td>
+<td>—</td>
+<td>Optional dedicated token for the sandbox git-push bridge. When set, <code>github_push_token()</code> prefers this over <code>forge_token</code> (PAT mode only). Falls back to <code>forge_token</code> if unset.</td>
+</tr>
+</tbody>
+</table>
+<p>Secrets live in the <code>"secrets"</code> block of <code>config/config.json</code> (overridable
+via <code>MILL_SECRETS_FILE</code> env var). Template: the <code>"secrets"</code> block of
+<code>config/config.example.json</code>.</p>
+<blockquote>
+<p>¹ The <code>langfuse_*</code> fields on <code>Secrets</code> are configured via the
+<code>secrets:</code> block of <code>config/config.json</code>.  At startup, <code>Secrets</code> reads
+them from that block, and <code>_apply_global_langfuse</code> stamps them onto
+every <code>RepoConfig</code> so that each repo inherits the global Langfuse
+credentials.  Per-repo overrides are not supported — all repos share
+the same Langfuse configuration.</p>
+</blockquote>
+<hr />
+<h2 id="repos-registry">Repos registry</h2>
+<p>The repos registry maps each repository to its own board identity and
+Langfuse observability project. It is loaded <strong>separately</strong> from
+<code>Settings</code> by a dedicated <code>ReposRegistry</code> Pydantic model — it never
+participates in the Settings merge. Access it via <code>get_repos_config()</code>
+or <code>get_repo_config("repo-id")</code>.</p>
+<blockquote>
+<p><strong>There is no longer a board-less default.</strong> Every ticket must carry a
+<code>board_id</code> from <code>config/repos.yaml</code>. The legacy <code>&lt;data_dir&gt;/mill.db</code>
+that held tickets without a board_id has been removed. For single-repo
+deployments, configure exactly one repo entry.</p>
+</blockquote>
+<p>Langfuse credentials are configured globally via the <code>secrets:</code> block of
+<code>config/config.json</code> — the <code>Secrets</code> model reads them from that block,
+and <code>_apply_global_langfuse</code> stamps them onto every <code>RepoConfig</code> at
+startup.  Per-repo overrides are not supported; all repos share the same
+Langfuse configuration.</p>
+<h3 id="set-up">Set up</h3>
+<p>Add a <code>"repos"</code> block to <code>config/config.json</code> — one entry per repository
+(example entries in <code>config/repos.example.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># config/repos.yaml (or the &quot;repos&quot; key of config/config.json)</span>
+<span class="nt">repos</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my-repo</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">board_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;my-board&quot;</span>
+<span class="w">    </span><span class="c1"># forge_remote_url: &quot;https://github.com/your-org/your-repo.git&quot;  # optional — defaults to FORGE_REMOTE_URL</span>
+<span class="w">    </span><span class="c1"># Langfuse credentials are configured globally in the `secrets:` block —</span>
+<span class="w">    </span><span class="c1"># there is no per-repo langfuse configuration.</span>
+</code></pre></div>
+<p>After editing, verify the config is valid and uses real (non-placeholder)
+keys:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>scripts/verify_repos_config.py
+</code></pre></div>
+<h3 id="select-a-repo-at-startup">Select a repo at startup</h3>
+<p>Once <code>config/repos.yaml</code> is configured, start the server.  By default
+the server loads <strong>all</strong> repos from <code>config/repos.yaml</code> and serves them
+together.  In this multi-repo mode the board UI includes a repo selector
+dropdown — pick a repo to filter the kanban, runs list, and cost
+dashboard, or select "All repos" to see everything at once.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Multi-repo mode: serves every repo in config/repos.yaml</span>
+robotsix-mill<span class="w"> </span>serve
+</code></pre></div>
+<p>To scope the process to a single repo (useful for tests/dev), pass
+<code>--repo-id</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Single-repo override:</span>
+robotsix-mill<span class="w"> </span>serve<span class="w"> </span>--repo-id<span class="w"> </span>my-repo
+</code></pre></div>
+<p>When <code>config/repos.yaml</code> is empty, the server refuses to start (exit
+code 2) with an error message.  An unknown <code>--repo-id</code> also causes an
+error exit.</p>
+<p>List the registered repos from the CLI:</p>
+<div class="highlight"><pre><span></span><code>robotsix-mill<span class="w"> </span>repos<span class="w"> </span>list
+</code></pre></div>
+<p>Source: the <code>"repos"</code> key of <code>config/config.json</code> (overridable via the
+<code>MILL_REPOS_FILE</code> env var, which reads the given file directly). Set
+<code>MILL_REPOS_FILE=""</code> to disable repos config entirely. Example entries:
+<code>config/repos.example.yaml</code>.</p>
+<h3 id="field-reference">Field reference</h3>
+<table>
+<thead>
+<tr>
+<th>YAML key (in repos.yaml)</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>repos.&lt;id&gt;.board_id</code></td>
+<td>yes</td>
+<td>—</td>
+<td>Board identifier for per-repo board isolation</td>
+</tr>
+<tr>
+<td><code>repos.&lt;id&gt;.forge_remote_url</code></td>
+<td>no</td>
+<td><code>FORGE_REMOTE_URL</code></td>
+<td>Per-repo forge remote URL for push/PR/merge operations</td>
+</tr>
+<tr>
+<td><code>repos.&lt;id&gt;.working_branch</code></td>
+<td>no</td>
+<td>—</td>
+<td>Per-repo target branch for clone/baseline/deliver operations. When set, overrides the global <code>forge_target_branch</code>. Use this for repos whose default branch is not <code>main</code> (e.g. <code>rolling</code>, <code>lyrical</code>, <code>develop</code>). Automatically populated by member-sync from the manifest <code>version</code> field.</td>
+</tr>
+</tbody>
+</table>
+<p>Each repo ID must be unique and non-empty. The <code>board_id</code> must also be
+non-empty. The registry validates that every entry's <code>repo_id</code> matches
+its key in the repos map.</p>
+<h3 id="per-repo-branch-configuration">Per-repo branch configuration</h3>
+<p>Every stage that clones, bases PRs, or rebases work (refine, implement,
+deliver, merge, CI monitor, etc.) resolves the <strong>effective target branch</strong>
+for each repo using this rule:</p>
+<ol>
+<li>If <code>repos.&lt;id&gt;.working_branch</code> is set in <code>config/repos.yaml</code>, <strong>use that</strong>.</li>
+<li>Otherwise, use the global <code>forge_target_branch</code> setting (default <code>main</code>).</li>
+</ol>
+<p>This allows repos with non-main default branches to be fully onboarded:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># config/repos.yaml</span>
+<span class="nt">repos</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ros2-example-interfaces</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">board_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;example-interfaces&quot;</span>
+<span class="w">    </span><span class="nt">forge_remote_url</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://github.com/damien-robotsix/example_interfaces.git&quot;</span>
+<span class="w">    </span><span class="nt">working_branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lyrical</span><span class="w">  </span><span class="c1"># This repo&#39;s default branch is &#39;lyrical&#39;, not &#39;main&#39;</span>
+</code></pre></div>
+<p>With this configuration, the mill will:
+- Clone against <code>origin/lyrical</code> instead of <code>origin/main</code>
+- Run baseline tests on the <code>lyrical</code> branch
+- Open PRs into <code>lyrical</code> (not <code>main</code>)
+- Rebase work onto <code>lyrical</code></p>
+<p>When <code>working_branch</code> is absent, every repo uses the global default,
+preserving backward compatibility with existing deployments.</p>
+<h4 id="common-use-cases">Common use cases</h4>
+<ul>
+<li><strong>Cross-repo contributions</strong>: when a managed repo forks or contributes to an upstream repo that uses a different default branch (e.g. ROS 2 repos use <code>rolling</code> or <code>lyrical</code> instead of <code>main</code>)</li>
+<li><strong>Workspace member auto-registration</strong>: member-sync automatically populates <code>working_branch</code> from each member's vcs2l manifest <code>version</code> field</li>
+<li><strong>Development branches</strong>: when a repo is in active development on a non-default branch and tickets should target that branch until release</li>
+</ul>
+<h3 id="workspace-member-auto-registration">Workspace member auto-registration</h3>
+<p>A master repository that uses vcs2l manifests to declare workspace members
+can opt into <strong>automatic registration</strong> of those members as RepoConfig
+entries. When enabled, the mill detects members from the manifest and
+automatically upserts them into <code>config/repos.yaml</code>, creating boards and
+filing build-out tickets on their behalf.</p>
+<h4 id="how-it-works">How it works</h4>
+<p>The workspace-member sync agent:</p>
+<ol>
+<li><strong>Detects</strong> vcs2l manifest members from the master repo's manifest file
+   (typically <code>.rosinstall</code>).</li>
+<li><strong>Derives</strong> a <code>repo_id</code> from each member's path key (e.g. <code>src/zeta/pkg</code>
+   → <code>src-zeta-pkg</code>), slugifying special characters to ASCII.</li>
+<li><strong>Inherits</strong> Langfuse configuration from the master repo so all members
+   share observability projects.</li>
+<li><strong>Upserts</strong> entries into <code>config/repos.yaml</code> with the member's:</li>
+<li><code>forge_remote_url</code> from the manifest <code>url</code> field</li>
+<li><code>working_branch</code> from the manifest <code>version</code> field (if present)</li>
+<li><code>cross_repo_target</code> upstream policy (if present)</li>
+<li><code>member_of: &lt;master_repo_id&gt;</code> provenance marker</li>
+<li><strong>Flags</strong> members that vanish from the manifest with <code>pending_removal: true</code>
+   instead of auto-deleting — boards + history stay intact for operator review.</li>
+<li><strong>Files</strong> a build-out ticket on each newly registered member's board so the
+   pipeline populates the member's <code>.robotsix-mill/config.yaml</code> and enables it.</li>
+</ol>
+<h4 id="fields-added-by-auto-registration">Fields added by auto-registration</h4>
+<p>When a member is auto-registered, its entry carries additional fields:</p>
+<table>
+<thead>
+<tr>
+<th>YAML key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>member_of</code></td>
+<td>Master repo ID; presence indicates this entry was synced from a manifest. Used to scope disappearance detection — only this master's members are affected by subsequent sync passes.</td>
+</tr>
+<tr>
+<td><code>pending_removal</code></td>
+<td>Set to <code>true</code> when the member vanishes from the manifest but the entry is retained for operator review. Cleared when the member reappears.</td>
+</tr>
+</tbody>
+</table>
+<p>Manual entries (not synced) omit both fields, so sync passes never modify
+them — collision with a non-member entry is logged and skipped.</p>
+<h4 id="integration-with-repo-provisioning">Integration with repo provisioning</h4>
+<p>Auto-registered members follow the same onboarding path as manually
+configured repos:</p>
+<ul>
+<li><strong>Board creation</strong> happens automatically on first ticket write (no explicit
+  board provisioning needed).</li>
+<li><strong>Build-out ticket</strong> is filed on the member's board with instructions to add
+  <code>.robotsix-mill/config.yaml</code> (test command + languages).</li>
+<li><strong>Langfuse project</strong> is inherited from the master repo and wired
+  automatically.</li>
+<li><strong>Cross-repo targeting</strong> is configured if the manifest declares an upstream
+  policy for the member.</li>
+</ul>
+<p>This integration ensures members are fully onboarded into the mill pipeline
+in a single pass without additional operator steps.</p>
+<h3 id="multi-repo-behaviour">Multi-repo behaviour</h3>
+<p>When multiple repos are registered (default when <code>config/repos.yaml</code>
+has two or more entries), each periodic agent fans out across all repos
+sequentially — one timer per agent type iterates every enabled repo in
+turn. This means:</p>
+<ul>
+<li><strong>Memory files</strong> are per-repo: <code>&lt;data_dir&gt;/&lt;repo_id&gt;/audit_memory.md</code>,
+  <code>&lt;data_dir&gt;/&lt;repo_id&gt;/bc_check_memory.md</code>, etc.</li>
+<li><strong>Run registry</strong> entries include a <code>repo_id</code> field. <code>GET /runs</code> accepts
+  <code>?repo_id=X</code> to filter by repo.</li>
+<li><strong>CI monitor</strong> dedup state is per-repo:
+  <code>&lt;data_dir&gt;/&lt;repo_id&gt;/ci_monitor_state.json</code>.</li>
+<li><strong>Agent toggles</strong> (e.g. <code>MILL_AUDIT_PERIODIC</code>) remain global — all
+  repos share the same enabled/disabled flags.</li>
+</ul>
+<p>In single-repo mode (<code>--repo-id</code> on serve or one entry in
+<code>config/repos.yaml</code>) periodic agents run only for that repo, and memory
+files use the legacy flat path (<code>&lt;data_dir&gt;/audit_memory.md</code>).</p>
+<hr />
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../../">index.md</a> — documentation home</li>
+<li><a href="../../cli/usage/">cli/usage.md</a> — full CLI command reference</li>
+<li><a href="../../langfuse/observability/">observability.md</a> — per-repo Langfuse + deployed-log config the refine agent consults</li>
+<li><a href="../../dev-tooling/deployment/">deployment.md</a> — continuous deployment guide</li>
+<li><a href="../config-audit/">config-audit.md</a> — complete inventory of every config value and its source</li>
+<li><a href="../../config/config.example.json"><code>config/config.example.json</code></a> — committed single-file config template (defaults + <code>"secrets"</code> block)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,3407 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../approval-gate/">
+      
+      
+        <link rel="next" href="../../core/dedup-guard/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Implement stage - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#implement-stage-agent-edit-test-gate-deliver" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Implement stage
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/autoupdate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autoupdate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sandbox/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../repo-scaffold/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repo scaffold
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deps/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implement stage
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implement stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overall-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overall lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pre-agent-validation-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-agent validation gates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pre-agent validation gates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisite-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisite gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#baseline-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Baseline check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scope-guardrail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope guardrail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#preflight-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preflight checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-fix-iteration-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The fix iteration loop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The fix iteration loop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#edit-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edit pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Routing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stuck-loop-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stuck-loop detection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resume-from-blocked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resume from BLOCKED
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-spawn-stall-guard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-spawn stall guard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submodule-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submodule breakdown
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Submodule breakdown">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#agent-seam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent seam
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-knobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration knobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-flow-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State flow summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-definitions/expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta/meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/periodic/survey-cross-board-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Survey cross-board routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runtime
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/run-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notify/notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vcs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VCS (git) module
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/pin-bump/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pin bump
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Forge
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/gitlab/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitLab backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/ci-monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/code-scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code scanning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_13" id="__nav_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overall-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overall lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pre-agent-validation-gates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-agent validation gates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pre-agent validation gates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisite-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisite gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#baseline-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Baseline check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scope-guardrail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope guardrail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#preflight-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preflight checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-fix-iteration-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The fix iteration loop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The fix iteration loop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#edit-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edit pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Routing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stuck-loop-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stuck-loop detection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resume-from-blocked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resume from BLOCKED
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-spawn-stall-guard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-spawn stall guard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submodule-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submodule breakdown
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Submodule breakdown">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#agent-seam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent seam
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-knobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration knobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-flow-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State flow summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="implement-stage-agent-edit-test-gate-deliver">Implement stage: agent edit → test gate → deliver</h1>
+<p>The implement stage is the core pipeline stage — the robot reads the
+ticket spec, clones the repo, runs an LLM coding agent to make changes,
+runs the test gate, and either delivers the result or escalates to a
+human. It is the most complex stage in the mill: 9 source files
+(~5,100 lines) and 8 test files backing a multi-pass, multi-guardrail
+fix loop.</p>
+<h2 id="overall-lifecycle">Overall lifecycle</h2>
+<div class="highlight"><pre><span></span><code>READY
+  │
+  ├── Validation gates (prerequisite, baseline, scope)
+  │
+  ▼
+Implement fix loop
+  │
+  ├── Agent edit pass (LLM makes changes)
+  ├── Test gate (run test command + smoke checks)
+  ├── Routing:
+  │     ├── Pass → DELIVERABLE
+  │     ├── Retry (under max_fix_iterations) → loop
+  │     └── Exhausted / stuck / failed → BLOCKED (resumable)
+  │
+  ▼
+DELIVERABLE  (or BLOCKED)
+</code></pre></div>
+<p>The stage accepts tickets in <code>READY</code> state and outputs <code>DELIVERABLE</code>
+on success or <code>BLOCKED</code> on failure. Every <code>BLOCKED</code> exit is resumable:
+the ticket can re-enter <code>READY</code> and the stage will pick up where it
+left off without re-cloning.</p>
+<h2 id="pre-agent-validation-gates">Pre-agent validation gates</h2>
+<p>Before the expensive LLM agent fires, several cheap gates run in order:</p>
+<h3 id="prerequisite-gate">Prerequisite gate</h3>
+<p>Parses the spec's <code>```prereq</code> <code>` fenced blocks, imports them in a
+sandboxed Python subprocess, and verifies every declared symbol is
+resolvable. If a required module, class, or function is absent (e.g. an
+unmerged external port), the ticket is short-circuited to</code>BLOCKED`
+without ever invoking the LLM.</p>
+<p>Controlled by <code>gates.prerequisite_gate_enabled</code> (default <code>true</code>).
+Degrades gracefully on internal errors — always proceeds, never blocks
+on checker bugs.</p>
+<h3 id="baseline-check">Baseline check</h3>
+<p>Runs the test gate on the <strong>base branch</strong> (target) before the agent
+loop starts. Results are cached at <code>artifacts/baseline_check.json</code>
+keyed by the base-branch commit SHA.</p>
+<ul>
+<li>If the base branch itself has failing tests, the agent's work would be
+  blocked by pre-existing failures it didn't introduce. The stage spawns
+  a dedicated dependency-fix ticket and the current ticket escalates to
+  <code>BLOCKED</code>.</li>
+<li>An idempotency guard prevents spawning duplicate fix tickets for the
+  same pre-existing failure.</li>
+</ul>
+<h3 id="scope-guardrail">Scope guardrail</h3>
+<p>Checks every file the agent touches against the ticket's declared
+<code>file_map</code>. Two sub-paths:</p>
+<ul>
+<li><strong>Binary artifacts</strong> are auto-cleaned from the tree.</li>
+<li><strong>Vendored/excluded paths</strong> (gitignored files, known noise) are silently
+  excluded.</li>
+<li><strong>Flood guard</strong>: if out-of-scope text file count exceeds
+  <code>scope_triage_max_files</code> (default 50), the ticket is blocked immediately.</li>
+</ul>
+<p>When <code>scope_triage_enabled</code> (default <code>true</code>), the remaining
+out-of-scope files are sent to the <strong>scope-triage</strong> LLM classifier,
+which returns one of <code>EXPAND</code>, <code>REJECT</code>, or <code>ESCALATE</code>. See
+<a href="../scope-triage/">Scope triage</a> for the full classifier contract and
+dedup guard against REJECT ping-pong.</p>
+<h3 id="preflight-checks">Preflight checks</h3>
+<p>Before the main agent trace opens (to avoid wasted Langfuse costs):</p>
+<ul>
+<li><strong>Epic guard</strong>: ticket with no spec and a parent epic short-circuits.</li>
+<li><strong>Empty-spec guard</strong>: ticket with an empty spec body blocks.</li>
+<li><strong>Spawn-limit guard</strong>: prevents re-spawning subtasks from the same
+  ticket beyond a threshold.</li>
+<li><strong>Cycle-limit guard</strong>: caps total implement passes across all review
+  rounds (see <code>max_implement_review_cycles</code>).</li>
+<li><strong>Cross-spawn stall guard</strong> (see below).</li>
+</ul>
+<h2 id="the-fix-iteration-loop">The fix iteration loop</h2>
+<p>Once the pre-agent gates pass, the stage enters a bounded fix loop:</p>
+<div class="highlight"><pre><span></span><code>┌─────────────────────────────┐
+│  Edit pass                  │
+│  (LLM agent makes changes)  │
+└──────────┬──────────────────┘
+           ▼
+┌─────────────────────────────┐
+│  Test gate                  │
+│  (run test command +        │
+│   path-scoped smoke gate)   │
+└──────────┬──────────────────┘
+           ▼
+┌─────────────────────────────┐
+│  ValidationResult.decide    │
+│  ├── Pass → exit loop       │
+│  ├── Retry → next iteration │
+│  └── Escalate → BLOCKED     │
+└─────────────────────────────┘
+</code></pre></div>
+<h3 id="edit-pass">Edit pass</h3>
+<p>The LLM coding agent (<code>run_implement_agent</code>) receives the ticket spec,
+full filesystem access to the cloned repo, and optional feedback from
+prior iterations. It uses a coordinator pattern: a top-level agent
+delegates to sub-agents (<code>explore</code>, <code>spawn_subtask</code>) to understand the
+codebase and make changes.</p>
+<p>The agent runs inside an isolated sandbox container. It has no network
+access to the internet, no forge credentials, and no ability to push
+or open PRs. Changes are made to the local clone only.</p>
+<p><strong>Agent-level bypass:</strong> for tickets whose spec is purely mechanical
+(rename-only, config/docs-only, <code>no_change_needed</code> re-checks), the
+stage skips the full LLM coordinator and uses a cheaper direct path:
+- <code>level=0</code>: rename-only changes
+- <code>level=-1</code>: spec-exact-code tickets (fenced code blocks with paths)
+- <code>level=1</code>: no-change-needed re-checks, config/docs-only</p>
+<h3 id="test-gate">Test gate</h3>
+<p>After the agent produces a diff, the stage runs the project's test
+command inside the sandbox. The test command is resolved with
+precedence: per-repo <code>.robotsix-mill/config.yaml</code> →
+<code>repos.yaml</code> per-repo entry → global <code>test_command</code> setting.</p>
+<p>When <code>test_command</code> is empty (or missing at all three layers), the
+test gate is skipped and the agent pass is treated as a passing test
+run. This supports repos without an automated test suite while keeping
+the implement loop structure intact.</p>
+<p>After the full test run, a <strong>path-scoped smoke gate</strong> runs: it checks
+that every modified Python file parses and passes <code>ruff</code> format
+checks. This catches syntax errors and formatting regressions cheaply
+before the full test suite runs.</p>
+<h3 id="routing">Routing</h3>
+<p><code>ValidationResult.decide(passed, iterations, max_iters, feedback)</code>
+determines the next action:</p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tests pass</td>
+<td>Exit loop → DELIVERABLE</td>
+</tr>
+<tr>
+<td>Tests fail, iterations remaining</td>
+<td>Retry with feedback (diff, test output, diagnostics)</td>
+</tr>
+<tr>
+<td>Tests fail, iterations exhausted</td>
+<td>BLOCKED (resumable)</td>
+</tr>
+<tr>
+<td>Agent exhausted budget (AgentBudgetError)</td>
+<td>BLOCKED (resumable, conversation state persisted)</td>
+</tr>
+<tr>
+<td>Agent error (AgentRunError)</td>
+<td>Retry with backoff (transient) or BLOCKED (persistent)</td>
+</tr>
+</tbody>
+</table>
+<p>The loop is bounded by <code>max_fix_iterations</code> (default 8). Each iteration
+gets a fresh request budget (<code>coordinator_requests</code>, default 500) and
+tool-call cap (<code>coordinator_max_tool_calls</code>, default 300). A per-pass
+wall-clock timeout (<code>coordinator_timeout_seconds</code>, default 600 s) caps
+worst-case stuck-loop burn.</p>
+<h2 id="stuck-loop-detection">Stuck-loop detection</h2>
+<p>Before each retry, the stage checks three cross-pass signals:</p>
+<ol>
+<li>
+<p><strong>Zero-change passes</strong> (<code>_STUCK_NO_DIFF_PASSES = 3</code>): three
+   consecutive passes with an empty git diff → the agent is producing
+   no work. The stage emits a "zero-change stuck loop" diagnosis and
+   blocks.</p>
+</li>
+<li>
+<p><strong>Cumulative tool calls without diff</strong> (<code>_STUCK_MAX_TOOL_CALLS_NO_DIFF
+   = 50</code>): the agent has consumed 50 tool calls across passes without
+   a single file change. This catches agents that are busy reading and
+   reasoning but never editing.</p>
+</li>
+<li>
+<p><strong>Identical non-progress tool calls</strong> (<code>_STUCK_SAME_TOOL_WINDOW = 5</code>):
+   the tail of the tool-call log is a repeating pattern of the same
+   non-progress operation (e.g. re-reading the same file).</p>
+</li>
+</ol>
+<p>Additionally, a <strong>diagnostic-history circuit breaker</strong> watches for the
+same diagnosis being emitted across multiple iterations. If the agent
+produces the same diagnosis (e.g. "test failure in module X") across
+multiple passes without resolution, the loop is terminated early even
+if <code>max_fix_iterations</code> hasn't been reached.</p>
+<h2 id="resume-from-blocked">Resume from BLOCKED</h2>
+<p>When a ticket re-enters <code>READY</code> from <code>BLOCKED</code>, the implement stage
+detects the existing clone and skips re-cloning. It:</p>
+<ol>
+<li><strong>Checks the clone is still viable</strong> (repo exists, branch is
+   checkoutable).</li>
+<li><strong>Clears stale-spec guards</strong>: the <code>implement.md</code> artifact is
+   re-read and any stale blocker metadata is cleared.</li>
+<li><strong>Persists stall state</strong>: the <code>_transition_mixin</code> writes
+   <code>implement_stall_state.json</code> from the <code>implement.md</code> metadata so
+   the cross-spawn stall guard survives the resume-blocked cycle.</li>
+<li>Re-enters the fix loop with the existing working tree and WIP
+   commits intact.</li>
+</ol>
+<p>This means a human-operator unblock (e.g. "the prerequisite port was
+merged, try again") can resume from exactly where the agent left off
+without re-doing work.</p>
+<h2 id="cross-spawn-stall-guard">Cross-spawn stall guard</h2>
+<p>A hidden guard checks for <strong>no-progress BLOCKED→resume→BLOCKED cycles</strong>.
+It hashes the agent's summary fingerprint (SHA-256 truncated to 16 hex
+chars) and compares it across consecutive blocked attempts.</p>
+<ul>
+<li>When the fingerprint is unchanged (the agent produced the same
+  summary / same diagnosis), a <code>stall_count</code> counter increments.</li>
+<li>When <code>stall_count ≥ implement_stall_threshold</code> (default 2), the third
+  attempt is blocked <strong>before</strong> opening a Langfuse trace — the ticket
+  never reaches the LLM, saving cost.</li>
+</ul>
+<p>The stall state persists to <code>artifacts/implement_stall_state.json</code> so
+it survives the resume-blocked clears of <code>implement.md</code>. On a genuine
+change (different summary fingerprint or actual file changes), the
+counter resets.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stages.implement_stall_threshold</code></td>
+<td><code>MILL_IMPLEMENT_STALL_THRESHOLD</code></td>
+<td><code>2</code></td>
+<td>Consecutive no-progress BLOCKED cycles before stall guard fires. 0 disables.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="submodule-breakdown">Submodule breakdown</h2>
+<p>The implement stage is structured as a single <code>ImplementStage</code> class
+assembled from four mixins plus a top-level core module:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Lines</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>phase_coordinator.py</code></td>
+<td>~1,250</td>
+<td>Run-loop orchestration: the fix iteration loop, stuck-loop detection, cross-spawn stall guard, and the <code>_implement_loop</code> entry point. The largest single module.</td>
+</tr>
+<tr>
+<td><code>validation.py</code></td>
+<td>~750</td>
+<td>Pre-agent gating: prerequisite check, baseline test-gate run, scope guardrail (including scope-triage invocation), flood guard, and binary-artifact cleanup.</td>
+</tr>
+<tr>
+<td><code>implementation_logic.py</code></td>
+<td>~600</td>
+<td>Agent passes and test gate: invokes <code>run_implement_agent</code>, handles <code>AgentBudgetError</code>/<code>AgentRunError</code>, runs the test command, runs the smoke gate, and feeds results into <code>ValidationResult.decide</code>. Also contains <code>_select_agent_level</code> for the level-bypass logic.</td>
+</tr>
+<tr>
+<td><code>file_operations.py</code></td>
+<td>~550</td>
+<td>Clone/branch setup and repo-change inspection: <code>_clone_and_branch</code>, <code>_any_repo_has_changes</code>, path-escape guards, formatter-reversion detection, and edit-claim diagnostics.</td>
+</tr>
+<tr>
+<td><code>core.py</code></td>
+<td>~200</td>
+<td>Top-level entry point: <code>ImplementStage</code> class (<code>name="implement"</code>, <code>input_state=READY</code>) composed from the four mixins. Delegates orchestration to <code>phase_coordinator</code>; the core module is thin glue.</td>
+</tr>
+<tr>
+<td><code>_shared.py</code></td>
+<td>~100</td>
+<td>Shared constants and types used across the mixins.</td>
+</tr>
+</tbody>
+</table>
+<p>The mixin pattern allows each concern (looping, validating, implementing,
+file-ops) to be tested and read independently while the <code>core.py</code> façade
+presents a single <code>Stage</code> subclass to the pipeline runner.</p>
+<h3 id="agent-seam">Agent seam</h3>
+<p>The stage invokes agents through <code>coding.run_implement_agent()</code>, a
+patchable seam that delegates to <code>coordinating.run_coordinator</code>
+internally. Three additional seams (<code>run_test_agent</code>, <code>run_smoke_agent</code>,
+<code>load_repo_smoke_paths</code>) are re-exported from the <code>__init__.py</code> module
+for test mocking.</p>
+<h2 id="configuration-knobs">Configuration knobs</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.limits.max_fix_iterations</code></td>
+<td><code>MILL_MAX_FIX_ITERATIONS</code></td>
+<td><code>8</code></td>
+<td>Max implement→test fix loop iterations</td>
+</tr>
+<tr>
+<td><code>core.limits.coordinator_requests</code></td>
+<td><code>MILL_PER_PASS_REQUEST_BUDGET</code></td>
+<td><code>500</code></td>
+<td>Per-pass request budget (resets each iteration)</td>
+</tr>
+<tr>
+<td><code>core.limits.coordinator_max_tool_calls</code></td>
+<td><code>MILL_COORDINATOR_MAX_TOOL_CALLS</code></td>
+<td><code>300</code></td>
+<td>Hard cap on total tool calls per pass</td>
+</tr>
+<tr>
+<td><code>core.limits.coordinator_timeout_seconds</code></td>
+<td><code>MILL_COORDINATOR_TIMEOUT_SECONDS</code></td>
+<td><code>600</code></td>
+<td>Wall-clock timeout per pass (seconds)</td>
+</tr>
+<tr>
+<td><code>core.limits.scope_triage_max_files</code></td>
+<td><code>MILL_SCOPE_TRIAGE_MAX_FILES</code></td>
+<td><code>50</code></td>
+<td>Max out-of-scope files before flood guard blocks</td>
+</tr>
+<tr>
+<td><code>core.limits.max_stuck_cycles</code></td>
+<td><code>MILL_MAX_STUCK_CYCLES</code></td>
+<td><code>3</code></td>
+<td>Re-entries without progress before BLOCK</td>
+</tr>
+<tr>
+<td><code>core.limits.stage_timeout_seconds</code></td>
+<td><code>MILL_STAGE_TIMEOUT_SECONDS</code></td>
+<td><code>2400</code></td>
+<td>Per-stage wall-clock timeout</td>
+</tr>
+<tr>
+<td><code>gates.max_implement_review_cycles</code></td>
+<td><code>MILL_MAX_IMPLEMENT_REVIEW_CYCLES</code></td>
+<td><code>10</code></td>
+<td>Ceiling on total implement passes across review rounds (0 disables)</td>
+</tr>
+<tr>
+<td><code>gates.scope_triage_enabled</code></td>
+<td><code>MILL_SCOPE_TRIAGE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Enable scope-triage LLM classifier</td>
+</tr>
+<tr>
+<td><code>gates.prerequisite_gate_enabled</code></td>
+<td><code>MILL_PREREQUISITE_GATE_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Enable prerequisite symbol checker</td>
+</tr>
+<tr>
+<td><code>stages.implement_stall_threshold</code></td>
+<td><code>MILL_IMPLEMENT_STALL_THRESHOLD</code></td>
+<td><code>2</code></td>
+<td>Consecutive no-progress cycles before stall guard fires (0 disables)</td>
+</tr>
+<tr>
+<td><code>sandbox.test_command</code></td>
+<td><code>MILL_TEST_COMMAND</code></td>
+<td><code>""</code></td>
+<td>Test command (empty = skip, global fallback)</td>
+</tr>
+<tr>
+<td><code>pipeline.implement_memory_path</code></td>
+<td><code>MILL_IMPLEMENT_MEMORY_PATH</code></td>
+<td><code>None</code></td>
+<td>Override path for implement memory</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="../../config/configuration/">Configuration reference</a> for the full
+settings catalog, loading order, and precedence rules.</p>
+<h2 id="state-flow-summary">State flow summary</h2>
+<div class="highlight"><pre><span></span><code>READY
+    │
+    ├── Prerequisite gate: unmet symbol → BLOCKED (resumable)
+    ├── Baseline check:   base-branch fails → BLOCKED (dependency ticket spawned)
+    ├── Scope guardrail:   out-of-scope flood → BLOCKED
+    ├── Scope triage:      REJECT → clean + retry
+    │                      EXPAND → expand file_map + continue
+    │                      ESCALATE → BLOCKED
+    ├── Preflight:         epic/empty/spawn/cycle/stall → BLOCKED
+    │
+    ▼
+Implement fix loop  ◄──────────────────────────────┐
+    │ (per iteration)                               │
+    ├── Agent edit pass                             │
+    │     ├── AgentBudgetError → BLOCKED (resume)   │
+    │     └── AgentRunError  → retry / BLOCKED      │
+    ├── Test gate + smoke gate                      │
+    ├── ValidationResult.decide                     │
+    │     ├── Pass → DELIVERABLE                    │
+    │     ├── Retry (remaining iters) → loop ───────┘
+    │     └── Exhausted → BLOCKED (resumable)       │
+    │                                               │
+    ├── Stuck-loop detection (before each retry)    │
+    │     ├── Zero-change passes ≥ 3 → BLOCKED      │
+    │     ├── Tool calls no diff ≥ 50 → BLOCKED     │
+    │     └── Diagnostic circuit breaker → BLOCKED  │
+    │                                               │
+    └── Cross-spawn stall guard                     │
+          └── stall_count ≥ threshold → BLOCKED     │
+                                                    │
+BLOCKED (resumable)                                 │
+    │ (operator clears blocker)                     │
+    └── READY → resume (no re-clone) ───────────────┘
+</code></pre></div>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../../config/configuration/">Configuration reference</a> — full env-var reference</li>
+<li><a href="../scope-triage/">Scope triage</a> — out-of-scope file classifier</li>
+<li><a href="../merge-stage/">Merge stage</a> — CI-fix, rebase, review-revision</li>
+<li><a href="../../agents/">Agent catalog</a> — agent definitions and toolchains</li>
+<li><a href="../blocked-ticket-recovery/">Blocked ticket recovery</a> — how blocked tickets are recovered</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

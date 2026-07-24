@@ -1,0 +1,4825 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../design/worker-process-split/">
+      
+      
+        <link rel="next" href="../github-app/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Overview - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#forge-architecture-design-document" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Overview
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/autoupdate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autoupdate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sandbox/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../repo-scaffold/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repo scaffold
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deps/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/implement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implement stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-definitions/expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta/meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/periodic/survey-cross-board-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Survey cross-board routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runtime
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/run-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notify/notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vcs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VCS (git) module
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/pin-bump/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pin bump
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Forge
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-forge-interface-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Forge interface contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Forge interface contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-data-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Data classes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-abc-forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 ABC: Forge
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.2 ABC: Forge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-abstract-methods-12-total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.1 Abstract methods (12 total)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-concrete-non-abstract-methods-4-total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.2 Concrete (non-abstract) methods (4 total)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-factory-get_forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 Factory: get_forge()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-notconfigurederror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 NotConfiguredError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-github-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. GitHub implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. GitHub implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-remote-url-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Remote URL resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-abstract-method-rest-endpoint-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Abstract method → REST endpoint mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-check_status-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 check_status detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-mergeable-normalization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 mergeable normalization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-code-scanning-alerts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 Code scanning alerts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-repo-creation-reuse-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 Repo creation reuse safety
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-utility-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.7 Utility functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-gitlab-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. GitLab implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. GitLab implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-remote-url-project-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Remote URL → project path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-project-id-resolution-the-central-seam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Project ID resolution — the central seam
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-abstract-method-rest-endpoint-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Abstract method → REST endpoint mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-mr-lookup-branch-based-vs-iid-based" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 MR lookup: branch-based vs. IID-based
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-pipeline-status-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 Pipeline status mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-merge-status-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6 Merge-status mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#37-review-status-heuristic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.7 Review-status heuristic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#38-mr-changes-diff-parsing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.8 MR changes diff parsing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#39-auth-header" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.9 Auth header
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Authentication
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Authentication">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-two-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Two modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-static-token-forge_authtoken" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Static token (FORGE_AUTH=token)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-github-app-forge_authapp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 GitHub App (FORGE_AUTH=app)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-per-repo-installation-token-minting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Per-repo installation token minting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-secretsforge_repo_create_token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 Secrets.forge_repo_create_token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46-push-authentication-github_push_token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.6 Push authentication (github_push_token)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-configuration-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Configuration surface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Configuration surface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-settings-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Settings fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-secrets-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Secrets fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-auto-detection-auto-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Auto-detection (auto mode)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-repoconfig-field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 RepoConfig field
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-yaml-defaults-forge-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 YAML defaults — forge: block
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-key-design-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Key design decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Key design decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-http-seam-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 HTTP seam pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-pr_status_by_url-iid-based-lookup-gitlab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 pr_status_by_url — IID-based lookup (GitLab)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-list_code_scanning_alerts-github-only-no-op-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 list_code_scanning_alerts — GitHub-only, no-op default
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-_max_failed_jobs-10-and-_capture_failure_window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 _MAX_FAILED_JOBS = 10 and _capture_failure_window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-why-forge_token-exists-in-both-settings-and-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 Why forge_token exists in both Settings and Secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-github-gitlab-api-mapping-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. GitHub ↔ GitLab API mapping table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-extension-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Extension points
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gitlab/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitLab backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci-monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code scanning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_13" id="__nav_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-forge-interface-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Forge interface contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Forge interface contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-data-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Data classes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-abc-forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 ABC: Forge
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.2 ABC: Forge">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-abstract-methods-12-total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.1 Abstract methods (12 total)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-concrete-non-abstract-methods-4-total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.2 Concrete (non-abstract) methods (4 total)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-factory-get_forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 Factory: get_forge()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-notconfigurederror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 NotConfiguredError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-github-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. GitHub implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. GitHub implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-remote-url-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Remote URL resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-abstract-method-rest-endpoint-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Abstract method → REST endpoint mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-check_status-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 check_status detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-mergeable-normalization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 mergeable normalization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-code-scanning-alerts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 Code scanning alerts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-repo-creation-reuse-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 Repo creation reuse safety
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-utility-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.7 Utility functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-gitlab-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. GitLab implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. GitLab implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-remote-url-project-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Remote URL → project path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-project-id-resolution-the-central-seam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 Project ID resolution — the central seam
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-abstract-method-rest-endpoint-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Abstract method → REST endpoint mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-mr-lookup-branch-based-vs-iid-based" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 MR lookup: branch-based vs. IID-based
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-pipeline-status-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 Pipeline status mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36-merge-status-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6 Merge-status mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#37-review-status-heuristic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.7 Review-status heuristic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#38-mr-changes-diff-parsing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.8 MR changes diff parsing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#39-auth-header" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.9 Auth header
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Authentication
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Authentication">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-two-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Two modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-static-token-forge_authtoken" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Static token (FORGE_AUTH=token)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-github-app-forge_authapp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 GitHub App (FORGE_AUTH=app)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-per-repo-installation-token-minting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Per-repo installation token minting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-secretsforge_repo_create_token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 Secrets.forge_repo_create_token
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46-push-authentication-github_push_token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.6 Push authentication (github_push_token)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-configuration-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Configuration surface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Configuration surface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-settings-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Settings fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-secrets-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Secrets fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-auto-detection-auto-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Auto-detection (auto mode)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-repoconfig-field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 RepoConfig field
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-yaml-defaults-forge-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 YAML defaults — forge: block
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-key-design-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Key design decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Key design decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-http-seam-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 HTTP seam pattern
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-pr_status_by_url-iid-based-lookup-gitlab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 pr_status_by_url — IID-based lookup (GitLab)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-list_code_scanning_alerts-github-only-no-op-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 list_code_scanning_alerts — GitHub-only, no-op default
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-_max_failed_jobs-10-and-_capture_failure_window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 _MAX_FAILED_JOBS = 10 and _capture_failure_window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-why-forge_token-exists-in-both-settings-and-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 Why forge_token exists in both Settings and Secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-github-gitlab-api-mapping-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. GitHub ↔ GitLab API mapping table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-extension-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Extension points
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="forge-architecture-design-document">Forge Architecture — Design Document</h1>
+<blockquote>
+<p><strong>Status:</strong> draft<br />
+<strong>Epic:</strong> gitlab-forge-support<br />
+<strong>Scope:</strong> design only — no code changes in this ticket  </p>
+</blockquote>
+<h2 id="overview">Overview</h2>
+<p>The forge abstraction layer (<code>src/robotsix_mill/forge/</code>) isolates the
+deliver, merge, and CI-monitor stages from concrete forge APIs.  Two
+adapters ship today: <code>GitHubForge</code> (GitHub REST API) and <code>GitLabForge</code>
+(GitLab REST API v4).  A factory function <code>get_forge()</code> dispatches on
+<code>Settings.forge_kind</code>.</p>
+<p>This document describes the interface contract, each adapter's API
+mapping, the authentication layer, the configuration surface, key
+design decisions, and how to add a third provider.</p>
+<hr />
+<h2 id="1-forge-interface-contract">1. Forge interface contract</h2>
+<h3 id="11-data-classes">1.1 Data classes</h3>
+<div class="highlight"><pre><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RepoInfo</span><span class="p">:</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">clone_url</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">html_url</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BranchInfo</span><span class="p">:</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">last_commit_at</span><span class="p">:</span> <span class="n">datetime</span>   <span class="c1"># timezone-aware (UTC)</span>
+    <span class="n">is_protected</span><span class="p">:</span> <span class="nb">bool</span>
+</code></pre></div>
+<h3 id="12-abc-forge">1.2 ABC: <code>Forge</code></h3>
+<p><strong>Module:</strong> <code>src/robotsix_mill/forge/base.py</code></p>
+<p>The constructor receives <code>settings: Settings</code> and stores it as
+<code>self.settings</code>.</p>
+<h4 id="121-abstract-methods-12-total">1.2.1 Abstract methods (12 total)</h4>
+<p>Every adapter must implement these.  Return shapes are normative —
+callers in the deliver/merge stages depend on these exact keys.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Method</th>
+<th>Signature</th>
+<th>Returns</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>open_merge_request</code></td>
+<td><code>(*, source_branch: str, title: str, body: str)</code></td>
+<td><code>str</code></td>
+<td>Open an MR/PR for <code>source_branch</code> against <code>settings.forge_target_branch</code>.  Returns the MR/PR web URL.  Must handle the "already exists" case by returning the existing URL instead of failing.</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>pr_status</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>dict | None</code></td>
+<td>Status by head branch.  Returns <code>{"merged": bool, "state": "open"|"closed", "url": str, "mergeable": bool|None}</code> or <code>None</code> if no PR exists. <code>mergeable</code> is <code>None</code> when the forge hasn't computed it yet (treat as mergeable).</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>pr_status_by_url</code></td>
+<td><code>(*, url: str)</code></td>
+<td><code>dict | None</code></td>
+<td>Status by recorded PR URL, independent of whether the head branch still exists.  Same return shape as <code>pr_status</code>, plus a <code>"number"</code> key (the forge-native MR/PR number or IID).  Returns <code>None</code> when the URL cannot be parsed or the PR cannot be resolved.</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>check_status</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>dict | None</code></td>
+<td>Remote CI check-run status.  Returns <code>None</code> when no PR exists.  When a PR exists: <code>{"conclusion": "success"|"failure"|"pending"|None, "failing": [...]}</code>.  Each failing entry: <code>{"name": str, "summary": str|None, "text": str|None, "annotations": [...]}</code>.  Summaries capped at 2000 chars, text at 4000, annotations at 20 per check.</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>pr_files</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>list[dict]</code></td>
+<td>File-list diff of the PR.  <code>[]</code> when no PR exists.  Each dict: <code>"path"</code> (str), <code>"status"</code> (<code>"added"|"modified"|"removed"|"renamed"</code>), <code>"additions"</code> (int), <code>"deletions"</code> (int).</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>pr_review_status</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>dict | None</code></td>
+<td>Aggregate review state.  <code>None</code> when no PR exists.  Returns <code>{"state": "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED"|"PENDING", "comments": [...], "files": [...]}</code>.  <code>comments</code> entries: <code>"body"</code>, <code>"path"</code>, <code>"line"</code> (int</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>merge_pr</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>dict</code></td>
+<td>Squash-merge the PR.  Returns <code>{"merged": bool, "reason": str}</code>.  Must never raise for API-level failures — catch and return a failure dict.</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>list_pr_reviews</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>list[dict]</code></td>
+<td>Formal PR reviews (approve/request-changes/comment).  <code>[]</code> when no PR exists.  Each: <code>"id"</code>, <code>"author"</code>, <code>"created_at"</code>, <code>"body"</code> (never <code>None</code>, <code>""</code> when submitted without body).</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>list_review_comments</code></td>
+<td><code>(*, source_branch: str)</code></td>
+<td><code>list[dict]</code></td>
+<td>Inline code-review comments.  <code>[]</code> when no PR exists.  Each: <code>"id"</code>, <code>"author"</code>, <code>"created_at"</code>, <code>"body"</code>, <code>"file_path"</code>, <code>"line"</code> (int</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>list_workflow_runs</code></td>
+<td><code>(*, branch: str|None, head_sha: str|None)</code></td>
+<td><code>list[dict]</code></td>
+<td>Completed workflow/pipeline runs, optionally filtered.  Each: <code>"id"</code>, <code>"name"</code>, <code>"workflow_id"</code>, <code>"head_sha"</code>, <code>"conclusion"</code>, <code>"html_url"</code>, <code>"created_at"</code>.</td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>fetch_workflow_job_logs</code></td>
+<td><code>(*, run_id: int)</code></td>
+<td><code>str</code></td>
+<td>Concatenated, ANSI-stripped, size-capped logs of all failed jobs in a workflow run.  Returns <code>""</code> when no failed jobs found.</td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>create_repo</code></td>
+<td><code>(*, name: str, owner: str, private: bool, description: str)</code></td>
+<td><code>RepoInfo</code></td>
+<td>Create a new repository.  Must raise <code>NotConfiguredError</code> when repo creation is disabled by configuration.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="122-concrete-non-abstract-methods-4-total">1.2.2 Concrete (non-abstract) methods (4 total)</h4>
+<p>These have default implementations in the base class.  Adapters <strong>may</strong>
+override them when the forge supports the capability.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Default behaviour</th>
+<th>GitHub override</th>
+<th>GitLab override</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_code_scanning_alerts(*, source_branch)</code></td>
+<td>Returns <code>[]</code> — code-scanning is GitHub-only.</td>
+<td>Fetches open CodeQL alerts via the security/code-scanning API.</td>
+<td>Not overridden (inherits <code>[]</code>).</td>
+</tr>
+<tr>
+<td><code>update_branch(*, source_branch)</code></td>
+<td>Returns <code>{"updated": False, "reason": "not supported"}</code> — MR/PR branch rebasing is not implemented by default.</td>
+<td><code>PUT /repos/{owner}/{repo}/pulls/{number}/update-branch</code> — merges the target branch tip into the PR branch so CI re-runs against the current base.</td>
+<td><code>PUT /projects/:id/merge_requests/:iid/rebase</code> — rebases the MR branch against the target branch; returns <code>{"updated": True, "reason": "rebase accepted"}</code> on 202 (accepted).</td>
+</tr>
+<tr>
+<td><code>delete_branch(*, branch)</code></td>
+<td>Returns <code>False</code>.</td>
+<td><code>DELETE /repos/.../git/refs/heads/{branch}</code> — returns <code>True</code> on 204/404/422 (branch gone = success).</td>
+<td><code>DELETE /projects/:id/repository/branches/:branch</code> — returns <code>True</code> on 204/404.</td>
+</tr>
+<tr>
+<td><code>list_branches()</code></td>
+<td>Returns <code>[]</code>.</td>
+<td>Paginates <code>GET /repos/.../branches</code>, returns <code>list[BranchInfo]</code>.</td>
+<td>Paginates <code>GET /projects/:id/repository/branches</code>.</td>
+</tr>
+<tr>
+<td><code>list_open_pr_branches()</code></td>
+<td>Returns <code>set()</code> (empty).</td>
+<td>Paginates <code>GET /repos/.../pulls?state=open</code>, collects head refs.</td>
+<td>Paginates <code>GET /projects/:id/merge_requests?state=opened</code>, collects <code>source_branch</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-factory-get_forge">1.3 Factory: <code>get_forge()</code></h3>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_forge</span><span class="p">(</span><span class="n">settings</span><span class="p">:</span> <span class="n">Settings</span><span class="p">,</span> <span class="n">repo_config</span><span class="p">:</span> <span class="n">RepoConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Forge</span><span class="p">:</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">forge_kind</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+        <span class="n">remote_url</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">repo_config</span><span class="o">.</span><span class="n">forge_remote_url</span> <span class="k">if</span> <span class="n">repo_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">settings</span><span class="o">.</span><span class="n">forge_remote_url</span>
+            <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+        <span class="p">)</span>
+        <span class="n">kind</span> <span class="o">=</span> <span class="n">_detect_forge_kind</span><span class="p">(</span><span class="n">remote_url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;github&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">GitHubForge</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">repo_config</span><span class="o">=</span><span class="n">repo_config</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;gitlab&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">GitLabForge</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">repo_config</span><span class="o">=</span><span class="n">repo_config</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;no forge configured (FORGE_KIND=</span><span class="si">{</span><span class="n">kind</span><span class="si">!r}</span><span class="s2">); cannot deliver&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>When <code>repo_config</code> is provided, the adapter uses its
+<code>forge_remote_url</code> instead of the global <code>Settings.forge_remote_url</code>,
+so different repos under the same forge can target different remotes.</p>
+<p>When <code>forge_kind</code> is <code>"auto"</code>, the effective forge kind is detected
+from the remote URL (per-repo <code>forge_remote_url</code> takes precedence over
+the global setting). See §5.3 for the auto-detection heuristics.</p>
+<h3 id="14-notconfigurederror">1.4 <code>NotConfiguredError</code></h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NotConfiguredError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when an optional forge capability (e.g. repo creation) is</span>
+<span class="sd">    disabled by configuration.&quot;&quot;&quot;</span>
+</code></pre></div>
+<p>Used by <code>create_repo()</code> when <code>enable_repo_creation</code> is <code>False</code>.</p>
+<hr />
+<h2 id="2-github-implementation">2. GitHub implementation</h2>
+<p><strong>Module:</strong> <code>src/robotsix_mill/forge/github.py</code><br />
+<strong>Class:</strong> <code>GitHubForge(Forge)</code></p>
+<h3 id="21-remote-url-resolution">2.1 Remote URL resolution</h3>
+<p>The <code>_owner_repo</code> property parses the effective remote URL (per-repo
+override or global <code>forge_remote_url</code>) via <code>_parse_owner_repo()</code>, which
+extracts <code>(owner, repo)</code> from patterns like
+<code>github.com[:/]&lt;owner&gt;/&lt;repo&gt;[.git]</code>.</p>
+<h3 id="22-abstract-method-rest-endpoint-mapping">2.2 Abstract method → REST endpoint mapping</h3>
+<p>Each public method resolves <code>owner</code>/<code>repo</code>, then delegates to a private
+<code>_http_*</code> method (the <strong>HTTP seam</strong> — see §6.1).</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>HTTP seam</th>
+<th>GitHub REST endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>open_merge_request</code></td>
+<td><code>_create_pr</code></td>
+<td><code>POST /repos/{owner}/{repo}/pulls</code> with 422 retry (4 attempts, exponential backoff 1s/2s/4s). On 422, checks <code>GET /repos/.../pulls?head={owner}:{head}&amp;state=open</code> for an existing PR. A 422 with <code>"field":"head","code":"invalid"</code> is treated as a transient post-push indexing race and retried.</td>
+</tr>
+<tr>
+<td><code>pr_status</code></td>
+<td><code>_get_pr</code></td>
+<td><code>GET /repos/{owner}/{repo}/pulls?head={owner}:{head}&amp;state=all</code> → pick first item → <code>GET /repos/.../pulls/{number}</code></td>
+</tr>
+<tr>
+<td><code>pr_status_by_url</code></td>
+<td><code>_get_pr_by_number</code></td>
+<td>Parses PR number from URL (<code>/pull/(\d+)</code>), then <code>GET /repos/{owner}/{repo}/pulls/{number}</code></td>
+</tr>
+<tr>
+<td><code>check_status</code></td>
+<td><code>_check_status</code></td>
+<td>1. <code>_get_pr</code> for SHA. 2. <code>GET /repos/.../commits/{sha}/check-runs</code> (403 → fall through). 3. <code>GET /repos/.../commits/{sha}/status</code> (403 → fall through). 4. Combine check runs + statuses. 5. For each failing check run, <code>GET /repos/.../check-runs/{id}</code> for annotations.</td>
+</tr>
+<tr>
+<td><code>pr_files</code></td>
+<td><code>_pr_files</code></td>
+<td><code>GET /repos/{owner}/{repo}/pulls/{number}/files?per_page=100</code></td>
+</tr>
+<tr>
+<td><code>pr_review_status</code></td>
+<td><code>_pr_review_status</code></td>
+<td><code>GET /repos/.../pulls/{number}/reviews</code> + <code>GET /repos/.../pulls/{number}/comments</code> + <code>_pr_files</code>. Aggregate state derived from <strong>latest non-dismissed review</strong> (fallback: latest dismissed).</td>
+</tr>
+<tr>
+<td><code>merge_pr</code></td>
+<td><code>_merge_pr</code></td>
+<td><code>PUT /repos/{owner}/{repo}/pulls/{number}/merge</code> with <code>merge_method=squash</code>. 200 → merged; 405 → branch protection; 409 → not mergeable.</td>
+</tr>
+<tr>
+<td><code>list_pr_reviews</code></td>
+<td><code>_list_pr_reviews</code></td>
+<td><code>GET /repos/{owner}/{repo}/pulls/{number}/reviews?per_page=100</code></td>
+</tr>
+<tr>
+<td><code>list_review_comments</code></td>
+<td><code>_list_review_comments</code></td>
+<td><code>GET /repos/{owner}/{repo}/pulls/{number}/comments?per_page=100</code></td>
+</tr>
+<tr>
+<td><code>list_workflow_runs</code></td>
+<td><code>_list_workflow_runs</code></td>
+<td><code>GET /repos/{owner}/{repo}/actions/runs?status=completed&amp;per_page=30</code> (optional <code>branch</code>/<code>head_sha</code> params)</td>
+</tr>
+<tr>
+<td><code>fetch_workflow_job_logs</code></td>
+<td><code>_fetch_workflow_job_logs</code></td>
+<td><code>GET /repos/.../actions/runs/{run_id}/jobs?status=completed</code> → filter to failed-like conclusions → <code>GET /repos/.../actions/jobs/{job_id}/logs</code> for each (up to <code>_MAX_FAILED_JOBS</code>)</td>
+</tr>
+<tr>
+<td><code>create_repo</code></td>
+<td><code>_create_repo</code></td>
+<td><code>POST /orgs/{owner}/repos</code> → fallback <code>POST /user/repos</code> on 403/404. 422 with "name already exists": attempt to reuse if repo is empty (no commits).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-check_status-detail">2.3 <code>check_status</code> detail</h3>
+<p>The method merges two GitHub API concepts:</p>
+<ul>
+<li><strong>Check runs</strong> (<code>/commits/{sha}/check-runs</code>) — GitHub Actions workflows
+  and any check-run integration.</li>
+<li><strong>Statuses</strong> (<code>/commits/{sha}/status</code>) — legacy commit-status API,
+  converted to check-run–shaped dicts by <code>_statuses_to_check_runs()</code>.</li>
+</ul>
+<p>A 403 from either endpoint (App lacks <code>checks:read</code> permission) does
+not fail — the method treats it as "no data from that source" and
+falls through.</p>
+<p>Conclusions: <code>_derive_check_conclusion()</code> classifies each check as
+<code>pending</code>/<code>failure</code>/<code>neutral</code>.  Overall is <code>"failure"</code> if any check
+failed, <code>"pending"</code> if any check is in-flight, <code>"success"</code> if all
+completed and passed, <code>None</code> if no checks exist at all.  When <strong>both</strong>
+check-runs and statuses are empty (no CI configured), the method
+returns <code>{"conclusion": "success", "failing": []}</code> so the merge stage
+doesn't loop forever.</p>
+<h3 id="24-mergeable-normalization">2.4 <code>mergeable</code> normalization</h3>
+<p><code>_parse_pr_detail()</code> maps GitHub's <code>mergeable_state</code> + <code>mergeable</code>
+into the standard <code>mergeable</code> field:</p>
+<table>
+<thead>
+<tr>
+<th><code>mergeable_state</code></th>
+<th><code>mergeable</code> field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>null</code> or <code>"unknown"</code></td>
+<td><code>None</code> (still computing)</td>
+</tr>
+<tr>
+<td><code>"clean"</code></td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>"dirty"</code>, <code>"blocked"</code>, <code>"unstable"</code>, …</td>
+<td><code>False</code> (from <code>mergeable</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>When <code>mergeable_state</code> is <code>"unknown"</code>, the caller considers the PR
+mergeable and polls again next cycle.</p>
+<h3 id="25-code-scanning-alerts">2.5 Code scanning alerts</h3>
+<p><code>list_code_scanning_alerts()</code> is <strong>not</strong> abstract — the base class
+returns <code>[]</code>.  <code>GitHubForge</code> overrides it to call
+<code>GET /repos/{owner}/{repo}/code-scanning/alerts?ref=refs/heads/{branch}&amp;state=open</code>.
+403 (no security-events scope) and 404 (no CodeQL) degrade silently
+to <code>[]</code>.</p>
+<h3 id="26-repo-creation-reuse-safety">2.6 Repo creation reuse safety</h3>
+<p><code>_create_repo()</code>'s 422 "name already exists" path does not
+unconditionally fail.  <code>_reuse_if_empty()</code> checks whether the existing
+repo has zero commits (<code>GET /repos/.../commits</code> returns 409 or empty
+list).  An empty repo is treated as a prior incomplete scaffold attempt
+and reused; a repo with real content raises a <code>RuntimeError</code>.</p>
+<h3 id="27-utility-functions">2.7 Utility functions</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_ANSI_RE</code></td>
+<td>Compiled regex stripping ANSI escape sequences from CI logs.</td>
+</tr>
+<tr>
+<td><code>_MAX_FAILED_JOBS = 10</code></td>
+<td>Cap on number of failed jobs whose logs are fetched per run.</td>
+</tr>
+<tr>
+<td><code>_capture_failure_window(clean_log, max_bytes)</code></td>
+<td>Anchors log truncation on the <strong>first</strong> failure marker so <code>if: always()</code> cascades can't mask the real error.</td>
+</tr>
+<tr>
+<td><code>_LOG_FAILURE_RE</code></td>
+<td>Regex matching failure markers (<code>##[error]</code>, <code>FATAL</code>, <code>Error:</code>, <code>exit code [1-9]</code>, <code>Process completed with exit code [1-9]</code>).</td>
+</tr>
+<tr>
+<td><code>_parse_iso_utc(value)</code></td>
+<td>Parses ISO-8601 timestamps (with <code>Z</code> support) into timezone-aware UTC <code>datetime</code>. Returns Unix epoch on failure.</td>
+</tr>
+<tr>
+<td><code>_parse_pr_detail(pr)</code></td>
+<td>Normalizes a GitHub PR dict into the standard status shape.</td>
+</tr>
+<tr>
+<td><code>_build_headers(token)</code></td>
+<td>Returns <code>{"Authorization": "Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}</code>.</td>
+</tr>
+<tr>
+<td><code>_parse_owner_repo(remote_url)</code></td>
+<td>Extracts <code>(owner, repo)</code> from GitHub remote URLs.</td>
+</tr>
+<tr>
+<td><code>_clamp_repo_description(description)</code></td>
+<td>Truncates to 350 chars (GitHub's repo-description limit).</td>
+</tr>
+<tr>
+<td><code>_parse_repo_info(r)</code></td>
+<td>Extracts <code>RepoInfo</code> from a GitHub repo-creation response.</td>
+</tr>
+</tbody>
+</table>
+<p><code>_ANSI_RE</code>, <code>_MAX_FAILED_JOBS</code>, <code>_capture_failure_window</code>, and
+<code>_parse_iso_utc</code> are <strong>re-used by <code>GitLabForge</code></strong> (imported from
+<code>github.py</code>).</p>
+<hr />
+<h2 id="3-gitlab-implementation">3. GitLab implementation</h2>
+<p><strong>Module:</strong> <code>src/robotsix_mill/forge/gitlab/core.py</code><br />
+<strong>Class:</strong> <code>GitLabForge(Forge)</code></p>
+<h3 id="31-remote-url-project-path">3.1 Remote URL → project path</h3>
+<p><code>_parse_gitlab_project_path(remote_url)</code> extracts the namespace/project
+path from both HTTPS (<code>https://&lt;host&gt;/ns/project.git</code>) and SSH
+(<code>git@&lt;host&gt;:ns/project.git</code>) URLs.</p>
+<h3 id="32-project-id-resolution-the-central-seam">3.2 Project ID resolution — the central seam</h3>
+<p>Every GitLab API call needs a numeric project ID.  <code>_resolve_project_id(project_path)</code>
+calls <code>GET /projects/:encoded_path</code> (URL-encoded path) and returns the
+project <code>id</code> field.  This is the single point of project-ID resolution
+— all other <code>_http_*</code> methods call it first.</p>
+<h3 id="33-abstract-method-rest-endpoint-mapping">3.3 Abstract method → REST endpoint mapping</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>HTTP seam</th>
+<th>GitLab REST endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>open_merge_request</code></td>
+<td><code>_create_mr</code></td>
+<td><code>POST /projects/:id/merge_requests</code> with <code>source_branch</code>, <code>target_branch</code>, <code>title</code>, <code>description</code>. On 409 (conflict → MR already exists), calls <code>_find_mr</code> to return the existing MR's <code>web_url</code>.</td>
+</tr>
+<tr>
+<td><code>pr_status</code></td>
+<td><code>_find_mr</code></td>
+<td><code>GET /projects/:id/merge_requests?source_branch=...&amp;state=all&amp;per_page=1</code></td>
+</tr>
+<tr>
+<td><code>pr_status_by_url</code></td>
+<td><code>_get_mr_by_iid</code></td>
+<td>Parses MR IID from URL (<code>merge_requests/(\d+)</code>), then <code>GET /projects/:id/merge_requests/:iid</code></td>
+</tr>
+<tr>
+<td><code>check_status</code></td>
+<td><code>_get_latest_pipeline</code> + <code>_get_failed_jobs</code></td>
+<td>1. <code>_find_mr</code> for the MR. 2. <code>GET /projects/:id/merge_requests/:iid/pipelines?per_page=1</code> for the latest pipeline. 3. If failed: <code>GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&amp;per_page=20</code></td>
+</tr>
+<tr>
+<td><code>pr_files</code></td>
+<td><code>_mr_changes</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/changes</code> — counts <code>+</code>/<code>-</code> lines from the raw diff text</td>
+</tr>
+<tr>
+<td><code>pr_review_status</code></td>
+<td><code>_pr_review_status</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/approvals</code> (approval state) + <code>_mr_notes</code> (comments). Heuristic: <code>"APPROVED"</code> when approved, <code>"COMMENTED"</code> when any non-system notes exist, else <code>"PENDING"</code>.</td>
+</tr>
+<tr>
+<td><code>merge_pr</code></td>
+<td><code>_merge_mr</code></td>
+<td><code>PUT /projects/:id/merge_requests/:iid/merge</code> with <code>merge_when_pipeline_succeeds=true</code>, <code>squash=true</code>, <code>should_remove_source_branch=false</code>. 200 → merged or MWPS-queued; 405 → branch protection; 409 → not mergeable.</td>
+</tr>
+<tr>
+<td><code>list_pr_reviews</code></td>
+<td><code>_mr_notes</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/notes?per_page=100</code> — returns non-system notes <strong>without</strong> a <code>position</code> (general comments).</td>
+</tr>
+<tr>
+<td><code>list_review_comments</code></td>
+<td><code>_mr_notes</code></td>
+<td>Same endpoint — returns notes <strong>with</strong> a <code>position</code> (inline diff comments).</td>
+</tr>
+<tr>
+<td><code>list_workflow_runs</code></td>
+<td><code>_list_pipelines</code></td>
+<td><code>GET /projects/:id/pipelines?per_page=30</code> (optional <code>ref</code>/<code>sha</code> params)</td>
+</tr>
+<tr>
+<td><code>fetch_workflow_job_logs</code></td>
+<td><code>_fetch_pipeline_job_logs</code></td>
+<td><code>GET /projects/:id/pipelines/{run_id}/jobs?scope=failed&amp;per_page=20</code> → <code>GET /projects/:id/jobs/{job_id}/trace</code> for each (up to <code>_MAX_FAILED_JOBS</code>)</td>
+</tr>
+<tr>
+<td><code>create_repo</code></td>
+<td><code>_create_project</code></td>
+<td><code>POST /projects</code> with optional <code>namespace_id</code> (resolved via <code>GET /namespaces/:encoded</code>). 400/409 "already been taken" / "already exists" raises <code>RuntimeError</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34-mr-lookup-branch-based-vs-iid-based">3.4 MR lookup: branch-based vs. IID-based</h3>
+<ul>
+<li>
+<p><strong><code>_find_mr(project_path, source_branch, state)</code></strong> — looks up an MR by
+  <code>source_branch</code>.  Used by <code>pr_status</code>, <code>check_status</code>, <code>pr_files</code>,
+  <code>merge_pr</code>, <code>list_pr_reviews</code>, and <code>list_review_comments</code>.  Returns
+  <code>None</code> when the source branch has been deleted (common after merge).</p>
+</li>
+<li>
+<p><strong><code>_get_mr_by_iid(project_path, mr_iid)</code></strong> — looks up an MR by its IID
+  (the project-scoped integer in the web URL).  Used by
+  <code>pr_status_by_url</code> to survive branch deletion — the MR record
+  persists after the head branch is gone.</p>
+</li>
+</ul>
+<h3 id="35-pipeline-status-mapping">3.5 Pipeline status mapping</h3>
+<p><code>_map_pipeline_status()</code> maps GitLab pipeline statuses to the standard
+conclusion:</p>
+<table>
+<thead>
+<tr>
+<th>GitLab status</th>
+<th>Standard conclusion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>success</code></td>
+<td><code>"success"</code></td>
+</tr>
+<tr>
+<td><code>failed</code>, <code>canceled</code></td>
+<td><code>"failure"</code></td>
+</tr>
+<tr>
+<td><code>pending</code>, <code>running</code>, <code>created</code>, <code>waiting_for_resource</code>, <code>preparing</code>, <code>manual</code>, <code>scheduled</code></td>
+<td><code>"pending"</code></td>
+</tr>
+<tr>
+<td>anything else</td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="36-merge-status-mapping">3.6 Merge-status mapping</h3>
+<p><code>_map_merge_status()</code> maps GitLab's <code>merge_status</code> field to the
+standard <code>mergeable</code> boolean-or-<code>None</code>:</p>
+<table>
+<thead>
+<tr>
+<th>GitLab <code>merge_status</code></th>
+<th><code>mergeable</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>can_be_merged</code></td>
+<td><code>True</code></td>
+</tr>
+<tr>
+<td><code>cannot_be_merged</code></td>
+<td><code>False</code></td>
+</tr>
+<tr>
+<td><code>checking</code>, <code>unchecked</code>, anything else</td>
+<td><code>None</code> (treat as mergeable)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="37-review-status-heuristic">3.7 Review-status heuristic</h3>
+<p>GitLab has no formal review-state object equivalent to GitHub's
+reviews.  <code>GitLabForge._pr_review_status()</code> uses a simplified heuristic:</p>
+<ol>
+<li><code>GET /projects/:id/merge_requests/:iid/approvals</code> — if <code>approved</code> is
+   <code>true</code>, state is <code>"APPROVED"</code>.</li>
+<li>Otherwise, if any non-system notes exist, state is <code>"COMMENTED"</code>.</li>
+<li>Otherwise, <code>"PENDING"</code>.</li>
+</ol>
+<p>All comments (non-system notes) are returned with the same
+<code>review_state</code> as the aggregate.  This is the simpler of the two
+possible designs — the codebase chose not to attempt per-note
+state attribution (GitLab notes don't carry a review-state field).</p>
+<h3 id="38-mr-changes-diff-parsing">3.8 MR changes diff parsing</h3>
+<p><code>_mr_changes()</code> calls <code>GET /projects/:id/merge_requests/:iid/changes</code>
+and counts <code>+</code>/<code>-</code> lines from the raw diff text (GitLab's <code>changes</code>
+endpoint does not report <code>additions</code>/<code>deletions</code> counts separately).</p>
+<h3 id="39-auth-header">3.9 Auth header</h3>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_build_headers</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;PRIVATE-TOKEN&quot;</span><span class="p">:</span> <span class="n">token</span><span class="p">}</span>
+</code></pre></div>
+<p>GitLab uses the <code>PRIVATE-TOKEN</code> header (not <code>Authorization: Bearer</code>).</p>
+<hr />
+<h2 id="4-authentication">4. Authentication</h2>
+<p><strong>Module:</strong> <code>src/robotsix_mill/forge/auth.py</code></p>
+<h3 id="41-two-modes">4.1 Two modes</h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th><code>FORGE_AUTH</code> value</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Static token</strong></td>
+<td><code>token</code> (default)</td>
+<td>Reads <code>Secrets.forge_token</code> directly.  Works for both GitHub (PAT) and GitLab (personal/project access token).</td>
+</tr>
+<tr>
+<td><strong>GitHub App</strong></td>
+<td><code>app</code></td>
+<td>Mints a short-lived GitHub App installation token via JWT → installation lookup → access token.  <strong>GitHub-only</strong> — GitLab has no App concept.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-static-token-forge_authtoken">4.2 Static token (<code>FORGE_AUTH=token</code>)</h3>
+<div class="highlight"><pre><span></span><code>Settings.forge_auth = &quot;token&quot;
+Secrets.forge_token  = &quot;&lt;PAT or access token&gt;&quot;
+</code></pre></div>
+<ul>
+<li>GitHub: sent as <code>Authorization: Bearer {token}</code>.</li>
+<li>GitLab: sent as <code>PRIVATE-TOKEN: {token}</code>.</li>
+</ul>
+<p>The token is read from <code>Secrets.forge_token</code> (populated from
+the <code>config/config.yaml</code> <code>secrets:</code> block).  <code>Settings.forge_token</code> (aliased <code>FORGE_TOKEN</code>
+env var) exists in the Settings model but is <strong>not</strong> the runtime source
+— the code always calls <code>get_secrets().forge_token</code>.</p>
+<p>If <code>forge_token</code> is empty, <code>github_token()</code> raises <code>RuntimeError</code>.</p>
+<h3 id="43-github-app-forge_authapp">4.3 GitHub App (<code>FORGE_AUTH=app</code>)</h3>
+<div class="highlight"><pre><span></span><code>Settings.forge_auth = &quot;app&quot;
+Secrets.github_app_id              = &quot;&lt;App ID&gt;&quot;
+Secrets.github_app_private_key      = &quot;&lt;PEM key&gt;&quot;       # OR
+Secrets.github_app_private_key_path = &quot;/path/to/key.pem&quot;
+</code></pre></div>
+<p>Flow in <code>_mint_installation_token()</code>:</p>
+<ol>
+<li><strong>JWT creation</strong> — signed with the App private key (RS256), expires
+   in 9 minutes.  Issuer is the App ID.</li>
+<li><strong>Installation lookup</strong> — <code>GET /repos/{owner}/{repo}/installation</code>
+   with <code>Authorization: Bearer {jwt}</code> returns the installation ID.</li>
+<li><strong>Access token</strong> — <code>POST /app/installations/{iid}/access_tokens</code>
+   returns a short-lived token (GitHub issues ~1 hour).</li>
+<li><strong>Caching</strong> — tokens are cached in <code>_cache: dict[str, tuple[str, float]]</code>
+   keyed by <code>"{app_id}:{remote_url}"</code>.  Cache TTL is 50 minutes
+   (checked: if <code>cached[1] - 60 &gt; time.time()</code>).  This ensures one
+   deliver (push + PR) doesn't mint twice.</li>
+</ol>
+<p><code>_mint_installation_token</code> is a <strong>test seam</strong> — tests monkeypatch it
+to avoid the real JWT/network flow.</p>
+<h3 id="44-per-repo-installation-token-minting">4.4 Per-repo installation token minting</h3>
+<p>When a <code>RepoConfig</code> with a non-empty <code>forge_remote_url</code> is passed,
+<code>_resolve_remote_url()</code> uses that repo's remote instead of the global
+setting.  The cache key includes the remote URL, so different repos
+under the same App get separate cached tokens.</p>
+<h3 id="45-secretsforge_repo_create_token">4.5 <code>Secrets.forge_repo_create_token</code></h3>
+<p>A separate PAT used <strong>only</strong> for <code>create_repo()</code>.  GitHub App
+installation tokens cannot create repositories under personal accounts.
+When <code>forge_repo_create_token</code> is set, it is used instead of the main
+token for <code>POST /orgs/{owner}/repos</code> and <code>POST /user/repos</code>.  Falls
+back to the normal <code>github_token()</code> when not set.</p>
+<h3 id="46-push-authentication-github_push_token">4.6 Push authentication (<code>github_push_token</code>)</h3>
+<p><strong>Module:</strong> <code>src/robotsix_mill/forge/auth.py</code>, function <code>github_push_token()</code></p>
+<p>Git push operations (ci-fix, rebase, review-revision) authenticate with a
+separate, freshly-minted token rather than the cached API token.</p>
+<p><strong>Why separate?</strong> The original design used a static PAT embedded in the
+git remote URL.  PATs expire, get revoked, or are over-scoped — any of
+these silently dead-ends every push.  <code>github_push_token()</code> eliminates
+the stored credential entirely:</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Old (PAT)</th>
+<th>New (App token)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Token source</td>
+<td>Long-lived static PAT</td>
+<td>Freshly-minted installation token</td>
+</tr>
+<tr>
+<td>Scope</td>
+<td><code>repo</code> (full access)</td>
+<td><code>contents: write</code> on one repo</td>
+</tr>
+<tr>
+<td>Lifetime</td>
+<td>Until manually revoked</td>
+<td>~1 hour</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>Secret on disk</td>
+<td>Never stored; minted per push</td>
+</tr>
+<tr>
+<td>Cache</td>
+<td>N/A</td>
+<td>Not cached — each call mints once</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Flow:</strong></p>
+<ol>
+<li><strong>Fallback:</strong> When <code>forge_auth != "app"</code>, delegates to
+   <code>github_token()</code> (returns the static PAT).</li>
+<li><strong>JWT:</strong> Calls <code>_build_app_jwt()</code> — same JWT header construction
+   used by <code>_mint_installation_token()</code>.</li>
+<li><strong>Installation lookup:</strong> <code>GET /repos/{owner}/{repo}/installation</code> —
+   raises <code>GitHubAppNotInstalledError</code> on 404.</li>
+<li><strong>Scoped access token:</strong>
+   <code>POST /app/installations/{iid}/access_tokens</code> with
+   <code>{"permissions": {"contents": "write"}, "repositories": [repo]}</code> —
+   requests a token scoped to exactly one repo and one permission.</li>
+</ol>
+<p><strong>No caching:</strong> Unlike <code>github_token()</code> which caches in <code>_cache</code> for
+~50 minutes, <code>github_push_token()</code> always hits the API.  This is
+deliberate — push tokens are so short-lived that caching saves little,
+and every push wants the freshest possible credential.</p>
+<p><strong>Call sites</strong> (all in <code>stages/</code>):</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Context</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ci_fix.py</code></td>
+<td>Rebase-onto-main before CI scan; agent push; post-push check</td>
+</tr>
+<tr>
+<td><code>merge/ci_fix_mixin.py</code></td>
+<td>Multi-repo ci-fix inline recovery</td>
+</tr>
+<tr>
+<td><code>merge/multi_repo.py</code></td>
+<td>Multi-repo rebase inline recovery</td>
+</tr>
+<tr>
+<td><code>merge/rebase.py</code></td>
+<td>Single-repo rebase agent push + post-push check</td>
+</tr>
+<tr>
+<td><code>merge/review_revision.py</code></td>
+<td>Review-revision agent reconcile + push</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-configuration-surface">5. Configuration surface</h2>
+<h3 id="51-settings-fields">5.1 <code>Settings</code> fields</h3>
+<p>All fields are in <code>src/robotsix_mill/config.py</code>, class <code>Settings</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Env/YAML alias</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forge_kind</code></td>
+<td><code>Literal["github","gitlab","auto","none"]</code></td>
+<td><code>"none"</code></td>
+<td><code>FORGE_KIND</code></td>
+<td>Which forge adapter to use. <code>"none"</code> disables forge delivery entirely. <code>"auto"</code> detects the forge kind from the remote URL hostname (see §5.3).</td>
+</tr>
+<tr>
+<td><code>forge_remote_url</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td><code>FORGE_REMOTE_URL</code></td>
+<td>Remote URL of the target repository (used for clone, push, and API calls).</td>
+</tr>
+<tr>
+<td><code>forge_target_branch</code></td>
+<td><code>str</code></td>
+<td><code>"main"</code></td>
+<td><code>FORGE_TARGET_BRANCH</code></td>
+<td>Target branch for PRs/MRs.</td>
+</tr>
+<tr>
+<td><code>forge_auth</code></td>
+<td><code>Literal["token","app"]</code></td>
+<td><code>"token"</code></td>
+<td><code>FORGE_AUTH</code></td>
+<td>Auth mode: <code>"token"</code> for static PAT, <code>"app"</code> for GitHub App JWT flow.</td>
+</tr>
+<tr>
+<td><code>forge_token</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td><code>FORGE_TOKEN</code></td>
+<td>Static forge token (env-var override; runtime source is <code>Secrets.forge_token</code>).</td>
+</tr>
+<tr>
+<td><code>github_app_id</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td><code>GITHUB_APP_ID</code></td>
+<td>GitHub App ID (env-var override; runtime source is <code>Secrets.github_app_id</code>).</td>
+</tr>
+<tr>
+<td><code>github_app_private_key</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td><code>GITHUB_APP_PRIVATE_KEY</code></td>
+<td>GitHub App private key (env-var override; runtime source is <code>Secrets.github_app_private_key</code>).</td>
+</tr>
+<tr>
+<td><code>github_app_private_key_path</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td><code>GITHUB_APP_PRIVATE_KEY_PATH</code></td>
+<td>Host path to the private key <code>.pem</code> file (not a secret — path may be in YAML).</td>
+</tr>
+<tr>
+<td><code>github_api_url</code></td>
+<td><code>str</code></td>
+<td><code>"https://api.github.com"</code></td>
+<td>—</td>
+<td>API base URL (override for GitHub Enterprise Server).</td>
+</tr>
+<tr>
+<td><code>gitlab_api_url</code></td>
+<td><code>str</code></td>
+<td><code>"https://gitlab.com/api/v4"</code></td>
+<td>—</td>
+<td>API base URL (override for self-hosted GitLab instances).</td>
+</tr>
+<tr>
+<td><code>enable_repo_creation</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>—</td>
+<td>Gate for <code>create_repo()</code>. Must be explicitly enabled.</td>
+</tr>
+<tr>
+<td><code>ci_log_max_bytes</code></td>
+<td><code>int</code></td>
+<td><code>65536</code></td>
+<td>—</td>
+<td>Maximum bytes fetched per CI job log (applied after ANSI stripping).</td>
+</tr>
+<tr>
+<td><code>delete_branch_on_merge</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>—</td>
+<td>Delete the head branch after merge.</td>
+</tr>
+</tbody>
+</table>
+<p>Stale-branch cleanup fields (forge-adjacent, not core to the forge
+abstraction): <code>stale_branch_cleanup_periodic</code>, <code>stale_branch_cleanup_interval_seconds</code>,
+<code>stale_branch_max_age_days</code>, <code>stale_branch_cleanup_prefix_only</code>.</p>
+<h3 id="52-secrets-fields">5.2 <code>Secrets</code> fields</h3>
+<p>All fields are in <code>src/robotsix_mill/config.py</code>, class <code>Secrets</code>.
+Loaded from the <code>config/config.yaml</code> <code>secrets:</code> block (overridable via <code>MILL_SECRETS_FILE</code>).
+Singleton, accessed via <code>get_secrets()</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forge_token</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>Static forge access token (PAT for GitHub, personal/project token for GitLab).</td>
+</tr>
+<tr>
+<td><code>forge_repo_create_token</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>Separate PAT for <code>create_repo()</code> when the main token lacks sufficient scope.</td>
+</tr>
+<tr>
+<td><code>github_app_id</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>GitHub App ID (needed for <code>FORGE_AUTH=app</code>).</td>
+</tr>
+<tr>
+<td><code>github_app_private_key</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>GitHub App private key PEM text.</td>
+</tr>
+<tr>
+<td><code>github_app_private_key_path</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>Path to the private key <code>.pem</code> file (may be in secrets or YAML).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="53-auto-detection-auto-mode">5.3 Auto-detection (<code>auto</code> mode)</h3>
+<p>When <code>forge_kind</code> is <code>"auto"</code>, the system inspects the remote URL
+hostname to decide which forge adapter to use.</p>
+<p><strong>Resolution order:</strong>
+1. If a per-repo <code>forge_remote_url</code> is set on the <code>RepoConfig</code>, use that URL.
+2. Otherwise, fall back to the global <code>Settings.forge_remote_url</code>.
+3. If neither is set, the empty string is passed to <code>_detect_forge_kind()</code>,
+   which raises <code>RuntimeError</code>.</p>
+<p><strong>Heuristics</strong> (in <code>_detect_forge_kind()</code>):
+- Host <code>github.com</code> → <code>"github"</code> (covers <code>https://github.com/...</code> and <code>git@github.com:...</code>)
+- Host <code>gitlab.com</code> → <code>"gitlab"</code> (covers <code>https://gitlab.com/...</code> and <code>git@gitlab.com:...</code>)
+- Any other host (GitHub Enterprise Server, self-hosted GitLab, etc.) → raises
+  <code>RuntimeError</code> with a message instructing the operator to set <code>FORGE_KIND</code>
+  explicitly.</p>
+<p><strong>Error case:</strong> Custom domains are ambiguous — there is no way to
+distinguish a GitHub Enterprise Server instance from a self-hosted
+GitLab instance by hostname alone. The operator must set
+<code>FORGE_KIND=github</code> or <code>FORGE_KIND=gitlab</code> explicitly.</p>
+<h3 id="54-repoconfig-field">5.4 <code>RepoConfig</code> field</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forge_remote_url</code></td>
+<td><code>str \| None</code></td>
+<td><code>None</code></td>
+<td>Per-repo override of <code>Settings.forge_remote_url</code>. When set, the forge adapter targets this repo's remote instead of the global one.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="55-yaml-defaults-forge-block">5.5 YAML defaults — <code>forge:</code> block</h3>
+<p>In <code>config/config.example.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">forge</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">none</span><span class="w">                              </span><span class="c1"># github | gitlab | auto | none</span>
+<span class="w">  </span><span class="nt">remote_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">                        </span><span class="c1"># remote URL for clone + push</span>
+<span class="w">  </span><span class="nt">target_branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span><span class="w">                     </span><span class="c1"># target branch for PRs</span>
+<span class="w">  </span><span class="nt">auth_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">token</span><span class="w">                        </span><span class="c1"># token (PAT) | app (GitHub App)</span>
+<span class="w">  </span><span class="nt">github_app_private_key_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">       </span><span class="c1"># host path to App private-key .pem (not a secret)</span>
+<span class="w">  </span><span class="nt">github_api_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://api.github.com</span><span class="w">  </span><span class="c1"># override for GitHub Enterprise</span>
+<span class="w">  </span><span class="nt">gitlab_api_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://gitlab.com/api/v4</span><span class="w">  </span><span class="c1"># override for self-hosted GitLab</span>
+</code></pre></div>
+<p><code>github_app_id</code> and <code>github_app_private_key</code> are <strong>not</strong> in the YAML
+defaults — they are secrets and belong in the <code>config.yaml</code> <code>secrets:</code> block.</p>
+<p><code>ci_log_max_bytes</code> is under <code>periodic.ci_monitor.log_max_bytes</code> in the
+YAML (used by the CI-monitor periodic agent as well as by
+<code>fetch_workflow_job_logs</code>).</p>
+<hr />
+<h2 id="6-key-design-decisions">6. Key design decisions</h2>
+<h3 id="61-http-seam-pattern">6.1 HTTP seam pattern</h3>
+<p>Every network call lives in a private <code>_http_*</code> method (e.g.
+<code>_create_pr</code>, <code>_get_pr</code>, <code>_get_latest_pipeline</code>).  Tests do <strong>not</strong> mock
+<code>httpx</code> at the module level — they monkeypatch these specific methods on
+a live <code>GitHubForge</code>/<code>GitLabForge</code> instance, replacing them with
+functions that return canned responses.  This avoids all real network
+calls while testing the full call chain from public method → owner/repo
+resolution → HTTP seam → response parsing.</p>
+<p>The auth token functions (<code>github_token</code>, <code>_mint_installation_token</code>)
+are also monkeypatched in tests.</p>
+<h3 id="62-pr_status_by_url-iid-based-lookup-gitlab">6.2 <code>pr_status_by_url</code> — IID-based lookup (GitLab)</h3>
+<p>GitLab's <code>_get_mr_by_iid</code> resolves an MR by its IID (the project-scoped
+integer from the web URL) rather than by source branch.  This is
+deliberate: after a merge, the merge stage may delete the head branch
+(especially when <code>delete_branch_on_merge</code> is <code>True</code> or the forge
+auto-deletes).  Branch-based lookup (<code>_find_mr</code>) returns <code>None</code> for a
+deleted branch, but IID-based lookup survives because the MR record
+persists.  GitHub's equivalent is <code>_get_pr_by_number</code>, which fetches a
+PR directly by its repository-scoped number.</p>
+<h3 id="63-list_code_scanning_alerts-github-only-no-op-default">6.3 <code>list_code_scanning_alerts</code> — GitHub-only, no-op default</h3>
+<p>Code scanning alerts (CodeQL) are a GitHub-specific feature accessed
+via the security/code-scanning API.  The base <code>Forge</code> class provides a
+concrete <code>[]</code> default so non-GitHub adapters don't need to implement
+it.  Only <code>GitHubForge</code> overrides it.  The feature exists because
+CodeQL findings live in the security API, not in workflow job logs —
+without it the CI-fix agent sees only "CodeQL: failure" with no detail.</p>
+<h3 id="64-_max_failed_jobs-10-and-_capture_failure_window">6.4 <code>_MAX_FAILED_JOBS = 10</code> and <code>_capture_failure_window</code></h3>
+<p><code>_MAX_FAILED_JOBS</code> caps the number of failed jobs whose logs are
+fetched per workflow run to 10 — a run with 50 failed matrix jobs won't
+flood the agent context.</p>
+<p><code>_capture_failure_window()</code> anchors log truncation on the <strong>first</strong>
+failure marker rather than blindly tail-capping.  This is necessary
+because GitHub Actions <code>if: always()</code> cascades cause downstream steps to
+re-error with misleading input near the log tail.  Anchoring on the
+earliest <code>##[error]</code>, <code>FATAL</code>, <code>Error:</code>, <code>exit code [1-9]</code>, or
+<code>Process completed with exit code [1-9]</code> preserves the true root cause.</p>
+<h3 id="65-why-forge_token-exists-in-both-settings-and-secrets">6.5 Why <code>forge_token</code> exists in both <code>Settings</code> and <code>Secrets</code></h3>
+<p><code>Settings.forge_token</code> (aliased <code>FORGE_TOKEN</code>) allows environment-level
+overrides through the standard YAML pipeline.  <code>Secrets.forge_token</code> is
+the canonical runtime source (loaded from the <code>config.yaml</code> <code>secrets:</code> block).  All forge
+code calls <code>get_secrets().forge_token</code> — the <code>Settings</code> field is for
+configuration ergonomics but is not the runtime read path.</p>
+<hr />
+<h2 id="7-github-gitlab-api-mapping-table">7. GitHub ↔ GitLab API mapping table</h2>
+<p>For every method in the <code>Forge</code> ABC, the concrete API endpoints used by
+each adapter:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Method</th>
+<th>GitHub endpoint(s)</th>
+<th>GitLab endpoint(s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>open_merge_request</code></td>
+<td><code>POST /repos/{o}/{r}/pulls</code> (422 → <code>GET</code> by head)</td>
+<td><code>POST /projects/:id/merge_requests</code> (409 → <code>_find_mr</code>)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>pr_status</code></td>
+<td><code>GET /repos/{o}/{r}/pulls?head={o}:{h}&amp;state=all</code> → <code>GET …/pulls/{num}</code></td>
+<td><code>GET /projects/:id/merge_requests?source_branch=…&amp;state=all&amp;per_page=1</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>pr_status_by_url</code></td>
+<td><code>GET /repos/{o}/{r}/pulls/{number}</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>check_status</code></td>
+<td><code>GET /repos/…/commits/{sha}/check-runs</code> + <code>GET …/commits/{sha}/status</code> + <code>GET …/check-runs/{id}</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/pipelines?per_page=1</code> → <code>GET …/pipelines/{id}/jobs?scope=failed&amp;per_page=20</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>pr_files</code></td>
+<td><code>GET /repos/{o}/{r}/pulls/{num}/files?per_page=100</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/changes</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>pr_review_status</code></td>
+<td><code>GET …/pulls/{num}/reviews</code> + <code>GET …/pulls/{num}/comments</code> + <code>_pr_files</code></td>
+<td><code>GET …/merge_requests/:iid/approvals</code> + <code>GET …/merge_requests/:iid/notes</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>merge_pr</code></td>
+<td><code>PUT /repos/{o}/{r}/pulls/{num}/merge</code> (squash)</td>
+<td><code>PUT /projects/:id/merge_requests/:iid/merge</code> (MWPS + squash)</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>list_pr_reviews</code></td>
+<td><code>GET /repos/{o}/{r}/pulls/{num}/reviews?per_page=100</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/notes?per_page=100</code> (system=false, no position)</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>list_review_comments</code></td>
+<td><code>GET /repos/{o}/{r}/pulls/{num}/comments?per_page=100</code></td>
+<td><code>GET /projects/:id/merge_requests/:iid/notes?per_page=100</code> (with position)</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>list_workflow_runs</code></td>
+<td><code>GET /repos/{o}/{r}/actions/runs?status=completed&amp;per_page=30</code></td>
+<td><code>GET /projects/:id/pipelines?per_page=30</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>fetch_workflow_job_logs</code></td>
+<td><code>GET …/actions/runs/{id}/jobs?status=completed</code> → <code>GET …/actions/jobs/{id}/logs</code></td>
+<td><code>GET …/pipelines/{id}/jobs?scope=failed&amp;per_page=20</code> → <code>GET …/jobs/{id}/trace</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>create_repo</code></td>
+<td><code>POST /orgs/{owner}/repos</code> → fallback <code>POST /user/repos</code></td>
+<td><code>POST /projects</code> (+ <code>GET /namespaces/:encoded</code> for namespace resolution)</td>
+</tr>
+</tbody>
+</table>
+<p>Concrete methods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>GitHub</th>
+<th>GitLab</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>update_branch</code></td>
+<td><code>PUT /repos/{o}/{r}/pulls/{number}/update-branch</code></td>
+<td><code>PUT /projects/:id/merge_requests/:iid/rebase</code></td>
+</tr>
+<tr>
+<td><code>list_code_scanning_alerts</code></td>
+<td><code>GET /repos/{o}/{r}/code-scanning/alerts?ref=refs/heads/{branch}&amp;state=open</code></td>
+<td>no-op (<code>[]</code>)</td>
+</tr>
+<tr>
+<td><code>delete_branch</code></td>
+<td><code>DELETE /repos/{o}/{r}/git/refs/heads/{branch}</code></td>
+<td><code>DELETE /projects/:id/repository/branches/:branch</code></td>
+</tr>
+<tr>
+<td><code>list_branches</code></td>
+<td><code>GET /repos/{o}/{r}/branches?per_page=100</code> (paginated)</td>
+<td><code>GET /projects/:id/repository/branches?per_page=100</code> (paginated)</td>
+</tr>
+<tr>
+<td><code>list_open_pr_branches</code></td>
+<td><code>GET /repos/{o}/{r}/pulls?state=open&amp;per_page=100</code> (paginated)</td>
+<td><code>GET /projects/:id/merge_requests?state=opened&amp;per_page=100</code> (paginated)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-extension-points">8. Extension points</h2>
+<p>To add a third forge provider (e.g. Bitbucket, Gitea):</p>
+<ol>
+<li>
+<p><strong>Subclass <code>Forge</code></strong> in a new module under <code>src/robotsix_mill/forge/</code>
+   (e.g. <code>bitbucket.py</code>).</p>
+</li>
+<li>
+<p><strong>Implement all 12 abstract methods</strong> with the forge's API semantics.</p>
+</li>
+<li>
+<p><strong>Optionally override</strong> the 4 concrete methods (<code>list_code_scanning_alerts</code>,
+   <code>delete_branch</code>, <code>list_branches</code>, <code>list_open_pr_branches</code>) when the
+   forge supports those capabilities.</p>
+</li>
+<li>
+<p><strong>Add a new literal</strong> to the <code>Settings.forge_kind</code> type union in
+   <code>src/robotsix_mill/config.py</code>:
+   <div class="highlight"><pre><span></span><code><span class="n">forge_kind</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;github&quot;</span><span class="p">,</span> <span class="s2">&quot;gitlab&quot;</span><span class="p">,</span> <span class="s2">&quot;bitbucket&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Register the adapter</strong> in <code>get_forge()</code> in <code>src/robotsix_mill/forge/base.py</code>:
+   <div class="highlight"><pre><span></span><code><span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;bitbucket&quot;</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.bitbucket</span><span class="w"> </span><span class="kn">import</span> <span class="n">BitbucketForge</span>
+    <span class="k">return</span> <span class="n">BitbucketForge</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">repo_config</span><span class="o">=</span><span class="n">repo_config</span><span class="p">)</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Follow the HTTP seam pattern</strong> — each API call should live in a
+   private <code>_http_*</code> method so tests can monkeypatch it away.</p>
+</li>
+<li>
+<p><strong>Add auth</strong> — the new adapter may need its own auth module or
+   leverage the existing <code>forge_token</code> path in <code>Secrets</code>.  If the
+   forge uses a different header scheme, define its own <code>_build_headers()</code>.</p>
+</li>
+</ol>
+<p>No other files need to change — the deliver, merge, and CI-monitor
+stages all consume the <code>Forge</code> ABC through the <code>get_forge()</code> factory
+and are oblivious to the concrete adapter.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

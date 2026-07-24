@@ -1,0 +1,6269 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../agents/reference/">
+      
+      
+        <link rel="next" href="../../runtime/reference/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Core - robotsix-mill</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="robotsix-mill" class="md-header__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            robotsix-mill
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Core
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="robotsix-mill" class="md-nav__button md-logo" aria-label="robotsix-mill" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    robotsix-mill
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/communication-research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Communication Research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration & Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration & Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Continuous deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/autoupdate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autoupdate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/reusable-workflow-callers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reusable-workflow callers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docker-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sandbox/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev-tooling/ci-policy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../repo-scaffold/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repo scaffold
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/config-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../config/rfc-config-v2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RFC: config v2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deps/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/approval-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval gate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/implement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implement stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dedup-guard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dedup guard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/merge-stage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge stage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../epic-dedup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epic dedup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/md-candidates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AGENT.md candidates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/scope-triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scope triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents & Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Agents & Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/audit-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/blocked-ticket-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blocked ticket recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/retrospect-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Retrospect memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/trace-health/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trace-health check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../langfuse/observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/diagnostic-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agent-definitions/expert-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expert YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/agent-yaml-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent YAML schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../meta/meta-board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Meta board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/periodic/survey-cross-board-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Survey cross-board routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runtime
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/run-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cost-and-resilience/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost controls & resilience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notify/notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ticket-provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ticket provenance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vcs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    VCS (git) module
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/workspace-cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workspace cleanup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/orphaned-pr-check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orphaned-PR check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runners/pin-bump/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pin bump
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/screenshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Attaching screenshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/cost-indicators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cost indicators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/worker-process-split/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Worker Process Split (ADR)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Forge
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/github-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub App setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/gitlab/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitLab backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/ci-monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../forge/code-scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code scanning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/adding-a-new-agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a New Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_13" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_13" id="__nav_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../agents/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        service
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="service">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.AmbiguousTicketId" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AmbiguousTicketId
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.TransitionError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TransitionError
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.TicketService" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketService
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TicketService">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.TicketService.workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        workspace
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.SourceKind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SourceKind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketKind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketKind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CaseTolerantEnum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CaseTolerantEnum
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CaseTolerantEnum">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CaseTolerantEnum.process_bind_param" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        process_bind_param
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CaseTolerantEnum.process_result_value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        process_result_value
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.Ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketEvent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketEvent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.Comment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketCreate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketCreate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketTransition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketTransition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketMigrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketMigrate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketDescriptionUpdate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketDescriptionUpdate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketRead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketRead
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CommentCreate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CommentCreate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CommentRead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CommentRead
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.Memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        states
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="states">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.states.can_transition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_transition
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        db
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="db">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db--schema-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema migration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.DiskFullError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiskFullError
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.retry_on_db_full" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        retry_on_db_full
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.get_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.init_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.reset_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reset_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.load_memory_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_memory_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.persist_memory_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        persist_memory_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        workspace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="workspace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workspace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workspace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.description_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        description_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.artifacts_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        artifacts_dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.screenshots_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        screenshots_dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.repo_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        repo_dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.list_screenshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_screenshots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.write_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.read_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.content_hash" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        content_hash
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.read_counter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read_counter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.write_counter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write_counter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.prune_clone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prune_clone
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.datetime_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        datetime_utils
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="datetime_utils">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.datetime_utils--why-this-module-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this module exists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.datetime_utils.TZDateTime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TZDateTime
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.delta_context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delta_context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="delta_context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.delta_context.trim_spec_for_retry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trim_spec_for_retry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.delta_context.trim_draft_for_re_refine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trim_draft_for_re_refine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.duration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        duration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="duration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.duration.parse_duration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parse_duration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.duration.format_duration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        format_duration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        text_utils
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="text_utils">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils.truncate_at_boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        truncate_at_boundary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils.tail_keep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tail_keep
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils.head_tail_keep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        head_tail_keep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stages/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        service
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="service">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.AmbiguousTicketId" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AmbiguousTicketId
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.TransitionError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TransitionError
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.TicketService" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketService
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TicketService">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.service.TicketService.workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        workspace
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.SourceKind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SourceKind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketKind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketKind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CaseTolerantEnum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CaseTolerantEnum
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CaseTolerantEnum">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CaseTolerantEnum.process_bind_param" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        process_bind_param
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CaseTolerantEnum.process_result_value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        process_result_value
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.Ticket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ticket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketEvent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketEvent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.Comment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketCreate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketCreate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketTransition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketTransition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketMigrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketMigrate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketDescriptionUpdate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketDescriptionUpdate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.TicketRead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TicketRead
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CommentCreate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CommentCreate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.CommentRead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CommentRead
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.models.Memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        states
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="states">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.states.can_transition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_transition
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        db
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="db">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db--schema-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema migration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.DiskFullError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DiskFullError
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.retry_on_db_full" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        retry_on_db_full
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.get_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.init_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.reset_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reset_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.load_memory_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_memory_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.db.persist_memory_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        persist_memory_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        workspace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="workspace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workspace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workspace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.description_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        description_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.artifacts_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        artifacts_dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.screenshots_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        screenshots_dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.repo_dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        repo_dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.list_screenshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_screenshots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.write_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.read_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.Workspace.content_hash" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        content_hash
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.read_counter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        read_counter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.write_counter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write_counter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.workspace.prune_clone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prune_clone
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.datetime_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        datetime_utils
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="datetime_utils">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.datetime_utils--why-this-module-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this module exists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.datetime_utils.TZDateTime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TZDateTime
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.delta_context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delta_context
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="delta_context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.delta_context.trim_spec_for_retry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trim_spec_for_retry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.delta_context.trim_draft_for_re_refine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trim_draft_for_re_refine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.duration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        duration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="duration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.duration.parse_duration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parse_duration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.duration.format_duration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        format_duration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        text_utils
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="text_utils">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils.truncate_at_boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        truncate_at_boundary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils.tail_keep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tail_keep
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robotsix_mill.core.text_utils.head_tail_keep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        head_tail_keep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="core">Core</h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.service" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.service</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>TicketService — the management-plane API surface over the DB.</p>
+<p>All state mutation goes through here so the API, the worker, and tests
+share one set of invariants (transition validation, history events,
+workspace pointer upkeep). DB access is synchronous; the worker calls it
+from its coroutine (never from the stage threadpool).</p>
+<p>The implementation is split across responsibility mixins for navigability
+(this package was previously a single <code>service.py</code> module): read/query
+access (:mod:<code>._queries</code>), ticket creation (:mod:<code>._create_mixin</code>),
+state transitions (:mod:<code>._transition_mixin</code>), cross-board migration
+(:mod:<code>._migrate_mixin</code>), delete/redraft (:mod:<code>._delete_mixin</code>),
+DB maintenance (:mod:<code>._maintenance_mixin</code>), single-column metadata
+setters (:mod:<code>._metadata</code>), and comment/thread handling
+(:mod:<code>._comments</code>). The module-level helpers and
+:class:<code>TransitionError</code> live in :mod:<code>._helpers</code>. The concrete
+:class:<code>TicketService</code> is assembled here by multiple inheritance; the
+public import path <code>robotsix_mill.core.service</code> is unchanged.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.service.AmbiguousTicketId" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">AmbiguousTicketId</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="Exception">Exception</span></code></p>
+
+
+
+        <p>Multiple tickets matched the given short-ID suffix.</p>
+
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.service.TransitionError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TransitionError</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="RuntimeError">RuntimeError</span></code></p>
+
+
+
+        <p>Requested state transition is not allowed by the state machine.</p>
+
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.service.TicketService" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketService</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="robotsix_mill.core.service._create_mixin._CreateMixin">_CreateMixin</span></code>, <code><span title="robotsix_mill.core.service._transition_mixin._TransitionMixin">_TransitionMixin</span></code>, <code><span title="robotsix_mill.core.service._migrate_mixin._MigrateMixin">_MigrateMixin</span></code>, <code><span title="robotsix_mill.core.service._delete_mixin._DeleteMixin">_DeleteMixin</span></code>, <code><span title="robotsix_mill.core.service._maintenance_mixin._MaintenanceMixin">_MaintenanceMixin</span></code>, <code><span title="robotsix_mill.core.service._queries._QueryMixin">_QueryMixin</span></code>, <code><span title="robotsix_mill.core.service._metadata._MetadataMixin">_MetadataMixin</span></code>, <code><span title="robotsix_mill.core.service._comments._CommentMixin">_CommentMixin</span></code></p>
+
+
+
+        <p>Manage the ticket lifecycle over per-repo SQLite databases.</p>
+<p>Central service for creating tickets, moving them through the state
+machine (raising :class:<code>TransitionError</code> on illegal transitions),
+persisting them to per-repo SQLite DBs, and keeping each ticket's
+:class:<code>Workspace</code> in sync. It is constructed from :class:<code>Settings</code>
+(which supplies the database path and the workspace root) and a
+<em>board_id</em> identifying the repository this instance is bound to;
+workspaces live under <code>&lt;data_dir&gt;/&lt;board_id&gt;/workspaces/&lt;ticket_id&gt;/</code>,
+routed via :meth:<code>workspace</code>.</p>
+<p>Key method groups:</p>
+<ul>
+<li><strong>Reads</strong> — :meth:<code>get</code> (ID lookup with cross-repo fanout when
+  <code>board_id</code> is empty), :meth:<code>list</code>, :meth:<code>history</code>,
+  :meth:<code>list_children</code>, :meth:<code>list_comments</code>.</li>
+<li><strong>Lifecycle / writes</strong> — :meth:<code>create</code>, :meth:<code>transition</code>,
+  :meth:<code>delete</code>, :meth:<code>add_comment</code>, :meth:<code>add_history_note</code>,
+  :meth:<code>redraft</code>, :meth:<code>request_changes</code>, :meth:<code>mark_done</code>,
+  :meth:<code>close_thread</code>, :meth:<code>reopen_thread</code>.</li>
+<li><strong>Relationships / metadata</strong> — :meth:<code>set_parent</code>,
+  :meth:<code>set_unblocks</code>, :meth:<code>set_depends_on</code>,
+  :meth:<code>promote_to_epic</code>, :meth:<code>set_priority</code>, :meth:<code>set_title</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.service.TicketService.workspace" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">workspace</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">workspace</span><span class="p">(</span><span class="n">ticket</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the :class:<code>Workspace</code> for <em>ticket</em>.</p>
+<p>Routed via :meth:<code>Settings.workspaces_dir_for</code> using the
+ticket's <code>board_id</code> (falling back to this service's
+<code>board_id</code>), so workspaces live under the per-repo subtree
+<code>&lt;data_dir&gt;/&lt;board_id&gt;/workspaces/&lt;ticket_id&gt;/</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.models" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.models</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Management-plane data model (SQLModel / SQLite).</p>
+<p>The DB is authoritative for <em>management</em> — state, history, queueing,
+relationships — and is what the API (and a future web frontend) read.
+The ticket <em>body</em> is not stored here: it lives in the filesystem
+workspace (<code>description.md</code>); the row keeps only <code>workspace_path</code> and
+<code>content_hash</code> as the pointer. SQLModel classes double as API schemas.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.SourceKind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">SourceKind</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.StrEnum">StrEnum</span></code></p>
+
+
+
+        <p>Enumeration of ticket origin sources (user, retrospect, audit, etc.).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketKind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketKind</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.StrEnum">StrEnum</span></code></p>
+
+
+
+        <p>Enumeration of ticket kinds — canonical source of truth for <code>kind</code> values.</p>
+<p>Persisted as the canonical UPPERCASE member <em>name</em> via
+<code>CaseTolerantEnum</code> (below).  <code>State</code> is the other name-mapped
+StrEnum and is intentionally left with its auto-generated <code>Enum</code>
+column — not in scope for this ticket.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.CaseTolerantEnum" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CaseTolerantEnum</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlalchemy.TypeDecorator">TypeDecorator</span>[<span title="str">str</span>]</code></p>
+
+
+
+        <p>Stores a StrEnum by its canonical UPPERCASE member name and
+tolerates any-case DB strings on read (legacy lowercase rows resolve
+cleanly).</p>
+<p>WRITE
+    Accept a <code>TicketKind</code> member or a <code>str</code> of any case →
+    store the canonical uppercase member name.
+READ
+    Upper-case the DB string before the enum NAME lookup so a
+    legacy lowercase <code>'task'</code> resolves to <code>TicketKind.TASK</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.models.CaseTolerantEnum.process_bind_param" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">process_bind_param</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">process_bind_param</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dialect</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Convert <em>value</em> to its canonical uppercase member name for DB storage.</p>
+<p>Accepts <code>None</code> (pass-through), an existing <code>StrEnum</code> member (stores
+its <code>.name</code>), or a <code>str</code> of any case (resolved to the canonical
+member name via uppercase lookup).  Raises <code>ValueError</code> when the
+string does not match any member of the enum class.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.models.CaseTolerantEnum.process_result_value" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">process_result_value</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">process_result_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dialect</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Restore a DB string to the corresponding <code>StrEnum</code> member.</p>
+<p>Accepts <code>None</code> (pass-through) or a <code>str</code> — uppercased and resolved
+against <code>self.enum_cls</code>.  Raises <code>ValueError</code> when the string does
+not match any member name.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.Ticket" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Ticket</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>Database row for a ticket — tracks state, branch, cost, retries, and parent/child relationships.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketEvent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketEvent</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>Append-only state-transition history with hash-chain integrity.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.Comment" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Comment</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>Reviewer comment on a ticket — supports threading via parent_id
+and open/closed tracking on top-level threads via closed_at.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketCreate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketCreate</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API request shape for creating a new ticket.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketTransition" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketTransition</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API request shape for transitioning a ticket to a new state.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketMigrate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketMigrate</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API request shape for migrating a ticket to another board.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketDescriptionUpdate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketDescriptionUpdate</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API request shape for updating a ticket's spec description.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.TicketRead" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TicketRead</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API response shape for reading a ticket, including computed fields like unmet_deps and PR URL.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.CommentCreate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CommentCreate</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API request shape for creating a comment (optionally threaded via parent_id).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.CommentRead" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CommentRead</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>API response shape for reading a comment.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.models.Memory" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Memory</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlmodel.SQLModel">SQLModel</span></code></p>
+
+
+
+        <p>Per-board, per-agent memory ledger row.</p>
+<p>Replaces the file-based Markdown ledger with a DB-backed table so
+retention is enforced and the full file is never injected unbounded
+into agent prompts.  Each row is one agent's ledger for one board.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.states" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.states</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>The pipeline state machine.</p>
+<p>Each <em>active</em> state is owned by exactly one stage, which consumes
+tickets in that state and transitions them onward. <code>ERRORED</code> and
+<code>BLOCKED</code> are side states reachable from any active state when a stage
+errors or escalates; they require human attention before re-entering the
+pipeline. <code>HUMAN_ISSUE_APPROVAL</code> is a human-wait state between refine
+and implement — it has no stage owner and pauses the chain until a human
+approves. <code>IMPLEMENT_COMPLETE</code> is an active state between
+<code>DELIVERABLE</code> and <code>HUMAN_MR_APPROVAL</code>: the PR exists but CI and
+mergeability gates have not been verified yet. The merge stage polls it
+and promotes the ticket to <code>HUMAN_MR_APPROVAL</code> (notifying the human)
+only when both CI is green and the PR is mergeable. If either gate
+degrades while the ticket is in <code>HUMAN_MR_APPROVAL</code>, the merge stage
+silently falls back to <code>IMPLEMENT_COMPLETE</code> so the robot can auto-fix
+before re-notifying. <code>WAITING_AUTO_MERGE</code> is an active state between
+<code>HUMAN_MR_APPROVAL</code> and <code>DONE</code>: the merge stage detects a mergeable PR
+whose CI is pending and auto-merge is eligible, then on each poll
+re-checks CI; when CI goes green it auto-merges to <code>DONE</code>, on CI
+failure or conflict it falls back to <code>IMPLEMENT_COMPLETE</code>, and on
+eligibility changes it
+returns to <code>HUMAN_MR_APPROVAL</code>. <code>REBASING</code> is an active state between
+<code>IMPLEMENT_COMPLETE</code> and <code>IMPLEMENT_COMPLETE</code>: the merge stage detects a
+conflicting PR — or a green-CI PR whose branch is behind the target under
+a strict up-to-date branch policy — and transitions to <code>REBASING</code>, then
+on the next poll runs the rebase agent and force-pushes the ticket branch. On success it
+returns to <code>IMPLEMENT_COMPLETE</code> for gate re-verification; on temporary
+failure it stays in <code>REBASING</code> for a retry; on exhaustion it escalates
+to <code>BLOCKED</code>. <code>FIXING_CI</code> is an active state between
+<code>IMPLEMENT_COMPLETE</code> and <code>IMPLEMENT_COMPLETE</code>: the merge stage detects a
+mergeable PR with failing CI and transitions to <code>FIXING_CI</code>, then on
+the next poll runs the CI-fix agent. On success it returns to
+<code>IMPLEMENT_COMPLETE</code> for gate re-verification; on failure it escalates
+to <code>BLOCKED</code>. <code>ADDRESSING_REVIEW</code> is an active state between
+<code>HUMAN_MR_APPROVAL</code> and <code>HUMAN_MR_APPROVAL</code>: the merge stage detects a
+PR with a human reviewer's "request changes" review and transitions to
+<code>ADDRESSING_REVIEW</code>, then on the next poll runs the review-revision
+agent. On success it returns to <code>HUMAN_MR_APPROVAL</code> for re-review;
+on failure with retries remaining it stays in <code>ADDRESSING_REVIEW</code>;
+on exhaustion it escalates to <code>BLOCKED</code>.</p>
+<p>When a ticket is blocked, the state it was blocked <em>from</em> is recorded
+(<code>Ticket.blocked_from</code>). A human can <strong>resume</strong> the blocked ticket
+straight back to that originating state to re-run only the failed stage
+(no need to replay earlier stages). The existing <code>BLOCKED → READY</code> and
+<code>BLOCKED → DRAFT</code> transitions remain available as explicit human
+overrides that re-run the full downstream chain.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.states.can_transition" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">can_transition</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">can_transition</span><span class="p">(</span>
+    <span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">blocked_from</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">paused_from</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return True if <code>src → dst</code> is a legal transition.</p>
+<p>When <em>src</em> is <code>BLOCKED</code>, <em>dst</em> is also allowed when it matches
+the recorded <code>blocked_from</code> state (the resume path).  The
+existing <code>BLOCKED → READY</code> and <code>BLOCKED → DRAFT</code> overrides are
+always available regardless of <code>blocked_from</code>.
+Additionally, <code>BLOCKED → ASKED</code> is allowed when resuming a
+blocked inquiry.</p>
+<p>When <em>src</em> is <code>AWAITING_USER_REPLY</code>, <em>dst</em> is also allowed when
+it matches the recorded <code>paused_from</code> state (the resume path).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.db</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>SQLite engine + schema lifecycle.</p>
+<p>Per-repo databases: each registered repo gets its own SQLite file at
+<code>&lt;data_dir&gt;/&lt;board_id&gt;/mill.db</code>; the default <code>&lt;data_dir&gt;/mill.db</code>
+holds anything without a board_id (legacy / unmapped). Engines are
+cached process-wide, one per board.</p>
+<p><code>check_same_thread=False</code> because stage work runs in a threadpool
+while the worker coroutine owns DB access; all writes for a given
+board are still serialized through that board's single worker, so
+SQLite's single-writer model is respected.</p>
+<h4 id="robotsix_mill.core.db--schema-migration">Schema migration</h4>
+<p><code>SQLModel.metadata.create_all()</code> creates tables on fresh databases.
+Alembic (<code>alembic/</code>) handles all subsequent schema changes — column
+additions, renames, type changes, and table restructures.  The previous
+hand-rolled additive-migration system (<code>sqlite_utils.py</code>) is retained
+temporarily for reference but is no longer called; it will be removed
+once all deployments have transitioned.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.db.DiskFullError" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">DiskFullError</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="RuntimeError">RuntimeError</span></code></p>
+
+
+
+        <p>Raised when a DB operation fails with a disk-full condition even
+after an emergency VACUUM + retry pass.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.retry_on_db_full" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">retry_on_db_full</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">retry_on_db_full</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">board_id</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Context manager yielding a session whose <code>commit()</code> and <code>flush()</code>
+are wrapped with disk-full retry + emergency VACUUM.</p>
+<p>Use as a drop-in replacement for <code>db.session()</code> at sites that
+call <code>commit()</code> or <code>flush()</code>::</p>
+<div class="highlight"><pre><span></span><code>with retry_on_db_full(settings, board_id) as s:
+    s.add(ticket)
+    s.commit()  # auto-retried on disk-full
+</code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.get_engine" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_engine</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_engine</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">board_id</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the per-board SQLite engine, creating it on first call.</p>
+<p><em>board_id</em> is required — raises <code>ValueError</code> (via
+:func:<code>_db_path</code>) when empty.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.init_db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">init_db</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">init_db</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">board_id</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Create tables (if missing) on the per-board DB and apply any
+pending Alembic migrations.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.session" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">session</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">session</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">board_id</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a new SQLModel Session bound to the per-board engine.</p>
+<p>Lazily initializes the per-board schema on first access — so a
+fresh repo's DB is created on its first session() call without
+requiring an explicit init_db() at startup.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.reset_engine" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">reset_engine</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">reset_engine</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Test hook: drop the cached engines so fresh DB paths are picked up.</p>
+<p>Dispose each engine before dropping it so its pooled SQLite
+connections (and their file descriptors) are released. Without this
+every test that swaps the cache leaks an undisposed engine; across a
+full suite run those leaked file descriptors accumulate and
+eventually trip an "unable to open database file" / too-many-open-
+files error on whichever later test happens to cross the limit.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.load_memory_db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_memory_db</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">load_memory_db</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">board_id</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read <em>name</em>'s memory ledger for <em>board_id</em> from the DB.</p>
+<p>When <em>max_chars</em> is set and the content exceeds that limit, the
+oldest entries are dropped — only the most recent content (by newline
+alignment) is kept, with a truncation note prepended.  Returns <code>""</code>
+when no row exists for this (board_id, name) pair.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.db.persist_memory_db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">persist_memory_db</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">persist_memory_db</span><span class="p">(</span>
+    <span class="n">settings</span><span class="p">,</span> <span class="n">board_id</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Write <em>text</em> as <em>name</em>'s memory ledger for <em>board_id</em> to the DB.</p>
+<p>Upserts the (board_id, name) row.  On first write for a given row
+(no existing row), attempts a one-time migration from the legacy
+Markdown file (at <code>settings.memory_file_for(name, board_id)</code>)
+and renames the migrated file to <code>&lt;name&gt;_memory.md.migrated</code>.</p>
+<p>Strips ephemeral sections, applies <em>max_chars</em> truncation (same
+as the file-based <code>persist_memory</code>), and updates <code>updated_at</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.workspace" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.workspace</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Per-ticket filesystem workspace (the work plane).</p>
+<p>File-canonical: <code>description.md</code> is the source of truth for the ticket
+body — agents read and rewrite it directly. The DB only stores the path
+and a content hash so the management plane can detect external edits.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.workspace.Workspace" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Workspace</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Per-ticket directory layout providing access to <code>description.md</code>, <code>artifacts/</code>, and <code>repo/</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.description_path" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">description_path</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">description_path</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Path to <code>description.md</code> — the canonical ticket body.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.artifacts_dir" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">artifacts_dir</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">artifacts_dir</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Path to the <code>artifacts/</code> subdirectory, creating it lazily on first access.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.screenshots_dir" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">screenshots_dir</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">screenshots_dir</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Path to the <code>screenshots/</code> subdirectory, creating it lazily on first access.</p>
+<p>Kept as a sibling of <code>artifacts/</code> (not under it) so user-supplied
+screenshots survive a refine restart-from-scratch, which wipes
+<code>artifacts/</code> but must preserve user input.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.repo_dir" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">repo_dir</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">repo_dir</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Path to the <code>repo/</code> subdirectory (no creation side-effect).</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.list_screenshots" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">list_screenshots</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_screenshots</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return stored screenshot image files, sorted by name for determinism.</p>
+<p>Returns <code>[]</code> when the <code>screenshots/</code> directory is absent. Only files
+with a supported image extension (<code>.png</code>, <code>.jpg</code>, <code>.jpeg</code>,
+<code>.gif</code>, <code>.webp</code>) are included.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.write_description" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">write_description</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">write_description</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Write <em>text</em> to <code>description.md</code> and return the new content hash.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.read_description" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">read_description</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">read_description</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the text of <code>description.md</code>, or an empty string if absent.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="robotsix_mill.core.workspace.Workspace.content_hash" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">content_hash</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">content_hash</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the SHA-256 hex digest of <code>description.md</code>, or an empty string if absent.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.workspace.read_counter" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">read_counter</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">read_counter</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read an integer from <em>path</em>, returning 0 when the file is missing or unparseable.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.workspace.write_counter" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">write_counter</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">write_counter</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Write <em>value</em> to <em>path</em>, creating parent directories as needed.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.workspace.prune_clone" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">prune_clone</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">prune_clone</span><span class="p">(</span><span class="n">workspace</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Delete the <code>repo/</code> subdirectory of <em>workspace</em>.</p>
+<p>Idempotent – silently succeeds when <code>repo/</code> is absent.
+Best-effort – any <code>OSError</code> is logged and swallowed; the caller
+continues as if pruning succeeded.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.datetime_utils" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.datetime_utils</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Timezone-safe datetime helpers.</p>
+<hr />
+<h4 id="robotsix_mill.core.datetime_utils--why-this-module-exists">Why this module exists</h4>
+<p>SQLite has no native datetime type.  SQLModel / SQLAlchemy store Python
+<code>datetime</code> objects as ISO-8601 strings but <strong>strip <code>tzinfo</code></strong> on
+read-back.  This means::</p>
+<div class="highlight"><pre><span></span><code># Write: fully aware
+ticket.updated_at = datetime.now(timezone.utc)
+
+# Round-trip through SQLite: tzinfo is None
+assert ticket.updated_at.tzinfo is None  # naive UTC
+</code></pre></div>
+<p>Any comparison between a tz-naive DB value and a tz-aware value (e.g., a
+freshly-built <code>lookback_cutoff</code>) raises::</p>
+<div class="highlight"><pre><span></span><code>TypeError: can&#39;t compare offset-naive and offset-aware datetimes
+</code></pre></div>
+<p>The <code>TZDateTime</code> type decorator (below) is the <strong>model-level fix</strong>: it
+stores all timestamps as naive UTC in the database and re-attaches
+<code>timezone.utc</code> on read-back, so application code always sees aware
+datetimes.  <code>_as_utc()</code> remains as a defense-in-depth helper for any
+value that bypasses the ORM type machinery.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="robotsix_mill.core.datetime_utils.TZDateTime" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TZDateTime</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlalchemy.types.TypeDecorator">TypeDecorator</span></code></p>
+
+
+
+        <p>A SQLAlchemy column type that stores aware UTC datetimes as naive
+UTC in the database (compatible with SQLite, which has no native
+timezone support) and re-attaches <code>timezone.utc</code> on read-back.</p>
+<blockquote>
+<blockquote>
+<blockquote>
+<p>from datetime import datetime, timezone
+tz_dt = TZDateTime()
+stored = tz_dt.process_bind_param(
+...     datetime(2025, 1, 1, tzinfo=timezone.utc), dialect=None
+... )
+stored.tzinfo is None
+True
+restored = tz_dt.process_result_value(stored, dialect=None)
+restored.tzinfo == timezone.utc
+True</p>
+</blockquote>
+</blockquote>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.delta_context" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.delta_context</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Trimming helpers for retry/audit/re-refine passes.</p>
+<p>When a stage re-invokes an agent on the same ticket (test-failure
+retry, reviewer sendback, re-refine), the agent already knows the full
+context from the first pass.  Re-sending the full accumulated lifecycle
+context — spec, epic context, memory ledger, reference files — inflates
+every call.  This module provides helpers to trim the context down to
+the delta: the specific failing item plus a minimal spec reminder.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.delta_context.trim_spec_for_retry" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">trim_spec_for_retry</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">trim_spec_for_retry</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="mi">800</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a minimal version of <em>spec</em> suitable for a retry pass.</p>
+<p>Keeps the first <em>max_chars</em> characters, advancing to the next
+paragraph boundary so the truncation is clean.  On a retry pass
+the agent already saw the full spec on the first pass; this
+reminder is just enough to re-orient it.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.delta_context.trim_draft_for_re_refine" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">trim_draft_for_re_refine</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">trim_draft_for_re_refine</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_chars</span><span class="o">=</span><span class="mi">800</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a minimal version of <em>draft</em> for a refine re-refine pass.</p>
+<p>Keeps the first <em>max_chars</em> characters, advancing to the next
+paragraph boundary.  On a re-refine pass the agent only needs the
+reviewer's delta comments + a brief reminder of the draft's topic.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.duration" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.duration</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Human-readable duration parsing/formatting — stdlib-only.</p>
+<p>Periodic-agent run intervals are ultimately consumed downstream as an
+integer number of seconds, but a raw <code>86400</code> carries no obvious
+meaning to an operator editing a YAML file. This module lets intervals
+be expressed in a compact, descending-order duration form::</p>
+<div class="highlight"><pre><span></span><code>1w2d3h40m10s   →  790810 seconds
+1d             →  86400
+12h            →  43200
+90m            →  5400
+</code></pre></div>
+<p>Unit map: <code>w</code> = 604800s (week), <code>d</code> = 86400s (day), <code>h</code> = 3600s
+(hour), <code>m</code> = 60s (minute), <code>s</code> = 1s (second). Each unit may appear
+at most once, in descending order, with at least one unit present. A
+bare integer (or integer-as-string) is accepted unchanged and
+interpreted as seconds, so legacy raw-seconds YAML keeps working.</p>
+<p>This module depends only on the stdlib (<code>re</code>) so it is importable
+without pulling in the agent runtime, matching the <code>core/</code> convention.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.duration.parse_duration" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">parse_duration</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">parse_duration</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Parse <em>value</em> into a total number of seconds.</p>
+<p>An <code>int</code> passes through unchanged (interpreted as seconds);
+<code>bool</code> is rejected. A string in the canonical descending-order
+form <code>1w2d3h40m10s</code> (any subset of units, each at most once) is
+parsed to total seconds; a bare integer string (e.g. <code>"3600"</code>) is
+accepted and treated as seconds. Surrounding whitespace is stripped.</p>
+<p>Raises <code>ValueError</code> for negative values or malformed input
+(empty string, unknown unit, duplicate unit, non-numeric magnitude,
+no units), with a message naming the offending value.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.duration.format_duration" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">format_duration</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">format_duration</span><span class="p">(</span><span class="n">seconds</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Render <em>seconds</em> as a compact duration string (inverse of
+:func:<code>parse_duration</code>).</p>
+<p>Emits only the largest-to-smallest non-zero units (<code>86400 -&gt; "1d"</code>,
+<code>9010 -&gt; "2h30m10s"</code>); <code>0</code> renders as <code>"0s"</code>. Raises
+<code>ValueError</code> for negative input. The round-trip property
+<code>parse_duration(format_duration(n)) == n</code> holds for any <code>n &gt;= 0</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="robotsix_mill.core.text_utils" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">robotsix_mill.core.text_utils</span>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Text utilities — smart truncation and other string helpers.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.text_utils.truncate_at_boundary" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">truncate_at_boundary</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">truncate_at_boundary</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">max_chars</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Truncate <em>text</em> at the last strong boundary before <em>max_chars</em>.</p>
+<p>If <code>len(text) &lt;= max_chars</code> the string is returned unchanged.
+Otherwise the function scans <code>text[:max_chars]</code> for the <strong>last</strong>
+occurrence of any of these boundaries:</p>
+<ul>
+<li>sentence-ending punctuation followed by whitespace: <code>.</code> <code>!</code> <code>?</code></li>
+<li>sentence-ending punctuation at end of line: <code>.\n</code> <code>!\n</code> <code>?\n</code></li>
+<li>paragraph break: <code>\n\n</code></li>
+<li>Markdown code-fence close: <code>```</code></li>
+</ul>
+<p>Truncation happens <em>after</em> the boundary (the boundary itself is kept).
+If no boundary is found the function falls back to a hard cut at
+<em>max_chars</em>.  When truncation <em>does</em> occur a note like
+<code>\n\n[... description truncated; N chars omitted]</code> is appended.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The (possibly truncated) string.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.text_utils.tail_keep" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">tail_keep</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">tail_keep</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">max_chars</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;content&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Keep the most-recent tail of <em>text</em>, dropping the oldest content.</p>
+<p>If <code>len(text) &lt;= max_chars</code> the string is returned unchanged.
+Otherwise the last <em>max_chars</em> characters are kept, advanced forward
+to the next newline boundary so the first kept line is complete, and
+a <code>[... &lt;label&gt; truncated: N chars omitted]</code> note is prepended.</p>
+<p>This is the correct primitive for chronological logs / append-only
+ledgers where the newest content matters most — unlike
+:func:<code>truncate_at_boundary</code>, which keeps the HEAD.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The (possibly tail-truncated) string.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="robotsix_mill.core.text_utils.head_tail_keep" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">head_tail_keep</span>
+
+
+</h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">head_tail_keep</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">max_chars</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;content&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Keep a head slice and a tail slice of <em>text</em>, dropping the middle.</p>
+<p>If <code>max_chars == 0</code> or <code>len(text) &lt;= max_chars</code> the string is
+returned unchanged. Otherwise the budget is split ~60% head / 40%
+tail; each slice is advanced to a line boundary so kept lines are
+complete, and the two are joined by an explicit marker line
+<code>[... &lt;label&gt; truncated: N chars omitted from the middle ...]</code>.</p>
+<p>Head+tail (not pure head or tail) is the correct primitive for
+git diffs: both the early and late files in the diff get
+representation, unlike :func:<code>tail_keep</code> (keeps only the end) or
+:func:<code>truncate_at_boundary</code> (keeps only the start).</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The (possibly middle-truncated) string.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

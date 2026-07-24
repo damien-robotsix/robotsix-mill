@@ -1,0 +1,624 @@
+# Canonical Module Taxonomy for robotsix-mill
+#
+# This file is the single source of truth for "what modules exist and
+# where their files live."
+#
+# Schema: bundled with the robotsix-modules package (see
+# https://github.com/damien-robotsix/robotsix-modules).
+# Validation: pre-commit hook `validate-module-taxonomy` + CI step
+
+modules:
+  # -------------------------------------------------------------------
+  # Foundations
+  # -------------------------------------------------------------------
+
+  - id: config
+    description: >-
+      Application configuration layer.  Provides Settings (pydantic-settings),
+      RepoConfig/ReposRegistry, YAML config loading, and secrets management.
+      Every other module depends on this.
+    paths:
+      - src/robotsix_mill/config/*.py
+      - src/robotsix_mill/__init__.py
+      - src/robotsix_mill/py.typed
+      - _check_advanced.py
+      - _gen_schema.py
+      - config/config.schema.json
+      - config/config.example.json
+      - config/repos.example.yaml
+      - .robotsix-mill/config.yaml
+      - .robotsix-mill/periodic/*.yaml
+      - docs/config/**/*
+      - tests/config/test_config.py
+      - tests/config/test_repo_settings.py
+      - tests/config/test_workspace_members.py
+      - tests/config/test_member_sync_config.py
+      - tests/config/test_cross_repo_target.py
+      - tests/config/test_global_langfuse.py
+      - tests/config/test_target_branch_for.py
+      - tests/config/test_repos_source.py
+      - tests/config/test_repos_registry_shape.py
+      - tests/config/test_secrets.py
+    dependencies: []
+
+  - id: core
+    description: >-
+      Core domain model: Ticket, Comment, State, SQLModel-backed persistence,
+      TicketService business logic, datetime/text utilities, and the Workspace
+      abstraction for file-based ticket workspaces.
+    paths:
+      - src/robotsix_mill/core/__init__.py
+      - src/robotsix_mill/core/models.py
+      - src/robotsix_mill/core/states.py
+      - src/robotsix_mill/core/db.py
+      - src/robotsix_mill/core/service/*.py
+      - src/robotsix_mill/core/workspace.py
+      - src/robotsix_mill/core/datetime_utils.py
+      - src/robotsix_mill/core/text_utils.py
+      - src/robotsix_mill/core/sqlite_utils.py
+      - src/robotsix_mill/core/delta_context.py
+      - src/robotsix_mill/core/constants.py
+      - src/robotsix_mill/core/text_noop.py
+      - src/robotsix_mill/core/duration.py
+      - src/robotsix_mill/core/dedup.py
+      - src/robotsix_mill/core/repo_layout.py
+      - src/robotsix_mill/core/tool_wrappers.py
+      - docs/core/**/*
+      - tests/core/test_core_dedup.py
+      - tests/core/test_db.py
+      - tests/core/test_models.py
+      - tests/core/test_states.py
+      - tests/core/test_service.py
+      - tests/core/test_sqlite_utils.py
+      - tests/core/test_datetime_utils.py
+      - tests/core/test_text_noop.py
+      - tests/core/test_text_utils.py
+      - tests/core/test_duration.py
+      - tests/core/test_memory_db.py
+      - tests/core/test_prune_clone.py
+      - tests/core/test_workspace.py
+      - tests/core/test_workspace_screenshots.py
+      - tests/core/test_repo_layout.py
+      - tests/core/test_tool_wrappers.py
+      - tests/core/test_delta_context.py
+      - changelog.d/*.md
+    dependencies: [config]
+
+  - id: deps
+    description: >-
+      Read-only internal dependency graph model.  Parses
+      ``[tool.uv.sources]`` git ``rev`` pins from ``pyproject.toml``
+      files and builds a directed, topologically sorted dependency graph
+      of robotsix repos.
+    paths:
+      - src/robotsix_mill/deps/*.py
+      - tests/deps/*.py
+      - docs/deps/**/*
+    dependencies: [config]
+
+  - id: deploy
+    description: >-
+      Deploy-server integration: worker-image freshness checks.
+      Queries the deploy server's ``GET /services/mill`` endpoint to
+      compare running vs latest image digests, so the implement
+      preflight and resume-blocked paths can gate on stale images
+      before burning an attempt.
+    paths:
+      - src/robotsix_mill/deploy/__init__.py
+      - tests/deploy/__init__.py
+      - tests/deploy/test_deploy.py
+    dependencies: [config]
+
+  # -------------------------------------------------------------------
+  # Forge & VCS
+  # -------------------------------------------------------------------
+
+  - id: vcs
+    description: >-
+      Low-level version-control operations: clone, branch, commit, push.
+      Thin wrapper around the git CLI via subprocess.  No dependencies on
+      any other robotsix-mill module.
+    paths:
+      - src/robotsix_mill/vcs/git_ops.py
+      - src/robotsix_mill/vcs/__init__.py
+      - tests/vcs/__init__.py
+      - tests/vcs/test_clone_all_repos.py
+      - tests/vcs/test_git_ops.py
+      - docs/vcs/**/*
+    dependencies: []
+
+  - id: forge
+    description: >-
+      Forge abstraction layer.  Defines a Forge base class and implements
+      GitHub and GitLab backends for issue/PR creation, commenting, and
+      repository metadata.  Also handles forge authentication (PAT, GitHub
+      App installation tokens).
+    paths:
+      - src/robotsix_mill/forge/__init__.py
+      - src/robotsix_mill/forge/base.py
+      - src/robotsix_mill/forge/auth.py
+      - src/robotsix_mill/forge/github.py
+      - src/robotsix_mill/forge/github_pr.py
+      - src/robotsix_mill/forge/github_ci.py
+      - src/robotsix_mill/forge/github_code_scanning.py
+      - src/robotsix_mill/forge/github_dependabot.py
+      - src/robotsix_mill/forge/github_security.py
+      - src/robotsix_mill/forge/gitlab/__init__.py
+      - src/robotsix_mill/forge/gitlab/core.py
+      - src/robotsix_mill/forge/gitlab/ci.py
+      - src/robotsix_mill/forge/gitlab/code_scanning.py
+      - src/robotsix_mill/forge/gitlab/dependabot.py
+      - src/robotsix_mill/forge/_github_pagination.py
+      - src/robotsix_mill/forge/gitlab/_pagination.py
+      - src/robotsix_mill/forge/_http.py
+      - src/robotsix_mill/forge/_log_utils.py
+      - tests/forge/test_forge_auth.py
+      - tests/forge/test_forge_base.py
+      - tests/forge/test_github.py
+      - tests/forge/test_github_dependabot.py
+      - tests/forge/test_github_pagination.py
+      - tests/forge/test_github_security.py
+      - tests/forge/test_gitlab.py
+      - tests/forge/test_http.py
+      - docs/forge/**/*
+    dependencies: [config, vcs]
+
+  # -------------------------------------------------------------------
+  # Runtime (HTTP API + async worker loop)
+  # -------------------------------------------------------------------
+
+  - id: runtime
+    description: >-
+      The FastAPI HTTP API server and its async worker loop.  Routes
+      webhook and management-plane requests, enqueues stage runs, and
+      orchestrates the event-driven lifecycle.  Includes tracing
+      instrumentation (OpenTelemetry/Langfuse), the run registry,
+      deep-review storage, CI-monitor endpoint, and the board HTML page.
+    paths:
+      - src/robotsix_mill/runtime/__init__.py
+      - src/robotsix_mill/runtime/api.py
+      - src/robotsix_mill/runtime/errors.py
+      - src/robotsix_mill/runtime/exception_handlers.py
+      - src/robotsix_mill/runtime/routes/**/*.py
+      - src/robotsix_mill/runtime/worker/*.py
+      - src/robotsix_mill/runtime/deps.py
+      - src/robotsix_mill/runtime/lifespan.py
+      - src/robotsix_mill/runtime/middleware.py
+      - src/robotsix_mill/runtime/tracing.py
+      - src/robotsix_mill/runtime/transient_errors.py
+      - src/robotsix_mill/runtime/credit_status.py
+      - src/robotsix_mill/runtime/board_html.py
+      - src/robotsix_mill/runtime/board_adapter.py
+      - src/robotsix_mill/runtime/broadcaster.py
+      - src/robotsix_mill/runtime/cost_warm.py
+      - src/robotsix_mill/runtime/run_registry.py
+      - src/robotsix_mill/runtime/stage_retry.py
+      - src/robotsix_mill/runtime/static/*
+      - docs/runtime/**/*
+      - tests/runtime/test_api.py
+      - tests/runtime/test_broadcaster.py
+      - tests/runtime/test_cost_warm.py
+      - tests/runtime/test_credit_status.py
+      - tests/runtime/test_deps.py
+      - tests/runtime/test_errors.py
+      - tests/runtime/test_exception_handlers.py
+      - tests/runtime/test_lifespan.py
+      - tests/runtime/test_recent_traces.py
+      - tests/runtime/test_run_registry.py
+      - tests/runtime/test_stage_retry.py
+      - tests/runtime/test_tickets_ingest.py
+      - tests/runtime/test_tracing.py
+      - tests/runtime/test_transient_errors.py
+      - tests/runtime/test_repos_endpoint.py
+      - tests/runtime/routes/**/*.py
+      - tests/runtime/routes/**/*.mjs
+      - tests/runtime/worker/**/*.py
+    dependencies: [config, core, forge, stages]
+
+  # -------------------------------------------------------------------
+  # Runners (glue between runtime workers and agents)
+  # -------------------------------------------------------------------
+
+  - id: runners
+    description: >-
+      The glue layer that wires up services (TicketService, forges) and
+      calls agents.  Each runner is a self-contained script that the worker
+      invokes for periodic maintenance or stage execution.  Includes the
+      shared pass_runner subroutine used by several agent-family runners.
+      Runners deliberately live at ``src/robotsix_mill/`` root (not under
+      ``agents/``): they are the orchestration layer above agents, share
+      infrastructure (``pass_runner``, ``periodic_runner``) that is not
+      per-agent, and are registered by string path from
+      ``runtime/worker.py`` and monkeypatched by string path from tests,
+      so co-locating them with agents would fragment the orchestration
+      layer without simplifying any caller.  The tight ``meta`` family
+      is the documented exception where a runner is grouped with its
+      agents: they are consolidated into the ``src/robotsix_mill/meta/``
+      subpackage (``agent.py`` + ``triage.py`` + ``runner.py`` +
+      ``workspace.py``) under the ``meta`` module.
+    paths:
+      - src/robotsix_mill/runners/__init__.py
+      - src/robotsix_mill/runners/pass_runner.py
+      - src/robotsix_mill/runners/run_health_runner.py
+      - src/robotsix_mill/runners/diagnostic_runner.py
+      - src/robotsix_mill/runners/diagnostic_checks.py
+      - src/robotsix_mill/runners/diagnostic_check_errors.py
+      - src/robotsix_mill/runners/diagnostic_data.py
+      - src/robotsix_mill/runners/diagnostic_events.py
+      - src/robotsix_mill/runners/diagnostic_check_recurring_ci.py
+      - src/robotsix_mill/runners/member_sync_runner.py
+      - src/robotsix_mill/runners/roadmap_sync_runner.py
+      - src/robotsix_mill/runners/timeout_escalation_runner.py
+      - src/robotsix_mill/runners/trace_health_runner.py
+      - src/robotsix_mill/runners/trace_review_runner.py
+      - src/robotsix_mill/runners/langfuse_cleanup_runner.py
+      - src/robotsix_mill/runners/bespoke_runner.py
+      - src/robotsix_mill/runners/changelog_autofill_runner.py
+      - src/robotsix_mill/runners/data_dir_gc/__init__.py
+      - src/robotsix_mill/runners/data_dir_gc/orphans.py
+      - src/robotsix_mill/runners/orphaned_pr_check.py
+      - docs/runners/**/*
+      - src/robotsix_mill/runners/periodic_runner.py
+      - src/robotsix_mill/runners/pin_bump_runner.py
+      - src/robotsix_mill/runners/repo_description_sync_runner.py
+      - src/robotsix_mill/runners/credit_balance_runner.py
+      - src/robotsix_mill/runners/verify_runner.py
+      - tests/runners/test_pass_runner.py
+      - tests/runners/test_periodic_runner.py
+      - tests/runners/test_pin_bump_runner.py
+      - tests/runners/test_run_health_runner.py
+      - tests/runners/test_diagnostic_runner.py
+      - tests/runners/test_diagnostic_check_errors.py
+      - tests/runners/test_diagnostic_data.py
+      - tests/runners/test_diagnostic_events.py
+      - tests/runners/test_config_sync_runner.py
+      - tests/runners/test_member_sync_runner.py
+      - tests/runners/test_orphaned_pr_check.py
+      - tests/runners/test_roadmap_sync_runner.py
+      - tests/runners/test_trace_review_runner.py
+      - tests/runners/test_langfuse_cleanup_runner.py
+      - tests/runners/test_bespoke_runner.py
+      - tests/runners/test_changelog_autofill_runner.py
+      - tests/runners/test_data_dir_gc_runner.py
+      - tests/runners/test_credit_balance_runner.py
+      - tests/runners/test_verify_runner.py
+      - tests/runners/test_copy_paste_runner.py
+      - tests/runners/test_repo_description_sync_runner.py
+    dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
+
+  # -------------------------------------------------------------------
+  # Stages (ticket-lifecycle orchestrators)
+  # -------------------------------------------------------------------
+
+  - id: stages
+    description: >-
+      Stage definitions for every step in the ticket lifecycle.  Each stage
+      is an orchestrator that loads the right agent(s), manages the workspace,
+      handles pause/resume conversation state, and decides the next State
+      transition.  The registry maps State values to their Stage.
+    paths:
+      - src/robotsix_mill/stages/__init__.py
+      - src/robotsix_mill/stages/hooks.py
+      - src/robotsix_mill/stages/base.py
+      - src/robotsix_mill/stages/registry.py
+      - src/robotsix_mill/stages/implement/__init__.py
+      - src/robotsix_mill/stages/implement/_shared.py
+      - src/robotsix_mill/stages/implement/_base.py
+      - src/robotsix_mill/stages/implement/core.py
+      - src/robotsix_mill/stages/implement/phase_coordinator.py
+      - src/robotsix_mill/stages/implement/validation.py
+      - src/robotsix_mill/stages/implement/implementation_logic.py
+      - src/robotsix_mill/stages/implement/implementation_editing.py
+      - src/robotsix_mill/stages/implement/file_operations.py
+      - src/robotsix_mill/stages/deliver.py
+      - src/robotsix_mill/stages/document.py
+      - src/robotsix_mill/stages/review.py
+      - src/robotsix_mill/stages/refine/__init__.py
+      - src/robotsix_mill/stages/refine/core.py
+      - src/robotsix_mill/stages/refine/gates.py
+      - src/robotsix_mill/stages/refine/orchestration.py
+      - src/robotsix_mill/stages/refine/_checkpoint.py
+      - src/robotsix_mill/stages/refine/_reconcile.py
+      - src/robotsix_mill/stages/refine/_result_paths.py
+      - src/robotsix_mill/stages/refine/_triage.py
+      - src/robotsix_mill/stages/refine/helpers.py
+      - src/robotsix_mill/stages/refine/_impl_ready.py
+      - src/robotsix_mill/stages/answer.py
+      - src/robotsix_mill/stages/merge/__init__.py
+      - src/robotsix_mill/stages/merge/_base.py
+      - src/robotsix_mill/stages/merge/_shared.py
+      - src/robotsix_mill/stages/merge/ci_poll.py
+      - src/robotsix_mill/stages/merge/core.py
+      - src/robotsix_mill/stages/merge/multi_repo.py
+      - src/robotsix_mill/stages/merge/ci_fix_mixin.py
+      - src/robotsix_mill/stages/merge/rebase.py
+      - src/robotsix_mill/stages/merge/review_revision.py
+      - src/robotsix_mill/stages/ci_fix.py
+      - src/robotsix_mill/stages/ci_fix_helpers.py
+      - src/robotsix_mill/stages/ci_fix_codeql.py
+      - src/robotsix_mill/stages/pause.py
+      - src/robotsix_mill/stages/retrospect.py
+      - src/robotsix_mill/stages/short_circuit_verify.py
+      - src/robotsix_mill/stages/_stage_cache.py
+      - src/robotsix_mill/stages/dependency_fix.py
+      - tests/stages/test_hooks.py
+      - tests/stages/test_dependency_fix.py
+      - tests/stages/test_registry.py
+      - tests/stages/implement/test_implement.py
+      - tests/stages/implement/test_implement_preflight.py
+      - tests/stages/implement/test_implement_validation.py
+      - tests/stages/implement/test_implement_file_operations.py
+      - tests/stages/implement/test_implement_phase_coordinator.py
+      - tests/stages/test_implement_package_dag.py
+      - tests/stages/implement/test_shared.py
+      - tests/stages/implement/__init__.py
+      - tests/stages/test_deliver.py
+      - tests/stages/test_document.py
+      - tests/stages/test_review.py
+      - tests/stages/refine/test_stage.py
+      - tests/stages/refine/test_helpers.py
+      - tests/stages/refine/test_orchestration.py
+      - tests/stages/refine/test_checkpoint.py
+      - tests/stages/refine/test_gates.py
+      - tests/stages/refine/test_reconcile.py
+      - tests/stages/refine/test_result_paths.py
+      - tests/stages/refine/test_triage.py
+      - tests/stages/refine/test_impl_ready.py
+      - tests/stages/refine/__init__.py
+      - tests/stages/merge/test_core.py
+      - tests/stages/merge/__init__.py
+      - tests/stages/test_ci_fix.py
+      - tests/stages/test_ci_fix_helpers.py
+      - tests/stages/test_stage_cache.py
+      - tests/stages/merge/test_ci_poll.py
+      - tests/stages/test_codeql_fp_triage.py
+      - tests/stages/test_pause.py
+      - tests/stages/test_retrospect_stage.py
+      - tests/stages/test_short_circuit_verify.py
+      - tests/stages/test_answer.py
+      - tests/stages/test_spec_review.py
+      - tests/stages/merge/test_multi_repo.py
+      - tests/stages/merge/test_ci_fix_mixin.py
+      - tests/stages/merge/test_review_revision.py
+      - src/robotsix_mill/stages/_implemented_repos.py
+      - src/robotsix_mill/stages/towncrier.py
+      - tests/stages/test_towncrier.py
+      - tests/stages/test_implemented_repos.py
+      - tests/stages/test_smoke_gate_browser.py
+      - tests/stages/implement/test_implementation_logic.py
+      - docs/stages/**/*
+    dependencies: [config, core, forge, vcs, agents, runners, langfuse]
+
+  # -------------------------------------------------------------------
+  # Agents
+  # -------------------------------------------------------------------
+
+  - id: agents
+    description: >-
+      Agent infrastructure, tool factories, and domain agent modules that
+      implement specific ticket-processing roles.  Provides agent-builder
+      (build_agent_from_definition), YAML/expert definition loading,
+      tool registry, prompt-block helpers, retry logic, cost-tracked
+      OpenRouter model wrapper, filesystem/web tools, explore sub-agent,
+      web research, report_issue, jscpd copy-paste detection, CI-pattern
+      memory, library/expert consultation entry points, and all domain
+      agents: orchestrator (coordinating), coding, testing, reviewing,
+      auditing, refining, documenting, answering, dedup, CI-fixing,
+      rebasing, review-revision checking, surveying, health checking,
+      agent-check, backwards-compatibility check, completeness check,
+      scope triage, epic breakdown/status, environment sync, and
+      retrospect.
+    paths:
+      - src/robotsix_mill/agents/*.py
+      - src/robotsix_mill/_resources.py
+      - tests/agents/*.py
+      - docs/agents/**/*
+    dependencies: [config, core, sandbox, langfuse, forge, vcs, runners]
+
+  # -------------------------------------------------------------------
+  # Meta-pass (cross-repo analysis)
+  # -------------------------------------------------------------------
+
+  - id: meta
+    description: >-
+      Meta-pass cross-repo analysis infrastructure.  Hosts the meta-agent
+      reasoning core (surveys every registered repo and emits extraction
+      and alignment proposals), the meta repo-triage agent (decides which
+      repos a meta-board ticket touches), the multi-repo workspace builder
+      used by refine/implement on meta tickets, and the meta-pass
+      integration runner that wires everything together (clone-all,
+      meta-agent, board routing, cross-repo memory ledger, mill-pinned
+      tracing).
+    paths:
+      - src/robotsix_mill/meta/__init__.py
+      - src/robotsix_mill/meta/agent.py
+      - src/robotsix_mill/meta/todo_scan.py
+      - src/robotsix_mill/meta/triage.py
+      - src/robotsix_mill/meta/runner.py
+      - src/robotsix_mill/meta/workspace.py
+      - tests/meta/test_agent_build.py
+      - tests/meta/test_agent_helpers.py
+      - tests/meta/test_todo_scan.py
+      - tests/meta/test_triage.py
+      - tests/meta/test_runner.py
+      - tests/meta/test_meta_workspace.py
+      - docs/meta/**/*
+    dependencies: [config, core, agents, forge, vcs, runners, runtime]
+
+  # -------------------------------------------------------------------
+  # Support services
+  # -------------------------------------------------------------------
+
+  - id: repo-scaffold
+    description: >-
+      Repo-scaffold workflow.  When a meta-board ticket carries a
+      ``new-repo`` extraction marker, this module calls
+      ``Forge.create_repo()``, scaffolds an initial commit (README,
+      LICENSE, Python skeleton), and registers the new repo in
+      ``config/repos.yaml``.
+    paths:
+      - src/robotsix_mill/repo_scaffold/**/*.py
+      - tests/repo_scaffold/test_repo_scaffold.py
+      - tests/repo_scaffold/test_workspace_member_sync.py
+      - docs/repo-scaffold/**/*
+    dependencies: [config, forge, vcs]
+
+  - id: sandbox
+    description: >-
+      Isolated subprocess execution environment.  Provides a safe sandbox
+      for running agent tools (explore, tests, web requests) with resource
+      limits.  Consumed by agents.
+    paths:
+      - src/robotsix_mill/sandbox/**/*.py
+      - tests/sandbox/test_sandbox.py
+      - tests/sandbox/test_sandbox_integration.py
+      - sandbox/**/*
+      - docs/sandbox/**/*
+    dependencies: [config]
+
+  - id: cli
+    description: >-
+      Command-line entry point (robotsix-mill).  Serves as the
+      management-plane CLI for manual operations and is the registered
+      console-script target.
+    paths:
+      - src/robotsix_mill/cli/**/*.py
+      - contrib/completions/*
+      - docs/cli/**/*
+      - tests/cli/test_cli.py
+      - tests/cli/test_repos_list.py
+      - tests/cli/test_screenshot_cli.py
+    dependencies: [config, core]
+
+  - id: langfuse
+    description: >-
+      Langfuse observability client.  Provides session-level cost tracking
+      and trace-fetch helpers consumed by the runtime tracing layer, the
+      retrospect stage, and several agents.
+    paths:
+      - src/robotsix_mill/langfuse/__init__.py
+      - src/robotsix_mill/langfuse/client.py
+      - tests/langfuse/test_langfuse_client.py
+      - tests/langfuse/test_trace_health.py
+      - docs/langfuse/**/*
+    dependencies: [config]
+
+  - id: notify
+    description: >-
+      Outbound notification sender.  Posts ticket-state-change
+      notifications to configured webhook URLs.
+    paths:
+      - src/robotsix_mill/notify/__init__.py
+      - tests/notify/test_notify.py
+      - docs/notify/**/*
+    dependencies: [config, core]
+
+  # -------------------------------------------------------------------
+  # Agent definitions, skills, experts, docs
+  # -------------------------------------------------------------------
+
+  - id: agent-definitions
+    description: >-
+      YAML agent and expert definition files.  These are the declarative
+      system prompts, tool lists, and model configurations that control
+      every agent and domain expert.
+    paths:
+      - agent_definitions/*.yaml
+      - agent_definitions/periodic/*.yaml
+      - agent_definitions/pipeline/*.yaml
+      - agent_definitions/_shared/*.yaml
+      - expert_definitions/*.yaml
+      - agent_definitions/language_instructions/*.md
+      - docs/agent-definitions/**/*
+    dependencies: []
+
+  - id: skills
+    description: >-
+      Agent skill files: Markdown documents injected into agent contexts
+      to teach specific workflows (board interaction, ask-user guardrails).
+    paths:
+      - skills/**/*
+    dependencies: []
+
+  - id: docs
+    description: >-
+      Project documentation site (MkDocs / Markdown).  Covers agent
+      catalog, configuration, deployment, security, and design docs.
+      Includes the module taxonomy and its schema.
+    paths:
+      - docs/*.md
+      - docs/*.yaml
+      - docs/design/**/*
+      - docs/guides/**/*
+      - docs/reference/**/*
+      - mkdocs.yml
+      - agent_references/**/*
+    dependencies: []
+
+  - id: dev-tooling
+    description: >-
+      Developer tooling: dev scripts, Docker image definition, repo
+      configuration (Makefile, pyproject.toml, pre-commit hooks, CI
+      workflows), and static-analysis config.  Not part of the
+      production runtime.
+    paths:
+      - docs/dev-tooling/**/*
+      - src/robotsix_mill/dev_tooling/**/*.py
+      - Makefile
+      - Dockerfile
+      - entrypoint.sh
+      - docker-compose.yml
+      - docker-compose.override.example.yml
+      - deploy/docker-compose.yml
+      - .dockerignore
+      - .shellcheckrc
+      - .hadolint.yaml
+      - pyproject.toml
+      - uv.lock
+      - .pre-commit-config.yaml
+      - renovate.json
+      - .github/**/*
+      - .jscpd.json
+      - lychee.toml
+      - .python-version
+      - .trivyignore
+      - .secrets.baseline
+      - mypy-baseline.txt
+      - mypy-baseline-test.txt
+      - vulture_whitelist.py
+      - scripts/**/*
+      - dev/**/*
+      - tests/__init__.py
+      - tests/conftest.py
+      - tests/test_doctests.py
+      - tests/script_loader.py
+      - tests/dev-tooling/test_docs_nav.py
+      - tests/dev-tooling/test_modules_yaml_paths.py
+      - tests/dev-tooling/test_check_config_sync.py
+      - tests/dev-tooling/autoupdate/**/*.py
+      - alembic.ini
+      - alembic/env.py
+      - alembic/script.py.mako
+      - alembic/versions/*.py
+    dependencies: []
+
+  # -------------------------------------------------------------------
+  # Project root files
+  # -------------------------------------------------------------------
+
+  - id: project-root
+    description: >-
+      Top-level project housekeeping files: README, contributing guide,
+      license, security policy, and gitignore.
+    paths:
+      - README.md
+      - ARCHITECTURE.md
+      - CONTRIBUTING.md
+      - CHANGELOG.md
+      - doc-agent-ledger.md
+      - LICENSE
+      - SECURITY.md
+      - AGENT.md
+      - .gitignore
+      - .git-blame-ignore-revs
+    dependencies: []
