@@ -81,7 +81,9 @@ def _accessible_repos(monitored: list[str]) -> tuple[list[str], list[str]]:
         return list(monitored), []
 
 
-def run_diagnostic_pass(session_id: str, repo_config: Any = None) -> DiagnosticPassResult:
+def run_diagnostic_pass(
+    session_id: str, repo_config: Any = None
+) -> DiagnosticPassResult:
     """Run a full diagnostic pass over every monitored repo × check.
 
     Construct ``Settings()``, resolve the monitored-repository list
