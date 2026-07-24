@@ -1,6 +1,7 @@
 import asyncio
 import subprocess
 
+import pytest
 
 from robotsix_mill import sandbox
 from robotsix_mill.agents import web_research as wr
@@ -11,6 +12,20 @@ from robotsix_mill.agents.web_tools import (
     reset_trace_web_fetch_budget,
 )
 from robotsix_mill.config import Settings, Secrets, _reset_secrets
+
+
+@pytest.fixture(autouse=True)
+def _reset_trace_budget():
+    """Reset the per-survey-run trace budget before every test so that
+    tests that activate it (e.g. ``TestTraceWebFetchBudget``) don't
+    leak a non-zero budget into subsequent tests that don't expect one
+    (e.g. ``test_web_fetch_cache_hit_is_free``).
+
+    The trace budget is per-process global state in
+    ``web_tools._trace_budget_max_calls/_trace_budget_max_bytes`` and
+    the corresponding ``_trace_fetch_*`` counters.
+    """
+    reset_trace_web_fetch_budget(0, 0)
 
 
 def _settings(tmp_path, **env):
