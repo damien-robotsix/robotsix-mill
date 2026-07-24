@@ -38,6 +38,7 @@ class FakeService:
         self.unblocks_calls: list[tuple[str, list[str]]] = []
         self.history_notes: list[tuple[str, str]] = []
         self.set_labels_calls: list[tuple[str, list[str]]] = []
+        self.transition_calls: list[tuple[str, object, str | None]] = []
         self.recent_tickets_data = recent_tickets_data or []
         self._existing_labels = existing_labels
         self._existing_unblocks = existing_unblocks
@@ -73,6 +74,10 @@ class FakeService:
 
     def set_unblocks(self, ticket_id, targets):
         self.unblocks_calls.append((ticket_id, targets))
+
+    def transition(self, ticket_id, dst, note=None):
+        self.transition_calls.append((ticket_id, dst, note))
+        return SimpleNamespace(id=ticket_id, state=dst)
 
     def add_history_note(self, ticket_id, note):
         if ticket_id in self.note_failures:
@@ -112,6 +117,21 @@ def test_fresh_spawn_creates_new_ticket() -> None:
     assert "fix-99" in (outcome.note or "")
 
 
+def test_fresh_spawn_transitions_to_ready() -> None:
+    """A freshly created dependency fix ticket is transitioned to READY
+    so the worker's poll loop picks it up — preventing the silent
+    deadlock where a draft fix ticket is created but never enqueued."""
+    service = FakeService(created_id="fix-99")
+    _spawn(service)
+
+    assert len(service.transition_calls) == 1
+    tid, dst, note = service.transition_calls[0]
+    assert tid == "fix-99"
+    assert dst == State.READY
+    assert note is not None
+    assert "dependency fix" in note
+
+
 def test_priority_flag_forwarded() -> None:
     service = FakeService()
     _spawn(service, priority=True)
@@ -130,6 +150,19 @@ def test_dedup_reuses_open_ticket_with_same_title() -> None:
     assert service.create_calls == []
     assert service.depends_on_calls == [("orig-1", ["fix-existing"])]
     assert "fix-existing" in (outcome.note or "")
+
+
+def test_dedup_reuse_does_not_transition() -> None:
+    """When an existing ticket is reused via title dedup, no transition
+    is attempted — the existing ticket may already be in a valid state."""
+    existing = SimpleNamespace(
+        id="fix-existing", title="fix the thing", state=State.READY
+    )
+    service = FakeService(proposals=[existing])
+
+    _spawn(service)
+
+    assert service.transition_calls == []
 
 
 def test_dedup_ignores_closed_or_done_tickets() -> None:
