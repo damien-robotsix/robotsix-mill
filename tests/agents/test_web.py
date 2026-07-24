@@ -289,6 +289,8 @@ def test_web_fetch_dedupes_fragment_only_variants(tmp_path, monkeypatch):
     from robotsix_mill.agents.web_tools import _cache
 
     _cache.clear()
+    reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path)
 
     calls: list[str] = []
@@ -315,6 +317,8 @@ def test_web_fetch_does_not_dedupe_different_paths(tmp_path, monkeypatch):
     from robotsix_mill.agents.web_tools import _cache
 
     _cache.clear()
+    reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path)
     calls: list[str] = []
     monkeypatch.setattr(
@@ -335,6 +339,8 @@ def test_web_fetch_raw_mode_bypasses_cache(tmp_path, monkeypatch):
     from robotsix_mill.agents.web_tools import _cache
 
     _cache.clear()
+    reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path, web_fetch_raw=True)
     calls = []
     monkeypatch.setattr(
@@ -360,6 +366,7 @@ def test_web_fetch_call_count_cap(tmp_path, monkeypatch):
 
     _cache.clear()
     reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path, web_fetch_max_calls=2)
 
     calls: list[str] = []
@@ -389,6 +396,7 @@ def test_web_fetch_byte_ceiling(tmp_path, monkeypatch):
 
     _cache.clear()
     reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     # Generous call cap so the BYTE ceiling is what trips.
     s = _settings(
         tmp_path,
@@ -425,6 +433,7 @@ def test_web_fetch_byte_ceiling_zero_disables(tmp_path, monkeypatch):
 
     _cache.clear()
     reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(
         tmp_path,
         web_fetch_max_calls=100,
@@ -458,6 +467,7 @@ def test_web_fetch_cache_hit_is_free(tmp_path, monkeypatch):
 
     _cache.clear()
     reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path, web_fetch_max_calls=1)
 
     calls: list[str] = []
@@ -489,6 +499,7 @@ def test_web_fetch_raw_mode_is_free(tmp_path, monkeypatch):
 
     _cache.clear()
     reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path, web_fetch_raw=True, web_fetch_max_calls=1)
 
     calls: list[str] = []
@@ -518,6 +529,7 @@ def test_reset_web_fetch_budget_zeroes_counters(tmp_path, monkeypatch):
 
     _cache.clear()
     reset_web_fetch_budget()
+    reset_trace_web_fetch_budget(0, 0)
     s = _settings(tmp_path, web_fetch_max_calls=1)
     monkeypatch.setattr(
         sandbox, "fetch", lambda url, *, settings: (0, f"body for {url}")
