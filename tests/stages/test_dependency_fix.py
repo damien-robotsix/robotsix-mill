@@ -182,7 +182,10 @@ def test_history_note_failure_is_caught_and_logged(caplog) -> None:
     assert service.depends_on_calls == [("orig-1", ["fix-7"])]
     assert service.unblocks_calls == [("fix-7", ["orig-1"])]
     assert outcome.next_state == State.BLOCKED
-    assert len(caplog.records) == 2
+    records = [
+        r for r in caplog.records if r.name == "robotsix_mill.stages.dependency_fix"
+    ]
+    assert len(records) == 2
 
 
 def test_return_value_is_blocked_with_resume_note() -> None:
