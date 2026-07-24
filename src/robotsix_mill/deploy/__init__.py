@@ -155,7 +155,7 @@ def validate_config_standard_footprint(
                 violations.append(suspect)
 
     if changed_files is not None:
-        violations = [v for v in violations if v in changed_files]
+        violations = [v for v in violations if _is_in_diff(v, changed_files)]
 
     return violations
 
