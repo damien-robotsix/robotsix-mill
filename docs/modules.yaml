@@ -306,6 +306,7 @@ modules:
       - src/robotsix_mill/stages/implement/_base.py
       - src/robotsix_mill/stages/implement/core.py
       - src/robotsix_mill/stages/implement/phase_coordinator.py
+      - src/robotsix_mill/stages/implement/phase_coordinator_preflight.py
       - src/robotsix_mill/stages/implement/validation.py
       - src/robotsix_mill/stages/implement/implementation_logic.py
       - src/robotsix_mill/stages/implement/implementation_editing.py
