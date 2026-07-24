@@ -6,6 +6,7 @@
 - Add missing `module_size` entry to `SOURCE_CLASS` map in `board-mill.js` and corresponding `.src-module-size` CSS rule in `board-mill.css`, so tickets with `SourceKind.MODULE_SIZE` render with the correct source badge instead of the fallback `.src-user` badge.
 - Fix four stale Langfuse credential descriptions in `docs/config/configuration.md`: the Secrets reference table (5 rows), footnote ¹, `deployed_log_folder` prose, **and the Repos registry intro paragraph** all described the data flow backward. Now correctly describe the global secrets block → `Secrets` → `_apply_global_langfuse` → `RepoConfig` path, and that all repos share the same global Langfuse configuration.
 - Add `docs/stages/implement.md` — a narrative design document covering the implement-stage lifecycle, fix iteration loop, resume path, submodule breakdown, config knobs, scope-triage sub-gate, and cross-spawn stall guard.
+- Config-standard footprint validation at deliverable stage now only inspects files the ticket's branch actually changed (three-dot diff), ignoring pre-existing repo files that the ticket never touched. Previously, files like `.pre-commit-config.yaml` that exist in the repo but were not part of the ticket's diff would block deliverable.
 - Config-standard 4-file footprint enforcement: CI gate rejects PRs
   adding files outside the canonical footprint, deploy-time validation
   blocks out-of-footprint files before push, and the refine stage

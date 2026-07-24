@@ -1,5 +1,5 @@
-"""Unit tests for ``robotsix_mill.deploy`` — deploy-freshness checks
-and config-standard footprint validation."""
+"""Unit tests for ``robotsix_mill.deploy`` — deploy-freshness checks and
+config-standard footprint validation."""
 
 from __future__ import annotations
 
@@ -263,6 +263,25 @@ def test_footprint_flags_stray_standards_dir(tmp_path):
     assert "_standards" in violations
 
 
+def test_footprint_standards_dir_filtered_out(tmp_path: Path) -> None:
+    """A pre-existing _standards/ dir excluded from changed_files is not flagged."""
+    (tmp_path / "_standards").mkdir()
+    (tmp_path / "_standards" / "some-file.md").write_text("text", encoding="utf-8")
+
+    violations = validate_config_standard_footprint(
+        tmp_path, changed_files={"src/foo.py"}
+    )
+    assert violations == []
+
+
+def test_footprint_none_changed_files_behaves_like_unfiltered(tmp_path: Path) -> None:
+    """When changed_files is None (default), all on-disk violations are returned."""
+    (tmp_path / "_standards").mkdir()
+
+    violations = validate_config_standard_footprint(tmp_path, changed_files=None)
+    assert "_standards" in violations
+
+
 def test_footprint_empty_repo(tmp_path):
     """An empty repo has a clean footprint."""
     assert validate_config_standard_footprint(tmp_path) == []
@@ -310,7 +329,7 @@ class TestValidateFootprintNoDiffFilter:
 
 
 class TestValidateFootprintWithDiffFilter:
-    """diff_files provided → only diff-touched violations reported."""
+    """changed_files provided → only diff-touched violations reported."""
 
     def test_pre_existing_stray_dir_not_flagged(self):
         """A _standards/ dir that exists but is NOT in the diff passes."""
@@ -323,7 +342,7 @@ class TestValidateFootprintWithDiffFilter:
             )
             # Diff touches only an unrelated file.
             diff = {"CHANGELOG.md"}
-            assert validate_config_standard_footprint(repo, diff_files=diff) == []
+            assert validate_config_standard_footprint(repo, changed_files=diff) == []
 
     def test_diff_touched_stray_dir_flagged(self):
         """A _standards/ dir whose file IS in the diff is flagged."""
@@ -335,7 +354,7 @@ class TestValidateFootprintWithDiffFilter:
                 },
             )
             diff = {"_standards/something.yaml"}
-            violations = validate_config_standard_footprint(repo, diff_files=diff)
+            violations = validate_config_standard_footprint(repo, changed_files=diff)
             assert "_standards" in violations
 
     def test_pre_existing_fleet_files_not_flagged(self):
@@ -352,5 +371,5 @@ class TestValidateFootprintWithDiffFilter:
             )
             # Diff touches only an unrelated file.
             diff = {"CHANGELOG.md"}
-            violations = validate_config_standard_footprint(repo, diff_files=diff)
+            violations = validate_config_standard_footprint(repo, changed_files=diff)
             assert violations == []

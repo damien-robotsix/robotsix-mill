@@ -112,7 +112,8 @@ def check_deploy_freshness(deploy_api_url: str | None) -> DeployStatus | None:
 
 
 def validate_config_standard_footprint(
-    repo_dir: str | Path, diff_files: set[str] | None = None
+    repo_dir: str | Path,
+    changed_files: set[str] | None = None,
 ) -> list[str]:
     """Validate the config-standard file footprint in *repo_dir*.
 
@@ -120,12 +121,12 @@ def validate_config_standard_footprint(
     ``_standards/`` copy) found in *repo_dir*.  An empty list means the
     footprint is clean.
 
-    When *diff_files* is provided, only paths that appear in that set
-    (or whose parent directories appear) are reported — pre-existing
-    files that the ticket branch never touched are silently allowed.
-    This prevents the gate from blocking a ticket for fleet-standard
-    files like ``.pre-commit-config.yaml`` that live in the repo but
-    are not part of the branch's change set.
+    When *changed_files* is provided only violations that also appear
+    in *changed_files* are returned — files that pre-exist in the repo
+    but were not touched by the current change are excluded.  This
+    prevents the gate from blocking tickets whose diff is clean but
+    whose repo carries a stray ``_standards/`` copy that predates the
+    ticket.
 
     This is a deploy-time gate — call it before pushing to catch a stray
     ``_standards/`` copy that would otherwise reach the target repo.
@@ -150,8 +151,11 @@ def validate_config_standard_footprint(
     # fleet-wide.
     for suspect in ("_standards", "_standards/"):
         if (repo / suspect).exists():
-            if _is_in_diff(suspect, diff_files):
+            if _is_in_diff(suspect, changed_files):
                 violations.append(suspect)
+
+    if changed_files is not None:
+        violations = [v for v in violations if _is_in_diff(v, changed_files)]
 
     return violations
 
