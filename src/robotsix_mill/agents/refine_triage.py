@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -179,7 +179,7 @@ def triage_refine(
 
     definition = load_agent_definition(agent_definitions_dir() / "triage.yaml")
 
-    tools: list = []
+    tools: list[Any] = []
     if repo_dir is not None:
         from .explore import make_explore_tool
         from .fs_tools import build_fs_tools
@@ -241,7 +241,7 @@ def triage_refine(
         )
     finally:
         _safe_close(agent)
-    return result.output
+    return cast(TriageResult, result.output)
 
 
 def triage_auto_approve(
@@ -275,7 +275,7 @@ def triage_auto_approve(
         prompt=user_prompt,
         what="auto-approve triage",
     )
-    return result.output
+    return cast(AutoApproveResult, result.output)
 
 
 def triage_reviewer_agreement(
@@ -339,4 +339,4 @@ def review_spec_for_conciseness(
         prompt=user_prompt,
         what="spec review",
     )
-    return result.output
+    return cast(SpecReviewResult, result.output)
