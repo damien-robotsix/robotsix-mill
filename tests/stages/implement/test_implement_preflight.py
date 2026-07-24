@@ -1375,3 +1375,114 @@ def test_stuck_cumulative_tool_calls_aborts_loop(ctx_factory, tmp_path, monkeypa
     assert "cumulative tool calls" in out.note.lower()
     # 30 calls/pass, cap at 50 → fires on second pass.
     assert call_count[0] <= 3
+
+
+# --- stale re-spawn guard (spec-fingerprint) ----------------------------
+
+
+def test_stale_respawn_guard_blocks_on_matching_fingerprint(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When implement.md has BLOCKED — resumable status AND a stored
+    spec-fingerprint that matches the current effective spec hash,
+    preflight must block to prevent wasteful re-implementation."""
+    import hashlib
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Guard block", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Compute the effective spec fingerprint the same way
+    # preflight and _finalize do.
+    spec = ctx.service.workspace(t).read_description() or ""
+    # ticket has no parent_id, so effective == spec
+    effective = spec
+    current_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {current_fp}\n"
+        "summary-fingerprint: deadbeef00000001\n"
+        "stall-count: 0\n"
+        "\nprior attempt failed\n",
+        encoding="utf-8",
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None, "must block when fingerprint matches"
+    assert out.next_state is State.BLOCKED
+    assert "spec unchanged" in out.note.lower()
+
+
+def test_stale_respawn_guard_allows_on_different_fingerprint(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When implement.md has BLOCKED — resumable status but the stored
+    fingerprint differs from the current effective spec, preflight
+    must allow — the spec has changed so re-implementation may
+    produce a different result."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Guard allow", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        "spec-fingerprint: completely_different_hash\n"
+        "summary-fingerprint: deadbeef00000001\n"
+        "stall-count: 0\n"
+        "\nprior attempt failed\n",
+        encoding="utf-8",
+    )
+
+    # Preflight must allow — different fingerprint means spec changed.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow when fingerprint differs, got: {out}"
+
+
+def test_stale_respawn_guard_allows_without_fingerprint(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When implement.md has BLOCKED — resumable status but NO
+    spec-fingerprint line, preflight must allow — this is a
+    transient or pre-condition failure, not a real implement
+    attempt."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="No fingerprint", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        "summary-fingerprint: deadbeef00000001\n"
+        "stall-count: 0\n"
+        "\nbaseline check failed\n",
+        encoding="utf-8",
+    )
+
+    # Preflight must allow — no fingerprint means the prior BLOCKED
+    # was not a spec-determined implement outcome.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, f"preflight must allow when fingerprint is absent, got: {out}"

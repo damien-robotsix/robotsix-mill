@@ -1112,6 +1112,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         reference_files: list[str] | None = None,
         extra_roots: list[Path] | None = None,
         transient: bool = False,
+        write_spec_fingerprint: bool = True,
     ) -> None:
         ws = ctx.service.workspace(ticket)
         # Compute the effective spec fingerprint for the stale
@@ -1124,6 +1125,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             epic_ctx = ctx.service.get_epic_context(ticket)
             if epic_ctx:
                 effective = epic_ctx + "\n\n" + effective
+        spec_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
 
         # --- cross-spawn stall detection ---------------------------------
         # Detect when the implement agent's output is byte-identical to
@@ -1227,10 +1229,10 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             fp_line = ""
         elif ok:
             header = "passed"
-            fp_line = f"spec-fingerprint: {hashlib.sha256(effective.encode('utf-8')).hexdigest()[:16]}\n"
+            fp_line = f"spec-fingerprint: {spec_fp}\n" if write_spec_fingerprint else ""
         else:
             header = "BLOCKED — resumable"
-            fp_line = f"spec-fingerprint: {hashlib.sha256(effective.encode('utf-8')).hexdigest()[:16]}\n"
+            fp_line = f"spec-fingerprint: {spec_fp}\n" if write_spec_fingerprint else ""
 
         summary_fp_line = f"summary-fingerprint: {new_summary_fp}\n"
         stall_line = f"stall-count: {stall_count}\n"

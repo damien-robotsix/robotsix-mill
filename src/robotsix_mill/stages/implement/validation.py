@@ -855,6 +855,10 @@ class ValidationMixin(_ImplementStageBase):
 
         # Write the implement.md artifact so the blocked ticket has a
         # matching diagnostic (AC8 / existing BLOCKED pattern).
+        # Don't persist a spec fingerprint — the baseline check is a
+        # pre-condition, not a real implement attempt.  Writing one
+        # would cause the stale-re-spawn guard in preflight to block
+        # every resume even though no implement agent has run yet.
         cls._finalize(
             ctx,
             ticket,
@@ -863,6 +867,7 @@ class ValidationMixin(_ImplementStageBase):
             f"pre-existing test failures on {target} ({base_sha[:8]}): {diag[:400]}",
             ok=False,
             extra_roots=None,
+            write_spec_fingerprint=False,
         )
         return cls._spawn_baseline_fix(ctx, ticket, diag, base_sha, settings)
 
