@@ -156,19 +156,14 @@ class Secrets:
     # --- Instance ------------------------------------------------
 
     def __init__(self, **data: Any):
-        from .settings import Settings
-
         secrets_file = data.pop("_secrets_file", None)
 
-        # 1. Build defaults from Settings (reads env / config.json).
-        self._settings = Settings.model_validate({})
-
-        # 2. Overlay from explicit JSON file when given.
+        # 1. Overlay from explicit JSON file when given.
         if secrets_file:
             file_data = self._load_secrets_file(secrets_file)
             data = {**file_data, **data}
 
-        # 3. Apply kwargs (dropping "SECRET" sentinels).
+        # 2. Apply kwargs (dropping "SECRET" sentinels).
         for name, value in data.items():
             if name in _SECRET_FIELD_NAMES and value != _SECRET_SENTINEL and value is not None:
                 object.__setattr__(self, f"_{name}", value)

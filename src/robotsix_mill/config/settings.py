@@ -148,13 +148,10 @@ class Settings(
     @property
     def tracing_enabled(self) -> bool:
         """True when all three Langfuse credentials are configured."""
-        from .secrets import get_secrets
-
-        secrets = get_secrets()
         return bool(
-            secrets.langfuse_base_url
-            and secrets.langfuse_public_key
-            and secrets.langfuse_secret_key
+            self.langfuse_base_url
+            and self.langfuse_public_key
+            and self.langfuse_secret_key
         )
 
     @property
