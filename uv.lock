@@ -1730,6 +1730,7 @@ dev = [
 docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pymdown-extensions" },
 ]
 
 [package.metadata]
@@ -1776,6 +1777,7 @@ dev = [
 docs = [
     { name = "mkdocs-material", specifier = ">=9" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.27" },
+    { name = "pymdown-extensions", specifier = ">=11.0.0" },
 ]
 
 [[package]]
