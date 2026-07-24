@@ -1,8 +1,11 @@
-"""Unit tests for ``robotsix_mill.deploy`` — deploy-freshness checks."""
+"""Unit tests for ``robotsix_mill.deploy`` — deploy-freshness checks
+and config-standard footprint validation."""
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import httpx
 import pytest
@@ -231,7 +234,7 @@ def test_deploy_status_equality():
 
 
 # ---------------------------------------------------------------------------
-# validate_config_standard_footprint
+# validate_config_standard_footprint — simple tests (no diff filtering)
 # ---------------------------------------------------------------------------
 
 
@@ -263,3 +266,91 @@ def test_footprint_flags_stray_standards_dir(tmp_path):
 def test_footprint_empty_repo(tmp_path):
     """An empty repo has a clean footprint."""
     assert validate_config_standard_footprint(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# validate_config_standard_footprint — diff-filtering tests
+# ---------------------------------------------------------------------------
+
+
+def _make_repo(base: Path, files: dict[str, str]) -> Path:
+    """Create a minimal repo directory tree from a dict of path→content."""
+    base.mkdir(parents=True, exist_ok=True)
+    for relpath, content in files.items():
+        full = base / relpath
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_text(content)
+    return base
+
+
+class TestValidateFootprintNoDiffFilter:
+    """Backward-compatible: no diff_files → all violations reported."""
+
+    def test_clean_repo(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(
+                Path(td),
+                {
+                    "config/config.json": "{}",
+                    "CHANGELOG.md": "# Changelog",
+                },
+            )
+            assert validate_config_standard_footprint(repo) == []
+
+    def test_stray_standards_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(
+                Path(td),
+                {
+                    "_standards/something.yaml": "foo: bar",
+                },
+            )
+            violations = validate_config_standard_footprint(repo)
+            assert "_standards" in violations
+
+
+class TestValidateFootprintWithDiffFilter:
+    """diff_files provided → only diff-touched violations reported."""
+
+    def test_pre_existing_stray_dir_not_flagged(self):
+        """A _standards/ dir that exists but is NOT in the diff passes."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(
+                Path(td),
+                {
+                    "_standards/something.yaml": "foo: bar",
+                },
+            )
+            # Diff touches only an unrelated file.
+            diff = {"CHANGELOG.md"}
+            assert validate_config_standard_footprint(repo, diff_files=diff) == []
+
+    def test_diff_touched_stray_dir_flagged(self):
+        """A _standards/ dir whose file IS in the diff is flagged."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(
+                Path(td),
+                {
+                    "_standards/something.yaml": "foo: bar",
+                },
+            )
+            diff = {"_standards/something.yaml"}
+            violations = validate_config_standard_footprint(repo, diff_files=diff)
+            assert "_standards" in violations
+
+    def test_pre_existing_fleet_files_not_flagged(self):
+        """Pre-existing fleet-standard files (.pre-commit-config.yaml, etc.)
+        are not flagged even when they live outside the footprint."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = _make_repo(
+                Path(td),
+                {
+                    ".pre-commit-config.yaml": "repos: []",
+                    "docker-compose.yml": "services:",
+                    "mkdocs.yml": "site_name: Test",
+                },
+            )
+            # Diff touches only an unrelated file.
+            diff = {"CHANGELOG.md"}
+            violations = validate_config_standard_footprint(repo, diff_files=diff)
+            assert violations == []
