@@ -260,8 +260,7 @@ docker compose up -d   # reads config/config.json (or set MILL_CONFIG_FILE)
 
 The operator can point the refine agent at a repo's live deployment log
 directory by setting a single per-repo field in mill's central,
-gitignored `config/repos.yaml` (alongside `board_id` / `forge_remote_url`
-/ `langfuse:`):
+gitignored `config/repos.yaml` (alongside `board_id` / `forge_remote_url`):
 
 ```yaml
 # config/repos.yaml
@@ -895,11 +894,11 @@ unset.
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
 | `github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | Alternative: host path to GitHub App private-key `.pem` file |
-| `langfuse_public_key`¹ | — | Langfuse public key (populated from `RepoConfig` at startup) |
-| `langfuse_secret_key`¹ | — | Langfuse secret key (populated from `RepoConfig` at startup) |
-| `langfuse_base_url`¹ | — | Langfuse base URL (populated from `RepoConfig` at startup) |
-| `langfuse_project_id`¹ | — | Langfuse project ID (populated from `RepoConfig` at startup) |
-| `langfuse_project_name`¹ | — | Langfuse project name (populated from `RepoConfig` at startup) |
+| `langfuse_public_key`¹ | — | Langfuse public key (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
+| `langfuse_secret_key`¹ | — | Langfuse secret key (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
+| `langfuse_base_url`¹ | — | Langfuse base URL (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
+| `langfuse_project_id`¹ | — | Langfuse project ID (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
+| `langfuse_project_name`¹ | — | Langfuse project name (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
 | `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
 | `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
 
@@ -907,11 +906,12 @@ Secrets live in the `"secrets"` block of `config/config.json` (overridable
 via `MILL_SECRETS_FILE` env var). Template: the `"secrets"` block of
 `config/config.example.json`.
 
-> ¹ The `langfuse_*` fields on `Secrets` are **not** user-configurable
-> via the `secrets:` block or environment variables.  They exist on the model
-> for backward compatibility but are no longer populated at startup —
-> per-repo Langfuse credentials are read directly from ``RepoConfig``
-> at call time.  See [Repos registry](#repos-registry) above.
+> ¹ The `langfuse_*` fields on `Secrets` are configured via the
+> `secrets:` block of `config/config.json`.  At startup, `Secrets` reads
+> them from that block, and `_apply_global_langfuse` stamps them onto
+> every `RepoConfig` so that each repo inherits the global Langfuse
+> credentials.  Per-repo overrides are not supported — all repos share
+> the same Langfuse configuration.
 
 ---
 
@@ -928,10 +928,11 @@ or `get_repo_config("repo-id")`.
 > that held tickets without a board_id has been removed. For single-repo
 > deployments, configure exactly one repo entry.
 
-Langfuse credentials are read from ``RepoConfig`` at call time (per
-ticket, per operation) — they are **not** stamped onto the global
-``Secrets`` singleton.  Each ticket's ``board_id`` determines which
-repo entry (and thus which Langfuse project) is used for its traces.
+Langfuse credentials are configured globally via the ``secrets:`` block of
+``config/config.json`` — the ``Secrets`` model reads them from that block,
+and ``_apply_global_langfuse`` stamps them onto every ``RepoConfig`` at
+startup.  Per-repo overrides are not supported; all repos share the same
+Langfuse configuration.
 
 ### Set up
 
