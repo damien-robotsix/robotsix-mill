@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Refine agent: add "Run pytest only once" guidance to combine all flags into a single invocation, avoiding wasted duplicate full-suite runs.
 - Add `credit_balance` to `_BUILTIN_KINDS` as `"schedule_only"` so `kind_for("credit_balance")` returns the correct kind and `is_portable` returns `True` consistently with other schedule-only workflows.
 - Reclassify `repo_description_sync` from `schedule_only` to `llm_agent` so that
   per-repo presence-file overrides (``prompt_overlay`` / ``system_prompt``) take

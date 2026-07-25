@@ -132,6 +132,12 @@ system_prompt: |
     to cross-check.
   - Use `ask_web_knowledge` ONLY for things not in the repo (a
     library/API/standard/best practice). Skip it when unneeded.
+  - **Run pytest only once.** When executing local verification gates,
+    combine all desired flags into a single pytest invocation (e.g.
+    `pytest tests/ -x -q --cov --cov-report=term-missing`). Do not
+    run the full test suite twice for different flag combinations —
+    the test results are identical and the second run adds only
+    latency.
   - **An internal toolchain failure (CI / mypy / type / lint / test) is a
     LOCAL code fix — NEVER a web-research task.** Scope the remedy from
     the repo and logs alone. Fix locally: annotate, `cast(...)`, a
