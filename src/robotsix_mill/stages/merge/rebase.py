@@ -102,10 +102,17 @@ class RebaseMixin(_MergeStageBase):
 
         if isinstance(run, Outcome):
             return run  # e.g. BLOCKED on a diverged PR branch
-        ok, detail = run
+        ok, detail, pre_rebase_files = run
         if ok:
             return self._handle_rebase_success(
-                ticket, ctx, branch, repo_dir, counter_path, attempt, max_attempts
+                ticket,
+                ctx,
+                branch,
+                repo_dir,
+                counter_path,
+                attempt,
+                max_attempts,
+                pre_rebase_files,
             )
         return self._handle_rebase_failure(
             ticket, repo_dir, counter_path, attempt, max_attempts, detail
@@ -144,14 +151,14 @@ class RebaseMixin(_MergeStageBase):
         branch: str,
         target: str,
         attempt: int,
-    ) -> tuple[bool, str] | Outcome:
+    ) -> tuple[bool, str, list[str]] | Outcome:
         """Invoke the rebase agent with bridged git tools.
 
         The agent now drives its own fetch + rebase + push via the
         bridged git tools.  This method only builds the context
         (remote_url, token) and delegates to the agent.
 
-        Returns ``(ok, detail)`` — ``ok`` True on success, False on a
+        Returns ``(ok, detail, pre_rebase_files)`` — ``ok`` True on success, False on a
         (retryable) rebase failure; ``detail`` is the agent's summary of
         what it found / why it could not resolve (surfaced in the BLOCKED
         note so a human sees the actual conflict, not a generic message).
@@ -161,6 +168,7 @@ class RebaseMixin(_MergeStageBase):
         """
         from robotsix_mill.stages import merge as _facade
 
+        pre_rebase_files: list[str] = []
         try:
             # The merge stage is traced=False (poll-driven, normally no
             # LLM), so the worker does NOT open the ticket's root span.
@@ -194,6 +202,13 @@ class RebaseMixin(_MergeStageBase):
                 if blocked is not None:
                     return blocked
 
+                # Capture the implement commit's source-file diff before
+                # the rebase agent mutates the branch, so the post-rebase
+                # integrity check can detect silent drops.
+                pre_rebase_files = _facade.git_ops.changed_source_files(
+                    Path(repo_dir), target
+                )
+
                 # The agent now drives fetch + rebase + push via bridged
                 # git tools — pass the per-repo remote_url and token so
                 # the tool closures can execute host-side. The token is
@@ -223,7 +238,7 @@ class RebaseMixin(_MergeStageBase):
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
             detail = f"rebase agent crashed: {e}"
-        return (ok, detail)
+        return (ok, detail, pre_rebase_files)
 
     def _handle_rebase_success(
         self,
@@ -234,12 +249,15 @@ class RebaseMixin(_MergeStageBase):
         counter_path: Path,
         attempt: int,
         max_attempts: int,
+        pre_rebase_files: list[str] | None = None,
     ) -> Outcome:
         """Post-check after the agent-driven rebase+push.
 
         The agent already pushed via ``git_push_with_lease``.  This
         method runs a deterministic host-side post-check to verify the
-        push actually landed and no foreign commits were clobbered.
+        push actually landed and no foreign commits were clobbered,
+        then verifies that the rebase did not silently drop any
+        implement-stage source files.
         """
         from robotsix_mill.stages import merge as _facade
 
@@ -260,6 +278,30 @@ class RebaseMixin(_MergeStageBase):
         if check is _facade.git_ops.PostPushResult.PASS:
             # Push landed, no foreign commits — genuine success.
             log.info("%s: rebase succeeded, push verified", ticket.id)
+
+            # Verify that the rebase did not silently drop any
+            # implement-stage source files.  This catches the case
+            # where the rebase agent resolved a conflict by discarding
+            # the PR's changes rather than merging them — the push
+            # landed, but the merged diff is empty (or missing key
+            # files).  Compare the post-rebase file list against the
+            # snapshot taken before the agent ran.
+            if pre_rebase_files:
+                ok, dropped = _facade.git_ops.check_rebase_diff_integrity(
+                    Path(repo_dir), target, pre_rebase_files
+                )
+                if not ok:
+                    shown = ", ".join(f"`{p}`" for p in dropped[:10])
+                    more = f" (+{len(dropped) - 10} more)" if len(dropped) > 10 else ""
+                    _write_counter(counter_path, 0)
+                    return Outcome(
+                        State.BLOCKED,
+                        f"rebase succeeded but silently dropped {len(dropped)} "
+                        f"implement-stage file(s): {shown}{more}. "
+                        "The rebase agent may have discarded the PR's changes "
+                        "during conflict resolution. "
+                        "Resume-blocked to retry from human_mr_approval.",
+                    )
 
             # The rebase changed the branch tip — any review verdict
             # (and its stage-outcome cache entry) produced against the

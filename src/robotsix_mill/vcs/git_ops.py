@@ -991,6 +991,56 @@ def branch_has_net_diff(
     return True
 
 
+def changed_source_files(
+    repo: Path, target_branch: str = "main", ref: str = "HEAD"
+) -> list[str]:
+    """Return the list of added/modified source files between merge-base and *ref*.
+
+    Uses ``git diff --name-only --diff-filter=AM <merge-base>...<ref>``.
+    Returns an empty list on any error (fail-safe — we would rather skip
+    the integrity check than block on a git plumbing failure).
+    """
+    try:
+        merge_base = _git(repo, "merge-base", f"origin/{target_branch}", ref)
+        out = _git(
+            repo,
+            "diff",
+            "--name-only",
+            "--diff-filter=AM",
+            f"{merge_base}...{ref}",
+        )
+    except subprocess.CalledProcessError:
+        return []
+    return [line for line in out.split("\n") if line] if out else []
+
+
+def check_rebase_diff_integrity(
+    repo: Path,
+    target_branch: str,
+    pre_rebase_files: list[str],
+) -> tuple[bool, list[str]]:
+    """Check that every source file from the pre-rebase diff survived the rebase.
+
+    Returns ``(ok, dropped_files)``. Excludes ``CHANGELOG.md`` and
+    ``changelog.d/`` entries — changelog fragments are expected to
+    change / be removed during rebase cycles and are not implement-stage
+    content whose loss signals a silent drop.
+    """
+    post_files = changed_source_files(repo, target_branch)
+    if not pre_rebase_files or not post_files:
+        return (True, [])
+
+    excluded_prefixes = ("CHANGELOG.md", "changelog.d/")
+    pre_set = {
+        f
+        for f in pre_rebase_files
+        if not any(f == p or f.startswith(p) for p in excluded_prefixes)
+    }
+    post_set = set(post_files)
+    dropped = sorted(pre_set - post_set)
+    return (len(dropped) == 0, dropped)
+
+
 def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:
     """Return True when ``origin/main`` has commits not on HEAD.
 

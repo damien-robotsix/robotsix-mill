@@ -942,6 +942,114 @@ def test_rebase_clears_stale_review_artifact_and_cache(tmp_path, monkeypatch):
     )
 
 
+def test_rebase_success_blocks_when_implement_files_silently_dropped(
+    tmp_path, monkeypatch
+):
+    """After rebase succeeds, if implement-stage source files are no longer
+    in the branch diff vs merge-base, the ticket must BLOCK with a diagnostic
+    listing the dropped files."""
+    ctx = _gh(tmp_path)
+
+    def fake_rebase(
+        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+    ):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+
+    # Simulate: pre-rebase the branch had 2 source files, but after
+    # rebase only 1 remains (the other was silently dropped).
+    pre_files = ["src/mod.py", "src/dropped.py"]
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda repo, target_branch="main", ref="HEAD": pre_files,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
+        lambda repo, target_branch, pre_rebase_files: (
+            False,
+            ["src/dropped.py"],
+        ),
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "src/dropped.py" in (out.note or "")
+
+
+def test_rebase_success_no_pre_rebase_files_passes_integrity(tmp_path, monkeypatch):
+    """When pre_rebase_files is empty (e.g. git plumbing failure), the
+    integrity check is skipped and the rebase succeeds normally."""
+    ctx = _gh(tmp_path)
+
+    def fake_rebase(
+        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+    ):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    # Pre-rebase file list is empty — integrity check is skipped.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda repo, target_branch="main", ref="HEAD": [],
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
 def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
     """Regression: the post-rebase force-push must target the ticket's
     *per-repo* remote, not the global FORGE_REMOTE_URL.
