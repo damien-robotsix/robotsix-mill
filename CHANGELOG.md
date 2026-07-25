@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `credit_balance` to `_BUILTIN_KINDS` as `"schedule_only"` so `kind_for("credit_balance")` returns the correct kind and `is_portable` returns `True` consistently with other schedule-only workflows.
 - Fix stale `config/repos.yaml` references in the "Deployed log folder" section
   of `docs/config/configuration.md` — the repos config lives under the `"repos"`
   key of `config/config.json`, not in a standalone `config/repos.yaml`

@@ -51,6 +51,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "diagnostic": "schedule_only",
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
+    "credit_balance": "schedule_only",
     "member_sync": "schedule_only",
     "data_dir_gc": "schedule_only",
     "changelog_autofill": "schedule_only",
