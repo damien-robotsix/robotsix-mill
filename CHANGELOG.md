@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Added 12 unit tests for the GitLab pagination helper `_paginated_get` (single/multi-page, empty, HTTP errors, item transforms, parameter forwarding).
 - Implement stage: zero-edit runs with all gates green now route to
   DONE (already satisfied) instead of re-spawning and eventually
   hitting the spawn-limit BLOCKED.  Two paths fixed: resuming with

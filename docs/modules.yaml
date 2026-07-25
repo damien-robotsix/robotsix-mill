@@ -159,6 +159,7 @@ modules:
       - tests/forge/test_github_pagination.py
       - tests/forge/test_github_security.py
       - tests/forge/test_gitlab.py
+      - tests/forge/test_gitlab_pagination.py
       - tests/forge/test_http.py
       - docs/forge/**/*
     dependencies: [config, vcs]
