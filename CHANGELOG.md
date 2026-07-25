@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Fix stale `config/repos.yaml` references in the "Deployed log folder" section
+  of `docs/config/configuration.md` — the repos config lives under the `"repos"`
+  key of `config/config.json`, not in a standalone `config/repos.yaml`
 - Stuck-loop detector in implement stage now considers committed branch-ahead-of-main work (not just working-tree changes), preventing false BLOCKED when a prior cycle already committed and pushed complete work
 - Implement agent: add instruction to register new changelog fragment files in `docs/modules.yaml` under the `core` module's `paths` list.
 - Fix zero-edit implement loop persisting after #2552: the resume-with-ahead-branch
