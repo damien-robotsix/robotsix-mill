@@ -332,7 +332,7 @@ class PollLoopsMixin(_WorkerBase):
                 mod_path, attr = custom_path.rsplit(":", 1)
                 runner = getattr(importlib.import_module(mod_path), attr)
 
-                def _run(*, session_id: str, repo_config):
+                def _run(*, session_id: Any, repo_config: Any) -> Any:
                     return runner(
                         session_id, repo_config, definition_override=definition
                     )
