@@ -89,8 +89,11 @@ class RepoDescriptionSyncPassResult:
 # ---------------------------------------------------------------------------
 
 
-def run_repo_description_sync_pass(
-    session_id: str, repo_config: RepoConfig | None = None
+def run_repo_description_sync_pass(  # noqa: C901 — sequential I/O pipeline: clone → fetch → read → LLM → update; each step has its own error handling
+    session_id: str,
+    repo_config: RepoConfig | None = None,
+    *,
+    definition_override: Any = None,
 ) -> RepoDescriptionSyncPassResult:
     """Execute one repo-description-sync pass for *repo_config*.
 
@@ -101,6 +104,11 @@ def run_repo_description_sync_pass(
     Args:
         session_id: Langfuse session id from the poll loop.
         repo_config: Per-repo configuration. Required.
+        definition_override: When provided (from the periodic-workflow
+            dispatch path), used as the agent definition instead of
+            loading the built-in YAML from disk.  This enables
+            presence-file overrides (``prompt_overlay`` /
+            ``system_prompt``) to take effect at runtime.
 
     Returns:
         ``RepoDescriptionSyncPassResult`` with summary and
@@ -184,8 +192,11 @@ def run_repo_description_sync_pass(
     from ..agents.retry import run_agent
     from ..agents.yaml_loader import load_agent_definition
 
-    yaml_path = agent_definitions_dir() / "periodic" / "repo_description_sync.yaml"
-    definition = load_agent_definition(yaml_path)
+    if definition_override is not None:
+        definition = definition_override
+    else:
+        yaml_path = agent_definitions_dir() / "periodic" / "repo_description_sync.yaml"
+        definition = load_agent_definition(yaml_path)
 
     prompt = (
         "<forge-description>\n"

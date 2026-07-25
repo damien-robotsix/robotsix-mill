@@ -299,7 +299,15 @@ class PollLoopsMixin(_WorkerBase):
         ),
         "changelog_autofill": "robotsix_mill.runners.changelog_autofill_runner:run_changelog_autofill_pass",
         "pin_bump": "robotsix_mill.runners.pin_bump_runner:run_pin_bump_pass",
-        "repo_description_sync": "robotsix_mill.runners.repo_description_sync_runner:run_repo_description_sync_pass",
+    }
+
+    # LLM-agent periodic workflows that use custom runners (not the
+    # standard run_periodic_pass + run_agent_pass path) but still
+    # benefit from definition_override for presence-file support.
+    _CUSTOM_LLM_AGENT_RUNNERS: dict[str, str] = {
+        "repo_description_sync": (
+            "robotsix_mill.runners.repo_description_sync_runner:run_repo_description_sync_pass"
+        ),
     }
 
     def _build_periodic_workflow_runner(self, wf):
@@ -307,9 +315,30 @@ class PollLoopsMixin(_WorkerBase):
 
         ``llm_agent`` → a closure that runs the matching periodic pass with
         the merged definition threaded in as ``definition_override``.
+        Custom LLM-agent runners (``_CUSTOM_LLM_AGENT_RUNNERS``) receive
+        ``definition_override`` as a keyword argument so that presence-file
+        overrides take effect.
         ``schedule_only`` → the workflow's module-level pass stub.
         """
         if wf.kind in ("llm_agent", "mill_only"):
+            # Check for custom LLM-agent runners first (e.g. repo_description_sync
+            # which has its own runner outside the standard PERIODIC_PASS_CONFIGS
+            # path but still needs definition_override for presence-file support).
+            custom_path = self._CUSTOM_LLM_AGENT_RUNNERS.get(wf.name)
+            if custom_path is not None:
+                import importlib
+
+                definition = wf.definition
+                mod_path, attr = custom_path.rsplit(":", 1)
+                runner = getattr(importlib.import_module(mod_path), attr)
+
+                def _run(*, session_id: Any, repo_config: Any) -> Any:
+                    return runner(
+                        session_id, repo_config, definition_override=definition
+                    )
+
+                return _run
+
             from ...config import Settings
 
             definition = wf.definition

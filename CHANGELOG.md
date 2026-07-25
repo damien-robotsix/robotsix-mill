@@ -1,6 +1,11 @@
 ## 0.0.0 (unreleased)
 
 - Add `credit_balance` to `_BUILTIN_KINDS` as `"schedule_only"` so `kind_for("credit_balance")` returns the correct kind and `is_portable` returns `True` consistently with other schedule-only workflows.
+- Reclassify `repo_description_sync` from `schedule_only` to `llm_agent` so that
+  per-repo presence-file overrides (``prompt_overlay`` / ``system_prompt``) take
+  effect at runtime. The custom runner now receives ``definition_override`` from
+  the periodic-workflow dispatch path instead of loading the built-in YAML
+  directly from disk.
 - Fix stale `config/repos.yaml` references in the "Deployed log folder" section
   of `docs/config/configuration.md` — the repos config lives under the `"repos"`
   key of `config/config.json`, not in a standalone `config/repos.yaml`

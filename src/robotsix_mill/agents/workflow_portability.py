@@ -17,8 +17,8 @@ from __future__ import annotations
 #   "llm_agent"     — built-in LLM periodic agent with a prompt yaml in
 #                     agent_definitions/periodic/<name>.yaml; the per-repo
 #                     file partial-merges over it.
-#   "schedule_only" — built-in pass with NO prompt yaml (or a deterministic
-#                     runner): the per-repo file only carries presence +
+#   "schedule_only" — built-in pass with a deterministic runner (no LLM
+#                     agent); the per-repo file only carries presence +
 #                     interval_seconds/enabled; prompt fields are ignored.
 #   "bespoke"       — brand-new repo-specific agent (name matches no
 #                     built-in); requires system_prompt.
@@ -45,9 +45,9 @@ _BUILTIN_KINDS: dict[str, str] = {
     "forge_parity": "llm_agent",
     "state_sync": "mill_only",
     "frontend_sync": "mill_only",
-    "repo_description_sync": "schedule_only",
     "triage_boilerplate": "llm_agent",
-    # Schedule-only passes (no prompt yaml / deterministic runner).
+    "repo_description_sync": "llm_agent",
+    # Schedule-only passes (deterministic runner / no LLM).
     "diagnostic": "schedule_only",
     "trace_review": "schedule_only",
     "config_sync": "schedule_only",
