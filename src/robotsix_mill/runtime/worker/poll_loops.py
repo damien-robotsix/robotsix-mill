@@ -220,7 +220,7 @@ class PollLoopsMixin(_WorkerBase):
         supervisor's clone. Failures in one pass log + continue; the
         loop only exits via cancellation.
         """
-        from ...runners import bespoke_runner
+        from ...agents.runners import bespoke_runner
         from .. import tracing
 
         interval = max(60, definition.interval_seconds)
@@ -287,17 +287,19 @@ class PollLoopsMixin(_WorkerBase):
     # module-level ``run_<name>_pass(session_id, repo_config)`` stub is used
     # directly — no definition override is applicable.
     _SCHEDULE_ONLY_RUNNERS: dict[str, str] = {
-        "trace_review": "robotsix_mill.runners.trace_review_runner:run_trace_review_pass",
-        "config_sync": "robotsix_mill.runners.periodic_runner:run_config_sync_pass",
-        "member_sync": "robotsix_mill.runners.member_sync_runner:run_member_sync_pass",
-        "data_dir_gc": ("robotsix_mill.runners.data_dir_gc:run_data_dir_gc_pass"),
-        "credit_balance": (
-            "robotsix_mill.runners.credit_balance_runner:run_credit_balance_check"
+        "trace_review": "robotsix_mill.agents.runners.trace_review_runner:run_trace_review_pass",
+        "config_sync": "robotsix_mill.agents.runners.periodic_runner:run_config_sync_pass",
+        "member_sync": "robotsix_mill.agents.runners.member_sync_runner:run_member_sync_pass",
+        "data_dir_gc": (
+            "robotsix_mill.agents.runners.data_dir_gc:run_data_dir_gc_pass"
         ),
-        "changelog_autofill": "robotsix_mill.runners.changelog_autofill_runner:run_changelog_autofill_pass",
-        "diagnostic": "robotsix_mill.runners.diagnostic_runner:run_diagnostic_pass",
-        "pin_bump": "robotsix_mill.runners.pin_bump_runner:run_pin_bump_pass",
-        "roadmap_sync": "robotsix_mill.runners.roadmap_sync_runner:run_roadmap_sync_pass",
+        "credit_balance": (
+            "robotsix_mill.agents.runners.credit_balance_runner:run_credit_balance_check"
+        ),
+        "changelog_autofill": "robotsix_mill.agents.runners.changelog_autofill_runner:run_changelog_autofill_pass",
+        "diagnostic": "robotsix_mill.agents.runners.diagnostic_runner:run_diagnostic_pass",
+        "pin_bump": "robotsix_mill.agents.runners.pin_bump_runner:run_pin_bump_pass",
+        "roadmap_sync": "robotsix_mill.agents.runners.roadmap_sync_runner:run_roadmap_sync_pass"
     }
 
     # LLM-agent periodic workflows that use custom runners (not the
@@ -305,7 +307,7 @@ class PollLoopsMixin(_WorkerBase):
     # benefit from definition_override for presence-file support.
     _CUSTOM_LLM_AGENT_RUNNERS: dict[str, str] = {
         "repo_description_sync": (
-            "robotsix_mill.runners.repo_description_sync_runner:run_repo_description_sync_pass"
+            "robotsix_mill.agents.runners.repo_description_sync_runner:run_repo_description_sync_pass"
         ),
     }
 
@@ -342,7 +344,7 @@ class PollLoopsMixin(_WorkerBase):
 
             definition = wf.definition
 
-            from ...runners.periodic_runner import (
+            from ...agents.runners.periodic_runner import (
                 PERIODIC_PASS_CONFIGS,
                 run_periodic_pass,
             )
@@ -435,7 +437,7 @@ class PollLoopsMixin(_WorkerBase):
         await asyncio.sleep(initial)
         while True:
             try:
-                from ...runners.langfuse_cleanup_runner import (
+                from ...agents.runners.langfuse_cleanup_runner import (
                     run_langfuse_cleanup_pass,
                 )
 
@@ -470,7 +472,7 @@ class PollLoopsMixin(_WorkerBase):
         await asyncio.sleep(initial)
         while True:
             try:
-                from ...runners.timeout_escalation_runner import run_timeout_escalation
+                from ...agents.runners.timeout_escalation_runner import run_timeout_escalation
 
                 result = await asyncio.to_thread(
                     run_timeout_escalation,
@@ -1100,7 +1102,7 @@ class PollLoopsMixin(_WorkerBase):
         await asyncio.sleep(initial)
         while True:
             try:
-                from ...runners.credit_balance_runner import run_credit_balance_check
+                from ...agents.runners.credit_balance_runner import run_credit_balance_check
 
                 await asyncio.to_thread(run_credit_balance_check, settings)
             except asyncio.CancelledError:

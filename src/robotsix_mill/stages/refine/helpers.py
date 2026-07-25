@@ -91,7 +91,7 @@ def _load_refine_memory(s: Settings, memory_board_id: str) -> str:
     fallback; the DB is the primary store.
     """
     from robotsix_mill.core.db import load_memory_db
-    from robotsix_mill.runners.pass_runner import load_memory as _file_load
+    from robotsix_mill.agents.runners.pass_runner import load_memory as _file_load
 
     content = load_memory_db(s, memory_board_id, "refine", max_chars=s.max_memory_chars)
     if content:

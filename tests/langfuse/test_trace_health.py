@@ -12,7 +12,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
-from robotsix_mill.runners.trace_health_runner import (
+from robotsix_mill.agents.runners.trace_health_runner import (
     run_trace_health_check,
     TraceHealthResult,
 )
@@ -142,7 +142,7 @@ def _name_orphan_traces(count, with_session=True):
 def _patch_settings(monkeypatch, settings):
     """Make run_trace_health_check use *settings* instead of its own."""
     monkeypatch.setattr(
-        "robotsix_mill.runners.trace_health_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.trace_health_runner.Settings", lambda: settings
     )
 
 
@@ -150,7 +150,7 @@ def _patch_list_all_traces(monkeypatch, traces):
     """Replace list_all_traces_since in the trace_health_runner module
     (where it's imported at module level)."""
     monkeypatch.setattr(
-        "robotsix_mill.runners.trace_health_runner.list_all_traces_since",
+        "robotsix_mill.agents.runners.trace_health_runner.list_all_traces_since",
         lambda s, ts, **kwargs: traces,
     )
 
@@ -377,7 +377,7 @@ def test_tracing_disabled_noop(tmp_path, monkeypatch):
 
 def test_trace_health_endpoint_is_fire_and_forget(client, monkeypatch):
     """POST /passes/trace_health/run must return 202 immediately, run in background."""
-    from robotsix_mill.runners import trace_health_runner
+    from robotsix_mill.agents.runners import trace_health_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -425,7 +425,7 @@ def test_cli_trace_health_human_output(capsys, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.trace_health_runner.run_trace_health_check",
+        "robotsix_mill.agents.runners.trace_health_runner.run_trace_health_check",
         mock_check,
     )
 
@@ -451,7 +451,7 @@ def test_cli_trace_health_json_output(capsys, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.trace_health_runner.run_trace_health_check",
+        "robotsix_mill.agents.runners.trace_health_runner.run_trace_health_check",
         mock_check,
     )
 
@@ -481,7 +481,7 @@ def test_cli_trace_health_no_alert(capsys, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.trace_health_runner.run_trace_health_check",
+        "robotsix_mill.agents.runners.trace_health_runner.run_trace_health_check",
         mock_check,
     )
 
@@ -499,7 +499,7 @@ def test_cli_trace_health_error(capsys, monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.trace_health_runner.run_trace_health_check",
+        "robotsix_mill.agents.runners.trace_health_runner.run_trace_health_check",
         mock_check,
     )
 
@@ -715,7 +715,7 @@ def test_start_ticket_root_span_not_called(tmp_path, monkeypatch):
     start_ticket_root_span, because it doesn't run an agent and
     should not create a Langfuse trace of its own.  The created
     alert ticket still has a valid origin_session."""
-    from robotsix_mill.runners import trace_health_runner
+    from robotsix_mill.agents.runners import trace_health_runner
 
     settings = _settings(tmp_path)
     _init_db_for_test(settings)

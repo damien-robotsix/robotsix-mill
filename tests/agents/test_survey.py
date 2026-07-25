@@ -5,8 +5,8 @@ from pathlib import Path
 
 from robotsix_mill.agents import surveying as survey_agent
 from robotsix_mill.agents.yaml_loader import load_agent_definition
-from robotsix_mill.runners.periodic_runner import run_survey_pass
-from robotsix_mill.runners.periodic_runner import PeriodicPassResult
+from robotsix_mill.agents.runners.periodic_runner import run_survey_pass
+from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -130,7 +130,7 @@ def test_run_survey_pass_empty_memory(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -159,7 +159,7 @@ def test_run_survey_pass_reads_existing_memory(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -181,7 +181,7 @@ def test_run_survey_pass_writes_memory_verbatim(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -208,7 +208,7 @@ def test_run_survey_pass_creates_draft_tickets(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -236,7 +236,7 @@ def test_run_survey_pass_no_drafts_when_empty(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -263,7 +263,7 @@ def test_run_survey_pass_missing_memory_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -284,7 +284,7 @@ def test_survey_pass_result_structure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     result = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -310,7 +310,7 @@ def test_run_survey_pass_opens_langfuse_session(tmp_path, monkeypatch):
 
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     res = run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -330,7 +330,7 @@ def test_survey_session_ids_are_unique_per_run(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
     a = run_survey_pass(
         session_id="test-sid", repo_config=_test_repo_config()
@@ -366,7 +366,7 @@ def test_run_survey_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(git_ops, "clone", fake_clone)
     monkeypatch.setattr(survey_agent, "run_survey_agent", mock_agent)
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
 
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
@@ -395,7 +395,7 @@ def test_run_survey_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.Settings", lambda: settings
+        "robotsix_mill.agents.runners.periodic_runner.Settings", lambda: settings
     )
     run_survey_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None
@@ -432,7 +432,7 @@ def test_survey_cli_command(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+        "robotsix_mill.agents.runners.periodic_runner.run_survey_pass", mock_run
     )
 
     result = main(["survey"])
@@ -453,7 +453,7 @@ def test_survey_cli_json_output(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+        "robotsix_mill.agents.runners.periodic_runner.run_survey_pass", mock_run
     )
 
     result = main(["survey", "--json"])
@@ -476,7 +476,7 @@ def test_survey_cli_no_drafts(capsys, tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+        "robotsix_mill.agents.runners.periodic_runner.run_survey_pass", mock_run
     )
 
     result = main(["survey"])
@@ -493,7 +493,7 @@ def test_survey_cli_failure(capsys, monkeypatch):
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(
-        "robotsix_mill.runners.periodic_runner.run_survey_pass", mock_run
+        "robotsix_mill.agents.runners.periodic_runner.run_survey_pass", mock_run
     )
 
     result = main(["survey"])
@@ -512,7 +512,7 @@ class TestSurveyRunnerTraceBudgetWiring:
         """run_survey_pass resets both web_fetch and web_search trace
         budgets with the configured settings values before delegating
         to run_periodic_pass."""
-        from robotsix_mill.runners.periodic_runner import PeriodicPassResult
+        from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
 
         settings = _make_settings(
             tmp_path,
@@ -534,7 +534,7 @@ class TestSurveyRunnerTraceBudgetWiring:
         # Monkeypatch the modules where periodic_runner imports from.
         import robotsix_mill.agents.web_tools as wt
         import robotsix_mill.agents.web_knowledge as wk
-        import robotsix_mill.runners.periodic_runner as sr
+        import robotsix_mill.agents.runners.periodic_runner as sr
 
         monkeypatch.setattr(wt, "reset_trace_web_fetch_budget", fake_fetch_reset)
         monkeypatch.setattr(wk, "reset_trace_web_search_budget", fake_search_reset)
@@ -565,7 +565,7 @@ class TestSurveyRunnerTraceBudgetWiring:
     def test_run_survey_pass_respects_custom_budget_values(self, tmp_path, monkeypatch):
         """When settings have different budget values, those are passed
         to the reset functions."""
-        from robotsix_mill.runners.periodic_runner import PeriodicPassResult
+        from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
 
         settings = _make_settings(
             tmp_path,
@@ -585,7 +585,7 @@ class TestSurveyRunnerTraceBudgetWiring:
 
         import robotsix_mill.agents.web_tools as wt
         import robotsix_mill.agents.web_knowledge as wk
-        import robotsix_mill.runners.periodic_runner as sr
+        import robotsix_mill.agents.runners.periodic_runner as sr
 
         monkeypatch.setattr(wt, "reset_trace_web_fetch_budget", fake_fetch_reset)
         monkeypatch.setattr(wk, "reset_trace_web_search_budget", fake_search_reset)

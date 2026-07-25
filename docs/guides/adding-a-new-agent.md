@@ -317,7 +317,7 @@ If the agent should be invocable on-demand via the management API:
    ```python
    "my_pass_name": {
        "kind": "llm_agent",             # "llm_agent", "schedule_only", or "global_only"
-       "runner_module": "robotsix_mill.runners.periodic_runner",
+       "runner_module": "robotsix_mill.agents.runners.periodic_runner",
        "runner_func": "run_my_pass",
        "label": "My Pass Label",
    },
@@ -364,7 +364,7 @@ from unittest.mock import Mock, call
 
 from robotsix_mill.agents import health as health_agent
 from robotsix_mill.config import Settings
-from robotsix_mill.runners.health_runner import run_health_pass
+from robotsix_mill.agents.runners.health_runner import run_health_pass
 
 
 @pytest.fixture
@@ -385,7 +385,7 @@ def _mock_health(monkeypatch):
 def test_run_health_pass(tmp_path, _mock_health):
     settings = Settings(data_dir=tmp_path)
     monkeypatch.setattr(
-        "robotsix_mill.runners.health_runner.Settings",
+        "robotsix_mill.agents.runners.health_runner.Settings",
         lambda: settings,
     )
     result = run_health_pass(

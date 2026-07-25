@@ -495,7 +495,7 @@ def persist_memory_db(
     from sqlmodel import select
 
     from .text_utils import tail_keep
-    from ..runners.pass_runner import strip_ephemeral_sections
+    from ..agents.runners.pass_runner import strip_ephemeral_sections
     from .models import Memory
 
     text = strip_ephemeral_sections(text)

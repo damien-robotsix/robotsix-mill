@@ -37,7 +37,7 @@ from __future__ import annotations
 # gate/orchestration code calls through.
 from ...agents import dedup, freshness, obsolescence, refining
 from ...forge.auth import _resolve_remote_url
-from ...runners.pass_runner import load_memory, persist_memory
+from ...agents.runners.pass_runner import load_memory, persist_memory
 from .core import RefineStage
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,

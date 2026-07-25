@@ -280,7 +280,7 @@ def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
         ExpertMemoryConfig,
         ExpertDefinition,
     )
-    from robotsix_mill.runners import pass_runner
+    from robotsix_mill.agents.runners import pass_runner
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 

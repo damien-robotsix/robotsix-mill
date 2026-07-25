@@ -218,77 +218,6 @@ modules:
     dependencies: [config, core, forge, stages]
 
   # -------------------------------------------------------------------
-  # Runners (glue between runtime workers and agents)
-  # -------------------------------------------------------------------
-
-  - id: runners
-    description: >-
-      The glue layer that wires up services (TicketService, forges) and
-      calls agents.  Each runner is a self-contained script that the worker
-      invokes for periodic maintenance or stage execution.  Includes the
-      shared pass_runner subroutine used by several agent-family runners.
-      Runners deliberately live at ``src/robotsix_mill/`` root (not under
-      ``agents/``): they are the orchestration layer above agents, share
-      infrastructure (``pass_runner``, ``periodic_runner``) that is not
-      per-agent, and are registered by string path from
-      ``runtime/worker.py`` and monkeypatched by string path from tests,
-      so co-locating them with agents would fragment the orchestration
-      layer without simplifying any caller.  The tight ``meta`` family
-      is the documented exception where a runner is grouped with its
-      agents: they are consolidated into the ``src/robotsix_mill/meta/``
-      subpackage (``agent.py`` + ``triage.py`` + ``runner.py`` +
-      ``workspace.py``) under the ``meta`` module.
-    paths:
-      - src/robotsix_mill/runners/__init__.py
-      - src/robotsix_mill/runners/pass_runner.py
-      - src/robotsix_mill/runners/run_health_runner.py
-      - src/robotsix_mill/runners/diagnostic_runner.py
-      - src/robotsix_mill/runners/diagnostic_checks.py
-      - src/robotsix_mill/runners/diagnostic_check_errors.py
-      - src/robotsix_mill/runners/diagnostic_data.py
-      - src/robotsix_mill/runners/diagnostic_events.py
-      - src/robotsix_mill/runners/diagnostic_check_recurring_ci.py
-      - src/robotsix_mill/runners/member_sync_runner.py
-      - src/robotsix_mill/runners/roadmap_sync_runner.py
-      - src/robotsix_mill/runners/timeout_escalation_runner.py
-      - src/robotsix_mill/runners/trace_health_runner.py
-      - src/robotsix_mill/runners/trace_review_runner.py
-      - src/robotsix_mill/runners/langfuse_cleanup_runner.py
-      - src/robotsix_mill/runners/bespoke_runner.py
-      - src/robotsix_mill/runners/changelog_autofill_runner.py
-      - src/robotsix_mill/runners/data_dir_gc/__init__.py
-      - src/robotsix_mill/runners/data_dir_gc/orphans.py
-      - src/robotsix_mill/runners/orphaned_pr_check.py
-      - docs/runners/**/*
-      - src/robotsix_mill/runners/periodic_runner.py
-      - src/robotsix_mill/runners/pin_bump_runner.py
-      - src/robotsix_mill/runners/repo_description_sync_runner.py
-      - src/robotsix_mill/runners/credit_balance_runner.py
-      - src/robotsix_mill/runners/verify_runner.py
-      - tests/runners/test_pass_runner.py
-      - tests/runners/test_periodic_runner.py
-      - tests/runners/test_pin_bump_runner.py
-      - tests/runners/test_run_health_runner.py
-      - tests/runners/test_diagnostic_runner.py
-      - tests/runners/test_diagnostic_check_errors.py
-      - tests/runners/test_diagnostic_data.py
-      - tests/runners/test_diagnostic_events.py
-      - tests/runners/test_config_sync_runner.py
-      - tests/runners/test_member_sync_runner.py
-      - tests/runners/test_orphaned_pr_check.py
-      - tests/runners/test_roadmap_sync_runner.py
-      - tests/runners/test_trace_review_runner.py
-      - tests/runners/test_langfuse_cleanup_runner.py
-      - tests/runners/test_bespoke_runner.py
-      - tests/runners/test_changelog_autofill_runner.py
-      - tests/runners/test_data_dir_gc_runner.py
-      - tests/runners/test_credit_balance_runner.py
-      - tests/runners/test_verify_runner.py
-      - tests/runners/test_copy_paste_runner.py
-      - tests/runners/test_repo_description_sync_runner.py
-    dependencies: [config, core, forge, agents, langfuse, sandbox, notify]
-
-  # -------------------------------------------------------------------
   # Stages (ticket-lifecycle orchestrators)
   # -------------------------------------------------------------------
 
@@ -391,7 +320,7 @@ modules:
       - tests/stages/test_smoke_gate_browser.py
       - tests/stages/implement/test_implementation_logic.py
       - docs/stages/**/*
-    dependencies: [config, core, forge, vcs, agents, runners, langfuse]
+    dependencies: [config, core, forge, vcs, agents, langfuse]
 
   # -------------------------------------------------------------------
   # Agents
@@ -399,25 +328,32 @@ modules:
 
   - id: agents
     description: >-
-      Agent infrastructure, tool factories, and domain agent modules that
-      implement specific ticket-processing roles.  Provides agent-builder
+      Agent infrastructure, tool factories, domain agent modules, and
+      runner glue layer.  Provides agent-builder
       (build_agent_from_definition), YAML/expert definition loading,
       tool registry, prompt-block helpers, retry logic, cost-tracked
       OpenRouter model wrapper, filesystem/web tools, explore sub-agent,
       web research, report_issue, jscpd copy-paste detection, CI-pattern
-      memory, library/expert consultation entry points, and all domain
+      memory, library/expert consultation entry points, all domain
       agents: orchestrator (coordinating), coding, testing, reviewing,
       auditing, refining, documenting, answering, dedup, CI-fixing,
       rebasing, review-revision checking, surveying, health checking,
       agent-check, backwards-compatibility check, completeness check,
       scope triage, epic breakdown/status, environment sync, and
-      retrospect.
+      retrospect, and the runner layer (``agents/runners/``) that wires
+      up services and calls agents for periodic maintenance and stage
+      execution.  The former top-level ``runners`` module was
+      consolidated into ``agents.runners`` to break a circular dependency.
     paths:
       - src/robotsix_mill/agents/*.py
+      - src/robotsix_mill/agents/runners/**/*.py
+      - src/robotsix_mill/runners/__init__.py
       - src/robotsix_mill/_resources.py
       - tests/agents/*.py
+      - tests/agents/runners/**/*.py
       - docs/agents/**/*
-    dependencies: [config, core, sandbox, langfuse, forge, vcs, runners]
+      - docs/runners/**/*
+    dependencies: [config, core, sandbox, langfuse, forge, vcs]
 
   # -------------------------------------------------------------------
   # Meta-pass (cross-repo analysis)
@@ -447,7 +383,7 @@ modules:
       - tests/meta/test_runner.py
       - tests/meta/test_meta_workspace.py
       - docs/meta/**/*
-    dependencies: [config, core, agents, forge, vcs, runners, runtime]
+    dependencies: [config, core, agents, forge, vcs, runtime]
 
   # -------------------------------------------------------------------
   # Support services

@@ -280,7 +280,7 @@ def test_create_epic_on_meta_board(multi_repo_client):
 
 def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
     """Audit pass for repo A writes sentinel only under repo A's dir."""
-    from robotsix_mill.runners import periodic_runner
+    from robotsix_mill.agents.runners import periodic_runner
     from robotsix_mill.core import db as _db
 
     _db.reset_engine()
@@ -341,7 +341,7 @@ def test_audit_repo_isolation(settings, monkeypatch, tmp_path):
 
 def test_bc_check_repo_isolation(settings, monkeypatch, tmp_path):
     """BC check pass for repo A writes sentinel only under repo A's dir."""
-    from robotsix_mill.runners import periodic_runner
+    from robotsix_mill.agents.runners import periodic_runner
     from robotsix_mill.core import db as _db
 
     _db.reset_engine()

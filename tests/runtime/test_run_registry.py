@@ -371,7 +371,7 @@ class TestAuditTraceHealthEndpoints:
             yield c
 
     def test_audit_records_run(self, client, monkeypatch):
-        from robotsix_mill.runners import periodic_runner
+        from robotsix_mill.agents.runners import periodic_runner
 
         class _R:
             drafts_created: list = [{"id": "abc", "title": "x"}]
@@ -402,7 +402,7 @@ class TestAuditTraceHealthEndpoints:
         assert "Created 1 drafts: abc" in run["summary"]
 
     def test_trace_health_records_run(self, client, monkeypatch):
-        from robotsix_mill.runners import trace_health_runner
+        from robotsix_mill.agents.runners import trace_health_runner
 
         class _R:
             draft_created: bool = True
@@ -440,7 +440,7 @@ class TestAuditTraceHealthEndpoints:
         assert "draft created" in run["summary"]
 
     def test_error_run_recorded(self, client, monkeypatch):
-        from robotsix_mill.runners import periodic_runner
+        from robotsix_mill.agents.runners import periodic_runner
 
         def _fail(session_id=None, repo_config=None):
             raise RuntimeError("simulated failure")

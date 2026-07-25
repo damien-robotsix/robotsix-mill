@@ -1278,7 +1278,7 @@ def test_audit_endpoint_is_fire_and_forget(client, monkeypatch):
     as the old /audit route."""
     import threading
 
-    from robotsix_mill.runners import periodic_runner
+    from robotsix_mill.agents.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -1306,7 +1306,7 @@ def test_agent_check_endpoint_is_fire_and_forget(client, monkeypatch):
     contract as the generic pass endpoint."""
     import threading
 
-    from robotsix_mill.runners import periodic_runner
+    from robotsix_mill.agents.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -1334,7 +1334,7 @@ def test_run_health_endpoint_is_fire_and_forget(client, monkeypatch):
     /health-check. It is a global pass (no repo_id)."""
     import threading
 
-    from robotsix_mill.runners import run_health_runner
+    from robotsix_mill.agents.runners import run_health_runner
 
     ran = threading.Event()
     release = threading.Event()
