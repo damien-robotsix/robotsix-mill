@@ -70,7 +70,7 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
             lambda: agent.run(query, usage_limits=limits),
             what="web_research",
         )
-    except Exception as e:  # noqa: BLE001 — degrade, never break the caller
+    except Exception as e:
         return f"web research failed: {e}"
     finally:
         await _aclose_async_client(client)

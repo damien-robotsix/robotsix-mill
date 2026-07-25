@@ -28,11 +28,11 @@ class FakeAgentHandle:
 
 def _make_definition(**overrides) -> ExpertDefinition:
     """Minimal valid ExpertDefinition with *overrides* applied."""
-    defaults: dict = dict(
-        domain="test-domain",
-        module_paths=["src/**/*.py"],
-        system_prompt="You are a test expert.",
-    )
+    defaults: dict = {
+        "domain": "test-domain",
+        "module_paths": ["src/**/*.py"],
+        "system_prompt": "You are a test expert.",
+    }
     defaults.update(overrides)
     return ExpertDefinition.model_validate(defaults)
 

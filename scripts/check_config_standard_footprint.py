@@ -53,7 +53,7 @@ def _run_git(args: list[str]) -> str:
     Raises :class:`subprocess.CalledProcessError` on failure.
     """
     result = subprocess.run(
-        ["git", *args],  # noqa: S607
+        ["git", *args],
         capture_output=True,
         text=True,
         check=True,

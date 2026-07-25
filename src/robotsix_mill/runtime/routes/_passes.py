@@ -141,7 +141,7 @@ def _make_background_pass(
                     )
                     registry.finish_ok(run_id, summary)
                     log.info("%s pass done", kind)
-                except Exception as e:  # noqa: BLE001 — background; just log
+                except Exception as e:
                     log.exception("%s pass failed", kind)
                     if run_id:
                         registry.finish_error(run_id, str(e))
@@ -453,7 +453,7 @@ def run_pass(
 
                 registry.finish_ok(run_id, summary)
                 log.info("%s pass done", pass_id)
-            except Exception as e:  # noqa: BLE001 — background; just log
+            except Exception as e:
                 log.exception("%s pass failed", pass_id)
                 if run_id:
                     registry.finish_error(run_id, str(e))

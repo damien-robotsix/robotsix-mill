@@ -60,7 +60,7 @@ def _eligible_for_triage(
     return eligible
 
 
-def _codeql_block_note(  # noqa: C901
+def _codeql_block_note(
     failing: list[dict[str, Any]],
     alerts: list[dict[str, Any]],
     changed_paths: set[str],
@@ -180,7 +180,7 @@ def _codeql_block_note(  # noqa: C901
     return "\n".join(lines)
 
 
-def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branchy
+def _try_codeql_fp_triage(
     ticket: Ticket,
     ctx: StageContext,
     failing: list[dict[str, Any]],
@@ -247,7 +247,7 @@ def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branc
             ticket_id=ticket.id,
             board_id=ctx.repo_config.board_id if ctx.repo_config else "",
         )
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         log.warning("%s: codeql_fp_triage agent crashed", ticket.id, exc_info=True)
         return None
 
@@ -259,7 +259,7 @@ def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branc
             json.dumps([v.model_dump() for v in result.verdicts]),
             encoding="utf-8",
         )
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         log.warning(
             "%s: failed to persist codeql_fp_triage verdicts",
             ticket.id,
@@ -311,7 +311,7 @@ def _try_codeql_fp_triage(  # noqa: C901 — guardrail chain is inherently branc
             "re-open any alert via the GitHub security tab."
         )
         ctx.service.add_history_note(ticket.id, "\n".join(note_lines))
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         log.warning("%s: failed to record codeql_fp_triage note", ticket.id)
 
     if dismissed_count > 0:
@@ -341,6 +341,6 @@ def _partition_open_alerts(
         alerts = forge.list_code_scanning_alerts(source_branch=branch)
         changed_paths = _pr_changed_paths(forge, branch)
         return _partition_alerts_by_diff(alerts, changed_paths)
-    except Exception:  # noqa: BLE001 — best-effort; degrade to no in-scope
+    except Exception:
         log.warning("ci-fix in-diff alert guard failed; falling back")
         return [], []

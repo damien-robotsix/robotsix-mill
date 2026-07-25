@@ -178,7 +178,7 @@ def _build_periodic_tools(
     return tools
 
 
-def run_periodic_agent(  # noqa: C901 — 7-step pipeline, fallback adds 1 branch
+def run_periodic_agent(
     *,
     settings: Settings,
     definition_name: str,

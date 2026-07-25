@@ -144,7 +144,7 @@ def test_build_headers():
 
 
 @pytest.mark.parametrize(
-    "url,expected",
+    ("url", "expected"),
     [
         ("https://github.com/o/r.git", ("o", "r")),
         ("https://github.com/o/r", ("o", "r")),
@@ -2289,8 +2289,10 @@ def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):
     out = forge.list_code_scanning_alerts(source_branch="feature/x")
     assert len(out) == 1
     a = out[0]
-    assert a["rule"] == "py/x" and a["severity"] == "high"
-    assert a["path"] == "tests/t.py" and a["line"] == 92
+    assert a["rule"] == "py/x"
+    assert a["severity"] == "high"
+    assert a["path"] == "tests/t.py"
+    assert a["line"] == 92
     assert "bad url substring" in a["message"]
 
 
@@ -2409,7 +2411,8 @@ def test_list_code_scanning_alerts_no_pr_falls_back_to_branch_ref(
     forge = _forge(tmp_path)
     out = forge.list_code_scanning_alerts(source_branch="feature/x")
     assert len(out) == 1
-    assert out[0]["rule"] == "py/x" and out[0]["path"] == "src/a.py"
+    assert out[0]["rule"] == "py/x"
+    assert out[0]["path"] == "src/a.py"
 
 
 def test_list_code_scanning_alerts_retry_on_analysis_lag(tmp_path, monkeypatch):
@@ -3023,7 +3026,7 @@ def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
     ]
     out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
     assert out["conclusion"] == "failure"
-    assert [f for f in out["failing"]]
+    assert list(out["failing"])
     assert out["pending"] == ["mypy"]
 
 

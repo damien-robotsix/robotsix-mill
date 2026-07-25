@@ -116,7 +116,8 @@ def test_noop_title_not_filed(settings):
         "Clean ticket, no issues to flag",
     ):
         out = tool(t, "agent had nothing to flag")
-        assert "not filed" in out and "no-op" in out
+        assert "not filed" in out
+        assert "no-op" in out
     assert (
         TicketService(settings, board_id="test-board").list() == []
     )  # zero tickets created

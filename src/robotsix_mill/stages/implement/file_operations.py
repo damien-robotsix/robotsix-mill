@@ -154,7 +154,7 @@ class FileOperationsMixin(_ImplementStageBase):
             if py_touched:
                 cls._run_project_formatter(repo_dir, py_touched)
             return not git_ops.has_changes(repo_dir)
-        except Exception:  # noqa: BLE001 — any replay failure → fail closed (BLOCK)
+        except Exception:
             log.warning(
                 "_edits_formatter_reverted: replay failed; failing closed",
                 exc_info=True,
@@ -290,7 +290,7 @@ class FileOperationsMixin(_ImplementStageBase):
                     seen.add(rel)
                     rels.append(rel)
             return git_ops.ignored_existing_paths(repo_dir, rels)
-        except Exception:  # noqa: BLE001 — diagnostic enrichment only
+        except Exception:
             log.warning(
                 "gitignored-edit detection failed; emitting plain note",
                 exc_info=True,

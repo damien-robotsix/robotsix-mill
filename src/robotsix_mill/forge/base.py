@@ -471,10 +471,7 @@ def _detect_forge_kind(remote_url: str) -> Literal["github", "gitlab"]:
     if cleaned.startswith("git@"):
         # "git@host:path" → split on ":" after stripping "git@"
         colon = cleaned.find(":")
-        if colon == -1:
-            host = cleaned[4:]
-        else:
-            host = cleaned[4:colon]
+        host = cleaned[4:] if colon == -1 else cleaned[4:colon]
     else:
         # https://host/... → split on "/"
         host = cleaned.split("/")[0]

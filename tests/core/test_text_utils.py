@@ -138,7 +138,7 @@ _BOUNDARY_CASES = [
 
 
 @pytest.mark.parametrize(
-    "boundary_label,body,max_chars,expected_truncated", _BOUNDARY_CASES
+    ("boundary_label", "body", "max_chars", "expected_truncated"), _BOUNDARY_CASES
 )
 def test_truncate_at_each_boundary_type(
     boundary_label: str, body: str, max_chars: int, expected_truncated: str

@@ -109,7 +109,7 @@ def test_extract_blank_lines_before_paragraph() -> None:
 
 
 @pytest.mark.parametrize(
-    "url, expected",
+    ("url", "expected"),
     [
         ("https://github.com/owner/repo.git", ("owner", "repo")),
         ("https://github.com/owner/repo", ("owner", "repo")),

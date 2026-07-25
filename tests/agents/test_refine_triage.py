@@ -830,7 +830,7 @@ _HIGH_RISK_SPEC_CASES = [
 ]
 
 
-@pytest.mark.parametrize("label,spec", _ROUTINE_SPEC_CASES)
+@pytest.mark.parametrize(("label", "spec"), _ROUTINE_SPEC_CASES)
 def test_auto_approve_criteria_approve_routine(label, spec, monkeypatch):
     """Routine specs (new internal module / schema / UI / tests / docs /
     internal endpoint / refactor) must route to APPROVE under new criteria."""
@@ -850,7 +850,7 @@ def test_auto_approve_criteria_approve_routine(label, spec, monkeypatch):
     assert "APPROVE" in (note or "")
 
 
-@pytest.mark.parametrize("label,spec", _HIGH_RISK_SPEC_CASES)
+@pytest.mark.parametrize(("label", "spec"), _HIGH_RISK_SPEC_CASES)
 def test_auto_approve_criteria_needs_approval_high_risk(label, spec, monkeypatch):
     """High-risk specs (auth, destructive, cross-repo CI, breaking public API,
     new external runtime dep) must route to NEEDS_APPROVAL under new criteria."""

@@ -213,22 +213,21 @@ def _matches_insufficient_credit(exc: BaseException) -> bool:
     if _INSUFFICIENT_CREDIT_RE.search(msg):
         return True
     # httpx.HTTPStatusError: response body may contain the message
-    if isinstance(exc, httpx.HTTPStatusError):
-        if exc.response.status_code == 402:
-            try:
-                body = exc.response.text
-            except Exception:
-                body = ""
-            if _INSUFFICIENT_CREDIT_RE.search(body):
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 402:
+        try:
+            body = exc.response.text
+        except Exception:
+            body = ""
+        if _INSUFFICIENT_CREDIT_RE.search(body):
+            return True
+        # Also check JSON error field
+        try:
+            js = exc.response.json()
+            err = str(js.get("error", {}).get("message", ""))
+            if _INSUFFICIENT_CREDIT_RE.search(err):
                 return True
-            # Also check JSON error field
-            try:
-                js = exc.response.json()
-                err = str(js.get("error", {}).get("message", ""))
-                if _INSUFFICIENT_CREDIT_RE.search(err):
-                    return True
-            except Exception:  # noqa: S110 -- defensive parse, ignore
-                pass
+        except Exception:
+            pass
     # openai.PermissionDeniedError (402)
     if openai is not None and isinstance(exc, openai.PermissionDeniedError):
         # PermissionDeniedError doesn't expose http_status directly;
@@ -284,14 +283,14 @@ def parse_credit_shortfall(exc: BaseException) -> str:
             body = exc.response.text
             if body:
                 msg = body
-        except Exception:  # noqa: S110 -- defensive parse, ignore
+        except Exception:
             pass
         try:
             js = exc.response.json()
             err = str(js.get("error", {}).get("message", ""))
             if err:
                 msg = err
-        except Exception:  # noqa: S110 -- defensive parse, ignore
+        except Exception:
             pass
 
     m = _SHORTFALL_RE.search(msg)
@@ -336,9 +335,7 @@ def _check_one_transient(exc: BaseException) -> bool:
         return True
     if isinstance(exc, SandboxError):
         return True
-    if _is_transient_message(exc):
-        return True
-    return False
+    return bool(_is_transient_message(exc))
 
 
 def classify_stage_error(exc: BaseException) -> str:

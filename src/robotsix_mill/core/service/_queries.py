@@ -413,9 +413,9 @@ class _QueryMixin(_ServiceBase):
                 select(Comment)
                 .where(
                     Comment.ticket_id == ticket_id,
-                    Comment.parent_id == None,  # noqa: E711
+                    Comment.parent_id == None,
                     Comment.body.startswith(ASK_USER_MARKER),
-                    Comment.closed_at == None,  # noqa: E711
+                    Comment.closed_at == None,
                 )
                 .order_by(Comment.created_at.desc())  # type: ignore[attr-defined]
                 .limit(1)

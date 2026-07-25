@@ -82,6 +82,6 @@ def resolve_under_src(repo_dir: pathlib.Path, token: str) -> pathlib.Path | None
         for candidate in src_path_candidates(token):
             if (repo_dir / candidate).exists():
                 return repo_dir / candidate
-    except Exception:  # noqa: BLE001, S110 — defensively swallow everything
+    except Exception:
         pass
     return None

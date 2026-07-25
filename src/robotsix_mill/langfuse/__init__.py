@@ -12,10 +12,10 @@ from .client import (
 )
 
 __all__ = [
-    "session_total_cost",
-    "session_traces",
-    "session_cost",
-    "session_cost_cached",
     "fetch_trace_detail",
     "fetch_trace_observations",
+    "session_cost",
+    "session_cost_cached",
+    "session_total_cost",
+    "session_traces",
 ]

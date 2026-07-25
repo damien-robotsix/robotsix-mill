@@ -103,7 +103,8 @@ def test_mill_ships_an_audit_overlay():
     )
     assert audit_yaml.exists(), f"Expected mill's audit presence file at {audit_yaml}"
     resolved = resolve_periodic_workflow(audit_yaml)
-    assert resolved is not None and resolved.kind == "llm_agent"
+    assert resolved is not None
+    assert resolved.kind == "llm_agent"
     body = resolved.definition.system_prompt  # built-in prompt + folded overlay
     # The DEFAULT MECHANISM RULE is the load-bearing overlay content.
     assert "DEFAULT MECHANISM RULE" in body
@@ -460,13 +461,15 @@ def test_run_audit_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "audit_workspace" / "repo"
-    assert seen["clone"] == 1 and seen["repo_dir"] == repo
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo
 
     seen["clone"] = 0
     run_audit_pass(
         session_id="test-sid", repo_config=_test_repo_config()
     )  # each run wipes + re-clones fresh (clean workspace)
-    assert seen["clone"] == 1 and seen["repo_dir"] == repo  # re-clones fresh each run
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo
 
 
 def test_run_audit_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):

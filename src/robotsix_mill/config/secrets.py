@@ -130,7 +130,7 @@ class Secrets(BaseModel):
         """Dump fields to dict, redacting all values by default."""
         d: dict[str, Any] = super().model_dump(**kwargs)
         if redact:
-            return {k: "***" for k in d}
+            return dict.fromkeys(d, "***")
         return d
 
     def __getattribute__(self, name: str) -> Any:

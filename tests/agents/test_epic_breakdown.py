@@ -324,7 +324,7 @@ class TestDetectCrossRepoDeps:
 
         # Bump child title references both repos.
         assert len(created_children) == 1
-        title, body = created_children[0]
+        title, _body = created_children[0]
         assert "robotsix-calendar-agent" in title
         assert "robotsix-llmio" in title
         assert "robotsix_llmio" in title

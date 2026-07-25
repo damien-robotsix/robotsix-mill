@@ -335,9 +335,11 @@ class TestGetRunsEndpoint:
         client.app.state.run_registries["robotsix-llmio"] = other
 
         ids = {e["id"] for e in client.get("/runs").json()}
-        assert a in ids and b in ids  # all-repos view sees BOTH
+        assert a in ids
+        assert b in ids
         ids_all = {e["id"] for e in client.get("/runs?repo_id=all").json()}
-        assert a in ids_all and b in ids_all
+        assert a in ids_all
+        assert b in ids_all
 
     def test_response_fields(self, client):
         """Every entry has all the expected top-level keys."""

@@ -170,7 +170,8 @@ def test_prerequisite_gate_blocks_on_unmet(monkeypatch):
     )
     assert out is not None
     assert out.next_state is State.BLOCKED
-    assert "foo.bar" in out.note and "baz" in out.note
+    assert "foo.bar" in out.note
+    assert "baz" in out.note
 
 
 def test_prerequisite_gate_proceeds_when_all_met(monkeypatch):
@@ -218,7 +219,7 @@ def _scope_ctx():
 
 
 def _scope_settings(**over):
-    base = dict(scope_triage_enabled=False, scope_triage_max_files=0)
+    base = {"scope_triage_enabled": False, "scope_triage_max_files": 0}
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -522,7 +523,8 @@ def test_baseline_check_idempotency_short_circuit(tmp_path, monkeypatch):
     out = _call_baseline(ctx)
     assert out is None
     # history note recorded, test agent never run, no cache written
-    assert ctx.history_notes and "fix-1" in ctx.history_notes[0][1]
+    assert ctx.history_notes
+    assert "fix-1" in ctx.history_notes[0][1]
     assert seams.agent_calls == []
     assert not (tmp_path / "baseline_check.json").exists()
 
@@ -587,7 +589,8 @@ def test_baseline_check_cache_miss_run_fail(tmp_path, monkeypatch):
     out = _call_baseline(_baseline_ctx(tmp_path))
     assert out is rec.sentinel
     assert out.next_state is State.BLOCKED
-    assert rec.finalize_calls and rec.finalize_calls[0].get("ok") is False
+    assert rec.finalize_calls
+    assert rec.finalize_calls[0].get("ok") is False
     assert rec.spawn_calls
     cache = json.loads((tmp_path / "baseline_check.json").read_text(encoding="utf-8"))
     assert cache["passed"] is False
@@ -1112,7 +1115,7 @@ def test_scope_guardrail_standard_config_all_reverted_skips_guard(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "ci_conclusion,network_dependent,expected",
+    ("ci_conclusion", "network_dependent", "expected"),
     [
         # CI green + sandbox fail → proceed
         ("success", True, "proceed"),

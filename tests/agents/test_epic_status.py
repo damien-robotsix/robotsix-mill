@@ -863,9 +863,10 @@ def test_closure_triggers_from_child_closed(settings, service, monkeypatch):
 # Orphaned-epic safety-net sweep (_maybe_sweep_orphaned_epic)
 # -----------------------------------------------------------------------
 
-from types import SimpleNamespace  # noqa: E402
+from types import SimpleNamespace
 
-from robotsix_mill.runtime.worker import Worker  # noqa: E402
+from robotsix_mill.runtime.worker import Worker
+import contextlib
 
 
 def _sweep_self(ctx):
@@ -881,10 +882,8 @@ def _close_children(service, epic_id):
             State.DONE,
             State.CLOSED,
         ):
-            try:
+            with contextlib.suppress(Exception):
                 service.transition(c.id, st)
-            except Exception:
-                pass
 
 
 def test_sweep_reevaluates_orphaned_all_terminal_epic(ctx, service, monkeypatch):
@@ -925,10 +924,8 @@ def test_sweep_skips_epic_with_open_child(ctx, service, monkeypatch):
         State.DONE,
         State.CLOSED,
     ):
-        try:
+        with contextlib.suppress(Exception):
             service.transition(c1.id, st)
-        except Exception:
-            pass
 
     Worker._maybe_sweep_orphaned_epic(_sweep_self(ctx), service.get(epic.id), service)
     assert spawned == []  # one child still open → not swept

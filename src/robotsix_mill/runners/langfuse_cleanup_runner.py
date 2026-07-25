@@ -140,7 +140,7 @@ def run_langfuse_cleanup_pass(
                 traces_before=total,
                 traces_deleted=deleted_total,
             )
-    except Exception as e:  # noqa: BLE001 — periodic sweep must not crash worker
+    except Exception as e:
         log.exception(
             "langfuse_cleanup: %s — pass failed after deleting %d: %s",
             label,
@@ -157,7 +157,7 @@ def run_langfuse_cleanup_pass_wrapper(
     repo_config: object = None,
     settings: object = None,
     max_traces: int = 0,
-) -> CleanupResult:  # noqa: ARG001
+) -> CleanupResult:
     """Wrapper conforming to (session_id, repo_config, **extra) for generic dispatcher."""
     return run_langfuse_cleanup_pass(
         settings=settings,  # type: ignore[arg-type]

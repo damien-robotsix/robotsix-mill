@@ -43,7 +43,7 @@ class RecurringCIFailureCheck:
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
         try:
             return self._run(ctx)
-        except Exception:  # noqa: BLE001 — preserve log-and-swallow contract
+        except Exception:
             log.exception("recurring_ci_failure check failed")
             return DiagnosticCheckResult(
                 name=self.name,
@@ -116,7 +116,7 @@ class RecurringCIFailureCheck:
                     title,
                 )
                 drafts_created.append({"id": ticket.id, "title": title})
-            except Exception:  # noqa: BLE001 — one failed group must not block others
+            except Exception:
                 log.exception(
                     "recurring_ci_failure: failed to file ticket for key %s", key
                 )

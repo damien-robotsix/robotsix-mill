@@ -915,12 +915,14 @@ class TestShrinkTraceData:
     def test_empty_observations_returns_zero(self):
         """Empty observations list → count = 0."""
         trace = {"id": "t2", "observations": []}
-        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
+        _shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps(trace))
         assert count == 0
 
     def test_missing_observations_key_returns_zero(self):
         """No 'observations' key → count = 0."""
-        shrunk, count = trace_inspector_mod._shrink_trace_data(json.dumps({"id": "t3"}))
+        _shrunk, count = trace_inspector_mod._shrink_trace_data(
+            json.dumps({"id": "t3"})
+        )
         assert count == 0
 
     def test_unparseable_string_returns_zero(self):

@@ -169,7 +169,7 @@ def test_load_handles_missing_keys(tmp_path: Path) -> None:
         json.dumps({"spec_markdown": "minimal"}),
         encoding="utf-8",
     )
-    result, conv_state = load_refine_checkpoint(ws)
+    result, _conv_state = load_refine_checkpoint(ws)
     assert result is not None
     assert result.spec_markdown == "minimal"
     assert result.split is False

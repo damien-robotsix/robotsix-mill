@@ -22,6 +22,7 @@ from ..core.repo_layout import src_path_candidates
 from .. import sandbox
 from ..runtime.tracing import trace_stage
 from .periodic_loader import validate_periodic_file_content
+import contextlib
 
 log = logging.getLogger(__name__)
 
@@ -791,10 +792,8 @@ def build_fs_tools(
             return syntax_error
         if _PERIODIC_PATH_RE.search(path):
             parsed: object = None
-            try:
+            with contextlib.suppress(yaml.YAMLError):
                 parsed = yaml.safe_load(content)
-            except yaml.YAMLError:
-                pass
             if isinstance(parsed, dict):
                 _name = parsed.get("name") or Path(path).stem
                 _sp = parsed.get("system_prompt")

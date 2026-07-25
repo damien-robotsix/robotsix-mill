@@ -80,21 +80,21 @@ def _patch_build_agent_from_definition(monkeypatch, agent_factory):
 def _make_definition(**kw):
     """Return a lightweight fake AgentDefinition with sensible defaults
     for every field that ``build_agent_from_definition`` reads."""
-    defaults = dict(
-        name="test-def",
-        system_prompt="You are a test agent.",
-        model=None,
-        web_knowledge=False,
-        report_issue=False,
-        read_ticket=False,
-        reply_to_thread=False,
-        close_thread=False,
-        ask_user=False,
-        retries=1,
-        output_type="DocResult",
-        module="documenting",
-        skills=[],
-    )
+    defaults = {
+        "name": "test-def",
+        "system_prompt": "You are a test agent.",
+        "model": None,
+        "web_knowledge": False,
+        "report_issue": False,
+        "read_ticket": False,
+        "reply_to_thread": False,
+        "close_thread": False,
+        "ask_user": False,
+        "retries": 1,
+        "output_type": "DocResult",
+        "module": "documenting",
+        "skills": [],
+    }
     defaults.update(kw)
     return type("_Def", (), defaults)()
 

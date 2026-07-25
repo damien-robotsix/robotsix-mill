@@ -66,7 +66,8 @@ def test_repr_redacts_all_values():
     assert "ghp_secret" not in r
     assert "***" in r
     # repr format: Secrets(openrouter_api_key='***', forge_token='***', ...)
-    assert r.startswith("Secrets(") and r.endswith(")")
+    assert r.startswith("Secrets(")
+    assert r.endswith(")")
 
 
 def test_repr_redacts_all_fields():
@@ -86,7 +87,7 @@ def test_model_dump_redacted():
     """model_dump(redact=True) returns '***' for every field."""
     s = Secrets(openrouter_api_key="sk-abc", forge_token="ghp-xyz")
     d = s.model_dump(redact=True)
-    assert d == {name: "***" for name in Secrets.model_fields}
+    assert d == dict.fromkeys(Secrets.model_fields, "***")
 
 
 def test_model_dump_raw():

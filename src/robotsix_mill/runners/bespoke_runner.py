@@ -53,10 +53,7 @@ def _memory_file_for(
     repo's bespoke ledger is isolated from mill core's per-agent
     ledgers (audit_memory.md, health_memory.md, …) and from other
     repos' ledgers."""
-    if board_id:
-        base = settings.data_dir / board_id
-    else:
-        base = settings.data_dir
+    base = settings.data_dir / board_id if board_id else settings.data_dir
     base.mkdir(parents=True, exist_ok=True)
     return base / f"bespoke_{name}_memory.md"
 

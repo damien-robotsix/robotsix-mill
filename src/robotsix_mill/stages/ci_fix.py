@@ -88,7 +88,7 @@ def _emit_ci_failure_event(
             reason=reason,
             normalized_key=normalized_key,
         )
-    except Exception:  # noqa: BLE001 — event emission must never block CI fix
+    except Exception:
         log.exception("%s: failed to emit CI_FAILURE event", ticket.id)
 
 
@@ -185,7 +185,7 @@ class CIFixStage(Stage):
             head_sha,
         )
 
-    def _resolve_clone_and_status(  # noqa: C901 — multi-step routing; each branch is simple
+    def _resolve_clone_and_status(
         self, ticket: Ticket, ctx: StageContext
     ) -> Outcome | _FailingContext:
         """Run the guards, resolve the clone, and route on CI status.
@@ -260,7 +260,7 @@ class CIFixStage(Stage):
             status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch, require_checks=True
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
@@ -316,7 +316,7 @@ class CIFixStage(Stage):
             head_sha,
         )
 
-    def _build_failure_detail(  # noqa: C901 — enrichment is inherently branchy
+    def _build_failure_detail(
         self,
         ticket: Ticket,
         ctx: StageContext,
@@ -380,9 +380,9 @@ class CIFixStage(Stage):
                                     f"\n--- {run.get('name', 'workflow')} "
                                     f"(run {run['id']}) ---\n{logs}"
                                 )
-            except Exception:  # noqa: BLE001 — best-effort enrichment
+            except Exception:
                 log.warning("%s: failed to fetch job logs", ticket.id)
-        except Exception:  # noqa: BLE001 — best-effort enrichment
+        except Exception:
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
         return (
@@ -475,7 +475,7 @@ class CIFixStage(Stage):
         fp_path.write_text(current_fp, encoding="utf-8")
         return None
 
-    def _try_dedup_changelog_fragments(  # noqa: C901 — multi-step dedup; each step is simple
+    def _try_dedup_changelog_fragments(
         self,
         ticket: Ticket,
         ctx: StageContext,
@@ -666,7 +666,7 @@ class CIFixStage(Stage):
             vp = artifacts_dir / _CODQL_FP_TRIAGE_VERDICTS
             if vp.exists():
                 verdicts = _json.loads(vp.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001, S110 — best-effort; silent fallback
+        except Exception:
             pass
 
         codeql_note = _codeql_block_note(failing, alerts, changed_paths, verdicts)
@@ -792,7 +792,7 @@ class CIFixStage(Stage):
                 )
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("%s: ci-fix agent crashed: %s", ticket.id, e)
             return None
         return result
@@ -831,7 +831,7 @@ class CIFixStage(Stage):
                 status = get_forge(s, repo_config=ctx.repo_config).check_status(
                     source_branch=branch, require_checks=True
                 )
-            except Exception:  # noqa: BLE001 — transient; keep waiting
+            except Exception:
                 log.warning(
                     "%s: check_status failed during CI wait — treating as pending",
                     ticket.id,
@@ -922,7 +922,7 @@ class CIFixStage(Stage):
                     "alert(s) are located in THIS PR's own changed files and "
                     "must be fixed in-scope: " + _format_alert_refs(in_scope_alerts),
                 )
-            except Exception:  # noqa: BLE001 — history note is best-effort
+            except Exception:
                 log.warning("%s: failed to record in-scope-alert note", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
@@ -941,7 +941,7 @@ class CIFixStage(Stage):
                 pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                     source_branch=branch
                 )
-            except Exception:  # noqa: BLE001 — treat as not-behind, fall through
+            except Exception:
                 pr = None
             if (pr or {}).get("mergeable_state") == "behind":
                 res = get_forge(s, repo_config=ctx.repo_config).update_branch(
@@ -956,7 +956,7 @@ class CIFixStage(Stage):
                             "update-branch before classifying out-of-scope; "
                             "re-running CI",
                         )
-                    except Exception:  # noqa: BLE001 — history note is best-effort
+                    except Exception:
                         log.warning(
                             "%s: failed to record branch-refresh note", ticket.id
                         )

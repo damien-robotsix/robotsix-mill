@@ -41,7 +41,8 @@ class TestTrimSpecForRetry:
         import re
 
         match = re.search(r"(\d+) chars", omitted_str)
-        assert match is not None and int(match.group(1)) > 0
+        assert match is not None
+        assert int(match.group(1)) > 0
 
     def test_long_spec_no_newline_truncates_at_max_chars(self):
         """When the spec has no newlines at all, truncation falls back

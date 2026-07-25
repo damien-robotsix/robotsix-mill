@@ -40,7 +40,7 @@ def _standards_cache_file(settings: Settings) -> Path:
     return settings.data_dir / "standards_cache" / _STANDARDS_CACHE_FILENAME
 
 
-def fetch_standards_context(settings: Settings) -> str:  # noqa: C901 — cache-hit/fetch/combine flow; tightly-coupled
+def fetch_standards_context(settings: Settings) -> str:
     """Return up-to-date robotsix-standards content ready for prompt injection.
 
     Returns the combined markdown of the key standards pages, or an

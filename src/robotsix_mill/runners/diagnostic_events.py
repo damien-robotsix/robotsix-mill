@@ -112,7 +112,7 @@ def emit_diagnostic_event(
             normalized_key,
         )
         return True
-    except Exception:  # noqa: BLE001 — event write must not crash the stage
+    except Exception:
         log.exception(
             "diagnostic_events: failed to emit event category=%s ticket=%s",
             category,
@@ -167,7 +167,7 @@ def list_diagnostic_events(
                 continue
             events.append(ev)
         return events
-    except Exception:  # noqa: BLE001 — data read must not crash callers
+    except Exception:
         log.exception("diagnostic_events: failed to list events for board %s", board_id)
         return []
 
@@ -190,6 +190,6 @@ def _event_exists(path: Path, ticket_id: str, normalized_key: str) -> bool:
                 and str(obj.get("normalized_key", "")) == normalized_key
             ):
                 return True
-    except Exception:  # noqa: BLE001 — fail open (don't block emission)
+    except Exception:
         log.warning("diagnostic_events: dedup check failed for %s", path, exc_info=True)
     return False

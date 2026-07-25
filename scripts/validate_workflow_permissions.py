@@ -103,7 +103,7 @@ def main() -> int:
                 continue
             # A job's own permissions block fully replaces the top-level one;
             # otherwise the job inherits the workflow-level permissions.
-            effective = job["permissions"] if "permissions" in job else top_perms
+            effective = job.get("permissions", top_perms)
             if not _grants_sarif(effective):
                 problems.append(
                     f"{wf.relative_to(_REPO_ROOT)}: job '{job_name}' calls "

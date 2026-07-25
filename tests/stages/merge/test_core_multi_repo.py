@@ -645,7 +645,8 @@ def test_multi_repo_one_pr_failing_ci_missing_clone_blocks(tmp_path, monkeypatch
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "repo-b" in out.note
-    assert "missing" in out.note and "re-run implement" in out.note
+    assert "missing" in out.note
+    assert "re-run implement" in out.note
 
 
 def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):

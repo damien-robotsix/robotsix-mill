@@ -35,7 +35,7 @@ non_advanced = [
 ]
 for f in non_advanced:
     if f in props:
-        assert props[f].get("advanced") is not True, f"{f} should NOT be advanced"  # noqa: S101
+        assert props[f].get("advanced") is not True, f"{f} should NOT be advanced"
 print("Non-advanced check passed")
 
 # Check repos schema for advanced fields
@@ -49,6 +49,6 @@ secrets_schema = Secrets.model_json_schema()
 secrets_props = secrets_schema.get("properties", {})
 secrets_advanced = [k for k, v in secrets_props.items() if v.get("advanced") is True]
 print(f"Secrets advanced fields: {secrets_advanced}")
-assert len(secrets_advanced) == 0, "Secrets should never be advanced!"  # noqa: S101
+assert len(secrets_advanced) == 0, "Secrets should never be advanced!"
 
 print("\nAll checks passed!")

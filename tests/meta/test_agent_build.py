@@ -45,7 +45,7 @@ class _StubResult:
 
 
 class _StubAgent:
-    def run_sync(self, prompt):  # noqa: ANN001 — test stub
+    def run_sync(self, prompt):
         return _StubResult()
 
 
@@ -94,7 +94,7 @@ class _CapturingAgent:
     def __init__(self) -> None:
         self.prompt: str | None = None
 
-    def run_sync(self, prompt):  # noqa: ANN001 — test stub
+    def run_sync(self, prompt):
         self.prompt = prompt
         return _StubResult()
 

@@ -281,11 +281,11 @@ class TestRunCoordinator:
     def _run(self, settings, tmp_path, **kwargs):
         """Call ``run_coordinator`` with (almost) every argument
         defaulted so individual tests only override what they need."""
-        defaults: dict = dict(
-            settings=settings,
-            repo_dir=tmp_path,
-            spec="do X",
-        )
+        defaults: dict = {
+            "settings": settings,
+            "repo_dir": tmp_path,
+            "spec": "do X",
+        }
         defaults.update(kwargs)
         return run_coordinator(**defaults)
 
@@ -553,7 +553,8 @@ class TestRunCoordinator:
         assert isinstance(up, UserPromptPart)
         # The user_prompt isn't empty (it's the implement coordinator's
         # built prompt — ticket_spec etc.).
-        assert isinstance(up.content, str) and up.content.strip()
+        assert isinstance(up.content, str)
+        assert up.content.strip()
 
         # [1]: ModelResponse with the preload ToolCallParts
         resp = mh[1]

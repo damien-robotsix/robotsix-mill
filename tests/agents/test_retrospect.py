@@ -52,11 +52,11 @@ def _no_langfuse(monkeypatch):
 
 def _default_result(**overrides):
     """Helper: build a RetrospectResult with required fields filled."""
-    defaults = dict(
-        findings="all good",
-        conclusion="closed",
-        updated_memory="",
-    )
+    defaults = {
+        "findings": "all good",
+        "conclusion": "closed",
+        "updated_memory": "",
+    }
     defaults.update(overrides)
     return RetrospectResult(**defaults)
 
@@ -1317,9 +1317,9 @@ def test_run_retrospect_agent_reprompts_once_on_unstructured_output(
 # --- insufficient-audit-data guard -----------------------------------------
 
 
-import pytest  # noqa: E402
+import pytest
 
-from robotsix_mill.agents.retrospecting import (  # noqa: E402
+from robotsix_mill.agents.retrospecting import (
     _NO_LANGFUSE_PLACEHOLDER,
     _NO_TRACES_PLACEHOLDER,
 )

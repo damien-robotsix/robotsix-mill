@@ -121,7 +121,7 @@ def _mock_refine_ok(spec_markdown="## Problem\nFix it", **overrides):
             epic_context,
             kw,
         )
-        kwargs = dict(spec_markdown=spec_markdown)
+        kwargs = {"spec_markdown": spec_markdown}
         kwargs.update(overrides)
         return RefineResult(**kwargs)
 

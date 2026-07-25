@@ -43,7 +43,7 @@ class GitHubForgeSecurityMixin:
                 return True
             r.raise_for_status()
             return True
-        except Exception:  # noqa: BLE001 — best-effort, never fatal
+        except Exception:
             return False
 
     def enable_automated_security_fixes(self) -> bool:
@@ -64,7 +64,7 @@ class GitHubForgeSecurityMixin:
                 return True
             r.raise_for_status()
             return True
-        except Exception:  # noqa: BLE001 — best-effort, never fatal
+        except Exception:
             return False
 
     def ensure_dependency_graph_enabled(self) -> bool:

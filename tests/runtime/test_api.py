@@ -1591,7 +1591,8 @@ def test_list_tickets_include_closed_hides_closed_and_epic_closed_and_answered_k
     assert closed.id not in ids_default
     assert epic.id not in ids_default
     assert answered.id not in ids_default
-    assert done.id in ids_default and draft.id in ids_default
+    assert done.id in ids_default
+    assert draft.id in ids_default
 
 
 def test_list_tickets_explicit_closed_state_overrides_default_exclusion(

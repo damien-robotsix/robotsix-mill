@@ -49,7 +49,7 @@ class GitHubForgeCodeScanningMixin:
             raw = r.json()
         except CodeScanningAlertsUnavailable:
             raise
-        except Exception:  # noqa: BLE001 — best-effort enrichment, never fatal
+        except Exception:
             return []
         return raw if isinstance(raw, list) else []
 
@@ -89,7 +89,7 @@ class GitHubForgeCodeScanningMixin:
             analyses = raw_analyses if isinstance(raw_analyses, list) else []
         except CodeScanningAlertsUnavailable:
             raise
-        except Exception:  # noqa: BLE001 — best-effort
+        except Exception:
             return []
 
         if not analyses:
@@ -118,7 +118,7 @@ class GitHubForgeCodeScanningMixin:
                     return raw_alerts
             except CodeScanningAlertsUnavailable:
                 raise
-            except Exception:  # noqa: BLE001 — best-effort
+            except Exception:
                 pass
 
         # Exhausted backoff window — alerts still unavailable.
@@ -153,7 +153,7 @@ class GitHubForgeCodeScanningMixin:
         # best-effort: any failure degrades to the branch-ref-only query.
         try:
             pr = self._get_pr(owner=owner, repo=repo, head=source_branch)  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001 — best-effort; fall back to branch ref
+        except Exception:
             pr = None
 
         merge_ref = f"refs/pull/{pr['number']}/merge" if pr is not None else None
@@ -233,5 +233,5 @@ class GitHubForgeCodeScanningMixin:
             )
             r.raise_for_status()
             return True
-        except Exception:  # noqa: BLE001 — best-effort
+        except Exception:
             return False

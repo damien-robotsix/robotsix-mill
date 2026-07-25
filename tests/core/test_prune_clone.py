@@ -62,14 +62,14 @@ def _done(ctx):
 
 def _default_result(**overrides):
     """Helper: build a RetrospectResult with required fields filled."""
-    defaults = dict(
-        findings="all good",
-        conclusion="closed",
-        updated_memory="",
-        propose_draft=False,
-        draft_title="",
-        draft_body="",
-    )
+    defaults = {
+        "findings": "all good",
+        "conclusion": "closed",
+        "updated_memory": "",
+        "propose_draft": False,
+        "draft_title": "",
+        "draft_body": "",
+    }
     defaults.update(overrides)
     return RetrospectResult(**defaults)
 

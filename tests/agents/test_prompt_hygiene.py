@@ -102,11 +102,13 @@ def test_document_prompt_requires_applied_edits_for_user_facing():
 
     # Must require the actual applied edit for user-facing changes.
     assert "invalid deliverable" in low
-    assert "edit_file" in prompt and "write_file" in prompt
+    assert "edit_file" in prompt
+    assert "write_file" in prompt
     assert "recommend" in low  # recommendation-only is called out as invalid
 
     # Must reserve budget for editing rather than blowing it on exploration.
-    assert "reserve" in low and "budget" in low
+    assert "reserve" in low
+    assert "budget" in low
 
     # Must NOT instruct an immediate DocResult return after merely locating
     # docs for a user-facing change. The old guidance said to "stop and
@@ -229,7 +231,7 @@ def _has_negation_context(text: str, match_start: int) -> bool:
 
 
 @pytest.mark.parametrize(
-    "agent_name,yaml_path",
+    ("agent_name", "yaml_path"),
     [
         ("audit", "periodic/audit.yaml"),
         ("health", "periodic/health.yaml"),
@@ -265,7 +267,7 @@ _IMPLEMENT_ACTION_TAG_MARKER = "Do NOT guess or fabricate a commit SHA"
 
 
 @pytest.mark.parametrize(
-    "agent_name,yaml_path,expected_marker",
+    ("agent_name", "yaml_path", "expected_marker"),
     [
         ("ci_fix", "ci_fix.yaml", _SHARED_ACTION_TAG_MARKER),
         ("implement", "implement.yaml", _IMPLEMENT_ACTION_TAG_MARKER),
@@ -304,7 +306,8 @@ def test_triage_prompt_exploration_findings_guidance():
     # Must instruct to populate from tool calls, not guess.
     assert "populate the" in prompt.lower() or "fill" in prompt.lower()
     # Must instruct to leave null when no tools used.
-    assert "leave" in prompt.lower() and "null" in prompt.lower()
+    assert "leave" in prompt.lower()
+    assert "null" in prompt.lower()
     # Must NOT restate tool signatures.
     _assert_no_tool_signatures(prompt, "triage")
 

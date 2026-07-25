@@ -72,7 +72,8 @@ class TestWrapReadToolsWithConsecutiveErrorGuard:
         )
         wrapped[0](path="/tmp/x.json")
         result = wrapped[0](path="/tmp/x.json")
-        assert isinstance(result, str) and result.startswith("error:")
+        assert isinstance(result, str)
+        assert result.startswith("error:")
 
     def test_three_consecutive_same_path_raises_modelretry(self):
         """Three consecutive same-path same-error-class calls raise ModelRetry."""
@@ -104,7 +105,8 @@ class TestWrapReadToolsWithConsecutiveErrorGuard:
         wrapped[0](path="/tmp/b.json")  # different path → a cleared, b=1
         wrapped[0](path="/tmp/a.json")  # a=1 again (was cleared)
         result = wrapped[0](path="/tmp/a.json")  # a=2
-        assert isinstance(result, str) and result.startswith("error:")
+        assert isinstance(result, str)
+        assert result.startswith("error:")
 
     def test_successful_call_resets_counter(self):
         """A successful (non-error) tool call resets all counters."""
@@ -120,7 +122,8 @@ class TestWrapReadToolsWithConsecutiveErrorGuard:
         wrapped[0](path="/tmp/x")  # 2
         wrapped[1](path="/tmp/y")  # success → resets
         result = wrapped[0](path="/tmp/x")  # should be 1 again
-        assert isinstance(result, str) and result.startswith("error:")
+        assert isinstance(result, str)
+        assert result.startswith("error:")
 
     def test_different_error_kind_same_path_resets(self):
         """Different error classifications on the same path do not accumulate."""
@@ -141,7 +144,8 @@ class TestWrapReadToolsWithConsecutiveErrorGuard:
         for _ in range(5):
             result = wrapped[0](path="/tmp/x")
             # Should never raise because the error kind toggles each call.
-            assert isinstance(result, str) and result.startswith("error:")
+            assert isinstance(result, str)
+            assert result.startswith("error:")
 
     def test_list_dir_also_wrapped(self):
         """list_dir tools are wrapped just like read_file."""
@@ -215,4 +219,5 @@ class TestWrapReadToolsWithConsecutiveErrorGuard:
         # Now path B should start fresh — two calls should NOT trigger.
         wrapped[0](path="/tmp/b")  # 1
         result = wrapped[0](path="/tmp/b")  # 2 — still under the limit
-        assert isinstance(result, str) and result.startswith("error:")
+        assert isinstance(result, str)
+        assert result.startswith("error:")

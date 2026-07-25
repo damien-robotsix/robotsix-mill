@@ -23,7 +23,8 @@ def load_script(script_path: Path, module_name: str | None = None) -> ModuleType
     name = module_name or script_path.stem.replace("-", "_")
     loader = SourceFileLoader(name, str(script_path))
     spec = importlib.util.spec_from_file_location(name, script_path, loader=loader)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules.setdefault(name, module)
     spec.loader.exec_module(module)

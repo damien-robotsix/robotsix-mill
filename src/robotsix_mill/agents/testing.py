@@ -111,7 +111,7 @@ def _env_error_diag(rc: int, out: str) -> str | None:
                 f"{ENV_ERROR_PREFIX} command not executable in sandbox: "
                 f"'{noexec_path}' (rc={rc}). A pip --user console script "
                 "under $HOME/.local/bin could not execute — the sandbox "
-                "/tmp tmpfs must be mounted exec (not noexec). This is a "  # noqa: S108 — /tmp is the in-sandbox Docker tmpfs path, not a host temp file
+                "/tmp tmpfs must be mounted exec (not noexec). This is a "
                 "sandbox regression, not fixable by editing code."
             )
         return None
@@ -166,14 +166,13 @@ def is_network_dependent_failure(out: str) -> bool:
     # returning empty).  The "char 0" form means s == '' (empty string);
     # a JSONDecodeError on non-empty malformed data (e.g. a fixture
     # with a stray brace) has a non-zero column — we do NOT match those.
-    if re.search(
-        r"JSONDecodeError[^)]*Expecting value: line 1 column 1 \(char 0\)",
-        out,
-        re.IGNORECASE,
-    ):
-        return True
-
-    return False
+    return bool(
+        re.search(
+            r"JSONDecodeError[^)]*Expecting value: line 1 column 1 \(char 0\)",
+            out,
+            re.IGNORECASE,
+        )
+    )
 
 
 def _load_file_map(repo_dir: Path) -> list[str] | None:
@@ -527,7 +526,7 @@ def _distill_failure(
             what="test-distill",
         )
         return str(result.output).strip()
-    except Exception as e:  # noqa: BLE001 — degrade to raw tail
+    except Exception as e:
         return f"tests failed (rc={rc}); distill error {e}:\n{tail[-1500:]}"
     finally:
         _safe_close(agent)

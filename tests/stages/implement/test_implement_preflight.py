@@ -1159,7 +1159,7 @@ def test_transient_agent_error_does_not_persist_fingerprint(
 
     # The implement stage should raise the transient cause, NOT
     # return a normal Outcome.
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(Exception):
         ImplementStage().run(t, ctx)
 
     # implement.md must NOT exist (or must not have a fingerprint)

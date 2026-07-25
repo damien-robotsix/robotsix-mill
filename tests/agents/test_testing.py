@@ -33,7 +33,7 @@ from robotsix_mill.agents.testing import (
 
 
 @pytest.mark.parametrize(
-    "out,expected",
+    ("out", "expected"),
     [
         # sh / dash style
         ("sh: 1: yamllint: not found", "yamllint"),
@@ -63,7 +63,7 @@ def test_detect_missing_binary_sh_wins_over_bash():
 
 
 @pytest.mark.parametrize(
-    "out,expected",
+    ("out", "expected"),
     [
         ("/tmp/script: Permission denied", "/tmp/script"),
         (
@@ -646,7 +646,7 @@ def test_run_test_agent_loads_file_map(tmp_path, monkeypatch):
     )
 
     s = _make_settings_for_gate(tmp_path)
-    passed, msg = run_test_agent(settings=s, repo_dir=repo)
+    passed, _msg = run_test_agent(settings=s, repo_dir=repo)
     assert passed is True
     assert load_called
 
@@ -679,7 +679,7 @@ def test_run_test_agent_repo_config_sandbox_image(monkeypatch, tmp_path):
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
     )
-    passed, msg = run_test_agent(settings=s, repo_dir=tmp_path, repo_config=rc)
+    passed, _msg = run_test_agent(settings=s, repo_dir=tmp_path, repo_config=rc)
     assert passed is True
     assert captured_image[0] == "custom-image:latest"
 
@@ -874,7 +874,7 @@ def test_run_test_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_pa
     """run_test_agent returns (False, ...) for broken TOML without hitting sandbox."""
     from types import SimpleNamespace
 
-    from robotsix_mill.sandbox import SandboxError  # noqa: F401 — ensures module is loaded
+    from robotsix_mill.sandbox import SandboxError
 
     monkeypatch.setattr(
         "robotsix_mill.agents.testing.load_repo_test_command",
@@ -908,7 +908,7 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
     """run_smoke_agent returns (False, ...) for broken TOML without hitting sandbox."""
     from types import SimpleNamespace
 
-    from robotsix_mill.sandbox import SandboxError  # noqa: F401 — ensures module is loaded
+    from robotsix_mill.sandbox import SandboxError
 
     monkeypatch.setattr(
         "robotsix_mill.agents.testing.load_repo_smoke_command",
@@ -944,7 +944,7 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
 
 
 @pytest.mark.parametrize(
-    "out,expected",
+    ("out", "expected"),
     [
         # JSONDecodeError on empty response — hallmark of blocked network
         (

@@ -308,8 +308,8 @@ def _verify_action_sha(
         url = f"https://github.com/{safe_owner}/{safe_repo}.git"
         if token:
             url = git_ops._authed_url(url, token)
-        result = subprocess.run(  # noqa: S603
-            ["git", "ls-remote", url],  # noqa: S607
+        result = subprocess.run(
+            ["git", "ls-remote", url],
             capture_output=True,
             text=True,
             timeout=15,
@@ -596,15 +596,15 @@ class _DiffMeta:
     """
 
     __slots__ = (
+        "action_refs",
         "diff",
+        "gh_token",
         "head_sha",
         "input_hash",
-        "repo_dir",
         "modified_paths",
-        "workflow_refs",
-        "action_refs",
+        "repo_dir",
         "reusable_workflow_refs",
-        "gh_token",
+        "workflow_refs",
     )
 
     def __init__(

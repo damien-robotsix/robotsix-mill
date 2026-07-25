@@ -82,7 +82,7 @@ class RepoRegistrationResult(BaseModel):
     status_code=status.HTTP_201_CREATED,
     response_model=RepoRegistrationResult,
 )
-async def register_repo(  # noqa: C901
+async def register_repo(
     body: RepoRegistration,
     request: Request,
     response: Response,

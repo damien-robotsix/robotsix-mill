@@ -33,7 +33,7 @@ from ...core.workspace import Workspace
 from ...runtime.tracing import set_current_span_attribute
 from ..base import Outcome, StageContext
 from ..pause import (
-    acknowledge_unanswered_threads,  # noqa: F401 — re-exported for test monkeypatch compat
+    acknowledge_unanswered_threads,
     build_compact_resume_message_history,
     check_for_pause,
     clear_conversation_state,
@@ -49,13 +49,13 @@ from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     _build_deployed_log_summary,
     _load_refine_memory,
-    _persist_refine_memory,  # noqa: F401 — re-exported for test monkeypatch compat
+    _persist_refine_memory,
     log,
 )
 
 # Re-export triage I/O helpers for backward compatibility (tests import
 # these symbols from the orchestration module).
-from ._reconcile import (  # noqa: F401
+from ._reconcile import (
     read_triage_complexity as _read_triage_complexity,
     read_triage_findings as _read_triage_findings,
     read_triage_trivial as _read_triage_trivial,
@@ -65,12 +65,12 @@ from ._reconcile import (  # noqa: F401
 
 __all__ = [
     "RefineAgentMixin",
-    "acknowledge_unanswered_threads",
     "_persist_refine_memory",
     "_read_triage_complexity",
     "_read_triage_findings",
     "_read_triage_trivial",
     "_write_triage_complexity",
+    "acknowledge_unanswered_threads",
 ]
 
 
@@ -377,7 +377,7 @@ class RefineAgentMixin:
                 if extra_roots is None:
                     extra_roots = [log_path]
                 else:
-                    extra_roots = list(extra_roots) + [log_path]
+                    extra_roots = [*list(extra_roots), log_path]
                 deployed_log_summary = _build_deployed_log_summary(
                     log_path, deployed_log_folder_str
                 )

@@ -13,10 +13,12 @@ def test_run_health_result_schema():
     r = rh.RunHealthResult(
         draft_titles=["a"], draft_bodies=["b"], gap_ids=["g"], updated_memory="m"
     )
-    assert r.draft_titles == ["a"] and r.gap_ids == ["g"]
+    assert r.draft_titles == ["a"]
+    assert r.gap_ids == ["g"]
     # Defaults are empty.
     empty = rh.RunHealthResult()
-    assert empty.draft_titles == [] and empty.updated_memory == ""
+    assert empty.draft_titles == []
+    assert empty.updated_memory == ""
 
 
 def test_run_clips_parallel_lists(monkeypatch):

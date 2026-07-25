@@ -98,7 +98,7 @@ class TestHelpers:
     # ----- _slug ----------------------------------------------------------
 
     @pytest.mark.parametrize(
-        "raw, expected",
+        ("raw", "expected"),
         [
             ("imaplib", "imaplib"),  # kebab-case passthrough
             ("FastAPI", "fastapi"),  # mixed case → lowercase
@@ -832,8 +832,8 @@ class TestTraceWebSearchBudget:
         # First two searches succeed.
         r1 = asyncio.run(web_search("query 1"))
         r2 = asyncio.run(web_search("query 2"))
-        assert "conclusion for: query 1" == r1
-        assert "conclusion for: query 2" == r2
+        assert r1 == "conclusion for: query 1"
+        assert r2 == "conclusion for: query 2"
 
         # Third search hits the trace budget cap.
         r3 = asyncio.run(web_search("query 3"))

@@ -78,7 +78,7 @@ def test_section_survives_nested_four_backtick_marker_in_content():
 
 
 @pytest.mark.parametrize(
-    "name, content, expected",
+    ("name", "content", "expected"),
     [
         # empty content
         ("ticket-spec", "", "````ticket-spec\n\n````\n<!-- /ticket-spec -->"),

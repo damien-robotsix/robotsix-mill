@@ -24,7 +24,6 @@ from sqlmodel import SQLModel
 
 # Import all models so SQLModel.metadata is populated before Alembic
 # inspects it.  The ``noqa: F401`` comment silences the "unused import" lint.
-from robotsix_mill.core import models  # noqa: F401
 
 # Alembic Config object (reads alembic.ini).
 # **Do not** read ``context.config`` at module level — Alembic may

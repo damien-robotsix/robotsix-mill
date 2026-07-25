@@ -366,7 +366,8 @@ def test_implement_complete_check_status_transient_error_stays_same_state(
 def test_blocked_when_forge_unconfigured(tmp_path):
     ctx = _ctx(tmp_path)
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
-    assert out.next_state is State.BLOCKED and "forge not configured" in out.note
+    assert out.next_state is State.BLOCKED
+    assert "forge not configured" in out.note
 
 
 def test_auto_forge_kind_bypasses_none_guard(tmp_path):
@@ -401,7 +402,8 @@ def test_merged_to_done(tmp_path, monkeypatch):
     )
     t = _human_mr_approval(ctx)
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.DONE and "pull/3" in out.note
+    assert out.next_state is State.DONE
+    assert "pull/3" in out.note
     assert (ctx.service.workspace(t).artifacts_dir / "merge.md").exists()
 
 

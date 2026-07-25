@@ -2037,14 +2037,16 @@ def test_strip_removes_prior_proposals_table():
     out = strip_ephemeral_sections(mem)
     assert "Prior proposals" not in out
     assert "20260530Tc57b" not in out
-    assert "## Project layout" in out and "## Testing conventions" in out
+    assert "## Project layout" in out
+    assert "## Testing conventions" in out
 
 
 def test_strip_table_at_end_of_memory():
 
     mem = "## Patterns\n\nfoo\n\n## Prior proposals — verified state\n\n| a | b |\n"
     out = strip_ephemeral_sections(mem)
-    assert "Prior proposals" not in out and "## Patterns" in out
+    assert "Prior proposals" not in out
+    assert "## Patterns" in out
 
 
 def test_strip_noop_without_table():
@@ -2066,8 +2068,10 @@ def test_strip_preserves_prose_after_table():
         "Real cross-ticket pattern worth keeping.\nA thing to monitor.\n"
     )
     out = strip_ephemeral_sections(mem)
-    assert "Prior proposals" not in out and "foo | CLOSED" not in out
-    assert "Real cross-ticket pattern" in out and "thing to monitor" in out
+    assert "Prior proposals" not in out
+    assert "foo | CLOSED" not in out
+    assert "Real cross-ticket pattern" in out
+    assert "thing to monitor" in out
 
 
 def test_strip_removes_recent_proposals_block_only_content():
@@ -2100,7 +2104,8 @@ def test_strip_recent_proposals_preserves_surrounding_prose():
     out = strip_ephemeral_sections(mem)
     assert "<recent_proposals>" not in out
     assert "20260530Tc57b" not in out
-    assert "## Patterns" in out and "Real observation worth keeping" in out
+    assert "## Patterns" in out
+    assert "Real observation worth keeping" in out
     assert "Another thing to monitor" in out
 
 

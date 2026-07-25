@@ -289,10 +289,8 @@ def can_transition(
         return True
     if src is State.BLOCKED and blocked_from is not None and dst is blocked_from:
         return True
-    if (
+    return bool(
         src is State.AWAITING_USER_REPLY
         and paused_from is not None
         and dst is paused_from
-    ):
-        return True
-    return False
+    )

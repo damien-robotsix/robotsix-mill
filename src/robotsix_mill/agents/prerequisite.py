@@ -378,7 +378,7 @@ def _apply_patches_and_recheck(
                 diff_path = tf.name
             try:
                 subprocess.run(
-                    ["git", "apply", "--quiet", diff_path],  # noqa: S607
+                    ["git", "apply", "--quiet", diff_path],
                     cwd=str(repo_dir),
                     check=True,
                     capture_output=True,
@@ -534,7 +534,9 @@ def run_prerequisite_check(
     # batch check runs, so cross-repo symbols resolve correctly. The
     # whole batch runs in a single container (one ``pip install .``).
     if runner is _default_runner and settings is not None:
-        unmet, error = _sandbox_batch_check(external, repo_dir, settings, sandbox_image)
+        unmet, _error = _sandbox_batch_check(
+            external, repo_dir, settings, sandbox_image
+        )
         if unmet:
             unmet = _maybe_recheck_with_dep_diffs(
                 spec, external, repo_dir, settings, sandbox_image, unmet

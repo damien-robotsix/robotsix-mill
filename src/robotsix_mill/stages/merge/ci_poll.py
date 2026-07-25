@@ -31,6 +31,7 @@ from ._shared import (
     _write_counter,
     log,
 )
+import contextlib
 
 
 def _extract_tracked_pr_url(description: str) -> str | None:
@@ -74,7 +75,7 @@ class CIPollMixin(_MergeStageBase):
             pr = get_forge(s, repo_config=ctx.repo_config).pr_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient: retry next poll
+        except Exception as e:
             log.warning("%s: PR status check failed (retry): %s", ticket.id, e)
             return None, Outcome(same_state)
 
@@ -89,7 +90,7 @@ class CIPollMixin(_MergeStageBase):
                         tracked = get_forge(
                             s, repo_config=ctx.repo_config
                         ).pr_status_by_url(url=tracked_url)
-                    except Exception as exc:  # noqa: BLE001 — transient
+                    except Exception as exc:
                         log.warning(
                             "%s: tracked PR status check failed: %s",
                             ticket.id,
@@ -190,7 +191,7 @@ class CIPollMixin(_MergeStageBase):
         target = target_branch_for(ctx.settings, ctx.repo_config)
         try:
             return not git_ops.branch_has_net_diff(repo_path, target, ref=ref)
-        except Exception:  # noqa: BLE001 — fail safe: keep BLOCKED on any error
+        except Exception:
             return False
 
     def _poll_implement_complete(self, ticket: Ticket, ctx: StageContext) -> Outcome:
@@ -253,7 +254,7 @@ class CIPollMixin(_MergeStageBase):
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
@@ -371,10 +372,8 @@ class CIPollMixin(_MergeStageBase):
             _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
             _write_counter(artifacts_dir / _PING_PONG_COUNT, 0)
             last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 last_stage_path.unlink()
-            except FileNotFoundError:
-                pass
             log.info("%s: gates passed → HUMAN_MR_APPROVAL", ticket.id)
             return Outcome(
                 State.HUMAN_MR_APPROVAL,
@@ -444,16 +443,14 @@ class CIPollMixin(_MergeStageBase):
         ping_pong_path = artifacts_dir / _PING_PONG_COUNT
 
         last_stage = ""
-        try:
+        with contextlib.suppress(FileNotFoundError):
             last_stage = last_stage_path.read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
-            pass
 
         # Determine whether this routing constitutes an alternation.
         alternation: bool = False
-        if routing_to == "rebase" and last_stage == "ci_fix":
-            alternation = True
-        elif routing_to == "ci_fix" and last_stage == "rebase":
+        if (routing_to == "rebase" and last_stage == "ci_fix") or (
+            routing_to == "ci_fix" and last_stage == "rebase"
+        ):
             alternation = True
 
         if alternation:
@@ -558,7 +555,7 @@ class CIPollMixin(_MergeStageBase):
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)
 
@@ -742,7 +739,7 @@ class CIPollMixin(_MergeStageBase):
             ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
                 source_branch=branch
             )
-        except Exception as e:  # noqa: BLE001 — transient
+        except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
 
@@ -858,5 +855,5 @@ class CIPollMixin(_MergeStageBase):
             if main_failing and pr_failing <= main_failing:
                 return pr_failing & main_failing
             return set()
-        except Exception:  # noqa: BLE001 — best-effort; fall through to normal retry
+        except Exception:
             return set()

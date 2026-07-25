@@ -823,9 +823,7 @@ class GitLabForge(
                 f"/projects/{pid}/repository/branches/{encoded}",
             )
             # 204 = deleted; 404 = branch already gone — desired end state.
-            if r.status_code in (204, 404):
-                return True
-            return False
+            return r.status_code in (204, 404)
         except Exception:
             return False
 

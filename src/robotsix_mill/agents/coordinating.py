@@ -109,7 +109,7 @@ class ImplementResult(BaseModel):
             and v.strip()
         ]
         if candidates:
-            best_k, best_v = max(candidates, key=lambda kv: len(kv[1]))
+            _best_k, best_v = max(candidates, key=lambda kv: len(kv[1]))
             data["summary"] = best_v
         return data
 

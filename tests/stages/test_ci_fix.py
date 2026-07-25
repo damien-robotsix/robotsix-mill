@@ -643,7 +643,9 @@ def test_build_failing_summary_includes_codeql_alerts():
         ],
     )
     assert "Code-scanning alerts" in out
-    assert "py/x" in out and "t.py:9" in out and "high" in out
+    assert "py/x" in out
+    assert "t.py:9" in out
+    assert "high" in out
 
 
 # ---------------------------------------------------------------------------
@@ -703,13 +705,13 @@ def _oos_forge(
 
 
 def _oos_result(**over):
-    kwargs = dict(
-        status="OUT_OF_SCOPE",
-        summary="repo debt — not this ticket's diff",
-        out_of_scope_reason="alert lives in __init__.py, outside this ticket's diff",
-        failing_check="py/clear-text-logging",
-        required_change_area="src/pkg/__init__.py",
-    )
+    kwargs = {
+        "status": "OUT_OF_SCOPE",
+        "summary": "repo debt — not this ticket's diff",
+        "out_of_scope_reason": "alert lives in __init__.py, outside this ticket's diff",
+        "failing_check": "py/clear-text-logging",
+        "required_change_area": "src/pkg/__init__.py",
+    }
     kwargs.update(over)
     return CiFixResult(**kwargs)
 

@@ -42,7 +42,7 @@ from ._migrate_mixin import _MigrateMixin
 from ._queries import _QueryMixin
 from ._transition_mixin import _TransitionMixin
 
-__all__ = ["TicketService", "TransitionError", "AmbiguousTicketId"]
+__all__ = ["AmbiguousTicketId", "TicketService", "TransitionError"]
 
 
 class TicketService(

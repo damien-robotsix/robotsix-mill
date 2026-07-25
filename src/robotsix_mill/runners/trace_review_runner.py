@@ -296,48 +296,24 @@ def _classify_trace(
             # skipping by tool name guards against any ask_user
             # output (e.g. a controlled "Error: no active ticket"
             # return) tripping the regex.
-            if name == "ask_user":
-                pass
-            # Successful run_command returns exit=0\n... or a success
-            # sentence; skip the error-pattern regex for those so grep
-            # output that contains test source code lines (e.g. "error:")
-            # doesn't produce false positives.
-            elif name == "run_command" and (
-                out_s.startswith("exit=0\n") or "Your command ran successfully" in out_s
+            if (
+                name == "ask_user"
+                or (
+                    name == "run_command"
+                    and (
+                        out_s.startswith("exit=0\n")
+                        or "Your command ran successfully" in out_s
+                    )
+                )
+                or (name == "read_file" and "does not exist — try" in out_s)
+                or (
+                    name == "run_command"
+                    and "failed with exit code" in out_s
+                    and "and produced no output" in out_s
+                )
+                or (name == "run_command" and "error: could not apply" in out_s)
+                or name == "ticket_description"
             ):
-                pass
-            # read_file path-not-found is user-friendly guidance for a
-            # stale-path guess, not a structural failure.  Its standard
-            # message begins with "error:" which would otherwise match
-            # _TOOL_ERR_PATTERNS (\berror:).  Carve it out via the
-            # stable substring "does not exist — try" from fs_tools.py.
-            elif name == "read_file" and "does not exist — try" in out_s:
-                pass
-            # run_command empty-output failure (e.g. grep that finds
-            # nothing, producing exit>0 + no output).  As of writing
-            # this message does NOT match _TOOL_ERR_PATTERNS, but a
-            # future addition to the pattern could start matching it.
-            # Include a defensive carve-out keyed on the exact wording
-            # from fs_tools.py run_command() so the classifier stays
-            # robust regardless of pattern changes.  Do NOT suppress
-            # exit=<rc>\n<stderr> returns — those carry real stderr and
-            # must still be scanned.
-            elif (
-                name == "run_command"
-                and "failed with exit code" in out_s
-                and "and produced no output" in out_s
-            ):
-                pass
-            # run_command rebase conflict notification
-            # (e.g. "error: could not apply 57cd7900...")
-            # is expected git output, not a tool failure.
-            elif name == "run_command" and "error: could not apply" in out_s:
-                pass
-            # ticket_description retrieves the body text of existing
-            # tickets, which may legitimately describe past tool errors
-            # (e.g. "UsageLimitExceeded").  The tool itself succeeded
-            # when it returned content; skip the error-pattern regex.
-            elif name == "ticket_description":
                 pass
             elif _TOOL_ERR_PATTERNS.search(out_s) or _TOOL_ERR_PATTERNS.search(
                 status_msg
@@ -416,7 +392,7 @@ def _load_watermark(settings: Settings, board_id: str) -> datetime | None:
         if not ts:
             return None
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except Exception:  # noqa: BLE001 — corrupted state file = behave as no watermark
+    except Exception:
         log.warning("trace_review_state.json unreadable at %s — ignoring", p)
         return None
 
@@ -482,7 +458,7 @@ def _resolve_target_repo_dir(
             cand = workspace / "repo"
             if (cand / ".git").exists():
                 return cand
-    except Exception:  # noqa: BLE001 — resolution is best-effort
+    except Exception:
         log.debug("trace-review: repo_dir resolution failed", exc_info=True)
     return None
 
@@ -531,7 +507,7 @@ def _finding_cites_only_missing_paths(
                 missing.append(raw)
         if not any_exists:
             return True, missing
-    except Exception:  # noqa: BLE001 — guard never blocks a legitimate filing
+    except Exception:
         log.debug("trace-review: path-existence guard failed", exc_info=True)
     return False, []
 
@@ -595,7 +571,7 @@ def run_trace_review_pass(
                     settings.trace_review_target_repo_id,
                     source_board_id,
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception(
                 "trace-review: target-repo lookup failed; using source board",
             )
@@ -915,7 +891,7 @@ def run_trace_review_pass(
                     origin_session=session_id or None,
                 )
                 drafts.append({"id": ticket.id, "title": ticket.title})
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception(
                     "trace-review: failed to create draft for %r",
                     title,
@@ -932,7 +908,7 @@ def run_trace_review_pass(
     next_watermark = now
     try:
         _save_watermark(settings, source_board_id, next_watermark)
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("trace-review: failed to persist watermark")
 
     summary = f"scanned={len(traces)} flagged={flagged_count} drafts={len(drafts)}"

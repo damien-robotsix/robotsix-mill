@@ -5,6 +5,7 @@ import pytest
 
 from robotsix_mill import sandbox
 from robotsix_mill.config import Settings
+import itertools
 
 
 def _settings(tmp_path, **env):
@@ -51,9 +52,11 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     rc, out = sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
 
     a = seen["argv"]
-    assert rc == 0 and out == "ok"
+    assert rc == 0
+    assert out == "ok"
     assert a[:3] == ["docker", "run", "--rm"]
-    assert "--network" in a and a[a.index("--network") + 1] == "none"
+    assert "--network" in a
+    assert a[a.index("--network") + 1] == "none"
     assert "--read-only" in a
     # named-volume case: ONLY the ticket's repo sub-path, not the root
     assert "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo" in a
@@ -345,7 +348,7 @@ def test_sandbox_injects_pythonpath_for_src_layout(tmp_path, monkeypatch):
     sandbox.run("pytest -q", repo_dir=repo, settings=s)
 
     a = seen["argv"]
-    pairs = list(zip(a, a[1:], strict=False))
+    pairs = list(itertools.pairwise(a))
     assert ("-e", "PYTHONPATH=src") in pairs, (
         f"-e PYTHONPATH=src not found as a flag pair in argv: {a}"
     )
@@ -644,7 +647,8 @@ def test_extra_packages_prefix_order(tmp_path, monkeypatch):
     apt_pos = cmd.find("apt-get")
     pip_pos = cmd.find("pip install")
     cmd_pos = cmd.rfind("true")
-    assert apt_pos != -1 and pip_pos != -1
+    assert apt_pos != -1
+    assert pip_pos != -1
     assert apt_pos < pip_pos < cmd_pos, (
         f"expected apt ({apt_pos}) < pip ({pip_pos}) < command ({cmd_pos}) in: {cmd}"
     )
@@ -1048,7 +1052,8 @@ def test_reap_orphan_sandboxes_startup_removes_all(monkeypatch):
     # The listing must use `docker ps -a` so Created/Exited restart-orphans
     # (invisible to a running-only `docker ps`) are swept at startup.
     ps_calls = [a for a in calls if a[:2] == ["docker", "ps"]]
-    assert ps_calls and "-a" in ps_calls[0]
+    assert ps_calls
+    assert "-a" in ps_calls[0]
 
 
 def test_reap_orphan_sandboxes_age_gated(monkeypatch):
@@ -1103,7 +1108,9 @@ def test_reap_orphan_sandboxes_best_effort_on_missing_docker(monkeypatch):
 
 def test_parse_docker_started_at():
     dt = sandbox._parse_docker_started_at("2026-06-18T20:34:45.483641388Z")
-    assert dt is not None and dt.year == 2026 and dt.tzinfo is not None
+    assert dt is not None
+    assert dt.year == 2026
+    assert dt.tzinfo is not None
     # zero value / blank / junk → None (treated as "leave it alone")
     assert sandbox._parse_docker_started_at("0001-01-01T00:00:00Z") is None
     assert sandbox._parse_docker_started_at("") is None

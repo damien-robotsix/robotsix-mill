@@ -420,11 +420,11 @@ async def run_explore(
             # Budget cap exhausted even after no-tools retry —
             # don't loop, return the failure immediately.
             return f"explore failed: budget exhausted after {attempt} attempt(s)"
-        except Exception as e:  # noqa: BLE001 — degrade, don't break the driver
+        except Exception as e:
             last_error = e
             if attempt < _EXPLORE_MAX_ATTEMPTS:
                 delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
-                delay += random.uniform(0, delay / 2)  # noqa: S311 — jitter, not crypto
+                delay += random.uniform(0, delay / 2)
                 log.warning(
                     "explore attempt %d/%d failed (%s: %s) — "
                     "retrying in %.1fs with simplified question",
@@ -622,8 +622,8 @@ def _try_grep_prefilter(question: str, repo_dir: Path) -> str | None:
         if len(term) < 3:
             continue  # too short to be distinctive
         try:
-            result = subprocess.run(  # noqa: S603 — term is re.escape'd
-                ["git", "grep", "-n", "-E", re.escape(term)],  # noqa: S607 — git is on PATH
+            result = subprocess.run(
+                ["git", "grep", "-n", "-E", re.escape(term)],
                 capture_output=True,
                 text=True,
                 cwd=str(repo_dir),
@@ -645,7 +645,7 @@ def _try_grep_prefilter(question: str, repo_dir: Path) -> str | None:
     return None
 
 
-def make_parallel_explore_tool(  # noqa: C901 — prefilter + scout batching is inherently multi-path
+def make_parallel_explore_tool(
     settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
 ):
     """Return a ``parallel_explore(questions)`` closure that batches
@@ -749,7 +749,7 @@ def make_parallel_explore_tool(  # noqa: C901 — prefilter + scout batching is 
                             question=batch_prompt,
                             extra_roots=extra_roots,
                         )
-                    except Exception as e:  # noqa: BLE001 — degrade
+                    except Exception as e:
                         result = f"(explore failed: {e})"
 
                 # Prepend question labels for the batched answers.

@@ -173,7 +173,7 @@ def _parse_frontmatter_datetime(head: str, regex: re.Pattern[str]) -> datetime |
         return None
 
 
-def _parse_frontmatter(text: str) -> _KnowledgeMeta:  # noqa: C901 — frontmatter parser naturally has one branch per field
+def _parse_frontmatter(text: str) -> _KnowledgeMeta:
     """Return a ``_KnowledgeMeta`` from a frontmatter-stamped
     knowledge file. Missing / unparseable frontmatter → all fields
     ``None`` / empty, body = *text* as-is."""
@@ -430,7 +430,7 @@ Plan your turns accordingly:
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings) -> list:  # noqa: C901 — factory intentionally groups all tool closures
+def _make_tools(settings: Settings) -> list:
     """Build the closures the agent calls during a consult."""
     from .web_research import run_web_research
 
@@ -651,7 +651,7 @@ async def run_web_knowledge(
             "Do NOT retry the same question — use a fallback approach "
             "(consult_expert or local research) instead."
         )
-    except Exception as e:  # noqa: BLE001 — degrade
+    except Exception as e:
         log.warning("web_knowledge failed: %s", e)
         return f"web_knowledge failed: {e}"
     finally:
@@ -737,7 +737,7 @@ def make_ask_web_knowledge_tool(
 
 
 __all__ = [
-    "run_web_knowledge",
     "make_ask_web_knowledge_tool",
     "reset_trace_web_search_budget",
+    "run_web_knowledge",
 ]

@@ -83,7 +83,7 @@ def _pr_changed_paths(forge: Forge, branch: str) -> set[str]:
     # spawn). This is the conservative direction and is intentional.
     try:
         return {f.get("path", "") for f in forge.pr_files(source_branch=branch)} - {""}
-    except Exception:  # noqa: BLE001 — best-effort; degrade to empty set
+    except Exception:
         return set()
 
 

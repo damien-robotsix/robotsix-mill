@@ -118,7 +118,8 @@ def test_test_agent_pass(tmp_path, monkeypatch):
         lambda cmd, *, repo_dir, settings, **kwargs: (0, "ok"),
     )
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
-    assert passed is True and "passed" in fb
+    assert passed is True
+    assert "passed" in fb
 
 
 def test_test_agent_no_tests_collected_passes(tmp_path, monkeypatch):
@@ -152,7 +153,7 @@ def test_test_agent_rc5_with_real_failure_still_fails(tmp_path, monkeypatch):
         "robotsix_mill.agents.testing.get_secrets",
         lambda: type("S", (), {"openrouter_api_key": ""})(),
     )
-    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    passed, _fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
 
 
@@ -221,7 +222,7 @@ def test_test_agent_no_retry_by_default(tmp_path, monkeypatch):
         "robotsix_mill.agents.testing.get_secrets",
         lambda: type("S", (), {"openrouter_api_key": ""})(),
     )
-    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    passed, _fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
     assert len(calls) == 1
 
@@ -249,7 +250,7 @@ def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sandbox, "run", fake_run)
 
-    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    passed, _fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
     assert cap["cmd"] == "repo-file-cmd"
 
@@ -257,13 +258,13 @@ def test_test_agent_repo_file_command_wins(tmp_path, monkeypatch):
 def _repo_config(**overrides):
     from robotsix_mill.config import RepoConfig
 
-    base = dict(
-        repo_id="r",
-        board_id="b",
-        langfuse_project_name="p",
-        langfuse_public_key="pk",
-        langfuse_secret_key="sk",
-    )
+    base = {
+        "repo_id": "r",
+        "board_id": "b",
+        "langfuse_project_name": "p",
+        "langfuse_public_key": "pk",
+        "langfuse_secret_key": "sk",
+    }
     base.update(overrides)
     return RepoConfig(**base)
 
@@ -323,7 +324,8 @@ def test_smoke_agent_pass(tmp_path, monkeypatch):
         lambda cmd, *, repo_dir, settings, **kwargs: (0, "ok"),
     )
     passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
-    assert passed is True and "smoke passed" in fb
+    assert passed is True
+    assert "smoke passed" in fb
 
 
 def test_smoke_agent_repo_file_command_wins(tmp_path, monkeypatch):
@@ -345,7 +347,7 @@ def test_smoke_agent_repo_file_command_wins(tmp_path, monkeypatch):
         return (0, "ok")
 
     monkeypatch.setattr(sandbox, "run", fake_run)
-    passed, fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
+    passed, _fb = testing.run_smoke_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
     assert cap["cmd"] == "repo-smoke-cmd"
 
@@ -448,7 +450,8 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
     # run_tests.yaml declares level 2 → DeepSeek pro via llmio tier defaults.
-    assert cap["model"] == "deepseek/deepseek-v4-pro" and cap["got_output"]
+    assert cap["model"] == "deepseek/deepseek-v4-pro"
+    assert cap["got_output"]
     assert cap["name"] == "run_tests"
 
     # AC4: run_tests agent has read-only diagnostic tools
@@ -464,7 +467,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
 
 def test_test_agent_no_command_is_pass(tmp_path):
     s = _settings(tmp_path, test_command="")
-    passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
+    passed, _fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is True
 
 
@@ -1020,7 +1023,7 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
 
     try:
         explicit_map = ["only/this/file.py"]
-        passed, fb = testing.run_test_agent(
+        passed, _fb = testing.run_test_agent(
             settings=s,
             repo_dir=tmp_path,
             file_map=explicit_map,

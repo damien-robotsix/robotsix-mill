@@ -4,8 +4,8 @@ from .base import Forge, _detect_forge_kind, get_forge, NotConfiguredError, Repo
 
 __all__ = [
     "Forge",
+    "NotConfiguredError",
+    "RepoInfo",
     "_detect_forge_kind",
     "get_forge",
-    "RepoInfo",
-    "NotConfiguredError",
 ]

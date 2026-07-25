@@ -53,7 +53,7 @@ def _clean_env() -> Generator[None, None, None]:
     os.environ.update(stash)
 
 
-@pytest.fixture()
+@pytest.fixture
 def settings() -> Settings:
     """A fresh ``Settings()`` with no env-var contamination."""
     return Settings()

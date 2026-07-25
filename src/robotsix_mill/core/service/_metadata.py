@@ -22,6 +22,7 @@ from ..models import Ticket, TicketEvent, TicketKind
 from ..states import State
 from ._base import _ServiceBase
 from ._helpers import _get_ticket, TransitionError
+import contextlib
 
 # States that are considered terminal — the spec cannot be updated
 # once a ticket reaches one of these.
@@ -318,10 +319,8 @@ class _MetadataMixin(_ServiceBase):
             s.commit()
         # Optionally clear the stale implement guard.
         if reset_fingerprint_guard:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 (ws.artifacts_dir / "implement.md").unlink()
-            except FileNotFoundError:
-                pass
         # Record the history event.
         note = f"[{author}] spec update: fingerprint {old_fp} → {new_fp}"
         if reset_fingerprint_guard:

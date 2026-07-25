@@ -10,6 +10,7 @@ import logging
 from asyncio import Queue
 
 from ..core.models import Ticket
+import contextlib
 
 log = logging.getLogger(__name__)
 
@@ -73,10 +74,8 @@ class BoardBroadcaster:
             except asyncio.QueueFull:
                 dead.append(q)
         for q in dead:
-            try:
+            with contextlib.suppress(ValueError):
                 self._queues.remove(q)
-            except ValueError:
-                pass
 
     async def subscribe(self, initial_tickets: list[dict]) -> Queue:
         """Register a new WebSocket client.
@@ -94,7 +93,5 @@ class BoardBroadcaster:
 
     def unsubscribe(self, q: Queue) -> None:
         """Remove a client queue (called on disconnect)."""
-        try:
+        with contextlib.suppress(ValueError):
             self._queues.remove(q)
-        except ValueError:
-            pass

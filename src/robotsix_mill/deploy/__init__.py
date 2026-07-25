@@ -150,9 +150,8 @@ def validate_config_standard_footprint(
     # as an out-of-footprint config-standard artifact and blocked deploys
     # fleet-wide.
     for suspect in ("_standards", "_standards/"):
-        if (repo / suspect).exists():
-            if _is_in_diff(suspect, changed_files):
-                violations.append(suspect)
+        if (repo / suspect).exists() and _is_in_diff(suspect, changed_files):
+            violations.append(suspect)
 
     if changed_files is not None:
         violations = [v for v in violations if _is_in_diff(v, changed_files)]
@@ -179,8 +178,4 @@ def _is_in_diff(path: str, diff_files: set[str] | None) -> bool:
     # e.g. path="_standards" matches diff_files entry
     # "_standards/foo.yaml".
     prefix = path.rstrip("/") + "/"
-    for df in diff_files:
-        if df == path or df.startswith(prefix):
-            return True
-
-    return False
+    return any(df == path or df.startswith(prefix) for df in diff_files)

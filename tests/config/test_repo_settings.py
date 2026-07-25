@@ -121,7 +121,8 @@ def test_resolve_languages_from_repo_file_multi(tmp_path):
     _write_config(repo, "languages: [python, rust]\n")
     s = _settings_with_builtin(tmp_path)
     out = resolve_language_instructions(s, repo)
-    assert "PY BUILTIN" in out and "RUST BUILTIN" in out
+    assert "PY BUILTIN" in out
+    assert "RUST BUILTIN" in out
 
 
 def test_resolve_no_repos_yaml_fallback(tmp_path):

@@ -21,6 +21,7 @@ from ..config import Settings, get_secrets
 from .prompt_tool_consistency import unregistered_call_directives
 from .report_issue import make_report_issue_tool
 from .tool_registry import ToolRegistry
+import contextlib
 
 # Defensive char cap on the inlined ``## Module Map`` block so the static
 # prompt can't grow unbounded as ``docs/modules.yaml`` grows. A hardcoded
@@ -51,10 +52,8 @@ async def _aclose_async_client(client: "httpx.AsyncClient") -> None:
     loop via ``run_until_complete`` is illegal while another loop runs on the
     thread (it would be swallowed, leaking the client's connections). Errors
     are swallowed so cleanup never breaks the caller."""
-    try:
+    with contextlib.suppress(Exception):
         await client.aclose()
-    except Exception:
-        pass
 
 
 def _safe_close(agent: Any) -> None:
@@ -64,10 +63,8 @@ def _safe_close(agent: Any) -> None:
     a ``close`` method or if closing raises."""
     close_fn = getattr(agent, "close", None)
     if close_fn is not None:
-        try:
+        with contextlib.suppress(Exception):
             close_fn()
-        except Exception:
-            pass
 
 
 # Provider prefix (hyphen-free) that selects the Claude SDK backend in the
@@ -192,27 +189,27 @@ def build_agent_from_definition(
     else:
         resolved_output_type = str
 
-    kwargs: dict[str, Any] = dict(
-        name=definition.name,
-        system_prompt=definition.system_prompt,
-        level=definition.level,
-        web_knowledge=definition.web_knowledge,
-        report_issue=definition.report_issue,
-        read_ticket=definition.read_ticket,
-        list_epic_children=definition.list_epic_children,
-        current_ticket_id=current_ticket_id,
-        reply_to_thread=definition.reply_to_thread,
-        close_thread=definition.close_thread,
-        list_threads=definition.list_threads,
-        ask_user=definition.ask_user,
-        retries=definition.retries,
-        max_tokens=definition.max_tokens,
-        output_type=resolved_output_type,
-        skills=definition.skills,
-        modules=definition.modules,
-        workflows=definition.workflows,
-        web_knowledge_block_reason=web_knowledge_block_reason,
-    )
+    kwargs: dict[str, Any] = {
+        "name": definition.name,
+        "system_prompt": definition.system_prompt,
+        "level": definition.level,
+        "web_knowledge": definition.web_knowledge,
+        "report_issue": definition.report_issue,
+        "read_ticket": definition.read_ticket,
+        "list_epic_children": definition.list_epic_children,
+        "current_ticket_id": current_ticket_id,
+        "reply_to_thread": definition.reply_to_thread,
+        "close_thread": definition.close_thread,
+        "list_threads": definition.list_threads,
+        "ask_user": definition.ask_user,
+        "retries": definition.retries,
+        "max_tokens": definition.max_tokens,
+        "output_type": resolved_output_type,
+        "skills": definition.skills,
+        "modules": definition.modules,
+        "workflows": definition.workflows,
+        "web_knowledge_block_reason": web_knowledge_block_reason,
+    }
     kwargs.update(overrides)
     kwargs["tools"] = tools
     # Forward the workspace so build_agent can confine the Claude SDK's
@@ -311,7 +308,7 @@ def _render_module_map(module_list: list[dict]) -> str:
     return rendered
 
 
-def compose_prompt(  # noqa: C901
+def compose_prompt(
     settings: Settings,
     system_prompt: str,
     skills: list[str] | None = None,
@@ -416,13 +413,13 @@ def _build_deepseek_handle(
     from pydantic_ai.settings import ModelSettings
 
     model, http_client = new_deepseek_model(effective_model, level)
-    agent_kwargs: dict[str, Any] = dict(
-        model=model,
-        system_prompt=composed_system,
-        output_type=output_type,
-        tools=all_tools,
-        retries=retries,
-    )
+    agent_kwargs: dict[str, Any] = {
+        "model": model,
+        "system_prompt": composed_system,
+        "output_type": output_type,
+        "tools": all_tools,
+        "retries": retries,
+    }
     if max_tokens is not None:
         agent_kwargs["model_settings"] = ModelSettings(max_tokens=max_tokens)
     if name is not None:
@@ -431,7 +428,7 @@ def _build_deepseek_handle(
     return AgentHandle(agent, http_client)
 
 
-def build_agent(  # noqa: C901
+def build_agent(
     settings: Settings,
     *,
     system_prompt: str,

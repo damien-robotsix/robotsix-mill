@@ -743,6 +743,6 @@ def list_all_traces_since(
             if max_traces is not None and len(all_traces) >= max_traces:
                 return all_traces[:max_traces]
         return all_traces
-    except Exception:  # noqa: BLE001 — never crash the caller
+    except Exception:
         log.exception("failed to list Langfuse traces since %s", from_timestamp)
         return []

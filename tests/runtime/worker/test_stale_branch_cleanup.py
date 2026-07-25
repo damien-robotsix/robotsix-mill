@@ -7,6 +7,7 @@ import pytest
 
 from robotsix_mill.forge.base import BranchInfo
 from robotsix_mill.runtime.worker import _branch_is_stale
+import contextlib
 
 
 # ---------------------------------------------------------------------------
@@ -220,10 +221,8 @@ async def test_per_repo_cleanup_deletes_only_eligible(
     # Wait long enough for one iteration to complete, then cancel.
     await asyncio.sleep(0.2)
     loop_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await loop_task
-    except asyncio.CancelledError:
-        pass
 
     # Only the old, unprotected, no-open-PR, prefix-matching branch
     # should be deleted.
@@ -278,7 +277,5 @@ async def test_forge_exception_does_not_crash_loop(settings, repo_config, monkey
     assert not loop_task.done()
 
     loop_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await loop_task
-    except asyncio.CancelledError:
-        pass

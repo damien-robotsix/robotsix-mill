@@ -13,6 +13,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.implement import ImplementStage
 from robotsix_mill.vcs import git_ops
+import contextlib
 
 
 def _git(cwd, *args):
@@ -136,7 +137,7 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     s = Settings(data_dir=str(tmp_path))
-    read_file, write_file, edit_file, delete_file, list_dir, run_command = (
+    read_file, write_file, _edit_file, _delete_file, list_dir, run_command = (
         build_fs_tools(tmp_path, s)
     )
     assert "wrote" in write_file("a/b.txt", "hi")
@@ -146,7 +147,8 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     # errors come back as strings (so the model can self-correct), and
     # the path-escape guard still refuses the op
     esc = read_file(path="../escape.txt")
-    assert esc.startswith("error:") and "escapes" in esc
+    assert esc.startswith("error:")
+    assert "escapes" in esc
     assert read_file(path="nope.txt").startswith("error:")  # missing file
 
 
@@ -496,7 +498,8 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     out = ImplementStage().run(t, ctx)  # test_failing_gate_blocks_resumable
 
     assert out.next_state is State.BLOCKED
-    assert "still failing" in out.note and "resumable" in out.note
+    assert "still failing" in out.note
+    assert "resumable" in out.note
     # The stage re-invokes the coordinator once per iteration.
     assert len(calls) == 2
     assert calls[0] is None  # first pass: no feedback
@@ -546,7 +549,8 @@ def test_smoke_gate_runs_after_tests_pass_when_paths_match(
 
     assert smoke_calls, "smoke gate must run after the unit gate passes"
     assert out.next_state is State.BLOCKED
-    assert "still failing" in out.note and "resumable" in out.note
+    assert "still failing" in out.note
+    assert "resumable" in out.note
 
 
 def test_smoke_gate_skipped_when_paths_do_not_match(ctx_factory, tmp_path, monkeypatch):
@@ -767,7 +771,8 @@ def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypat
     out = ImplementStage().run(t, ctx)  # test_budget_error_blocks_resumable_with_wip
 
     assert out.next_state is State.BLOCKED
-    assert "resumable" in out.note and "budget" in out.note
+    assert "resumable" in out.note
+    assert "budget" in out.note
     # WIP committed so a human can resume (no transcript now — a resume
     # re-runs the coordinator fresh).
     ws = ctx.service.workspace(t)
@@ -835,7 +840,8 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     assert (repo / "first.txt").exists()  # prior WIP kept
     assert (repo / "second.txt").exists()
     msgs = _commits(repo)
-    assert any("WIP" in m for m in msgs) and len(msgs) >= 2
+    assert any("WIP" in m for m in msgs)
+    assert len(msgs) >= 2
 
 
 # --- unconditional rebase (fresh clone + resume) -----------------------
@@ -3499,10 +3505,8 @@ def _clone_repo_to(ctx, remote_url, repo_dir):
 
         shutil.rmtree(repo_dir)
     token = None
-    try:
+    with contextlib.suppress(RuntimeError):
         token = github_token(ctx.settings, repo_config=ctx.repo_config)
-    except RuntimeError:
-        pass
     git_ops.clone(remote_url, repo_dir, ctx.settings.forge_target_branch, token)
 
 
@@ -3918,7 +3922,7 @@ def test_no_change_needed_guard_multi_repo_extra_has_changes(
     def _agent(*, repo_dir, extra_roots, **kw):
         del kw
         # Do NOT touch primary repo. Write to an EXTRA root only.
-        extra_root = [rp for rp in extra_roots if rp != repo_dir][0]
+        extra_root = next(rp for rp in extra_roots if rp != repo_dir)
         (extra_root / "feature.txt").write_text("only extra edit")
         return (
             "spec already satisfied",
@@ -3985,7 +3989,7 @@ def test_silent_no_change_guard_multi_repo(ctx_factory, tmp_path, monkeypatch):
     def _agent(*, repo_dir, extra_roots, **kw):
         del kw
         # Write only to an EXTRA root, leave primary untouched.
-        extra_root = [rp for rp in extra_roots if rp != repo_dir][0]
+        extra_root = next(rp for rp in extra_roots if rp != repo_dir)
         (extra_root / "feature.txt").write_text("silent extra edit")
         # Agent does NOT set no_change_needed.
         return ("silent work done", [], "", None, None, False, "")

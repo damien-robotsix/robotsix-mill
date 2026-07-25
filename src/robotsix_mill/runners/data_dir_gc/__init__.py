@@ -35,7 +35,7 @@ class DataDirGcPassResult:
     summary: str = ""
 
 
-def run_data_dir_gc_pass(  # noqa: C901
+def run_data_dir_gc_pass(
     session_id: str = "",
     repo_config: RepoConfig | None = None,
     settings: Settings | None = None,

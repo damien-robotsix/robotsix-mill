@@ -53,7 +53,7 @@ class GitHubForgeDependabotMixin:
                     return out
                 r.raise_for_status()
                 raw = r.json()
-            except Exception:  # noqa: BLE001 — best-effort, never fatal
+            except Exception:
                 return out
 
             if not isinstance(raw, list) or not raw:

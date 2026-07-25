@@ -92,12 +92,12 @@ def _ctx(service: FakeService, *, board_id: str | None = "test-board") -> StageC
 
 def _spawn(service: FakeService, **overrides):
     ticket = SimpleNamespace(id="orig-1")
-    kwargs = dict(
-        title="fix the thing",
-        description="please fix it",
-        source_kind=SourceKind.CI_FIX_DEPENDENCY,
-        block_reason_prefix="out of scope",
-    )
+    kwargs = {
+        "title": "fix the thing",
+        "description": "please fix it",
+        "source_kind": SourceKind.CI_FIX_DEPENDENCY,
+        "block_reason_prefix": "out of scope",
+    }
     kwargs.update(overrides)
     return spawn_dependency_fix(ticket, _ctx(service), **kwargs)
 

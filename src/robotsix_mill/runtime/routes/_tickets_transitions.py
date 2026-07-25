@@ -133,10 +133,10 @@ def mark_done(
     try:
         raw_note = body.get("note", "")
         note = str(raw_note) if raw_note else ""
-        comment, ticket = svc.mark_done(ticket_id, note=note)
+        _comment, ticket = svc.mark_done(ticket_id, note=note)
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
-    assert request is not None  # FastAPI always injects Request  # noqa: S101
+    assert request is not None  # FastAPI always injects Request
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
@@ -271,7 +271,7 @@ def cost_breakdown(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    assert request is not None  # FastAPI always injects Request  # noqa: S101
+    assert request is not None  # FastAPI always injects Request
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     from ...langfuse.client import session_traces
 

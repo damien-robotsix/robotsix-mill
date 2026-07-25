@@ -69,7 +69,7 @@ def fake_ai(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "status,expected",
+    ("status", "expected"),
     [
         ("DONE", True),
         ("FAILED", False),

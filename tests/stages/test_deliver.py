@@ -160,13 +160,14 @@ def test_blocked_without_forge_kind(tmp_path):
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DELIVERABLE)
     out = DeliverStage().run(ctx.service.get(t.id), ctx)
-    assert out.next_state is State.BLOCKED and "FORGE_KIND" in out.note
+    assert out.next_state is State.BLOCKED
+    assert "FORGE_KIND" in out.note
 
 
 def test_auto_forge_kind_bypasses_none_guard(tmp_path):
     """forge_kind=auto with a valid remote_url bypasses the
     FORGE_KIND=none guard — it should NOT block with "FORGE_KIND"."""
-    remote, _ = _bare(tmp_path)
+    _remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
         FORGE_KIND="auto",
@@ -191,7 +192,8 @@ def test_blocked_without_token(tmp_path):
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DELIVERABLE)
     out = DeliverStage().run(ctx.service.get(t.id), ctx)
-    assert out.next_state is State.BLOCKED and "FORGE_TOKEN" in out.note
+    assert out.next_state is State.BLOCKED
+    assert "FORGE_TOKEN" in out.note
 
 
 def test_blocked_without_branch(tmp_path):
@@ -206,7 +208,8 @@ def test_blocked_without_branch(tmp_path):
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DELIVERABLE)
     out = DeliverStage().run(ctx.service.get(t.id), ctx)
-    assert out.next_state is State.BLOCKED and "no implemented branch" in out.note
+    assert out.next_state is State.BLOCKED
+    assert "no implemented branch" in out.note
 
 
 # --- success + resumable failure ---------------------------------------
@@ -264,7 +267,8 @@ def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
 
     out = DeliverStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "resumable" in out.note and "403" in out.note
+    assert "resumable" in out.note
+    assert "403" in out.note
 
 
 def test_pr_422_no_commits_routes_to_done(tmp_path, monkeypatch):
@@ -320,7 +324,8 @@ def test_pr_non_422_error_still_blocks_resumable(tmp_path, monkeypatch):
 
     out = DeliverStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "resumable" in out.note and "500" in out.note
+    assert "resumable" in out.note
+    assert "500" in out.note
 
 
 # --- zero-diff guard ----------------------------------------------------
@@ -612,8 +617,8 @@ def _write_touched_repos(ctx, ticket, entries: list[dict]) -> None:
 def test_multi_repo_happy_path_opens_one_pr_per_repo(tmp_path, monkeypatch):
     """AC1: two touched repos, both ahead of main → exactly two PRs,
     pr_urls.json + deliver.md list both."""
-    remote_a, bare_a = _bare_in(tmp_path, "a")
-    remote_b, bare_b = _bare_in(tmp_path, "b")
+    remote_a, _bare_a = _bare_in(tmp_path, "a")
+    remote_b, _bare_b = _bare_in(tmp_path, "b")
     ctx = _ctx(
         tmp_path,
         FORGE_KIND="github",
@@ -1168,7 +1173,7 @@ def test_lockfile_regen_called_when_lock_stale_manifest_unchanged_uv(
 ):
     """Regen is called even when pyproject.toml is unchanged — the lock
     exists alongside its manifest, so it gets a consistency check."""
-    remote, _ = _bare(tmp_path)
+    _remote, _ = _bare(tmp_path)
     # Put pyproject.toml + uv.lock on main so they exist but are NOT
     # in the net diff of a branch that only changes a non-manifest file.
     seed2 = tmp_path / "seed2"
@@ -1232,7 +1237,7 @@ def test_lockfile_regen_called_when_lock_stale_manifest_unchanged_npm(
 ):
     """Regen is called even when package.json is unchanged — same
     consistency-check logic as the uv path."""
-    remote, _ = _bare(tmp_path)
+    _remote, _ = _bare(tmp_path)
     # Put package.json + package-lock.json on main.
     seed3 = tmp_path / "seed3"
     seed3.mkdir()

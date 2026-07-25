@@ -34,6 +34,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
+import contextlib
 
 
 def _write_yaml(path, data):
@@ -150,10 +151,8 @@ class TestBespokeSupervisor:
                 break
             await asyncio.sleep(0.01)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         assert len(spawned) == 1
         assert spawned[0].name == "mail"
@@ -196,10 +195,8 @@ class TestBespokeSupervisor:
                 break
             await asyncio.sleep(0.01)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         # Renamed: legacy gone, new path holds the clone + its committed yaml.
         assert not (base / "bespoke_workspace").exists()
@@ -279,10 +276,8 @@ class TestBespokeSupervisor:
         yaml_path.unlink()
         await real_sleep(0.05)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         # cancel_events captures cancellation from EITHER mid-loop
         # (YAML removal) or supervisor teardown — but the YAML-removal
@@ -352,10 +347,8 @@ class TestBespokeSupervisor:
         )
         await real_sleep(0.05)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         # Both versions of the prompt were spawned at some point.
         assert "old prompt" in spawns
@@ -407,10 +400,8 @@ class TestBespokeSupervisor:
         assert len(running_children) == 3
         # Cancel the supervisor; its finally must tear down children.
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
         # Allow scheduler to propagate cancellations.
         await asyncio.sleep(0.01)
         assert all(c.cancelled() or c.done() for c in running_children), (
@@ -458,10 +449,8 @@ class TestPeriodicSupervisorWorkflows:
                 break
             await asyncio.sleep(0.01)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         assert len(scheduled) == 1
         assert scheduled[0].name == "audit"
