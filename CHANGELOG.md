@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Stuck-loop detector in implement stage now considers committed branch-ahead-of-main work (not just working-tree changes), preventing false BLOCKED when a prior cycle already committed and pushed complete work
 - Implement agent: add instruction to register new changelog fragment files in `docs/modules.yaml` under the `core` module's `paths` list.
 - Fix zero-edit implement loop persisting after #2552: the resume-with-ahead-branch
   path in `_detect_no_change_contradiction` was gated on `_any_repo_has_changes`
