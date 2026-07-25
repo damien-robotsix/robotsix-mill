@@ -119,7 +119,7 @@ class GitHubForgeCodeScanningMixin:
             except CodeScanningAlertsUnavailable:
                 raise
             except Exception:
-                pass
+                pass  # best-effort fetch; if it fails, retry after backoff
 
         # Exhausted backoff window — alerts still unavailable.
         return []

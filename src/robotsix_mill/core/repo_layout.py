@@ -83,5 +83,5 @@ def resolve_under_src(repo_dir: pathlib.Path, token: str) -> pathlib.Path | None
             if (repo_dir / candidate).exists():
                 return repo_dir / candidate
     except Exception:
-        pass
+        pass  # path-resolution helpers are best-effort; any failure yields None
     return None

@@ -42,8 +42,6 @@ from ..pause import (
     _collect_ask_user_replies,
 )
 from . import _checkpoint
-from . import _reconcile
-from . import _result_paths
 from . import _triage
 from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
@@ -53,14 +51,53 @@ from .helpers import (
     log,
 )
 
-# Re-export triage I/O helpers for backward compatibility (tests import
-# these symbols from the orchestration module).
-from ._reconcile import (
-    read_triage_complexity as _read_triage_complexity,
-    read_triage_findings as _read_triage_findings,
-    read_triage_trivial as _read_triage_trivial,
-    write_triage_complexity as _write_triage_complexity,
-)
+# ---------------------------------------------------------------------------
+# Lazy imports for _reconcile and _result_paths — both have late imports
+# back to this module (for monkeypatch compatibility), so top-level
+# imports would create a cycle (py/cyclic-import).
+# ---------------------------------------------------------------------------
+
+_REEXPORT_MAP: dict[str, str] = {
+    "_read_triage_complexity": "read_triage_complexity",
+    "_read_triage_findings": "read_triage_findings",
+    "_read_triage_trivial": "read_triage_trivial",
+    "_write_triage_complexity": "write_triage_complexity",
+}
+
+
+def _lazy_import_reconcile():
+    """Lazily import and cache the _reconcile sub-module.
+
+    Must be called at the top of every method that references
+    ``_reconcile`` — the late imports within _reconcile (and
+    _result_paths) create a cycle if we import at module level.
+    """
+    global _reconcile  # noqa: PLW0603
+    if _reconcile is None:  # type: ignore[name-defined]
+        from . import _reconcile as _rec  # type: ignore[no-redef]
+        globals()["_reconcile"] = _rec
+
+
+def _lazy_import_result_paths():
+    """Lazily import and cache the _result_paths sub-module."""
+    global _result_paths  # noqa: PLW0603
+    if _result_paths is None:  # type: ignore[name-defined]
+        from . import _result_paths as _rp  # type: ignore[no-redef]
+        globals()["_result_paths"] = _rp
+
+
+# Sentinel values — replaced on first lazy import.
+_reconcile = None  # type: ignore[assignment]
+_result_paths = None  # type: ignore[assignment]
+
+
+def __getattr__(name: str) -> object:
+    if name in _REEXPORT_MAP:
+        _lazy_import_reconcile()
+        obj = getattr(_reconcile, _REEXPORT_MAP[name])  # type: ignore[union-attr]
+        globals()[name] = obj
+        return obj
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
@@ -89,6 +126,7 @@ class RefineAgentMixin:
         child_index: int | None = None,
     ) -> str:
         """Delegate to :func:`_result_paths.review_spec_conciseness`."""
+        _lazy_import_result_paths()
         return _result_paths.review_spec_conciseness(
             s, ws, ticket, spec, verbose_filename, child_index=child_index
         )
@@ -103,6 +141,7 @@ class RefineAgentMixin:
         reviewer_comments: str | None,
     ) -> Outcome | None:
         """Delegate to :func:`_reconcile.short_circuit_for_internal_failure`."""
+        _lazy_import_reconcile()
         return _reconcile.short_circuit_for_internal_failure(
             ctx, ticket, draft, ws, s, reviewer_comments
         )
@@ -152,6 +191,8 @@ class RefineAgentMixin:
         this body is the FSM driver that short-circuits on the first
         phase to produce an :class:`Outcome`.
         """
+        _lazy_import_reconcile()
+        _lazy_import_result_paths()
         reviewer_comments, open_thread_ids = (
             RefineAgentMixin._collect_reviewer_comments(ctx, ticket)
         )

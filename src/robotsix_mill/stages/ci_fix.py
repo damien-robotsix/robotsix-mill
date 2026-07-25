@@ -667,7 +667,7 @@ class CIFixStage(Stage):
             if vp.exists():
                 verdicts = _json.loads(vp.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            pass  # best-effort verdicts read; missing/unparseable file means no verdicts
 
         codeql_note = _codeql_block_note(failing, alerts, changed_paths, verdicts)
         if codeql_note is not None:

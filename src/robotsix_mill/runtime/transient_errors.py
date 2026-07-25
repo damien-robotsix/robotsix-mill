@@ -227,7 +227,7 @@ def _matches_insufficient_credit(exc: BaseException) -> bool:
             if _INSUFFICIENT_CREDIT_RE.search(err):
                 return True
         except Exception:
-            pass
+            pass  # best-effort JSON parse; if it fails, fall through to string check below
     # openai.PermissionDeniedError (402)
     if openai is not None and isinstance(exc, openai.PermissionDeniedError):
         # PermissionDeniedError doesn't expose http_status directly;
@@ -284,14 +284,14 @@ def parse_credit_shortfall(exc: BaseException) -> str:
             if body:
                 msg = body
         except Exception:
-            pass
+            pass  # best-effort text body read; non-text responses fall through
         try:
             js = exc.response.json()
             err = str(js.get("error", {}).get("message", ""))
             if err:
                 msg = err
         except Exception:
-            pass
+            pass  # best-effort JSON body read; non-JSON responses fall through
 
     m = _SHORTFALL_RE.search(msg)
     if m is None:
