@@ -1,6 +1,13 @@
 ## 0.0.0 (unreleased)
 
 - Implement agent: add instruction to register new changelog fragment files in `docs/modules.yaml` under the `core` module's `paths` list.
+- Fix zero-edit implement loop persisting after #2552: the resume-with-ahead-branch
+  path in `_detect_no_change_contradiction` was gated on `_any_repo_has_changes`
+  returning False, which bundles both working-tree cleanliness AND branch-not-ahead.
+  On a resume the branch IS ahead (prior commits from earlier passes), so the
+  guard never fired and the ticket fell through to CODE_REVIEW → re-implement →
+  spawn-limit BLOCKED.  Add a new exit path that detects "resuming + clean working
+  tree + branch ahead" and routes directly to DONE (already satisfied).
 - Added 12 unit tests for the GitLab pagination helper `_paginated_get` (single/multi-page, empty, HTTP errors, item transforms, parameter forwarding).
 - Implement stage scope guardrail: auto-revert standard config files
   (``.pre-commit-config.yaml``, ``docker-compose.yml``, ``mkdocs.yml``)

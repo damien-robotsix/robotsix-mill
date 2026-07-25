@@ -1934,6 +1934,69 @@ def test_no_change_needed_on_resume_still_routes_to_done(
     assert "5678" in out.note
 
 
+def test_resume_with_ahead_branch_and_clean_tree_routes_to_done(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Regression (ticket 3e44 / #2552 follow-up): when the workspace
+    branch already carries prior commits (from earlier implement passes)
+    and the current resume pass produces zero new working-tree changes,
+    the ticket must route to DONE — not CODE_REVIEW (which would
+    re-review the same prior work and loop back, burning spawn budget).
+
+    The original zero-edit detection in :meth:`_detect_no_change_contradiction`
+    was gated on ``_any_repo_has_changes`` returning False, which bundles
+    both working-tree cleanliness AND branch-not-ahead.  On a resume the
+    branch IS ahead (prior commits), so the guard never fired and the
+    ticket fell through to CODE_REVIEW → re-implement → spawn-limit BLOCKED.
+    """
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="true",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    # Bypass preflight gates.
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # First pass: agent creates a commit so the branch is ahead.
+    def _run_first(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_first)
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is State.CODE_REVIEW
+
+    # Second pass (resume): branch already has the implementation.
+    # Agent produces zero new changes — no edit tools called, clean
+    # working tree.  Should route to DONE, not CODE_REVIEW.
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+
+    def _run_resume(*, repo_dir, **_kwargs):
+        del repo_dir
+        return (
+            "The spec is already implemented — feature.txt was modified "
+            "in a prior pass and no further changes are needed.",
+            [],
+            "",
+            None,
+            None,
+            False,
+            "",
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_resume)
+    out2 = ImplementStage().run(t, ctx)
+    assert out2.next_state is State.DONE
+    assert "already satisfied" in out2.note.lower()
+    assert "clean working tree" in out2.note.lower()
+
+
 # --- unit tests for _run_scope_guardrail --------------------------------
 
 
@@ -4649,9 +4712,13 @@ def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
     monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
 
+    _call_count = 0
+
     def _agent(*, repo_dir, spec, **kwargs):
-        (Path(repo_dir) / "feature.txt").write_text("done")
-        return ("done", ["feature.txt"], "", None, None, False, "")
+        nonlocal _call_count
+        _call_count += 1
+        (Path(repo_dir) / "feature.txt").write_text(f"done round {_call_count}")
+        return (f"done round {_call_count}", ["feature.txt"], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _agent)
 
