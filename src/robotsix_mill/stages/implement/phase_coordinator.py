@@ -917,7 +917,9 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 cls, "_stuck_total_tool_calls_no_diff", 0
             )
             try:
-                has_diff = git_ops.has_changes(repo_dir)
+                has_diff = git_ops.has_changes(
+                    repo_dir
+                ) or git_ops.branch_is_ahead_of_main(repo_dir)
             except Exception:
                 has_diff = True
             if extra_roots:
@@ -925,7 +927,9 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     if repo_path == repo_dir:
                         continue
                     try:
-                        if git_ops.has_changes(repo_path):
+                        if git_ops.has_changes(
+                            repo_path
+                        ) or git_ops.branch_is_ahead_of_main(repo_path):
                             has_diff = True
                             break
                     except Exception:
