@@ -84,6 +84,7 @@ def _lazy_import_result_paths():
     global _result_paths
     if _result_paths is None:  # type: ignore[name-defined]
         from . import _result_paths as _rp  # type: ignore[no-redef]
+
         globals()["_result_paths"] = _rp
 
 
