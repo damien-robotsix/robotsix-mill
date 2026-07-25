@@ -431,6 +431,12 @@ system_prompt: |
     workflows, or tooling — note ``Skip-Changelog`` in your summary so
     the pipeline can label the PR accordingly.
 
+  **Fragment file registration.** Whenever a new changelog fragment
+  file is created (e.g. ``changelog.d/<id>.misc.md``), also add its
+  path to ``docs/modules.yaml`` under the ``core`` module's ``paths``
+  list, inserted alphabetically among the existing ``changelog.d/``
+  entries.  This applies even when no Python files are modified.
+
   ## Module registration (`docs/modules.yaml`)
 
   The repo maintains a canonical module-file manifest at

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Implement agent: add instruction to register new changelog fragment files in `docs/modules.yaml` under the `core` module's `paths` list.
 - Added 12 unit tests for the GitLab pagination helper `_paginated_get` (single/multi-page, empty, HTTP errors, item transforms, parameter forwarding).
 - Implement stage: zero-edit runs with all gates green now route to
   DONE (already satisfied) instead of re-spawning and eventually
