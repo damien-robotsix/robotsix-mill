@@ -246,6 +246,12 @@ reset_fingerprint
 # TicketIngestResult.deduped — pydantic response-model field, read only
 # via serialization (and by API clients), never by name in src/.
 deduped
+# Config route handlers — invoked via @router.get/post/put decorators, not
+# by direct Python call. Tested via HTTP TestClient.
+config_get
+config_put
+config_versions
+config_rollback
 
 # -- meta --------------------------------------------------------------------
 todo_drafts_created

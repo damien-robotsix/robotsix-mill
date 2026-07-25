@@ -85,6 +85,10 @@ def create_app(
                 "name": "Repos",
                 "description": "Runtime repo registration",
             },
+            {
+                "name": "Config",
+                "description": "Component-owned config surface (GET/PUT /config, versions, rollback)",
+            },
         ],
         lifespan=create_lifespan(settings, repos, single_repo_id=single_repo_id),
     )

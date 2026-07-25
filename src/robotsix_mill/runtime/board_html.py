@@ -124,6 +124,11 @@ background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Show closed
 </button>
+<button onclick="openSettings()" style="font-size:11px;padding:3px 10px;
+background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;
+margin-left:4px" title="Component-owned config (Settings panel)">
+  ⚙ Settings
+</button>
 </header>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 <div id="credit-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
