@@ -1401,9 +1401,11 @@ def test_resume_guard_pr_exists_skips_guard(ctx_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(coding, "run_implement_agent", _run_once)
 
     out2 = ImplementStage().run(t, ctx)
-    # Should NOT be IMPLEMENT_COMPLETE from the guard — should be
-    # CODE_REVIEW (normal agent completion).
-    assert out2.next_state is State.CODE_REVIEW
+    # The resume guard did NOT fire (not IMPLEMENT_COMPLETE from the
+    # guard).  The agent produced no new working-tree changes on a
+    # branch that already carries the implementation, so the zero-edit
+    # resume-with-ahead detection routes to DONE (already satisfied).
+    assert out2.next_state is State.DONE
 
 
 # ---------------------------------------------------------------------------

@@ -794,6 +794,77 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                     next_action="return",
                     outcome=Outcome(State.DONE, resume_done_note),
                 )
+        # Resuming with a clean working tree but branch already ahead
+        # of target: prior passes landed the implementation and the
+        # current pass found nothing more to do.  Route to DONE instead
+        # of falling through to CODE_REVIEW (which would re-review the
+        # same prior work and loop back, burning spawn budget).
+        _working_tree_clean = not git_ops.has_changes(repo_dir)
+        if _working_tree_clean and extra_roots:
+            for _rp in extra_roots:
+                if _rp != repo_dir and git_ops.has_changes(_rp):
+                    _working_tree_clean = False
+                    break
+        if resuming and _working_tree_clean:
+            # Edit-claim contradiction guard: an agent that called
+            # edit tools on a resume-with-ahead branch is signalling
+            # lost work — those edits didn't land in the working tree.
+            edit_tools_rs = short_circuit_verify.detect_edit_claim_contradiction(
+                has_changes=False, new_messages=new_msgs
+            )
+            if edit_tools_rs and (
+                cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
+            ):
+                tool_list = ", ".join(edit_tools_rs)
+                diag = (
+                    f"{summary or 'Agent finished without producing file edits.'}\n\n"
+                    "[Diagnostic] implement produced no new working-tree changes "
+                    "on a resuming run that already has prior commits, but the "
+                    f"agent invoked file-mutating tools ({tool_list}) and "
+                    "replaying those edits + formatting still produced a real "
+                    "change (or could not be verified).  Blocking for inspection."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "edit-claim contradiction "
+                        "(empty diff after edit calls on resume-with-ahead)",
+                    ),
+                )
+            resume_ahead_done_note = (
+                "already satisfied — no changes needed "
+                "(resuming with clean working tree, branch ahead of target)"
+            )
+            cls._finalize(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                f"{resume_ahead_done_note}\n\n{summary or 'Agent found no work to do.'}",
+                ok=True,
+                reference_files=ref_files,
+                extra_roots=extra_roots,
+            )
+            log.info(
+                "%s: clean working tree on resuming run with branch ahead — "
+                "DONE (already satisfied)",
+                ticket.id,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(State.DONE, resume_ahead_done_note),
+            )
         return None
 
     @classmethod
