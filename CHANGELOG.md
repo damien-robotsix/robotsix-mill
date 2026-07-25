@@ -9,6 +9,7 @@
   by AGENT.md conventions) even when the ticket scope is narrow — the
   guardrail now reverts them to ``origin/<target>`` instead of blocking
   or consuming LLM tokens on scope-triage.
+- Decompose the 598-line `ReviewStage.run` method into an orchestrator (~95 lines) and six private helpers: `_resolve_diff_and_metadata`, `_clone_cross_repo_workflows`, `_resolve_review_level`, `_validate_action_shas`, `_handle_review_verdict`, and `_handle_request_changes`. Each helper encapsulates a distinct responsibility (diff computation, cross-repo cloning, model-level routing, action-ref validation, verdict routing, and REQUEST_CHANGES processing). Behaviour is unchanged — all 57 review-stage tests pass.
 - Implement stage: zero-edit runs with all gates green now route to
   DONE (already satisfied) instead of re-spawning and eventually
   hitting the spawn-limit BLOCKED.  Two paths fixed: resuming with
