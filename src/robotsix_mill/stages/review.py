@@ -19,13 +19,14 @@ from pathlib import Path
 from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
 from ..config import target_branch_for
 from ..config.repos import get_repos_config
+from ..config.settings import Settings
 from ..core.models import Ticket
 from ..core.states import State
 from ..core.workspace import Workspace
 from ..forge.auth import github_token
 from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
-from ._implemented_repos import combined_diff, implemented_repos
+from ._implemented_repos import ImplementedRepo, combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 from .implement._shared import (
     _is_config_only_change,
@@ -584,6 +585,51 @@ def _maybe_cache(ws: Workspace, input_hash: str | None, outcome: Outcome) -> Non
         _update(ws, "review", input_hash, outcome)
 
 
+class _DiffMeta:
+    """Resolved diff and metadata bundle returned by
+    :meth:`ReviewStage._resolve_diff_and_metadata`.
+
+    Carries the bounded diff, HEAD SHA, input hash, repo directory,
+    extracted paths/refs, and an optional GitHub token — everything
+    the orchestrator needs downstream without threading a dozen local
+    variables.
+    """
+
+    __slots__ = (
+        "diff",
+        "head_sha",
+        "input_hash",
+        "repo_dir",
+        "modified_paths",
+        "workflow_refs",
+        "action_refs",
+        "reusable_workflow_refs",
+        "gh_token",
+    )
+
+    def __init__(
+        self,
+        diff: str,
+        head_sha: str,
+        input_hash: str,
+        repo_dir: Path,
+        modified_paths: list[str],
+        workflow_refs: set[str],
+        action_refs: list[tuple[str, str, str, str]],
+        reusable_workflow_refs: list[tuple[str, str, str, str]],
+        gh_token: str | None,
+    ) -> None:
+        self.diff = diff
+        self.head_sha = head_sha
+        self.input_hash = input_hash
+        self.repo_dir = repo_dir
+        self.modified_paths = modified_paths
+        self.workflow_refs = workflow_refs
+        self.action_refs = action_refs
+        self.reusable_workflow_refs = reusable_workflow_refs
+        self.gh_token = gh_token
+
+
 class ReviewStage(Stage):
     """Check out the target branch and perform automated code review on the ticket's implemented changes."""
 
@@ -591,14 +637,14 @@ class ReviewStage(Stage):
     input_state = State.CODE_REVIEW
     traced = True
 
+    # ── orchestrator ────────────────────────────────────────────────
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
-        """Process a CODE_REVIEW ticket: refresh the clone, check out the ticket branch, and run the automated reviewer agent against the diff."""
+        """Process a CODE_REVIEW ticket: refresh the clone, check out the
+        ticket branch, and run the automated reviewer agent against the
+        diff."""
         s = ctx.settings
-
         ws = ctx.service.workspace(ticket)
 
-        # Resolve the implemented clone(s) — single-repo (ws.dir/"repo")
-        # or meta multi-repo (ws.dir/"repos/<id>" + touched_repos.json).
         repos = implemented_repos(ws, s, ticket)
         if not repos:
             return Outcome(
@@ -608,13 +654,113 @@ class ReviewStage(Stage):
 
         target_branch = target_branch_for(s, ctx.repo_config)
 
+        # 1. Resolve diff + metadata; short-circuit on empty diff / cache hit.
+        dm = self._resolve_diff_and_metadata(ws, s, ctx, repos, target_branch, ticket)
+        if isinstance(dm, Outcome):
+            return dm
+
+        spec = ws.read_description()
+        prior_context = _build_prior_context(ticket, ctx, ws)
+
+        board_png = ws.artifacts_dir / "board.png"
+        screenshot_path = board_png if board_png.exists() else None
+
+        # 2. Cross-repo reusable-workflow clones.
+        extra_roots = self._clone_cross_repo_workflows(
+            ws, s, ctx, dm.workflow_refs, ticket
+        )
+
+        # 3. Model-level routing for cheap changes.
+        level = self._resolve_review_level(dm.repo_dir, target_branch)
+
+        # 4. Run the blind review agent.
+        try:
+            verdict: ReviewVerdict = run_review_agent(
+                settings=s,
+                diff=dm.diff,
+                spec=spec,
+                level=level,
+                prior_context=prior_context,
+                repo_dir=dm.repo_dir,
+                reference_files=dm.modified_paths,
+                screenshot_path=screenshot_path,
+                extra_roots=extra_roots,
+            )
+        except Exception as e:
+            log.exception("%s: review agent error", ticket.id)
+            # Transient model blips (OpenRouter 5xx/429/timeout, the
+            # DeepSeek reasoning-400) should get a fresh stage re-run via
+            # the worker's stage-retry rather than a hard BLOCK needing a
+            # manual resume — same fix as implement.py.
+            from ..runtime.transient_errors import (
+                is_insufficient_credit,
+                parse_credit_shortfall,
+                reraise_if_transient,
+            )
+
+            if is_insufficient_credit(e):
+                from ..runtime.credit_status import record_low_credit
+
+                detail = parse_credit_shortfall(e)
+                record_low_credit(detail=detail)
+
+            reraise_if_transient(e)
+            return Outcome(
+                State.BLOCKED,
+                f"review agent error — resumable: {e}",
+            )
+
+        # 5. Action-ref SHA validation (mutates verdict on violations).
+        verdict = self._validate_action_shas(
+            dm.action_refs, dm.reusable_workflow_refs, dm.gh_token, verdict
+        )
+
+        # 6. Persist review artifact.
+        ws.artifacts_dir.joinpath("review.md").write_text(
+            f"verdict: {verdict.verdict}\n"
+            f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n"
+            f"head_sha: {dm.head_sha}\n"
+            f"board_screenshot: {'present' if screenshot_path else 'absent'}\n"
+            f"comment: {_collapse_comments(verdict.comments)}\n",
+            encoding="utf-8",
+        )
+
+        # 7. Route verdict to the next stage.
+        return self._handle_review_verdict(
+            verdict,
+            ticket,
+            ctx,
+            ws,
+            s,
+            dm.input_hash,
+            dm.modified_paths,
+            dm.repo_dir,
+        )
+
+    # ── private helpers ─────────────────────────────────────────────
+
+    def _resolve_diff_and_metadata(
+        self,
+        ws: Workspace,
+        s: Settings,
+        ctx: StageContext,
+        repos: list[ImplementedRepo],
+        target_branch: str | None,
+        ticket: Ticket,
+    ) -> "_DiffMeta | Outcome":
+        """Compute the combined diff, extract metadata, and handle early
+        returns (empty diff, stage-outcome cache hit).
+
+        Returns a :class:`_DiffMeta` bundle on success, or an
+        :class:`Outcome` that *run* should return immediately.
+        """
         # Compute the combined diff across every implemented clone. Each
         # repo is fetched with a freshly-minted token for ITS forge (the
         # baked-in clone token expires ~1h after clone, so a stale origin
         # URL would 401 on the fetch). For >1 repo, prefix each repo's
         # diff with a header so the reviewer can tell them apart.
         try:
-            diff = combined_diff(s, ctx.repo_config, repos, target_branch)
+            diff = combined_diff(s, ctx.repo_config, repos, target_branch or "")
         except Exception as e:
             from ..runtime.transient_errors import reraise_if_transient
             from ..vcs.git_ops import redact_credentials
@@ -686,177 +832,139 @@ class ReviewStage(Stage):
 
         diff = head_tail_keep(diff, s.review_diff_max_chars, label="git-diff")
 
-        spec = ws.read_description()
-
-        prior_context = _build_prior_context(ticket, ctx, ws)
-
-        # Pre-seed the review agent with every modified file's content —
-        # the reviewer otherwise burns one read_file round-trip per file
-        # to verify claims, which is most of its observation count on
-        # any non-trivial diff. See fs_tools.build_preseed_history.
-        # ``modified_paths`` was derived above from the untruncated diff.
-
-        # A board screenshot (captured by the smoke gate for UI-touching
-        # tickets) lands at artifacts/board.png. When present, hand it to
-        # the reviewer so a vision-capable backend can assess the rendered
-        # board; when absent, pass None and review behaves as today.
-        board_png = ws.artifacts_dir / "board.png"
-        screenshot_path = board_png if board_png.exists() else None
-
-        # ── cross-repo reusable-workflow access ──────────────────────
-        # When the diff references sibling-repo workflows via ``uses:``,
-        # clone those repos so the review agent can verify their
-        # interface via read_file.  Clones land under .review-roots/
-        # (ephemeral — discarded with the workspace).  Gracefully skip
-        # repos that can't be found or cloned.
-        #
-        # *workflow_refs* was derived above from the UNTRUNCATED diff
-        # (same reasoning as modified_paths — truncation would silently
-        # drop ``uses:`` lines from the middle of the diff).
-        extra_roots: list[Path] | None = None
-
-        if workflow_refs:
-            # Exclude the current repo — the agent already has repo_dir.
-            current_remote = (
-                ctx.repo_config.forge_remote_url if ctx.repo_config else None
-            ) or s.forge_remote_url
-            if current_remote:
-                try:
-                    current_owner, current_repo = _parse_owner_repo(current_remote)
-                    current_slug = f"{current_owner}/{current_repo}"
-                    workflow_refs.discard(current_slug)
-                except Exception:
-                    log.debug(
-                        "%s: cannot parse current repo remote, skipping exclusion",
-                        ticket.id,
-                    )
-
-            if workflow_refs:
-                clone_roots: list[Path] = []
-
-                # Resolve refs via repos config: for each referenced
-                # owner/repo, pick up an existing clone (meta-layout
-                # or prior .review-roots clone) or clone fresh.
-                # Only repos whose slug matches a workflow_ref are
-                # included — unlike the earlier version that blindly
-                # added every meta-layout child directory.
-                try:
-                    all_repos = get_repos_config().repos
-                except Exception:
-                    all_repos = {}
-
-                for repo_id, rc in all_repos.items():
-                    remote = rc.forge_remote_url
-                    if not remote:
-                        continue
-                    try:
-                        owner, repo = _parse_owner_repo(remote)
-                    except Exception:
-                        log.debug(
-                            "%s: cannot parse remote %s, skipping",
-                            ticket.id,
-                            remote,
-                        )
-                        continue
-                    slug = f"{owner}/{repo}"
-                    if slug not in workflow_refs:
-                        continue
-
-                    # 1) Already cloned in .review-roots (prior pass)
-                    dest = ws.dir / ".review-roots" / repo_id
-                    if dest.is_dir():
-                        clone_roots.append(dest)
-                        continue
-
-                    # 2) Already cloned in meta-layout
-                    meta_dest = ws.dir / "repos" / repo_id
-                    if meta_dest.is_dir():
-                        clone_roots.append(meta_dest)
-                        continue
-
-                    # 3) Clone fresh, respecting per-repo branch override
-                    try:
-                        token = github_token(s, repo_config=rc)
-                        branch = target_branch_for(s, rc)
-                        git_ops.clone(remote, dest, branch, token)
-                        clone_roots.append(dest)
-                    except Exception:
-                        log.warning(
-                            "%s: failed to clone %s for cross-repo review",
-                            ticket.id,
-                            slug,
-                        )
-
-                if clone_roots:
-                    extra_roots = clone_roots
-
-        # ── end cross-repo setup ─────────────────────────────────────
-
-        # Route doc-only changes to the cheap level-1 model.  This is a
-        # fail-closed check — any git error or empty diff returns False,
-        # so the safe default is always the current level-2 behaviour.
-        in_review: bool = target_branch is not None
-        config_only: bool = (
-            _is_config_only_change(repo_dir, target_branch) if in_review else False
-        )
-        rename_only: bool = (
-            _is_rename_only_change(repo_dir, target_branch) if in_review else False
-        )
-        small_refactor: bool = (
-            _is_small_mechanical_refactor(repo_dir, target_branch)
-            if in_review
-            else False
-        )
-        level: int | None = (
-            1 if in_review and (config_only or rename_only or small_refactor) else None
+        return _DiffMeta(
+            diff=diff,
+            head_sha=head_sha,
+            input_hash=input_hash,
+            repo_dir=repo_dir,
+            modified_paths=modified_paths,
+            workflow_refs=workflow_refs,
+            action_refs=action_refs,
+            reusable_workflow_refs=reusable_workflow_refs,
+            gh_token=gh_token,
         )
 
-        # Run the blind review agent.
+    def _clone_cross_repo_workflows(
+        self,
+        ws: Workspace,
+        s: Settings,
+        ctx: StageContext,
+        workflow_refs: set[str],
+        ticket: Ticket,
+    ) -> list[Path] | None:
+        """Clone sibling repos referenced by reusable-workflow ``uses:``
+        lines so the review agent can inspect their interface.
+
+        Returns a list of :class:`~pathlib.Path` entries (``extra_roots``)
+        or ``None`` when no cross-repo clones were needed.
+        """
+        if not workflow_refs:
+            return None
+
+        # Exclude the current repo — the agent already has repo_dir.
+        current_remote = (
+            ctx.repo_config.forge_remote_url if ctx.repo_config else None
+        ) or s.forge_remote_url
+        if current_remote:
+            try:
+                current_owner, current_repo = _parse_owner_repo(current_remote)
+                current_slug = f"{current_owner}/{current_repo}"
+                workflow_refs.discard(current_slug)
+            except Exception:
+                log.debug(
+                    "%s: cannot parse current repo remote, skipping exclusion",
+                    ticket.id,
+                )
+
+        if not workflow_refs:
+            return None
+
+        clone_roots: list[Path] = []
+
+        # Resolve refs via repos config: for each referenced
+        # owner/repo, pick up an existing clone (meta-layout
+        # or prior .review-roots clone) or clone fresh.
         try:
-            verdict: ReviewVerdict = run_review_agent(
-                settings=s,
-                diff=diff,
-                spec=spec,
-                level=level,
-                prior_context=prior_context,
-                repo_dir=repo_dir,
-                reference_files=modified_paths,
-                screenshot_path=screenshot_path,
-                extra_roots=extra_roots,
-            )
-        except Exception as e:
-            log.exception("%s: review agent error", ticket.id)
-            # Transient model blips (OpenRouter 5xx/429/timeout, the
-            # DeepSeek reasoning-400) should get a fresh stage re-run via
-            # the worker's stage-retry rather than a hard BLOCK needing a
-            # manual resume — same fix as implement.py.
-            from ..runtime.transient_errors import (
-                is_insufficient_credit,
-                parse_credit_shortfall,
-                reraise_if_transient,
-            )
+            all_repos = get_repos_config().repos
+        except Exception:
+            all_repos = {}
 
-            if is_insufficient_credit(e):
-                from ..runtime.credit_status import record_low_credit
+        for repo_id, rc in all_repos.items():
+            remote = rc.forge_remote_url
+            if not remote:
+                continue
+            try:
+                owner, repo = _parse_owner_repo(remote)
+            except Exception:
+                log.debug(
+                    "%s: cannot parse remote %s, skipping",
+                    ticket.id,
+                    remote,
+                )
+                continue
+            slug = f"{owner}/{repo}"
+            if slug not in workflow_refs:
+                continue
 
-                detail = parse_credit_shortfall(e)
-                record_low_credit(detail=detail)
+            # 1) Already cloned in .review-roots (prior pass)
+            dest = ws.dir / ".review-roots" / repo_id
+            if dest.is_dir():
+                clone_roots.append(dest)
+                continue
 
-            reraise_if_transient(e)
-            return Outcome(
-                State.BLOCKED,
-                f"review agent error — resumable: {e}",
-            )
+            # 2) Already cloned in meta-layout
+            meta_dest = ws.dir / "repos" / repo_id
+            if meta_dest.is_dir():
+                clone_roots.append(meta_dest)
+                continue
 
-        # ── action-ref validation ──────────────────────────────────────
-        # Third-party action refs may use tag references (e.g. @v4) —
-        # Dependabot handles SHA pinning.  The format-level check
-        # (_validate_action_refs) is a no-op for this reason.
-        # We still perform an optional best-effort existence check on
-        # refs that ARE 40-char hex SHAs: confirm they exist in the
-        # upstream repo via ``git ls-remote``.  The LLM reviewer cannot
-        # do this (no network / run_command tools), so we enforce it
-        # here and inject any violations as synthetic REQUEST_CHANGES.
+            # 3) Clone fresh, respecting per-repo branch override
+            try:
+                token = github_token(s, repo_config=rc)
+                branch = target_branch_for(s, rc)
+                git_ops.clone(remote, dest, branch, token)
+                clone_roots.append(dest)
+            except Exception:
+                log.warning(
+                    "%s: failed to clone %s for cross-repo review",
+                    ticket.id,
+                    slug,
+                )
+
+        return clone_roots or None
+
+    @staticmethod
+    def _resolve_review_level(
+        repo_dir: Path,
+        target_branch: str | None,
+    ) -> int | None:
+        """Return 1 for cheap (config-only / rename-only / small-refactor)
+        changes so the review runs on the level-1 model; ``None`` (use
+        default level) otherwise.  Fail-closed: any git error returns
+        ``None``.
+        """
+        if target_branch is None:
+            return None
+        config_only: bool = _is_config_only_change(repo_dir, target_branch)
+        rename_only: bool = _is_rename_only_change(repo_dir, target_branch)
+        small_refactor: bool = _is_small_mechanical_refactor(repo_dir, target_branch)
+        if config_only or rename_only or small_refactor:
+            return 1
+        return None
+
+    @staticmethod
+    def _validate_action_shas(
+        action_refs: list[tuple[str, str, str, str]],
+        reusable_workflow_refs: list[tuple[str, str, str, str]],
+        gh_token: str | None,
+        verdict: "ReviewVerdict",
+    ) -> "ReviewVerdict":
+        """Validate 40-char hex SHA refs in *action_refs* and
+        *reusable_workflow_refs* via ``git ls-remote``, injecting any
+        missing-SHA violations as synthetic REQUEST_CHANGES.
+
+        Returns *verdict* (mutated in-place when violations are found).
+        """
         action_violations = _validate_action_refs(action_refs)
 
         # Optional best-effort existence check for SHA refs:
@@ -881,10 +989,7 @@ class ReviewStage(Stage):
                         )
 
         # Validate SHA refs from reusable-workflow ``uses:`` lines
-        # (previously skipped by ``_action_refs_from_diff``).  Same
-        # pattern as the action-ref loop above — only 40-char hex SHAs
-        # reach this point (tag refs are already filtered by
-        # ``_reusable_workflow_sha_refs_from_diff``).
+        # (previously skipped by ``_action_refs_from_diff``).
         for file_path, slug, ref, comment in reusable_workflow_refs:
             parts = slug.split("/")
             if len(parts) >= 2:
@@ -938,254 +1043,221 @@ class ReviewStage(Stage):
                     "below)."
                 )
 
-        # Persist review artifact for downstream consumers (e.g. auto-merge).
-        ws.artifacts_dir.joinpath("review.md").write_text(
-            f"verdict: {verdict.verdict}\n"
-            f"auto_merge_eligible: {str(verdict.auto_merge_eligible).lower()}\n"
-            f"head_sha: {head_sha}\n"
-            f"board_screenshot: {'present' if screenshot_path else 'absent'}\n"
-            f"comment: {_collapse_comments(verdict.comments)}\n",
-            encoding="utf-8",
-        )
+        return verdict
 
-        # Route based on verdict.
+    def _handle_review_verdict(
+        self,
+        verdict: "ReviewVerdict",
+        ticket: Ticket,
+        ctx: StageContext,
+        ws: Workspace,
+        s: Settings,
+        input_hash: str,
+        modified_paths: list[str],
+        repo_dir: Path,
+    ) -> Outcome:
+        """Route *verdict* to the next pipeline state.
+
+        APPROVE → DOCUMENTING; REQUEST_CHANGES → READY (or BLOCKED on
+        convergence / round-cap exhaustion); NEEDS_DISCUSSION →
+        AWAITING_USER_REPLY.
+        """
         if verdict.verdict == "APPROVE":
             ctx.service.set_review_rounds(ticket.id, 0)
             outcome = Outcome(State.DOCUMENTING, "review approved")
             _maybe_cache(ws, input_hash, outcome)
             return outcome
-        elif verdict.verdict == "REQUEST_CHANGES":
-            rounds = ticket.review_rounds + 1
-            ctx.service.set_review_rounds(ticket.id, rounds)
-            if rounds >= s.review_max_rounds:
-                ctx.service.add_comment(
-                    ticket.id,
-                    f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "
-                    f"REQUEST_CHANGES rounds). Escalating to DELIVERABLE for "
-                    f"human merge approval.\n\nLast review verdict:\n{verdict.comments}",
-                    author="review",
-                )
-                ctx.service.set_review_rounds(ticket.id, 0)
-                outcome = Outcome(
-                    State.DOCUMENTING,
-                    f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
-                )
-                _maybe_cache(ws, input_hash, outcome)
-                return outcome
-            # --- convergence detection: repeated findings fingerprint ---
-            # If the structured review asks are IDENTICAL to the previous
-            # round's asks, implement is not making progress — escalate
-            # early (BLOCKED) rather than burning another full cycle.
-            import hashlib
 
-            fp = hashlib.sha256()
-            for ask in sorted(verdict.request_changes, key=lambda a: a.title or ""):
-                fp.update((ask.title or "").encode())
-                fp.update((ask.description or "").encode())
-                for f in sorted(ask.files_touched or []):
-                    fp.update(f.encode())
-            fingerprint = fp.hexdigest()
-            fp_path = ws.artifacts_dir / "findings_fingerprint.txt"
-            prev_fp = None
-            if fp_path.exists():
-                try:
-                    prev_fp = fp_path.read_text(encoding="utf-8").strip()
-                except OSError:
-                    log.warning("%s: failed to read findings fingerprint", ticket.id)
-            if prev_fp == fingerprint:
-                ctx.service.add_comment(
-                    ticket.id,
-                    f"Convergence detected: review round {rounds} found the "
-                    f"same {len(verdict.request_changes)} issue(s) as the "
-                    "previous round. Implement is not making progress on "
-                    "these findings — escalating to BLOCKED for human "
-                    "inspection.",
-                    author="review",
-                )
-                ctx.service.set_review_rounds(ticket.id, 0)
-                outcome = Outcome(
-                    State.BLOCKED,
-                    "convergence: repeated review findings — implement stuck",
-                )
-                _maybe_cache(ws, input_hash, outcome)
-                return outcome
-            fp_path.parent.mkdir(parents=True, exist_ok=True)
-            fp_path.write_text(fingerprint, encoding="utf-8")
-            # Split asks against the ticket's file_map. An out-of-scope ask
-            # touches files outside the ticket's declared scope; making the
-            # implement agent edit them would get bounced by scope-triage and
-            # loop forever. Spawn each as a SEPARATE ticket — but wire it as a
-            # FOLLOW-UP that depends on THIS ticket, NOT as a prerequisite the
-            # parent waits on.
-            #
-            # Direction matters: most out-of-scope asks are refinements of the
-            # parent's OWN new code (e.g. "harden the parser this ticket
-            # adds"). Such work can only run once the parent is merged, so
-            # parking the parent on it deadlocks — the parent waits for the
-            # child, but the child cannot act until the parent's (unmerged)
-            # code exists (the 104b/413d incident: review spawned a follow-up
-            # as a prerequisite and froze both). Making the child depend on the
-            # parent means it runs AFTER the parent merges, operating on merged
-            # code, and never gates the parent.
-            file_map = _load_file_map(ws)
-            in_scope, out_of_scope = _split_asks(
-                verdict.request_changes,
-                file_map,
+        if verdict.verdict == "REQUEST_CHANGES":
+            return self._handle_request_changes(
+                verdict, ticket, ctx, ws, s, input_hash, modified_paths, repo_dir
             )
-            # Filter out-of-scope asks: some gaps may already be addressed
-            # in the implementer's branch diff.  If every file an ask would
-            # touch already appears in modified_paths, the implementer
-            # likely handled it inline — skip the follow-up and post a note.
-            already_addressed: list[ReviewAsk] = []
-            still_out_of_scope: list[ReviewAsk] = []
-            if out_of_scope:
-                already_addressed, still_out_of_scope = _gaps_already_addressed(
-                    out_of_scope,
-                    modified_paths,
-                )
 
-            # Verify any PR/commit claims in the "already addressed" asks.
-            # A review agent may claim that a gap was fixed in a cited PR
-            # or commit — confirm the referenced artifact actually touches
-            # the target files before accepting the dismissal.
-            if already_addressed:
-                truly_addressed: list[ReviewAsk] = []
-                for ask in already_addressed:
-                    if (
-                        ask.files_touched
-                        and ask.description
-                        and not verify_claim(
-                            ask.description, ask.files_touched, repo_dir
-                        )
-                    ):
-                        log.info(
-                            "%s: review ask claim unverified — "
-                            "cited refs in '%s' do not touch %s; "
-                            "treating as still out-of-scope",
-                            ticket.id,
-                            ask.description[:120],
-                            ", ".join(ask.files_touched[:5]),
-                        )
-                        still_out_of_scope.append(ask)
-                    else:
-                        truly_addressed.append(ask)
-                already_addressed = truly_addressed
+        # NEEDS_DISCUSSION — genuine human-decision verdict.
+        # Post as [ASK_USER] and pause; operator reply auto-resumes.
+        ctx.service.add_comment(
+            ticket.id,
+            f"[ASK_USER]\n\n{verdict.comments}",
+            author="review",
+        )
+        outcome = Outcome(State.AWAITING_USER_REPLY, verdict.comments)
+        _maybe_cache(ws, input_hash, outcome)
+        return outcome
 
-            if already_addressed:
-                lines = [
-                    f"Review found {len(already_addressed)} gap(s) that appear "
-                    "already addressed in the implementer's commits — "
-                    "no follow-up needed:",
-                    "",
-                ]
-                for a in already_addressed:
-                    desc = a.description.splitlines()[0][:120]
-                    lines.append(f"- {desc}")
-                ctx.service.add_comment(
-                    ticket.id,
-                    "\n".join(lines),
-                    author="review",
-                )
+    def _handle_request_changes(
+        self,
+        verdict: "ReviewVerdict",
+        ticket: Ticket,
+        ctx: StageContext,
+        ws: Workspace,
+        s: Settings,
+        input_hash: str,
+        modified_paths: list[str],
+        repo_dir: Path,
+    ) -> Outcome:
+        """Process a REQUEST_CHANGES verdict: round tracking, convergence
+        detection, ask splitting, and follow-up spawning."""
+        rounds = ticket.review_rounds + 1
+        ctx.service.set_review_rounds(ticket.id, rounds)
 
-            if still_out_of_scope:
-                new_ids = _spawn_dependency_tickets(
-                    ticket,
-                    still_out_of_scope,
-                    ctx,
-                )
-                for nid in new_ids:
-                    # Follow-up: the spawned ticket waits for THIS ticket to
-                    # land (do NOT park the parent on it — that deadlocks).
-                    ctx.service.set_depends_on(nid, [ticket.id])
-                lines = [
-                    f"Review found {len(still_out_of_scope)} out-of-scope "
-                    "ask(s) — spawned as follow-up ticket(s) that depend on "
-                    "this one (they run after it merges):",
-                    "",
-                ]
-                for nid, ask in zip(new_ids, still_out_of_scope, strict=True):
-                    desc = ask.description.splitlines()[0][:120]
-                    lines.append(f"- `{nid}` — {desc}")
-                ctx.service.add_comment(
-                    ticket.id,
-                    "\n".join(lines),
-                    author="review",
-                )
-
-            if in_scope:
-                # In-scope changes remain — re-implement just those; the
-                # out-of-scope asks are now follow-ups and are not re-asked.
-                body = _sanitize_comments(verdict.comments)
-                if still_out_of_scope:
-                    body = (
-                        _sanitize_comments(verdict.comments)
-                        + "\n\nIn-scope items to fix now (out-of-scope asks were "
-                        "spawned as follow-ups):\n"
-                        + "\n".join(
-                            f"- {a.description.splitlines()[0][:200]}" for a in in_scope
-                        )
-                    )
-                ctx.service.add_comment(ticket.id, body, author="review")
-                outcome = Outcome(State.READY, verdict.comments)
-                _maybe_cache(ws, input_hash, outcome)
-                return outcome
-
-            if still_out_of_scope:
-                # No in-scope changes: the ticket's own work is sound and the
-                # only asks were out-of-scope (now follow-ups). Approve so it
-                # can merge and release them — rather than parking it on work
-                # that cannot run until it merges.
-                ctx.service.set_review_rounds(ticket.id, 0)
-                outcome = Outcome(
-                    State.DOCUMENTING,
-                    f"approved; {len(still_out_of_scope)} out-of-scope "
-                    "ask(s) spawned as follow-ups",
-                )
-                _maybe_cache(ws, input_hash, outcome)
-                return outcome
-
-            if already_addressed:
-                # Every out-of-scope ask was already addressed by the
-                # implementer — nothing to spawn, nothing in-scope to fix.
-                # Approve directly so the ticket can merge.
-                ctx.service.set_review_rounds(ticket.id, 0)
-                outcome = Outcome(
-                    State.DOCUMENTING,
-                    f"approved; {len(already_addressed)} review gap(s) "
-                    "already addressed in the implementer's commits",
-                )
-                _maybe_cache(ws, input_hash, outcome)
-                return outcome
-
-            # REQUEST_CHANGES with no actionable asks — historical behaviour:
-            # re-implement against the narrative comments.
+        # Round-cap exhaustion.
+        if rounds >= s.review_max_rounds:
             ctx.service.add_comment(
-                ticket.id, _sanitize_comments(verdict.comments), author="review"
+                ticket.id,
+                f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "
+                f"REQUEST_CHANGES rounds). Escalating to DELIVERABLE for "
+                f"human merge approval.\n\nLast review verdict:\n{verdict.comments}",
+                author="review",
             )
+            ctx.service.set_review_rounds(ticket.id, 0)
+            outcome = Outcome(
+                State.DOCUMENTING,
+                f"review rounds exhausted ({rounds}/{s.review_max_rounds})",
+            )
+            _maybe_cache(ws, input_hash, outcome)
+            return outcome
+
+        # Convergence detection: repeated findings fingerprint.
+        import hashlib
+
+        fp = hashlib.sha256()
+        for ask in sorted(verdict.request_changes, key=lambda a: a.title or ""):
+            fp.update((ask.title or "").encode())
+            fp.update((ask.description or "").encode())
+            for f in sorted(ask.files_touched or []):
+                fp.update(f.encode())
+        fingerprint = fp.hexdigest()
+        fp_path = ws.artifacts_dir / "findings_fingerprint.txt"
+        prev_fp = None
+        if fp_path.exists():
+            try:
+                prev_fp = fp_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                log.warning("%s: failed to read findings fingerprint", ticket.id)
+        if prev_fp == fingerprint:
+            ctx.service.add_comment(
+                ticket.id,
+                f"Convergence detected: review round {rounds} found the "
+                f"same {len(verdict.request_changes)} issue(s) as the "
+                "previous round. Implement is not making progress on "
+                "these findings — escalating to BLOCKED for human "
+                "inspection.",
+                author="review",
+            )
+            ctx.service.set_review_rounds(ticket.id, 0)
+            outcome = Outcome(
+                State.BLOCKED,
+                "convergence: repeated review findings — implement stuck",
+            )
+            _maybe_cache(ws, input_hash, outcome)
+            return outcome
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_text(fingerprint, encoding="utf-8")
+
+        # Split asks against the ticket's file_map.
+        file_map = _load_file_map(ws)
+        in_scope, out_of_scope = _split_asks(verdict.request_changes, file_map)
+
+        already_addressed: list[ReviewAsk] = []
+        still_out_of_scope: list[ReviewAsk] = []
+        if out_of_scope:
+            already_addressed, still_out_of_scope = _gaps_already_addressed(
+                out_of_scope, modified_paths
+            )
+
+        # Verify any PR/commit claims in the "already addressed" asks.
+        if already_addressed:
+            truly_addressed: list[ReviewAsk] = []
+            for ask in already_addressed:
+                if (
+                    ask.files_touched
+                    and ask.description
+                    and not verify_claim(ask.description, ask.files_touched, repo_dir)
+                ):
+                    log.info(
+                        "%s: review ask claim unverified — "
+                        "cited refs in '%s' do not touch %s; "
+                        "treating as still out-of-scope",
+                        ticket.id,
+                        ask.description[:120],
+                        ", ".join(ask.files_touched[:5]),
+                    )
+                    still_out_of_scope.append(ask)
+                else:
+                    truly_addressed.append(ask)
+            already_addressed = truly_addressed
+
+        if already_addressed:
+            lines = [
+                f"Review found {len(already_addressed)} gap(s) that appear "
+                "already addressed in the implementer's commits — "
+                "no follow-up needed:",
+                "",
+            ]
+            for a in already_addressed:
+                desc = a.description.splitlines()[0][:120]
+                lines.append(f"- {desc}")
+            ctx.service.add_comment(ticket.id, "\n".join(lines), author="review")
+
+        if still_out_of_scope:
+            new_ids = _spawn_dependency_tickets(ticket, still_out_of_scope, ctx)
+            for nid in new_ids:
+                ctx.service.set_depends_on(nid, [ticket.id])
+            lines = [
+                f"Review found {len(still_out_of_scope)} out-of-scope "
+                "ask(s) — spawned as follow-up ticket(s) that depend on "
+                "this one (they run after it merges):",
+                "",
+            ]
+            for nid, ask in zip(new_ids, still_out_of_scope, strict=True):
+                desc = ask.description.splitlines()[0][:120]
+                lines.append(f"- `{nid}` — {desc}")
+            ctx.service.add_comment(ticket.id, "\n".join(lines), author="review")
+
+        if in_scope:
+            # In-scope changes remain — re-implement just those.
+            body = _sanitize_comments(verdict.comments)
+            if still_out_of_scope:
+                body = (
+                    _sanitize_comments(verdict.comments)
+                    + "\n\nIn-scope items to fix now (out-of-scope asks were "
+                    "spawned as follow-ups):\n"
+                    + "\n".join(
+                        f"- {a.description.splitlines()[0][:200]}" for a in in_scope
+                    )
+                )
+            ctx.service.add_comment(ticket.id, body, author="review")
             outcome = Outcome(State.READY, verdict.comments)
             _maybe_cache(ws, input_hash, outcome)
             return outcome
-        else:  # NEEDS_DISCUSSION
-            # A genuine human-decision verdict (e.g. "AC5 vs the 13
-            # pre-existing bandit findings — pick one of 3 options").
-            # This is NOT an error, so it must NOT BLOCK (which reads
-            # as a failure and needs a manual resume). Pause for the
-            # operator's reply instead: post the verdict as an
-            # [ASK_USER] thread and route to AWAITING_USER_REPLY. When
-            # the operator answers and closes the thread,
-            # _maybe_resume_awaiting_user_reply auto-resumes the ticket
-            # to CODE_REVIEW (paused_from) and review re-runs — this
-            # time with the operator's decision visible in
-            # prior-context (see _build_prior_context, which keeps
-            # closed [ASK_USER] threads).
-            ctx.service.add_comment(
-                ticket.id,
-                f"[ASK_USER]\n\n{verdict.comments}",
-                author="review",
-            )
+
+        if still_out_of_scope:
+            # No in-scope changes: approve so follow-ups can run after merge.
+            ctx.service.set_review_rounds(ticket.id, 0)
             outcome = Outcome(
-                State.AWAITING_USER_REPLY,
-                verdict.comments,
+                State.DOCUMENTING,
+                f"approved; {len(still_out_of_scope)} out-of-scope "
+                "ask(s) spawned as follow-ups",
             )
             _maybe_cache(ws, input_hash, outcome)
             return outcome
+
+        if already_addressed:
+            # Every out-of-scope ask was already addressed — approve.
+            ctx.service.set_review_rounds(ticket.id, 0)
+            outcome = Outcome(
+                State.DOCUMENTING,
+                f"approved; {len(already_addressed)} review gap(s) "
+                "already addressed in the implementer's commits",
+            )
+            _maybe_cache(ws, input_hash, outcome)
+            return outcome
+
+        # REQUEST_CHANGES with no actionable asks — re-implement against
+        # the narrative comments.
+        ctx.service.add_comment(
+            ticket.id, _sanitize_comments(verdict.comments), author="review"
+        )
+        outcome = Outcome(State.READY, verdict.comments)
+        _maybe_cache(ws, input_hash, outcome)
+        return outcome
