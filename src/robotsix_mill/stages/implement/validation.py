@@ -29,6 +29,21 @@ from ._shared import (
 )
 
 
+# Standard repo scaffolding files that the agent may regenerate
+# inadvertently (driven by AGENT.md conventions or system-prompt rules
+# about .pre-commit-config.yaml, mkdocs.yml, etc.).  When these files
+# appear out-of-scope after an implement pass, auto-revert them to
+# origin/<target> rather than blocking the ticket or consuming LLM
+# tokens on scope-triage.
+_STANDARD_CONFIG_FILES: frozenset[str] = frozenset(
+    {
+        ".pre-commit-config.yaml",
+        "docker-compose.yml",
+        "mkdocs.yml",
+    }
+)
+
+
 def classify_baseline_verdict(
     ci_conclusion: str
     | None,  # forge commit_ci_conclusion(...)["conclusion"], or None when unavailable
@@ -168,6 +183,18 @@ class ValidationMixin(_ImplementStageBase):
         )
         if vendor_skip is not None:
             return vendor_skip
+
+        # --- standard config-file auto-revert ---
+        # The agent occasionally regenerates repo scaffolding files
+        # (.pre-commit-config.yaml, docker-compose.yml, mkdocs.yml)
+        # that are inherited from the default branch and not part of
+        # the ticket's scope.  Revert them to origin/<target> so they
+        # don't block deliver or downstream CI footprint checks.
+        out_of_scope, stdcfg_skip = cls._revert_standard_configs(
+            ctx, ticket, repo_dir, target, out_of_scope, file_map, current_feedback
+        )
+        if stdcfg_skip is not None:
+            return stdcfg_skip
 
         # --- flood guard (deterministic prompt-size cap) ---
         # When an implement pass leaves an abnormally large out-of-scope
@@ -389,6 +416,102 @@ class ValidationMixin(_ImplementStageBase):
                 feedback=current_feedback,
             )
         return filtered, None
+
+    @classmethod
+    def _revert_standard_configs(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        target: str,
+        out_of_scope: list[str],
+        file_map: set[str] | None,
+        current_feedback: str | None,
+    ) -> tuple[list[str], _ScopeGuardrailResult | None]:
+        """Auto-revert known standard config files when they appear out-of-scope.
+
+        The implement agent occasionally regenerates repo scaffolding
+        files (``.pre-commit-config.yaml``, ``docker-compose.yml``,
+        ``mkdocs.yml``) that are inherited from the default branch and
+        not part of the ticket's scope.  These are driven by AGENT.md
+        conventions or system-prompt rules about those files — not by
+        deliberate ticket work.
+
+        Reverts tracked files to ``origin/<target>`` and removes
+        untracked copies, logging each reverted file.  Returns
+        ``(remaining, None)`` when text files remain for further
+        processing, or ``(remaining, skip_result)`` when ALL
+        out-of-scope files were standard config files.
+        """
+        standard_hits: list[str] = []
+        remaining: list[str] = []
+        for f in out_of_scope:
+            if f in _STANDARD_CONFIG_FILES:
+                standard_hits.append(f)
+            else:
+                remaining.append(f)
+
+        if standard_hits:
+            for path in standard_hits:
+                try:
+                    subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(repo_dir),
+                            "checkout",
+                            f"origin/{target}",
+                            "--",
+                            path,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                except subprocess.CalledProcessError:
+                    log.debug(
+                        "_revert_standard_configs: git checkout failed for %s "
+                        "— file may be untracked; unlinking",
+                        path,
+                        exc_info=True,
+                    )
+                    file_path = repo_dir / path
+                    try:
+                        if file_path.exists():
+                            file_path.unlink()
+                    except OSError:
+                        log.warning(
+                            "%s: failed to unlink standard config file: %s",
+                            ticket.id,
+                            path,
+                            exc_info=True,
+                        )
+                log.warning(
+                    "%s: auto-reverted standard config file (out of scope): %s",
+                    ticket.id,
+                    path,
+                )
+
+            ctx.service.add_step_event(
+                ticket.id,
+                "scope-triage auto-REVERT (standard config): reverted "
+                + ", ".join(f"`{f}`" for f in standard_hits)
+                + " — repo scaffolding, not ticket work",
+            )
+
+        if not remaining:
+            log.info(
+                "%s: all out-of-scope files were standard config files — "
+                "skipping scope-triage LLM call",
+                ticket.id,
+            )
+            return remaining, _ScopeGuardrailResult(
+                action="skip_iteration",
+                file_map=file_map,
+                feedback=current_feedback,
+            )
+
+        return remaining, None
 
     @classmethod
     def _run_scope_triage_classification(

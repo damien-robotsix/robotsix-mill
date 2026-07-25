@@ -10,6 +10,7 @@ and the pure ``smoke_paths_match`` gate, with git/sandbox/LLM seams mocked.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,6 +24,9 @@ from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement import validation as validation_mod
 from robotsix_mill.stages.implement.validation import (
     ValidationMixin,
+)
+from robotsix_mill.stages.implement._shared import (
+    _ScopeGuardrailResult,
 )
 
 
@@ -971,6 +975,135 @@ def test_scope_guardrail_vendored_dirs_logged(monkeypatch, caplog):
     assert len(step_events) == 1
     assert "auto-ignored vendored-dep dir" in step_events[0][1]
     assert ".pip-packages" in step_events[0][1]
+
+
+# ---------------------------------------------------------------------------
+# _run_scope_guardrail — standard-config auto-revert
+# ---------------------------------------------------------------------------
+
+
+def test_scope_guardrail_standard_config_auto_reverted(monkeypatch):
+    """Standard config files out-of-scope are auto-reverted, others remain."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+
+    # .pre-commit-config.yaml and docker-compose.yml are standard configs;
+    # extra_file.py is a genuine out-of-scope file.
+    introduced = [
+        ".pre-commit-config.yaml",
+        "docker-compose.yml",
+        "extra_file.py",
+    ]
+    monkeypatch.setattr(
+        validation_mod.git_ops, "introduced_files", lambda *a: introduced
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+
+    # _vendored_dep_roots returns empty → files pass through vendored filter.
+    monkeypatch.setattr(
+        validation_mod,
+        "_vendored_dep_roots",
+        lambda repo_dir, paths, target: set(),
+    )
+
+    # Capture git checkout calls.
+    checkout_calls: list[list[str]] = []
+
+    def _fake_checkout(args, **kwargs):
+        checkout_calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(validation_mod.subprocess, "run", _fake_checkout)
+
+    step_events: list[tuple] = []
+
+    # Short-circuit scope-triage LLM — we only care that the standard
+    # config files were reverted before the remaining file reaches triage.
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_run_scope_triage_classification",
+        classmethod(
+            lambda cls, *a, **kw: _ScopeGuardrailResult(
+                action="return",
+                outcome=Outcome(State.BLOCKED, "scope violation: extra_file.py"),
+                file_map={"in_scope.py"},
+            )
+        ),
+        raising=False,
+    )
+
+    res = ValidationMixin._run_scope_guardrail(
+        SimpleNamespace(
+            repo_config=SimpleNamespace(),
+            service=SimpleNamespace(
+                add_step_event=lambda tid, msg: step_events.append((tid, msg))
+            ),
+        ),
+        SimpleNamespace(id="T-stdcfg"),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=10),
+        "spec",
+        None,
+    )
+
+    # Verify git checkout was called for both standard config files.
+    assert len(checkout_calls) == 2
+    # args: ["git", "-C", "/repo", "checkout", "origin/main", "--", "<path>"]
+    checked_out = {args[6] for args in checkout_calls}
+    assert checked_out == {".pre-commit-config.yaml", "docker-compose.yml"}
+
+    # Verify step event was logged.
+    assert any("auto-REVERT (standard config)" in ev[1] for ev in step_events)
+    assert any(".pre-commit-config.yaml" in ev[1] for ev in step_events)
+    assert any("docker-compose.yml" in ev[1] for ev in step_events)
+
+    # extra_file.py should have been passed through to triage (mocked to
+    # return BLOCKED above).
+    assert res.action == "return"
+    assert "extra_file.py" in res.outcome.note
+
+
+def test_scope_guardrail_standard_config_all_reverted_skips_guard(monkeypatch):
+    """When ALL out-of-scope files are standard configs, skip_iteration."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+
+    introduced = [".pre-commit-config.yaml", "docker-compose.yml", "mkdocs.yml"]
+    monkeypatch.setattr(
+        validation_mod.git_ops, "introduced_files", lambda *a: introduced
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_mod,
+        "_vendored_dep_roots",
+        lambda repo_dir, paths, target: set(),
+    )
+
+    def _fake_checkout(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(validation_mod.subprocess, "run", _fake_checkout)
+
+    res = ValidationMixin._run_scope_guardrail(
+        SimpleNamespace(
+            repo_config=SimpleNamespace(),
+            service=SimpleNamespace(add_step_event=lambda *a, **kw: None),
+        ),
+        SimpleNamespace(id="T-stdcfg-all"),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=10),
+        "spec",
+        None,
+    )
+    # All files were standard configs → skip_iteration.
+    assert res.action == "skip_iteration"
+    assert res.outcome is None
 
 
 # ---------------------------------------------------------------------------
