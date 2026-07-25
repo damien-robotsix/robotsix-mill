@@ -439,6 +439,9 @@ input_state
 # and via RefineStage class inheritance; vulture (60% confidence) doesn't trace test calls.
 _review_spec_conciseness
 _short_circuit_for_internal_failure
+# Module-level __getattr__ — lazy import resolver for _reconcile / _result_paths
+# re-exports; invoked implicitly by Python's attribute-lookup machinery.
+__getattr__
 # _build_edit_claim_diagnostic — @classmethod on FileOperationsMixin called via
 # cls._build_edit_claim_diagnostic(...) from ImplementationLogicMixin; vulture
 # (60% confidence) cannot trace cross-mixin classmethod dispatch.

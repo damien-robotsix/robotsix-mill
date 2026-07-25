@@ -72,7 +72,7 @@ def _lazy_import_reconcile():
     ``_reconcile`` — the late imports within _reconcile (and
     _result_paths) create a cycle if we import at module level.
     """
-    global _reconcile  # noqa: PLW0603
+    global _reconcile
     if _reconcile is None:  # type: ignore[name-defined]
         from . import _reconcile as _rec  # type: ignore[no-redef]
         globals()["_reconcile"] = _rec
@@ -80,7 +80,7 @@ def _lazy_import_reconcile():
 
 def _lazy_import_result_paths():
     """Lazily import and cache the _result_paths sub-module."""
-    global _result_paths  # noqa: PLW0603
+    global _result_paths
     if _result_paths is None:  # type: ignore[name-defined]
         from . import _result_paths as _rp  # type: ignore[no-redef]
         globals()["_result_paths"] = _rp
@@ -103,10 +103,6 @@ def __getattr__(name: str) -> object:
 __all__ = [
     "RefineAgentMixin",
     "_persist_refine_memory",
-    "_read_triage_complexity",
-    "_read_triage_findings",
-    "_read_triage_trivial",
-    "_write_triage_complexity",
     "acknowledge_unanswered_threads",
 ]
 
