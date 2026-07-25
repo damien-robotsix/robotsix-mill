@@ -293,7 +293,7 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
         "label": "Pin Bump",
     },
     "repo_description_sync": {
-        "kind": "schedule_only",
+        "kind": "llm_agent",
         "runner_module": "robotsix_mill.runners.repo_description_sync_runner",
         "runner_func": "run_repo_description_sync_pass",
         "label": "Repo Description Sync",
