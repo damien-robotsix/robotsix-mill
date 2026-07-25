@@ -204,7 +204,7 @@ class _CommentMixin(_ServiceBase):
             # every one is closed.
             stmt = select(Comment).where(
                 Comment.ticket_id == ticket_id,
-                Comment.parent_id.is_(None),
+                Comment.parent_id.is_(None),  # type: ignore[union-attr]
                 Comment.body.startswith(ASK_USER_MARKER),
             )
             ask_threads = list(s.exec(stmt).all())

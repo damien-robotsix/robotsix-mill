@@ -22,7 +22,7 @@ respective sub-modules.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from ...agents import refining
 from ...agents.standards import fetch_standards_context
@@ -65,7 +65,7 @@ _REEXPORT_MAP: dict[str, str] = {
 }
 
 
-def _lazy_import_reconcile():
+def _lazy_import_reconcile() -> None:
     """Lazily import and cache the _reconcile sub-module.
 
     Must be called at the top of every method that references
@@ -73,30 +73,30 @@ def _lazy_import_reconcile():
     _result_paths) create a cycle if we import at module level.
     """
     global _reconcile
-    if _reconcile is None:  # type: ignore[name-defined]
-        from . import _reconcile as _rec  # type: ignore[no-redef]
+    if _reconcile is None:
+        from . import _reconcile as _rec
 
         globals()["_reconcile"] = _rec
 
 
-def _lazy_import_result_paths():
+def _lazy_import_result_paths() -> None:
     """Lazily import and cache the _result_paths sub-module."""
     global _result_paths
-    if _result_paths is None:  # type: ignore[name-defined]
-        from . import _result_paths as _rp  # type: ignore[no-redef]
+    if _result_paths is None:
+        from . import _result_paths as _rp
 
         globals()["_result_paths"] = _rp
 
 
 # Sentinel values — replaced on first lazy import.
-_reconcile = None  # type: ignore[assignment]
-_result_paths = None  # type: ignore[assignment]
+_reconcile: Any = None  # type: ignore[no-redef]
+_result_paths: Any = None  # type: ignore[no-redef]
 
 
 def __getattr__(name: str) -> object:
     if name in _REEXPORT_MAP:
         _lazy_import_reconcile()
-        obj = getattr(_reconcile, _REEXPORT_MAP[name])  # type: ignore[union-attr]
+        obj = getattr(_reconcile, _REEXPORT_MAP[name])
         globals()[name] = obj
         return obj
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
