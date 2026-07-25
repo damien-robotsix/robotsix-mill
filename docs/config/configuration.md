@@ -260,14 +260,15 @@ docker compose up -d   # reads config/config.json (or set MILL_CONFIG_FILE)
 
 The operator can point the refine agent at a repo's live deployment log
 directory by setting a single per-repo field in mill's central,
-gitignored `config/repos.yaml` (alongside `board_id` / `forge_remote_url`):
+`config/config.json` (the `"repos"` key), alongside `board_id` /
+`forge_remote_url`:
 
-```yaml
-# config/repos.yaml
-repos:
-  robotsix-auto-mail:
-    board_id: "..."
-    deployed_log_folder: /var/log/robotsix-auto-mail
+```json
+// Inside the "repos" block of config/config.json
+"robotsix-auto-mail": {
+  "board_id": "...",
+  "deployed_log_folder": "/var/log/robotsix-auto-mail"
+}
 ```
 
 - `deployed_log_folder` — a path (string) to the live deployment's log
