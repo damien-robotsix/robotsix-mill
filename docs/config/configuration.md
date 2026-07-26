@@ -673,6 +673,7 @@ variable and its dotted YAML path.
 | `periodic.trace_review.inspector_toolless_requests` | `MILL_TRACE_REVIEW_INSPECTOR_TOOLLESS_REQUESTS` | `3` | Request budget for the tool-less summary-only path |
 | `periodic.trace_review.tool_request_limit` | `MILL_TRACE_REVIEW_TOOL_REQUEST_LIMIT` | `15` | Request budget for the interactive `langfuse_inspect_trace` tool |
 | `periodic.trace_review.max_drafts_per_run` | `MILL_TRACE_REVIEW_MAX_DRAFTS_PER_RUN` | `5` | Cap on drafted findings per trace-review pass |
+| `periodic.trace_review.min_confidence` | `MILL_TRACE_REVIEW_MIN_CONFIDENCE` | `"medium"` | Minimum inspector confidence for a finding to be filed as a draft |
 | `periodic.trace_review.max_inspections_per_run` | `MILL_TRACE_REVIEW_MAX_INSPECTIONS_PER_RUN` | `5` | Hard cap on LLM inspector calls per trace-review run |
 | `periodic.trace_review.max_traces_per_run` | `MILL_TRACE_REVIEW_MAX_TRACES_PER_RUN` | `300` | Hard cap on traces pulled for full detail per run |
 | `periodic.trace_review.initial_lookback_hours` | `MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS` | `24` | First-run lookback window when no watermark exists (hours) |
