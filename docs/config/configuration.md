@@ -778,7 +778,7 @@ controls its request budget:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_AUDIT_PERIODIC` | `true` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `86400` | Seconds between audit passes |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `604800` | Seconds between audit passes |
 | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the audit agent |
 
 #### test_gap
