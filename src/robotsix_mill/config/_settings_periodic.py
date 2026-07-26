@@ -496,7 +496,7 @@ class _PeriodicSettings(BaseModel):
         description="When true, run daily State-enum consistency checks.",
     )
     # Seconds between periodic state-sync passes when
-    # MILL_STATE_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # MILL_STATE_SYNC_PERIODIC=true. Default 604800 (7 days). Minimum
     # enforced at 60s in the worker loop.
     state_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
@@ -512,7 +512,7 @@ class _PeriodicSettings(BaseModel):
         description="When true, run daily board frontend sync checks.",
     )
     # Seconds between periodic frontend-sync passes when
-    # MILL_FRONTEND_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
+    # MILL_FRONTEND_SYNC_PERIODIC=true. Default 604800 (7 days). Minimum
     # enforced at 60s in the worker loop.
     frontend_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
@@ -594,7 +594,7 @@ class _PeriodicSettings(BaseModel):
         default=False,
         description="When true, run the daily cross-repo meta-agent pass for extraction/alignment proposals.",
     )
-    # Seconds between automatic meta-agent passes. Default 86400 (1 day).
+    # Seconds between automatic meta-agent passes. Default 604800 (7 days).
     # Minimum enforced at 60 s in the worker loop.
     meta_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
@@ -613,7 +613,7 @@ class _PeriodicSettings(BaseModel):
         default=True,
         description="When true, run daily cross-board run-registry health monitoring.",
     )
-    # Seconds between automatic run-health passes. Default 86400 (1 day).
+    # Seconds between automatic run-health passes. Default 604800 (7 days).
     run_health_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic run-health passes.",
@@ -680,7 +680,7 @@ class _PeriodicSettings(BaseModel):
         default=False,
         description="When true, run daily deterministic diagnostic checks.",
     )
-    # Seconds between automatic diagnostic passes. Default 86400 (1 day).
+    # Seconds between automatic diagnostic passes. Default 604800 (7 days).
     diagnostic_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between automatic diagnostic passes.",
@@ -802,8 +802,8 @@ class _PeriodicSettings(BaseModel):
         default=True,
         description="When true, run periodic repo-description-sync passes.",
     )
-    # Interval between repo-description-sync passes (seconds). Default 86400
-    # (daily). Enforced minimum 3600s (1 hour) in the worker.
+    # Interval between repo-description-sync passes (seconds). Default 604800
+    # (7 days). Enforced minimum 3600s (1 hour) in the worker.
     repo_description_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between repo-description-sync passes.",

@@ -854,7 +854,7 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_STATE_SYNC_PERIODIC` | `true` | Enable periodic state-sync passes |
-| `MILL_STATE_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between state-sync passes |
+| `MILL_STATE_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between state-sync passes |
 | `MILL_REPO_DESCRIPTION_SYNC_PERIODIC` | `true` | Enable periodic repo-description-sync passes |
 | `MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between repo-description-sync passes |
 
