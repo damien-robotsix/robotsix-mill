@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix stale `doc_request_limit` default in `agent_definitions/document.yaml`: both the budget description ("default 16" → "default 32") and tool-use discipline section ("budget (16)" → "budget (32)") now match the actual config default of 32.
 - Fix `board_list_cache_ttl_seconds` default drift: changed Pydantic model default from `0.0` to `3.0` to match `config.example.json` and docs, making the board-list cache enabled by default as intended.
 - Add `check-builtin-kinds` pre-commit hook to validate `_BUILTIN_KINDS` cross-sync across workflow portability, periodic passes, poll loops, and agent definitions.
 - Updated all stale `config/repos.yaml` references in the Repos registry section of `docs/config/configuration.md` to reference `config/config.json`'s `"repos"` key, matching the actual loader behaviour.
