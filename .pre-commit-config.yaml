@@ -97,6 +97,14 @@ repos:
         pass_filenames: false
   - repo: local
     hooks:
+      - id: check-builtin-kinds
+        name: Validate _BUILTIN_KINDS cross-sync
+        entry: python scripts/check_builtin_kinds.py
+        language: system
+        files: ^(scripts/workflow_portability\.py|src/robotsix_mill/periodic/_passes\.py|src/robotsix_mill/periodic/poll_loops\.py|\.robotsix-mill/periodic/|agent_definitions/periodic/)$
+        pass_filenames: false
+  - repo: local
+    hooks:
       - id: validate-workflow-permissions
         name: Validate workflow security-events permission
         entry: python scripts/validate_workflow_permissions.py
