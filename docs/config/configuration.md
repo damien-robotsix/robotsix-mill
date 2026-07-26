@@ -926,7 +926,7 @@ participates in the Settings merge. Access it via `get_repos_config()`
 or `get_repo_config("repo-id")`.
 
 > **There is no longer a board-less default.** Every ticket must carry a
-> `board_id` from `config/repos.yaml`. The legacy `<data_dir>/mill.db`
+> `board_id` from `config/config.json`'s `"repos"` key. The legacy `<data_dir>/mill.db`
 > that held tickets without a board_id has been removed. For single-repo
 > deployments, configure exactly one repo entry.
 
@@ -960,14 +960,14 @@ python scripts/verify_repos_config.py
 
 ### Select a repo at startup
 
-Once `config/repos.yaml` is configured, start the server.  By default
-the server loads **all** repos from `config/repos.yaml` and serves them
+Once the `"repos"` key in `config/config.json` is configured, start the server.  By default
+the server loads **all** repos from `config/config.json`'s `"repos"` key and serves them
 together.  In this multi-repo mode the board UI includes a repo selector
 dropdown — pick a repo to filter the kanban, runs list, and cost
 dashboard, or select "All repos" to see everything at once.
 
 ```sh
-# Multi-repo mode: serves every repo in config/repos.yaml
+# Multi-repo mode: serves every repo in config/config.json
 robotsix-mill serve
 ```
 
@@ -979,7 +979,7 @@ To scope the process to a single repo (useful for tests/dev), pass
 robotsix-mill serve --repo-id my-repo
 ```
 
-When `config/repos.yaml` is empty, the server refuses to start (exit
+When the `"repos"` key in `config/config.json` is empty, the server refuses to start (exit
 code 2) with an error message.  An unknown `--repo-id` also causes an
 error exit.
 
@@ -996,7 +996,7 @@ Source: the `"repos"` key of `config/config.json` (overridable via the
 
 ### Field reference
 
-| YAML key (in repos.yaml) | Required | Default | Description |
+| YAML key (in repos:) | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
 | `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
@@ -1013,13 +1013,13 @@ Every stage that clones, bases PRs, or rebases work (refine, implement,
 deliver, merge, CI monitor, etc.) resolves the **effective target branch**
 for each repo using this rule:
 
-1. If `repos.<id>.working_branch` is set in `config/repos.yaml`, **use that**.
+1. If `repos.<id>.working_branch` is set in `config/config.json`'s `"repos"` key, **use that**.
 2. Otherwise, use the global `forge_target_branch` setting (default `main`).
 
 This allows repos with non-main default branches to be fully onboarded:
 
 ```yaml
-# config/repos.yaml
+# config/config.json (repos key)
 repos:
   ros2-example-interfaces:
     board_id: "example-interfaces"
@@ -1047,7 +1047,7 @@ preserving backward compatibility with existing deployments.
 A master repository that uses vcs2l manifests to declare workspace members
 can opt into **automatic registration** of those members as RepoConfig
 entries. When enabled, the mill detects members from the manifest and
-automatically upserts them into `config/repos.yaml`, creating boards and
+automatically upserts them into `config/config.json`'s `"repos"` key, creating boards and
 filing build-out tickets on their behalf.
 
 #### How it works
@@ -1060,7 +1060,7 @@ The workspace-member sync agent:
    → `src-zeta-pkg`), slugifying special characters to ASCII.
 3. **Inherits** Langfuse configuration from the master repo so all members
    share observability projects.
-4. **Upserts** entries into `config/repos.yaml` with the member's:
+4. **Upserts** entries into `config/config.json`'s `"repos"` key with the member's:
    - `forge_remote_url` from the manifest `url` field
    - `working_branch` from the manifest `version` field (if present)
    - `cross_repo_target` upstream policy (if present)
@@ -1101,7 +1101,7 @@ in a single pass without additional operator steps.
 
 ### Multi-repo behaviour
 
-When multiple repos are registered (default when `config/repos.yaml`
+When multiple repos are registered (default when the `"repos"` key in `config/config.json`
 has two or more entries), each periodic agent fans out across all repos
 sequentially — one timer per agent type iterates every enabled repo in
 turn. This means:
@@ -1116,7 +1116,7 @@ turn. This means:
   repos share the same enabled/disabled flags.
 
 In single-repo mode (`--repo-id` on serve or one entry in
-`config/repos.yaml`) periodic agents run only for that repo, and memory
+`config/config.json`'s `"repos"` key) periodic agents run only for that repo, and memory
 files use the legacy flat path (`<data_dir>/audit_memory.md`).
 
 ---
