@@ -287,11 +287,8 @@ class _CoreSettings(BaseModel):
     # full all-board query + enrichment that, under load, stalls the shared
     # event loop. Repeated identical polls within this window return a cached
     # snapshot (≤ this many seconds stale). 0.0 disables the cache.
-    # Field default is 0.0 (disabled) so unit tests that construct Settings()
-    # directly see immediate list consistency (create-then-list); the live
-    # mill enables it via config/config.example.json (3.0s).
     board_list_cache_ttl_seconds: float = Field(
-        default=0.0,
+        default=3.0,
         ge=0.0,
         description="Short-TTL cache for the board-poll GET /tickets endpoint (seconds). 0.0 disables.",
         json_schema_extra={"advanced": True},

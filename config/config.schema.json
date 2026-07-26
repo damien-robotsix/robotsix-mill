@@ -779,7 +779,7 @@
         },
         "board_list_cache_ttl_seconds": {
           "advanced": true,
-          "default": 0.0,
+          "default": 3.0,
           "description": "Short-TTL cache for the board-poll GET /tickets endpoint (seconds). 0.0 disables.",
           "minimum": 0.0,
           "title": "Board List Cache Ttl Seconds",
