@@ -739,7 +739,7 @@ these agent-specific settings are available:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_META_PERIODIC` | `false` | Master switch for the weekly meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global weekly schedule. |
-| `MILL_META_INTERVAL_SECONDS` | `86400` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
+| `MILL_META_INTERVAL_SECONDS` | `604800` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
 
 #### sandbox_reaper
 
