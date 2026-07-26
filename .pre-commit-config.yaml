@@ -93,7 +93,7 @@ repos:
         name: Validate config surface is in sync
         entry: python scripts/check_config_sync.py
         language: system
-        files: ^(config/mill\.defaults\.yaml|config/secrets\.example\.yaml|src/robotsix_mill/config\.py|src/robotsix_mill/config_loader\.py)$
+        files: ^(config/config\.example\.json|src/robotsix_mill/config/.*\.py)$
         pass_filenames: false
   - repo: local
     hooks:
@@ -101,7 +101,7 @@ repos:
         name: Validate _BUILTIN_KINDS cross-sync
         entry: python scripts/check_builtin_kinds.py
         language: system
-        files: ^(scripts/workflow_portability\.py|src/robotsix_mill/periodic/_passes\.py|src/robotsix_mill/periodic/poll_loops\.py|\.robotsix-mill/periodic/|agent_definitions/periodic/)$
+        files: ^(src/robotsix_mill/agents/workflow_portability\.py|src/robotsix_mill/runtime/routes/_passes\.py|src/robotsix_mill/runtime/worker/poll_loops\.py|\.robotsix-mill/periodic/|agent_definitions/periodic/)$
         pass_filenames: false
   - repo: local
     hooks:
