@@ -762,7 +762,7 @@ pattern control its tool-call and web-fetch budgets:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_SURVEY_PERIODIC` | `true` | Enable periodic survey passes |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `86400` | Seconds between survey passes |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `604800` | Seconds between survey passes |
 | `MILL_SURVEY_REQUEST_LIMIT` | `40` | Per-call request cap for the survey agent |
 | `MILL_SURVEY_WEB_FETCH_MAX_CALLS` | `5` | Max real (cache-miss) web_fetch calls per survey run |
 | `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
