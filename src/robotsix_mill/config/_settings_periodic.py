@@ -252,7 +252,7 @@ class _PeriodicSettings(BaseModel):
         description="When true, run periodic survey passes for OSS project discovery.",
     )
     # Seconds between automatic survey passes when
-    # MILL_SURVEY_PERIODIC=true. Default 86400 (1 day). Minimum
+    # MILL_SURVEY_PERIODIC=true. Default 604800 (7 days). Minimum
     # enforced at 60s in the worker loop.
     survey_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML

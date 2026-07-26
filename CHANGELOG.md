@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix stale code comment: survey interval default now correctly stated as 604800 (7 days) in `_settings_periodic.py`.
 - Document `trace_review_min_confidence` in the `trace_review` config table (`docs/config/configuration.md`).
 - Fix `survey_interval_seconds` documented default in `docs/config/configuration.md`: was `86400` (1 day), now matches the Pydantic model default of `604800` (7 days).
 - Fix stale `doc_request_limit` default in `agent_definitions/document.yaml`: both the budget description ("default 16" → "default 32") and tool-use discipline section ("budget (16)" → "budget (32)") now match the actual config default of 32.
