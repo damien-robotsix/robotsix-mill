@@ -791,7 +791,7 @@ budget and tool-call guardrails:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_TEST_GAP_PERIODIC` | `true` | Enable periodic test-gap passes |
-| `MILL_TEST_GAP_INTERVAL_SECONDS` | `86400` | Seconds between test-gap passes |
+| `MILL_TEST_GAP_INTERVAL_SECONDS` | `604800` | Seconds between test-gap passes |
 | `MILL_TEST_GAP_REQUEST_LIMIT` | `80` | Per-call request cap for the test-gap agent |
 | `MILL_TEST_GAP_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per test-gap trace |
 | `MILL_TEST_GAP_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
