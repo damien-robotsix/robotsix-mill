@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Added `scripts/check_builtin_kinds.py` pre-commit hook that cross-validates `_BUILTIN_KINDS` against `.robotsix-mill/periodic/`, `agent_definitions/periodic/`, and `_passes.py` to prevent multi-site synchronization drift. Fixed the known inconsistency: added `"roadmap_sync": "schedule_only"` to `_BUILTIN_KINDS`. Registered the hook in `.pre-commit-config.yaml` and `.github/workflows/ci.yml`.
 - Refine agent: add "Run pytest only once" guidance to combine all flags into a single invocation, avoiding wasted duplicate full-suite runs.
 - Add `credit_balance` to `_BUILTIN_KINDS` as `"schedule_only"` so `kind_for("credit_balance")` returns the correct kind and `is_portable` returns `True` consistently with other schedule-only workflows.
 - Reclassify `repo_description_sync` from `schedule_only` to `llm_agent` so that
