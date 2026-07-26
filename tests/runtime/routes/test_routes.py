@@ -1399,15 +1399,20 @@ def test_board_list_cache_serves_snapshot_within_ttl(tmp_path, repos_registry):
 
 
 def test_board_list_cache_disabled_by_default(tmp_path, repos_registry):
-    """With the default (ttl=0.0) the list is always fresh: a ticket created
-    after the first poll appears immediately on the next poll."""
+    """With the model default changed to 3.0, explicitly pass ttl=0.0 here
+    to verify that when the cache is disabled the list is always fresh:
+    a ticket created after the first poll appears immediately."""
     from robotsix_mill.config import Settings
     from robotsix_mill.core import db
     from robotsix_mill.core.service import TicketService
     from robotsix_mill.runtime.routes import _tickets as tickets_routes
 
     db.reset_engine()
-    s = Settings(data_dir=str(tmp_path), require_approval="false")
+    s = Settings(
+        data_dir=str(tmp_path),
+        require_approval="false",
+        board_list_cache_ttl_seconds=0.0,
+    )
     assert s.board_list_cache_ttl_seconds == 0.0
     db.init_db(s, board_id="test-board")
     svc = TicketService(s, board_id="test-board")
