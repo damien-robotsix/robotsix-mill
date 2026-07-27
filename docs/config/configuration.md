@@ -617,7 +617,7 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
-`completeness_check`, `diagnostic`, `forge_parity`, `module_curator`, `orphaned_pr_check`,
+`completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `module_curator`, `module_size`, `orphaned_pr_check`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `sandbox_reaper`, `repo_description_sync`.
 
@@ -729,6 +729,21 @@ The `db_maintenance` periodic agent runs SQLite maintenance (`VACUUM`,
 | `MILL_DB_MAINTENANCE_PERIODIC` | `true` | Enable periodic database maintenance passes |
 | `MILL_DB_MAINTENANCE_INTERVAL_SECONDS` | `86400` | Seconds between database maintenance passes |
 
+#### docstring_coverage
+
+The `docstring_coverage` periodic agent scans the repository for public-API
+documentation gaps (missing or incomplete docstrings) and files draft tickets
+when coverage is insufficient. Five extra fields beyond the generic periodic
+pattern control its request budget and tool-call guardrails:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_DOCSTRING_COVERAGE_PERIODIC` | `true` | Enable periodic docstring-coverage passes |
+| `MILL_DOCSTRING_COVERAGE_INTERVAL_SECONDS` | `604800` | Seconds between docstring-coverage passes |
+| `MILL_DOCSTRING_COVERAGE_REQUEST_LIMIT` | `80` | Per-call request cap for the docstring-coverage agent |
+| `MILL_DOCSTRING_COVERAGE_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per docstring-coverage trace |
+| `MILL_DOCSTRING_COVERAGE_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
+
 #### meta
 
 The `meta` periodic agent is a cross-repo survey agent that clones all
@@ -741,6 +756,21 @@ these agent-specific settings are available:
 |---------|---------|-------------|
 | `MILL_META_PERIODIC` | `false` | Master switch for the weekly meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global weekly schedule. |
 | `MILL_META_INTERVAL_SECONDS` | `604800` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
+
+#### module_size
+
+The `module_size` periodic agent scans the repository for oversized files
+(modules exceeding a reasonable line-count threshold) and files draft tickets
+when files warrant splitting. Five extra fields beyond the generic periodic
+pattern control its request budget and tool-call guardrails:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_MODULE_SIZE_PERIODIC` | `true` | Enable periodic module-size passes |
+| `MILL_MODULE_SIZE_INTERVAL_SECONDS` | `604800` | Seconds between module-size passes |
+| `MILL_MODULE_SIZE_REQUEST_LIMIT` | `60` | Per-call request cap for the module-size agent |
+| `MILL_MODULE_SIZE_MAX_TOOL_CALLS` | `80` | Hard cap on total tool calls per module-size trace |
+| `MILL_MODULE_SIZE_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
 
 #### sandbox_reaper
 
