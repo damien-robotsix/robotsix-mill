@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Document `ci_debt_recheck` periodic agent in `docs/config/configuration.md`: add to periodic agent list and document `MILL_CI_DEBT_RECHECK_PERIODIC` (default `true`) and `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` (default `3600`) env vars
 - Docs: added `roadmap_sync`, `frontend_sync`, and `pin_bump` to the periodic agent list and env-var reference table in `docs/config/configuration.md`.
 - Document `docstring_coverage` and `module_size` periodic agents in `docs/config/configuration.md` — add them to the periodic agent list and add dedicated subsections with env-var tables.
 - Add `repo-description-sync` CLI subcommand, wiring the already-registered periodic pass into the CLI `_RUNNERS` dict, add_parser block, and `_resolve_repo_config` branch.
