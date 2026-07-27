@@ -167,6 +167,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Module-size pass",
         "format": "memory_drafts",
     },
+    "repo-description-sync": {
+        "module": "runners.repo_description_sync_runner",
+        "function": "run_repo_description_sync_pass",
+        "label": "Repo Description Sync pass",
+        "format": "memory_drafts",
+    },
     "pin-bump": {
         "module": "runners.pin_bump_runner",
         "function": "run_pin_bump_pass",
@@ -226,6 +232,7 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             )
         elif cmd in (
             "member-sync",
+            "repo-description-sync",
             "trace-review",
             "roadmap-sync",
             "changelog-autofill",
@@ -865,6 +872,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_roadmap_sync.add_argument(
         "--repo-id",
         help="repository to run roadmap-sync for (required if multiple repos)",
+    )
+
+    # --- repo-description-sync command ---
+    p_repo_description_sync = sub.add_parser(
+        "repo-description-sync",
+        help="run a repo-description-sync pass over a managed repo",
+    )
+    p_repo_description_sync.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+    p_repo_description_sync.add_argument(
+        "--repo-id",
+        help="repository to sync the description for (required if multiple repos)",
     )
 
     # --- module-curator command ---
