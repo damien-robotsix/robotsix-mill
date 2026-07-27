@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Added `changelog-autofill` CLI subcommand, wiring the existing schedule_only runner for manual invocation.
 - Add missing `.robotsix-mill/periodic/roadmap_sync.yaml` presence file so the periodic scheduler discovers and runs the `roadmap_sync` workflow.
 - Fix vulture "unused variable 'frame'" warning in `src/robotsix_mill/runtime/tracing.py` by prefixing the unused signal handler parameter with `_`.
 - **config**: Moved `deploy_api_url` to its correct alphabetical position in `config.example.json` and removed it from the config-sync exception set in `scripts/check_config_sync.py`, permanently enforcing its presence (`deploy_api_url` is no longer an optional/exception field).
