@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- `_revert_standard_configs` no longer auto-reverts standard config files
+  (`.pre-commit-config.yaml`, `docker-compose.yml`, `mkdocs.yml`) when the
+  ticket's `file_map` declares them as relevant scope; they now pass through
+  to the scope-triage LLM for normal evaluation.
 - Remove stale agent references (`maintenance.yaml`, `periodic/cost_analyst.yaml`) from AGENT.md example lists; both files were deleted in earlier commits.
 - Enabled expanded Ruff lint rules (SIM, C4, LOG, G, ERA, PGH, RUF, PT) in
   ``pyproject.toml``. Applied ~540 auto-fixes across 223 files (``ruff --fix``
