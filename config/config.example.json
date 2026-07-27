@@ -76,6 +76,7 @@
     "dedup_request_limit": 12,
     "dedup_skip_on_no_overlap": true,
     "default_repo_id": "",
+    "deploy_api_url": null,
     "delete_branch_on_merge": true,
     "deliver_max_identical_blocks": 2,
     "delta_context_retry_enabled": true,
