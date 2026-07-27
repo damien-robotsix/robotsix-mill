@@ -167,6 +167,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Module-size pass",
         "format": "memory_drafts",
     },
+    "pin-bump": {
+        "module": "runners.pin_bump_runner",
+        "function": "run_pin_bump_pass",
+        "label": "Pin Bump pass",
+        "format": "memory_drafts",
+    },
     "roadmap-sync": {
         "module": "runners.roadmap_sync_runner",
         "function": "run_roadmap_sync_pass",
@@ -223,6 +229,7 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             "trace-review",
             "roadmap-sync",
             "changelog-autofill",
+            "pin-bump",
         ):
             resolved = _resolve_repo_config(args, cmd)
             if isinstance(resolved, int):
@@ -876,6 +883,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
+    )
+
+    # --- pin-bump command ---
+    p_pin_bump = sub.add_parser(
+        "pin-bump",
+        help="run a pin bump pass for dependency version pins",
+    )
+    p_pin_bump.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+    p_pin_bump.add_argument(
+        "--repo-id",
+        help="repository to run pin-bump for (required if multiple repos)",
     )
 
     # --- meta command ---

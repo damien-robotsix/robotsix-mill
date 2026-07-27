@@ -24,6 +24,7 @@ _shtab_robotsix_mill_commands() {
     "meta:"
     "module-curator:"
     "module-size:"
+    "pin-bump:"
     "repos:"
     "roadmap-sync:"
     "run-health:"
@@ -237,6 +238,15 @@ _shtab_robotsix_mill_module_size_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_module_size_defaults_added=0
 
+_shtab_robotsix_mill_pin_bump_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+  "--repo-id[repository to run pin-bump for (required if multiple repos)]:repo_id:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_pin_bump_defaults_added=0
+
 _shtab_robotsix_mill_repos_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
 )
@@ -423,6 +433,7 @@ _shtab_robotsix_mill() {
         meta) _arguments -C -s $_shtab_robotsix_mill_meta_options ;;
         module-curator) _arguments -C -s $_shtab_robotsix_mill_module_curator_options ;;
         module-size) _arguments -C -s $_shtab_robotsix_mill_module_size_options ;;
+        pin-bump) _arguments -C -s $_shtab_robotsix_mill_pin_bump_options ;;
         repos) _shtab_robotsix_mill_repos ;;
         roadmap-sync) _arguments -C -s $_shtab_robotsix_mill_roadmap_sync_options ;;
         run-health) _arguments -C -s $_shtab_robotsix_mill_run_health_options ;;
