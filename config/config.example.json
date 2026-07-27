@@ -82,6 +82,7 @@
     "dependabot_ingest_interval_seconds": 86400,
     "dependabot_ingest_max_drafts_per_pass": 5,
     "dependabot_ingest_periodic": true,
+    "deploy_api_url": null,
     "diagnostic_interval_seconds": 604800,
     "diagnostic_monitored_repo_ids": [],
     "diagnostic_periodic": false,
