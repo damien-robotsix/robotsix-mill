@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix vulture "unused variable 'frame'" warning in `src/robotsix_mill/runtime/tracing.py` by prefixing the unused signal handler parameter with `_`.
 - **config**: Moved `deploy_api_url` to its correct alphabetical position in `config.example.json` and removed it from the config-sync exception set in `scripts/check_config_sync.py`, permanently enforcing its presence (`deploy_api_url` is no longer an optional/exception field).
 - Add `deploy_api_url` to `config/config.example.json` and document it in `docs/config/configuration.md` (section 6 Service).
 - Wire `roadmap_sync` as a fully scheduled periodic pass: add `roadmap_sync_periodic`/`roadmap_sync_interval_seconds` settings fields, register it in `_BUILTIN_KINDS` as `schedule_only`, and add the runner to `_SCHEDULE_ONLY_RUNNERS` so the periodic supervisor can schedule it automatically.
