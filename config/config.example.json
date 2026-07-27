@@ -197,6 +197,8 @@
     "refine_web_fetch_max_total_bytes": 500000,
     "refine_web_search_max_calls": 5,
     "repo_description_sync_interval_seconds": 604800,
+    "roadmap_sync_interval_seconds": 604800,
+    "roadmap_sync_periodic": true,
     "repo_description_sync_periodic": true,
     "repo_visibility_default": "public",
     "requeue_batch_pause_seconds": 2.0,

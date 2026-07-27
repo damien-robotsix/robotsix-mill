@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Wire `roadmap_sync` as a fully scheduled periodic pass: add `roadmap_sync_periodic`/`roadmap_sync_interval_seconds` settings fields, register it in `_BUILTIN_KINDS` as `schedule_only`, and add the runner to `_SCHEDULE_ONLY_RUNNERS` so the periodic supervisor can schedule it automatically.
 - `_revert_standard_configs` no longer auto-reverts standard config files
   (`.pre-commit-config.yaml`, `docker-compose.yml`, `mkdocs.yml`) when the
   ticket's `file_map` declares them as relevant scope; they now pass through

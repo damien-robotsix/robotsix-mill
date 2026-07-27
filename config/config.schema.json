@@ -2204,6 +2204,19 @@
           "title": "Reviewer Agreement Gate Enabled",
           "type": "boolean"
         },
+        "roadmap_sync_interval_seconds": {
+          "advanced": true,
+          "default": 604800,
+          "description": "Seconds between roadmap-sync passes.",
+          "title": "Roadmap Sync Interval Seconds",
+          "type": "integer"
+        },
+        "roadmap_sync_periodic": {
+          "default": true,
+          "description": "When true, run periodic roadmap-sync passes.",
+          "title": "Roadmap Sync Periodic",
+          "type": "boolean"
+        },
         "run_health_interval_seconds": {
           "advanced": true,
           "default": 604800,

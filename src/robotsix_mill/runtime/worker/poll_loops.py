@@ -296,6 +296,7 @@ class PollLoopsMixin(_WorkerBase):
         ),
         "changelog_autofill": "robotsix_mill.runners.changelog_autofill_runner:run_changelog_autofill_pass",
         "pin_bump": "robotsix_mill.runners.pin_bump_runner:run_pin_bump_pass",
+        "roadmap_sync": "robotsix_mill.runners.roadmap_sync_runner:run_roadmap_sync_pass",
     }
 
     # LLM-agent periodic workflows that use custom runners (not the
