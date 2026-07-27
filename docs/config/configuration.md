@@ -616,7 +616,7 @@ Each periodic agent shares this pattern:
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
-`agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
+`agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
 `completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `orphaned_pr_check`, `pin_bump`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
@@ -881,6 +881,8 @@ and as environment variables:
 |---------|---------|-------------|
 | `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between bc-check passes |
+| `MILL_CI_DEBT_RECHECK_PERIODIC` | `true` | Enable periodic CI-debt recheck passes (auto-resumes BLOCKED tickets when target-branch CI debt clears) |
+| `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` | `3600` | Seconds between CI-debt recheck passes (1 hour) |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
