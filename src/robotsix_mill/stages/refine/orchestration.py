@@ -89,8 +89,8 @@ def _lazy_import_result_paths() -> None:
 
 
 # Sentinel values — replaced on first lazy import.
-_reconcile: Any = None  # type: ignore[no-redef]
-_result_paths: Any = None  # type: ignore[no-redef]
+_reconcile: Any = None
+_result_paths: Any = None
 
 
 def __getattr__(name: str) -> object:
@@ -125,8 +125,11 @@ class RefineAgentMixin:
     ) -> str:
         """Delegate to :func:`_result_paths.review_spec_conciseness`."""
         _lazy_import_result_paths()
-        return _result_paths.review_spec_conciseness(
-            s, ws, ticket, spec, verbose_filename, child_index=child_index
+        return cast(
+            str,
+            _result_paths.review_spec_conciseness(
+                s, ws, ticket, spec, verbose_filename, child_index=child_index
+            ),
         )
 
     @staticmethod
@@ -140,8 +143,11 @@ class RefineAgentMixin:
     ) -> Outcome | None:
         """Delegate to :func:`_reconcile.short_circuit_for_internal_failure`."""
         _lazy_import_reconcile()
-        return _reconcile.short_circuit_for_internal_failure(
-            ctx, ticket, draft, ws, s, reviewer_comments
+        return cast(
+            Outcome | None,
+            _reconcile.short_circuit_for_internal_failure(
+                ctx, ticket, draft, ws, s, reviewer_comments
+            ),
         )
 
     @staticmethod
@@ -202,8 +208,11 @@ class RefineAgentMixin:
         )
 
         if not _is_delta_reuse:
-            outcome = _reconcile.reviewer_agreement_guard(
-                ctx, ticket, draft, ws, s, reviewer_comments
+            outcome = cast(
+                Outcome | None,
+                _reconcile.reviewer_agreement_guard(
+                    ctx, ticket, draft, ws, s, reviewer_comments
+                ),
             )
             if outcome is not None:
                 return outcome
@@ -232,8 +241,11 @@ class RefineAgentMixin:
             if outcome is not None:
                 return outcome
 
-        outcome = _reconcile.short_circuit_for_internal_failure(
-            ctx, ticket, draft, ws, s, reviewer_comments
+        outcome = cast(
+            Outcome | None,
+            _reconcile.short_circuit_for_internal_failure(
+                ctx, ticket, draft, ws, s, reviewer_comments
+            ),
         )
         if outcome is not None:
             return outcome
@@ -253,36 +265,50 @@ class RefineAgentMixin:
             return outcome
         result = cast(refining.RefineResult, result)
 
-        outcome = _reconcile.gitignored_guard(ticket, result, repo_dir)
+        outcome = cast(
+            Outcome | None, _reconcile.gitignored_guard(ticket, result, repo_dir)
+        )
         if outcome is not None:
             return outcome
 
         _reconcile.apply_agent_side_effects(ctx, ticket, draft, ws, s, epic_ctx, result)
 
-        outcome = _result_paths.no_change_path(
-            ctx, ticket, draft, repo_dir, title, ws, result
+        outcome = cast(
+            Outcome | None,
+            _result_paths.no_change_path(
+                ctx, ticket, draft, repo_dir, title, ws, result
+            ),
         )
         if outcome is not None:
             return outcome
 
         if result.promote_to_epic and not result.split:
-            return _result_paths.promote_to_epic_path(ctx, ticket, draft, ws, s, result)
-
-        if not result.split:
-            return _result_paths.single_scope_path(
-                ctx, ticket, ws, s, result, reviewer_comments, open_thread_ids
+            return cast(
+                Outcome,
+                _result_paths.promote_to_epic_path(ctx, ticket, draft, ws, s, result),
             )
 
-        return _result_paths.multi_scope_path(
-            ctx,
-            ticket,
-            draft,
-            ws,
-            s,
-            epic_ctx,
-            result,
-            reviewer_comments,
-            open_thread_ids,
+        if not result.split:
+            return cast(
+                Outcome,
+                _result_paths.single_scope_path(
+                    ctx, ticket, ws, s, result, reviewer_comments, open_thread_ids
+                ),
+            )
+
+        return cast(
+            Outcome,
+            _result_paths.multi_scope_path(
+                ctx,
+                ticket,
+                draft,
+                ws,
+                s,
+                epic_ctx,
+                result,
+                reviewer_comments,
+                open_thread_ids,
+            ),
         )
 
     # -- phase: reviewer-comment gather (sendback guard) --------------------
