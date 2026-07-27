@@ -63,32 +63,32 @@ _secret_field_info: dict[str, SimpleNamespace] = {
 }
 
 
-class _SecretsModelFields(dict):
+class _SecretsModelFields(dict[str, SimpleNamespace]):
     """A dict subclass that ``set(_SecretsModelFields)`` iterates keys.
 
     Used as the ``Secrets.model_fields`` class attribute so the
     ``set(Secrets.model_fields)`` call in ``check_config_sync.py`` works.
     """
 
-    def __iter__(self):
+    def __iter__(self) -> Any:  # noqa: ANN401
         return iter(_secret_field_info)
 
-    def items(self):
+    def items(self) -> Any:  # noqa: ANN401
         return _secret_field_info.items()
 
-    def keys(self):
+    def keys(self) -> Any:  # noqa: ANN401
         return _secret_field_info.keys()
 
-    def values(self):
+    def values(self) -> Any:  # noqa: ANN401
         return _secret_field_info.values()
 
-    def __contains__(self, key):
+    def __contains__(self, key: object) -> bool:
         return key in _secret_field_info
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> SimpleNamespace:
         return _secret_field_info[key]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(_secret_field_info)
 
 
@@ -195,63 +195,63 @@ class Secrets:
 
     @property
     def openrouter_api_key(self) -> str | None:
-        return self._openrouter_api_key
+        return self._openrouter_api_key  # type: ignore[no-any-return]
 
     @property
     def forge_token(self) -> str | None:
-        return self._forge_token
+        return self._forge_token  # type: ignore[no-any-return]
 
     @property
     def forge_repo_create_token(self) -> str | None:
-        return self._forge_repo_create_token
+        return self._forge_repo_create_token  # type: ignore[no-any-return]
 
     @property
     def sandbox_push_token(self) -> str | None:
-        return self._sandbox_push_token
+        return self._sandbox_push_token  # type: ignore[no-any-return]
 
     @property
     def github_app_id(self) -> str | None:
-        return self._github_app_id
+        return self._github_app_id  # type: ignore[no-any-return]
 
     @property
     def github_app_private_key(self) -> str | None:
-        return self._github_app_private_key
+        return self._github_app_private_key  # type: ignore[no-any-return]
 
     @property
     def github_app_private_key_path(self) -> str | None:
-        return self._github_app_private_key_path
+        return self._github_app_private_key_path  # type: ignore[no-any-return]
 
     @property
     def langfuse_public_key(self) -> str | None:
-        return self._langfuse_public_key
+        return self._langfuse_public_key  # type: ignore[no-any-return]
 
     @property
     def langfuse_secret_key(self) -> str | None:
-        return self._langfuse_secret_key
+        return self._langfuse_secret_key  # type: ignore[no-any-return]
 
     @property
     def langfuse_base_url(self) -> str | None:
-        return self._langfuse_base_url
+        return self._langfuse_base_url  # type: ignore[no-any-return]
 
     @property
     def langfuse_project_id(self) -> str | None:
-        return self._langfuse_project_id
+        return self._langfuse_project_id  # type: ignore[no-any-return]
 
     @property
     def langfuse_project_name(self) -> str | None:
-        return self._langfuse_project_name
+        return self._langfuse_project_name  # type: ignore[no-any-return]
 
     @property
     def openrouter_management_key(self) -> str | None:
-        return self._openrouter_management_key
+        return self._openrouter_management_key  # type: ignore[no-any-return]
 
     @property
     def ntfy_url(self) -> str | None:
-        return self._ntfy_url
+        return self._ntfy_url  # type: ignore[no-any-return]
 
     @property
     def ntfy_token(self) -> str | None:
-        return self._ntfy_token
+        return self._ntfy_token  # type: ignore[no-any-return]
 
     # --- Debug logging for field access ----------------------------------
 

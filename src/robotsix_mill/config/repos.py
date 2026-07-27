@@ -480,7 +480,7 @@ def target_branch_for(settings: Any, repo_config: RepoConfig | None) -> str:
     """
     if repo_config is not None and repo_config.working_branch:
         return repo_config.working_branch
-    return settings.forge_target_branch
+    return settings.forge_target_branch  # type: ignore[no-any-return]
 
 
 def effective_target_branch(settings: Any, repo_config: RepoConfig | None) -> str:
