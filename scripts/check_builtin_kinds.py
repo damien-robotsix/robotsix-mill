@@ -5,13 +5,16 @@ Usage (from the repo root):
     python scripts/check_builtin_kinds.py
 
 Cross-references the live source-of-truth objects — never re-parses source
-— to catch ``_BUILTIN_KINDS`` drift across the four sync points:
+— to catch ``_BUILTIN_KINDS`` drift across the five sync points:
 
     1. ``.robotsix-mill/periodic/`` presence files
     2. ``agent_definitions/periodic/`` YAML definitions
     3. ``src/robotsix_mill/runtime/routes/_passes.py`` pass-routing table
     4. ``agent_definitions/periodic/`` → every ``llm_agent`` entry in
        ``_BUILTIN_KINDS`` must have a matching YAML definition.
+    5. ``src/robotsix_mill/runtime/worker/poll_loops.py`` → every
+       ``schedule_only`` entry in ``_BUILTIN_KINDS`` must have a matching
+       entry in ``PollLoopsMixin._SCHEDULE_ONLY_RUNNERS``.
 
 Invariants (each contributes drift lines; the run fails if any fire):
 
@@ -25,6 +28,8 @@ Invariants (each contributes drift lines; the run fails if any fire):
        ``_PASS_KIND_MISMATCH_OK``.
     4. Every ``llm_agent`` name in ``_BUILTIN_KINDS`` must have a
        corresponding YAML definition in ``agent_definitions/periodic/``.
+    5. Every ``schedule_only`` name in ``_BUILTIN_KINDS`` must have a
+       corresponding entry in ``PollLoopsMixin._SCHEDULE_ONLY_RUNNERS``.
 
 Exit codes:
     0 — every invariant holds; ``_BUILTIN_KINDS`` is in sync.
@@ -191,6 +196,23 @@ def check_builtin_llm_agents_have_def(
     return drift
 
 
+def check_schedule_only_runner_wiring(
+    builtin_kinds: dict[str, str],
+    schedule_only_runners: dict[str, str],
+) -> list[str]:
+    """Invariant 5: every ``schedule_only`` in ``_BUILTIN_KINDS`` must have a
+    corresponding entry in ``PollLoopsMixin._SCHEDULE_ONLY_RUNNERS``."""
+    drift: list[str] = []
+    for name, kind in sorted(builtin_kinds.items()):
+        if kind == "schedule_only" and name not in schedule_only_runners:
+            drift.append(
+                f"_BUILTIN_KINDS[{name!r}] is schedule_only but "
+                f"{name!r} is missing from "
+                f"PollLoopsMixin._SCHEDULE_ONLY_RUNNERS"
+            )
+    return drift
+
+
 # ---------------------------------------------------------------------------
 #  Main
 # ---------------------------------------------------------------------------
@@ -201,6 +223,7 @@ def collect_drift() -> list[str]:
 
     from robotsix_mill.agents.workflow_portability import _BUILTIN_KINDS
     from robotsix_mill.runtime.routes._passes import _PASS_REGISTRY
+    from robotsix_mill.runtime.worker.poll_loops import PollLoopsMixin
 
     presence_stems = _yaml_stems(_REPO_ROOT / ".robotsix-mill" / "periodic")
     agent_def_stems = _yaml_stems(_REPO_ROOT / "agent_definitions" / "periodic")
@@ -214,6 +237,9 @@ def collect_drift() -> list[str]:
         _PASS_REGISTRY, _BUILTIN_KINDS, _PASS_KIND_MISMATCH_OK
     )
     drift += check_builtin_llm_agents_have_def(_BUILTIN_KINDS, agent_def_stems)
+    drift += check_schedule_only_runner_wiring(
+        _BUILTIN_KINDS, PollLoopsMixin._SCHEDULE_ONLY_RUNNERS
+    )
     return drift
 
 
