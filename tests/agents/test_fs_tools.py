@@ -421,7 +421,7 @@ class TestReadFileOffsetLimit:
         root = tmp_path / "repo"
         root.mkdir()
         tools = build_fs_tools(root, settings)
-        rf = [t for t in tools if t.__name__ == "read_file"][0]
+        rf = next(t for t in tools if t.__name__ == "read_file")
         assert "offset" in rf.__doc__
         assert "limit" in rf.__doc__
 

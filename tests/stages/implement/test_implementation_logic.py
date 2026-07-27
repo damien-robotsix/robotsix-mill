@@ -27,15 +27,15 @@ from robotsix_mill.stages.implement.core import ImplementStage
 
 
 def _ic(**overrides) -> _ImplementContext:
-    defaults: dict = dict(
-        spec="Add feature",
-        memory_text="",
-        reference_files=None,
-        file_map=None,
-        feedback=None,
-        previous_attempt_summary=None,
-        open_thread_ids=None,
-    )
+    defaults: dict = {
+        "spec": "Add feature",
+        "memory_text": "",
+        "reference_files": None,
+        "file_map": None,
+        "feedback": None,
+        "previous_attempt_summary": None,
+        "open_thread_ids": None,
+    }
     defaults.update(overrides)
     return _ImplementContext(**defaults)
 
@@ -210,7 +210,7 @@ class FakeTicket:
 
 
 def _stage_ctx(**kw):
-    defaults = dict(repo_config=None)
+    defaults = {"repo_config": None}
     defaults.update(kw)
     return SimpleNamespace(**defaults)
 
@@ -253,7 +253,7 @@ class TestInvokeImplementAgent:
         finalize_calls = []
 
         def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
-            finalize_calls.append(dict(ok=ok, summary=summary))
+            finalize_calls.append({"ok": ok, "summary": summary})
 
         monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
 
@@ -291,7 +291,7 @@ class TestInvokeImplementAgent:
         finalize_calls = []
 
         def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
-            finalize_calls.append(dict(ok=ok, summary=summary))
+            finalize_calls.append({"ok": ok, "summary": summary})
 
         monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
 
@@ -336,7 +336,7 @@ class TestInvokeImplementAgent:
         finalize_calls = []
 
         def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
-            finalize_calls.append(dict(ok=ok, summary=summary))
+            finalize_calls.append({"ok": ok, "summary": summary})
 
         monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
 
@@ -526,33 +526,33 @@ class TestEvaluateTestResults:
         IMPORTANT: callers must invoke ``_install_default_patches(monkeypatch)``
         BEFORE any test-specific monkeypatch overrides, THEN call this method.
         """
-        params: dict = dict(
-            ctx=_simple_namespace(
+        params: dict = {
+            "ctx": _simple_namespace(
                 repo_config=None,
                 service=_simple_namespace(
                     add_step_event=lambda *a: None,
                     set_implement_cycles=lambda *a: None,
                 ),
             ),
-            ticket=FakeTicket(),
-            repo_dir=_DUMMY_PATH,
-            branch="main",
-            settings=_simple_namespace(
+            "ticket": FakeTicket(),
+            "repo_dir": _DUMMY_PATH,
+            "branch": "main",
+            "settings": _simple_namespace(
                 review_enabled=True,
                 smoke_command="",
             ),
-            ic=_ic(),
-            new_ic=_ic(),
-            summary="did work",
-            ref_files=None,
-            new_msgs=None,
-            no_change_needed=False,
-            no_change_rationale="",
-            resuming=False,
-            attempt=1,
-            max_iters=3,
-            extra_roots=None,
-        )
+            "ic": _ic(),
+            "new_ic": _ic(),
+            "summary": "did work",
+            "ref_files": None,
+            "new_msgs": None,
+            "no_change_needed": False,
+            "no_change_rationale": "",
+            "resuming": False,
+            "attempt": 1,
+            "max_iters": 3,
+            "extra_roots": None,
+        }
         params.update(overrides)
         return _Stage._evaluate_test_results(**params)
 

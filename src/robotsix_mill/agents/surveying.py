@@ -55,8 +55,8 @@ def _ensure_standards_repo(settings: Settings) -> Path | None:
     if (cache_dir / ".git").exists():
         # Already cloned — try a fast-forward pull (stale is fine).
         try:
-            subprocess.run(  # noqa: S603 — all args are repo-controlled constants
-                ["git", "-C", str(cache_dir), "pull", "--quiet", "--ff-only"],  # noqa: S607 — git is on PATH
+            subprocess.run(
+                ["git", "-C", str(cache_dir), "pull", "--quiet", "--ff-only"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -68,8 +68,8 @@ def _ensure_standards_repo(settings: Settings) -> Path | None:
 
     try:
         cache_dir.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(  # noqa: S603 — all args are repo-controlled constants
-            [  # noqa: S607 — git is on PATH
+        subprocess.run(
+            [
                 "git",
                 "clone",
                 "--quiet",

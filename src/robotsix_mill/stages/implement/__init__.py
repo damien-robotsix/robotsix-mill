@@ -42,14 +42,14 @@ from ._shared import _FLOOD_SAMPLE_SIZE, _modules_yaml_added_paths
 from .core import ImplementStage
 
 __all__ = [
+    # internal helpers imported directly by the unit tests.
+    "_FLOOD_SAMPLE_SIZE",
     "ImplementStage",
+    "_modules_yaml_added_paths",
+    "load_repo_smoke_paths",
+    "run_smoke_agent",
     # patchable seams (re-exported so the `_facade.<name>` call sites and
     # the `robotsix_mill.stages.implement.<name>` monkeypatch targets
     # resolve to the same callables).
     "run_test_agent",
-    "run_smoke_agent",
-    "load_repo_smoke_paths",
-    # internal helpers imported directly by the unit tests.
-    "_FLOOD_SAMPLE_SIZE",
-    "_modules_yaml_added_paths",
 ]

@@ -22,8 +22,8 @@ def _run_verify_diff(
 ) -> str:
     """Run ``git diff --stat`` and optionally cross-check expected files."""
     try:
-        result = subprocess.run(  # noqa: S603 — repo_dir is a controlled Path, not user input
-            ["git", "-C", str(repo_dir), "diff", "--stat"],  # noqa: S607 — git is on PATH
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "diff", "--stat"],
             capture_output=True,
             text=True,
             timeout=15,

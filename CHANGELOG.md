@@ -1,5 +1,18 @@
 ## 0.0.0 (unreleased)
 
+- Enabled expanded Ruff lint rules (SIM, C4, LOG, G, ERA, PGH, RUF, PT) in
+  ``pyproject.toml``. Applied ~540 auto-fixes across 223 files (``ruff --fix``
+  + ``--unsafe-fixes``) for safe transformations like nested-with flattening,
+  contextlib.suppress, collapsible-ifs, needless-bool simplification,
+  collection-literal conversions, and Yoda-condition fixes. Grandfathered
+  remaining pre-existing violations via per-file-ignores: RUF001-003 and
+  ERA001 blanket-suppressed for ``src/**`` and ``scripts/**``, RUF012
+  per-file for 6 source modules, PT/SIM/RUF059/RUF012/ERA/E402/PGH004/B017/
+  B018 noise blanket-suppressed for ``tests/**``, SIM103 for ``dev/**``.
+  Recovered ~80 bandit/other violations exposed when RUF100 stripped
+  inline ``# noqa:`` comments during the unsafe-fix pass — added per-file
+  ignores for those too. All gates pass: ruff check, ruff format, mypy
+  (no new errors), deptry, vulture.
 - Enable pytest-xdist parallel test execution: add `-n auto` to CI pytest-args, `parallel = true` to coverage config, and restructure `make test` with `coverage combine` for accurate multi-worker coverage. Add `make test-fast` for no-coverage parallel runs.
 - Fix `test_gap_interval_seconds` documented default in `docs/config/configuration.md`: `86400` → `604800` (7 days), matching the Pydantic model default in `_settings_periodic.py`.
 - Fix stale code comment: survey interval default now correctly stated as 604800 (7 days) in `_settings_periodic.py`.

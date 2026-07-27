@@ -1181,7 +1181,9 @@ GENERIC_PASS_ENTRIES = [
 ]
 
 
-@pytest.mark.parametrize("pass_id, target_module, target_attr", GENERIC_PASS_ENTRIES)
+@pytest.mark.parametrize(
+    ("pass_id", "target_module", "target_attr"), GENERIC_PASS_ENTRIES
+)
 def test_generic_pass_run_success(
     client, monkeypatch, pass_id, target_module, target_attr
 ):

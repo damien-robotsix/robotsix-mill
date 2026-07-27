@@ -88,38 +88,38 @@ from ._shared import (
 )
 
 __all__ = [
+    "_MERGE_REASON",
+    # constants
+    "_REBASE_COUNTER",
+    "_REV_REV_COUNTER",
     "MergeStage",
+    "_build_failing_summary",
+    "_changelog_warnings_for_ticket",
+    "_duplicate_changelog_fragments",
+    "_is_pr_check_run",
+    "_latest_failing_workflows",
+    "_lint_changelog",
+    # helpers
+    "_load_pr_urls",
+    "_read_counter",
+    "_read_reason",
+    "_repo_config_for_entry",
+    # patchable seams
+    "_resolve_remote_url",
+    "_verify_merge_ancestor",
+    "_workspace_repo_dir",
+    "_write_counter",
+    "_write_reason",
+    # sub-module references (re-exported for ``merge_mod.git_ops``, etc.)
+    "git_ops",
+    "github_push_token",
+    "github_token",
+    "load_memory",
+    "log",
+    "persist_memory",
     # agent seams (re-exported so ``merge_mod.<name>`` monkeypatches resolve)
     "run_ci_fix_agent",
     "run_rebase_agent",
     "run_review_revision_agent",
-    # sub-module references (re-exported for ``merge_mod.git_ops``, etc.)
-    "git_ops",
     "tracing",
-    # patchable seams
-    "_resolve_remote_url",
-    "github_token",
-    "github_push_token",
-    "load_memory",
-    "persist_memory",
-    # constants
-    "_REBASE_COUNTER",
-    "_MERGE_REASON",
-    "_REV_REV_COUNTER",
-    "log",
-    # helpers
-    "_load_pr_urls",
-    "_repo_config_for_entry",
-    "_read_counter",
-    "_write_counter",
-    "_build_failing_summary",
-    "_read_reason",
-    "_write_reason",
-    "_workspace_repo_dir",
-    "_verify_merge_ancestor",
-    "_duplicate_changelog_fragments",
-    "_lint_changelog",
-    "_changelog_warnings_for_ticket",
-    "_latest_failing_workflows",
-    "_is_pr_check_run",
 ]

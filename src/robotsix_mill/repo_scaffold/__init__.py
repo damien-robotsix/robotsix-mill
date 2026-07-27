@@ -396,9 +396,7 @@ def _sanitize_repo_id(name: str) -> str:
     for ch in name.lower():
         if ch.isascii() and ch.isalnum():
             sanitized.append(ch)
-        elif ch == "-":
-            sanitized.append("-")
-        elif ch in (" ", "_", ".") or not ch.isascii():
+        elif ch == "-" or ch in (" ", "_", ".") or not ch.isascii():
             sanitized.append("-")
         # drop other characters
     return "".join(sanitized).strip("-") or name.lower()

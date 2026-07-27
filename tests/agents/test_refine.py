@@ -397,7 +397,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     assert seen["repo_dir"] == repo  # agent got the local clone
 
     # second run: clone already present -> reused, not re-cloned
-    service.create  # noqa - keep ref
+    service.create
     seen["clone"] = 0
     t2 = service.get(t.id)
     RefineStage().run(t2, ctx)
@@ -1241,7 +1241,7 @@ def test_dedup_guard_survives_preexisting_closed_ticket(ctx, service, monkeypatc
     old = service.create("old done thing", "stuff")
     service.transition(old.id, State.CLOSED)  # now a closed candidate
     # Re-read via list() the way refine does.
-    closed = [t for t in service.list() if t.id == old.id][0]
+    closed = next(t for t in service.list() if t.id == old.id)
     assert closed.updated_at.tzinfo is not None
 
     monkeypatch.setattr(
@@ -1820,7 +1820,7 @@ def test_aware_vs_aware_comparison_no_typeerror(service):
 
     # Re-read via list() — must support comparison against aware values.
     tickets = service.list()
-    ticket = [x for x in tickets if x.id == t.id][0]
+    ticket = next(x for x in tickets if x.id == t.id)
 
     # This must not raise TypeError:
     assert ticket.updated_at >= datetime.now(tz.utc) - timedelta(days=30)
@@ -2381,7 +2381,7 @@ def test_split_child_skips_re_refinement(ctx, service, monkeypatch):
     assert out.next_state is State.CLOSED
     ids_in_note = out.note.replace("split into ", "").split(", ")
     assert len(ids_in_note) == 2
-    child_a_id, child_b_id = ids_in_note
+    child_a_id, _child_b_id = ids_in_note
 
     # Apply parent's CLOSED transition.
     service.transition(parent.id, out.next_state, out.note)
@@ -3617,8 +3617,10 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
                 return _FakeRunResult(
                     output=expected_spec,
                     finish_reason="stop",
-                    all_messages=first_messages
-                    + [{"role": "assistant", "content": "done"}],
+                    all_messages=[
+                        *first_messages,
+                        {"role": "assistant", "content": "done"},
+                    ],
                 )
 
         def close(self):
@@ -5716,22 +5718,24 @@ def test_triage_prompt_includes_registered_boards():
 
             return SimpleNamespace(output=TriageResult(decision="REFINE", reason="ok"))
 
-    with patch(
-        "robotsix_mill.agents.base.build_agent_from_definition",
-        return_value=_FakeAgent(),
-    ):
-        with patch(
+    with (
+        patch(
+            "robotsix_mill.agents.base.build_agent_from_definition",
+            return_value=_FakeAgent(),
+        ),
+        patch(
             "robotsix_mill.config.get_repos_config",
             return_value=fake_registry,
-        ):
-            from types import SimpleNamespace as _NS
+        ),
+    ):
+        from types import SimpleNamespace as _NS
 
-            triage_refine(
-                settings=_NS(triage_request_limit=10),
-                title="Test ticket",
-                draft="test draft",
-                repo_dir=None,
-            )
+        triage_refine(
+            settings=_NS(triage_request_limit=10),
+            title="Test ticket",
+            draft="test draft",
+            repo_dir=None,
+        )
 
     assert len(captured_prompts) == 1
     prompt = captured_prompts[0]
@@ -5758,22 +5762,24 @@ def test_triage_prompt_graceful_on_repos_config_failure():
 
             return SimpleNamespace(output=TriageResult(decision="REFINE", reason="ok"))
 
-    with patch(
-        "robotsix_mill.agents.base.build_agent_from_definition",
-        return_value=_FakeAgent(),
-    ):
-        with patch(
+    with (
+        patch(
+            "robotsix_mill.agents.base.build_agent_from_definition",
+            return_value=_FakeAgent(),
+        ),
+        patch(
             "robotsix_mill.config.get_repos_config",
             side_effect=RuntimeError("boom"),
-        ):
-            from types import SimpleNamespace as _NS
+        ),
+    ):
+        from types import SimpleNamespace as _NS
 
-            triage_refine(
-                settings=_NS(triage_request_limit=10),
-                title="Test ticket",
-                draft="test draft",
-                repo_dir=None,
-            )
+        triage_refine(
+            settings=_NS(triage_request_limit=10),
+            title="Test ticket",
+            draft="test draft",
+            repo_dir=None,
+        )
 
     assert len(captured_prompts) == 1
     prompt = captured_prompts[0]

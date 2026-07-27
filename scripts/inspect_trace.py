@@ -55,15 +55,12 @@ def _is_tool_observation(o: dict) -> bool:
         return True
 
     # Weak heuristic — only accept if input mentions tool AND output looks like a tool result.
-    if (
+    return bool(
         isinstance(inp, str)
         and "tool" in inp.lower()
         and isinstance(outp, str)
         and "server" in outp.lower()
-    ):
-        return True
-
-    return False
+    )
 
 
 def _collect_tool_observations(observations: list[dict]) -> list[dict]:

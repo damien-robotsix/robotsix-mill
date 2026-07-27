@@ -480,10 +480,7 @@ def _rationale_claims_external_fix(rationale: str) -> bool:
         or _COMMIT_SHA_RE.search(text)
         or _PR_MR_REF_RE.search(text)
     )
-    if has_ref and _RESOLVED_VERB_RE.search(text):
-        return True
-
-    return False
+    return bool(has_ref and _RESOLVED_VERB_RE.search(text))
 
 
 def _verify_cited_fix_at_head(repo_dir: Path | None, rationale: str) -> bool:
@@ -525,7 +522,7 @@ def _verify_cited_fix_at_head(repo_dir: Path | None, rationale: str) -> bool:
             )
             if anc.returncode == 0:
                 return True
-    except Exception:  # noqa: BLE001 — best-effort; never raise out of the stage
+    except Exception:
         log.debug(
             "cited-fix ancestry check failed for rationale — ignoring",
             exc_info=True,
@@ -744,10 +741,7 @@ def _draft_has_complete_spec(text: str) -> bool:
 
     if not _has_heading("Problem"):
         return False
-    for h in ("Scope", "Acceptance criteria", "Acceptance"):
-        if _has_heading(h):
-            return True
-    return False
+    return any(_has_heading(h) for h in ("Scope", "Acceptance criteria", "Acceptance"))
 
 
 # Sources whose tickets are deterministically auto-approved because they

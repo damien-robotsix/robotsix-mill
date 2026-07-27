@@ -726,14 +726,13 @@ def run_agent_pass(
         if (
             source_label in (SourceKind.TEST_GAP, SourceKind.HEALTH)
             and repo_dir is not None
-        ):
-            if _test_file_exists_for_gap(repo_dir, title):
-                log.warning(
-                    "%s draft skipped — test file(s) already exist on disk: %s",
-                    source_label,
-                    title,
-                )
-                continue
+        ) and _test_file_exists_for_gap(repo_dir, title):
+            log.warning(
+                "%s draft skipped — test file(s) already exist on disk: %s",
+                source_label,
+                title,
+            )
+            continue
         # Source-module-existence guard: skip a TEST_GAP draft whose source
         # module is absent from the audited tree (inverse of the test-file
         # check above — a cross-repo misrouting guard). HEALTH drafts target a

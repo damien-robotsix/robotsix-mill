@@ -853,7 +853,7 @@ class ValidationMixin(_ImplementStageBase):
                     f"baseline gate already satisfied by completed fix "
                     f"{resolved_fix_id} for base {base_sha[:8]} — proceeding.",
                 )
-            except Exception:  # noqa: BLE001 — history note is best-effort
+            except Exception:
                 log.warning(
                     "%s: failed to record baseline-gate-satisfied note",
                     ticket.id,
@@ -961,7 +961,7 @@ class ValidationMixin(_ImplementStageBase):
             log.warning("%s: %s", ticket.id, warning_msg)
             try:
                 ctx.service.add_history_note(ticket.id, warning_msg)
-            except Exception:  # noqa: BLE001 — history note is best-effort
+            except Exception:
                 log.warning(
                     "%s: failed to record baseline-warning history note",
                     ticket.id,

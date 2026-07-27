@@ -881,7 +881,8 @@ def test_init_db_migration_uppercases_lowercase_row(service, settings):
         before = conn.exec_driver_sql(
             "SELECT kind FROM ticket WHERE id = 't-migrate'"
         ).first()
-    assert before is not None and before[0] == "task"
+    assert before is not None
+    assert before[0] == "task"
 
     # Run init_db — this should trigger the UPDATE ticket SET kind = upper(kind)
     db.init_db(settings, service.board_id)
@@ -890,7 +891,8 @@ def test_init_db_migration_uppercases_lowercase_row(service, settings):
         after = conn.exec_driver_sql(
             "SELECT kind FROM ticket WHERE id = 't-migrate'"
         ).first()
-    assert after is not None and after[0] == "TASK"
+    assert after is not None
+    assert after[0] == "TASK"
 
 
 def test_init_db_migration_is_idempotent(service, settings):
@@ -904,7 +906,8 @@ def test_init_db_migration_is_idempotent(service, settings):
         first = conn.exec_driver_sql(
             "SELECT kind FROM ticket WHERE id = 't-idem-mig'"
         ).first()
-    assert first is not None and first[0] == "INQUIRY"
+    assert first is not None
+    assert first[0] == "INQUIRY"
 
     # Second migration: no-op (already uppercase)
     db.init_db(settings, service.board_id)
@@ -912,4 +915,5 @@ def test_init_db_migration_is_idempotent(service, settings):
         second = conn.exec_driver_sql(
             "SELECT kind FROM ticket WHERE id = 't-idem-mig'"
         ).first()
-    assert second is not None and second[0] == "INQUIRY"
+    assert second is not None
+    assert second[0] == "INQUIRY"

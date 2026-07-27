@@ -139,13 +139,13 @@ class ExpertManager:
         if memory_text:
             system_prompt = f"{system_prompt}\n\n<memory>\n{memory_text}\n</memory>"
 
-        build_kwargs: dict[str, Any] = dict(
-            system_prompt=system_prompt,
-            tools=tools,
-            level=definition.level,
-            skills=definition.skills,
-            name=f"expert:{definition.domain}",
-        )
+        build_kwargs: dict[str, Any] = {
+            "system_prompt": system_prompt,
+            "tools": tools,
+            "level": definition.level,
+            "skills": definition.skills,
+            "name": f"expert:{definition.domain}",
+        }
         if output_type is not None:
             build_kwargs["output_type"] = output_type
 

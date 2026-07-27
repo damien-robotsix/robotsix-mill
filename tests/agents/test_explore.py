@@ -27,7 +27,8 @@ def test_no_key_degrades_not_raises(tmp_path):
     out = asyncio.run(
         explore.run_explore(settings=s, repo_dir=tmp_path, question="where is X?")
     )
-    assert "unavailable" in out and "OPENROUTER_API_KEY" in out
+    assert "unavailable" in out
+    assert "OPENROUTER_API_KEY" in out
 
 
 def test_missing_repo_degrades_not_raises(tmp_path):
@@ -62,7 +63,9 @@ def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):
     # The batched question text is visible in the answer body
     # (the fake echoes its prompt), and each original question
     # appears inside the batched prompt.
-    assert "q1" in out and "q2" in out and "q3" in out
+    assert "q1" in out
+    assert "q2" in out
+    assert "q3" in out
 
 
 def test_parallel_explore_single_question_no_batching(tmp_path, monkeypatch):
@@ -254,7 +257,9 @@ def test_system_prompt_forbids_whole_file_shell_dumps():
     sp = explore._SYSTEM_PROMPT.lower()
     # No whole-file shell dumps via run_command — redirect to read_file.
     assert "run_command" in sp
-    assert "cat" in sp and "head" in sp and "tail" in sp
+    assert "cat" in sp
+    assert "head" in sp
+    assert "tail" in sp
     assert "read_file" in sp
     # Consolidate / avoid redundant discovery commands.
     assert "consolidate" in sp or "overlapping" in sp
@@ -332,7 +337,8 @@ def test_tool_delegates_to_seam(tmp_path, monkeypatch):
     monkeypatch.setattr(explore, "run_explore", fake)
     tool = make_explore_tool(s, tmp_path)
     assert asyncio.run(tool("where is the worker?")) == "FOUND: where is the worker?"
-    assert seen["q"] == "where is the worker?" and seen["dir"] == tmp_path
+    assert seen["q"] == "where is the worker?"
+    assert seen["dir"] == tmp_path
     assert seen["extra_roots"] is None
 
 
@@ -619,11 +625,11 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
             self._system_prompt = kw.get("system_prompt", "")
             if self._name == "explore-retry":
                 retry_agent_calls.append(
-                    dict(
-                        name=self._name,
-                        tools=self._tools,
-                        system_prompt=self._system_prompt,
-                    )
+                    {
+                        "name": self._name,
+                        "tools": self._tools,
+                        "system_prompt": self._system_prompt,
+                    }
                 )
 
         async def run(self, q, *, usage_limits=None):
@@ -765,7 +771,8 @@ def test_trace_stage_parallel_explore_nests_under_parent(tmp_path, monkeypatch):
     tool = explore.make_parallel_explore_tool(s, tmp_path)
     out = asyncio.run(tool(["q1", "q2"]))
     # The batched prompt contains both questions.
-    assert "q1" in out and "q2" in out
+    assert "q1" in out
+    assert "q2" in out
     assert "parallel_explore" in spans
     # The single inner explore call also opens its own "explore" span,
     # but we've monkeypatched run_explore away — inner spans are not

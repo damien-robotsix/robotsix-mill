@@ -146,7 +146,8 @@ class TestPostComment:
         )
         tool = _pc.make_post_comment_tool(settings, agent_name="implement")
         out = tool("body")
-        assert out.startswith("post_comment:") and "no active" in out
+        assert out.startswith("post_comment:")
+        assert "no active" in out
 
     def test_db_exception_returns_error_string(
         self,

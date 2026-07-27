@@ -12,6 +12,7 @@ from robotsix_mill.core.service import (
 )
 from robotsix_mill.core.states import State, can_transition
 from robotsix_mill.core.models import SourceKind, TicketKind
+import itertools
 
 
 def test_slug_strips_dash_exposed_at_truncation_boundary():
@@ -571,7 +572,7 @@ def test_redraft_clean_slate_reset(service, settings):
     (ws.repo_dir / "marker").write_text("clone", encoding="utf-8")
     assert ws.repo_dir.exists()
 
-    comment, ticket = service.redraft(t.id, body="because X")
+    comment, _ticket = service.redraft(t.id, body="because X")
 
     assert comment is None
     assert service.get(t.id).state is State.DRAFT
@@ -666,7 +667,7 @@ def test_redraft_no_comments_empty_body(service):
     ws = service.workspace(service.get(t.id))
     ws.repo_dir.mkdir(parents=True, exist_ok=True)
 
-    comment, ticket = service.redraft(t.id)
+    comment, _ticket = service.redraft(t.id)
 
     assert comment is None
     assert service.get(t.id).state is State.DRAFT
@@ -1636,7 +1637,7 @@ def test_mark_done_merge_ancestor_succeeds(service, tmp_path):
     # Fast-forward origin/main to include the feature branch (simulate merge).
     _advance_origin_main(repo)
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -1683,7 +1684,7 @@ def test_mark_done_merge_squash_detected(service, tmp_path):
     )
     _advance_origin_main(repo)
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -1725,7 +1726,7 @@ def test_mark_done_merge_content_match(service, tmp_path):
     )
     _advance_origin_main(repo)
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -1789,7 +1790,7 @@ def test_mark_done_merge_no_branch_skips_verification(service, tmp_path):
         text=True,
     )
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -1817,7 +1818,7 @@ def test_mark_done_allows_single_changelog_fragment(service, tmp_path):
     _setup_repo_with_towncrier(repo)
     _add_fragment(repo, "changes", f"{t.id}.misc.md")
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -1830,7 +1831,7 @@ def test_mark_done_allows_no_changelog_fragments(service, tmp_path):
     _setup_repo_with_towncrier(repo)
     # no fragment added
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -1865,7 +1866,7 @@ def test_mark_done_allows_no_towncrier_config(service, tmp_path):
     # Add a fragment anyway (no towncrier config → gate should skip).
     _add_fragment(repo, "changes", f"{t.id}.feature.md")
 
-    comment, ticket = service.mark_done(t.id)
+    _comment, ticket = service.mark_done(t.id)
     assert ticket.state is State.DONE
 
 
@@ -2788,7 +2789,7 @@ def test_migrate_moves_ticket_history_and_workspace(settings, migrate_env):
     assert hist[0].note == "created"
     assert "migrated from board 'test-board' to 'other-board'" in hist[-1].note
     assert "belongs there" in hist[-1].note
-    for prev, cur in zip(hist, hist[1:], strict=False):
+    for prev, cur in itertools.pairwise(hist):
         assert cur.prev_hash == prev.hash
 
     # Comments moved.
@@ -2945,7 +2946,7 @@ def test_migrate_epic_subtree_moves_all_tickets(settings, migrate_env):
     # Hash chain intact for each ticket.
     for tid in [epic.id, child_a.id, child_b.id, grandchild.id]:
         hist = other.history(tid)
-        for prev, cur in zip(hist, hist[1:], strict=False):
+        for prev, cur in itertools.pairwise(hist):
             assert cur.prev_hash == prev.hash, f"{tid}: broken hash chain"
 
 
@@ -2977,7 +2978,7 @@ def test_migrate_epic_subtree_rejects_non_migratable_child(migrate_env):
 def test_migrate_epic_subtree_rolls_back_on_db_failure(settings, migrate_env):
     """When the target DB insert fails mid-subtree, workspace dirs are
     rolled back to the source board and the source DB is untouched."""
-    service, other = migrate_env
+    service, _other = migrate_env
 
     epic = service.create("Epic", kind=TicketKind.EPIC)
     child = service.create("Child", parent_id=epic.id)
@@ -3260,7 +3261,7 @@ class TestDbMaintenancePass:
 
         # Close all comments so they're all unprotected.
         with db.session(settings, service._board_for(t.id)) as s:
-            for cid in [parent.id, reply.id] + filler_ids:
+            for cid in [parent.id, reply.id, *filler_ids]:
                 cmt = s.get(Comment, cid)
                 cmt.closed_at = datetime.now(timezone.utc)
                 s.add(cmt)
@@ -3346,19 +3347,13 @@ class TestDbMaintenancePass:
 
         # The WAL file should exist and be non-trivial.
         # (On first access with WAL mode, SQLite creates the WAL file.)
-        if wal_path.exists():
-            wal_size_before = wal_path.stat().st_size
-        else:
-            wal_size_before = 0
+        wal_size_before = wal_path.stat().st_size if wal_path.exists() else 0
 
         # Run the maintenance pass, which now includes the TRUNCATE checkpoint.
         summary = service.db_maintenance_pass()
 
         # After the pass the WAL should be truncated to ~0 bytes or absent.
-        if wal_path.exists():
-            wal_size_after = wal_path.stat().st_size
-        else:
-            wal_size_after = 0
+        wal_size_after = wal_path.stat().st_size if wal_path.exists() else 0
 
         # If the WAL was non-zero before, assert it shrank.  When the
         # file never existed (size 0 before and after) the test still

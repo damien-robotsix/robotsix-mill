@@ -32,8 +32,6 @@ from .diagnostic_checks import (
 # These live here (not in diagnostic_checks) to avoid a cyclic import:
 # each check module imports from diagnostic_checks, so importing them
 # from diagnostic_checks would create a cycle.
-from . import diagnostic_check_errors  # noqa: E402,F401
-from . import diagnostic_check_recurring_ci  # noqa: E402,F401
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +71,7 @@ def _accessible_repos(monitored: list[str]) -> tuple[list[str], list[str]]:
             else:
                 invalid.append(repo_id)
         return valid, invalid
-    except Exception:  # noqa: BLE001 — a config-load outage must not crash the pass
+    except Exception:
         log.exception(
             "diagnostic: load_repos_config failed; attempting all "
             "configured repos unvalidated"

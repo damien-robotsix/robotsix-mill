@@ -117,7 +117,7 @@ def run_coherence_check(repo_dir: Path) -> list[str]:
     success.
     """
     result = subprocess.run(
-        ["uv", "lock"],  # noqa: S607
+        ["uv", "lock"],
         cwd=repo_dir,
         capture_output=True,
         text=True,

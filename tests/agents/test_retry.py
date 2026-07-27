@@ -35,7 +35,7 @@ def _httpx_status(code):
 
 
 @pytest.mark.parametrize(
-    "exc,transient",
+    ("exc", "transient"),
     [
         (ModelHTTPError(429, "m"), True),
         (ModelHTTPError(503, "m"), True),
@@ -174,7 +174,8 @@ def test_transient_then_success(tmp_path):
         return "ok"
 
     out = call_with_retry(fn, sleep=slept.append)
-    assert out == "ok" and calls["n"] == 3
+    assert out == "ok"
+    assert calls["n"] == 3
     assert len(slept) == 2  # two backoffs before the 3rd, successful call
 
 
@@ -206,7 +207,7 @@ def test_non_transient_not_retried(tmp_path, exc):
 
 
 @pytest.mark.parametrize(
-    "exc,expected",
+    ("exc", "expected"),
     [
         (UsageLimitExceeded("cap"), True),
         (ModelHTTPError(429, "m"), False),
@@ -367,7 +368,8 @@ def test_async_transient_then_success(tmp_path):
         slept.append(d)
 
     out = asyncio.run(acall_with_retry(fn, sleep=fake_sleep))
-    assert out == "ok" and calls["n"] == 3
+    assert out == "ok"
+    assert calls["n"] == 3
     assert len(slept) == 2  # two backoffs before the 3rd, successful call
 
 
@@ -410,7 +412,8 @@ def test_async_rate_limit_activates_fallback_once(tmp_path):
 
     out = asyncio.run(acall_with_retry(fn, sleep=fake_sleep, fallback_fn=fallback))
     assert out == "fallback-answer"
-    assert calls["n"] == 1 and fb["n"] == 1
+    assert calls["n"] == 1
+    assert fb["n"] == 1
 
 
 # ===========================================================================

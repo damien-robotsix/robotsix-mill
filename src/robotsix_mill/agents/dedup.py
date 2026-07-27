@@ -39,9 +39,9 @@ log = logging.getLogger("robotsix_mill.agents.dedup")
 def tokenize(text: str) -> set[str]:
     """Tokenize *text* for Jaccard similarity: lowercase, split on
     non-alphanumeric characters, keep tokens longer than 2 chars."""
-    return set(
+    return {
         t for t in re.sub(r"[^a-z0-9]+", " ", text.casefold()).split() if len(t) > 2
-    )
+    }
 
 
 def any_candidate_overlap(
@@ -63,10 +63,7 @@ def any_candidate_overlap(
     draft_tokens = tokenize(draft_title + " " + draft_body)
     if not draft_tokens:
         return False
-    for text in candidates_texts:
-        if draft_tokens & tokenize(text):
-            return True
-    return False
+    return any(draft_tokens & tokenize(text) for text in candidates_texts)
 
 
 def rank_candidates_by_similarity(

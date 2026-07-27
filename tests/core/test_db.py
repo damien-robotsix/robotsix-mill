@@ -12,7 +12,6 @@ from sqlalchemy import inspect
 
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
-from robotsix_mill.core import models  # noqa: F401 — populate SQLModel.metadata
 
 
 # ── _db_path ──────────────────────────────────────────────────────────────

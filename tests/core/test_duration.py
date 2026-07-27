@@ -19,7 +19,7 @@ from robotsix_mill.core.duration import format_duration, parse_duration
 
 
 @pytest.mark.parametrize(
-    "value, expected",
+    ("value", "expected"),
     [
         ("1w2d3h40m10s", 604800 + 172800 + 10800 + 2400 + 10),
         ("1w2d3h40m10s", 790810),
@@ -78,7 +78,7 @@ def test_parse_duration_error_message_names_value():
 
 
 @pytest.mark.parametrize(
-    "seconds, expected",
+    ("seconds", "expected"),
     [
         (86400, "1d"),
         (604800, "1w"),

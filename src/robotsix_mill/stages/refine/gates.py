@@ -83,7 +83,7 @@ class RefineGatesMixin:
                     ticket.id,
                 )
                 return None
-        except Exception:  # noqa: BLE001 — best-effort; never block refine
+        except Exception:
             log.debug("%s: dedup sendback-check skipped", ticket.id, exc_info=True)
 
         # Gather candidate tickets: all non-terminal + recently closed.
@@ -535,7 +535,7 @@ class RefineGatesMixin:
                 except json.JSONDecodeError, TypeError:
                     pass
             if label not in existing_labels:
-                ctx.service.set_labels(ticket.id, existing_labels + [label])
+                ctx.service.set_labels(ticket.id, [*existing_labels, label])
 
         note = find_inflight_overlap(
             ctx.service,

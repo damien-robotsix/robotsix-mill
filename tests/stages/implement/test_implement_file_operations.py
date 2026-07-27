@@ -454,7 +454,7 @@ class TestCloneAndBranch:
         )
 
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
-        repo_dir_out, branch, resuming = result
+        _repo_dir_out, _branch, resuming = result
         assert resuming is True
         assert "checkout" in calls
         # Fresh clone steps should be skipped.
@@ -665,7 +665,7 @@ class TestCloneAndBranch:
 
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, tuple)
-        repo_dir, branch, resuming = result
+        _repo_dir, _branch, resuming = result
         assert resuming is False
         assert len(captured_remote) == 1
         assert captured_remote[0] == "https://github.com/fork/repo.git"
@@ -720,7 +720,7 @@ class TestCloneAndBranch:
         )
 
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
-        repo_dir_out, branch, resuming = result
+        _repo_dir_out, _branch, resuming = result
         assert resuming is True
         assert "clone" not in calls
         assert "checkout" in calls
@@ -790,7 +790,7 @@ class TestCloneAndBranch:
 
         result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
         assert isinstance(result, tuple)
-        repo_dir, branch, resuming = result
+        _repo_dir, _branch, resuming = result
         assert resuming is False
         assert "clone" in calls
         assert "create_branch" in calls

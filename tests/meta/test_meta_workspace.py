@@ -121,8 +121,10 @@ def test_triaged_blocks_when_required_repo_missing(tmp_path, monkeypatch):
         ctx, ticket, ws, "spec", author="implement"
     )
 
-    assert repo_dir is None and extra_roots is None
-    assert outcome is not None and outcome.next_state is State.BLOCKED
+    assert repo_dir is None
+    assert extra_roots is None
+    assert outcome is not None
+    assert outcome.next_state is State.BLOCKED
     assert "priv" in comments[0]
 
 
@@ -152,7 +154,8 @@ def test_triaged_proceeds_when_all_required_repos_present(tmp_path, monkeypatch)
         ctx, ticket, ws, "spec", author="implement"
     )
     assert outcome is None
-    assert repo_dir == mill and extra_roots == [mill, priv]
+    assert repo_dir == mill
+    assert extra_roots == [mill, priv]
 
 
 def test_wipes_stale_clone_before_recloning(tmp_path, monkeypatch):

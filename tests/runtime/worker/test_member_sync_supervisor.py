@@ -28,6 +28,7 @@ from robotsix_mill.runtime.worker.periodic_passes import (
     _save_repos_yaml_hash,
 )
 from robotsix_mill.stages import StageContext
+import contextlib
 
 
 @pytest.fixture
@@ -153,10 +154,8 @@ class TestMemberSyncTrigger:
         )
         await real_sleep(0.06)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         assert fired == ["member_sync", "member_sync"]
         # Hash persisted after the fire.
@@ -189,10 +188,8 @@ class TestMemberSyncTrigger:
         task = asyncio.create_task(worker._periodic_supervisor(repo_config))
         await real_sleep(0.06)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         assert fired == []
 
@@ -227,9 +224,7 @@ class TestMemberSyncTrigger:
         task = asyncio.create_task(worker._periodic_supervisor(repo_config))
         await real_sleep(0.06)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         assert fired == []

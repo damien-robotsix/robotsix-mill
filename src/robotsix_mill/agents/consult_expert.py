@@ -157,7 +157,7 @@ async def run_consult_expert(
             lambda: agent.run(question, usage_limits=limits),
             what=f"consult:{domain}",
         )
-    except Exception as e:  # noqa: BLE001 — degrade, never break the coordinator
+    except Exception as e:
         return f"consult {domain} failed: {e}"
     finally:
         await _aclose_async_client(client)
@@ -177,7 +177,7 @@ async def run_consult_expert(
                 output.updated_memory,
                 max_chars=definition.memory.max_memory_chars,
             )
-        except Exception:  # noqa: BLE001 — memory persistence is best-effort
+        except Exception:
             log.warning(
                 "could not persist memory for expert %s at %s",
                 domain,

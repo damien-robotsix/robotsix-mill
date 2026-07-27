@@ -64,7 +64,8 @@ def test_web_research_no_key_degrades(tmp_path):
     # No OPENROUTER_API_KEY -> a short message, never an exception.
     s = _settings(tmp_path, OPENROUTER_API_KEY="")
     out = asyncio.run(wr.run_web_research(settings=s, query="anything"))
-    assert "unavailable" in out and "OPENROUTER_API_KEY" in out
+    assert "unavailable" in out
+    assert "OPENROUTER_API_KEY" in out
 
 
 def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
@@ -157,7 +158,8 @@ def test_web_fetch_tool_reports_errors(tmp_path, monkeypatch):
 def test_fetch_rejects_non_http(tmp_path):
     s = _settings(tmp_path)
     rc, msg = sandbox.fetch("file:///etc/passwd", settings=s)
-    assert rc == 1 and "only http(s)" in msg
+    assert rc == 1
+    assert "only http(s)" in msg
 
 
 def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
@@ -172,7 +174,8 @@ def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
     rc, body = sandbox.fetch("https://docs.example/api", settings=s)
 
     a = seen["argv"]
-    assert rc == 0 and body == "hello"
+    assert rc == 0
+    assert body == "hello"
     assert a[:3] == ["docker", "run", "--rm"]
     assert "--read-only" in a
     assert a[a.index("--cap-drop") + 1] == "ALL"

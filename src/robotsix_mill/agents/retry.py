@@ -162,11 +162,11 @@ def _try_record_step_usage(
 
 
 __all__ = [
-    "call_with_retry",
     "acall_with_retry",
-    "run_agent",
-    "is_transient",
+    "call_with_retry",
     "is_rate_limited",
+    "is_transient",
+    "run_agent",
 ]
 
 
@@ -259,7 +259,7 @@ async def acall_with_retry(
             # Record per-step usage on success.
             _try_record_step_usage(result, retry_count, last_reason)
             return result
-        except Exception as e:  # noqa: BLE001 — re-raised unless retryable
+        except Exception as e:
             if attempt >= attempts:
                 raise
             if is_transient(e):

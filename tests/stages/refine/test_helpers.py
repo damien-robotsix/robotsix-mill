@@ -201,7 +201,8 @@ def test_resolve_next_state_deterministic_source():
         source="test_gap",
     )
     assert state is State.READY
-    assert note is not None and "auto-approve: APPROVE" in note
+    assert note is not None
+    assert "auto-approve: APPROVE" in note
     assert "test_gap" in note
 
 
@@ -284,7 +285,8 @@ def test_resolve_next_state_triage_note_clean_passes():
         triage_note="spec is already precise and implementation-ready",
     )
     assert state is State.READY
-    assert note is not None and "APPROVE" in note
+    assert note is not None
+    assert "APPROVE" in note
 
 
 def test_resolve_next_state_triage_note_none_passes():
@@ -297,7 +299,8 @@ def test_resolve_next_state_triage_note_none_passes():
         triage_note=None,
     )
     assert state is State.READY
-    assert note is not None and "APPROVE" in note
+    assert note is not None
+    assert "APPROVE" in note
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +547,7 @@ def test_draft_has_complete_spec_case_insensitive():
 
 def test_draft_has_complete_spec_importable_from_refine_module():
     """_draft_has_complete_spec is re-exported from the refine package."""
-    from robotsix_mill.stages.refine import _draft_has_complete_spec  # noqa: F811
+    from robotsix_mill.stages.refine import _draft_has_complete_spec
 
     assert callable(_draft_has_complete_spec)
     assert _draft_has_complete_spec("## Problem\n\n## Scope\n\nx") is True

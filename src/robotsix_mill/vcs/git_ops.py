@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 from enum import Enum
 from pathlib import Path
+import contextlib
 
 log = logging.getLogger("robotsix_mill.vcs.git_ops")
 
@@ -125,8 +126,8 @@ def _remote_has_branches(remote_url: str, token: str | None) -> bool:
     attempt a bootstrap when it cannot verify emptiness.
     """
     try:
-        result = subprocess.run(  # noqa: S603 — remote_url from repo config, token from env
-            [  # noqa: S607 — git is on PATH
+        result = subprocess.run(
+            [
                 "git",
                 "ls-remote",
                 "--quiet",
@@ -384,10 +385,8 @@ def try_rebase_onto(
         _git(repo, "rebase", f"origin/{target}")
         return True
     except subprocess.CalledProcessError:
-        try:
+        with contextlib.suppress(subprocess.CalledProcessError):
             _git(repo, "rebase", "--abort")
-        except subprocess.CalledProcessError:
-            pass
         return False
 
 
@@ -838,7 +837,7 @@ class PostPushResult(str, Enum):
         transiently, etc.).  Callers should re-poll rather than block.
     """
 
-    PASS = "pass"  # noqa: S105 — enum value, not a credential
+    PASS = "pass"
     NOT_LANDED = "not_landed"
     FOREIGN_DIVERGENCE = "foreign_divergence"
     UNAVAILABLE = "unavailable"
@@ -1148,7 +1147,7 @@ def conflicted_files(repo: Path) -> list[str]:
     """
     try:
         out = _git(repo, "diff", "--name-only", "--diff-filter=U")
-    except Exception:  # noqa: BLE001 — diagnostics must not fail the caller
+    except Exception:
         return []
     return [line for line in out.split("\n") if line] if out else []
 

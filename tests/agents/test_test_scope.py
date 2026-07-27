@@ -41,7 +41,7 @@ def test_test_scope_verdict_model_true() -> None:
 def test_test_scope_verdict_missing_field_raises() -> None:
     """Missing required field raises ValidationError."""
     with pytest.raises(ValidationError):
-        _TestScopeVerdict(needs_full_suite=True)  # noqa: B026 — deliberate missing field
+        _TestScopeVerdict(needs_full_suite=True)
 
 
 # ---------------------------------------------------------------------------

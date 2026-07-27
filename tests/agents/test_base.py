@@ -416,12 +416,12 @@ def test_build_agent_composes_prompt(monkeypatch, settings):
         settings, system_prompt, skills=None, modules=False, workflows=False
     ):
         captured_compose.append(
-            dict(
-                system_prompt=system_prompt,
-                skills=skills,
-                modules=modules,
-                workflows=workflows,
-            )
+            {
+                "system_prompt": system_prompt,
+                "skills": skills,
+                "modules": modules,
+                "workflows": workflows,
+            }
         )
         return system_prompt
 

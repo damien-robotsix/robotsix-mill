@@ -13,11 +13,11 @@ from robotsix_mill.agents.yaml_loader import AgentDefinition, load_agent_definit
 
 def _make_definition(**overrides) -> AgentDefinition:
     """Minimal valid AgentDefinition with *overrides* applied."""
-    defaults: dict = dict(
-        name="test-agent",
-        level=2,
-        system_prompt="You are a test agent.",
-    )
+    defaults: dict = {
+        "name": "test-agent",
+        "level": 2,
+        "system_prompt": "You are a test agent.",
+    }
     defaults.update(overrides)
     return AgentDefinition.model_validate(defaults)
 

@@ -24,7 +24,7 @@ def test_happy_path_closes_thread(settings, monkeypatch):
         lambda self, comment_id, ticket_id=None: None,
     )
 
-    close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
+    close_thread, _close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_thread(comment_id=7)
 
     assert result == "Thread closed (id=7)."
@@ -139,7 +139,7 @@ def test_close_threads_all_succeed(settings, monkeypatch):
     _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_threads(comment_ids=[5, 12, 14])
 
-    assert "Closed 3 threads: ids 5, 12, 14." == result
+    assert result == "Closed 3 threads: ids 5, 12, 14."
 
 
 def test_close_threads_mixed_already_closed(settings, monkeypatch):
@@ -199,7 +199,7 @@ def test_close_threads_empty_list(settings, monkeypatch):
     _close_thread, close_threads = make_close_thread_tool(settings, "test-agent")
     result = close_threads(comment_ids=[])
 
-    assert "No comment ids provided." == result
+    assert result == "No comment ids provided."
 
 
 def test_close_threads_no_session(settings, monkeypatch):
@@ -232,4 +232,4 @@ def test_close_threads_single_already_closed(settings, monkeypatch):
 
     # No "Closed" message (empty list), just the already-closed note.
     assert "Closed" not in result
-    assert "Already closed (idempotent success): ids 5." == result
+    assert result == "Already closed (idempotent success): ids 5."

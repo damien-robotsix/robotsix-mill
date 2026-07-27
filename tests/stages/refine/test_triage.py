@@ -127,11 +127,13 @@ def test_triage_outcome_basic(ctx_factory, tmp_path):
     ws = ctx.service.workspace(t)
     draft = "This is a draft."
 
-    with patch.object(
-        _result_paths, "resolved_outcome", return_value=State.DONE
-    ) as mock_resolved:
-        with patch.object(_reconcile, "write_file_map") as mock_wfm:
-            _triage._triage_outcome(ctx, ws, draft, t.id, "test reason")
+    with (
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.DONE
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map") as mock_wfm,
+    ):
+        _triage._triage_outcome(ctx, ws, draft, t.id, "test reason")
 
     # draft-original.md written
     draft_path = ws.artifacts_dir / "draft-original.md"
@@ -230,19 +232,21 @@ def test_triage_outcome_passes_source_and_triage_note(ctx_factory, tmp_path):
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
 
-    with patch.object(
-        _result_paths, "resolved_outcome", return_value=State.DONE
-    ) as mock_resolved:
-        with patch.object(_reconcile, "write_file_map"):
-            _triage._triage_outcome(
-                ctx,
-                ws,
-                "draft",
-                t.id,
-                "reason",
-                source="audit",
-                triage_note="auto-approved",
-            )
+    with (
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.DONE
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        _triage._triage_outcome(
+            ctx,
+            ws,
+            "draft",
+            t.id,
+            "reason",
+            source="audit",
+            triage_note="auto-approved",
+        )
 
     kwargs = mock_resolved.call_args.kwargs
     assert kwargs["source"] == "audit"
@@ -336,18 +340,20 @@ def test_anti_bounce_has_prior_migration_returns_outcome(ctx_factory, tmp_path):
     triage = MagicMock()
     triage.reason = "migrate to repo-x"
 
-    with patch.object(
-        _triage, "_parse_prior_boards", return_value=({"target-board"}, 1)
-    ):
-        with patch.object(
+    with (
+        patch.object(
+            _triage, "_parse_prior_boards", return_value=({"target-board"}, 1)
+        ),
+        patch.object(
             _result_paths,
             "resolved_outcome",
             return_value=State.HUMAN_ISSUE_APPROVAL,
-        ) as mock_resolved:
-            with patch.object(_reconcile, "write_file_map"):
-                result = _triage._anti_bounce_escalate(
-                    ctx, ws, "draft", t, triage, "target-board"
-                )
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage._anti_bounce_escalate(
+            ctx, ws, "draft", t, triage, "target-board"
+        )
 
     assert result is not None
     # resolved_outcome(ctx, spec, ticket_id, base_note, ...)
@@ -363,18 +369,20 @@ def test_anti_bounce_target_in_prior_boards_returns_outcome(ctx_factory, tmp_pat
     triage = MagicMock()
     triage.reason = "migrate back"
 
-    with patch.object(
-        _triage, "_parse_prior_boards", return_value=({"target-board"}, 0)
-    ):
-        with patch.object(
+    with (
+        patch.object(
+            _triage, "_parse_prior_boards", return_value=({"target-board"}, 0)
+        ),
+        patch.object(
             _result_paths,
             "resolved_outcome",
             return_value=State.HUMAN_ISSUE_APPROVAL,
-        ) as mock_resolved:
-            with patch.object(_reconcile, "write_file_map"):
-                result = _triage._anti_bounce_escalate(
-                    ctx, ws, "draft", t, triage, "target-board"
-                )
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage._anti_bounce_escalate(
+            ctx, ws, "draft", t, triage, "target-board"
+        )
 
     assert result is not None
     assert "anti-bounce blocked" in mock_resolved.call_args.args[3]
@@ -388,20 +396,20 @@ def test_anti_bounce_history_read_error_escalates(ctx_factory, tmp_path):
     triage = MagicMock()
     triage.reason = "migrate"
 
-    with patch.object(
-        _triage,
-        "_parse_prior_boards",
-        side_effect=RuntimeError("DB connection lost"),
-    ):
-        with patch.object(
+    with (
+        patch.object(
+            _triage,
+            "_parse_prior_boards",
+            side_effect=RuntimeError("DB connection lost"),
+        ),
+        patch.object(
             _result_paths,
             "resolved_outcome",
             return_value=State.HUMAN_ISSUE_APPROVAL,
-        ) as mock_resolved:
-            with patch.object(_reconcile, "write_file_map"):
-                result = _triage._anti_bounce_escalate(
-                    ctx, ws, "draft", t, triage, "any-board"
-                )
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage._anti_bounce_escalate(ctx, ws, "draft", t, triage, "any-board")
 
     assert result is not None
     assert "anti-bounce error" in mock_resolved.call_args.args[3]
@@ -501,14 +509,14 @@ def test_split_child_own_history_split_from(ctx_factory, tmp_path):
 
     ws = ctx.service.workspace(child)
 
-    with patch.object(_reconcile, "write_triage_complexity"):
-        with patch.object(
+    with (
+        patch.object(_reconcile, "write_triage_complexity"),
+        patch.object(
             _result_paths, "resolved_outcome", return_value=State.READY
-        ) as mock_resolved:
-            with patch.object(_reconcile, "write_file_map"):
-                result = _triage.split_child_fast_path(
-                    ctx, child, "refined spec", ws, None
-                )
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage.split_child_fast_path(ctx, child, "refined spec", ws, None)
 
     assert result is not None
     base_note = mock_resolved.call_args.args[3]
@@ -683,13 +691,15 @@ def test_triage_skip_prescriptive_spec_threshold_met(ctx_factory, tmp_path):
     ws = ctx.service.workspace(t)
     draft = "```\n" + "\n".join(f"line {i}" for i in range(5)) + "\n```"
 
-    with patch.object(
-        _result_paths, "resolved_outcome", return_value=State.READY
-    ) as mock_resolved:
-        with patch.object(_reconcile, "write_file_map"):
-            result = _triage.triage_skip(
-                ctx, t, draft, None, None, t.title, ws, ctx.settings, None
-            )
+    with (
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage.triage_skip(
+            ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+        )
 
     assert result is not None
     base_note = mock_resolved.call_args.args[3]
@@ -703,19 +713,19 @@ def test_triage_skip_prescriptive_spec_threshold_zero_disabled(ctx_factory, tmp_
     ws = ctx.service.workspace(t)
     draft = "```\n" + "\n".join(f"line {i}" for i in range(10)) + "\n```"
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("SKIP", "ok"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("SKIP", "ok"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(_result_paths, "resolved_outcome", return_value=State.READY),
+        patch.object(_reconcile, "write_file_map"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            with patch.object(
-                _result_paths, "resolved_outcome", return_value=State.READY
-            ):
-                with patch.object(_reconcile, "write_file_map"):
-                    result = _triage.triage_skip(
-                        ctx, t, draft, None, None, t.title, ws, ctx.settings, None
-                    )
+        result = _triage.triage_skip(
+            ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+        )
 
     # Should have gone through triage_refine (SKIP) — not the prescriptive path
     assert result is not None
@@ -745,19 +755,21 @@ def test_triage_skip_no_change_decision(ctx_factory, tmp_path):
     t = _ticket(ctx, kind=TicketKind.TASK)
     ws = ctx.service.workspace(t)
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("NO_CHANGE", "already done"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("NO_CHANGE", "already done"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            with patch.object(
-                _result_paths, "resolved_outcome", return_value=State.READY
-            ) as mock_resolved:
-                with patch.object(_reconcile, "write_file_map"):
-                    result = _triage.triage_skip(
-                        ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
-                    )
+        result = _triage.triage_skip(
+            ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
+        )
 
     assert result is not None
     base_note = mock_resolved.call_args.args[3]
@@ -773,16 +785,18 @@ def test_triage_skip_no_change_task_with_branch(ctx_factory, tmp_path):
     t = ctx.service.get(t.id)
     ws = ctx.service.workspace(t)
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("NO_CHANGE", "already merged"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("NO_CHANGE", "already merged"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            with patch.object(_reconcile, "write_file_map"):
-                result = _triage.triage_skip(
-                    ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
-                )
+        with patch.object(_reconcile, "write_file_map"):
+            result = _triage.triage_skip(
+                ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
+            )
 
     assert result is not None
     assert result.next_state == State.DONE
@@ -795,19 +809,21 @@ def test_triage_skip_skip_decision(ctx_factory, tmp_path):
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("SKIP", "already a precise spec"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("SKIP", "already a precise spec"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            with patch.object(
-                _result_paths, "resolved_outcome", return_value=State.READY
-            ) as mock_resolved:
-                with patch.object(_reconcile, "write_file_map"):
-                    result = _triage.triage_skip(
-                        ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
-                    )
+        result = _triage.triage_skip(
+            ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
+        )
 
     assert result is not None
     base_note = mock_resolved.call_args.args[3]
@@ -821,21 +837,23 @@ def test_triage_skip_mechanical_fast_path_deterministic_source(ctx_factory, tmp_
     ws = ctx.service.workspace(t)
     draft = "Edit `src/foo.py` and `tests/test_foo.py` for this audit finding regarding dead code removal."
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=TriageResult(
-            decision="REFINE", reason="needs refinement", complexity="simple"
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=TriageResult(
+                decision="REFINE", reason="needs refinement", complexity="simple"
+            ),
         ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            with patch.object(
-                _result_paths, "resolved_outcome", return_value=State.READY
-            ) as mock_resolved:
-                with patch.object(_reconcile, "write_file_map"):
-                    result = _triage.triage_skip(
-                        ctx, t, draft, None, None, t.title, ws, ctx.settings, None
-                    )
+        result = _triage.triage_skip(
+            ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+        )
 
     assert result is not None
     base_note = mock_resolved.call_args.args[3]
@@ -937,30 +955,32 @@ def test_triage_skip_mechanical_fast_path_auto_approve_exception_falls_through(
     t = _ticket(ctx, source="retrospect")
     ws = ctx.service.workspace(t)
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=TriageResult(
-            decision="REFINE", reason="needs refinement", complexity="simple"
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=TriageResult(
+                decision="REFINE", reason="needs refinement", complexity="simple"
+            ),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(
+            _triage.refining,
+            "triage_auto_approve",
+            side_effect=RuntimeError("auto-approve failed"),
         ),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            with patch.object(
-                _triage.refining,
-                "triage_auto_approve",
-                side_effect=RuntimeError("auto-approve failed"),
-            ):
-                result = _triage.triage_skip(
-                    ctx,
-                    t,
-                    "draft",
-                    None,
-                    None,
-                    t.title,
-                    ws,
-                    ctx.settings,
-                    None,
-                )
+        result = _triage.triage_skip(
+            ctx,
+            t,
+            "draft",
+            None,
+            None,
+            t.title,
+            ws,
+            ctx.settings,
+            None,
+        )
 
     assert result is None
 
@@ -971,15 +991,17 @@ def test_triage_skip_refine_decision_returns_none(ctx_factory, tmp_path):
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("REFINE", "needs refinement"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("REFINE", "needs refinement"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            result = _triage.triage_skip(
-                ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
-            )
+        result = _triage.triage_skip(
+            ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
+        )
 
     # With auto_approve_enabled=False and REFINE, falls through
     assert result is None
@@ -1116,15 +1138,17 @@ def test_triage_skip_doc_only_with_code_file_falls_through(ctx_factory, tmp_path
     ws = ctx.service.workspace(t)
     draft = "Update `docs/readme.md` and `src/foo.py`."
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("REFINE", "needs refinement"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("REFINE", "needs refinement"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            result = _triage.triage_skip(
-                ctx, t, draft, None, None, t.title, ws, ctx.settings, None
-            )
+        result = _triage.triage_skip(
+            ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+        )
 
     # Falls through to normal triage (REFINE → None)
     assert result is None
@@ -1137,14 +1161,16 @@ def test_triage_skip_doc_only_no_paths_falls_through(ctx_factory, tmp_path):
     ws = ctx.service.workspace(t)
     draft = "Add documentation for the new feature."
 
-    with patch.object(
-        _triage.refining,
-        "triage_refine",
-        return_value=_mock_triage_result("REFINE", "needs refinement"),
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("REFINE", "needs refinement"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
     ):
-        with patch.object(_reconcile, "persist_triage_complexity"):
-            result = _triage.triage_skip(
-                ctx, t, draft, None, None, t.title, ws, ctx.settings, None
-            )
+        result = _triage.triage_skip(
+            ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+        )
 
     assert result is None

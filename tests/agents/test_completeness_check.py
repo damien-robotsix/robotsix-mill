@@ -506,11 +506,13 @@ def test_run_completeness_check_pass_clones_and_passes_repo_dir(tmp_path, monkey
 
     run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "completeness_check_workspace" / "repo"
-    assert seen["clone"] == 1 and seen["repo_dir"] == repo
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo
 
     seen["clone"] = 0
     run_completeness_check_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert seen["clone"] == 1 and seen["repo_dir"] == repo  # re-clones fresh each run
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo
 
 
 def test_run_completeness_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):

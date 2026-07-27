@@ -144,7 +144,7 @@ def list_children(
 
 
 @router.post("/tickets/{ticket_id}/generate-children", status_code=202)
-def generate_children(  # noqa: C901
+def generate_children(
     ticket_id: str,
     request: Request,
     svc=Depends(get_service),
@@ -187,7 +187,7 @@ def generate_children(  # noqa: C901
 
     run_id = registry.start("epic-breakdown", repo_id=epic_board_id)
 
-    def _run() -> None:  # noqa: C901
+    def _run() -> None:
         try:
             from .. import tracing
             from ...agents.epic_breakdown import (
@@ -366,7 +366,7 @@ def generate_children(  # noqa: C901
                 len(created_ids),
                 ticket_id,
             )
-        except Exception as e:  # noqa: BLE001 — background; just log
+        except Exception as e:
             log.exception("epic-breakdown failed for %s", ticket_id)
             registry.finish_error(run_id, str(e))
 

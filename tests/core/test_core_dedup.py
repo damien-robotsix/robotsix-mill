@@ -985,7 +985,7 @@ def test_find_prior_normalizes_naive_created_at(settings, monkeypatch):
         body="prior body that names no code locus",
     )
     live = svc.get(ticket.id)
-    live.created_at = datetime.now() - timedelta(days=1)  # noqa: DTZ005 — naive
+    live.created_at = datetime.now() - timedelta(days=1)
     assert live.created_at.tzinfo is None
     monkeypatch.setattr(svc, "recent_tickets", lambda **k: [live])
 
@@ -1596,7 +1596,7 @@ def test_is_eligible_candidate_naive_created_at_gets_utc(settings):
     svc, ticket = _seed(settings, title="naive", body="")
     svc.transition(ticket.id, State.DONE, note="merged")
     live = svc.get(ticket.id)
-    live.created_at = datetime.now() - timedelta(days=1)  # noqa: DTZ005 — naive
+    live.created_at = datetime.now() - timedelta(days=1)
     assert live.created_at.tzinfo is None
     assert _is_eligible_candidate(live, set(), _now() - timedelta(days=2), svc)
 

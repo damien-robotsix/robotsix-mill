@@ -82,15 +82,15 @@ def _ticket(ctx, title="Add feature", body="Please add feature.txt"):
 
 def _ic(**over):
     """Build an ``_ImplementContext`` with sensible defaults."""
-    defaults = dict(
-        spec="spec",
-        memory_text="",
-        reference_files=None,
-        file_map=None,
-        feedback=None,
-        previous_attempt_summary=None,
-        open_thread_ids=None,
-    )
+    defaults = {
+        "spec": "spec",
+        "memory_text": "",
+        "reference_files": None,
+        "file_map": None,
+        "feedback": None,
+        "previous_attempt_summary": None,
+        "open_thread_ids": None,
+    }
     defaults.update(over)
     return _ImplementContext(**defaults)
 
@@ -170,7 +170,7 @@ def _setup_loop(monkeypatch, results, base_ic=None):
 
 
 @pytest.mark.parametrize(
-    "action,state",
+    ("action", "state"),
     [
         ("return", State.DOCUMENTING),
         ("pause", State.AWAITING_USER_REPLY),
@@ -210,7 +210,7 @@ def test_loop_retry_threads_updated_ic(ctx_factory, tmp_path, monkeypatch):
         _SinglePassResult(next_action="retry", feedback="diag-a", ic=new_ic),
         _SinglePassResult(next_action="proceed", outcome=Outcome(State.DOCUMENTING)),
     ]
-    rec, fin = _setup_loop(monkeypatch, results)
+    rec, _fin = _setup_loop(monkeypatch, results)
 
     out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
 
@@ -228,7 +228,7 @@ def test_loop_zero_iterations_runs_single_pass(ctx_factory, tmp_path, monkeypatc
     t = _ticket(ctx)
     settings = SimpleNamespace(max_fix_iterations=0)
     outcome = Outcome(State.DOCUMENTING)
-    rec, fin = _setup_loop(
+    rec, _fin = _setup_loop(
         monkeypatch,
         [_SinglePassResult(next_action="proceed", outcome=outcome)],
     )

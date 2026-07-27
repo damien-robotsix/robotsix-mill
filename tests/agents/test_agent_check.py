@@ -517,12 +517,14 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
     repo = settings.data_dir / "agent_check_workspace" / "repo"
-    assert seen["clone"] == 1 and seen["repo_dir"] == repo
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo
     assert seen["memory_dir"] == settings.data_dir
 
     seen["clone"] = 0
     run_agent_check_pass(session_id="test-sid", repo_config=_test_repo_config())
-    assert seen["clone"] == 1 and seen["repo_dir"] == repo  # re-clones fresh each run
+    assert seen["clone"] == 1
+    assert seen["repo_dir"] == repo
     assert seen["memory_dir"] == settings.data_dir
 
 

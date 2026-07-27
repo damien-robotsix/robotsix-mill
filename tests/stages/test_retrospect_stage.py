@@ -32,17 +32,17 @@ from robotsix_mill.stages.retrospect import (
 def _result(**overrides) -> RetrospectResult:
     """Module-level factory returning a RetrospectResult with sensible
     defaults, overridable per kwarg."""
-    defaults: dict = dict(
-        findings="All clear.",
-        conclusion="Closed — clean run.",
-        propose_draft=False,
-        draft_title=None,
-        draft_body=None,
-        updated_memory="",
-        draft_gap_id=None,
-        follow_up_title=None,
-        follow_up_body=None,
-    )
+    defaults: dict = {
+        "findings": "All clear.",
+        "conclusion": "Closed — clean run.",
+        "propose_draft": False,
+        "draft_title": None,
+        "draft_body": None,
+        "updated_memory": "",
+        "draft_gap_id": None,
+        "follow_up_title": None,
+        "follow_up_body": None,
+    }
     defaults.update(overrides)
     return RetrospectResult(**defaults)
 
@@ -425,7 +425,7 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
     all_tickets = ctx.service.list()
     # original + spawned draft = 2
     assert len(all_tickets) == 2
-    spawned = [tk for tk in all_tickets if tk.id != t.id][0]
+    spawned = next(tk for tk in all_tickets if tk.id != t.id)
     assert spawned.title == "Fix X"
     assert spawned.parent_id == t.id
     assert spawned.id in (out.note or "")
@@ -539,7 +539,7 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
 
     all_tickets = ctx.service.list()
     assert len(all_tickets) == 2
-    spawned = [tk for tk in all_tickets if tk.id != t.id][0]
+    spawned = next(tk for tk in all_tickets if tk.id != t.id)
     assert spawned.title == "Incomplete: add tests"
     assert spawned.parent_id == t.id
 

@@ -222,7 +222,8 @@ def test_start_of_run_log_lists_monitored_repos(monkeypatch, caplog):
             if "Diagnostic pass starting" in r.getMessage()
         ]
         assert starting
-        assert "repo-a" in starting[0] and "repo-b" in starting[0]
+        assert "repo-a" in starting[0]
+        assert "repo-b" in starting[0]
     finally:
         dc.DIAGNOSTIC_CHECKS[:] = snapshot
 

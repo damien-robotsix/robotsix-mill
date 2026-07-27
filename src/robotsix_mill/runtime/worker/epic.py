@@ -707,6 +707,4 @@ def _branch_is_stale(
     cutoff = now - timedelta(days=max_age_days)
     if b.last_commit_at >= cutoff:
         return False
-    if prefix_only and not b.name.startswith(branch_prefix):
-        return False
-    return True
+    return not (prefix_only and not b.name.startswith(branch_prefix))

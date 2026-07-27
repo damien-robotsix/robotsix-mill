@@ -58,7 +58,7 @@ def _is_next_module(line: str, in_core: bool) -> bool:
     return in_core and line.rstrip("\n").startswith("  - id: ")
 
 
-def _find_core_paths_range(lines: list[str]) -> tuple[int | None, int | None, str]:  # noqa: C901 — parser state-machine, branches are inherent
+def _find_core_paths_range(lines: list[str]) -> tuple[int | None, int | None, str]:
     """Locate the ``core`` module's ``paths`` list in *lines*.
 
     Returns ``(paths_start, paths_end, indent)`` where *paths_start* is

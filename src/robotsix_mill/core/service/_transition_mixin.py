@@ -24,6 +24,7 @@ from ._helpers import (
     _parse_depends_on_str,
     verify_merge_before_done,
 )
+import contextlib
 
 log = logging.getLogger("robotsix_mill.service")
 
@@ -42,10 +43,8 @@ def _clear_stale_implement_guard(ws: Workspace) -> None:
     survives operator-initiated resume/reset cycles.
     """
     _persist_stall_state_from_implement_md(ws)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         (ws.artifacts_dir / "implement.md").unlink()
-    except FileNotFoundError:
-        pass
 
 
 def _persist_stall_state_from_implement_md(ws: Workspace) -> None:
@@ -78,15 +77,13 @@ def _persist_stall_state_from_implement_md(ws: Workspace) -> None:
             except ValueError:
                 stall_count = 0
     if summary_fp or stall_count:
-        try:
+        with contextlib.suppress(OSError):
             (ws.artifacts_dir / "implement_stall_state.json").write_text(
                 json.dumps(
                     {"summary_fingerprint": summary_fp, "stall_count": stall_count}
                 ),
                 encoding="utf-8",
             )
-        except OSError:
-            pass
 
 
 # A ticket auto-unblocks its ``unblocks`` targets when it reaches one of
@@ -493,10 +490,8 @@ class _TransitionMixin(_ServiceBase):
                 _persist_stall_state_from_implement_md(ws)
                 for _fname in ("implement_summary.md", "reference_files.json"):
                     _p = ws.artifacts_dir / _fname
-                    try:
+                    with contextlib.suppress(FileNotFoundError):
                         _p.unlink()
-                    except FileNotFoundError:
-                        pass
             if spawn_reset and counter_path is not None:
                 try:
                     counter_path.unlink()

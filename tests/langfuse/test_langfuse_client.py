@@ -363,9 +363,9 @@ def _multi_page_mock_client(pages: dict[int, dict]):
 # ---------------------------------------------------------------------------
 
 
-from types import SimpleNamespace  # noqa: E402
+from types import SimpleNamespace
 
-from robotsix_mill.langfuse.client import session_cost  # noqa: E402
+from robotsix_mill.langfuse.client import session_cost
 
 
 def _capturing_api_get(captured: list):
@@ -428,7 +428,7 @@ def test_cost_cache_key_consistent_between_blocking_and_cached(settings, monkeyp
 # ---------------------------------------------------------------------------
 
 
-from robotsix_mill.langfuse.client import trace_observation_summary  # noqa: E402
+from robotsix_mill.langfuse.client import trace_observation_summary
 
 
 def test_trace_observation_summary_empty():

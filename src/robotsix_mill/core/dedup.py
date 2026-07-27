@@ -328,7 +328,7 @@ def find_prior_matching_ticket(
                 return ticket
         # fmt: on
         return None
-    except Exception:  # noqa: BLE001 — best-effort dedup
+    except Exception:
         log.exception("dedup: find_prior_matching_ticket failed")
         return None
 
@@ -462,7 +462,7 @@ def paths_excluding_out_of_scope(text: str) -> list[str]:
             captured.append(line)
 
         return _extract_paths("\n".join(captured))
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         log.exception("dedup: paths_excluding_out_of_scope failed")
         return []
 
@@ -520,7 +520,7 @@ def _scope_paths(text: str) -> set[str]:
             if capturing:
                 captured.append(line)
         return set(_extract_paths("\n".join(captured)))
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         log.exception("dedup: _scope_paths failed")
         return set()
 
@@ -557,9 +557,9 @@ def _describe_recent_signal(
                 ticket.id,
             ).read_description()
             matched = [p for p in paths if p and p in body]
-            if len(matched) >= 2:
-                desc = f"file path `{matched[0]}`"
-            elif len(matched) == 1 and matched[0] in _scope_paths(body):
+            if len(matched) >= 2 or (
+                len(matched) == 1 and matched[0] in _scope_paths(body)
+            ):
                 desc = f"file path `{matched[0]}`"
             else:
                 return "title overlap"
@@ -575,7 +575,7 @@ def _describe_recent_signal(
                         quoted += "`, …"
                     desc += f" (symbol `{quoted}`)"
             return desc
-    except Exception:  # noqa: BLE001 — best-effort
+    except Exception:
         log.exception("dedup: _describe_recent_signal failed for %s", ticket.id)
     return "title overlap"
 
@@ -663,7 +663,7 @@ def find_inflight_overlap(
         return (
             f"Possible duplicate of {prior.id} ({prior.title!r}) — matched on {signal}"
         )
-    except Exception:  # noqa: BLE001 — best-effort dedup
+    except Exception:
         log.exception("dedup: find_inflight_overlap failed")
         return None
 
@@ -718,7 +718,7 @@ def find_agent_md_proposal_overlap(
             lookback_days=settings.epic_dedup_lookback_days,
             exclude_ids=exclude_ids,
         )
-    except Exception:  # noqa: BLE001 — best-effort dedup
+    except Exception:
         log.exception("dedup: find_agent_md_proposal_overlap failed")
         return None
 
@@ -756,7 +756,7 @@ def find_child_overlaps(
         exclude_ids: set[str] = {parent_epic_id}
         try:
             exclude_ids |= {c.id for c in service.list_children(parent_epic_id)}
-        except Exception:  # noqa: BLE001 — best-effort
+        except Exception:
             log.exception("dedup: list_children failed for %s", parent_epic_id)
 
         # (normalized title, extracted path set) for each accepted sibling.
@@ -820,6 +820,6 @@ def find_child_overlaps(
             notes[i] = note
             accepted.append((normalize(title), set(paths)))
         return notes
-    except Exception:  # noqa: BLE001 — best-effort dedup
+    except Exception:
         log.exception("dedup: find_child_overlaps failed")
         return [None] * len(child_titles)

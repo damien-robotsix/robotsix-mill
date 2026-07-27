@@ -514,9 +514,11 @@ def test_sample_yaml_parses():
     assert p.exists(), "Sample YAML file not found"
     ed = load_expert_definition(p)
     assert ed.domain == "python-backend"
-    assert ed.description is not None and "Python backend" in ed.description
+    assert ed.description is not None
+    assert "Python backend" in ed.description
     assert "src/**/*.py" in ed.module_paths
-    assert isinstance(ed.system_prompt, str) and len(ed.system_prompt) > 0
+    assert isinstance(ed.system_prompt, str)
+    assert len(ed.system_prompt) > 0
     assert ed.memory.max_memory_chars == 8000
     assert "board-report" in ed.skills
     assert "run_command" in ed.tools

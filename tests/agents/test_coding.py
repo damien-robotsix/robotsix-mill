@@ -74,18 +74,18 @@ def _make_result(
 
 
 def _call(settings, tmp_path, **kwargs):
-    defaults = dict(
-        settings=settings,
-        repo_dir=tmp_path,
-        spec="do X",
-        memory="ledger",
-        feedback="test failed",
-        reference_files=[{"path": "a.py"}],
-        message_history=["msg"],
-        epic_context="epic",
-        previous_attempt_summary="prev",
-        board_id="b",
-    )
+    defaults = {
+        "settings": settings,
+        "repo_dir": tmp_path,
+        "spec": "do X",
+        "memory": "ledger",
+        "feedback": "test failed",
+        "reference_files": [{"path": "a.py"}],
+        "message_history": ["msg"],
+        "epic_context": "epic",
+        "previous_attempt_summary": "prev",
+        "board_id": "b",
+    }
     defaults.update(kwargs)
     return run_implement_agent(**defaults)
 

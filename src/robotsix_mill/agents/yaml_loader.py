@@ -105,7 +105,7 @@ class AgentDefinition(BaseModel):
         return self
 
 
-def _resolve_includes(  # noqa: C901
+def _resolve_includes(
     raw_text: str,
     base_dir: Path,
     _depth: int = 0,

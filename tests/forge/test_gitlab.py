@@ -129,7 +129,7 @@ def test_build_headers():
 
 
 @pytest.mark.parametrize(
-    "url,expected",
+    ("url", "expected"),
     [
         ("https://gitlab.com/ns/project.git", "ns/project"),
         ("https://gitlab.com/ns/project", "ns/project"),
@@ -399,7 +399,7 @@ def test_pr_status_no_mr_returns_none(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "merge_status,expected",
+    ("merge_status", "expected"),
     [
         ("can_be_merged", True),
         ("cannot_be_merged", False),

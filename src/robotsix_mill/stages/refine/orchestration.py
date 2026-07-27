@@ -22,7 +22,7 @@ respective sub-modules.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from ...agents import refining
 from ...agents.standards import fetch_standards_context
@@ -33,7 +33,7 @@ from ...core.workspace import Workspace
 from ...runtime.tracing import set_current_span_attribute
 from ..base import Outcome, StageContext
 from ..pause import (
-    acknowledge_unanswered_threads,  # noqa: F401 — re-exported for test monkeypatch compat
+    acknowledge_unanswered_threads,
     build_compact_resume_message_history,
     check_for_pause,
     clear_conversation_state,
@@ -42,35 +42,70 @@ from ..pause import (
     _collect_ask_user_replies,
 )
 from . import _checkpoint
-from . import _reconcile
-from . import _result_paths
 from . import _triage
 from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     _build_deployed_log_summary,
     _load_refine_memory,
-    _persist_refine_memory,  # noqa: F401 — re-exported for test monkeypatch compat
+    _persist_refine_memory,
     log,
 )
 
-# Re-export triage I/O helpers for backward compatibility (tests import
-# these symbols from the orchestration module).
-from ._reconcile import (  # noqa: F401
-    read_triage_complexity as _read_triage_complexity,
-    read_triage_findings as _read_triage_findings,
-    read_triage_trivial as _read_triage_trivial,
-    write_triage_complexity as _write_triage_complexity,
-)
+# ---------------------------------------------------------------------------
+# Lazy imports for _reconcile and _result_paths — both have late imports
+# back to this module (for monkeypatch compatibility), so top-level
+# imports would create a cycle (py/cyclic-import).
+# ---------------------------------------------------------------------------
+
+_REEXPORT_MAP: dict[str, str] = {
+    "_read_triage_complexity": "read_triage_complexity",
+    "_read_triage_findings": "read_triage_findings",
+    "_read_triage_trivial": "read_triage_trivial",
+    "_write_triage_complexity": "write_triage_complexity",
+}
+
+
+def _lazy_import_reconcile() -> None:
+    """Lazily import and cache the _reconcile sub-module.
+
+    Must be called at the top of every method that references
+    ``_reconcile`` — the late imports within _reconcile (and
+    _result_paths) create a cycle if we import at module level.
+    """
+    global _reconcile
+    if _reconcile is None:
+        from . import _reconcile as _rec
+
+        globals()["_reconcile"] = _rec
+
+
+def _lazy_import_result_paths() -> None:
+    """Lazily import and cache the _result_paths sub-module."""
+    global _result_paths
+    if _result_paths is None:
+        from . import _result_paths as _rp
+
+        globals()["_result_paths"] = _rp
+
+
+# Sentinel values — replaced on first lazy import.
+_reconcile: Any = None
+_result_paths: Any = None
+
+
+def __getattr__(name: str) -> object:
+    if name in _REEXPORT_MAP:
+        _lazy_import_reconcile()
+        obj = getattr(_reconcile, _REEXPORT_MAP[name])
+        globals()[name] = obj
+        return obj
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
     "RefineAgentMixin",
-    "acknowledge_unanswered_threads",
     "_persist_refine_memory",
-    "_read_triage_complexity",
-    "_read_triage_findings",
-    "_read_triage_trivial",
-    "_write_triage_complexity",
+    "acknowledge_unanswered_threads",
 ]
 
 
@@ -89,8 +124,12 @@ class RefineAgentMixin:
         child_index: int | None = None,
     ) -> str:
         """Delegate to :func:`_result_paths.review_spec_conciseness`."""
-        return _result_paths.review_spec_conciseness(
-            s, ws, ticket, spec, verbose_filename, child_index=child_index
+        _lazy_import_result_paths()
+        return cast(
+            str,
+            _result_paths.review_spec_conciseness(
+                s, ws, ticket, spec, verbose_filename, child_index=child_index
+            ),
         )
 
     @staticmethod
@@ -103,8 +142,12 @@ class RefineAgentMixin:
         reviewer_comments: str | None,
     ) -> Outcome | None:
         """Delegate to :func:`_reconcile.short_circuit_for_internal_failure`."""
-        return _reconcile.short_circuit_for_internal_failure(
-            ctx, ticket, draft, ws, s, reviewer_comments
+        _lazy_import_reconcile()
+        return cast(
+            Outcome | None,
+            _reconcile.short_circuit_for_internal_failure(
+                ctx, ticket, draft, ws, s, reviewer_comments
+            ),
         )
 
     @staticmethod
@@ -152,6 +195,8 @@ class RefineAgentMixin:
         this body is the FSM driver that short-circuits on the first
         phase to produce an :class:`Outcome`.
         """
+        _lazy_import_reconcile()
+        _lazy_import_result_paths()
         reviewer_comments, open_thread_ids = (
             RefineAgentMixin._collect_reviewer_comments(ctx, ticket)
         )
@@ -163,8 +208,11 @@ class RefineAgentMixin:
         )
 
         if not _is_delta_reuse:
-            outcome = _reconcile.reviewer_agreement_guard(
-                ctx, ticket, draft, ws, s, reviewer_comments
+            outcome = cast(
+                Outcome | None,
+                _reconcile.reviewer_agreement_guard(
+                    ctx, ticket, draft, ws, s, reviewer_comments
+                ),
             )
             if outcome is not None:
                 return outcome
@@ -193,8 +241,11 @@ class RefineAgentMixin:
             if outcome is not None:
                 return outcome
 
-        outcome = _reconcile.short_circuit_for_internal_failure(
-            ctx, ticket, draft, ws, s, reviewer_comments
+        outcome = cast(
+            Outcome | None,
+            _reconcile.short_circuit_for_internal_failure(
+                ctx, ticket, draft, ws, s, reviewer_comments
+            ),
         )
         if outcome is not None:
             return outcome
@@ -214,36 +265,50 @@ class RefineAgentMixin:
             return outcome
         result = cast(refining.RefineResult, result)
 
-        outcome = _reconcile.gitignored_guard(ticket, result, repo_dir)
+        outcome = cast(
+            Outcome | None, _reconcile.gitignored_guard(ticket, result, repo_dir)
+        )
         if outcome is not None:
             return outcome
 
         _reconcile.apply_agent_side_effects(ctx, ticket, draft, ws, s, epic_ctx, result)
 
-        outcome = _result_paths.no_change_path(
-            ctx, ticket, draft, repo_dir, title, ws, result
+        outcome = cast(
+            Outcome | None,
+            _result_paths.no_change_path(
+                ctx, ticket, draft, repo_dir, title, ws, result
+            ),
         )
         if outcome is not None:
             return outcome
 
         if result.promote_to_epic and not result.split:
-            return _result_paths.promote_to_epic_path(ctx, ticket, draft, ws, s, result)
-
-        if not result.split:
-            return _result_paths.single_scope_path(
-                ctx, ticket, ws, s, result, reviewer_comments, open_thread_ids
+            return cast(
+                Outcome,
+                _result_paths.promote_to_epic_path(ctx, ticket, draft, ws, s, result),
             )
 
-        return _result_paths.multi_scope_path(
-            ctx,
-            ticket,
-            draft,
-            ws,
-            s,
-            epic_ctx,
-            result,
-            reviewer_comments,
-            open_thread_ids,
+        if not result.split:
+            return cast(
+                Outcome,
+                _result_paths.single_scope_path(
+                    ctx, ticket, ws, s, result, reviewer_comments, open_thread_ids
+                ),
+            )
+
+        return cast(
+            Outcome,
+            _result_paths.multi_scope_path(
+                ctx,
+                ticket,
+                draft,
+                ws,
+                s,
+                epic_ctx,
+                result,
+                reviewer_comments,
+                open_thread_ids,
+            ),
         )
 
     # -- phase: reviewer-comment gather (sendback guard) --------------------
@@ -377,7 +442,7 @@ class RefineAgentMixin:
                 if extra_roots is None:
                     extra_roots = [log_path]
                 else:
-                    extra_roots = list(extra_roots) + [log_path]
+                    extra_roots = [*list(extra_roots), log_path]
                 deployed_log_summary = _build_deployed_log_summary(
                     log_path, deployed_log_folder_str
                 )

@@ -20,6 +20,7 @@ from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
 from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.vcs.git_ops import PostPushResult
+import contextlib
 
 
 def _ctx(tmp_path, repo_config=None, **env):
@@ -147,10 +148,8 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()  # stop after first cycle
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -213,10 +212,8 @@ def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -268,10 +265,8 @@ def test_dedup_key_is_workflow_id_and_head_sha(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -319,10 +314,8 @@ def test_prunes_old_entries_from_state(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -373,10 +366,8 @@ def test_successful_run_not_filed(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -426,10 +417,8 @@ def test_pending_run_not_filed(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -480,10 +469,8 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -624,10 +611,8 @@ def _run_one_cycle(worker, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run())
     loop.close()
@@ -1117,10 +1102,8 @@ def test_ci_monitor_skips_repo_when_skip_ci_true(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -1183,10 +1166,8 @@ def test_ci_monitor_polls_repo_when_skip_ci_false(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()
@@ -1240,10 +1221,8 @@ def test_ci_monitor_polls_repo_when_no_config_clone(tmp_path, monkeypatch):
                 raise asyncio.CancelledError()
 
         monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker._ci_monitor_poll_loop()
-        except asyncio.CancelledError:
-            pass
 
     loop.run_until_complete(_run_one_cycle())
     loop.close()

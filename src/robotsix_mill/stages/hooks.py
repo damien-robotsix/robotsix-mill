@@ -70,7 +70,7 @@ def run_prepare_hook(
     }
 
     try:
-        proc = subprocess.run(  # noqa: S603 — script is repo-controlled, not attacker input
+        proc = subprocess.run(
             ["/bin/sh", str(script_path)],
             cwd=str(repo_dir),
             env=env,

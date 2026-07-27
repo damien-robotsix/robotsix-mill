@@ -281,7 +281,7 @@ class GitHubForgePRMixin:
                 # branch already up to date — nothing to do
                 return {"updated": False, "reason": "already up to date"}
             return {"updated": False, "reason": f"HTTP {r.status_code}: {r.text[:200]}"}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             return {"updated": False, "reason": str(e)}
 
     def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
@@ -598,9 +598,7 @@ class GitHubForgePRMixin:
             # 204 = deleted; 404/422 = ref does not exist (already gone,
             # e.g. by GitHub auto-delete) — the branch is gone either way,
             # which is the desired end state.
-            if r.status_code in (204, 404, 422):
-                return True
-            return False
+            return r.status_code in (204, 404, 422)
         except Exception:
             return False
 

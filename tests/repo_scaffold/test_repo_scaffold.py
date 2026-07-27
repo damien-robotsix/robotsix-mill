@@ -574,7 +574,8 @@ def test_write_periodic_presence_files(tmp_path):
     periodic_dir = tmp_path / ".robotsix-mill" / "periodic"
     audit = periodic_dir / "audit.yaml"
     health = periodic_dir / "health.yaml"
-    assert audit.exists() and health.exists()
+    assert audit.exists()
+    assert health.exists()
     assert yaml.safe_load(audit.read_text()) == {"name": "audit"}
     assert yaml.safe_load(health.read_text()) == {"name": "health"}
 
@@ -593,7 +594,8 @@ def test_write_github_workflows(tmp_path):
 
     ci = tmp_path / ".github" / "workflows" / "ci.yml"
     docs = tmp_path / ".github" / "workflows" / "docs.yml"
-    assert ci.exists() and docs.exists()
+    assert ci.exists()
+    assert docs.exists()
 
     ci_text = ci.read_text()
     assert (

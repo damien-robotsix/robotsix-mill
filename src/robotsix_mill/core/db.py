@@ -26,7 +26,7 @@ import logging
 import re
 import shutil
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Generator, cast
 
@@ -368,7 +368,6 @@ def init_db(settings: Settings, board_id: str) -> None:
         with lock:
             if board_id not in _initialized:
                 # import models so SQLModel.metadata is populated before create_all
-                from . import models  # noqa: F401
 
                 engine = get_engine(settings, board_id)
                 SQLModel.metadata.create_all(engine)
@@ -421,10 +420,8 @@ def reset_engine() -> None:
     """
     global _engines, _initialized, _init_locks
     for engine in _engines.values():
-        try:
+        with suppress(Exception):
             engine.dispose()
-        except Exception:
-            pass
     _engines = {}
     _initialized = set()
     _init_locks = {}
@@ -513,10 +510,9 @@ def persist_memory_db(
             if legacy_path.exists():
                 try:
                     file_content = legacy_path.read_text(encoding="utf-8")
-                    if file_content.strip():
-                        if not text.strip():
-                            # No new text — carry over legacy content verbatim.
-                            migrated_content = file_content
+                    if file_content.strip() and not text.strip():
+                        # No new text — carry over legacy content verbatim.
+                        migrated_content = file_content
                         # else: keep migrated_content = text (new text provided)
                     legacy_path.rename(str(legacy_path) + ".migrated")
                     log.info(

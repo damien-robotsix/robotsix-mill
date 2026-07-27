@@ -39,9 +39,7 @@ def _is_skip_line(line: bytes) -> bool:
         return True
     # Heuristic: if the whole line is inside triple quotes, skip it.
     # This is coarse but avoids false positives on docstrings.
-    if stripped.startswith(b'"""') or stripped.endswith(b'"""'):
-        return True
-    return False
+    return bool(stripped.startswith(b'"""') or stripped.endswith(b'"""'))
 
 
 def main() -> int:

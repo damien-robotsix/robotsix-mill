@@ -33,6 +33,7 @@ from .processing import (
 )
 from .periodic_passes import PeriodicPassesMixin
 from .poll_loops import PollLoopsMixin
+import contextlib
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -474,7 +475,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     after.state if after else None,
                     repo_config=ticket_repo_config,
                 )
-            except Exception:  # noqa: BLE001 — never let the consumer die
+            except Exception:
                 log.exception("processing %s crashed", ticket_id)
             finally:
                 # drop from in-flight FIRST so a re-enqueue (e.g. next
@@ -747,7 +748,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         if svc.unmet_dependencies(t):
                             continue
                         self.enqueue(t.id)
-            except Exception:  # noqa: BLE001 — never let the poll die
+            except Exception:
                 log.exception("reconcile sweep failed")
 
     def start(self) -> None:
@@ -1041,10 +1042,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         for t in tasks:
             t.cancel()
         for t in tasks:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await t
-            except* asyncio.CancelledError:
-                pass
         self._tasks = {}
         tracing.flush_tracing()
 

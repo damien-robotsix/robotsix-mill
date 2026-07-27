@@ -273,7 +273,8 @@ def test_export_adapter_label_falls_back_to_public_key(monkeypatch):
     tracing._ensure_tracing()
     captured["on_export_result"]("pk-only", False, "nope")
     failures = tracing.get_export_failures()
-    assert failures and failures[0]["project"] == "pk-only"
+    assert failures
+    assert failures[0]["project"] == "pk-only"
 
 
 # --- start_ticket_root_span / force_traces_to_mill delegation ----------
@@ -552,10 +553,8 @@ def test_sigterm_calls_flush_tracing(monkeypatch):
     monkeypatch.setattr(tracing, "flush_tracing", fake_flush)
 
     tracing.install_signal_handlers()
-    try:
+    with contextlib.suppress(SystemExit):
         os.kill(os.getpid(), signal.SIGTERM)
-    except SystemExit:
-        pass
     assert len(calls) == 1
 
 
@@ -573,10 +572,8 @@ def test_double_sigterm_no_deadlock(monkeypatch):
 
     tracing.install_signal_handlers()
     # First signal — handler runs, raises SystemExit.
-    try:
+    with contextlib.suppress(SystemExit):
         os.kill(os.getpid(), signal.SIGTERM)
-    except SystemExit:
-        pass
     assert len(calls) == 1
 
     # Second signal — handler sees _shutdown_requested is True, returns.

@@ -222,7 +222,7 @@ class TestCreateOrUpdateEpics:
                 raw_span=(0, 0),
             ),
         ]
-        created, updated, skipped, new_ids = _create_or_update_epics(
+        created, updated, _skipped, _new_ids = _create_or_update_epics(
             service,
             sections,
         )
@@ -250,7 +250,7 @@ class TestCreateOrUpdateEpics:
                 raw_span=(0, 0),
             ),
         ]
-        created, updated, skipped, new_ids = _create_or_update_epics(
+        created, updated, skipped, _new_ids = _create_or_update_epics(
             service,
             sections,
         )
@@ -273,7 +273,7 @@ class TestCreateOrUpdateEpics:
                 raw_span=(0, 0),
             ),
         ]
-        created, updated, skipped, new_ids = _create_or_update_epics(
+        _created, updated, _skipped, _new_ids = _create_or_update_epics(
             service,
             sections,
         )

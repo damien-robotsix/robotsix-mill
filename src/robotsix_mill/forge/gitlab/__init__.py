@@ -12,8 +12,8 @@ from .ci import _LOG_FAILURE_RE
 from .core import GitLabForge, _build_headers, _parse_gitlab_project_path
 
 __all__ = [
+    "_LOG_FAILURE_RE",
     "GitLabForge",
     "_build_headers",
-    "_LOG_FAILURE_RE",
     "_parse_gitlab_project_path",
 ]

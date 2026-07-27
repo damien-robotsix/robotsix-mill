@@ -40,7 +40,8 @@ def test_no_key_degrades_not_raises(tmp_path):
         domain="python-backend",
         question="where is X?",
     )
-    assert "unavailable" in out and "OPENROUTER_API_KEY" in out
+    assert "unavailable" in out
+    assert "OPENROUTER_API_KEY" in out
 
 
 def test_missing_repo_degrades_not_raises(tmp_path):

@@ -18,7 +18,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-import sqlmodel  # noqa: F401 — required for AutoString etc.
+import sqlmodel
 
 
 # revision identifiers, used by Alembic.

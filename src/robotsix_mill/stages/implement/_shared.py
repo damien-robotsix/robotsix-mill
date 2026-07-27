@@ -196,7 +196,6 @@ def _vendored_dep_roots(
                     "_vendored_dep_roots: git ls-files failed for %s — "
                     "treating as tracked (fail-closed)",
                     root,
-                    exc_info=True,
                 )
                 continue
             if ls.stdout.strip():

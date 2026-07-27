@@ -2142,7 +2142,7 @@ class TestCheckPushAccess:
 
     def test_ok_with_bare_repo(self, tmp_path):
         """Against a local bare repo (no auth), the probe succeeds."""
-        from .test_git_ops import make_bare_repo  # noqa: F811 — fixture helper
+        from .test_git_ops import make_bare_repo
 
         url = make_bare_repo(tmp_path)
         result = git_ops.check_push_access(url, token=None)

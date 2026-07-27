@@ -36,7 +36,9 @@ def test_kind_for_classification():
 def test_name_only_inherits_builtin(tmp_path):
     p = _write(tmp_path, "audit", "name: audit\n")
     r = pl.resolve_periodic_workflow(p)
-    assert r is not None and r.kind == "llm_agent" and r.enabled is True
+    assert r is not None
+    assert r.kind == "llm_agent"
+    assert r.enabled is True
     # inherits the shipped prompt + model
     from robotsix_mill.agents.yaml_loader import load_agent_definition
 
@@ -91,7 +93,8 @@ def test_prompt_overlay_and_system_prompt_mutually_exclusive(tmp_path):
 def test_enabled_false_is_respected(tmp_path):
     p = _write(tmp_path, "audit", "name: audit\nenabled: false\n")
     r = pl.resolve_periodic_workflow(p)
-    assert r is not None and r.enabled is False
+    assert r is not None
+    assert r.enabled is False
 
 
 def test_interval_override_carried(tmp_path):
@@ -130,7 +133,8 @@ def test_malformed_interval_skipped(tmp_path):
 def test_schedule_only_has_no_definition(tmp_path):
     p = _write(tmp_path, "trace_review", "name: trace_review\ninterval_seconds: 7200\n")
     r = pl.resolve_periodic_workflow(p)
-    assert r.kind == "schedule_only" and r.definition is None
+    assert r.kind == "schedule_only"
+    assert r.definition is None
     assert r.interval_seconds == 7200
 
 
@@ -155,7 +159,8 @@ def test_bespoke_builds_definition(tmp_path):
         "name: my-thing\nsystem_prompt: do the thing\nlevel: 2\n",
     )
     r = pl.resolve_periodic_workflow(p)
-    assert r is not None and r.kind == "bespoke"
+    assert r is not None
+    assert r.kind == "bespoke"
     assert r.definition.system_prompt == "do the thing"
     assert r.definition.level == 2
 
@@ -217,7 +222,9 @@ def test_discover_name_defaults_to_stem(tmp_path):
     # file with no explicit name field → name taken from filename stem
     _write(tmp_path, "health", "interval_seconds: 600\n")
     out = pl.discover_periodic_workflows(tmp_path)
-    assert len(out) == 1 and out[0].name == "health" and out[0].kind == "llm_agent"
+    assert len(out) == 1
+    assert out[0].name == "health"
+    assert out[0].kind == "llm_agent"
     assert out[0].interval_seconds == 600
 
 

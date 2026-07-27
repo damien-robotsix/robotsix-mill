@@ -6,7 +6,6 @@ import pytest
 
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
-from robotsix_mill.core import models  # noqa: F401 — populate SQLModel.metadata
 
 
 @pytest.fixture(autouse=True)

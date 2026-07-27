@@ -79,7 +79,8 @@ async def test_working_stages_chain_to_real_tail(ctx, service, monkeypatch):
     await process_ticket(t.id, ctx)
     assert service.get(t.id).state is State.BLOCKED  # real deliver: no forge
     states = [e.state for e in service.history(t.id)]
-    assert State.READY in states and State.DELIVERABLE in states
+    assert State.READY in states
+    assert State.DELIVERABLE in states
 
 
 async def test_failing_stage_marks_failed(ctx, service, monkeypatch):
@@ -2013,7 +2014,7 @@ def test_reconcile_closes_draft_with_merged_covering_sibling():
 
 
 @pytest.mark.parametrize(
-    "covering, closures",
+    ("covering", "closures"),
     [
         # dedup-closed covering sibling whose canonical never merged
         ({"S1": (State.DONE, "duplicate of Z: dupe")}, {"C1": "S1"}),

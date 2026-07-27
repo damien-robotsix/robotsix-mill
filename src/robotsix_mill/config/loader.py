@@ -46,7 +46,7 @@ _EXAMPLE_FILE = _CONFIG_DIR / "config.example.json"
 # A secret leaf equal to this is treated as UNSET (the field falls back
 # to its ``None`` default), so example / CI runs behave like "no secret
 # configured".
-_SECRET_SENTINEL = "SECRET"  # noqa: S105 — sentinel, not a real credential
+_SECRET_SENTINEL = "SECRET"
 
 
 def _resolve_config_path(config_file: str | None) -> Path:
@@ -164,7 +164,7 @@ def load_secrets_json(secrets_file: str | None = None) -> dict[str, object]:
     }
 
 
-def _load_repos_document(file_path: str | None = None) -> dict[str, object]:  # noqa: C901
+def _load_repos_document(file_path: str | None = None) -> dict[str, object]:
     """Read and parse the repos configuration document.
 
     Merges operator repos from the JSON config (``repos:`` key) with
