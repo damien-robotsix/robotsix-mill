@@ -106,7 +106,7 @@ are:
   (e.g. `refine.yaml`, `implement.yaml`, `review.yaml`, `triage.yaml`,
   `document.yaml`, `retrospect.yaml`, `dedup.yaml`,
   `epic_breakdown.yaml`, `obsolescence.yaml`, `auto-approve.yaml`,
-  `doc_classifier.yaml`, `maintenance.yaml`, `scope_triage.yaml`,
+  `doc_classifier.yaml`, `scope_triage.yaml`,
   `spec-review.yaml`, `run_tests.yaml`, `pipeline/meta_triage.yaml`).
 
 - **`periodic`** — background scheduled agents, almost always under
@@ -115,7 +115,7 @@ are:
   `periodic/meta.yaml`, `periodic/test_gap.yaml`,
   `periodic/agent_check.yaml`, `periodic/bc_check.yaml`,
   `periodic/completeness_check.yaml`,
-  `periodic/copy_paste.yaml`, `periodic/cost_analyst.yaml`,
+  `periodic/copy_paste.yaml`,
   `periodic/diagnostic.yaml`, `periodic/forge_parity.yaml`,
   `periodic/module_curator.yaml`, `periodic/run_health.yaml`, and
   `epic_status.yaml` at the root).
