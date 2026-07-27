@@ -25,6 +25,7 @@ _shtab_robotsix_mill_commands() {
     "module-curator:"
     "module-size:"
     "pin-bump:"
+    "repo-description-sync:"
     "repos:"
     "roadmap-sync:"
     "run-health:"
@@ -247,6 +248,15 @@ _shtab_robotsix_mill_pin_bump_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_pin_bump_defaults_added=0
 
+_shtab_robotsix_mill_repo_description_sync_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+  "--repo-id[repository to sync the description for (required if multiple repos)]:repo_id:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_repo_description_sync_defaults_added=0
+
 _shtab_robotsix_mill_repos_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
 )
@@ -434,6 +444,7 @@ _shtab_robotsix_mill() {
         module-curator) _arguments -C -s $_shtab_robotsix_mill_module_curator_options ;;
         module-size) _arguments -C -s $_shtab_robotsix_mill_module_size_options ;;
         pin-bump) _arguments -C -s $_shtab_robotsix_mill_pin_bump_options ;;
+        repo-description-sync) _arguments -C -s $_shtab_robotsix_mill_repo_description_sync_options ;;
         repos) _shtab_robotsix_mill_repos ;;
         roadmap-sync) _arguments -C -s $_shtab_robotsix_mill_roadmap_sync_options ;;
         run-health) _arguments -C -s $_shtab_robotsix_mill_run_health_options ;;
