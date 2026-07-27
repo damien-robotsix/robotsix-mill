@@ -94,9 +94,7 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         # -- Periodic agent settings (presence-file driven; no JSON entry) --
         "repo_description_sync_periodic",
         "repo_description_sync_interval_seconds",
-        # -- deploy-freshness gate (optional; only needed when a deploy
-        #    server is present and the gate should be active) --
-        "deploy_api_url",
+
         # -- packaged resource dirs — defaults resolve via
         #    importlib.resources to machine-specific absolute paths, so a
         #    committed template value can only be wrong somewhere. A
