@@ -15,6 +15,7 @@ _MILL_REPOS_FILE_UNSET = object()
 
 class ConfigError(Exception):
     """Raised for config-loading failures."""
+
     pass
 
 
@@ -44,7 +45,7 @@ def _load_file(target: Path) -> dict[str, Any]:
     """Load a YAML or JSON file, returning a dict (or {} on error)."""
     try:
         raw_text = target.read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return {}
 
     # Try JSON first, then YAML.
@@ -103,13 +104,19 @@ def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
     main_repos: dict[str, Any] = {}
     if main_path is not None:
         main_data = _load_file(main_path)
-        main_repos = main_data.get("repos", {}) if isinstance(main_data.get("repos"), dict) else {}
+        main_repos = (
+            main_data.get("repos", {})
+            if isinstance(main_data.get("repos"), dict)
+            else {}
+        )
 
     # Merge overlay (machine-owned auto-registered repos).
     overlay_path = _resolve_data_dir() / "registered_repos.yaml"
     overlay_data = _load_file(overlay_path)
     overlay_repos: dict[str, Any] = (
-        overlay_data.get("repos", {}) if isinstance(overlay_data.get("repos"), dict) else {}
+        overlay_data.get("repos", {})
+        if isinstance(overlay_data.get("repos"), dict)
+        else {}
     )
 
     # Merge: overlay first, then operator (operator wins on conflict).

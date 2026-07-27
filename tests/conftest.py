@@ -98,7 +98,7 @@ def _no_dotenv(monkeypatch, tmp_path):
     if session_path is not None and session_path.exists():
         try:
             base = json.loads(session_path.read_text())
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             pass
     base["data_dir"] = str(tmp_path)
     # Put the config file in the parent of tmp_path so it does not
@@ -136,6 +136,8 @@ def _no_dotenv(monkeypatch, tmp_path):
         "MILL_REPOS_FILE",
     ):
         monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def _reset_secrets_each_test():
     """Clear the cached Secrets singleton before every test so no

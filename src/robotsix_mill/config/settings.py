@@ -222,8 +222,7 @@ class Settings(
         # forge_auth=app requires GitHub App credentials
         if self.forge_auth == "app":
             has_app_id = (
-                self.github_app_id is not None
-                and self.github_app_id.get_secret_value()
+                self.github_app_id is not None and self.github_app_id.get_secret_value()
             )
             has_key_path = (
                 self.github_app_private_key_path is not None

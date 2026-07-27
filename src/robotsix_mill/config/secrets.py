@@ -165,7 +165,11 @@ class Secrets:
 
         # 2. Apply kwargs (dropping "SECRET" sentinels).
         for name, value in data.items():
-            if name in _SECRET_FIELD_NAMES and value != _SECRET_SENTINEL and value is not None:
+            if (
+                name in _SECRET_FIELD_NAMES
+                and value != _SECRET_SENTINEL
+                and value is not None
+            ):
                 object.__setattr__(self, f"_{name}", value)
             elif name in _SECRET_FIELD_NAMES:
                 object.__setattr__(self, f"_{name}", None)
@@ -180,7 +184,7 @@ class Secrets:
         """Read the ``secrets:`` block from a JSON file."""
         try:
             raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError):
+        except FileNotFoundError, json.JSONDecodeError:
             return {}
         if not isinstance(raw, dict):
             return {}
