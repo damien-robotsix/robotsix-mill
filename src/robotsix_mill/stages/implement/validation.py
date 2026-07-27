@@ -446,7 +446,7 @@ class ValidationMixin(_ImplementStageBase):
         standard_hits: list[str] = []
         remaining: list[str] = []
         for f in out_of_scope:
-            if f in _STANDARD_CONFIG_FILES:
+            if f in _STANDARD_CONFIG_FILES and (not file_map or f not in file_map):
                 standard_hits.append(f)
             else:
                 remaining.append(f)
