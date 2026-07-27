@@ -617,9 +617,9 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
-`completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `module_curator`, `module_size`, `orphaned_pr_check`,
+`completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `orphaned_pr_check`, `pin_bump`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
-`db_maintenance`, `sandbox_reaper`, `repo_description_sync`.
+`db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
@@ -873,8 +873,8 @@ standard two periodic-agent fields:
 
 #### Env-var-only periodic agents
 
-`bc_check`, `completeness_check`, and `repo_description_sync` enabled and interval
-fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`, `periodic.repo_description_sync.*`)
+`bc_check`, `completeness_check`, `frontend_sync`, `pin_bump`, `repo_description_sync`, and `roadmap_sync` enabled and interval
+fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`, `periodic.frontend_sync.*`, `periodic.pin_bump.*`, `periodic.repo_description_sync.*`, `periodic.roadmap_sync.*`)
 and as environment variables:
 
 | Env var | Default | Description |
@@ -884,6 +884,12 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
+| `MILL_FRONTEND_SYNC_PERIODIC` | `true` | Enable periodic frontend-sync passes |
+| `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes |
+| `MILL_PIN_BUMP_PERIODIC` | `false` | Enable periodic pin-bump passes |
+| `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes |
+| `MILL_ROADMAP_SYNC_PERIODIC` | `true` | Enable periodic roadmap-sync passes |
+| `MILL_ROADMAP_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between roadmap-sync passes |
 | `MILL_STATE_SYNC_PERIODIC` | `true` | Enable periodic state-sync passes |
 | `MILL_STATE_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between state-sync passes |
 | `MILL_REPO_DESCRIPTION_SYNC_PERIODIC` | `true` | Enable periodic repo-description-sync passes |
