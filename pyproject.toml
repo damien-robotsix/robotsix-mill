@@ -115,6 +115,7 @@ filterwarnings = [
 source = ["robotsix_mill"]
 branch = true
 relative_files = true
+parallel = true
 
 [tool.coverage.report]
 precision = 2
