@@ -78,15 +78,20 @@ def run_preflight_checks(
                 "empty or missing specification — cannot implement without a spec",
             )
 
-    # 2. Implement spawn counter: cap the total number of
-    #    implement-stage invocations per ticket so that a ticket
-    #    stuck in a BLOCKED→READY→BLOCKED loop cannot burn
-    #    unbounded LLM quota across re-spawns.  Counted and gated
-    #    here in preflight so a ticket at the spawn limit fails
-    #    fast with BLOCKED before a Langfuse trace opens.
+    # 2. Implement spawn counter: LIMIT CHECK ONLY.
+    #    Cap the total number of implement-stage invocations per
+    #    ticket so that a ticket stuck in a BLOCKED→READY→BLOCKED
+    #    loop cannot burn unbounded LLM quota across re-spawns.
+    #    The limit check runs early (fast-fail before a trace opens)
+    #    but the INCREMENT has been moved to the END of this function
+    #    — after all other guards pass — so that guards 3–8 (cycle
+    #    cap, stale respawn, stall guard, tool/skill/language/
+    #    workspace integrity) never consume a spawn slot.  A block
+    #    from any of those guards should be free; only a successful
+    #    preflight (about to open a trace and do real work) counts.
     spawn_limit = s.implement_max_spawns_per_ticket
+    counter_path = ws.artifacts_dir / "implement_spawn_count"
     if spawn_limit > 0:
-        counter_path = ws.artifacts_dir / "implement_spawn_count"
         spawn_count = 0
         if counter_path.exists():
             try:
@@ -120,21 +125,9 @@ def run_preflight_checks(
             # transcript.
             clear_conversation_state(ws, "implement")
             return Outcome(State.BLOCKED, note)
-        # Only increment on genuine re-spawns, not transient
-        # infrastructure retries.  Transient failures (sandbox EOF,
-        # OOM, etc.) must not burn the ticket's spawn budget —
-        # otherwise a single flaky runner can permanently deadlock
-        # a ticket against the spawn limit.
-        if ticket.retry_attempt == 0:
-            spawn_count += 1
-            try:
-                counter_path.write_text(str(spawn_count), encoding="utf-8")
-            except OSError:
-                log.warning(
-                    "%s: failed to write implement_spawn_count",
-                    ticket.id,
-                    exc_info=True,
-                )
+        # NOTE: the spawn counter INCREMENT is at the end of this
+        # function, after all guards pass.  See the block right
+        # before ``return None``.
 
     # 3. Ticket-lifetime implement-cycle cap: catch the runaway
     #    implement↔review loop before we clone or open a trace.
@@ -310,5 +303,19 @@ def run_preflight_checks(
             State.BLOCKED,
             f"workspace directory absent or inaccessible: {ws.dir}",
         )
+
+    # --- All preflight guards passed: increment the spawn counter ---
+    # Only genuine re-spawns (retry_attempt == 0) count; transient
+    # infrastructure retries must not burn the ticket's spawn budget.
+    if spawn_limit > 0 and ticket.retry_attempt == 0:
+        spawn_count += 1
+        try:
+            counter_path.write_text(str(spawn_count), encoding="utf-8")
+        except OSError:
+            log.warning(
+                "%s: failed to write implement_spawn_count",
+                ticket.id,
+                exc_info=True,
+            )
 
     return None
