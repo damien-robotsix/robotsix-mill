@@ -19,6 +19,7 @@ from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
 def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
+    repo_auto_merge_enabled = env.pop("repo_auto_merge_enabled", False)
     s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
@@ -40,6 +41,7 @@ def _ctx(tmp_path, **env):
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
+            auto_merge_enabled=repo_auto_merge_enabled,
         ),
     )
 
@@ -74,6 +76,9 @@ def _in_rebasing(ctx):
 
 
 def _gh(tmp_path, **extra):
+    # When auto_merge_enabled is set to "true", also opt in the repo.
+    if extra.get("auto_merge_enabled") == "true" and "repo_auto_merge_enabled" not in extra:
+        extra["repo_auto_merge_enabled"] = True
     return _ctx(
         tmp_path,
         FORGE_KIND="github",
@@ -2157,6 +2162,7 @@ def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
             "state": "open",
             "url": "https://gh/o/r/pull/1",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2168,6 +2174,16 @@ def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
@@ -2189,6 +2205,7 @@ def test_auto_merge_skipped_when_flag_disabled(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2609,6 +2626,7 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
