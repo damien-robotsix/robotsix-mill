@@ -193,6 +193,9 @@ def run_periodic_pass(
         config: Descriptor for this periodic pass.
         settings: Pre-resolved ``Settings`` instance injected by the
             stub.
+        definition_override: Optional per-repo merged agent definition
+            (resolved from ``.robotsix-mill/periodic/<name>.yaml``)
+            to pass through to the agent callable.
 
     Returns:
         An instance of ``config.result_dataclass`` with

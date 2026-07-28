@@ -601,6 +601,9 @@ def run_agent_pass(
                     (clips ``draft_titles``, ``draft_bodies``, and
                     ``gap_ids`` before the creation loop).  Defaults to
                     ``None`` (no limit).
+        repo_dir: Path to the cloned repository working tree
+                  (``None`` when cloning is unavailable or not
+                  configured).
 
     Returns:
         ``AgentPassResult`` with updated memory and created draft info.

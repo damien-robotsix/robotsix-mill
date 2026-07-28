@@ -41,6 +41,7 @@ class RecurringCIFailureCheck:
     name = "recurring_ci_failure"
 
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
+        """Execute the recurring CI failure check and file fix-proposal drafts."""
         try:
             return self._run(ctx)
         except Exception:

@@ -57,6 +57,7 @@ class ErroredRunsCheck:
     name = "errored_runs"
 
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
+        """Execute the errored-runs check and file draft tickets."""
         try:
             return self._run(ctx)
         except Exception:

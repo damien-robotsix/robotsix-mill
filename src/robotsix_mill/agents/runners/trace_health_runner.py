@@ -40,6 +40,7 @@ class TraceHealthResult:
 
     @property
     def summary(self) -> str:
+        """One-line summary of the trace-health check result."""
         parts: list[str] = [
             f"Unsessoned: {self.unsessioned_count}, "
             f"unnamed: {self.name_missing_count} / {self.total_traces}"
