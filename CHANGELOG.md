@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- docs: add `stale_branch_cleanup` to footnote ² exception list in `docs/config/configuration.md` so that its 86400 s (1 day) default is documented, matching the Pydantic model default.
 - Docs: add `langfuse_cleanup` to the footnote ² list of agents that default to 86400 s (1 day) interval in `docs/config/configuration.md`.
 - Updated the periodic-agent generic interval default in `docs/config/configuration.md` from `86400` (1 day) to `604800` (7 days), matching the actual model defaults for the majority of periodic agents. Added a footnote listing the agents that default to `86400` (1 day) or `3600` (1 hour).
 - Document `implement_pass_timeout` / `MILL_IMPLEMENT_PASS_TIMEOUT` in the config reference table (section 2, Request limits).
