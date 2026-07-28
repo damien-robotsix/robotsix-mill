@@ -40,9 +40,9 @@ def tokenize(text: str) -> set[str]:
     """Tokenize *text* for Jaccard similarity: lowercase, split on
     non-alphanumeric characters, keep tokens longer than 2 chars.
     """
-    return set(
+    return {
         t for t in re.sub(r"[^a-z0-9]+", " ", text.casefold()).split() if len(t) > 2
-    )
+    }
 
 
 def any_candidate_overlap(
