@@ -194,6 +194,7 @@ def _extract_annotations(
         "summary": summary,
         "text": text,
         "annotations": annotations,
+        "conclusion": cr.get("conclusion"),
     }
 
 

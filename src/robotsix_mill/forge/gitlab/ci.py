@@ -177,6 +177,7 @@ class GitLabForgeCIMixin:
                         "summary": summary,
                         "text": text,
                         "annotations": [],
+                        "conclusion": j.get("status", "failed"),
                     }
                 )
 
