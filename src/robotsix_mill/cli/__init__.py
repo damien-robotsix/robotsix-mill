@@ -203,6 +203,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Meta pass",
         "format": "memory_drafts",
     },
+    "data-dir-gc": {
+        "module": "runners.data_dir_gc",
+        "function": "run_data_dir_gc_pass",
+        "label": "Data Dir GC pass",
+        "format": "data_dir_gc",
+    },
 }
 
 
@@ -254,6 +260,11 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 + result.alignment_drafts_created
                 + result.todo_drafts_created
             )
+        elif cmd == "data-dir-gc":
+            from ..runtime.tracing import make_session_id
+
+            session_id = make_session_id(cmd)
+            result = func(session_id=session_id)
         else:
             from ..runtime.tracing import make_session_id
 
@@ -347,6 +358,20 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     {
                         "summary": result.summary,
                         "tickets_created": result.drafts_created,
+                    },
+                    indent=2,
+                )
+            )
+        elif entry["format"] == "data_dir_gc":
+            print(
+                json.dumps(
+                    {
+                        "closed_pruned": result.closed_pruned,
+                        "clones_pruned": result.clones_pruned,
+                        "db_rows_purged": result.db_rows_purged,
+                        "orphans_pruned": result.orphans_pruned,
+                        "memory_ledgers_truncated": result.memory_ledgers_truncated,
+                        "summary": result.summary,
                     },
                     indent=2,
                 )
@@ -459,6 +484,16 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                     print(f"  - {d['id']}: {d.get('title', '')}")
             else:
                 print("No new draft tickets created.")
+        elif entry["format"] == "data_dir_gc":
+            print(f"{entry['label']} complete.")
+            print(result.summary)
+            print(
+                f"Closed pruned: {result.closed_pruned} | "
+                f"Clones pruned: {result.clones_pruned} | "
+                f"DB rows purged: {result.db_rows_purged} | "
+                f"Orphans pruned: {result.orphans_pruned} | "
+                f"Memory ledgers truncated: {result.memory_ledgers_truncated}"
+            )
         else:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
@@ -920,6 +955,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_pin_bump.add_argument(
         "--repo-id",
         help="repository to run pin-bump for (required if multiple repos)",
+    )
+
+    # --- data-dir-gc command ---
+    p_data_dir_gc = sub.add_parser(
+        "data-dir-gc",
+        help="run a garbage-collection pass over data directories",
+    )
+    p_data_dir_gc.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
     )
 
     # --- meta command ---

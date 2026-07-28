@@ -15,6 +15,9 @@ Cross-references the live source-of-truth objects — never re-parses source
     5. ``src/robotsix_mill/runtime/worker/poll_loops.py`` → every
        ``schedule_only`` entry in ``_BUILTIN_KINDS`` must have a matching
        entry in ``PollLoopsMixin._SCHEDULE_ONLY_RUNNERS``.
+    6. ``src/robotsix_mill/cli/__init__.py`` → every ``_PASS_REGISTRY``
+       entry must have a matching CLI ``_RUNNERS`` entry with a matching
+       function name (modulo ``_CLI_RUNNER_FUNC_MISMATCH_OK``).
 
 Invariants (each contributes drift lines; the run fails if any fire):
 
@@ -30,6 +33,9 @@ Invariants (each contributes drift lines; the run fails if any fire):
        corresponding YAML definition in ``agent_definitions/periodic/``.
     5. Every ``schedule_only`` name in ``_BUILTIN_KINDS`` must have a
        corresponding entry in ``PollLoopsMixin._SCHEDULE_ONLY_RUNNERS``.
+    6. Every ``_PASS_REGISTRY`` entry must have a matching CLI
+       ``_RUNNERS`` entry with a matching function name (modulo
+       ``_CLI_RUNNER_FUNC_MISMATCH_OK``).
 
 Exit codes:
     0 — every invariant holds; ``_BUILTIN_KINDS`` is in sync.
@@ -77,6 +83,32 @@ _AGENT_DEF_GLOBAL_ONLY: frozenset[str] = frozenset(
         "run_health",
     }
 )
+
+# Names where the CLI _RUNNERS function name intentionally differs from
+# _PASS_REGISTRY's runner_func.  The CLI calls a non-wrapper function
+# directly (without server-provided kwargs like ``settings`` or
+# ``request``), while the pass registry routes to wrappers that supply
+# those extras at runtime.
+#
+#   pass_name → (runner_func in _PASS_REGISTRY, function in _RUNNERS)
+_CLI_RUNNER_FUNC_MISMATCH_OK: dict[str, tuple[str, str]] = {
+    "trace_health": (
+        "run_trace_health_pass",
+        "run_trace_health_check",
+    ),
+    "langfuse_cleanup": (
+        "run_langfuse_cleanup_pass_wrapper",
+        "run_langfuse_cleanup_pass",
+    ),
+    "meta": (
+        "run_meta_pass_wrapper",
+        "run_meta_pass",
+    ),
+    "run_health": (
+        "run_run_health_pass_wrapper",
+        "run_run_health_pass",
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +245,56 @@ def check_schedule_only_runner_wiring(
     return drift
 
 
+def check_pass_registry_cli_runners(
+    pass_registry: dict[str, dict[str, Any]],
+    cli_runners: dict[str, dict[str, str]],
+    mismatches_ok: dict[str, tuple[str, str]],
+) -> list[str]:
+    """Invariant 6: every ``_PASS_REGISTRY`` entry must have a matching
+    CLI ``_RUNNERS`` entry with a matching function name (modulo
+    intentional mismatches in ``_CLI_RUNNER_FUNC_MISMATCH_OK``).
+
+    The mapping from pass name (underscore form, e.g. ``data_dir_gc``) to
+    CLI runner key (hyphen form, e.g. ``data-dir-gc``) is
+    ``pass_name.replace('_', '-')``.
+    """
+    drift: list[str] = []
+    for pass_name, entry in sorted(pass_registry.items()):
+        cli_key = pass_name.replace("_", "-")
+        if cli_key not in cli_runners:
+            drift.append(
+                f"_PASS_REGISTRY[{pass_name!r}] has no CLI _RUNNERS "
+                f"entry for {cli_key!r}"
+            )
+            continue
+
+        runner_func = cli_runners[cli_key]["function"]
+        expected_func = entry.get("runner_func", "")
+
+        if pass_name in mismatches_ok:
+            exp_pass_func, exp_cli_func = mismatches_ok[pass_name]
+            if expected_func != exp_pass_func:
+                drift.append(
+                    f"_PASS_REGISTRY[{pass_name!r}].runner_func is "
+                    f"{expected_func!r}, expected {exp_pass_func!r} per "
+                    f"_CLI_RUNNER_FUNC_MISMATCH_OK"
+                )
+            if runner_func != exp_cli_func:
+                drift.append(
+                    f"_RUNNERS[{cli_key!r}].function is {runner_func!r}, "
+                    f"expected {exp_cli_func!r} per "
+                    f"_CLI_RUNNER_FUNC_MISMATCH_OK"
+                )
+        elif runner_func != expected_func:
+            drift.append(
+                f"_PASS_REGISTRY[{pass_name!r}].runner_func is "
+                f"{expected_func!r} but _RUNNERS[{cli_key!r}].function is "
+                f"{runner_func!r} (must match; if intentional, add to "
+                f"_CLI_RUNNER_FUNC_MISMATCH_OK)"
+            )
+    return drift
+
+
 # ---------------------------------------------------------------------------
 #  Main
 # ---------------------------------------------------------------------------
@@ -224,6 +306,7 @@ def collect_drift() -> list[str]:
     from robotsix_mill.agents.workflow_portability import _BUILTIN_KINDS
     from robotsix_mill.runtime.routes._passes import _PASS_REGISTRY
     from robotsix_mill.runtime.worker.poll_loops import PollLoopsMixin
+    from robotsix_mill.cli import _RUNNERS
 
     presence_stems = _yaml_stems(_REPO_ROOT / ".robotsix-mill" / "periodic")
     agent_def_stems = _yaml_stems(_REPO_ROOT / "agent_definitions" / "periodic")
@@ -239,6 +322,9 @@ def collect_drift() -> list[str]:
     drift += check_builtin_llm_agents_have_def(_BUILTIN_KINDS, agent_def_stems)
     drift += check_schedule_only_runner_wiring(
         _BUILTIN_KINDS, PollLoopsMixin._SCHEDULE_ONLY_RUNNERS
+    )
+    drift += check_pass_registry_cli_runners(
+        _PASS_REGISTRY, _RUNNERS, _CLI_RUNNER_FUNC_MISMATCH_OK
     )
     return drift
 
