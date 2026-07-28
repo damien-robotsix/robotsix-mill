@@ -770,7 +770,9 @@ class PeriodicPassesMixin(_WorkerBase):
                         "Starting periodic trace-health check for repo %s",
                         repo_label,
                     )
-                    from ...agents.runners.trace_health_runner import run_trace_health_check
+                    from ...agents.runners.trace_health_runner import (
+                        run_trace_health_check,
+                    )
 
                     run_id = None
                     if self.run_registry:

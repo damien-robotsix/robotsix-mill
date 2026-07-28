@@ -37,14 +37,12 @@ _SUBMODULES: list[str] = [
     "verify_runner",
 ]
 
-_registered = False
 
 
 def _register() -> None:
     """Lazily register every legacy submodule in ``sys.modules`` so that
     ``from robotsix_mill.runners.xxx import yyy`` continues to work."""
-    global _registered
-    if _registered:
+    if getattr(_register, "_done", False):
         return
     for name in _SUBMODULES:
         new_full = f"robotsix_mill.agents.runners.{name}"
@@ -55,11 +53,11 @@ def _register() -> None:
             except ImportError:
                 continue
             sys.modules[old_full] = mod
-    _registered = True
+    _register._done = True
 
 
 # Re-export top-level names (run_*_pass, PeriodicPassResult, Settings, etc.).
-from robotsix_mill.agents.runners import *  # noqa: E402,F401,F403
+from robotsix_mill.agents.runners import *  # noqa: E402,F403
 
 # Register submodules on first access.  This is called at the bottom so
 # that any import of ``robotsix_mill.runners`` triggers registration
