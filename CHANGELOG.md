@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Added `data-dir-gc` CLI subcommand, wiring the existing garbage-collection pass into `_RUNNERS`, `build_parser()`, and `_run_and_print()`. Extended `scripts/check_builtin_kinds.py` with invariant 6 (`check_pass_registry_cli_runners`) to catch future `_PASS_REGISTRY` entries that are missing CLI wiring.
 - Add `MILL_MEMBER_SYNC_PERIODIC` and `MILL_MEMBER_SYNC_INTERVAL_SECONDS` env var rows to the "Env-var-only periodic agents" table in `docs/config/configuration.md`.
 - Document `MILL_CONFIG_SYNC_PERIODIC` and `MILL_CONFIG_SYNC_INTERVAL_SECONDS` env vars in the "Env-var-only periodic agents" table (`docs/config/configuration.md`).
 - docs: add `stale_branch_cleanup` to footnote ² exception list in `docs/config/configuration.md` so that its 86400 s (1 day) default is documented, matching the Pydantic model default.
