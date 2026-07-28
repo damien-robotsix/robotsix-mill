@@ -3797,6 +3797,7 @@ def test_parse_pr_detail_clean_mergeable():
         "mergeable_state": "clean",
         "sha": "abc123",
         "number": 7,
+        "author": "",
     }
 
 
