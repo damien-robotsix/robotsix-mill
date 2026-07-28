@@ -198,7 +198,7 @@ def _parse_str_id_list(raw: str | None) -> list[str]:
 
     try:
         parsed = _json.loads(raw)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         return []
     return [x for x in parsed if isinstance(x, str)] if isinstance(parsed, list) else []
 
@@ -284,7 +284,7 @@ def _dependencies_for(ticket: Ticket, service: TicketService) -> list[dict]:
 
     try:
         dep_ids = _json.loads(ticket.depends_on)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         return []
     if not isinstance(dep_ids, list):
         return []

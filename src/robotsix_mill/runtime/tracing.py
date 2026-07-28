@@ -413,7 +413,7 @@ class _RootIO:
 
             try:
                 s = _json.dumps(value, default=str, ensure_ascii=False)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):  # fmt: skip
                 s = str(value)
         if len(s) > self._MAX_LEN:
             s = s[: self._MAX_LEN] + "… (truncated)"

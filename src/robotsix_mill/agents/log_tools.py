@@ -73,7 +73,7 @@ def make_log_query_tool(log_dir: Path):
 
             try:
                 cutoff = datetime.now(tz=timezone.utc).timestamp() - since_hours * 3600
-            except OverflowError, ValueError:
+            except (OverflowError, ValueError):  # fmt: skip
                 cutoff = 0.0
 
             terms = [t for t in keywords.lower().split() if t]

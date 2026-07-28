@@ -558,7 +558,7 @@ def _read_deferral_count(path: Path) -> int:
     try:
         raw = path.read_text(encoding="utf-8").strip()
         return int(raw) if raw else 0
-    except FileNotFoundError, ValueError:
+    except (FileNotFoundError, ValueError):  # fmt: skip
         return 0
 
 

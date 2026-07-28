@@ -5,6 +5,11 @@
 - Added deterministic fast-path for trivial config-only changes (new presence/config files ≤40 lines). Bypasses the LLM coordinator entirely for tickets that only add fresh `.yaml`/`.toml`/`.md`/etc. files — handled via `_handle_trivial_config_change` mirroring the rename-only pattern.
 - Eliminate duplicate `_CODQL_CHECK_NAMES` definition in `ci_fix_codeql.py`; import from canonical definition in `ci_fix_helpers` instead.
 - Add `POST /tickets/{id}/answer` endpoint so the chat agent can deliver an operator-supplied answer to a ticket in `awaiting_user_reply`. Posts the answer to the open `[ASK_USER]` thread, closes it, and auto-resumes the ticket back to its originating state.
+- Convert 30 instances of Python 2-style ``except A, B:`` syntax to
+  parenthesized tuple form ``except (A, B):  # fmt: skip`` across
+  17 source files, eliminating ``py/uninitialized-local-variable``
+  CodeQL warnings and preventing CI fix cycles when those files are
+  touched.
 - Add missing `.robotsix-mill/periodic/roadmap_sync.yaml` presence file so the periodic scheduler discovers and runs the `roadmap_sync` workflow.
 - Fix vulture "unused variable 'frame'" warning in `src/robotsix_mill/runtime/tracing.py` by prefixing the unused signal handler parameter with `_`.
 - **config**: Moved `deploy_api_url` to its correct alphabetical position in `config.example.json` and removed it from the config-sync exception set in `scripts/check_config_sync.py`, permanently enforcing its presence (`deploy_api_url` is no longer an optional/exception field).

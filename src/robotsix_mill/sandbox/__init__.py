@@ -88,7 +88,7 @@ def ensure_sandbox_network(settings: Settings) -> bool:
             text=True,
             timeout=30,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):  # fmt: skip
         log.warning("ensure_sandbox_network: `docker network create %s` failed", net)
         return False
     if create.returncode != 0 and "already exists" not in create.stderr:
@@ -149,7 +149,7 @@ def resolve_data_volume(settings: Settings) -> None:
             text=True,
             timeout=30,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):  # fmt: skip
         log.warning("resolve_data_volume: `docker inspect %s` failed to run", cid)
         return
     if ins.returncode != 0:
@@ -161,7 +161,7 @@ def resolve_data_volume(settings: Settings) -> None:
         return
     try:
         mounts = json.loads(ins.stdout)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         log.warning("resolve_data_volume: could not parse docker inspect Mounts JSON")
         return
     if not isinstance(mounts, list):
@@ -729,7 +729,7 @@ def _list_sandbox_containers() -> list[tuple[str, str]]:
             text=True,
             timeout=30,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):  # fmt: skip
         return []
     if listing.returncode != 0:
         return []
@@ -756,7 +756,7 @@ def _container_age_exceeds(cid: str, max_age_seconds: int) -> bool:
             text=True,
             timeout=30,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):  # fmt: skip
         return False
     if ins.returncode != 0:
         return False

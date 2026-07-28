@@ -165,7 +165,7 @@ def _meta_triage_was_fallback(artifacts_dir: Path) -> bool:
         return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
+    except (OSError, ValueError):  # fmt: skip
         return False
     return isinstance(data, dict) and bool(data.get("fallback"))
 
@@ -342,7 +342,7 @@ class DeliverStage(Stage):
         if touched_path.exists():
             try:
                 touched_repos = json.loads(touched_path.read_text(encoding="utf-8"))
-            except OSError, ValueError:
+            except (OSError, ValueError):  # fmt: skip
                 return Outcome(
                     State.BLOCKED,
                     "touched_repos.json corrupted — resumable",

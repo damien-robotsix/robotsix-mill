@@ -59,7 +59,7 @@ def implemented_repos(ws, settings: Settings, ticket: Ticket) -> list[Implemente
     if manifest.exists():
         try:
             entries = json.loads(manifest.read_text(encoding="utf-8"))
-        except OSError, ValueError:
+        except (OSError, ValueError):  # fmt: skip
             entries = []
         out: list[ImplementedRepo] = []
         for entry in entries:

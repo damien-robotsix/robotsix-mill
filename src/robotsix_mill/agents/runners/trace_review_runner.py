@@ -178,7 +178,7 @@ def _extract_trace_end_time(
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         return None
 
 

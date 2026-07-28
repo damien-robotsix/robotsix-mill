@@ -448,7 +448,7 @@ def run_pass(
 
                 try:
                     summary = _default_summary(r)
-                except AttributeError, TypeError:
+                except (AttributeError, TypeError):  # fmt: skip
                     summary = f"Pass completed: {r.summary if hasattr(r, 'summary') else str(r)[:200]}"
 
                 registry.finish_ok(run_id, summary)

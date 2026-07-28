@@ -138,7 +138,7 @@ def session_total_cost(
     def _num(x):
         try:
             return float(x or 0)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):  # fmt: skip
             return 0.0
 
     for t in traces:
@@ -176,7 +176,7 @@ def session_traces(
     def _num(x):
         try:
             return float(x or 0)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):  # fmt: skip
             return 0.0
 
     out: list[dict] = []
@@ -341,7 +341,7 @@ def fetch_session_summary(
     def num(x):
         try:
             return float(x or 0)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):  # fmt: skip
             return 0.0
 
     total_cost = sum(num(t.get("totalCost")) for t in traces)
@@ -460,7 +460,7 @@ def list_recent_traces(
     def _cost(t: dict) -> float:
         try:
             return float(t.get("totalCost") or 0)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):  # fmt: skip
             return 0.0
 
     PAGE_SIZE = 100

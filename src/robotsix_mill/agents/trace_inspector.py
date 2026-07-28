@@ -416,7 +416,7 @@ def _wrap_tools_with_error_limit(
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     return await fn(*args, **kwargs)
-                except UsageLimitExceeded, ModelRetry:
+                except (UsageLimitExceeded, ModelRetry):  # fmt: skip
                     raise
                 except Exception:
                     state["errors"] += 1
@@ -434,7 +434,7 @@ def _wrap_tools_with_error_limit(
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     return fn(*args, **kwargs)
-                except UsageLimitExceeded, ModelRetry:
+                except (UsageLimitExceeded, ModelRetry):  # fmt: skip
                     raise
                 except Exception:
                     state["errors"] += 1

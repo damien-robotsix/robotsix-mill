@@ -102,7 +102,7 @@ def read_counter(path: Path) -> int:
     """Read an integer from *path*, returning 0 when the file is missing or unparseable."""
     try:
         return int(path.read_text(encoding="utf-8").strip())
-    except FileNotFoundError, ValueError:
+    except (FileNotFoundError, ValueError):  # fmt: skip
         return 0
 
 

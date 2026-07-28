@@ -20,7 +20,7 @@ def _serve(args: argparse.Namespace, settings: Settings) -> int:
         _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         target = max(65536, hard) if hard != resource.RLIM_INFINITY else 65536
         resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
-    except ValueError, OSError:
+    except (ValueError, OSError):  # fmt: skip
         pass
 
     import uvicorn

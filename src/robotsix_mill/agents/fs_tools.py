@@ -594,7 +594,7 @@ def build_fs_tools(
                 if rel_tail:
                     try:
                         p = _safe(root, rel_tail, extra_roots=extra_roots)
-                    except ValueError, OSError:
+                    except (ValueError, OSError):  # fmt: skip
                         return f"error: {e}"
                     # Only accept the fallback if the relative form
                     # actually exists — otherwise the agent truly
@@ -623,7 +623,7 @@ def build_fs_tools(
             for cand in candidates[1:]:
                 try:
                     alt = _safe(root, cand, extra_roots=extra_roots)
-                except ValueError, OSError:
+                except (ValueError, OSError):  # fmt: skip
                     continue
                 if alt.is_file():
                     p = alt
@@ -669,7 +669,7 @@ def build_fs_tools(
                     try:
                         _text = _read_cached(p)
                         line_count: int | str = _text.count("\n")
-                    except ValueError, OSError:
+                    except (ValueError, OSError):  # fmt: skip
                         line_count = "?"
                     return (
                         f"REFUSED (do NOT retry): {path} "
@@ -909,7 +909,7 @@ def build_fs_tools(
                     for cand in candidates[1:]:
                         try:
                             alt = _safe(root, cand, extra_roots=extra_roots)
-                        except ValueError, OSError:
+                        except (ValueError, OSError):  # fmt: skip
                             continue
                         if alt.is_dir():
                             listing = "\n".join(
