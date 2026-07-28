@@ -4002,6 +4002,7 @@ def test_extract_annotations_success():
     result = _extract_annotations(client, "https://api.github.com", "o", "r", {}, cr)
     assert result["name"] == "ci/test"
     assert result["summary"] == "Build failed"
+    assert result["conclusion"] is None  # cr dict has no "conclusion" key
     assert len(result["annotations"]) == 1
     assert result["annotations"][0]["path"] == "src/app.py"
     assert result["annotations"][0]["start_line"] == 42
@@ -4030,6 +4031,7 @@ def test_extract_annotations_http_error():
         "summary": None,
         "text": None,
         "annotations": [],
+        "conclusion": None,
     }
 
 

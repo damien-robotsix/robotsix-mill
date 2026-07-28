@@ -509,11 +509,11 @@ def test_build_failing_summary_formats_correctly():
         },
     ]
     result = _build_failing_summary(failing)
-    assert "## Failing check #1: lint / ruff" in result
+    assert "## ❌ FAILED: lint / ruff" in result
     assert "Found 3 errors" in result
     assert "unused import" in result
     assert "src/foo.py:10" in result
-    assert "## Failing check #2: test / pytest" in result
+    assert "## ❌ FAILED: test / pytest" in result
 
 
 def test_build_failing_summary_empty():
@@ -556,7 +556,7 @@ def test_build_failing_summary_no_logs_still_works():
     ]
     result = _build_failing_summary(failing)
     assert "**Job logs:**" not in result
-    assert "## Failing check #1: lint" in result
+    assert "## ❌ FAILED: lint" in result
 
 
 def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):

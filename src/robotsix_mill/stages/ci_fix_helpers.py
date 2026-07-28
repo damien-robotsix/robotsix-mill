@@ -164,6 +164,24 @@ def _format_alert_summary_block(
     return "\n".join(lines)
 
 
+# Check-run conclusions that are terminal failures (mirrors github_ci._FAILING_CONCLUSIONS).
+_FAILING_CONCLUSIONS = frozenset(
+    {"failure", "timed_out", "action_required", "startup_failure"}
+)
+
+
+def _check_indicator(conclusion: str | None) -> str:
+    """Return a visual pass/fail indicator for a check run's conclusion.
+
+    Trace-review dc631bde5ede9e369156b954ab6e00cc identified that the
+    old ``Failing check #N`` header was ambiguous — the agent couldn't
+    tell which checks passed and which failed without fetching logs.
+    """
+    if conclusion in _FAILING_CONCLUSIONS:
+        return "❌ FAILED:"
+    return "✅ PASSED:"
+
+
 def _build_failing_summary(
     failing: list[dict[str, Any]],
     log_text: str = "",
@@ -185,8 +203,10 @@ def _build_failing_summary(
     # Inject compact alert summary at the very top for fast reference.
     codeql_failing = _only_codeql_failing(failing)
     parts.append(_format_alert_summary_block(alerts, codeql_failing=codeql_failing))
-    for i, chk in enumerate(failing):
-        parts.append(f"## Failing check #{i + 1}: {chk['name']}")
+    for chk in failing:
+        parts.append(
+            f"## {_check_indicator(chk.get('conclusion', 'failure'))} {chk['name']}"
+        )
         if chk.get("summary"):
             parts.append(f"\n**Summary:**\n{chk['summary']}")
         if chk.get("text"):
