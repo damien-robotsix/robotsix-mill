@@ -615,7 +615,7 @@ Each periodic agent shares this pattern:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `true`¹ | Enable periodic passes |
-| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `86400` | Seconds between automatic passes |
+| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `604800`² | Seconds between automatic passes |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
@@ -624,6 +624,11 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
+>
+> ² Most agents default to `604800` (7 days). Exceptions defaulting to `86400` (1 day):
+> `trace_health`, `trace_review`, `config_sync`, `member_sync`, `data_dir_gc`,
+> `changelog_autofill`, `dependabot_ingest`, `orphaned_pr_check`, `pin_bump`.
+> `timeout_escalation`, `sandbox_reaper`, and `ci_debt_recheck` default to `3600` (1 hour).
 >
 > `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` write no
 > per-agent memory ledger (`member_sync` and `diagnostic` are deterministic
