@@ -534,7 +534,7 @@ def test_traces_detail_not_found(client, monkeypatch):
 def test_survey_fire_and_forget(client, monkeypatch):
     """POST /survey returns 202 immediately and runs the survey in a
     background thread — must not block on the LLM call."""
-    from robotsix_mill.runners import periodic_runner
+    from robotsix_mill.agents.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -562,7 +562,7 @@ def test_survey_fire_and_forget(client, monkeypatch):
 def test_module_curator_fire_and_forget(client, monkeypatch):
     """POST /module-curator returns 202 immediately and runs the pass in
     a background thread (run-now surface for the daily module-curator)."""
-    from robotsix_mill.runners import periodic_runner
+    from robotsix_mill.agents.runners import periodic_runner
 
     ran = threading.Event()
     release = threading.Event()
@@ -754,7 +754,7 @@ def test_factory_default_tracing_handler(monkeypatch):
         return _FakeResult()
 
     fake_mod = type("_FakeMod", (), {"run_test_pass": staticmethod(_fake_runner)})()
-    sys.modules["robotsix_mill.runners.test_factory_runner"] = fake_mod
+    sys.modules["robotsix_mill.agents.runners.test_factory_runner"] = fake_mod
 
     # -- stub the tracing helpers so we don't need Langfuse -----------------
     monkeypatch.setattr(
@@ -768,7 +768,7 @@ def test_factory_default_tracing_handler(monkeypatch):
 
     handler = _make_background_pass(
         kind="test-factory",
-        runner_module="robotsix_mill.runners.test_factory_runner",
+        runner_module="robotsix_mill.agents.runners.test_factory_runner",
         runner_func="run_test_pass",
         docstring="Test handler.",
     )
@@ -808,11 +808,11 @@ def test_factory_no_tracing_handler():
         return _FakeResult()
 
     fake_mod = type("_FakeMod", (), {"run_notrace_pass": staticmethod(_fake_runner)})()
-    sys.modules["robotsix_mill.runners.test_notrace_runner"] = fake_mod
+    sys.modules["robotsix_mill.agents.runners.test_notrace_runner"] = fake_mod
 
     handler = _make_background_pass(
         kind="notrace",
-        runner_module="robotsix_mill.runners.test_notrace_runner",
+        runner_module="robotsix_mill.agents.runners.test_notrace_runner",
         runner_func="run_notrace_pass",
         docstring="No tracing.",
         uses_tracing=False,
@@ -844,11 +844,11 @@ def test_factory_custom_summary_builder():
         return _FakeResult()
 
     fake_mod = type("_FakeMod", (), {"run_custom_pass": staticmethod(_fake_runner)})()
-    sys.modules["robotsix_mill.runners.test_custom_runner"] = fake_mod
+    sys.modules["robotsix_mill.agents.runners.test_custom_runner"] = fake_mod
 
     handler = _make_background_pass(
         kind="custom",
-        runner_module="robotsix_mill.runners.test_custom_runner",
+        runner_module="robotsix_mill.agents.runners.test_custom_runner",
         runner_func="run_custom_pass",
         docstring="Custom summary.",
         uses_tracing=False,
@@ -881,11 +881,11 @@ def test_factory_extra_runner_kwargs():
         return _FakeResult()
 
     fake_mod = type("_FakeMod", (), {"run_extra_pass": staticmethod(_fake_runner)})()
-    sys.modules["robotsix_mill.runners.test_extra_runner"] = fake_mod
+    sys.modules["robotsix_mill.agents.runners.test_extra_runner"] = fake_mod
 
     handler = _make_background_pass(
         kind="extra",
-        runner_module="robotsix_mill.runners.test_extra_runner",
+        runner_module="robotsix_mill.agents.runners.test_extra_runner",
         runner_func="run_extra_pass",
         docstring="Extra kwargs.",
         uses_tracing=False,
@@ -911,11 +911,11 @@ def test_factory_error_path():
         raise RuntimeError("simulated crash")
 
     fake_mod = type("_FakeMod", (), {"run_fail_pass": staticmethod(_failing_runner)})()
-    sys.modules["robotsix_mill.runners.test_fail_runner"] = fake_mod
+    sys.modules["robotsix_mill.agents.runners.test_fail_runner"] = fake_mod
 
     handler = _make_background_pass(
         kind="fail",
-        runner_module="robotsix_mill.runners.test_fail_runner",
+        runner_module="robotsix_mill.agents.runners.test_fail_runner",
         runner_func="run_fail_pass",
         docstring="Always fails.",
         uses_tracing=False,
@@ -951,11 +951,11 @@ def test_factory_thread_is_daemon():
     fake_mod = type(
         "_FakeMod", (), {"run_block_pass": staticmethod(_blocking_runner)}
     )()
-    sys.modules["robotsix_mill.runners.test_block_runner"] = fake_mod
+    sys.modules["robotsix_mill.agents.runners.test_block_runner"] = fake_mod
 
     handler = _make_background_pass(
         kind="block",
-        runner_module="robotsix_mill.runners.test_block_runner",
+        runner_module="robotsix_mill.agents.runners.test_block_runner",
         runner_func="run_block_pass",
         docstring="Blocks.",
         uses_tracing=False,
@@ -1141,26 +1141,38 @@ class _FakePassResult:
 # Each entry: (pass_id, runner_module, runner_attr)
 
 GENERIC_PASS_ENTRIES = [
-    ("audit", "robotsix_mill.runners.periodic_runner", "run_audit_pass"),
-    ("health", "robotsix_mill.runners.periodic_runner", "run_health_pass"),
-    ("test_gap", "robotsix_mill.runners.periodic_runner", "run_test_gap_pass"),
-    ("survey", "robotsix_mill.runners.periodic_runner", "run_survey_pass"),
-    ("copy_paste", "robotsix_mill.runners.periodic_runner", "run_copy_paste_pass"),
-    ("config_sync", "robotsix_mill.runners.periodic_runner", "run_config_sync_pass"),
-    ("member_sync", "robotsix_mill.runners.member_sync_runner", "run_member_sync_pass"),
+    ("audit", "robotsix_mill.agents.runners.periodic_runner", "run_audit_pass"),
+    ("health", "robotsix_mill.agents.runners.periodic_runner", "run_health_pass"),
+    ("test_gap", "robotsix_mill.agents.runners.periodic_runner", "run_test_gap_pass"),
+    ("survey", "robotsix_mill.agents.runners.periodic_runner", "run_survey_pass"),
+    (
+        "copy_paste",
+        "robotsix_mill.agents.runners.periodic_runner",
+        "run_copy_paste_pass",
+    ),
+    (
+        "config_sync",
+        "robotsix_mill.agents.runners.periodic_runner",
+        "run_config_sync_pass",
+    ),
+    (
+        "member_sync",
+        "robotsix_mill.agents.runners.member_sync_runner",
+        "run_member_sync_pass",
+    ),
     (
         "repo_description_sync",
-        "robotsix_mill.runners.repo_description_sync_runner",
+        "robotsix_mill.agents.runners.repo_description_sync_runner",
         "run_repo_description_sync_pass",
     ),
     (
         "trace_health",
-        "robotsix_mill.runners.trace_health_runner",
+        "robotsix_mill.agents.runners.trace_health_runner",
         "run_trace_health_pass",
     ),
     (
         "langfuse_cleanup",
-        "robotsix_mill.runners.langfuse_cleanup_runner",
+        "robotsix_mill.agents.runners.langfuse_cleanup_runner",
         "run_langfuse_cleanup_pass_wrapper",
     ),
     (
@@ -1170,12 +1182,12 @@ GENERIC_PASS_ENTRIES = [
     ),
     (
         "run_health",
-        "robotsix_mill.runners.run_health_runner",
+        "robotsix_mill.agents.runners.run_health_runner",
         "run_run_health_pass_wrapper",
     ),
     (
         "state_sync",
-        "robotsix_mill.runners.periodic_runner",
+        "robotsix_mill.agents.runners.periodic_runner",
         "run_state_sync_pass",
     ),
 ]

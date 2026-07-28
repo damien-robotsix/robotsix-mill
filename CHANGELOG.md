@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Consolidate `runners` module into `agents.runners` sub-package to break the circular dependency between `agents` and `runners`.  All runner source files move to `src/robotsix_mill/agents/runners/` and test files to `tests/agents/runners/`.  A deprecation shim at `src/robotsix_mill/runners/__init__.py` preserves backward-compatible imports for one release cycle.
 - Enable Ruff D (pydocstyle) rules with Google convention, suppressing D105/D107/D205/D415.  Auto-fixed ~260 mechanical violations; remaining D102/D417 gaps are per-file-ignored with FIXME markers for incremental cleanup.
 - Enable pytest-xdist parallel test execution: add `-n auto` to CI pytest-args, `parallel = true` to coverage config, and restructure `make test` with `coverage combine` for accurate multi-worker coverage. Add `make test-fast` for no-coverage parallel runs.
 - Fix `test_gap_interval_seconds` documented default in `docs/config/configuration.md`: `86400` → `604800` (7 days), matching the Pydantic model default in `_settings_periodic.py`.

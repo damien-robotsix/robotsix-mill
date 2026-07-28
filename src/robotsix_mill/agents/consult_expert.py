@@ -97,7 +97,7 @@ async def run_consult_expert(
         )
 
     # 2. Load expert memory ledger.
-    from ..runners.pass_runner import load_memory
+    from ..agents.runners.pass_runner import load_memory
 
     memory_path = settings.memory_file_for(f"expert_{domain}", board_id)
     try:
@@ -171,7 +171,7 @@ async def run_consult_expert(
 
     if output.updated_memory and output.updated_memory.strip():
         try:
-            from ..runners.pass_runner import persist_memory
+            from ..agents.runners.pass_runner import persist_memory
 
             persist_memory(
                 memory_path,

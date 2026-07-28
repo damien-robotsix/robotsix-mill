@@ -538,7 +538,7 @@ class PeriodicPassesMixin(_WorkerBase):
         failures from legitimate empties, and files high-confidence draft
         tickets to the mill board.
         """
-        from robotsix_mill.runners.run_health_runner import (
+        from robotsix_mill.agents.runners.run_health_runner import (
             RunHealthPassResult,
             run_run_health_pass,
         )
@@ -586,7 +586,7 @@ class PeriodicPassesMixin(_WorkerBase):
         root span, and per-pass error survival. The runner is the
         deterministic check orchestrator (no LLM).
         """
-        from robotsix_mill.runners.diagnostic_runner import run_diagnostic_pass
+        from robotsix_mill.agents.runners.diagnostic_runner import run_diagnostic_pass
 
         interval = max(60, self.ctx.settings.diagnostic_interval_seconds)
         await self._run_periodic_pass("diagnostic", run_diagnostic_pass, interval)
@@ -664,7 +664,9 @@ class PeriodicPassesMixin(_WorkerBase):
         and either auto-closes the PR (with a comment) or files a
         tracking ticket.
         """
-        from robotsix_mill.runners.orphaned_pr_check import run_orphaned_pr_check_pass
+        from robotsix_mill.agents.runners.orphaned_pr_check import (
+            run_orphaned_pr_check_pass,
+        )
 
         settings = self.ctx.settings
         interval = max(3600, settings.orphaned_pr_check_interval_seconds)
@@ -768,7 +770,9 @@ class PeriodicPassesMixin(_WorkerBase):
                         "Starting periodic trace-health check for repo %s",
                         repo_label,
                     )
-                    from ...runners.trace_health_runner import run_trace_health_check
+                    from ...agents.runners.trace_health_runner import (
+                        run_trace_health_check,
+                    )
 
                     run_id = None
                     if self.run_registry:
@@ -875,8 +879,8 @@ class PeriodicPassesMixin(_WorkerBase):
         """
         from ...agents.bespoke_loader import load_bespoke_definitions
         from ...agents.periodic_loader import discover_periodic_workflows
-        from ...runners.periodic_runner import _clone_token
-        from ...runners.member_sync_runner import run_member_sync_pass
+        from ...agents.runners.periodic_runner import _clone_token
+        from ...agents.runners.member_sync_runner import run_member_sync_pass
         from ...vcs import git_ops
 
         settings = self.ctx.settings

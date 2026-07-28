@@ -24,8 +24,8 @@ from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
-from ..runners.diagnostic_events import emit_diagnostic_event
-from ..runners.pass_runner import load_memory, persist_memory
+from ..agents.runners.diagnostic_events import emit_diagnostic_event
+from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix

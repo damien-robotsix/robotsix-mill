@@ -108,7 +108,7 @@ def test_sourcekind_has_state_sync():
 
 def test_state_sync_in_periodic_pass_configs():
     """The state_sync entry exists in PERIODIC_PASS_CONFIGS."""
-    from robotsix_mill.runners.periodic_runner import PERIODIC_PASS_CONFIGS
+    from robotsix_mill.agents.runners.periodic_runner import PERIODIC_PASS_CONFIGS
 
     assert "state_sync" in PERIODIC_PASS_CONFIGS
     cfg = PERIODIC_PASS_CONFIGS["state_sync"]

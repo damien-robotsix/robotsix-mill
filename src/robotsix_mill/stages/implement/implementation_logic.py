@@ -14,7 +14,7 @@ from ...config import Settings, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
 from ...config.repo_settings import load_repo_smoke_command
-from ...runners.pass_runner import persist_memory
+from ...agents.runners.pass_runner import persist_memory
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext

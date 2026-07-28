@@ -650,13 +650,13 @@ class RetrospectStage(Stage):
         # Read current memory through the shared helper — returns "" on
         # missing/unreadable files and tail-truncates to max_memory_chars
         # (keeps the most-recent entries), matching every other stage.
-        from ..runners.pass_runner import load_memory, persist_memory
+        from ..agents.runners.pass_runner import load_memory, persist_memory
 
         memory_file = s.memory_file_for("retrospect", ctx.memory_board_id(ticket))
         memory_text = load_memory(memory_file, max_chars=s.max_memory_chars)
 
         # Verify prior proposals and prepend verified-state table.
-        from ..runners.pass_runner import (
+        from ..agents.runners.pass_runner import (
             _verify_prior_proposals,
             _render_verified_summary,
             _format_recent_proposals,
@@ -714,7 +714,7 @@ class RetrospectStage(Stage):
         # the ephemeral verified-state table if the agent copied it back in
         # (it is injected fresh each run from the DB and must never accrete
         # in the ledger).
-        from ..runners.pass_runner import strip_ephemeral_sections
+        from ..agents.runners.pass_runner import strip_ephemeral_sections
 
         if res.updated_memory:
             # Case 3: full rewrite (existing behavior — agent modified the ledger).

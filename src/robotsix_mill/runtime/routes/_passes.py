@@ -79,7 +79,7 @@ def _make_background_pass(
         and (when tracing is enabled) the Langfuse session / span stage.
     runner_module:
         Absolute dotted module path of the runner (e.g.
-        ``"robotsix_mill.runners.periodic_runner"``).  Imported lazily inside the
+        ``"robotsix_mill.agents.runners.periodic_runner"``).  Imported lazily inside the
         background thread so that ``monkeypatch.setattr`` in tests can
         intercept it.
     runner_func:
@@ -167,160 +167,160 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
     # -- llm_agent passes (run via periodic_runner) --
     "audit": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_audit_pass",
         "label": "Audit",
     },
     "agent_check": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_agent_check_pass",
         "label": "Agent Check",
     },
     "bc_check": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_bc_check_pass",
         "label": "BC Check",
     },
     "completeness_check": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_completeness_check_pass",
         "label": "Completeness",
     },
     "copy_paste": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_copy_paste_pass",
         "label": "Copy Paste",
     },
     "docstring_coverage": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_docstring_coverage_pass",
         "label": "Doc Coverage",
     },
     "forge_parity": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_forge_parity_pass",
         "label": "Forge Parity",
     },
     "frontend_sync": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_frontend_sync_pass",
         "label": "Frontend Sync",
     },
     "health": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_health_pass",
         "label": "Health Check",
     },
     "module_curator": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_module_curator_pass",
         "label": "Module Curator",
     },
     "module_size": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_module_size_pass",
         "label": "Module Size",
     },
     "state_sync": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_state_sync_pass",
         "label": "State Sync",
     },
     "survey": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_survey_pass",
         "label": "Survey",
     },
     "test_gap": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_test_gap_pass",
         "label": "Test Gaps",
     },
     "triage_boilerplate": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_triage_boilerplate_pass",
         "label": "Triage Boilerplate",
     },
     # -- schedule_only passes --
     "changelog_autofill": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.changelog_autofill_runner",
+        "runner_module": "robotsix_mill.agents.runners.changelog_autofill_runner",
         "runner_func": "run_changelog_autofill_pass",
         "label": "Changelog Autofill",
     },
     "diagnostic": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.diagnostic_runner",
+        "runner_module": "robotsix_mill.agents.runners.diagnostic_runner",
         "runner_func": "run_diagnostic_pass",
         "label": "Diagnostic",
     },
     "config_sync": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.periodic_runner",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
         "runner_func": "run_config_sync_pass",
         "label": "Config Sync",
     },
     "data_dir_gc": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.data_dir_gc",
+        "runner_module": "robotsix_mill.agents.runners.data_dir_gc",
         "runner_func": "run_data_dir_gc_pass",
         "label": "Data Dir GC",
     },
     "member_sync": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.member_sync_runner",
+        "runner_module": "robotsix_mill.agents.runners.member_sync_runner",
         "runner_func": "run_member_sync_pass",
         "label": "Member Sync",
     },
     "pin_bump": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.pin_bump_runner",
+        "runner_module": "robotsix_mill.agents.runners.pin_bump_runner",
         "runner_func": "run_pin_bump_pass",
         "label": "Pin Bump",
     },
     "repo_description_sync": {
         "kind": "llm_agent",
-        "runner_module": "robotsix_mill.runners.repo_description_sync_runner",
+        "runner_module": "robotsix_mill.agents.runners.repo_description_sync_runner",
         "runner_func": "run_repo_description_sync_pass",
         "label": "Repo Description Sync",
     },
     "roadmap_sync": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.roadmap_sync_runner",
+        "runner_module": "robotsix_mill.agents.runners.roadmap_sync_runner",
         "runner_func": "run_roadmap_sync_pass",
         "label": "Roadmap Sync",
     },
     "trace_review": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.trace_review_runner",
+        "runner_module": "robotsix_mill.agents.runners.trace_review_runner",
         "runner_func": "run_trace_review_pass",
         "label": "Trace Review",
     },
     # -- global-only / no-tracing passes (formerly hand-wired routes) --
     "trace_health": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.trace_health_runner",
+        "runner_module": "robotsix_mill.agents.runners.trace_health_runner",
         "runner_func": "run_trace_health_pass",
         "label": "Trace Health",
         "uses_tracing": False,
     },
     "langfuse_cleanup": {
         "kind": "schedule_only",
-        "runner_module": "robotsix_mill.runners.langfuse_cleanup_runner",
+        "runner_module": "robotsix_mill.agents.runners.langfuse_cleanup_runner",
         "runner_func": "run_langfuse_cleanup_pass_wrapper",
         "label": "Langfuse Cleanup",
         "uses_tracing": False,
@@ -338,7 +338,7 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "run_health": {
         "kind": "global_only",
-        "runner_module": "robotsix_mill.runners.run_health_runner",
+        "runner_module": "robotsix_mill.agents.runners.run_health_runner",
         "runner_func": "run_run_health_pass_wrapper",
         "label": "Run Health",
         "global_only": True,
