@@ -86,7 +86,8 @@ class _Baselines:
     """Per-batch median thresholds against which a single trace is
     compared. ``None`` for either field means the batch was too small
     (< 3 traces) to compute a meaningful baseline — the relative flag
-    is suppressed in that case."""
+    is suppressed in that case.
+    """
 
     cost_threshold: float | None
     obs_threshold: float | None
@@ -112,7 +113,8 @@ def _compute_baselines(
 ) -> _Baselines:
     """Compute median × multiplier thresholds for cost and observation
     count across the entire *traces* batch. Returns ``None`` thresholds
-    when the batch is too small to baseline (< 3 traces)."""
+    when the batch is too small to baseline (< 3 traces).
+    """
     if len(traces) < 3:
         return _Baselines(None, None, None, None)
     costs = [float(t.get("totalCost") or 0.0) for t in traces]
@@ -414,7 +416,8 @@ def _save_watermark(settings: Settings, board_id: str, when: datetime) -> None:
 def _existing_open_titles(service: TicketService, board_id: str) -> set[str]:
     """Return the set of normalized titles of still-open
     ``source=trace-review`` tickets on *service*'s board, so we don't
-    re-file the same finding from a second flagged trace."""
+    re-file the same finding from a second flagged trace.
+    """
     out: set[str] = set()
     settings = service.settings
     with db_session(settings, board_id) as s:

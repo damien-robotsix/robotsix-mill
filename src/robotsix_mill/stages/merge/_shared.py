@@ -145,7 +145,8 @@ def _repo_config_for_entry(entry: dict) -> RepoConfig:
     missing, non-string, empty, or not registered so the caller's
     existing ``except ConfigError`` arm translates to a BLOCKED
     outcome (instead of bubbling a ``KeyError`` from ``entry['repo_id']``
-    when the manifest is malformed)."""
+    when the manifest is malformed).
+    """
     repo_id = entry.get("repo_id")
     if not isinstance(repo_id, str) or not repo_id:
         raise ConfigError("pr_urls.json entry is missing a non-empty string 'repo_id'")
@@ -443,7 +444,8 @@ def _latest_failing_workflows(runs: list[dict[str, Any]]) -> set[str]:
     main-CI-in-flight window.
 
     Returns the names of those latest-per-workflow runs whose
-    ``conclusion`` is ``"failure"`` (blank names are dropped)."""
+    ``conclusion`` is ``"failure"`` (blank names are dropped).
+    """
     latest: dict[Any, dict[str, Any]] = {}
     for run in runs:
         if run.get("conclusion") is None:

@@ -112,7 +112,8 @@ def run_implement_agent(
     (meta-board tickets).
     The implement agent is always the primary worker and can delegate
     to per-domain expert sub-agents via its ``consult_expert`` tool,
-    with each expert keeping its own memory ledger."""
+    with each expert keeping its own memory ledger.
+    """
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator

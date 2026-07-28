@@ -145,7 +145,8 @@ def _slug(library: str) -> str:
 def _knowledge_dir(settings: Settings) -> Path:
     """Mill-global cache directory. NOT per-board: library facts
     don't change between repos, so partitioning would just fragment
-    identical knowledge across boards."""
+    identical knowledge across boards.
+    """
     return settings.data_dir / "web_knowledge"
 
 
@@ -160,7 +161,8 @@ def _general_path(settings: Settings) -> Path:
 def _parse_frontmatter_datetime(head: str, regex: re.Pattern[str]) -> datetime | None:
     """Extract an optional ISO-8601 datetime from *head* using *regex*.
     Returns None when the field is absent or unparseable.  Naive
-    timestamps are treated as UTC."""
+    timestamps are treated as UTC.
+    """
     m = regex.search(head)
     if not m:
         return None
@@ -176,7 +178,8 @@ def _parse_frontmatter_datetime(head: str, regex: re.Pattern[str]) -> datetime |
 def _parse_frontmatter(text: str) -> _KnowledgeMeta:
     """Return a ``_KnowledgeMeta`` from a frontmatter-stamped
     knowledge file. Missing / unparseable frontmatter → all fields
-    ``None`` / empty, body = *text* as-is."""
+    ``None`` / empty, body = *text* as-is.
+    """
     m = _FRONTMATTER_RE.match(text)
     if not m:
         return _KnowledgeMeta(last_updated=None, body=text)
@@ -248,7 +251,8 @@ def _stamp_frontmatter(
 def _is_stale(meta: _KnowledgeMeta, ttl_hours: int) -> bool:
     """Return True when the entry's ``last_verified`` is older than
     *ttl_hours* or missing entirely (never touched since the field
-    was introduced)."""
+    was introduced).
+    """
     if meta.last_verified is None:
         return True
     age = datetime.now(timezone.utc) - meta.last_verified
@@ -263,7 +267,8 @@ def _build_index(settings: Settings) -> str:
 
     Entries whose ``last_verified`` timestamp is older than
     ``web_knowledge_cache_ttl_hours`` (or missing entirely) are
-    flagged ``[STALE]``."""
+    flagged ``[STALE]``.
+    """
     d = _knowledge_dir(settings)
     if not d.is_dir():
         return "(empty)"
@@ -438,7 +443,8 @@ def _make_tools(settings: Settings) -> list:
         """List every library file + general-memory size you have
         written so far. You also see this index in your system
         prompt; call this tool only if you want a refresh after a
-        write."""
+        write.
+        """
         return _build_index(settings)
 
     def read_library(library: str) -> str:
@@ -502,7 +508,8 @@ def _make_tools(settings: Settings) -> list:
 
     def read_general_memory() -> str:
         """Read the cross-library general memory file. Returns
-        ``(empty)`` when nothing has been written yet."""
+        ``(empty)`` when nothing has been written yet.
+        """
         path = _general_path(settings)
         if not path.is_file():
             return "(empty)"
@@ -521,7 +528,8 @@ def _make_tools(settings: Settings) -> list:
         content), the file is also stamped with ``verified_at:``
         so future ``read_library`` calls can distinguish file-touch
         from fact-verification.  Always provide *source_url* when
-        the content was verified against a web source."""
+        the content was verified against a web source.
+        """
         path = _library_path(settings, library)
         try:
             stamped = _stamp_frontmatter(library, content, source_url=source_url)
@@ -536,7 +544,8 @@ def _make_tools(settings: Settings) -> list:
 
     def append_general_memory(note: str) -> str:
         """Append a short note to the general memory. Use for cross-
-        library facts that don't fit a single ``<library>.md``."""
+        library facts that don't fit a single ``<library>.md``.
+        """
         if not note or not note.strip():
             return "skipped: empty note"
         path = _general_path(settings)
@@ -555,7 +564,8 @@ def _make_tools(settings: Settings) -> list:
         """Search the web for *query*. Use sparingly — prefer the
         cached files when they cover the question. Returns the
         web-research sub-agent's distilled conclusion (it has already
-        read pages for you)."""
+        read pages for you).
+        """
         global _trace_search_calls
         if (
             _trace_search_max_calls > 0
@@ -678,7 +688,8 @@ def make_ask_web_knowledge_tool(
     are internal toolchain failures (CI/type/lint/test), where
     web-searching wastes turns on irrelevant results.  The tool
     is still registered in ``ToolRegistry`` so the prompt-tool-
-    consistency guard is not tripped."""
+    consistency guard is not tripped.
+    """
 
     async def ask_web_knowledge(question: str) -> str:
         """Ask the web-knowledge agent ONE focused question about a

@@ -80,7 +80,8 @@ def build_ci_wait_tool(
           verification budget. Stop and report FAILED with what remains broken.
         - ``CI_GONE`` — the PR/branch vanished from the forge. Report FAILED.
 
-        Guardrailed: only the ticket's own branch is accepted."""
+        Guardrailed: only the ticket's own branch is accepted.
+        """
         with trace_stage("wait_for_ci"):
             if branch_name != branch:
                 return (

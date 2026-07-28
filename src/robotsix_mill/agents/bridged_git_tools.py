@@ -49,7 +49,8 @@ def build_bridged_git_tools(
         it works against current main, not a stale ref.
 
         Guardrailed: only the ticket's configured target branch is
-        accepted — arbitrary branches are rejected."""
+        accepted — arbitrary branches are rejected.
+        """
         with trace_stage("git_fetch"):
             if target_branch != target:
                 return (
@@ -72,7 +73,8 @@ def build_bridged_git_tools(
 
         Fetches the remote branch first so the returned SHA is fresh
         (not the stale local tracking ref).  Guardrailed: only the
-        ticket's own branch is accepted."""
+        ticket's own branch is accepted.
+        """
         with trace_stage("git_remote_sha"):
             if branch_name != branch:
                 return (
@@ -110,7 +112,8 @@ def build_bridged_git_tools(
           diagnostic rather than a code defect.
         - ``PUSH_ERROR: ...`` — some other error (network, etc.).
 
-        Guardrailed: only the ticket's own branch is accepted."""
+        Guardrailed: only the ticket's own branch is accepted.
+        """
         with trace_stage("git_push_with_lease"):
             if branch_name != branch:
                 return (
@@ -167,7 +170,8 @@ def build_bridged_git_tools(
         self-rebase and safe to retry; any foreign author means a human
         pushed and the mill must NOT clobber it.
 
-        Guardrailed: only the ticket's own branch and target are accepted."""
+        Guardrailed: only the ticket's own branch and target are accepted.
+        """
         with trace_stage("git_branch_ancestry"):
             if branch_name != branch:
                 return (

@@ -134,7 +134,8 @@ def make_report_issue_tool(
         Do NOT file for: cosmetic observations, style nits, nice-to-have
         improvements, or non-blocking observations. When in doubt, do NOT file.
         category: missing-tool|error|workflow-improvement|missing-input|other.
-        Never raises."""
+        Never raises.
+        """
         try:
             # Step 1: validate title
             err = _validate_title(title)

@@ -263,7 +263,7 @@ def run_periodic_agent(
         (e.g. DeepSeek 503 on OpenRouter) by falling back to a
         different provider.  Defaults to ``None`` (no fallback).
 
-    Returns
+    Returns:
     -------
     Any
         The ``output`` attribute of the run result — typically a

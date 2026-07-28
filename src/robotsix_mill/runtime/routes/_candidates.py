@@ -64,7 +64,8 @@ def _to_read(c: Candidate, repo_id: str) -> CandidateRead:
 def _resolve_board(repo_id: str, request: Request):
     """Resolve *repo_id* to its ``RepoConfig`` or raise 400. UNlike the
     ticket routes we don't allow ``"all"`` or an empty value — the
-    candidates file is strictly per-board."""
+    candidates file is strictly per-board.
+    """
     repos = request.app.state.repos
     if not repo_id or repo_id not in repos.repos:
         sorted_keys = sorted(repos.repos.keys())
@@ -96,7 +97,8 @@ def list_candidates(
     repo are aggregated into a single flat list, each tagged with its
     owning ``repo_id`` so the UI can target validate/reject at the
     correct per-board file. The synthetic ``"meta"`` board is skipped —
-    it has no candidates file."""
+    it has no candidates file.
+    """
     if not repo_id or repo_id == "all":
         out: list[CandidateRead] = []
         for rc in request.app.state.repos.repos.values():
@@ -217,7 +219,8 @@ def reject_candidate(
 ) -> CandidateRead:
     """Mark the candidate rejected — no ticket is filed. The entry
     stays in the file as audit trail but the UI hides it on the next
-    refresh."""
+    refresh.
+    """
     rc = _resolve_board(repo_id, request)
     path = candidates_path(settings.data_dir, rc.board_id)
     updated = update_status(path, candidate_id, new_status="rejected")

@@ -274,7 +274,8 @@ def _apply_memory_edits(
 def _is_noop_draft(title: str | None) -> bool:
     """The retrospect model sometimes sets propose_draft=true with a
     "No notable issues - clean run" title — noise, not a ticket. Defers
-    to the shared :func:`is_noop_report` (title-only)."""
+    to the shared :func:`is_noop_report` (title-only).
+    """
     return is_noop_report(title)
 
 

@@ -72,7 +72,8 @@ _TRANSIENT_MESSAGE_RE = [
 
 def _is_transient_message(exc: BaseException) -> bool:
     """Return True when *exc*'s string representation matches a
-    known transient-error pattern not covered by type checks."""
+    known transient-error pattern not covered by type checks.
+    """
     msg = str(exc)
     return any(pattern.search(msg) for pattern in _TRANSIENT_MESSAGE_RE)
 

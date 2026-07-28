@@ -109,7 +109,7 @@ _OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
 
 
 def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
-    """Extract action ``uses:`` references from added diff lines.
+    r"""Extract action ``uses:`` references from added diff lines.
 
     Scans ``^\\+`` lines (excluding the ``+++`` header) for ``uses:``
     directives of the form ``uses: <owner>/<repo>[/<subpath>]@<ref>``.
@@ -123,55 +123,55 @@ def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
     absent).
 
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n'
     ... )
     [('.github/workflows/ci.yml', 'actions/checkout', '11bd71901bbe5b1630ceea73d27597364c9af683', 'v4.2.2')]
 
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: actions/checkout@v4\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: actions/checkout@v4\n'
     ... )
     [('.github/workflows/ci.yml', 'actions/checkout', 'v4', '')]
 
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: github/codeql-action/init@6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4 # v3.29.2\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: github/codeql-action/init@6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4 # v3.29.2\n'
     ... )
     [('.github/workflows/ci.yml', 'github/codeql-action/init', '6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4', 'v3.29.2')]
 
     >>> # Local refs are skipped.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: ./.github/actions/my-action@main\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: ./.github/actions/my-action@main\n'
     ... )
     []
 
     >>> # Docker refs are skipped.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: docker://ubuntu:latest\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: docker://ubuntu:latest\n'
     ... )
     []
 
     >>> # Reusable-workflow refs are skipped (already handled by _WORKFLOW_RE).
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@v1\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@v1\n'
     ... )
     []
 
     >>> # +++ header lines are not scanned.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
     ... )
     []
 
     >>> # Deleted lines (^-prefixed) are not scanned.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '-    uses: evilcorp/backdoor@v1\\n'
-    ...     '+    uses: actions/checkout@v4\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '-    uses: evilcorp/backdoor@v1\n'
+    ...     '+    uses: actions/checkout@v4\n'
     ... )
     [('.github/workflows/ci.yml', 'actions/checkout', 'v4', '')]
     """
@@ -207,7 +207,7 @@ def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
 def _reusable_workflow_sha_refs_from_diff(
     diff: str,
 ) -> list[tuple[str, str, str, str]]:
-    """Extract SHA-pinned refs from reusable-workflow ``uses:`` lines.
+    r"""Extract SHA-pinned refs from reusable-workflow ``uses:`` lines.
 
     ``_action_refs_from_diff()`` skips reusable-workflow lines (those
     whose slug contains ``.github/workflows/`` or ``.github/actions/``)
@@ -222,25 +222,25 @@ def _reusable_workflow_sha_refs_from_diff(
     same validation pipeline.
 
     >>> _reusable_workflow_sha_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
     ...     '+    uses: damien-robotsix/robotsix-github-workflows/'
     ...     '.github/workflows/docker-release.yml'
-    ...     '@43309967ea8011400212a8995d33ca900ee2afed\\n'
+    ...     '@43309967ea8011400212a8995d33ca900ee2afed\n'
     ... )
     [('.github/workflows/ci.yml', 'damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml', '43309967ea8011400212a8995d33ca900ee2afed', '')]
 
     >>> # Tag refs are skipped — valid for reusable workflows, no check needed.
     >>> _reusable_workflow_sha_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@main\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@main\n'
     ... )
     []
 
     >>> # .github/actions/ is also matched.
     >>> _reusable_workflow_sha_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
     ...     '+    uses: my-org/my-repo/.github/actions/composite-action'
-    ...     '@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\\n'
+    ...     '@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\n'
     ... )
     [('.github/workflows/ci.yml', 'my-org/my-repo/.github/actions/composite-action', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0', '')]
     """
@@ -503,7 +503,8 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
     from the last round into a ``prior-context`` fenced block.
 
-    Returns ``None`` when neither source has content (first review round)."""
+    Returns ``None`` when neither source has content (first review round).
+    """
     from ..agents.prompt_blocks import section
     from ..core.text_utils import tail_keep
 
@@ -641,7 +642,8 @@ class ReviewStage(Stage):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a CODE_REVIEW ticket: refresh the clone, check out the
         ticket branch, and run the automated reviewer agent against the
-        diff."""
+        diff.
+        """
         s = ctx.settings
         ws = ctx.service.workspace(ticket)
 
@@ -1096,7 +1098,8 @@ class ReviewStage(Stage):
         repo_dir: Path,
     ) -> Outcome:
         """Process a REQUEST_CHANGES verdict: round tracking, convergence
-        detection, ask splitting, and follow-up spawning."""
+        detection, ask splitting, and follow-up spawning.
+        """
         rounds = ticket.review_rounds + 1
         ctx.service.set_review_rounds(ticket.id, rounds)
 

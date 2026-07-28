@@ -34,7 +34,8 @@ def _close_async_client(client: "httpx.AsyncClient") -> None:
     """Close an httpx.AsyncClient from outside its original event loop.
 
     Creates a temporary event loop to run aclose(), catching any errors
-    so cleanup never raises in a finally/del context."""
+    so cleanup never raises in a finally/del context.
+    """
     try:
         loop = asyncio.new_event_loop()
         loop.run_until_complete(client.aclose())
@@ -51,7 +52,8 @@ async def _aclose_async_client(client: "httpx.AsyncClient") -> None:
     awaited directly here — :func:`_close_async_client`'s spin-up of a fresh
     loop via ``run_until_complete`` is illegal while another loop runs on the
     thread (it would be swallowed, leaking the client's connections). Errors
-    are swallowed so cleanup never breaks the caller."""
+    are swallowed so cleanup never breaks the caller.
+    """
     with contextlib.suppress(Exception):
         await client.aclose()
 
@@ -60,7 +62,8 @@ def _safe_close(agent: Any) -> None:
     """Close an agent's HTTP client if it has a close method.
 
     Safe to call on any object — silently no-ops if the object lacks
-    a ``close`` method or if closing raises."""
+    a ``close`` method or if closing raises.
+    """
     close_fn = getattr(agent, "close", None)
     if close_fn is not None:
         with contextlib.suppress(Exception):
@@ -88,7 +91,8 @@ def new_deepseek_model(model_name: str, level: int):
     defaults (L1/L2 → OpenRouterDeepseekProvider). Cost recording, the DeepSeek
     provider pin, and the per-level reasoning policy (level 1 → reasoning off,
     else xhigh) are all baked into the provider. The caller owns closing the
-    returned client (pair with :func:`_aclose_async_client`)."""
+    returned client (pair with :func:`_aclose_async_client`).
+    """
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
     from robotsix_llmio import get_provider_for_level
@@ -105,7 +109,8 @@ def build_openrouter_model(level: int | str = 1, *, online: bool = False):
     defaults.  When *level* is a str, it is used as the model name directly
     (with reasoning policy set to level 1).  Appends ``:online`` when
     *online* (web search). Caller owns closing the client (pair with
-    :func:`_aclose_async_client`)."""
+    :func:`_aclose_async_client`).
+    """
     if isinstance(level, str):
         model_name = level
         level_int = 1
@@ -124,7 +129,8 @@ class AgentHandle:
     deterministically close the client after use.
 
     Delegates attribute access to the underlying agent so existing
-    code (including test mocks) works unchanged."""
+    code (including test mocks) works unchanged.
+    """
 
     def __init__(self, agent: Any, http_client: Any) -> None:
         self._agent = agent
@@ -408,7 +414,8 @@ def _build_deepseek_handle(
 
     The model (cost recording + DeepSeek pin + per-level reasoning policy) comes
     from llmio via :func:`new_deepseek_model`; this function only assembles the
-    pydantic-ai ``Agent`` so per-agent ``max_tokens``/tools/name are preserved."""
+    pydantic-ai ``Agent`` so per-agent ``max_tokens``/tools/name are preserved.
+    """
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings
 
@@ -466,7 +473,8 @@ def build_agent(
 
     Note: for a structured ``output_type`` on a model whose provider
     rejects forced ``tool_choice``, wrap it in ``PromptedOutput`` at
-    the call site (the default ``ToolOutput`` mode 404s there)."""
+    the call site (the default ``ToolOutput`` mode 404s there).
+    """
     all_tools = list(tools or [])
     if report_issue:
         # Every agent can self-report a blocking/degrading issue (missing

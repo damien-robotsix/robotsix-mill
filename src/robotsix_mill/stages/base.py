@@ -95,5 +95,6 @@ class Stage(ABC):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process one ticket. Raise to fail the ticket (worker -> FAILED);
         raise NotImplementedError for a stub (worker logs, stops the
-        chain, leaves the ticket)."""
+        chain, leaves the ticket).
+        """
         raise NotImplementedError

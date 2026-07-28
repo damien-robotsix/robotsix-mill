@@ -28,7 +28,8 @@ _CHILD_ROWS = 40
 
 def _render_children(service, parent_id: str, children, current_ticket_id: str) -> str:
     """Render the Markdown list of *children*, marking the current ticket
-    and soft-capping the description excerpt per child and the whole output."""
+    and soft-capping the description excerpt per child and the whole output.
+    """
     lines = [f"## Children of epic `{parent_id}` ({len(children)})", ""]
     for child in children[:_CHILD_ROWS]:
         marker = " (this ticket)" if child.id == current_ticket_id else ""

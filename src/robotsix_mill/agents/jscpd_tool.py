@@ -173,7 +173,8 @@ def make_jscpd_tool(repo_dir: Path) -> Callable[[], str]:
     def detect_duplication() -> str:
         """Run jscpd to detect copy-paste duplication across the repository,
         returning clone pairs with file paths, line ranges, and duplication
-        metrics."""
+        metrics.
+        """
         with trace_stage("detect_duplication"):
             return run_jscpd(repo_dir)
 

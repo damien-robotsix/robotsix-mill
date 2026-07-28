@@ -6,7 +6,7 @@ URL is set at runtime by ``db.py`` before each ``upgrade()`` or
 ``stamp()`` call — the ``sqlalchemy.url`` in ``alembic.ini`` is
 a placeholder.
 
-References
+References:
 ----------
 * TestDriven.io FastAPI + SQLModel tutorial:
   https://testdriven.io/blog/fastapi-sqlmodel/

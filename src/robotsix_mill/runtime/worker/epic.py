@@ -179,7 +179,7 @@ def _resolve_delivery(
 
 
 def _build_child_summaries(svc, epic_id: str) -> list[dict]:
-    """Build the per-child summary dicts passed to the epic-status agent.
+    r"""Build the per-child summary dicts passed to the epic-status agent.
 
     Each child's description is read and truncated to 500 chars (with a
     ``"\\n...(truncated)"`` suffix); the summary carries ``id``,

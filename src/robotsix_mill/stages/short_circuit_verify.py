@@ -162,7 +162,8 @@ def run_claimed_edited_rawpaths(new_messages: bytes | str | None) -> list[str]:
     absolute for the Claude SDK editors) instead of reducing to a basename.
     Used by the gitignored-edit detector, which needs the real location to
     ask ``git check-ignore``. Fail-open on malformed input, like every
-    scanner here."""
+    scanner here.
+    """
     messages = _parse_new_messages(
         new_messages, fail_open=True, log_prefix="run_claimed_edited_rawpaths"
     )
@@ -418,7 +419,8 @@ def _detect_stuck_same_tool(
     same_tool_window: int,
 ) -> str | None:
     """Return the tool name if the tail of *tool_names* is a run of the
-    same non-progress tool >= *same_tool_window* long, else ``None``."""
+    same non-progress tool >= *same_tool_window* long, else ``None``.
+    """
     total = len(tool_names)
     if total < same_tool_window:
         return None
@@ -436,7 +438,8 @@ def _detect_stuck_same_tool(
 
 def _trailing_non_progress_run(tool_names: list[str]) -> int:
     """Return the length of the trailing run of consecutive non-progress
-    tool calls at the end of *tool_names*."""
+    tool calls at the end of *tool_names*.
+    """
     run = 0
     for i in range(len(tool_names) - 1, -1, -1):
         if tool_names[i] in _NON_PROGRESS_TOOLS:

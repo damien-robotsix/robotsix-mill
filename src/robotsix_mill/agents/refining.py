@@ -49,7 +49,7 @@ def _strip_explore_call_directives(
     include_explore: bool,
     include_parallel_explore: bool,
 ) -> str:
-    """Remove markdown bullet items that issue a ``\\`tool(...)\\`` call
+    r"""Remove markdown bullet items that issue a ``\\`tool(...)\\`` call
     directive for an explore sub-agent tool that is gated OFF.
 
     When triage rules a ticket ``simple`` the ``explore`` /
@@ -487,7 +487,8 @@ def _coerce_refine_output(output: object) -> "RefineResult":
     claude_sdk backend, which parses output itself). Wrap that text into a
     result so the caller's ``output.conversation_state = …`` setattr — and its
     ``except AttributeError`` branch — don't blow up with "'str' object has no
-    attribute 'conversation_state'" (the bug that blocked tickets like 0da9)."""
+    attribute 'conversation_state'" (the bug that blocked tickets like 0da9).
+    """
     if isinstance(output, RefineResult):
         return output
     log.warning(
@@ -506,7 +507,8 @@ def _build_refine_overrides(
     """Assemble the ``build_agent_from_definition`` overrides for refine:
     the reviewer-sendback prompt + thread flags when handling feedback.
     The model comes from the definition's ``level`` (refine is level 3
-    → Claude Opus)."""
+    → Claude Opus).
+    """
     overrides: dict = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
@@ -580,7 +582,6 @@ def run_refine_agent(
         was provided, otherwise ``None``
       - ``conversation_state``: raw conversation JSON for pause/resume
     """
-
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition

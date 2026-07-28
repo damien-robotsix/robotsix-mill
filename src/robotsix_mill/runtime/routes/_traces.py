@@ -125,7 +125,8 @@ def list_recent_traces(
     Each trace now includes an ``observationSummary`` with per-trace
     token counts, model, tool-call list, and error/warning counts so
     fleet-level cost analysis can attribute spend without fetching every
-    trace individually."""
+    trace individually.
+    """
     from ...langfuse.client import list_recent_traces as _list_recent
     from ...langfuse.client import trace_observation_summary
 

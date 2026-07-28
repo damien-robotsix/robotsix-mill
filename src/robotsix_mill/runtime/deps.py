@@ -253,7 +253,8 @@ def _cumulative_cost_for(
     repo_config: RepoConfig | None,
 ) -> float | None:
     """Return cumulative cost when the ticket has descendants and the
-    rollup is meaningfully larger than the direct cost; ``None`` otherwise."""
+    rollup is meaningfully larger than the direct cost; ``None`` otherwise.
+    """
     if not service.list_children(ticket.id):
         return None
     cum = service.cumulative_cost(
@@ -275,7 +276,8 @@ def _parent_title_for(ticket: Ticket, service: TicketService) -> str | None:
 
 def _dependencies_for(ticket: Ticket, service: TicketService) -> list[dict]:
     """Resolve each declared dependency to ``{id, title, state}`` so the
-    drawer can render a readable list instead of opaque IDs."""
+    drawer can render a readable list instead of opaque IDs.
+    """
     if not ticket.depends_on:
         return []
     import json as _json
@@ -312,7 +314,8 @@ def _pr_url_for(
     """Prefer the multi-repo manifest (deliver wrote one URL per
     touched repo) over the single-repo forge lookup.  ``pr_urls.json``
     is the multi-repo discriminator and its URLs are authoritative —
-    no forge call needed."""
+    no forge call needed.
+    """
     if not fetch_pr_url:
         return None
     multi = _pr_urls_for_multi_repo(ticket, service)

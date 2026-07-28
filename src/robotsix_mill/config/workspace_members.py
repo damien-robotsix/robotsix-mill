@@ -50,7 +50,8 @@ class DetectedMember:
     policy (or ``None``). The downstream derivations
     (``path -> repo_id``, ``url -> forge_remote_url``,
     ``version -> working_branch``) happen in the registration ticket,
-    not here."""
+    not here.
+    """
 
     path: str
     url: str

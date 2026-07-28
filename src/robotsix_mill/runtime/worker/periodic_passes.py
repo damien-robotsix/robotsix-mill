@@ -49,7 +49,8 @@ def _member_sync_hash_path(settings: Settings, repo_id: str) -> Path:
 
 def _hash_repos_yaml(clone_dir: Path) -> str:
     """Return the sha256 of ``<clone_dir>/repos.yaml``, or ``""`` when the
-    file is absent/unreadable (the sentinel — never fires a sync)."""
+    file is absent/unreadable (the sentinel — never fires a sync).
+    """
     p = Path(clone_dir) / "repos.yaml"
     if not p.exists():
         return ""

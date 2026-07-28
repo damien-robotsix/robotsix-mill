@@ -55,7 +55,8 @@ def record_export_failure(
     *, project: str, error: str, status: int | None = None
 ) -> None:
     """Append a Langfuse export-failure entry; capped at the most
-    recent ``_EXPORT_FAILURE_CAP`` items."""
+    recent ``_EXPORT_FAILURE_CAP`` items.
+    """
     from datetime import datetime as _dt, timezone as _tz
 
     entry = {
@@ -81,7 +82,8 @@ def clear_export_failures_for(project: str) -> None:
     adapter when a SUCCESS comes back so the UI's red badge clears on its
     own as soon as Langfuse recovers — without this the badge sticks
     until an operator hits POST /langfuse-status/clear and they end
-    up seeing stale errors long after the export path is healthy."""
+    up seeing stale errors long after the export path is healthy.
+    """
     with _export_lock:
         _export_failures[:] = [
             e for e in _export_failures if e.get("project") != project
@@ -246,7 +248,8 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
     def _on_export_result(_pk: str, ok: bool, error: str | None) -> None:
         """Bridge llmio's per-project export-health hook to mill's
         failure registry: clear the badge on a successful batch, record
-        an entry on failure so /langfuse-status surfaces it."""
+        an entry on failure so /langfuse-status surfaces it.
+        """
         if ok:
             clear_export_failures_for(label)
         else:
@@ -342,7 +345,7 @@ def flush_tracing(timeout: int = 10_000) -> None:
 
 
 def install_signal_handlers() -> None:
-    """Register handlers for SIGTERM and SIGINT that flush pending traces
+    r"""Register handlers for SIGTERM and SIGINT that flush pending traces
     before the process exits.
 
     Each handler sets a module-level ``_shutdown_requested`` flag so
@@ -441,7 +444,8 @@ class _RootIO:
 
 class _NoopRootIO:
     """Drop-in for ``_RootIO`` when tracing is disabled — accepts the
-    same calls and silently discards them."""
+    same calls and silently discards them.
+    """
 
     @property
     def trace_id(self) -> None:

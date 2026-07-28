@@ -37,7 +37,8 @@ def write_triage_complexity(
     findings: str | None = None,
 ) -> None:
     """Persist the triage complexity verdict (and optionally the trivial-scope
-    flag and exploration findings) for downstream consumption."""
+    flag and exploration findings) for downstream consumption.
+    """
     data: dict[str, Any] = {"complexity": complexity}
     if trivial_scope is not None:
         data["trivial_scope"] = trivial_scope
@@ -52,7 +53,8 @@ def write_triage_complexity(
 
 def read_triage_complexity(ws: Workspace) -> str:
     """Read the triage complexity verdict; returns ``"needs-exploration"``
-    when the file is absent (conservative default)."""
+    when the file is absent (conservative default).
+    """
     path = ws.artifacts_dir / "triage_complexity.json"
     if not path.exists():
         return "needs-exploration"
@@ -65,7 +67,8 @@ def read_triage_complexity(ws: Workspace) -> str:
 
 def read_triage_findings(ws: Workspace) -> str | None:
     """Read the triage exploration findings; returns ``None`` when the
-    artifact is absent or unparseable (conservative default — no block)."""
+    artifact is absent or unparseable (conservative default — no block).
+    """
     path = ws.artifacts_dir / "triage_findings.json"
     if not path.exists():
         return None
@@ -79,7 +82,8 @@ def read_triage_findings(ws: Workspace) -> str | None:
 
 def read_triage_trivial(ws: Workspace) -> bool:
     """Read the triage trivial-scope verdict; returns ``False`` when the
-    file or key is absent (conservative default — no cheap-model routing)."""
+    file or key is absent (conservative default — no cheap-model routing).
+    """
     path = ws.artifacts_dir / "triage_complexity.json"
     if not path.exists():
         return False

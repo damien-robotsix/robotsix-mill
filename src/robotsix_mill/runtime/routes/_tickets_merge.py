@@ -173,7 +173,8 @@ def get_merge_info(
 ) -> dict:
     """Return CI status, mergeable flag, and changed files for the PR/MR
     backing *ticket_id*.  Each forge call is individually resilient —
-    a failure in one field does not crash the whole response."""
+    a failure in one field does not crash the whole response.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:
@@ -256,7 +257,8 @@ def get_merge_reason(
     svc=Depends(get_service),
 ) -> dict:
     """Return the auto-merge blocking reason written by the merge
-    stage, or an empty string when no reason has been recorded."""
+    stage, or an empty string when no reason has been recorded.
+    """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     ticket = svc.get(ticket_id)
     if ticket is None:

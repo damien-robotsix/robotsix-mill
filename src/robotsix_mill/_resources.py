@@ -79,13 +79,15 @@ def _effective_dir(name: str, configured: Path, packaged: Path) -> Path:
 
 def effective_skills_dir(configured: Path) -> Path:
     """The skills directory to actually read from: *configured* if it
-    exists, else the packaged ``skills/`` copy."""
+    exists, else the packaged ``skills/`` copy.
+    """
     return _effective_dir("skills_dir", configured, skills_dir())
 
 
 def effective_language_instructions_dir(configured: Path) -> Path:
     """The language-instructions directory to actually read from:
-    *configured* if it exists, else the packaged copy."""
+    *configured* if it exists, else the packaged copy.
+    """
     return _effective_dir(
         "language_instructions_dir", configured, language_instructions_dir()
     )

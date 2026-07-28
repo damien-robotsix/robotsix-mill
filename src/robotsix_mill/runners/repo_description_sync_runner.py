@@ -77,6 +77,8 @@ def _extract_h1_and_first_paragraph(text: str) -> tuple[str, str]:
 
 @dataclass
 class RepoDescriptionSyncPassResult:
+    """Result of a repo-description sync periodic pass."""
+
     updated_memory: str = ""
     drafts_created: list[dict[str, Any]] = field(default_factory=list)
     session_id: str = ""

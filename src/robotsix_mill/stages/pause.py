@@ -93,7 +93,8 @@ def load_conversation_state(
     stage_name: str,
 ) -> bytes | None:
     """Read and return ``{stage_name}_conversation_state.json`` if it
-    exists; return ``None`` otherwise."""
+    exists; return ``None`` otherwise.
+    """
     path = _state_path(ws, stage_name)
     if not path.exists():
         return None

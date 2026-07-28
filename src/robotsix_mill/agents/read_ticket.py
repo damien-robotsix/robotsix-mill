@@ -35,7 +35,8 @@ def _truncate_at_boundary(text: str, cap: int, markers: tuple[str, ...]) -> str:
     """Return *text* trimmed to roughly *cap* chars, preferring to cut at the
     last occurrence of one of *markers* (a heading / paragraph / line break)
     in the final ~10% of the budget so we never cut mid-word or mid-heading.
-    Appends a ``... [truncated]`` sentinel. No-op when already within *cap*."""
+    Appends a ``... [truncated]`` sentinel. No-op when already within *cap*.
+    """
     if len(text) <= cap:
         return text
     cutoff = cap

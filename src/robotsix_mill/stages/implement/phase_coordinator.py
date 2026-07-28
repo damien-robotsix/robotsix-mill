@@ -56,7 +56,8 @@ _STUCK_SAME_TOOL_WINDOW = 5
 def _commit_or_raise(repo_dir: Path, commit_message: str) -> None:
     """Call :func:`~robotsix_mill.vcs.git_ops.commit_all` and, on git
     failure, include stderr in the exception message so ticket history
-    shows diagnostic output instead of just the command line."""
+    shows diagnostic output instead of just the command line.
+    """
     try:
         git_ops.commit_all(repo_dir, commit_message)
     except subprocess.CalledProcessError as exc:

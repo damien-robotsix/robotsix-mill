@@ -60,7 +60,8 @@ def redact_credentials(text: str | bytes) -> str:
     ``https://oauth2:ghs_…@github.com/…`` — into ticket notes and
     Langfuse traces. Run every git-command error string through this
     before it leaves the process. Accepts bytes (CalledProcessError
-    stderr is bytes when the command ran without ``text=True``)."""
+    stderr is bytes when the command ran without ``text=True``).
+    """
     if isinstance(text, bytes):
         text = text.decode("utf-8", errors="replace")
     return _CREDENTIAL_IN_URL.sub("://***@", text)
@@ -88,7 +89,8 @@ def _paths_from_diff(diff: str) -> list[str]:
 def _authed_url(url: str, token: str | None) -> str:
     """Inject a token into an https remote for non-interactive clone/push.
     Other schemes (file://, ssh) are returned unchanged. Never log the
-    result — it contains the credential."""
+    result — it contains the credential.
+    """
     if token and url.startswith("https://"):
         return url.replace("https://", f"https://oauth2:{token}@", 1)
     return url
@@ -105,7 +107,8 @@ def _git(repo: Path, *args: str) -> str:
 
 def _git_redacted(repo: Path, *args: str) -> str:
     """Like :func:`_git` but redacts credentials from any
-    :class:`CalledProcessError` before propagation."""
+    :class:`CalledProcessError` before propagation.
+    """
     try:
         return _git(repo, *args)
     except subprocess.CalledProcessError as exc:
@@ -196,7 +199,8 @@ def clone(
 
     On failure raises :class:`subprocess.CalledProcessError` with the
     tokenized URL redacted from ``cmd`` and ``stderr`` — the repr of this
-    error routinely ends up in ticket notes and traces."""
+    error routinely ends up in ticket notes and traces.
+    """
     try:
         subprocess.run(
             [
@@ -393,7 +397,8 @@ def try_rebase_onto(
 def head_sha(repo: Path) -> str:
     """Current HEAD commit SHA. Used to detect a no-op rebase so the
     merge stage can skip a pointless force-push (an unchanged push still
-    re-triggers CI and a GitHub mergeable recompute → state churn)."""
+    re-triggers CI and a GitHub mergeable recompute → state churn).
+    """
     return _git(repo, "rev-parse", "HEAD")
 
 
@@ -402,7 +407,8 @@ def remote_branch_sha(repo: Path, branch: str) -> str | None:
     ``git fetch origin`` first, so ``origin/<branch>`` is fresh). Returns
     None if the remote has no such branch yet. The merge stage skips the
     force-push only when this equals local HEAD — i.e. the remote truly
-    already has this exact commit (not merely a local-rebase no-op)."""
+    already has this exact commit (not merely a local-rebase no-op).
+    """
     try:
         return _git(repo, "rev-parse", f"refs/remotes/origin/{branch}")
     except subprocess.CalledProcessError:
@@ -636,7 +642,8 @@ def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
     ``--force`` so a re-delivery updates the bot-owned branch; pushes to
     the explicit authed URL rather than the clone's origin (the clone
     may have been made without a write token, and there is no
-    remote-tracking ref to lease against on an explicit-URL push)."""
+    remote-tracking ref to lease against on an explicit-URL push).
+    """
     _git_redacted(
         repo,
         "push",
@@ -650,7 +657,8 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     """Fetch ``branch`` from ``remote_url`` (token-auth for https) and
     update ``refs/remotes/origin/<branch>``.  Uses an explicit refspec
     so the remote-tracking ref is refreshed even when fetching from
-    an explicit URL rather than the clone's origin remote."""
+    an explicit URL rather than the clone's origin remote.
+    """
     _git_redacted(
         repo,
         "fetch",
@@ -1213,7 +1221,8 @@ def ignored_existing_paths(repo: Path, paths: list[str]) -> list[str]:
     board (e.g. a ROS 2 workspace repo whose ``.gitignore`` carries
     ``/src/*`` for vcs-imported sub-repos) lets an agent write real files
     that never reach a diff, which otherwise surfaces only as an opaque
-    "no changes produced" block."""
+    "no changes produced" block.
+    """
     hits: list[str] = []
     for p in paths:
         rel = p.lstrip("/")
@@ -1237,7 +1246,8 @@ def ignored_paths(repo: Path, paths: list[str]) -> list[str]:
     directory (e.g. ``src/ros2/foo/Status.msg`` against a ``/src/*``
     rule). Used by the refine guard to reject specs whose ``file_map``
     targets paths the board cannot deliver (vcs-imported / vendored
-    sub-trees managed via ``repos.yaml``, invisible to git)."""
+    sub-trees managed via ``repos.yaml``, invisible to git).
+    """
     hits: list[str] = []
     for p in paths:
         rel = p.lstrip("/")

@@ -34,7 +34,8 @@ class ExpertConsultResult(BaseModel):
     ``answer`` is the concise response handed back to the coordinator.
     ``updated_memory`` is the expert's revised memory ledger; the
     runner persists it verbatim when non-empty so future consultations
-    of the same domain see the expert's accumulated knowledge."""
+    of the same domain see the expert's accumulated knowledge.
+    """
 
     answer: str = Field(
         description="Concise, focused answer to the coordinator's "
@@ -190,7 +191,8 @@ async def run_consult_expert(
 
 def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str = ""):
     """Build the ``consult_expert`` tool exposed to the coordinator. It
-    only ever returns the expert sub-agent's answer string."""
+    only ever returns the expert sub-agent's answer string.
+    """
 
     async def consult_expert(domain: str, question: str) -> str:
         """Consult a domain expert sub-agent about a specific codebase
@@ -199,7 +201,8 @@ def make_consult_expert_tool(settings: Settings, repo_dir: Path, board_id: str =
         deep knowledge of that domain's conventions, file layout, and
         gotchas — ask focused questions and use the answer to guide
         your edits. Available domains match expert_definitions/*.yaml
-        (e.g. 'python-backend')."""
+        (e.g. 'python-backend').
+        """
         return await run_consult_expert(
             settings=settings,
             repo_dir=repo_dir,

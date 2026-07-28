@@ -32,7 +32,8 @@ def _make_session_cost_tool(settings: Settings, repo_config=None):
 
     def langfuse_session_cost(session_id: str) -> str:
         """Fetch the total USD cost for a Langfuse session by its ID.
-        Returns the cost as a dollar string (e.g. "$1.2345")."""
+        Returns the cost as a dollar string (e.g. "$1.2345").
+        """
         from ..langfuse.client import session_cost
 
         kwargs: dict = {}
@@ -68,7 +69,8 @@ def _make_session_summary_tool(settings: Settings, repo_config=None):
     def langfuse_session_summary(session_id: str) -> str:
         """Fetch a structured summary of all traces in a Langfuse
         session: per-stage cost, latency, observation counts, plus any
-        warnings/errors. Returns a Markdown text block."""
+        warnings/errors. Returns a Markdown text block.
+        """
         from ..langfuse.client import fetch_session_summary
 
         kwargs: dict = {}
@@ -109,7 +111,8 @@ def _make_list_traces_tool(settings: Settings, repo_config=None):
 
     def langfuse_list_traces(session_id: str) -> str:
         """List all trace IDs for a Langfuse session. Returns one trace
-        per line with its name, timestamp, and cost."""
+        per line with its name, timestamp, and cost.
+        """
         from ..langfuse.client import _langfuse_api_get
 
         kwargs: dict = {}
@@ -161,7 +164,8 @@ def _make_trace_detail_tool(settings: Settings, repo_config=None):
 
     def langfuse_trace_detail(trace_id: str) -> str:
         """Fetch the full detail of a single Langfuse trace by its ID.
-        Returns a JSON-like summary of the trace's observations."""
+        Returns a JSON-like summary of the trace's observations.
+        """
         from ..langfuse.client import fetch_trace_detail
 
         kwargs: dict = {}
@@ -398,7 +402,8 @@ def make_langfuse_inspect_tool(
         """Synchronous body of langfuse_inspect_trace — runs on a worker
         thread via ``asyncio.to_thread`` so ``run_trace_inspector`` (which
         internally calls ``run_sync`` → ``run_until_complete``) executes
-        safely in a thread with no active event loop."""
+        safely in a thread with no active event loop.
+        """
         from ..langfuse.client import fetch_trace_detail
         from .trace_inspector import run_trace_inspector
 

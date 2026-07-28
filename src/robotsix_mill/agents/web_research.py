@@ -43,7 +43,8 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
     """Run the cheap research sub-agent for ``query`` and return only
     its conclusion string. Bounded by ``web_research_request_limit``.
     Never raises out — research failure degrades to a short message so
-    the main agent can carry on."""
+    the main agent can carry on.
+    """
     if not get_secrets().openrouter_api_key:
         return "web research unavailable: OPENROUTER_API_KEY is not set"
 

@@ -52,7 +52,8 @@ _SECRET_ALIASES: frozenset[str] = frozenset(
 
 def _is_secret_key(key: str) -> bool:
     """Return True when *key* is a secret — either a Secrets field name
-    or a Settings alias that maps to one."""
+    or a Settings alias that maps to one.
+    """
     return key in _SECRET_FIELD_NAMES or key in _SECRET_ALIASES
 
 
@@ -205,7 +206,8 @@ def _clean_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 def _generate_config_schema() -> dict[str, Any]:
     """Generate the JSON Schema for the Settings model, augmented with
-    secret-field entries marked as ``writeOnly``."""
+    secret-field entries marked as ``writeOnly``.
+    """
     raw: dict[str, Any] = Settings.model_json_schema()
     schema: dict[str, Any] = _clean_schema(raw)
 

@@ -45,7 +45,8 @@ def _check_repo_workable(
 ) -> None:
     """Reject tickets for auto-registered repos when runtime
     registration is disabled (the repo was registered via
-    POST /repos but the instance isn't configured to work it)."""
+    POST /repos but the instance isn't configured to work it).
+    """
     if repo_config.source == "auto" and not settings.allow_runtime_repo_registration:
         raise HTTPException(
             status_code=400,
@@ -186,7 +187,8 @@ def _create_ticket(
     settings: Settings,
 ) -> JSONResponse:
     """Create a new draft ticket and enqueue it.  Shared between the
-    dedup-miss path and the fail-open path."""
+    dedup-miss path and the fail-open path.
+    """
     ticket = board_svc.create(
         title=body.title,
         description=body.body,

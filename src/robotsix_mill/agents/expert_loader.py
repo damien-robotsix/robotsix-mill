@@ -70,7 +70,8 @@ class ExpertDefinition(BaseModel):
     @classmethod
     def _validate_domain_slug(cls, v: str) -> str:
         """Domain must be a slug-like identifier: lowercase letters,
-        digits, and single hyphens between segments."""
+        digits, and single hyphens between segments.
+        """
         if not re.fullmatch(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", v):
             raise ValueError(
                 f"domain must be a slug-like identifier (e.g. 'python-backend'), got {v!r}"

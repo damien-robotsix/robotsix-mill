@@ -412,7 +412,8 @@ class GitLabForge(
 
         Resolves a recorded MR web url to its current status independent
         of whether the source branch still exists, mirroring the GitHub
-        ``_get_pr_by_number`` seam."""
+        ``_get_pr_by_number`` seam.
+        """
         pid = self._resolve_project_id(project_path)
         r = self._http.get(
             f"/projects/{pid}/merge_requests/{mr_iid}",
@@ -790,7 +791,8 @@ class GitLabForge(
     def _rebase_mr(self, project_path: str, mr_iid: int) -> dict[str, Any]:
         """PUT /projects/:id/merge_requests/:iid/rebase to merge the target
         branch tip into the MR branch so its pipeline re-runs against the
-        current base."""
+        current base.
+        """
         pid = self._resolve_project_id(project_path)
         try:
             r = self._http.put(

@@ -71,7 +71,8 @@ _DISK_FULL_RE = re.compile(r"disk is full|database or disk is full|database is l
 
 class DiskFullError(RuntimeError):
     """Raised when a DB operation fails with a disk-full condition even
-    after an emergency VACUUM + retry pass."""
+    after an emergency VACUUM + retry pass.
+    """
 
     def __init__(
         self, message: str, disk_stats: dict[str, float] | None = None
@@ -122,7 +123,8 @@ def _retry_op(
 ) -> Any:
     """Call *fn(*args, **kwargs)* once; on a disk-full error run an
     emergency VACUUM and retry once.  Re-raises as :class:`DiskFullError`
-    when the retry also fails."""
+    when the retry also fails.
+    """
     try:
         return fn(*args, **kwargs)
     except sqlite3.OperationalError as exc:
@@ -155,7 +157,8 @@ def _retry_op(
 
 class _RetrySession:
     """Thin wrapper around a :class:`Session` that retries ``commit()``
-    and ``flush()`` on disk-full errors."""
+    and ``flush()`` on disk-full errors.
+    """
 
     def __init__(self, session: Session, settings: Settings, board_id: str) -> None:
         self._session = session
@@ -362,7 +365,8 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
 
 def init_db(settings: Settings, board_id: str) -> None:
     """Create tables (if missing) on the per-board DB and apply any
-    pending Alembic migrations."""
+    pending Alembic migrations.
+    """
     if board_id not in _initialized:
         lock = _init_locks.setdefault(board_id, threading.Lock())
         with lock:

@@ -72,7 +72,8 @@ def reset_web_fetch_budget() -> None:
     """Zero the per-consult web_fetch budget counters. Called at the
     start of each web-knowledge consult so the budget scopes to one
     ``ask_web_knowledge`` call across every ``web_research`` sub-agent
-    it spawns."""
+    it spawns.
+    """
     global _fetch_calls, _fetch_bytes
     _fetch_calls = 0
     _fetch_bytes = 0
@@ -96,7 +97,8 @@ def reset_trace_web_fetch_budget(max_calls: int, max_bytes: int) -> None:
 def _trace_budget_sentinel() -> str | None:
     """Return the budget-exhausted sentinel when the per-survey-run
     trace budget is spent, else ``None``. Returns ``None`` when the
-    trace budget is inactive (both caps are 0)."""
+    trace budget is inactive (both caps are 0).
+    """
     if _trace_budget_max_calls <= 0 and _trace_budget_max_bytes <= 0:
         return None
     if _trace_fetch_calls >= _trace_budget_max_calls or (
@@ -119,7 +121,8 @@ def _trace_budget_sentinel() -> str | None:
 
 def web_fetch_budget() -> tuple[int, int]:
     """Return the current ``(calls, bytes)`` consumed against the
-    budget. Exposed for tests."""
+    budget. Exposed for tests.
+    """
     return _fetch_calls, _fetch_bytes
 
 
@@ -128,7 +131,8 @@ def _budget_sentinel(settings: Settings) -> str | None:
     per-consult fetch budget OR the per-survey-run trace budget is
     spent, else ``None``. Checked before a real sandbox fetch (cache
     hits / raw-mode never reach here). A ``web_fetch_max_total_bytes``
-    of 0 disables the byte ceiling."""
+    of 0 disables the byte ceiling.
+    """
     # Check the per-consult budget first.
     max_calls = settings.web_fetch_max_calls
     max_total_bytes = settings.web_fetch_max_total_bytes
@@ -173,7 +177,8 @@ def _canonical_url(url: str) -> str:
 def _looks_like_html(body: bytes | str) -> bool:
     """``True`` when the first 1 KB of *body* contains an HTML
     structural marker. Robust against pages that don't start with
-    DOCTYPE (e.g. a leading BOM or comment)."""
+    DOCTYPE (e.g. a leading BOM or comment).
+    """
     if isinstance(body, str):
         body = body.encode("utf-8", errors="ignore")
     return _HTML_SNIFF.search(body[:1024]) is not None
@@ -182,7 +187,8 @@ def _looks_like_html(body: bytes | str) -> bool:
 def _prune_cache(now: float) -> None:
     """Drop expired entries and shrink the cache to ≤ the byte
     budget. Called from inside the tool, single-threaded use only
-    (the tool runs inside the agent's synchronous loop)."""
+    (the tool runs inside the agent's synchronous loop).
+    """
     expired = [
         k for k, (ts, _) in _cache.items() if now - ts > _PER_RUN_CACHE_TTL_SECONDS
     ]
@@ -199,7 +205,8 @@ def _prune_cache(now: float) -> None:
 def _apply_text_cap(body: str, max_bytes: int) -> str:
     """Truncate *body* if it exceeds *max_bytes* of UTF-8 encoded
     text, using boundary-aware truncation that preserves sentence /
-    paragraph boundaries instead of a hard byte cut."""
+    paragraph boundaries instead of a hard byte cut.
+    """
     encoded = body.encode("utf-8", errors="ignore")
     if len(encoded) <= max_bytes:
         return body

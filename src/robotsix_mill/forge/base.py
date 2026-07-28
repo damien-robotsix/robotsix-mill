@@ -17,7 +17,8 @@ from ..config import RepoConfig, Settings
 
 class NotConfiguredError(RuntimeError):
     """Raised when an optional forge capability (e.g. repo creation) is
-    disabled by configuration."""
+    disabled by configuration.
+    """
 
 
 @dataclass
@@ -79,7 +80,8 @@ class Forge(ABC):
         ``"owner/repo"`` string, the head branch lives in that fork and
         the PR is opened against the upstream repo / ``base_branch``
         resolved from the repo's ``cross_repo_target``. When ``None``
-        (the default), behaviour is the ordinary same-repo PR."""
+        (the default), behaviour is the ordinary same-repo PR.
+        """
 
     @abstractmethod
     def pr_status(self, *, source_branch: str) -> dict | None:
@@ -89,7 +91,8 @@ class Forge(ABC):
 
         ``mergeable`` is ``True`` when the PR has no conflicts with the
         target branch, ``False`` when it does, and ``None`` when the
-        forge hasn't yet performed the check (treat as mergeable)."""
+        forge hasn't yet performed the check (treat as mergeable).
+        """
 
     @abstractmethod
     def pr_status_by_url(self, *, url: str) -> dict | None:
@@ -98,7 +101,8 @@ class Forge(ABC):
         branch still exists. Returns the same shape as ``pr_status``
         ({"merged": bool, "state": ..., "url": ..., "mergeable": ...,
         "number": ...}) or ``None`` when the url cannot be parsed or
-        the PR/MR cannot be resolved."""
+        the PR/MR cannot be resolved.
+        """
 
     @abstractmethod
     def check_status(
@@ -200,7 +204,8 @@ class Forge(ABC):
         Returns ``{"merged": True, "reason": "..."}`` on success,
         ``{"merged": False, "reason": "..."}`` on failure. Must never
         raise for API-level failures (branch protection, not mergeable,
-        conflict, network error) — catch and return a failure dict."""
+        conflict, network error) — catch and return a failure dict.
+        """
 
     @abstractmethod
     def close_pr(self, *, source_branch: str) -> bool:
@@ -398,7 +403,8 @@ class Forge(ABC):
 
     def update_branch(self, *, source_branch: str) -> dict:
         """Merge the PR's base branch into the PR branch (server-side) so its
-        CI re-runs against the current base tip. Default: unsupported no-op."""
+        CI re-runs against the current base tip. Default: unsupported no-op.
+        """
         return {"updated": False, "reason": "not supported"}
 
     def delete_branch(self, *, branch: str) -> bool:
@@ -406,17 +412,20 @@ class Forge(ABC):
 
         Returns True on success, False on any failure (branch already
         gone, 404/422, network error, insufficient scope). Must NEVER
-        raise — catch all API-level failures and return False."""
+        raise — catch all API-level failures and return False.
+        """
         return False
 
     def list_branches(self) -> list[BranchInfo]:
         """List all remote branches with last-commit timestamp and
-        protection flag. Returns [] on any failure. Must NEVER raise."""
+        protection flag. Returns [] on any failure. Must NEVER raise.
+        """
         return []
 
     def list_open_pr_branches(self) -> set[str]:
         """Head branch names of all currently-open PRs/MRs. Returns an
-        empty set on any failure. Must NEVER raise."""
+        empty set on any failure. Must NEVER raise.
+        """
         return set()
 
     def list_open_prs(self) -> list[dict[str, Any]]:

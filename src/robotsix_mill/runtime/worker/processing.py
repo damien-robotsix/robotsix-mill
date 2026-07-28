@@ -92,7 +92,8 @@ async def process_ticket(
     ticket_id: str, ctx: StageContext, active_map: dict | None = None
 ) -> None:
     """Drive one ticket through as many stages as possible, in order,
-    until it reaches a terminal/waiting state or a stub stops the chain."""
+    until it reaches a terminal/waiting state or a stub stops the chain.
+    """
     await _process_ticket_inner(ticket_id, ctx, active_map=active_map)
 
 

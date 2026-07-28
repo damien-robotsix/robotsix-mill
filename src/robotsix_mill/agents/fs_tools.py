@@ -346,7 +346,8 @@ def build_fs_tools(
 
     def _check_read_file_cap() -> str | None:
         """Return an error string if the read_file cap is exceeded,
-        or None if the call should proceed."""
+        or None if the call should proceed.
+        """
         if (
             read_file_max_calls is not None
             and _read_file_call_count[0] >= read_file_max_calls
@@ -368,7 +369,8 @@ def build_fs_tools(
         """Read *p* and cache the result.  *p* is already sandbox-safe
         (returned by ``_safe``), but we ``resolve()`` again for a
         canonical cache key.  ``ValueError`` / ``OSError`` are re-raised
-        so the caller can convert them to error strings."""
+        so the caller can convert them to error strings.
+        """
         key = p.resolve()
         if key in _file_cache:
             return _file_cache[key]
@@ -449,7 +451,8 @@ def build_fs_tools(
         A prior partial read with ``(o, l)`` covers ``[o, o+l)`` (or
         ``[o, EOF)`` when *l* is ``None`` but *o* > 1).  Pruned returns
         (content == ``_PRUNED_PLACEHOLDER``) are skipped — their content
-        is gone from context."""
+        is gone from context.
+        """
         try:
             messages = getattr(ctx, "messages", None)
             if not messages:
@@ -773,7 +776,8 @@ def build_fs_tools(
         linter requires the full module graph and false-positives on
         work-in-progress edits. ``compile`` catches the kind of error
         that would otherwise waste a full test cycle (missing colon,
-        unmatched paren, stray indent)."""
+        unmatched paren, stray indent).
+        """
         if not path.endswith(".py"):
             return None
         if not settings.lint_on_edit:
@@ -819,7 +823,8 @@ def build_fs_tools(
         ``old_string``, and if it appears at least ``count`` times
         replaces the first ``count`` occurrences with ``new_string``.
         Returns a short result string — prefer this for surgical edits
-        over ``write_file``."""
+        over ``write_file``.
+        """
         try:
             with trace_stage("edit_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
@@ -953,7 +958,8 @@ def build_fs_tools(
         reading files, use ``git grep <pattern>`` (or plain ``grep``
         when ``.git`` is absent).  Prefer this over exhaustive
         ``read_file`` loops — it finds the files that matter in one
-        command so you can then ``read_file`` only those."""
+        command so you can then ``read_file`` only those.
+        """
         # -- loop guard: refuse exact duplicates and repeated grep on   --
         # -- the same file (the agent is spinning instead of answering). --
         if command in _command_history:

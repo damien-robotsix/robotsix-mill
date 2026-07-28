@@ -57,6 +57,8 @@ ASK_USER_MARKER: str = "[ASK_USER]"
 
 
 class State(StrEnum):
+    """Ticket states in the pipeline lifecycle."""
+
     DRAFT = "draft"  # raw idea, awaiting refinement
     HUMAN_ISSUE_APPROVAL = "human_issue_approval"  # refined; awaiting human approval
     READY = "ready"  # actionable; awaiting implementation

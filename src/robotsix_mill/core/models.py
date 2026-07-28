@@ -254,7 +254,8 @@ class TicketEvent(SQLModel, table=True):
 
 class Comment(SQLModel, table=True):
     """Reviewer comment on a ticket — supports threading via parent_id
-    and open/closed tracking on top-level threads via closed_at."""
+    and open/closed tracking on top-level threads via closed_at.
+    """
 
     id: int | None = Field(default=None, primary_key=True)
     ticket_id: str = Field(foreign_key="ticket.id", index=True)

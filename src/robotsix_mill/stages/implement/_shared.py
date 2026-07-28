@@ -64,7 +64,7 @@ _VENDORED_DEP_MIN_MARKERS = 2
 
 
 def _is_binary_artifact(repo_dir: Path, path: str, target_branch: str) -> bool:
-    """Return True if *path* is a binary artifact.
+    r"""Return True if *path* is a binary artifact.
 
     Uses three orthogonal signals; any is sufficient:
 

@@ -32,7 +32,8 @@ router = APIRouter(tags=["Health"])
 
 def _uptime_payload(request: Request) -> dict[str, Any]:
     """Return a dict with ``started_at`` / ``uptime_seconds`` when the
-    app-state ``started_at`` is set, empty dict otherwise."""
+    app-state ``started_at`` is set, empty dict otherwise.
+    """
     started_at: datetime | None = getattr(request.app.state, "started_at", None)
     if started_at is not None:
         uptime = (datetime.now(timezone.utc) - started_at).total_seconds()

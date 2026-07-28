@@ -123,7 +123,8 @@ class MergeStage(
     def _cleanup_branch_on_done(self, ticket, ctx, branch: str) -> None:
         """Best-effort: delete the merged head branch on the forge.
         Gated by settings.delete_branch_on_merge. Never raises — a
-        cleanup failure must not block the DONE transition."""
+        cleanup failure must not block the DONE transition.
+        """
         if not ctx.settings.delete_branch_on_merge:
             return
         try:

@@ -286,7 +286,8 @@ def _anti_bounce_escalate(
 def is_sendback_reentry(service: TicketService, ticket_id: str) -> bool:
     """Return ``True`` when this refine run follows an operator "changes requested"
     sendback — i.e. a prior ``DRAFT`` event whose note starts with
-    ``OPERATOR_SENDBACK_PREFIX``."""
+    ``OPERATOR_SENDBACK_PREFIX``.
+    """
     for ev in service.history(ticket_id):  # type: ignore[attr-defined]
         if (
             ev.state == State.DRAFT

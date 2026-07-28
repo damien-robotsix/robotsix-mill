@@ -96,7 +96,7 @@ def find_orphan_workspaces(
     settings: Settings,
     board_id: str,
 ) -> list[OrphanWorkspace]:
-    """Return workspace directories whose ticket no longer exists.
+    r"""Return workspace directories whose ticket no longer exists.
 
     Lists every subdirectory under ``<data_dir>/<board_id>/workspaces/``,
     cross-references the names against *board_id*'s ``mill.db`` in one
@@ -315,7 +315,8 @@ def _prune_board_workspaces(
 
 def _prune_closed_workspaces(settings: Settings) -> int:
     """Remove workspace dirs of terminal-state tickets older than the
-    configured age. Returns the number of directories removed."""
+    configured age. Returns the number of directories removed.
+    """
     now = _now()
     age_threshold_seconds = settings.data_dir_gc_prune_closed_age_seconds
     total_removed = 0
@@ -393,7 +394,8 @@ def _prune_board_terminal_clones(
 def _prune_terminal_clones(settings: Settings) -> int:
     """Remove ``repo/`` / ``repos/`` clones from terminal-ticket
     workspaces across all boards. Returns the number of clone dirs
-    removed."""
+    removed.
+    """
     now = _now()
     age_threshold_seconds = settings.data_dir_gc_prune_terminal_clones_age_seconds
     total_removed = 0

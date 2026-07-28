@@ -14,6 +14,8 @@ from ..core.service import _event_hash
 
 @dataclass
 class VerifyResult:
+    """Result of a ticket-verification periodic pass."""
+
     total_events: int = 0
     tickets_verified: int = 0
     breaks: list[dict] = field(default_factory=list)

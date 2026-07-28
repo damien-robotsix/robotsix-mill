@@ -275,7 +275,8 @@ def _filter_same_repo(
     directives: list[dict[str, str]], repo_pkgs: set[str]
 ) -> list[dict[str, str]]:
     """Return only the directives whose top-level module is NOT a
-    same-repo package, logging each skipped directive at INFO level."""
+    same-repo package, logging each skipped directive at INFO level.
+    """
     external: list[dict[str, str]] = []
     for d in directives:
         code = d["code"]
@@ -419,7 +420,8 @@ def _run_individual_checks(
     runner: Callable[[str, Path, float], int],
 ) -> list[str]:
     """Run each directive one at a time via *runner*, returning the
-    ``unmet`` list."""
+    ``unmet`` list.
+    """
     per_check_timeout = max(1.0, _TOTAL_TIMEOUT_S / len(external)) if external else 1.0
     unmet = []
     for d in external:

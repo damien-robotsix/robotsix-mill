@@ -21,7 +21,7 @@ import pathlib
 
 
 def src_path_candidates(token: str) -> list[str]:
-    """Ordered candidate repo-relative spellings for *token*.
+    r"""Ordered candidate repo-relative spellings for *token*.
 
     Returns the literal *token* first, then a ``src/``-prefixed form
     when the token is relative and not already under ``src/``.

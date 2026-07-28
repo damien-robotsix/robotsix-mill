@@ -409,7 +409,6 @@ def _classify_branches(
     Phase 2: act on each classification (close or file-ticket) up to
     per-type and combined caps.
     """
-
     # ---- phase 0a: author guard --------------------------------------
     prs_after_author: list[dict] = []
     for pr in mill_prs:

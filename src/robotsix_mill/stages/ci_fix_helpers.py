@@ -43,7 +43,8 @@ def _workspace_repo_dir(ctx: StageContext, ticket: Ticket) -> str | None:
 def _format_code_scanning_alerts(alerts: list[dict[str, Any]]) -> str:
     """Render open code-scanning (CodeQL) alerts as a markdown block. These
     come from the security/code-scanning API, NOT the workflow job logs, so
-    without them the agent can't see what a CodeQL check actually flagged."""
+    without them the agent can't see what a CodeQL check actually flagged.
+    """
     if not alerts:
         return ""
     lines = ["**Code-scanning alerts (CodeQL — these are NOT in the job logs):**"]

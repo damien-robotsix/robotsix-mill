@@ -248,7 +248,8 @@ def _regen_uv_lock(repo_dir: Path, ticket_id: str) -> None:
 
 def _regen_npm_lock(repo_dir: Path, ticket_id: str) -> None:
     """Run ``npm install --package-lock-only`` and commit package-lock.json
-    if changed. Warn-and-proceed on failure."""
+    if changed. Warn-and-proceed on failure.
+    """
     try:
         result = subprocess.run(
             ["npm", "install", "--package-lock-only", "--no-audit", "--no-fund"],

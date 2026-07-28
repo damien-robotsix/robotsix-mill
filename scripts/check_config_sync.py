@@ -119,7 +119,6 @@ _SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
 
 def build_valid_settings_names(model: type) -> set[str]:
     """Return the union of every ``model`` field name and non-null alias."""
-
     names: set[str] = set()
     for name, field in model.model_fields.items():
         names.add(name)
@@ -134,7 +133,6 @@ def check_settings_keys_in_model(
     exceptions: frozenset[str],
 ) -> list[str]:
     """Invariant 1: every settings key must be a real field name/alias."""
-
     drift: list[str] = []
     for key in sorted(example_keys):
         if key in exceptions:
@@ -153,7 +151,6 @@ def check_model_fields_in_json(
     exceptions: frozenset[str],
 ) -> list[str]:
     """Invariant 2: every Settings field must appear in the JSON settings."""
-
     drift: list[str] = []
     for name, field in model.model_fields.items():
         if name in exceptions:
@@ -175,7 +172,6 @@ def check_secrets_example(
     exceptions: frozenset[str],
 ) -> list[str]:
     """Invariant 3: secrets-block keys == user-configurable Secrets fields."""
-
     expected = secrets_fields - exceptions
     drift: list[str] = []
     for key in sorted(example_keys - expected):
@@ -192,7 +188,6 @@ def check_secrets_example(
 
 def collect_drift() -> list[str]:
     """Load the real on-disk surfaces and run every invariant."""
-
     from robotsix_mill.config import Secrets, Settings
 
     with open(_CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as fh:
