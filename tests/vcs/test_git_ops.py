@@ -859,7 +859,176 @@ class TestChangedFiles:
 
 
 # ===========================================================================
-# 13a. introduced_files — integration (real git)
+# 13a. changed_source_files — integration (real git)
+# ===========================================================================
+
+
+class TestChangedSourceFiles:
+    def test_committed_file_appears(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "new.txt").write_text("branch work")
+        git_ops.commit_all(dest, "add new.txt")
+        files = git_ops.changed_source_files(dest, "main")
+        assert "new.txt" in files
+
+    def test_clean_branch_returns_empty(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        # No changes — same as origin/main
+        files = git_ops.changed_source_files(dest, "main")
+        assert files == []
+
+    def test_uncommitted_changes_not_reported(self, tmp_path):
+        """Only committed (--diff-filter=AM) files appear; working-tree
+        dirt is invisible — this is the contract the rebase integrity
+        check relies on."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "dirty.txt").write_text("unstaged")
+        files = git_ops.changed_source_files(dest, "main")
+        assert "dirty.txt" not in files
+
+    def test_deleted_file_not_reported(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "README.md").unlink()
+        git_ops.commit_all(dest, "remove readme")
+        files = git_ops.changed_source_files(dest, "main")
+        assert "README.md" not in files
+
+    def test_changelog_excluded_by_check_not_by_collector(self, tmp_path):
+        """changed_source_files does NOT filter CHANGELOG.md — the
+        exclusion is the caller's responsibility."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "CHANGELOG.md").write_text("updated")
+        git_ops.commit_all(dest, "changelog")
+        files = git_ops.changed_source_files(dest, "main")
+        assert "CHANGELOG.md" in files
+
+
+# ===========================================================================
+# 13b. check_rebase_diff_integrity — unit
+# ===========================================================================
+
+
+class TestCheckRebaseDiffIntegrity:
+    def test_no_drops_returns_ok(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "a.txt").write_text("branch work")
+        (dest / "b.txt").write_text("more work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", ["a.txt", "b.txt"]
+        )
+        assert ok is True
+        assert dropped == []
+
+    def test_dropped_file_detected(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "a.txt").write_text("branch work")
+        git_ops.commit_all(dest, "implement")
+
+        # Pre-rebase files include b.txt, but b.txt is not in the diff
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", ["a.txt", "b.txt"]
+        )
+        assert ok is False
+        assert dropped == ["b.txt"]
+
+    def test_changelog_excluded_from_comparison(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "src").mkdir(parents=True, exist_ok=True)
+        (dest / "src" / "mod.py").write_text("real work")
+        git_ops.commit_all(dest, "implement")
+
+        # CHANGELOG.md in pre-rebase list but not in post-rebase diff
+        # should NOT trigger a drop.
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", ["src/mod.py", "CHANGELOG.md"]
+        )
+        assert ok is True
+        assert dropped == []
+
+    def test_changelog_fragment_excluded(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "src").mkdir(parents=True, exist_ok=True)
+        (dest / "src" / "mod.py").write_text("real work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", ["src/mod.py", "changelog.d/20250601.misc.md"]
+        )
+        assert ok is True
+        assert dropped == []
+
+    def test_empty_pre_list_returns_ok(self, tmp_path):
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "a.txt").write_text("work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(dest, "main", [])
+        assert ok is True
+        assert dropped == []
+
+    def test_custom_target_branch(self, tmp_path):
+        """Integrity check works with a non-main target branch."""
+        seed = tmp_path / "seed"
+        seed.mkdir()
+        _git(seed, "init", "-q")
+        _git(seed, "config", "user.email", "t@t")
+        _git(seed, "config", "user.name", "t")
+        (seed / "README.md").write_text("seed\n")
+        _git(seed, "add", "-A")
+        _git(seed, "commit", "-q", "-m", "init")
+        _git(seed, "branch", "-M", "develop")
+        bare = tmp_path / "remote.git"
+        subprocess.run(
+            ["git", "clone", "--bare", "-q", str(seed), str(bare)],
+            check=True,
+            capture_output=True,
+        )
+        remote = f"file://{bare}"
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "develop")
+        git_ops.create_branch(dest, "feature")
+        (dest / "mod.py").write_text("work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(dest, "develop", ["mod.py"])
+        assert ok is True
+        assert dropped == []
+
+
+# ===========================================================================
+# 13c. introduced_files — integration (real git)
 # ===========================================================================
 
 
