@@ -517,6 +517,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `sandbox.pids_limit` | `MILL_SANDBOX_PIDS_LIMIT` | `512` | PID limit for sandbox containers |
 | `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
 | `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `1800` | Wall-clock cap (seconds) for sandbox shell/test commands |
+| `sandbox.op_timeout` | `MILL_SANDBOX_OP_TIMEOUT` | `300` | Per-docker-exec timeout (seconds) for individual sandbox operations. `0` disables. |
 | `sandbox.data_volume` | `MILL_DATA_VOLUME` | `mill_data` | Named Docker volume for data (fallback when not bind-mounted) |
 | `sandbox.data_mount` | `MILL_SANDBOX_DATA_MOUNT` | `None` | Host path for bind-mounted data directory (overrides `data_volume`) |
 | `sandbox.network` | `MILL_SANDBOX_NETWORK` | `mill-sandbox-net` | Docker network sandbox containers connect to (internal, filtered through proxy) |
