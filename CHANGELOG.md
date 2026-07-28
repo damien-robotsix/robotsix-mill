@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Updated the periodic-agent generic interval default in `docs/config/configuration.md` from `86400` (1 day) to `604800` (7 days), matching the actual model defaults for the majority of periodic agents. Added a footnote listing the agents that default to `86400` (1 day) or `3600` (1 hour).
 - Document `implement_pass_timeout` / `MILL_IMPLEMENT_PASS_TIMEOUT` in the config reference table (section 2, Request limits).
 - Document `sandbox_op_timeout` / `MILL_SANDBOX_OP_TIMEOUT` in the configuration reference (section 9, Sandbox).
 - Added the ``diagnostic`` periodic pass to ``_SCHEDULE_ONLY_RUNNERS`` so repos with a ``diagnostic.yaml`` presence file have it scheduled (previously it was silently skipped). Extended ``scripts/check_builtin_kinds.py`` with invariant 5 to catch future ``schedule_only`` entries that are missing scheduler wiring.
