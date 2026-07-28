@@ -893,6 +893,8 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
+| `MILL_CONFIG_SYNC_PERIODIC` | `true` | Enable periodic config/drift detection passes |
+| `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day) |
 | `MILL_FRONTEND_SYNC_PERIODIC` | `true` | Enable periodic frontend-sync passes |
 | `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes |
 | `MILL_PIN_BUMP_PERIODIC` | `false` | Enable periodic pin-bump passes |
