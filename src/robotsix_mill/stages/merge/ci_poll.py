@@ -681,6 +681,8 @@ class CIPollMixin(_MergeStageBase):
         """
         s = ctx.settings
         rc = ctx.repo_config
+        if rc is None:
+            return False, "no repo config available"
 
         # --- Config-only gates (fast, no I/O) ---
         if not s.auto_merge_enabled:
