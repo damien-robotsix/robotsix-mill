@@ -964,7 +964,12 @@ def build_fs_tools(
                 f"(scroll back in the conversation history) instead "
                 f"of re-running it."
             )
-        _LOOP_FILE_THRESHOLD = 3
+        # Count DISTINCT greps per file (byte-identical repeats are already
+        # refused above), and allow a generous number of them: a large source
+        # file legitimately needs many DIFFERENT greps (distinct symbols /
+        # regions). A threshold of 3 bricked real large-file work; only a
+        # genuine storm of distinct probes on one file should trip this.
+        _LOOP_FILE_THRESHOLD = 8
         _LOOP_TOTAL_MIN = 4
         if len(_command_history) >= _LOOP_TOTAL_MIN:
             # Extract file paths from all grep commands in history.
@@ -988,17 +993,19 @@ def build_fs_tools(
                 else None
             )
             if current_target is not None:
-                prior_greps = sum(
-                    1
-                    for c in _command_history
-                    if ("grep" in c or "git grep" in c)
-                    and _file_of(c) == current_target
+                prior_greps = len(
+                    {
+                        c
+                        for c in _command_history
+                        if ("grep" in c or "git grep" in c)
+                        and _file_of(c) == current_target
+                    }
                 )
                 if prior_greps >= _LOOP_FILE_THRESHOLD:
                     _command_history.append(command)
                     return (
                         f"REFUSED (do NOT retry): you have already run "
-                        f"{prior_greps} grep commands against "
+                        f"{prior_greps} distinct grep commands against "
                         f"{current_target!r}. You have enough information "
                         f"to answer — synthesise what you've learned "
                         f"and return your answer now. Do NOT issue "

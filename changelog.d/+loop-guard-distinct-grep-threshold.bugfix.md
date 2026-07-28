@@ -1,0 +1,1 @@
+`run_command` loop-guard no longer bricks legitimate large-file exploration. It now counts only *distinct* greps per file (byte-identical repeats are already refused separately) and raises the per-file threshold from 3 to 8, so a large source file that genuinely needs many different greps is not refused after the third one.

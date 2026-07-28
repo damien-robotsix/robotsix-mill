@@ -322,6 +322,25 @@ class FileOperationsMixin(_ImplementStageBase):
         )
         if resuming:
             git_ops.checkout(repo_dir, branch)
+            # A prior cycle may have terminated on a non-finalizing exit path
+            # (transient AgentRunError re-raise, pause/interrupt, worker-
+            # scheduled retry) that left real edits UNCOMMITTED in the
+            # worktree. The try_rebase_onto() below runs `git reset --hard`
+            # + `git clean -fd`, which would silently destroy that work —
+            # producing the "clean checkout, re-do the edits, exhaust the
+            # spawn budget, block" loop. If the branch has no commits beyond
+            # the base yet the worktree is dirty, nothing was ever committed,
+            # so persist the edits as a WIP commit; try_rebase_onto carries
+            # committed work forward, so the edits then reach the deliver
+            # stage instead of being lost. (When the branch IS already ahead,
+            # a leftover dirty tree is genuine throwaway state and is
+            # discarded as before.)
+            if git_ops.has_changes(repo_dir) and not git_ops.branch_is_ahead_of_main(
+                repo_dir, target
+            ):
+                git_ops.commit_all(
+                    repo_dir, f"mill: {ticket.id} resume-preserve WIP [WIP]"
+                )
         else:
             if repo_dir.exists():
                 shutil.rmtree(repo_dir)

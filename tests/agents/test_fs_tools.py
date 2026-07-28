@@ -970,23 +970,35 @@ class TestRunCommand:
         assert "already ran this exact command" in result2
 
     def test_refuses_grep_loop_same_file(self, tmp_path, settings, fake_sandbox):
-        """After 4+ total commands and 3+ grep commands on the same file,
-        the next grep on that file is refused."""
+        """After 8+ DISTINCT grep commands on the same file, the next grep on
+        that file is refused (byte-identical repeats are refused separately)."""
         root = tmp_path / "repo"
         root.mkdir()
         tools = _build(root, settings)
 
-        # 3 grep commands on the same file.
-        tools["run_command"]("grep -n 'def foo' src/foo.py")
-        tools["run_command"]("grep -n 'def bar' src/foo.py")
-        tools["run_command"]("grep -n 'class Qux' src/foo.py")
-        # A non-grep command to push total ≥ 4.
-        tools["run_command"]("echo hello")
-        # 4th grep on same file triggers the counter-based guard.
+        # 8 DISTINCT greps on the same file are allowed.
+        for i in range(8):
+            r = tools["run_command"](f"grep -n 'sym{i}' src/foo.py")
+            assert "REFUSED" not in r
+        # The 9th distinct grep on the same file trips the counter guard.
         result = tools["run_command"]("grep -n 'class Baz' src/foo.py")
         assert "REFUSED" in result
-        assert "grep commands against" in result
+        assert "distinct grep commands against" in result
         assert "src/foo.py" in result
+
+    def test_grep_loop_under_threshold_allowed_large_file(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """Legitimate large-file exploration: up to 7 DISTINCT greps on one
+        file are allowed (regression guard against the old threshold of 3 that
+        bricked real work)."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        for i in range(7):
+            r = tools["run_command"](f"grep -n 'symbol{i}' src/big.py")
+            assert "REFUSED" not in r
 
     def test_grep_loop_different_files_allowed(self, tmp_path, settings, fake_sandbox):
         """Grep commands on different files are not refused."""
