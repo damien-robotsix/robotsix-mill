@@ -285,10 +285,18 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # When resuming from a prior implement run (local branch already
         # exists), check whether the remote branch carries commits with
         # all-green CI but no open PR.  If so, skip the implement loop
-        # and route to IMPLEMENT_COMPLETE so the deliver stage re-opens
-        # a PR from the existing branch.  This prevents a redraft/re-block
-        # loop where re-implementing an already-complete branch triggers
-        # the stale-spec guard or produces unnecessary additional commits.
+        # and route to DELIVERABLE so the deliver stage opens a PR from
+        # the existing branch.  This prevents a redraft/re-block loop where
+        # re-implementing an already-complete branch triggers the stale-spec
+        # guard or produces unnecessary additional commits.
+        #
+        # DELIVERABLE — not IMPLEMENT_COMPLETE — is the required target: the
+        # deliver stage (which opens PRs) runs on DELIVERABLE, whereas
+        # IMPLEMENT_COMPLETE is the POST-deliver state handled by the merge
+        # stage's poll, which expects an already-open PR and merely re-polls
+        # (never opening one) when none exists.  Routing to IMPLEMENT_COMPLETE
+        # therefore skipped deliver entirely, so the PR was never created and
+        # the ticket churned back into implement until the spawn cap tripped.
         if resuming:
             try:
                 remote_url = _resolve_remote_url(s, ctx.repo_config)
@@ -305,11 +313,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                             if pr is None or pr.get("state") != "open":
                                 note = (
                                     "branch exists with green CI but no open PR — "
-                                    "re-routing to IMPLEMENT_COMPLETE so deliver "
-                                    "stage re-opens PR"
+                                    "routing to DELIVERABLE so the deliver stage "
+                                    "opens a PR from the existing branch"
                                 )
                                 log.info("%s: %s", ticket.id, note)
-                                return Outcome(State.IMPLEMENT_COMPLETE, note)
+                                return Outcome(State.DELIVERABLE, note)
             except Exception:
                 log.warning(
                     "%s: branch/PR resume check failed — proceeding normally",
