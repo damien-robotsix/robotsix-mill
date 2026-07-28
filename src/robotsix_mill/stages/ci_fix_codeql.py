@@ -12,6 +12,7 @@ from ..core.states import State
 from ..forge import get_forge
 from .base import Outcome, StageContext
 from .ci_fix_helpers import (
+    _CODQL_CHECK_NAMES,
     _only_codeql_failing,
     _partition_alerts_by_diff,
     _pr_changed_paths,
@@ -27,9 +28,6 @@ _CODQL_FP_TRIAGE_VERDICTS = "codeql_fp_triage_verdicts.json"
 # Maximum number of alerts the codeql_fp_triage agent may dismiss in a
 # single pass.  Caps the blast radius of a misjudged dismissal.
 _CODQL_FP_TRIAGE_MAX_DISMISSALS = 5
-
-# Check-run names that are CodeQL-related (case-insensitive contains).
-_CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})
 
 
 def _eligible_for_triage(
