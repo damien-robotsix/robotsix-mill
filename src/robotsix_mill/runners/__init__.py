@@ -38,7 +38,6 @@ _SUBMODULES: list[str] = [
 ]
 
 
-
 def _register() -> None:
     """Lazily register every legacy submodule in ``sys.modules`` so that
     ``from robotsix_mill.runners.xxx import yyy`` continues to work."""
