@@ -403,6 +403,20 @@ class TestCloneAndBranch:
                 _track("try_rebase_onto") or True
             ),
         )
+        # Resume WIP-preservation guard: default to a clean worktree so the
+        # existing resume paths behave as before (no WIP commit).
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.has_changes",
+            lambda rd: _track("has_changes") or False,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_is_ahead_of_main",
+            lambda rd, target="main": _track("branch_is_ahead_of_main") or True,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.commit_all",
+            lambda rd, msg: _track("commit_all"),
+        )
 
     def _mock_forge_auth(self, monkeypatch):
         monkeypatch.setattr(
@@ -725,6 +739,85 @@ class TestCloneAndBranch:
         assert "clone" not in calls
         assert "checkout" in calls
         assert "try_rebase_onto" in calls
+
+    def test_resume_preserves_uncommitted_wip(self, monkeypatch, tmp_path):
+        """Resume with a dirty worktree and NO commits beyond base: the edits
+        are WIP-committed before the destructive rebase so they aren't lost."""
+        ctx = self._ctx_cross_repo(tmp_path)
+        ticket = _ticket(ctx)
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repo"
+        repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_exists",
+            lambda rd, branch: True,
+        )
+        # Dirty worktree, branch NOT ahead of base -> nothing was ever committed.
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.has_changes",
+            lambda rd: True,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_is_ahead_of_main",
+            lambda rd, target="main": False,
+        )
+        committed = []
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.commit_all",
+            lambda rd, msg: committed.append(msg),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.github_token",
+            lambda settings, repo_config=None: "fake-token",
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        _rd, _branch, resuming = result
+        assert resuming is True
+        assert len(committed) == 1
+        assert "[WIP]" in committed[0]
+        assert ticket.id in committed[0]
+
+    def test_resume_ahead_branch_does_not_wip_commit(self, monkeypatch, tmp_path):
+        """Resume whose branch is already AHEAD of base keeps old behavior: a
+        leftover dirty tree is throwaway and is NOT WIP-committed."""
+        ctx = self._ctx_cross_repo(tmp_path)
+        ticket = _ticket(ctx)
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repo"
+        repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_exists",
+            lambda rd, branch: True,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.has_changes",
+            lambda rd: True,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_is_ahead_of_main",
+            lambda rd, target="main": True,
+        )
+        committed = []
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.commit_all",
+            lambda rd, msg: committed.append(msg),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.github_token",
+            lambda settings, repo_config=None: "fake-token",
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        _rd, _branch, resuming = result
+        assert resuming is True
+        assert committed == []
 
     def test_cross_repo_rebase_uses_fork_remote(self, monkeypatch, tmp_path):
         """The rebase also targets the fork remote, not the managed repo."""
