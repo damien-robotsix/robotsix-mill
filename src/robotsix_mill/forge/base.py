@@ -93,7 +93,8 @@ class Forge(ABC):
         target branch, ``False`` when it does, and ``None`` when the
         forge hasn't yet performed the check (treat as mergeable).
         ``author`` is the forge login/username of the PR author (empty
-        string when unavailable)."""
+        string when unavailable).
+        """
 
     @abstractmethod
     def pr_status_by_url(self, *, url: str) -> dict | None:
