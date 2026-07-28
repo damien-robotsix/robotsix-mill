@@ -123,55 +123,55 @@ def _action_refs_from_diff(diff: str) -> list[tuple[str, str, str, str]]:
     absent).
 
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n'
     ... )
     [('.github/workflows/ci.yml', 'actions/checkout', '11bd71901bbe5b1630ceea73d27597364c9af683', 'v4.2.2')]
 
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: actions/checkout@v4\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: actions/checkout@v4\n'
     ... )
     [('.github/workflows/ci.yml', 'actions/checkout', 'v4', '')]
 
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: github/codeql-action/init@6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4 # v3.29.2\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: github/codeql-action/init@6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4 # v3.29.2\n'
     ... )
     [('.github/workflows/ci.yml', 'github/codeql-action/init', '6b0550b4a2a7c00e939e5501b0c0b3f654b3d8e4', 'v3.29.2')]
 
     >>> # Local refs are skipped.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: ./.github/actions/my-action@main\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: ./.github/actions/my-action@main\n'
     ... )
     []
 
     >>> # Docker refs are skipped.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: docker://ubuntu:latest\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: docker://ubuntu:latest\n'
     ... )
     []
 
     >>> # Reusable-workflow refs are skipped (already handled by _WORKFLOW_RE).
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@v1\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@v1\n'
     ... )
     []
 
     >>> # +++ header lines are not scanned.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
     ... )
     []
 
     >>> # Deleted lines (^-prefixed) are not scanned.
     >>> _action_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '-    uses: evilcorp/backdoor@v1\\n'
-    ...     '+    uses: actions/checkout@v4\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '-    uses: evilcorp/backdoor@v1\n'
+    ...     '+    uses: actions/checkout@v4\n'
     ... )
     [('.github/workflows/ci.yml', 'actions/checkout', 'v4', '')]
     """
@@ -222,25 +222,25 @@ def _reusable_workflow_sha_refs_from_diff(
     same validation pipeline.
 
     >>> _reusable_workflow_sha_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
     ...     '+    uses: damien-robotsix/robotsix-github-workflows/'
     ...     '.github/workflows/docker-release.yml'
-    ...     '@43309967ea8011400212a8995d33ca900ee2afed\\n'
+    ...     '@43309967ea8011400212a8995d33ca900ee2afed\n'
     ... )
     [('.github/workflows/ci.yml', 'damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml', '43309967ea8011400212a8995d33ca900ee2afed', '')]
 
     >>> # Tag refs are skipped — valid for reusable workflows, no check needed.
     >>> _reusable_workflow_sha_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
-    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@main\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
+    ...     '+    uses: my-org/my-repo/.github/workflows/ci.yml@main\n'
     ... )
     []
 
     >>> # .github/actions/ is also matched.
     >>> _reusable_workflow_sha_refs_from_diff(
-    ...     '+++ b/.github/workflows/ci.yml\\n'
+    ...     '+++ b/.github/workflows/ci.yml\n'
     ...     '+    uses: my-org/my-repo/.github/actions/composite-action'
-    ...     '@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\\n'
+    ...     '@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\n'
     ... )
     [('.github/workflows/ci.yml', 'my-org/my-repo/.github/actions/composite-action', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0', '')]
     """
