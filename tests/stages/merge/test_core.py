@@ -77,7 +77,10 @@ def _in_rebasing(ctx):
 
 def _gh(tmp_path, **extra):
     # When auto_merge_enabled is set to "true", also opt in the repo.
-    if extra.get("auto_merge_enabled") == "true" and "repo_auto_merge_enabled" not in extra:
+    if (
+        extra.get("auto_merge_enabled") == "true"
+        and "repo_auto_merge_enabled" not in extra
+    ):
         extra["repo_auto_merge_enabled"] = True
     return _ctx(
         tmp_path,
