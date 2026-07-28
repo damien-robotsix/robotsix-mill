@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Document `sandbox_op_timeout` / `MILL_SANDBOX_OP_TIMEOUT` in the configuration reference (section 9, Sandbox).
 - Added the ``diagnostic`` periodic pass to ``_SCHEDULE_ONLY_RUNNERS`` so repos with a ``diagnostic.yaml`` presence file have it scheduled (previously it was silently skipped). Extended ``scripts/check_builtin_kinds.py`` with invariant 5 to catch future ``schedule_only`` entries that are missing scheduler wiring.
 - Document `ci_debt_recheck` periodic agent in `docs/config/configuration.md`: add to periodic agent list and document `MILL_CI_DEBT_RECHECK_PERIODIC` (default `true`) and `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` (default `3600`) env vars
 - Docs: added `roadmap_sync`, `frontend_sync`, and `pin_bump` to the periodic agent list and env-var reference table in `docs/config/configuration.md`.
