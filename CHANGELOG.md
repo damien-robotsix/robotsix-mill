@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `MILL_MEMBER_SYNC_PERIODIC` and `MILL_MEMBER_SYNC_INTERVAL_SECONDS` env var rows to the "Env-var-only periodic agents" table in `docs/config/configuration.md`.
 - Document `MILL_CONFIG_SYNC_PERIODIC` and `MILL_CONFIG_SYNC_INTERVAL_SECONDS` env vars in the "Env-var-only periodic agents" table (`docs/config/configuration.md`).
 - docs: add `stale_branch_cleanup` to footnote ² exception list in `docs/config/configuration.md` so that its 86400 s (1 day) default is documented, matching the Pydantic model default.
 - Docs: add `langfuse_cleanup` to the footnote ² list of agents that default to 86400 s (1 day) interval in `docs/config/configuration.md`.
