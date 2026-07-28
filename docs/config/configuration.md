@@ -897,6 +897,8 @@ and as environment variables:
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day) |
 | `MILL_FRONTEND_SYNC_PERIODIC` | `true` | Enable periodic frontend-sync passes |
 | `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes |
+| `MILL_MEMBER_SYNC_PERIODIC` | `true` | Enable periodic team-member-sync passes |
+| `MILL_MEMBER_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between member-sync passes |
 | `MILL_PIN_BUMP_PERIODIC` | `false` | Enable periodic pin-bump passes |
 | `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes |
 | `MILL_ROADMAP_SYNC_PERIODIC` | `true` | Enable periodic roadmap-sync passes |
