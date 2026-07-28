@@ -170,7 +170,6 @@ def triage_refine(
     draft-only classification path (e.g. for meta-board tickets with
     no repo clone).
     """
-
     from pydantic_ai.usage import UsageLimits
 
     from .yaml_loader import load_agent_definition
@@ -263,7 +262,6 @@ def triage_auto_approve(
     NO tools, NO web, NO explore — just a tiny prompt and a
     structured classification.
     """
-
     from .yaml_loader import load_and_run_agent
 
     user_prompt = section("spec", spec)
@@ -294,7 +292,6 @@ def triage_reviewer_agreement(
     NO tools, NO web, NO explore — just a tiny prompt and a
     structured classification.
     """
-
     from .yaml_loader import load_and_run_agent
 
     user_prompt = (
@@ -327,7 +324,6 @@ def review_spec_for_conciseness(
 
     NO tools, NO web, NO explore — classification/transformation only.
     """
-
     from .yaml_loader import load_and_run_agent
 
     user_prompt = section("spec", spec_markdown)

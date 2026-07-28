@@ -642,7 +642,8 @@ class ReviewStage(Stage):
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a CODE_REVIEW ticket: refresh the clone, check out the
         ticket branch, and run the automated reviewer agent against the
-        diff."""
+        diff.
+        """
         s = ctx.settings
         ws = ctx.service.workspace(ticket)
 
@@ -1097,7 +1098,8 @@ class ReviewStage(Stage):
         repo_dir: Path,
     ) -> Outcome:
         """Process a REQUEST_CHANGES verdict: round tracking, convergence
-        detection, ask splitting, and follow-up spawning."""
+        detection, ask splitting, and follow-up spawning.
+        """
         rounds = ticket.review_rounds + 1
         ctx.service.set_review_rounds(ticket.id, rounds)
 
