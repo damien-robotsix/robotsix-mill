@@ -12,6 +12,7 @@ _shtab_robotsix_mill_commands() {
     "completeness-check:"
     "config-sync:"
     "copy-paste:"
+    "data-dir-gc:"
     "diagnostic:"
     "docstring-coverage:"
     "epic:"
@@ -131,6 +132,14 @@ _shtab_robotsix_mill_copy_paste_options=(
 
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_copy_paste_defaults_added=0
+
+_shtab_robotsix_mill_data_dir_gc_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_data_dir_gc_defaults_added=0
 
 _shtab_robotsix_mill_diagnostic_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -431,6 +440,7 @@ _shtab_robotsix_mill() {
         completeness-check) _arguments -C -s $_shtab_robotsix_mill_completeness_check_options ;;
         config-sync) _arguments -C -s $_shtab_robotsix_mill_config_sync_options ;;
         copy-paste) _arguments -C -s $_shtab_robotsix_mill_copy_paste_options ;;
+        data-dir-gc) _arguments -C -s $_shtab_robotsix_mill_data_dir_gc_options ;;
         diagnostic) _arguments -C -s $_shtab_robotsix_mill_diagnostic_options ;;
         docstring-coverage) _arguments -C -s $_shtab_robotsix_mill_docstring_coverage_options ;;
         epic) _shtab_robotsix_mill_epic ;;
