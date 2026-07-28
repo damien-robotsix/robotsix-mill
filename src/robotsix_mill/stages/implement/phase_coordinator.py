@@ -1067,6 +1067,17 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
             maybe_generate_towncrier_fragment(repo_dir, ticket.id, ticket.title)
             cls._validate_changelog_fragments(repo_dir)
+            # Regenerate shell completions if the CLI subcommand
+            # definitions changed — avoids a stale-completions CI
+            # auto-fix commit on the next push.
+            _target = effective_target_branch(ctx.settings, ctx.repo_config)
+            _changed = git_ops.changed_files(repo_dir, _target)
+            if any("src/robotsix_mill/cli/__init__.py" in f for f in _changed):
+                subprocess.run(
+                    ["uv", "run", "python", "scripts/gen_completions.py"],
+                    cwd=repo_dir,
+                    check=True,
+                )
             _commit_or_raise(repo_dir, commit_message)
         # Commit extra repos (skip primary — already done above).
         if extra_roots is not None:
