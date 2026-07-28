@@ -627,7 +627,7 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 >
 > ² Most agents default to `604800` (7 days). Exceptions defaulting to `86400` (1 day):
 > `trace_health`, `trace_review`, `config_sync`, `member_sync`, `data_dir_gc`,
-> `changelog_autofill`, `dependabot_ingest`, `orphaned_pr_check`, `pin_bump`.
+> `langfuse_cleanup`, `changelog_autofill`, `dependabot_ingest`, `orphaned_pr_check`, `pin_bump`.
 > `timeout_escalation`, `sandbox_reaper`, and `ci_debt_recheck` default to `3600` (1 hour).
 >
 > `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` write no
