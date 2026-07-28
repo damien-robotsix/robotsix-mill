@@ -1293,11 +1293,17 @@ def test_convergence_backstop_uses_cross_repo_base_branch(
     assert "origin/develop" in out2.note.lower()
 
 
-def test_resume_guard_branch_green_ci_no_pr_routes_to_implement_complete(
+def test_resume_guard_branch_green_ci_no_pr_routes_to_deliverable(
     ctx_factory, tmp_path, monkeypatch
 ):
     """When resuming and the remote branch has green CI but no open PR,
-    skip the implement loop and route to IMPLEMENT_COMPLETE."""
+    skip the implement loop and route to DELIVERABLE so the deliver stage
+    opens a PR from the existing branch.
+
+    Regression: this previously routed to IMPLEMENT_COMPLETE, which is the
+    POST-deliver state (merge-poll); it skipped the deliver stage entirely so
+    the PR was never opened and the ticket churned back into implement until
+    the spawn cap tripped."""
     remote = _make_bare_repo_on_branch(tmp_path, "main")
 
     ctx = ctx_factory(
@@ -1349,7 +1355,7 @@ def test_resume_guard_branch_green_ci_no_pr_routes_to_implement_complete(
     monkeypatch.setattr(pc, "github_token", lambda *a, **kw: "fake-token")
 
     out2 = ImplementStage().run(t, ctx)
-    assert out2.next_state is State.IMPLEMENT_COMPLETE
+    assert out2.next_state is State.DELIVERABLE
     assert "green ci but no open pr" in out2.note.lower()
 
 
