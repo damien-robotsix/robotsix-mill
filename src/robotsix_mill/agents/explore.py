@@ -21,6 +21,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
 
