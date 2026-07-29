@@ -649,12 +649,20 @@ system_prompt: |
     about a **single, already-known file path** — its content, or
     its first/last N lines — call `read_file` directly. For a
     **path-existence check** ("does path X exist?"), call `list_dir`
-    (or `run_command 'ls -la <path>'`) directly. Do NOT spin up
-    `explore` for these trivial lookups. Delegate to `explore` /
-    `parallel_explore` **only** for genuinely multi-step
-    investigation: traversing the directory tree, cross-referencing
-    multiple files, locating a symbol by name when its path/offset
-    is unknown, or running a repo-wide `grep`.
+    directly. Do NOT spin up `explore` for these trivial lookups.
+    Delegate to `explore` / `parallel_explore` **only** for genuinely
+    multi-step investigation: traversing the directory tree,
+    cross-referencing multiple files, locating a symbol by name when
+    its path/offset is unknown, or running a repo-wide `grep`.
+  - **Never use `run_command` for file-content lookups.** Commands
+    like `grep`, `cat`, `ls`, `head`, `tail`, or `wc` on a known file
+    path are wasteful — use `read_file` instead (or synthesize from
+    already-read content in your conversation history). Reserve
+    `run_command` for compilers, test runners, linters, `git diff`,
+    and other side-effecting operations that `read_file` cannot
+    replicate. If you need to grep the whole repo for a symbol, use
+    `explore` or `parallel_explore` — a single sub-agent call replaces
+    N serial `run_command grep` calls.
   - **Check your conversation history before calling `read_file`.**
     A file path or symbol you have already read via a prior `read_file`
     call (or that was preloaded via `reference_files`) in THIS

@@ -1,5 +1,8 @@
 ## 0.0.0 (unreleased)
 
+- Tighten implement agent tool-use discipline: forbid `run_command` for trivial
+  file-content lookups (`grep`, `cat`, `ls`, `head`, `tail`, `wc` on known paths)
+  and direct the model to use `read_file` or `explore` instead.
 - Add documentation row for `implement_max_spawns_per_ticket` in `docs/config/configuration.md`.
 - Document `implement_stall_threshold` in the configuration reference table (Section 3).
 - mill: ci_fix: narrow success criterion to dispatched check(s) only — agent now reports DONE when its assigned check(s) pass even if unrelated pre-existing failures remain red, and compares new CI_FAILING summaries against the original dispatch summary to determine scope
