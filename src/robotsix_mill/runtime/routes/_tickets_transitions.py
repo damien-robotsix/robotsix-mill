@@ -263,6 +263,8 @@ def answer_pending_question(
         raise HTTPException(409, str(e)) from None
 
     ticket = svc.get(ticket_id_u)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
