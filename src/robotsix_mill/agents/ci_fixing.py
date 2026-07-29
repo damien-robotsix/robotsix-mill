@@ -36,7 +36,7 @@ class CiFixResult(BaseModel):
     pattern_signature: str = ""
     pattern_approach: str = ""
     out_of_scope_reason: str = ""
-    failing_check: str = ""
+    failing_check: str = ""  # populated for DONE (check(s) fixed) and OUT_OF_SCOPE
     required_change_area: str = ""
 
 
