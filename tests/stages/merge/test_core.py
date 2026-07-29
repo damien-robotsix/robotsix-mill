@@ -4394,6 +4394,16 @@ def test_waiting_auto_merge_stale_artifact_does_not_bounce(tmp_path, monkeypatch
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
 
     t = _human_mr_approval(ctx)
     # Artifact from BEFORE the rebase — different head_sha.
