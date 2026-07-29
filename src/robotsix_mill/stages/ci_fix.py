@@ -31,7 +31,6 @@ from ..vcs import git_ops
 from . import dependency_fix
 from .base import Outcome, Stage, StageContext
 from .ci_fix_codeql import (
-    _CODQL_CHECK_NAMES,
     _CODQL_FP_TRIAGE_VERDICTS,
     _codeql_block_note,
     _partition_open_alerts,
@@ -39,6 +38,7 @@ from .ci_fix_codeql import (
 )
 from .ci_fix_helpers import (
     _CI_FAILURE_FINGERPRINT,
+    _CODQL_CHECK_NAMES,
     _CI_IDENTICAL_FAILURE_COUNT,
     _CI_REFRESH_COUNTER,
     _FailingContext,
