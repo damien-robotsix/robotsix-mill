@@ -97,6 +97,14 @@ repos:
         pass_filenames: false
   - repo: local
     hooks:
+      - id: validate-config-docs-sync
+        name: Validate config docs defaults are in sync
+        entry: python scripts/check_config_docs_sync.py
+        language: system
+        files: ^(docs/config/configuration\.md|src/robotsix_mill/config/.*\.py)$
+        pass_filenames: false
+  - repo: local
+    hooks:
       - id: check-builtin-kinds
         name: Validate _BUILTIN_KINDS cross-sync
         entry: python scripts/check_builtin_kinds.py
