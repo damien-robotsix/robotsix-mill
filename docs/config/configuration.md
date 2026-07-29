@@ -899,6 +899,7 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_CONFIG_SYNC_PERIODIC` | `true` | Enable periodic config/drift detection passes |
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day) |
+| `MILL_DIAGNOSTIC_EVENTS_PATH` | `None` | Explicit file path for the diagnostic event store JSONL file |
 | `MILL_FRONTEND_SYNC_PERIODIC` | `true` | Enable periodic frontend-sync passes |
 | `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes |
 | `MILL_MEMBER_SYNC_PERIODIC` | `true` | Enable periodic team-member-sync passes |
