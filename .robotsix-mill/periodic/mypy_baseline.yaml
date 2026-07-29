@@ -1,0 +1,4 @@
+# Presence enables mypy_baseline for this repo. Monitors mypy baseline
+# drift (mypy-baseline.txt and mypy-baseline-test.txt) and files draft
+# tickets when new errors grow the baseline.
+name: mypy_baseline

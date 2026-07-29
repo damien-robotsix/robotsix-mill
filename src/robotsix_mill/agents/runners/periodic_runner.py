@@ -498,6 +498,17 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         clone_token_fn=None,  # uses forge_token (raises on missing)
         requires_repo=True,
     ),
+    "mypy_baseline": PeriodicPassConfig(
+        label="mypy_baseline",
+        source_kind=SourceKind.MYPY_BASELINE,
+        agent_module_attr="mypy_baseline",
+        agent_fn_name="run_mypy_baseline_agent",
+        memory_filename="mypy_baseline_memory.md",
+        workspace_subdir="mypy_baseline_workspace",
+        result_dataclass=PeriodicPassResult,
+        clone_token_fn=_clone_token,
+        requires_repo=True,
+    ),
 }
 
 
@@ -592,3 +603,4 @@ run_frontend_sync_pass = _make_entry("frontend_sync")
 run_triage_boilerplate_pass = _make_entry("triage_boilerplate")
 run_docstring_coverage_pass = _make_entry("docstring_coverage")
 run_module_size_pass = _make_entry("module_size")
+run_mypy_baseline_pass = _make_entry("mypy_baseline")

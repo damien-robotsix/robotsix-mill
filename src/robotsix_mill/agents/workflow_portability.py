@@ -42,6 +42,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "docstring_coverage": "llm_agent",
     "module_curator": "llm_agent",
     "module_size": "llm_agent",
+    "mypy_baseline": "llm_agent",
     "forge_parity": "llm_agent",
     "state_sync": "mill_only",
     "frontend_sync": "mill_only",
