@@ -681,6 +681,9 @@ class _FakeGitOps:
     def commit_all(self, repo, message):
         self.commits.append((str(repo), message))
 
+    def changed_files(self, repo, target_branch):
+        return []  # tests don't exercise shell-completion regeneration
+
 
 def test_finalize_writes_artifacts_and_commits(ctx_factory, tmp_path, monkeypatch):
     ctx = ctx_factory()
@@ -947,6 +950,9 @@ def test_finalize_commit_all_failure_includes_stderr(
     class _FailingGitOps:
         def has_changes(self, repo):
             return True
+
+        def changed_files(self, repo, target_branch):
+            return []  # tests don't exercise shell-completion regeneration
 
         def commit_all(self, repo, message):
             raise subprocess.CalledProcessError(
