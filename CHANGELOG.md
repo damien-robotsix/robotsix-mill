@@ -1,78 +1,6 @@
 ## 0.0.0 (unreleased)
 
-- **Fix:** spawn counter increment moved to after all preflight guards pass, so blocks from late guards (stale respawn, stall detector, cycle cap, tool/skill/workspace integrity) no longer burn a spawn slot.  Previously the counter was incremented early in preflight and later checks could block the spawn without any LLM work, exhausting the 3/3 budget with near-zero spend and no implement-cycle traces.
-- `_build_failing_summary` now includes an explicit pass/fail indicator (❌ FAILED: / ✅ PASSED:) per check instead of the ambiguous `Failing check #N` label. Check-run conclusions are now preserved through `_extract_annotations` (GitHub) and `_get_failed_jobs` (GitLab) so the summary can show the genuine status at a glance.
-- Consolidate `runners` module into `agents.runners` sub-package to break the circular dependency between `agents` and `runners`.  All runner source files move to `src/robotsix_mill/agents/runners/` and test files to `tests/agents/runners/`.  A deprecation shim at `src/robotsix_mill/runners/__init__.py` preserves backward-compatible imports for one release cycle.
-- Add `MILL_MEMBER_SYNC_PERIODIC` and `MILL_MEMBER_SYNC_INTERVAL_SECONDS` env var rows to the "Env-var-only periodic agents" table in `docs/config/configuration.md`.
-- Document `MILL_CONFIG_SYNC_PERIODIC` and `MILL_CONFIG_SYNC_INTERVAL_SECONDS` env vars in the "Env-var-only periodic agents" table (`docs/config/configuration.md`).
-- docs: add `stale_branch_cleanup` to footnote ² exception list in `docs/config/configuration.md` so that its 86400 s (1 day) default is documented, matching the Pydantic model default.
-- Docs: add `langfuse_cleanup` to the footnote ² list of agents that default to 86400 s (1 day) interval in `docs/config/configuration.md`.
-- Updated the periodic-agent generic interval default in `docs/config/configuration.md` from `86400` (1 day) to `604800` (7 days), matching the actual model defaults for the majority of periodic agents. Added a footnote listing the agents that default to `86400` (1 day) or `3600` (1 hour).
-- Document `implement_pass_timeout` / `MILL_IMPLEMENT_PASS_TIMEOUT` in the config reference table (section 2, Request limits).
-- Document `sandbox_op_timeout` / `MILL_SANDBOX_OP_TIMEOUT` in the configuration reference (section 9, Sandbox).
-- Added the ``diagnostic`` periodic pass to ``_SCHEDULE_ONLY_RUNNERS`` so repos with a ``diagnostic.yaml`` presence file have it scheduled (previously it was silently skipped). Extended ``scripts/check_builtin_kinds.py`` with invariant 5 to catch future ``schedule_only`` entries that are missing scheduler wiring.
-- Document `ci_debt_recheck` periodic agent in `docs/config/configuration.md`: add to periodic agent list and document `MILL_CI_DEBT_RECHECK_PERIODIC` (default `true`) and `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` (default `3600`) env vars
-- Docs: added `roadmap_sync`, `frontend_sync`, and `pin_bump` to the periodic agent list and env-var reference table in `docs/config/configuration.md`.
-- Document `docstring_coverage` and `module_size` periodic agents in `docs/config/configuration.md` — add them to the periodic agent list and add dedicated subsections with env-var tables.
-- Add `repo-description-sync` CLI subcommand, wiring the already-registered periodic pass into the CLI `_RUNNERS` dict, add_parser block, and `_resolve_repo_config` branch.
-- Added `changelog-autofill` CLI subcommand, wiring the existing schedule_only runner for manual invocation.
-- Add missing `.robotsix-mill/periodic/roadmap_sync.yaml` presence file so the periodic scheduler discovers and runs the `roadmap_sync` workflow.
-- Fix vulture "unused variable 'frame'" warning in `src/robotsix_mill/runtime/tracing.py` by prefixing the unused signal handler parameter with `_`.
-- **config**: Moved `deploy_api_url` to its correct alphabetical position in `config.example.json` and removed it from the config-sync exception set in `scripts/check_config_sync.py`, permanently enforcing its presence (`deploy_api_url` is no longer an optional/exception field).
-- Add `deploy_api_url` to `config/config.example.json` and document it in `docs/config/configuration.md` (section 6 Service).
-- Wire `roadmap_sync` as a fully scheduled periodic pass: add `roadmap_sync_periodic`/`roadmap_sync_interval_seconds` settings fields, register it in `_BUILTIN_KINDS` as `schedule_only`, and add the runner to `_SCHEDULE_ONLY_RUNNERS` so the periodic supervisor can schedule it automatically.
-- `_revert_standard_configs` no longer auto-reverts standard config files
-  (`.pre-commit-config.yaml`, `docker-compose.yml`, `mkdocs.yml`) when the
-  ticket's `file_map` declares them as relevant scope; they now pass through
-  to the scope-triage LLM for normal evaluation.
-- Remove stale agent references (`maintenance.yaml`, `periodic/cost_analyst.yaml`) from AGENT.md example lists; both files were deleted in earlier commits.
-- Enabled expanded Ruff lint rules (SIM, C4, LOG, G, ERA, PGH, RUF, PT) in
-  ``pyproject.toml``. Applied ~540 auto-fixes across 223 files (``ruff --fix``
-  + ``--unsafe-fixes``) for safe transformations like nested-with flattening,
-  contextlib.suppress, collapsible-ifs, needless-bool simplification,
-  collection-literal conversions, and Yoda-condition fixes. Grandfathered
-  remaining pre-existing violations via per-file-ignores: RUF001-003 and
-  ERA001 blanket-suppressed for ``src/**`` and ``scripts/**``, RUF012
-  per-file for 6 source modules, PT/SIM/RUF059/RUF012/ERA/E402/PGH004/B017/
-  B018 noise blanket-suppressed for ``tests/**``, SIM103 for ``dev/**``.
-  Recovered ~80 bandit/other violations exposed when RUF100 stripped
-  inline ``# noqa:`` comments during the unsafe-fix pass — added per-file
-  ignores for those too. All gates pass: ruff check, ruff format, mypy
-  (no new errors), deptry, vulture.
-- Enable Ruff D (pydocstyle) rules with Google convention, suppressing D105/D107/D205/D415.  Auto-fixed ~260 mechanical violations; remaining D102/D417 gaps are per-file-ignored with FIXME markers for incremental cleanup.
-- Enable pytest-xdist parallel test execution: add `-n auto` to CI pytest-args, `parallel = true` to coverage config, and restructure `make test` with `coverage combine` for accurate multi-worker coverage. Add `make test-fast` for no-coverage parallel runs.
-- Fix `test_gap_interval_seconds` documented default in `docs/config/configuration.md`: `86400` → `604800` (7 days), matching the Pydantic model default in `_settings_periodic.py`.
-- Fix stale code comment: survey interval default now correctly stated as 604800 (7 days) in `_settings_periodic.py`.
-- Document `trace_review_min_confidence` in the `trace_review` config table (`docs/config/configuration.md`).
-- Fix `survey_interval_seconds` documented default in `docs/config/configuration.md`: was `86400` (1 day), now matches the Pydantic model default of `604800` (7 days).
-- Fix `docs/config/configuration.md` audit agent table: default for `MILL_AUDIT_INTERVAL_SECONDS` corrected from 86400 to 604800 (7 days), matching the Pydantic model field default.
-- Fix `docs/config/configuration.md`: the `MILL_META_INTERVAL_SECONDS` default was documented as `86400` (1 day) but the model default is `604800` (7 days). Now documents the correct `604800` default.
-- Fix stale `doc_request_limit` default in `agent_definitions/document.yaml`: both the budget description ("default 16" → "default 32") and tool-use discipline section ("budget (16)" → "budget (32)") now match the actual config default of 32.
-- Fix `board_list_cache_ttl_seconds` default drift: changed Pydantic model default from `0.0` to `3.0` to match `config.example.json` and docs, making the board-list cache enabled by default as intended.
-- Add `check-builtin-kinds` pre-commit hook to validate `_BUILTIN_KINDS` cross-sync across workflow portability, periodic passes, poll loops, and agent definitions.
-- Updated all stale `config/repos.yaml` references in the Repos registry section of `docs/config/configuration.md` to reference `config/config.json`'s `"repos"` key, matching the actual loader behaviour.
-- Add `check-builtin-kinds` pre-commit hook to validate `_BUILTIN_KINDS` cross-sync between `workflow_portability.py`, `_passes.py`, `poll_loops.py`, `.robotsix-mill/periodic/`, and `agent_definitions/periodic/`.
-- Added `scripts/check_builtin_kinds.py` pre-commit hook that cross-validates `_BUILTIN_KINDS` against `.robotsix-mill/periodic/`, `agent_definitions/periodic/`, and `_passes.py` to prevent multi-site synchronization drift. Fixed the known inconsistency: added `"roadmap_sync": "schedule_only"` to `_BUILTIN_KINDS`. Registered the hook in `.pre-commit-config.yaml` and `.github/workflows/ci.yml`.
-- Refine agent: add "Run pytest only once" guidance to combine all flags into a single invocation, avoiding wasted duplicate full-suite runs.
-- Add `credit_balance` to `_BUILTIN_KINDS` as `"schedule_only"` so `kind_for("credit_balance")` returns the correct kind and `is_portable` returns `True` consistently with other schedule-only workflows.
-- Reclassify `repo_description_sync` from `schedule_only` to `llm_agent` so that
-  per-repo presence-file overrides (``prompt_overlay`` / ``system_prompt``) take
-  effect at runtime. The custom runner now receives ``definition_override`` from
-  the periodic-workflow dispatch path instead of loading the built-in YAML
-  directly from disk.
-- Fix stale `config/repos.yaml` references in the "Deployed log folder" section
-  of `docs/config/configuration.md` — the repos config lives under the `"repos"`
-  key of `config/config.json`, not in a standalone `config/repos.yaml`
-- Post-rebase diff integrity check: after every rebase the pipeline now
-  verifies that all implement-stage source files still appear in the
-  branch diff vs merge-base.  If the rebase agent silently dropped a
-  file (the PR's changes were discarded during conflict resolution),
-  the ticket is BLOCKED with a diagnostic listing the dropped files.
-  Excludes `CHANGELOG.md` and `changelog.d/` from the comparison.
-- Stuck-loop detector in implement stage now considers committed branch-ahead-of-main work (not just working-tree changes), preventing false BLOCKED when a prior cycle already committed and pushed complete work
-- Implement agent: add instruction to register new changelog fragment files in `docs/modules.yaml` under the `core` module's `paths` list.
-<<<<<<< HEAD
-=======
+- Extended `scripts/check_config_sync.py` with invariant 4: validates code-comment `Default N` values against the actual `Field(default=N)` in the Settings model. Scans `_settings_periodic.py` and `_settings_core.py` for comment-stated numeric defaults, resolves the associated field name, and reports mismatches. Fixed the stale `roadmap_sync_interval_seconds` comment (said 86400/daily, actual 604800).
 - Fix zero-edit implement loop persisting after #2552: the resume-with-ahead-branch
   path in `_detect_no_change_contradiction` was gated on `_any_repo_has_changes`
   returning False, which bundles both working-tree cleanliness AND branch-not-ahead.
@@ -286,4 +214,74 @@
 - Sandbox test timeouts (rc=124) now produce a deterministic ENV-ERROR diagnosis
   instead of invoking the expensive LLM distiller, letting the fix-loop circuit
   breaker fire immediately without burning 30+ requests per cycle.
->>>>>>> 25556664 (mill: 20260726T093113Z-implement-spawns-abort-pre-llm-prompt-co-9d6a resume-preserve WIP [WIP])
+- **Fix:** spawn counter increment moved to after all preflight guards pass, so blocks from late guards (stale respawn, stall detector, cycle cap, tool/skill/workspace integrity) no longer burn a spawn slot.  Previously the counter was incremented early in preflight and later checks could block the spawn without any LLM work, exhausting the 3/3 budget with near-zero spend and no implement-cycle traces.
+- `_build_failing_summary` now includes an explicit pass/fail indicator (❌ FAILED: / ✅ PASSED:) per check instead of the ambiguous `Failing check #N` label. Check-run conclusions are now preserved through `_extract_annotations` (GitHub) and `_get_failed_jobs` (GitLab) so the summary can show the genuine status at a glance.
+- Consolidate `runners` module into `agents.runners` sub-package to break the circular dependency between `agents` and `runners`.  All runner source files move to `src/robotsix_mill/agents/runners/` and test files to `tests/agents/runners/`.  A deprecation shim at `src/robotsix_mill/runners/__init__.py` preserves backward-compatible imports for one release cycle.
+- Add `MILL_MEMBER_SYNC_PERIODIC` and `MILL_MEMBER_SYNC_INTERVAL_SECONDS` env var rows to the "Env-var-only periodic agents" table in `docs/config/configuration.md`.
+- Document `MILL_CONFIG_SYNC_PERIODIC` and `MILL_CONFIG_SYNC_INTERVAL_SECONDS` env vars in the "Env-var-only periodic agents" table (`docs/config/configuration.md`).
+- docs: add `stale_branch_cleanup` to footnote ² exception list in `docs/config/configuration.md` so that its 86400 s (1 day) default is documented, matching the Pydantic model default.
+- Docs: add `langfuse_cleanup` to the footnote ² list of agents that default to 86400 s (1 day) interval in `docs/config/configuration.md`.
+- Updated the periodic-agent generic interval default in `docs/config/configuration.md` from `86400` (1 day) to `604800` (7 days), matching the actual model defaults for the majority of periodic agents. Added a footnote listing the agents that default to `86400` (1 day) or `3600` (1 hour).
+- Document `implement_pass_timeout` / `MILL_IMPLEMENT_PASS_TIMEOUT` in the config reference table (section 2, Request limits).
+- Document `sandbox_op_timeout` / `MILL_SANDBOX_OP_TIMEOUT` in the configuration reference (section 9, Sandbox).
+- Added the ``diagnostic`` periodic pass to ``_SCHEDULE_ONLY_RUNNERS`` so repos with a ``diagnostic.yaml`` presence file have it scheduled (previously it was silently skipped). Extended ``scripts/check_builtin_kinds.py`` with invariant 5 to catch future ``schedule_only`` entries that are missing scheduler wiring.
+- Document `ci_debt_recheck` periodic agent in `docs/config/configuration.md`: add to periodic agent list and document `MILL_CI_DEBT_RECHECK_PERIODIC` (default `true`) and `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` (default `3600`) env vars
+- Docs: added `roadmap_sync`, `frontend_sync`, and `pin_bump` to the periodic agent list and env-var reference table in `docs/config/configuration.md`.
+- Document `docstring_coverage` and `module_size` periodic agents in `docs/config/configuration.md` — add them to the periodic agent list and add dedicated subsections with env-var tables.
+- Add `repo-description-sync` CLI subcommand, wiring the already-registered periodic pass into the CLI `_RUNNERS` dict, add_parser block, and `_resolve_repo_config` branch.
+- Added `changelog-autofill` CLI subcommand, wiring the existing schedule_only runner for manual invocation.
+- Add missing `.robotsix-mill/periodic/roadmap_sync.yaml` presence file so the periodic scheduler discovers and runs the `roadmap_sync` workflow.
+- Fix vulture "unused variable 'frame'" warning in `src/robotsix_mill/runtime/tracing.py` by prefixing the unused signal handler parameter with `_`.
+- **config**: Moved `deploy_api_url` to its correct alphabetical position in `config.example.json` and removed it from the config-sync exception set in `scripts/check_config_sync.py`, permanently enforcing its presence (`deploy_api_url` is no longer an optional/exception field).
+- Add `deploy_api_url` to `config/config.example.json` and document it in `docs/config/configuration.md` (section 6 Service).
+- Wire `roadmap_sync` as a fully scheduled periodic pass: add `roadmap_sync_periodic`/`roadmap_sync_interval_seconds` settings fields, register it in `_BUILTIN_KINDS` as `schedule_only`, and add the runner to `_SCHEDULE_ONLY_RUNNERS` so the periodic supervisor can schedule it automatically.
+- `_revert_standard_configs` no longer auto-reverts standard config files
+  (`.pre-commit-config.yaml`, `docker-compose.yml`, `mkdocs.yml`) when the
+  ticket's `file_map` declares them as relevant scope; they now pass through
+  to the scope-triage LLM for normal evaluation.
+- Remove stale agent references (`maintenance.yaml`, `periodic/cost_analyst.yaml`) from AGENT.md example lists; both files were deleted in earlier commits.
+- Enabled expanded Ruff lint rules (SIM, C4, LOG, G, ERA, PGH, RUF, PT) in
+  ``pyproject.toml``. Applied ~540 auto-fixes across 223 files (``ruff --fix``
+  + ``--unsafe-fixes``) for safe transformations like nested-with flattening,
+  contextlib.suppress, collapsible-ifs, needless-bool simplification,
+  collection-literal conversions, and Yoda-condition fixes. Grandfathered
+  remaining pre-existing violations via per-file-ignores: RUF001-003 and
+  ERA001 blanket-suppressed for ``src/**`` and ``scripts/**``, RUF012
+  per-file for 6 source modules, PT/SIM/RUF059/RUF012/ERA/E402/PGH004/B017/
+  B018 noise blanket-suppressed for ``tests/**``, SIM103 for ``dev/**``.
+  Recovered ~80 bandit/other violations exposed when RUF100 stripped
+  inline ``# noqa:`` comments during the unsafe-fix pass — added per-file
+  ignores for those too. All gates pass: ruff check, ruff format, mypy
+  (no new errors), deptry, vulture.
+- Enable Ruff D (pydocstyle) rules with Google convention, suppressing D105/D107/D205/D415.  Auto-fixed ~260 mechanical violations; remaining D102/D417 gaps are per-file-ignored with FIXME markers for incremental cleanup.
+- Enable pytest-xdist parallel test execution: add `-n auto` to CI pytest-args, `parallel = true` to coverage config, and restructure `make test` with `coverage combine` for accurate multi-worker coverage. Add `make test-fast` for no-coverage parallel runs.
+- Fix `test_gap_interval_seconds` documented default in `docs/config/configuration.md`: `86400` → `604800` (7 days), matching the Pydantic model default in `_settings_periodic.py`.
+- Fix stale code comment: survey interval default now correctly stated as 604800 (7 days) in `_settings_periodic.py`.
+- Document `trace_review_min_confidence` in the `trace_review` config table (`docs/config/configuration.md`).
+- Fix `survey_interval_seconds` documented default in `docs/config/configuration.md`: was `86400` (1 day), now matches the Pydantic model default of `604800` (7 days).
+- Fix `docs/config/configuration.md` audit agent table: default for `MILL_AUDIT_INTERVAL_SECONDS` corrected from 86400 to 604800 (7 days), matching the Pydantic model field default.
+- Fix `docs/config/configuration.md`: the `MILL_META_INTERVAL_SECONDS` default was documented as `86400` (1 day) but the model default is `604800` (7 days). Now documents the correct `604800` default.
+- Fix stale `doc_request_limit` default in `agent_definitions/document.yaml`: both the budget description ("default 16" → "default 32") and tool-use discipline section ("budget (16)" → "budget (32)") now match the actual config default of 32.
+- Fix `board_list_cache_ttl_seconds` default drift: changed Pydantic model default from `0.0` to `3.0` to match `config.example.json` and docs, making the board-list cache enabled by default as intended.
+- Add `check-builtin-kinds` pre-commit hook to validate `_BUILTIN_KINDS` cross-sync across workflow portability, periodic passes, poll loops, and agent definitions.
+- Updated all stale `config/repos.yaml` references in the Repos registry section of `docs/config/configuration.md` to reference `config/config.json`'s `"repos"` key, matching the actual loader behaviour.
+- Add `check-builtin-kinds` pre-commit hook to validate `_BUILTIN_KINDS` cross-sync between `workflow_portability.py`, `_passes.py`, `poll_loops.py`, `.robotsix-mill/periodic/`, and `agent_definitions/periodic/`.
+- Added `scripts/check_builtin_kinds.py` pre-commit hook that cross-validates `_BUILTIN_KINDS` against `.robotsix-mill/periodic/`, `agent_definitions/periodic/`, and `_passes.py` to prevent multi-site synchronization drift. Fixed the known inconsistency: added `"roadmap_sync": "schedule_only"` to `_BUILTIN_KINDS`. Registered the hook in `.pre-commit-config.yaml` and `.github/workflows/ci.yml`.
+- Refine agent: add "Run pytest only once" guidance to combine all flags into a single invocation, avoiding wasted duplicate full-suite runs.
+- Add `credit_balance` to `_BUILTIN_KINDS` as `"schedule_only"` so `kind_for("credit_balance")` returns the correct kind and `is_portable` returns `True` consistently with other schedule-only workflows.
+- Reclassify `repo_description_sync` from `schedule_only` to `llm_agent` so that
+  per-repo presence-file overrides (``prompt_overlay`` / ``system_prompt``) take
+  effect at runtime. The custom runner now receives ``definition_override`` from
+  the periodic-workflow dispatch path instead of loading the built-in YAML
+  directly from disk.
+- Fix stale `config/repos.yaml` references in the "Deployed log folder" section
+  of `docs/config/configuration.md` — the repos config lives under the `"repos"`
+  key of `config/config.json`, not in a standalone `config/repos.yaml`
+- Post-rebase diff integrity check: after every rebase the pipeline now
+  verifies that all implement-stage source files still appear in the
+  branch diff vs merge-base.  If the rebase agent silently dropped a
+  file (the PR's changes were discarded during conflict resolution),
+  the ticket is BLOCKED with a diagnostic listing the dropped files.
+  Excludes `CHANGELOG.md` and `changelog.d/` from the comparison.
+- Stuck-loop detector in implement stage now considers committed branch-ahead-of-main work (not just working-tree changes), preventing false BLOCKED when a prior cycle already committed and pushed complete work
+- Implement agent: add instruction to register new changelog fragment files in `docs/modules.yaml` under the `core` module's `paths` list.

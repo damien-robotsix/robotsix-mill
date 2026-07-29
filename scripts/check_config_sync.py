@@ -37,6 +37,7 @@ Exit codes:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -111,6 +112,27 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
 # ``secrets:`` block of ``config/config.example.json``.
 _SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
 
+# Source files scanned for code-comment "Default N" annotations (invariant 4).
+# Each path is relative to the repo root.
+_COMMENT_DEFAULT_SOURCES: tuple[str, ...] = (
+    "src/robotsix_mill/config/_settings_periodic.py",
+    "src/robotsix_mill/config/_settings_core.py",
+)
+
+# Regex matching a comment line that states a numeric default value.
+# Capture group 1 = the claimed default integer.  The trailing-punctuation
+# guard (end-of-line, parentheses, equals, commas, or various dash forms)
+# rejects human-language durations like "Default 7 days" while accepting
+# machine-readable annotations like "Default 604800 (7 days)" or
+# "Default 500 — high enough …".
+_COMMENT_DEFAULT_RE = re.compile(
+    r"^\s*#\s+.*\bDefault\s+(\d+)\s*(?:$|[=(,\u2013\u2014\u2015\-])"
+)
+
+# Regex capturing a field name and its type annotation on a ``field: type =
+# Field(…)`` line.  After a "Default N" comment we look ahead for the
+# next field definition to resolve which field the comment belongs to.
+_FIELD_DEF_RE = re.compile(r"^\s*(\w+)\s*:\s*[^=]+\s*=\s*Field\(")
 
 # ---------------------------------------------------------------------------
 #  Pure helpers (parameterised so synthetic cases need no monkeypatching)
@@ -186,6 +208,80 @@ def check_secrets_example(
     return drift
 
 
+def _parse_comment_defaults(
+    source_path: Path,
+) -> list[tuple[str, int, int]]:
+    """Parse one source file for code-comment "Default N" annotations.
+
+    Returns a list of ``(field_name, claimed_default, line_number)``
+    tuples.  Each tuple represents a comment like ``# … Default 86400
+    (daily).`` followed (within a few lines) by a field definition
+    whose ``Field(default=…)`` we can cross-check.
+
+    A comment whose field cannot be resolved is silently skipped.
+    """
+
+    text = source_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    results: list[tuple[str, int, int]] = []
+
+    for i, line in enumerate(lines):
+        m = _COMMENT_DEFAULT_RE.search(line)
+        if m is None:
+            continue
+        claimed = int(m.group(1))
+
+        # Walk forward from the comment to find the next field
+        # definition.  We search up to 15 lines ahead — any comment
+        # farther from its field is likely an orphan.
+        field_name: str | None = None
+        for j in range(i + 1, min(i + 16, len(lines))):
+            fm = _FIELD_DEF_RE.match(lines[j])
+            if fm:
+                field_name = fm.group(1)
+                break
+
+        if field_name is None:
+            continue
+
+        results.append((field_name, claimed, i + 1))  # 1-indexed
+
+    return results
+
+
+def check_comment_defaults(settings_model: type) -> list[str]:
+    """Invariant 4: every code-comment "Default N" must match the
+    actual ``Field(default=N)`` on the corresponding model field."""
+
+    drift: list[str] = []
+    for rel_path in _COMMENT_DEFAULT_SOURCES:
+        source_path = _REPO_ROOT / rel_path
+        if not source_path.is_file():
+            drift.append(f"comment-default source file not found: {rel_path}")
+            continue
+
+        for field_name, claimed, lineno in _parse_comment_defaults(source_path):
+            model_field = settings_model.model_fields.get(field_name)
+            if model_field is None:
+                drift.append(
+                    f"{rel_path}:{lineno}: comment says Default {claimed} "
+                    f"but field {field_name!r} is not in the Settings model"
+                )
+                continue
+
+            actual = model_field.default
+            if not isinstance(actual, int):
+                continue  # non-numeric default — not comparable
+
+            if actual != claimed:
+                drift.append(
+                    f"{rel_path}:{lineno}: comment says Default {claimed} "
+                    f"but {field_name} Field(default={actual})"
+                )
+
+    return drift
+
+
 def collect_drift() -> list[str]:
     """Load the real on-disk surfaces and run every invariant."""
     from robotsix_mill.config import Secrets, Settings
@@ -218,6 +314,7 @@ def collect_drift() -> list[str]:
     drift += check_secrets_example(
         example_secrets_keys, secrets_fields, _SECRETS_NOT_IN_EXAMPLE
     )
+    drift += check_comment_defaults(Settings)
     return drift
 
 
