@@ -557,6 +557,76 @@ def _parse_spec_code_blocks(spec: str) -> list[tuple[str, str, str]]:
     return blocks
 
 
+def _is_trivial_config_only_change(repo_dir: Path, target_branch: str) -> bool:
+    """True when the change adds ONLY new config/presence files and is small.
+
+    Returns ``True`` when ALL of:
+    1. Every changed file has a config-only extension
+       (:func:`_is_config_only_change`), AND
+    2. The total diff delta (insertions + deletions) is ≤ 40 lines, AND
+    3. At least one file is *new* (--diff-filter=A) — this is a fresh
+       presence/config file, not a reconfiguration of existing code.
+
+    Fail-closed: returns ``False`` on any git error, when the diff is
+    empty, or when there are no new files.
+    """
+    if not _is_config_only_change(repo_dir, target_branch):
+        return False
+
+    # Check for at least one new (Added) file.
+    added = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--name-only",
+            "--diff-filter=A",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if added.returncode != 0:
+        return False
+    if not added.stdout.strip():
+        return False  # no new files → not a trivial addition
+
+    # Check total diff size via --shortstat.
+    stat = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "diff",
+            "--shortstat",
+            f"origin/{target_branch}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if stat.returncode != 0:
+        return False
+    shortstat = stat.stdout.strip()
+    if not shortstat:
+        return False
+
+    import re as _re
+
+    total = 0
+    ins = _re.search(r"(\d+)\s+insertions?\(\+\)", shortstat)
+    if ins:
+        total += int(ins.group(1))
+    dels = _re.search(r"(\d+)\s+deletions?\(-\)", shortstat)
+    if dels:
+        total += int(dels.group(1))
+
+    if total == 0:
+        return False
+
+    return total <= 40
+
+
 def _is_spec_exact_edits(spec: str, repo_dir: Path) -> bool:
     """True when *spec* contains fenced code blocks with file paths
     that all reference files existing in *repo_dir*.
@@ -606,6 +676,12 @@ def _should_skip_test_gate(
     deterministic check already says config-only, so a real code change
     runs the full gate without ever paying for the LLM call.
     """
+    # Trivial config-only additions (new presence/config files, ≤40 lines)
+    # have zero behavioural delta — skip the full test suite without even
+    # consulting the test-scope LLM agent.
+    if _is_trivial_config_only_change(repo_dir, target_branch):
+        return True, "trivial config-only addition — skipping full test gate"
+
     # Rename-only changes have zero behavioural delta — skip the full
     # test suite without even consulting the test-scope LLM agent.
     if _is_rename_only_change(repo_dir, target_branch):

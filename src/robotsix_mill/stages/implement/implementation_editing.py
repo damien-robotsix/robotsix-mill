@@ -164,6 +164,102 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         return None
 
     @classmethod
+    def _handle_trivial_config_change(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings: Settings,
+        ic: _ImplementContext,
+        target: str,
+        extra_roots: list[Path] | None,
+    ) -> _SinglePassResult:
+        """Handle a trivial config-only addition deterministically — no LLM.
+
+        Collects the new-file list for the summary, persists artifacts,
+        runs the scope guardrail, and routes to test evaluation (which
+        will skip via :func:`_should_skip_test_gate`).
+        """
+        # Collect new (Added) files for the summary.
+        added_out = sp.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--diff-filter=A",
+                "--name-only",
+                f"origin/{target}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        added: list[str] = (
+            added_out.stdout.strip().splitlines() if added_out.returncode == 0 else []
+        )
+
+        # Collect all changed files for reference_files.
+        all_out = sp.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--name-only",
+                f"origin/{target}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        all_changed: list[str] = (
+            all_out.stdout.strip().splitlines() if all_out.returncode == 0 else []
+        )
+
+        # Build a deterministic summary.
+        added_preview = ", ".join(added[:5])
+        if len(added) > 5:
+            added_preview += f" (+{len(added) - 5} more)"
+        summary = f"trivial config-only addition: {len(added)} new file(s)" + (
+            f" — {added_preview}" if added_preview else ""
+        )
+
+        ref_files = all_changed
+        guardrail_result = cls._persist_artifacts_and_run_guardrail(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            summary,
+            ref_files,
+        )
+        if isinstance(guardrail_result, _SinglePassResult):
+            return guardrail_result
+        new_ic = guardrail_result
+
+        # Route to test evaluation (which will skip via _should_skip_test_gate).
+        return cls._evaluate_test_results(  # type: ignore[no-any-return]
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            new_ic,
+            summary,
+            ref_files,
+            None,  # new_msgs
+            False,  # no_change_needed
+            "",  # no_change_rationale
+            False,  # resuming
+            1,  # attempt
+            max(1, settings.max_fix_iterations),  # max_iters
+            extra_roots,
+        )
+
+    @classmethod
     def _handle_rename_only_change(
         cls,
         ctx: StageContext,
