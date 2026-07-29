@@ -413,6 +413,7 @@ the `claude` CLI in the container). These knobs govern that path:
 |-----------|---------|---------|-------------|
 | `core.limits.max_fix_iterations` | `MILL_MAX_FIX_ITERATIONS` | `8` | Max implement→test fix loop iterations before BLOCK |
 | `core.limits.max_stuck_cycles` | `MILL_MAX_STUCK_CYCLES` | `3` | Re-entries to same stage without progress before BLOCK |
+| `pipeline.implement_stall_threshold` | `MILL_IMPLEMENT_STALL_THRESHOLD` | `2` | Consecutive no-progress BLOCKED implement cycles before stall guard fires. `0` disables |
 | `core.limits.max_spend_usd_per_ticket` | `MILL_MAX_SPEND_USD_PER_TICKET` | `20.0` | Dollar cap per ticket (0.0 = disabled) |
 | `core.limits.max_traces_per_ticket` | `MILL_MAX_TRACES_PER_TICKET` | `15` | Trace-count circuit-breaker (0 = disabled) |
 | `core.limits.max_openrouter_marginal_usd_per_ticket` | `MILL_MAX_OPENROUTER_MARGINAL_USD_PER_TICKET` | `3.0` | OpenRouter marginal-spend breaker (0.0 = disabled) |
