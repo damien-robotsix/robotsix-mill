@@ -3456,6 +3456,7 @@ def test_cross_repo_merge_routes_to_upstream_pr(tmp_path, monkeypatch):
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
         forge_remote_url="https://github.com/fork-owner/r.git",
+        auto_merge_enabled=True,
         cross_repo_target=CrossRepoTarget(
             upstream_remote_url="https://github.com/up/r.git",
             fork_remote_url="https://github.com/fork-owner/r.git",
