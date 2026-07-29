@@ -4452,6 +4452,16 @@ def test_waiting_auto_merge_legacy_artifact_no_head_sha_does_not_bounce(
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
 
     t = _human_mr_approval(ctx)
     # Legacy artifact — no head_sha line at all.
@@ -4487,6 +4497,11 @@ def test_waiting_auto_merge_current_artifact_no_longer_bounces(
         github.GitHubForge,
         "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
     )
 
     t = _human_mr_approval(ctx)
@@ -4529,6 +4544,16 @@ def test_stale_artifact_no_longer_blocks_auto_merge(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
