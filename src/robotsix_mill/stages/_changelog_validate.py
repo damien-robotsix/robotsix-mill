@@ -39,7 +39,7 @@ def _is_next_module(line: str, in_core: bool) -> bool:
     return in_core and line.rstrip("\n").startswith("  - id: ")
 
 
-def _find_core_paths_range(lines: list[str]) -> tuple[int | None, int | None, str]:  # noqa: C901 — parser state-machine, branches are inherent
+def _find_core_paths_range(lines: list[str]) -> tuple[int | None, int | None, str]:
     """Locate the ``core`` module's ``paths`` list in *lines*.
 
     Returns ``(paths_start, paths_end, indent)`` where *paths_start* is
@@ -56,9 +56,9 @@ def _find_core_paths_range(lines: list[str]) -> tuple[int | None, int | None, st
 
     for i, line in enumerate(lines):
         stripped = line.rstrip("\n")
+        if _is_next_module(line, in_core) and in_paths:
+            paths_end = i
         if _is_next_module(line, in_core):
-            if in_paths:
-                paths_end = i
             break
         if stripped == "  - id: core":
             in_core = True
@@ -71,10 +71,13 @@ def _find_core_paths_range(lines: list[str]) -> tuple[int | None, int | None, st
         if in_paths and stripped.strip() == "dependencies:":
             paths_end = i
             break
-        if in_paths and not stripped.startswith(indent + "  - "):
-            if stripped.strip() == "" or not stripped.startswith(indent + "  "):
-                paths_end = i
-                break
+        if (
+            in_paths
+            and not stripped.startswith(indent + "  - ")
+            and (stripped.strip() == "" or not stripped.startswith(indent + "  "))
+        ):
+            paths_end = i
+            break
 
     if paths_start is None:
         return None, None, ""
@@ -132,7 +135,8 @@ def _modules_yaml_check(repo_dir: Path) -> list[str]:
 
 def validate_changelog(repo_dir: Path) -> list[str]:
     """Run all changelog validation checks.  Returns diagnostic messages
-    for anything that was auto-fixed (empty list means clean)."""
+    for anything that was auto-fixed (empty list means clean).
+    """
     msgs: list[str] = []
     msgs.extend(_trailing_newline_errors(repo_dir))
     msgs.extend(_modules_yaml_check(repo_dir))
