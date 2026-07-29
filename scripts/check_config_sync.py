@@ -257,9 +257,7 @@ def check_comment_defaults(settings_model: type) -> list[str]:
     for rel_path in _COMMENT_DEFAULT_SOURCES:
         source_path = _REPO_ROOT / rel_path
         if not source_path.is_file():
-            drift.append(
-                f"comment-default source file not found: {rel_path}"
-            )
+            drift.append(f"comment-default source file not found: {rel_path}")
             continue
 
         for field_name, claimed, lineno in _parse_comment_defaults(source_path):
