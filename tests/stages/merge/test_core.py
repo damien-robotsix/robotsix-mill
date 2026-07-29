@@ -2650,7 +2650,7 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
 
     assert len(merge_events) == 1
 
-    assert "auto-merge disabled in config" in (merge_events[0].note or "")
+    assert "auto-merge disabled in global config" in (merge_events[0].note or "")
 
 
 def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
