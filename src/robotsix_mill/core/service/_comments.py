@@ -160,6 +160,74 @@ class _CommentMixin(_ServiceBase):
 
         return comment
 
+    def answer_pending_question(
+        self,
+        ticket_id: str,
+        body: str,
+        author: str,
+    ) -> Comment:
+        """Answer an open ``[ASK_USER]`` question on a ticket in
+        ``AWAITING_USER_REPLY``.
+
+        Posts *body* as a reply to the most recent open ``[ASK_USER]``
+        top-level thread, then closes that thread.  Closing triggers
+        the auto-resume logic: when all ``[ASK_USER]`` threads on the
+        ticket are closed, the ticket transitions back to its
+        ``paused_from`` state.
+
+        Raises ``KeyError`` if the ticket does not exist.
+        Raises ``ValueError`` if the ticket is not in
+        ``AWAITING_USER_REPLY`` or there is no open ``[ASK_USER]``
+        thread.
+        """
+        board = self._board_for(ticket_id)
+        with retry_on_db_full(self.settings, board) as s:
+            ticket = s.get(Ticket, ticket_id)
+            if ticket is None:
+                raise KeyError(f"ticket {ticket_id} not found")
+            if ticket.state is not State.AWAITING_USER_REPLY:
+                raise ValueError(
+                    f"ticket is not awaiting a user reply (currently {ticket.state})"
+                )
+
+            # Find the most recent open [ASK_USER] thread.
+            stmt = (
+                select(Comment)
+                .where(
+                    Comment.ticket_id == ticket_id,
+                    Comment.parent_id.is_(None),  # type: ignore[union-attr]
+                    Comment.body.startswith(ASK_USER_MARKER),
+                    Comment.closed_at.is_(None),  # type: ignore[union-attr]
+                )
+                .order_by(Comment.created_at.desc())  # type: ignore[attr-defined]
+                .limit(1)
+            )
+            ask_thread = s.exec(stmt).first()
+            if ask_thread is None:
+                raise ValueError("no open [ASK_USER] thread to answer")
+
+            # Post the reply.
+            reply = Comment(
+                ticket_id=ticket_id,
+                body=body,
+                author=author,
+                parent_id=ask_thread.id,
+            )
+            s.add(reply)
+            s.commit()
+            s.refresh(reply)
+
+            # Close the thread.
+            ask_thread.closed_at = datetime.now(timezone.utc)
+            s.add(ask_thread)
+            s.commit()
+            s.refresh(ask_thread)
+
+        # Post-close: auto-resume if all [ASK_USER] threads are closed.
+        self._maybe_resume_awaiting_user_reply(ticket_id, board)
+
+        return reply
+
     def _maybe_resume_awaiting_user_reply(
         self,
         ticket_id: str,

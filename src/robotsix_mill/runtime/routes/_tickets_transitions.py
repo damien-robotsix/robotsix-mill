@@ -216,6 +216,58 @@ def resume_blocked(
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
+@router.post("/tickets/{ticket_id}/answer", response_model=TicketRead)
+def answer_pending_question(
+    ticket_id: str,
+    request: Request,
+    body: dict[str, str] = Body({}),
+    svc: TicketService = Depends(get_service),
+    worker: Worker = Depends(get_worker),
+    settings: Settings = Depends(get_settings),
+) -> TicketRead:
+    """Answer an open ``[ASK_USER]`` question on a ticket.
+
+    Posts the answer as a reply to the ``[ASK_USER]`` thread, closes
+    the thread, and triggers auto-resume: when all ``[ASK_USER]``
+    threads on the ticket are closed the ticket transitions from
+    ``awaiting_user_reply`` back to its originating state (e.g.
+    ``implementing``).
+
+    Body::
+
+        {"body": "<answer text>", "author": "robotsix-chat"}
+
+    Raises 404 if the ticket does not exist, 409 if the ticket is not
+    in ``awaiting_user_reply`` or has no open ``[ASK_USER]`` thread.
+    """
+    ticket_id_u = resolve_ticket_id(ticket_id, svc)
+    ticket = svc.get(ticket_id_u)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.state is not State.AWAITING_USER_REPLY:
+        raise HTTPException(
+            409,
+            f"ticket is not awaiting a user reply (currently {ticket.state})",
+        )
+
+    answer_body = str(body.get("body", ""))
+    if not answer_body.strip():
+        raise HTTPException(400, "body must not be empty")
+    author = str(body.get("author", "robotsix-chat"))
+
+    try:
+        svc.answer_pending_question(ticket_id_u, answer_body, author)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+
+    ticket = svc.get(ticket_id_u)
+    maybe_enqueue(ticket, worker)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
 @router.post("/tickets/{ticket_id}/reset-fingerprint", response_model=TicketRead)
 def reset_fingerprint(
     ticket_id: str,
