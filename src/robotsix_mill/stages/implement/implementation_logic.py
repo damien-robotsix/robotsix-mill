@@ -30,6 +30,7 @@ from ._shared import (
     _is_config_only_change,
     _is_rename_only_change,
     _is_spec_exact_edits,
+    _is_trivial_config_only_change,
     _should_skip_test_gate,
     log,
 )
@@ -54,16 +55,23 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         target_branch: str,
     ) -> int | None:
         """Pick the cheaper level-1 model for simple tickets, or bypass LLM
-        entirely for rename-only and spec-exact-code tickets.
+        entirely for trivial config-only, rename-only, and spec-exact-code
+        tickets.
 
-        Returns ``0`` for:
-        * a rename-only change (every non-rename change is a config/doc
-          stub or zero-delta file) — bypass the LLM coordinator entirely.
+        Returns ``-2`` for:
+        * a trivial config-only addition — every changed file is
+          config-only, the total delta is ≤ 40 lines, and at least one
+          file is new (a fresh presence/config file).  Bypass the LLM
+          coordinator entirely; apply deterministically.
 
         Returns ``-1`` for:
         * a spec-exact-code ticket — the description contains fenced code
           blocks with file paths referencing existing files, so edits can
           be applied deterministically without an LLM.
+
+        Returns ``0`` for:
+        * a rename-only change (every non-rename change is a config/doc
+          stub or zero-delta file) — bypass the LLM coordinator entirely.
 
         Returns ``1`` for:
         * a no-change-needed re-check (the previous attempt already
@@ -77,6 +85,8 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
         if "no change needed" in prev.lower():
             return 1
+        if _is_trivial_config_only_change(repo_dir, target_branch):
+            return -2
         if _is_config_only_change(repo_dir, target_branch):
             return 1
         if _is_rename_only_change(repo_dir, target_branch):
@@ -893,6 +903,19 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         )
         target = target_branch_for(settings, ctx.repo_config)
         agent_level = cls._select_agent_level(ic, settings, repo_dir, target)
+
+        # Trivial config-only additions bypass the LLM coordinator entirely.
+        if agent_level == -2:
+            return cls._handle_trivial_config_change(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                ic,
+                target,
+                extra_roots,
+            )
 
         # Rename-only changes bypass the LLM coordinator entirely.
         if agent_level == 0:
