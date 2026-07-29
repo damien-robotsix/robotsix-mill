@@ -20,7 +20,7 @@ jobs:
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@5cd8c1facb02299da618979e7a55f1953f9c075a
     with:
       python-version: "3.14"
-      uv-version: "0.8.15"
+      uv-version: "0.12.0"
       # `dev` is now a PEP 735 dependency-group, not a package extra; it is
       # pulled in automatically by `[tool.uv] default-groups = ["dev"]` on
       # every `uv sync`, so only the genuine `tracing` extra is listed here.
@@ -47,8 +47,9 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install uv
-        run: pip install uv==0.8.15
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.12.0"
 
       - name: Install dev deps
         # `dev` is a PEP 735 dependency-group pulled in automatically via
