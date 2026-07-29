@@ -1662,13 +1662,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "robotsix-http"
+version = "0.1.dev38+gba90d55ea"
+source = { git = "https://github.com/damien-robotsix/robotsix-http.git?rev=ba90d55ea2bcbd02f605f392e837cea7b485d73d#ba90d55ea2bcbd02f605f392e837cea7b485d73d" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[[package]]
 name = "robotsix-llmio"
-version = "0.1.2"
-source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=cad9caf20a0503b1b2320e684354a704850d71ca#cad9caf20a0503b1b2320e684354a704850d71ca" }
+version = "0.1.4"
+source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=5b615548398554f50c64f1163f7240ef53ec14da#5b615548398554f50c64f1163f7240ef53ec14da" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-ai-slim" },
+    { name = "robotsix-http" },
     { name = "starlette" },
 ]
 
@@ -1750,7 +1759,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17" },
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config?rev=d29de204db62910f062456e5055fc2fe232e04a9" },
-    { name = "robotsix-llmio", extras = ["claude-sdk", "openrouter"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=cad9caf20a0503b1b2320e684354a704850d71ca" },
+    { name = "robotsix-llmio", extras = ["claude-sdk", "openrouter"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=5b615548398554f50c64f1163f7240ef53ec14da" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
