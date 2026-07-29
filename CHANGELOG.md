@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add documentation row for `implement_max_spawns_per_ticket` in `docs/config/configuration.md`.
 - mill: ci_fix: narrow success criterion to dispatched check(s) only — agent now reports DONE when its assigned check(s) pass even if unrelated pre-existing failures remain red, and compares new CI_FAILING summaries against the original dispatch summary to determine scope
 - **Fix:** spawn counter increment moved to after all preflight guards pass, so blocks from late guards (stale respawn, stall detector, cycle cap, tool/skill/workspace integrity) no longer burn a spawn slot.  Previously the counter was incremented early in preflight and later checks could block the spawn without any LLM work, exhausting the 3/3 budget with near-zero spend and no implement-cycle traces.
 - Added deterministic fast-path for trivial config-only changes (new presence/config files ≤40 lines). Bypasses the LLM coordinator entirely for tickets that only add fresh `.yaml`/`.toml`/`.md`/etc. files — handled via `_handle_trivial_config_change` mirroring the rename-only pattern.
