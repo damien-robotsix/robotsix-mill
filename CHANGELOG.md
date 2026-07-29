@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Document `gates.delta_context_retry_enabled` (`MILL_DELTA_CONTEXT_RETRY_ENABLED`, default `true`) in the configuration reference under section 11.3 Refine routing.
 - Tighten implement agent tool-use discipline: forbid `run_command` for trivial
   file-content lookups (`grep`, `cat`, `ls`, `head`, `tail`, `wc` on known paths)
   and direct the model to use `read_file` or `explore` instead.

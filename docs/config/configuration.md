@@ -609,6 +609,7 @@ refinement pass.
 | `gates.refine_findings_downgrade_min_chars` | `MILL_REFINE_FINDINGS_DOWNGRADE_MIN_CHARS` | `150` | Minimum stripped-character length of triage findings for the Opus downgrade to fire |
 | `gates.refine_subscription_model_findings` | `MILL_REFINE_SUBSCRIPTION_MODEL_FINDINGS` | `sonnet` | Claude alias used when the findings-present downgrade fires |
 | `gates.max_re_refine_cycles_before_cheap` | `MILL_MAX_RE_REFINE_CYCLES_BEFORE_CHEAP` | `2` | Force cheap model after this many "changes requested" sendbacks; `0` disables |
+| `gates.delta_context_retry_enabled` | `MILL_DELTA_CONTEXT_RETRY_ENABLED` | `true` | When true, retry/audit/re-refine passes receive only the delta rather than full context |
 | — | `MILL_REFINE_DELTA_REUSE_ENABLED` | `true` | When re-entering refine after an operator sendback, reuse the prior refined description.md as the starting point instead of refining from scratch |
 
 ### 12. Periodic agents
