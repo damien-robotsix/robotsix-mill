@@ -2731,6 +2731,7 @@ def test_not_eligible_flagged_false_auto_merges_anyway(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2742,6 +2743,16 @@ def test_not_eligible_flagged_false_auto_merges_anyway(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
@@ -2763,6 +2774,7 @@ def test_not_eligible_no_comment_line_auto_merges_anyway(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2774,6 +2786,16 @@ def test_not_eligible_no_comment_line_auto_merges_anyway(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
