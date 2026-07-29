@@ -4326,6 +4326,16 @@ def test_auto_merge_without_head_sha_in_artifact_is_backward_compat(
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
 
     t = _human_mr_approval(ctx)
     # No head_sha line — legacy artifact, treated as stale.
