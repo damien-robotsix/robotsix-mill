@@ -81,7 +81,6 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         # -- Credentials leaked from Secrets model into Settings (legacy
         #    compatibility). These live in the secrets block, not settings --
         "forge_auth",
-        "github_app_private_key_path",
         # -- default_factory fields whose effective default depends on
         #    runtime resolution (Path via importlib.resources, dict
         #    constructed at class-load, etc.) —
@@ -321,6 +320,33 @@ def _parse_doc_default(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _parse_table_data_row(
+    cells: list[str],
+    default_col_idx: int | None,
+    env_var_col_idx: int | None,
+) -> tuple[str, str] | None:
+    """Extract (env_var, default) from a table data row, or None if skipped."""
+    if default_col_idx is None or env_var_col_idx is None:
+        return None
+    if default_col_idx >= len(cells) or env_var_col_idx >= len(cells):
+        return None
+
+    env_var = _strip_backticks(cells[env_var_col_idx].strip())
+    default_text = _strip_backticks(cells[default_col_idx].strip())
+
+    # Skip rows with no env var or placeholder env vars
+    if not env_var or env_var in ("—", "-", "–"):
+        return None
+    # Skip placeholder patterns like MILL_<NAME>_PERIODIC
+    if "<" in env_var or ">" in env_var:
+        return None
+    # Skip values that are clearly not env var names
+    if env_var.lower() in ("yes", "no"):
+        return None
+
+    return env_var, default_text
+
+
 def _parse_doc_tables(md_path: Path) -> dict[str, str]:
     """Parse settings tables from the config docs markdown.
 
@@ -369,27 +395,9 @@ def _parse_doc_tables(md_path: Path) -> dict[str, str]:
                 continue
             continue
 
-        # Data row
-        if default_col_idx is None or env_var_col_idx is None:
-            continue
-        if default_col_idx >= len(cells) or env_var_col_idx >= len(cells):
-            continue
-
-        env_var = _strip_backticks(cells[env_var_col_idx].strip())
-        default_text = _strip_backticks(cells[default_col_idx].strip())
-
-        # Skip rows with no env var or placeholder env vars
-        if not env_var or env_var in ("—", "-", "–"):
-            continue
-        # Skip placeholder patterns like MILL_<NAME>_PERIODIC
-        if "<" in env_var or ">" in env_var:
-            continue
-        # Skip values that are clearly not env var names (e.g. "yes"/"no"
-        # from a "Required" column inadvertently parsed as env var)
-        if env_var.lower() in ("yes", "no"):
-            continue
-
-        doc_defaults[env_var] = default_text
+        result = _parse_table_data_row(cells, default_col_idx, env_var_col_idx)
+        if result is not None:
+            doc_defaults[result[0]] = result[1]
 
     return doc_defaults
 
@@ -485,8 +493,6 @@ def _check_doc_env_vars_in_model(
 
 def _build_valid_env_vars(model: type) -> set[str]:
     """Return the set of all valid env-var names for a Settings model."""
-    from pydantic.fields import PydanticUndefined
-
     names: set[str] = set()
     for name, field in model.model_fields.items():
         names.add(_field_env_var(name, field))
