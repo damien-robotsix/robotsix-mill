@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Document `gates.delta_context_retry_enabled` (`MILL_DELTA_CONTEXT_RETRY_ENABLED`, default `true`) in the configuration reference under section 11.3 Refine routing.
+- config-sync: `max_refine_passes_per_ticket` — already documented in section 11.2 (Stages tuning) of `docs/config/configuration.md`; no docs change needed.
 - Document `max_refine_passes_per_ticket` (`MILL_MAX_REFINE_PASSES_PER_TICKET`, default 3) in the configuration reference under "Stages tuning"
 - Tighten implement agent tool-use discipline: forbid `run_command` for trivial
   file-content lookups (`grep`, `cat`, `ls`, `head`, `tail`, `wc` on known paths)
