@@ -818,7 +818,7 @@ class _PeriodicSettings(BaseModel):
         default=True,
         description="When true, run periodic roadmap-sync passes.",
     )
-    # Interval between roadmap-sync passes (seconds). Default 86400 (daily).
+    # Interval between roadmap-sync passes (seconds). Default 604800 (7 days).
     # Enforced minimum 3600s (1 hour) in the worker.
     roadmap_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
