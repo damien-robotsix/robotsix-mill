@@ -224,6 +224,29 @@ POST /tickets/<ticket-id>/resume-blocked
 
 Resumes a `blocked` ticket back to its originating state, or clears retry metadata from a retrying ticket.  Request body is optional: `{"note": "..."}`.  For a `blocked` ticket the note is recorded as a comment and, when resuming back into `ready`, also clears the implement stage's stale-spec guard — supply a justification note instead of re-blocking immediately when you want to force a retry on an unchanged spec.  Returns 409 if the ticket is not blocked or retrying.
 
+### POST /tickets/{id}/answer — answer a pending question
+
+```
+POST /tickets/<ticket-id>/answer
+Content-Type: application/json
+
+{
+  "body": "<the operator's answer>",
+  "author": "robotsix-chat"
+}
+```
+
+Delivers an operator-supplied answer to a ticket in `awaiting_user_reply`
+(the ``[ASK_USER]`` / `ask_user` pause).  Posts the answer as a reply to
+the open ``[ASK_USER]`` thread, closes the thread, and auto-resumes the
+ticket back to its originating state (e.g. `implementing`).
+
+Use this when an operator replies to a clarifying question you posed
+earlier — do not use it on tickets in any other state.  Returns the
+enriched `TicketRead` on success.  Raises 404 if the ticket does not
+exist, 409 if it is not in `awaiting_user_reply` or has no open
+``[ASK_USER]`` thread.
+
 ---
 
 ## Deletion

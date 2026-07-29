@@ -894,6 +894,89 @@ def test_resume_blocked_no_deploy_url_resumes_normally(client, service, settings
     assert r.json()["state"] == State.READY
 
 
+# --- answer pending-question endpoint tests ---
+
+
+def test_answer_pending_question_success(client, service):
+    """POST /tickets/{id}/answer posts a reply and auto-resumes."""
+    t = service.create("Answerable ticket")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    service.add_comment(
+        t.id, "[ASK_USER]\n\nShould we use red or blue?", author="refine"
+    )
+
+    assert service.get(t.id).state is State.AWAITING_USER_REPLY
+
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={"body": "Use red.", "author": "robotsix-chat"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == t.id
+    assert data["state"] == State.READY  # auto-resumed to paused_from
+
+    # pending_question is cleared.
+    assert data["pending_question"] is None
+
+    # The answer was posted as a comment.
+    comments = service.list_comments(t.id)
+    answer = [
+        c for c in comments if c.body == "Use red." and c.author == "robotsix-chat"
+    ]
+    assert len(answer) == 1
+    # The answer is a reply to the [ASK_USER] thread.
+    assert answer[0].parent_id is not None
+
+
+def test_answer_pending_question_missing_ticket_404(client):
+    """POST /tickets/{id}/answer with bogus id returns 404."""
+    r = client.post(
+        "/tickets/nonexistent/answer",
+        json={"body": "answer", "author": "robotsix-chat"},
+    )
+    assert r.status_code == 404
+
+
+def test_answer_pending_question_wrong_state_409(client, service):
+    """POST /tickets/{id}/answer on a non-AWAITING_USER_REPLY ticket returns 409."""
+    t = service.create("Not paused")
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={"body": "answer", "author": "robotsix-chat"},
+    )
+    assert r.status_code == 409
+
+
+def test_answer_pending_question_empty_body_400(client, service):
+    """POST /tickets/{id}/answer with empty body returns 400."""
+    t = service.create("Paused ticket")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    service.add_comment(t.id, "[ASK_USER]\n\nQuestion?", author="refine")
+
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={"body": "", "author": "robotsix-chat"},
+    )
+    assert r.status_code == 400
+
+
+def test_answer_pending_question_no_ask_user_thread_409(client, service):
+    """POST /tickets/{id}/answer on an AWAITING_USER_REPLY ticket with no
+    open [ASK_USER] thread returns 409."""
+    t = service.create("Paused without question")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={"body": "Here is an answer", "author": "robotsix-chat"},
+    )
+    assert r.status_code == 409
+
+
 # --- reset-fingerprint endpoint tests ---
 
 
