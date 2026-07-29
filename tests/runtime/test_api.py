@@ -902,7 +902,9 @@ def test_answer_pending_question_success(client, service):
     t = service.create("Answerable ticket")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.AWAITING_USER_REPLY)
-    service.add_comment(t.id, "[ASK_USER]\n\nShould we use red or blue?", author="refine")
+    service.add_comment(
+        t.id, "[ASK_USER]\n\nShould we use red or blue?", author="refine"
+    )
 
     assert service.get(t.id).state is State.AWAITING_USER_REPLY
 
@@ -920,7 +922,9 @@ def test_answer_pending_question_success(client, service):
 
     # The answer was posted as a comment.
     comments = service.list_comments(t.id)
-    answer = [c for c in comments if c.body == "Use red." and c.author == "robotsix-chat"]
+    answer = [
+        c for c in comments if c.body == "Use red." and c.author == "robotsix-chat"
+    ]
     assert len(answer) == 1
     # The answer is a reply to the [ASK_USER] thread.
     assert answer[0].parent_id is not None

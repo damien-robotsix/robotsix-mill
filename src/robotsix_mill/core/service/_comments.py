@@ -17,6 +17,11 @@ from ._helpers import _get_ticket, _make_event
 log = logging.getLogger("robotsix_mill.service")
 
 
+def _sanitize_log_value(value: str) -> str:
+    """Replace newlines to prevent log-forging attacks."""
+    return value.replace("\n", " ").replace("\r", " ")
+
+
 class _CommentMixin(_ServiceBase):
     """Reviewer comments, thread close/reopen, and ask-user auto-resume."""
 
@@ -259,13 +264,13 @@ class _CommentMixin(_ServiceBase):
                     log.warning(
                         "%s: AWAITING_USER_REPLY but no paused_from and no prior"
                         " events — cannot auto-resume",
-                        ticket_id,
+                        _sanitize_log_value(ticket_id),
                     )
                     return
                 log.warning(
                     "%s: AWAITING_USER_REPLY but no paused_from — recovering from"
                     " event history (last state before pause: %s)",
-                    ticket_id,
+                    _sanitize_log_value(ticket_id),
                     prev_state_event.state.value,
                 )
                 ticket.paused_from = prev_state_event.state.value
@@ -308,7 +313,7 @@ class _CommentMixin(_ServiceBase):
             log.info(
                 "%s: auto-resumed from AWAITING_USER_REPLY → %s "
                 "(all %d ask_user threads closed)",
-                ticket_id,
+                _sanitize_log_value(ticket_id),
                 dst.value,
                 len(ask_threads),
             )
