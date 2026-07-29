@@ -19,6 +19,7 @@ from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
 def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
+    repo_auto_merge_enabled = env.pop("repo_auto_merge_enabled", False)
     s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
@@ -40,6 +41,7 @@ def _ctx(tmp_path, **env):
             langfuse_project_name="test",
             langfuse_public_key="pk-test",
             langfuse_secret_key="sk-test",
+            auto_merge_enabled=repo_auto_merge_enabled,
         ),
     )
 
@@ -74,6 +76,12 @@ def _in_rebasing(ctx):
 
 
 def _gh(tmp_path, **extra):
+    # When auto_merge_enabled is set to "true", also opt in the repo.
+    if (
+        extra.get("auto_merge_enabled") == "true"
+        and "repo_auto_merge_enabled" not in extra
+    ):
+        extra["repo_auto_merge_enabled"] = True
     return _ctx(
         tmp_path,
         FORGE_KIND="github",
@@ -2157,6 +2165,7 @@ def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
             "state": "open",
             "url": "https://gh/o/r/pull/1",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2168,6 +2177,16 @@ def test_auto_merge_fires_when_all_conditions_met(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
@@ -2189,6 +2208,7 @@ def test_auto_merge_skipped_when_flag_disabled(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2609,6 +2629,7 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2629,7 +2650,7 @@ def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
 
     assert len(merge_events) == 1
 
-    assert "auto-merge disabled in config" in (merge_events[0].note or "")
+    assert "auto-merge disabled in global config" in (merge_events[0].note or "")
 
 
 def test_not_eligible_review_disabled_stays_human_mr_approval_with_comment(
@@ -2710,6 +2731,7 @@ def test_not_eligible_flagged_false_auto_merges_anyway(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2721,6 +2743,16 @@ def test_not_eligible_flagged_false_auto_merges_anyway(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
@@ -2742,6 +2774,7 @@ def test_not_eligible_no_comment_line_auto_merges_anyway(tmp_path, monkeypatch):
             "state": "open",
             "url": "u",
             "mergeable": True,
+            "author": "mill-bot",
         },
     )
     monkeypatch.setattr(
@@ -2753,6 +2786,16 @@ def test_not_eligible_no_comment_line_auto_merges_anyway(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
@@ -3413,6 +3456,7 @@ def test_cross_repo_merge_routes_to_upstream_pr(tmp_path, monkeypatch):
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
         forge_remote_url="https://github.com/fork-owner/r.git",
+        auto_merge_enabled=True,
         cross_repo_target=CrossRepoTarget(
             upstream_remote_url="https://github.com/up/r.git",
             fork_remote_url="https://github.com/fork-owner/r.git",
@@ -4305,6 +4349,16 @@ def test_auto_merge_without_head_sha_in_artifact_is_backward_compat(
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
 
     t = _human_mr_approval(ctx)
     # No head_sha line — legacy artifact, treated as stale.
@@ -4340,6 +4394,16 @@ def test_waiting_auto_merge_stale_artifact_does_not_bounce(tmp_path, monkeypatch
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)
@@ -4389,6 +4453,16 @@ def test_waiting_auto_merge_legacy_artifact_no_head_sha_does_not_bounce(
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
 
     t = _human_mr_approval(ctx)
     # Legacy artifact — no head_sha line at all.
@@ -4424,6 +4498,11 @@ def test_waiting_auto_merge_current_artifact_no_longer_bounces(
         github.GitHubForge,
         "check_status",
         lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
     )
 
     t = _human_mr_approval(ctx)
@@ -4466,6 +4545,16 @@ def test_stale_artifact_no_longer_blocks_auto_merge(tmp_path, monkeypatch):
         github.GitHubForge,
         "merge_pr",
         lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
     )
 
     t = _human_mr_approval(ctx)

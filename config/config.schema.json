@@ -36,6 +36,12 @@
     "RepoConfig": {
       "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
       "properties": {
+        "auto_merge_enabled": {
+          "default": false,
+          "description": "When true, the merge stage may auto-merge green PRs for this repo (opt-in per repo).",
+          "title": "Auto Merge Enabled",
+          "type": "boolean"
+        },
         "board_id": {
           "description": "Board identifier this repo's tickets are routed to (e.g. 'robotsix-mill').",
           "title": "Board Id",
@@ -744,12 +750,34 @@
           "title": "Auto Merge Enabled",
           "type": "boolean"
         },
+        "auto_merge_infra_denylist": {
+          "description": "Repo IDs permanently excluded from auto-merge.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Auto Merge Infra Denylist",
+          "type": "array"
+        },
+        "auto_merge_kill_switch": {
+          "default": false,
+          "description": "When true, suppress ALL auto-merge globally (emergency kill-switch).",
+          "title": "Auto Merge Kill Switch",
+          "type": "boolean"
+        },
         "auto_merge_main_debt_detection_enabled": {
           "advanced": true,
           "default": true,
           "description": "When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
           "title": "Auto Merge Main Debt Detection Enabled",
           "type": "boolean"
+        },
+        "auto_merge_sensitive_globs": {
+          "description": "Glob patterns for files that always block auto-merge when touched.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Auto Merge Sensitive Globs",
+          "type": "array"
         },
         "bc_check_interval_seconds": {
           "advanced": true,

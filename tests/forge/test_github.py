@@ -338,6 +338,7 @@ def test_get_pr_found_returns_expected_dict(tmp_path, monkeypatch):
         "mergeable_state": "clean",
         "sha": "abc123",
         "number": 7,
+        "author": "",
     }
 
 
@@ -425,6 +426,7 @@ def test_pr_status_by_url_resolves_merged_pr(tmp_path, monkeypatch):
         "mergeable_state": "unknown",
         "sha": "abc123",
         "number": 7,
+        "author": "",
     }
 
 
@@ -3797,6 +3799,7 @@ def test_parse_pr_detail_clean_mergeable():
         "mergeable_state": "clean",
         "sha": "abc123",
         "number": 7,
+        "author": "",
     }
 
 

@@ -20,7 +20,15 @@
     "auto_approve_enabled": false,
     "auto_fix_max_cycles": 6,
     "auto_merge_enabled": false,
+    "auto_merge_infra_denylist": ["robotsix-central-deploy"],
+    "auto_merge_kill_switch": false,
     "auto_merge_main_debt_detection_enabled": true,
+    "auto_merge_sensitive_globs": [
+      ".github/workflows/**",
+      "**/secrets/**",
+      "**/*.secret*",
+      ".env*"
+    ],
     "bc_check_interval_seconds": 604800,
     "bc_check_periodic": true,
     "bespoke_discovery_interval_seconds": 600,

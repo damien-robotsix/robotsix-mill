@@ -65,6 +65,7 @@ def _mr_status_dict(mr: dict[str, Any]) -> dict[str, Any]:
         "mergeable": _map_merge_status(mr.get("merge_status", "")),
         "sha": (mr.get("diff_refs") or {}).get("head_sha") or mr.get("sha", ""),
         "number": mr["iid"],
+        "author": (mr.get("author") or {}).get("username", ""),
     }
 
 

@@ -222,6 +222,33 @@ class _StagesSettings(BaseModel):
         default=True,
         json_schema_extra={"advanced": True},
     )
+    # When True (default False), all auto-merge is suppressed globally
+    # regardless of per-repo toggles.  Emergency kill-switch — the
+    # operator flips this to halt all autonomous merges immediately.
+    auto_merge_kill_switch: bool = Field(
+        description="When true, suppress ALL auto-merge globally (emergency kill-switch).",
+        default=False,
+    )
+    # Glob patterns for files/directories that block auto-merge when
+    # touched by a PR.  A PR that touches ANY of these paths will NEVER
+    # be auto-merged, regardless of the per-repo toggle — it must route
+    # to human approval.  The match is against the full repo-relative
+    # path (e.g. ".github/workflows/ci.yml").
+    auto_merge_sensitive_globs: list[str] = Field(
+        default_factory=lambda: [
+            ".github/workflows/**",
+            "**/secrets/**",
+            "**/*.secret*",
+            ".env*",
+        ],
+        description="Glob patterns for files that always block auto-merge when touched.",
+    )
+    # Repo IDs permanently excluded from auto-merge (cannot be opted in).
+    # Default includes the infra repo; an operator can add more.
+    auto_merge_infra_denylist: list[str] = Field(
+        default_factory=lambda: ["robotsix-central-deploy"],
+        description="Repo IDs permanently excluded from auto-merge.",
+    )
     # When True, the board's ticket detail drawer renders description.md
     # below the comments with a collapsible "Hide" toggle (the frontend
     # reads ``gatesCache.comments_after_body``). Default False (opt-in).

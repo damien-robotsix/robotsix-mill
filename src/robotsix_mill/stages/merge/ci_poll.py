@@ -7,6 +7,7 @@ routes to FIXING_CI / REBASING / WAITING_AUTO_MERGE as appropriate.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from pathlib import Path
 from typing import Any
@@ -552,9 +553,8 @@ class CIPollMixin(_MergeStageBase):
 
         # Check remote CI before returning no-op.
         try:
-            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
-                source_branch=branch
-            )
+            forge = get_forge(s, repo_config=ctx.repo_config)
+            ci_status = forge.check_status(source_branch=branch)
         except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.HUMAN_MR_APPROVAL)
@@ -576,16 +576,14 @@ class CIPollMixin(_MergeStageBase):
         # success, pending, or None — evaluate auto-merge eligibility.
         feature_tip_sha = pr.get("sha", "")
         eligible, eligibility_reason = self._auto_merge_eligible(
-            ticket, ctx, pr_head_sha=feature_tip_sha
+            ticket, ctx, pr_head_sha=feature_tip_sha, forge=forge, pr=pr
         )
 
         if _ci_truly_green(conclusion, pr):
             if eligible:
                 # CI green + eligible → auto-merge now.
                 feature_tip_sha = pr.get("sha", "")
-                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
-                    source_branch=branch
-                )
+                result = forge.merge_pr(source_branch=branch)
                 if result.get("merged"):
                     repo_dir = _facade._workspace_repo_dir(ctx, ticket)
                     target = target_branch_for(s, ctx.repo_config)
@@ -656,25 +654,80 @@ class CIPollMixin(_MergeStageBase):
         return Outcome(State.HUMAN_MR_APPROVAL)
 
     def _auto_merge_eligible(
-        self, ticket: Ticket, ctx: StageContext, pr_head_sha: str | None = None
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        pr_head_sha: str | None = None,
+        *,
+        forge: Forge | None = None,
+        pr: dict[str, Any] | None = None,
     ) -> tuple[bool, str]:
         """Return ``(eligible, reason)`` for auto-merge.
 
         *eligible* is True when ALL of the following hold:
-        1. ``settings.auto_merge_enabled`` is True
-        2. ``settings.review_enabled`` is True
+        1. Global ``settings.auto_merge_enabled`` is True
+        2. ``settings.auto_merge_kill_switch`` is False
+        3. Per-repo ``repo_config.auto_merge_enabled`` is True
+        4. ``settings.review_enabled`` is True
+        5. Repo is NOT in ``settings.auto_merge_infra_denylist``
+        6. PR author is the mill/chat agent (only when *forge* + *pr* given)
+        7. No sensitive paths touched (only when *forge* + *pr* given)
 
-        The review artifact is no longer required — the upstream
-        ``human_mr_approval`` operator gate is the authoritative,
-        traceable review decision point.
+        When *forge* + *pr* are not provided, only config-only gates
+        (1–5) are evaluated.  Provide both to enable the forge-dependent
+        safety checks (6–7).  The review artifact is no longer required.
 
         *reason* explains the blocking condition when eligible is False.
         """
         s = ctx.settings
+        rc = ctx.repo_config
+        if rc is None:
+            return False, "no repo config available"
+
+        # --- Config-only gates (fast, no I/O) ---
         if not s.auto_merge_enabled:
-            return False, "auto-merge disabled in config"
+            return False, "auto-merge disabled in global config"
+        if s.auto_merge_kill_switch:
+            return False, "auto-merge kill-switch is active"
+        if not rc.auto_merge_enabled:
+            return False, "auto-merge disabled for this repo"
         if not s.review_enabled:
             return False, "review gate disabled — human approval required"
+        if rc.repo_id in s.auto_merge_infra_denylist:
+            return False, f"repo {rc.repo_id!r} is on the infra denylist"
+
+        # --- Forge-dependent safety gates ---
+        if forge is not None and pr is not None:
+            # 6. PR author must be the mill/chat agent.
+            author = (pr or {}).get("author", "")
+            if author:
+                bot_logins = s.orphaned_pr_bot_logins or []
+                if bot_logins:
+                    allowed = set(bot_logins)
+                else:
+                    bot_login = forge.get_authenticated_user_login()
+                    allowed = {bot_login} if bot_login else set()
+                if allowed and author not in allowed:
+                    return False, (
+                        f"PR author {author!r} is not a trusted bot; "
+                        f"allowed: {sorted(allowed)}"
+                    )
+
+            # 7. No sensitive paths touched.
+            try:
+                files = forge.pr_files(source_branch=ticket.branch or "")
+            except Exception:
+                # Fail-closed: any error fetching files → not eligible.
+                return False, "failed to fetch PR file list"
+            sensitive = s.auto_merge_sensitive_globs or []
+            for f in files:
+                path = f.get("path", "")
+                for pattern in sensitive:
+                    if fnmatch.fnmatch(path, pattern):
+                        return False, (
+                            f"sensitive path touched: {path!r} "
+                            f"(matched glob {pattern!r})"
+                        )
 
         return True, "eligible"
 
@@ -705,8 +758,9 @@ class CIPollMixin(_MergeStageBase):
 
         # Re-check eligibility (review artifact may have changed / become stale).
         feature_tip_sha = pr.get("sha", "")
+        forge = get_forge(s, repo_config=ctx.repo_config)
         eligible, reason = self._auto_merge_eligible(
-            ticket, ctx, pr_head_sha=feature_tip_sha
+            ticket, ctx, pr_head_sha=feature_tip_sha, forge=forge, pr=pr
         )
         if not eligible:
             self._maybe_comment(ticket, ctx, reason)
@@ -736,9 +790,7 @@ class CIPollMixin(_MergeStageBase):
 
         # Check CI.
         try:
-            ci_status = get_forge(s, repo_config=ctx.repo_config).check_status(
-                source_branch=branch
-            )
+            ci_status = forge.check_status(source_branch=branch)
         except Exception as e:
             log.warning("%s: check_status failed (retry): %s", ticket.id, e)
             return Outcome(State.WAITING_AUTO_MERGE)
@@ -765,9 +817,7 @@ class CIPollMixin(_MergeStageBase):
             # starts, with mergeable_state still "blocked"/"behind" — merging
             # then would redden the target branch.
             feature_tip_sha = pr.get("sha", "")  # capture before merge
-            result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
-                source_branch=branch
-            )
+            result = forge.merge_pr(source_branch=branch)
             if result.get("merged"):
                 repo_dir = _facade._workspace_repo_dir(ctx, ticket)
                 target = target_branch_for(s, ctx.repo_config)

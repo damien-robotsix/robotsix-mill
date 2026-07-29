@@ -171,6 +171,14 @@ class RepoConfig(BaseModel):
         description="Maximum number of in-flight PR tickets before the worker stops dispatching new work for this repo. 0 disables.",
         json_schema_extra={"advanced": True},
     )
+    # When True (default False), the merge stage may auto-merge green
+    # PRs for this repo via the forge API without waiting for a human.
+    # Must also have the global ``auto_merge_enabled`` set True and the
+    # global kill-switch ``auto_merge_kill_switch`` set False.
+    auto_merge_enabled: bool = Field(
+        False,
+        description="When true, the merge stage may auto-merge green PRs for this repo (opt-in per repo).",
+    )
     # Source discriminator: ``"config"`` for operator-configured entries,
     # ``"auto"`` for machine-registered overlay entries.
     source: Literal["config", "auto"] = Field(

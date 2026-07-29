@@ -35,6 +35,7 @@ def _parse_pr_detail(pr: dict) -> dict:
         "mergeable_state": mergeable_state,
         "sha": (pr.get("head") or {}).get("sha", ""),
         "number": pr["number"],
+        "author": (pr.get("user") or {}).get("login", ""),
     }
 
 

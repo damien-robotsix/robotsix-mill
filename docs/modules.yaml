@@ -300,6 +300,7 @@ modules:
       - tests/stages/merge/test_core.py
       - tests/stages/merge/test_core_multi_repo.py
       - tests/stages/merge/__init__.py
+      - tests/stages/merge/conftest.py
       - tests/stages/test_ci_fix.py
       - tests/stages/test_ci_fix_helpers.py
       - tests/stages/test_stage_cache.py
