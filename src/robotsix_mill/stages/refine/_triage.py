@@ -723,8 +723,13 @@ def triage_skip(
                     )
     except Exception:
         log.warning(
-            "%s: triage failed, falling through to full refine",
+            "%s: triage failed — short-circuiting to human approval "
+            "instead of falling through to expensive refine",
             ticket.id,
             exc_info=True,
+        )
+        return Outcome(
+            State.HUMAN_ISSUE_APPROVAL,
+            "triage classifier failed (model unavailable) — routing to human approval",
         )
     return None

@@ -1098,7 +1098,9 @@ def test_refine_triage_skip_no_paths_writes_empty_file_map(ctx_factory, monkeypa
 # ---------------------------------------------------------------------------
 
 
-def test_refine_triage_exception_falls_through_to_full_refine(ctx_factory, monkeypatch):
+def test_refine_triage_exception_short_circuits_to_human_approval(
+    ctx_factory, monkeypatch
+):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     t = _ticket(ctx, body="Fix the thing")
 
@@ -1126,8 +1128,8 @@ def test_refine_triage_exception_falls_through_to_full_refine(ctx_factory, monke
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state is State.READY
-    assert len(refine_called) == 1
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_called) == 0
 
 
 # ---------------------------------------------------------------------------
