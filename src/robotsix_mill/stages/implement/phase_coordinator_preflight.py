@@ -1,7 +1,7 @@
 """Preflight gate checks for the implement phase.
 
 Extracted from :class:`PhaseCoordinatorMixin` to reduce file size.
-All nine gate checks run BEFORE a Langfuse trace opens, catching
+All gate checks run BEFORE a Langfuse trace opens, catching
 known-no-op conditions without consuming a spawn slot or emitting
 a $0.00 trace.
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -18,6 +19,7 @@ from robotsix_mill._resources import (
 
 from ..._resources import agent_definitions_dir
 from ...agents.yaml_loader import load_agent_definition
+from ...config import effective_target_branch
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...deploy import check_deploy_freshness
@@ -238,6 +240,83 @@ def run_preflight_checks(
                 "The implement agent is not converging.  "
                 "Consider re-scoping or splitting the ticket.",
             )
+
+    # 4.6. Changelog-only review re-spawn short-circuit: a ticket that
+    #      came back from review with OPEN feedback threads and whose
+    #      previous implement attempt committed only changelog
+    #      fragments did NOT address that feedback — re-spawning would
+    #      re-review the same diff and burn the remaining spawn budget
+    #      (ticket b92d / faa8: three identical review verdicts, two
+    #      changelog-only no-op attempts, 3/3 → BLOCKED with no
+    #      progress).  Escalate to BLOCKED before the agent loop —
+    #      without consuming a spawn — and surface the reviewer's open
+    #      gap list (not the summary tail) in the block note.
+    repo_dir = ws.dir / "repo"
+    if ticket.review_rounds > 0 and (repo_dir / ".git").exists():
+        _non_feedback_authors = {"mill", "system"}
+        try:
+            _comments = ctx.service.list_comments(ticket.id)
+        except Exception:
+            _comments = []
+        open_feedback = [
+            c
+            for c in _comments
+            if c.parent_id is None
+            and c.closed_at is None
+            and c.author not in _non_feedback_authors
+        ]
+        if open_feedback:
+            target = effective_target_branch(s, ctx.repo_config)
+            last_files: list[str] = []
+            try:
+                _ahead_raw = subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "rev-list",
+                        "--count",
+                        f"origin/{target}..HEAD",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                ).stdout.strip()
+                if _ahead_raw and int(_ahead_raw) > 0:
+                    last_files = [
+                        ln.strip()
+                        for ln in subprocess.run(
+                            [
+                                "git",
+                                "-C",
+                                str(repo_dir),
+                                "show",
+                                "--name-only",
+                                "--format=",
+                                "HEAD",
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        ).stdout.splitlines()
+                        if ln.strip()
+                    ]
+            except (subprocess.SubprocessError, OSError, ValueError):
+                last_files = []
+            if last_files and all(f.startswith("changelog.d/") for f in last_files):
+                gap_list = "\n".join(
+                    f"- [review #{c.id}] {c.body.strip()}" for c in open_feedback
+                )
+                clear_conversation_state(ws, "implement")
+                return Outcome(
+                    State.BLOCKED,
+                    "changelog-only re-attempt with unaddressed review "
+                    "feedback — the previous implement attempt committed "
+                    "only changelog fragment(s) while review threads are "
+                    "still open; re-spawning would re-review the same "
+                    "diff without addressing the feedback.  "
+                    "Unaddressed review feedback:\n" + gap_list,
+                )
 
     # 5. Agent tool-definition integrity: the assembled tool list
     #    must be non-empty before we open a trace.  Load the agent-
