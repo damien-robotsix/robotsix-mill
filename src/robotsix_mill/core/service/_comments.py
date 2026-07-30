@@ -195,7 +195,8 @@ class _CommentMixin(_ServiceBase):
         author: str,
     ) -> Comment:
         """Answer an open ``[ASK_USER]`` question on a ticket in
-        ``AWAITING_USER_REPLY``.
+        ``AWAITING_USER_REPLY``, or on a ``BLOCKED`` ticket that was
+        escalated from ``AWAITING_USER_REPLY``.
 
         Posts *body* as a reply to the most recent open ``[ASK_USER]``
         top-level thread, then closes that thread.  Closing triggers
@@ -203,17 +204,24 @@ class _CommentMixin(_ServiceBase):
         ticket are closed, the ticket transitions back to its
         ``paused_from`` state.
 
+        For a ``BLOCKED`` ticket (blocked_from=awaiting_user_reply),
+        the answer transitions the ticket back to
+        ``AWAITING_USER_REPLY`` first, then triggers the standard
+        auto-resume path.
+
         Raises ``KeyError`` if the ticket does not exist.
-        Raises ``ValueError`` if the ticket is not in
-        ``AWAITING_USER_REPLY`` or there is no open ``[ASK_USER]``
-        thread.
+        Raises ``ValueError`` if the ticket is not in an answerable
+        state or there is no open ``[ASK_USER]`` thread.
         """
         board = self._board_for(ticket_id)
         with retry_on_db_full(self.settings, board) as s:
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 raise KeyError(f"ticket {ticket_id} not found")
-            if ticket.state is not State.AWAITING_USER_REPLY:
+            if ticket.state is not State.AWAITING_USER_REPLY and not (
+                ticket.state is State.BLOCKED
+                and ticket.blocked_from == State.AWAITING_USER_REPLY.value
+            ):
                 raise ValueError(
                     f"ticket is not awaiting a user reply (currently {ticket.state})"
                 )
@@ -250,6 +258,29 @@ class _CommentMixin(_ServiceBase):
             s.add(ask_thread)
             s.commit()
             s.refresh(ask_thread)
+
+            # If the ticket is BLOCKED (timeout escalation), transition
+            # it back to AWAITING_USER_REPLY so the auto-resume path
+            # can pick it up.
+            is_blocked = ticket.state is State.BLOCKED
+
+        if is_blocked:
+            # Transition BLOCKED → AWAITING_USER_REPLY.  This is legal
+            # because blocked_from == AWAITING_USER_REPLY.  The
+            # transition clears blocked_from while preserving
+            # paused_from (set at the original ask_user pause).
+            updated = self.transition(
+                ticket_id,
+                State.AWAITING_USER_REPLY,
+                note="operator answered — resuming from ask_user timeout block",
+            )
+            # Add a system comment documenting the resume.
+            self.add_comment(
+                ticket_id,
+                f"Operator answered the [ASK_USER] question — resuming "
+                f"from BLOCKED back to {updated.paused_from or 'originating state'}.",
+                author="system",
+            )
 
         # Post-close: auto-resume if all [ASK_USER] threads are closed.
         self._maybe_resume_awaiting_user_reply(ticket_id, board)

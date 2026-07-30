@@ -252,7 +252,10 @@ TRANSITIONS: dict[State, set[State]] = {
     # BLOCKED: human can override to READY or DRAFT (re-run downstream),
     # or resume to the originating state (re-run only the failed stage).
     # ASKED is included so a blocked inquiry can resume to ASKED.
-    State.BLOCKED: {State.READY, State.DRAFT},
+    # CLOSED provides a terminal escape for ask_user-blocked tickets
+    # that will never receive an operator answer (the operator can
+    # force-close rather than let them accumulate indefinitely).
+    State.BLOCKED: {State.READY, State.DRAFT, State.CLOSED},
 }
 
 #: active state -> name of the stage that consumes it.
