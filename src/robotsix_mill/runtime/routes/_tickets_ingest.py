@@ -212,10 +212,9 @@ def ingest_ticket(
             "(fingerprint match)",
         )
         logger.info(
-            "ingest fingerprint match: %s → %s (source=%s)",
-            repr(body.title),
+            "ingest fingerprint match: dup_id=%s source_tag=%s",
             dup_id,
-            repr(body.source_tag),
+            body.source_tag,
         )
         return JSONResponse(
             status_code=200,
