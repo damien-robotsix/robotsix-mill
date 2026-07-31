@@ -1,12 +1,16 @@
 import pytest
 
 from robotsix_mill.agents import refining
-from robotsix_mill.agents.refining import RefineResult
+from robotsix_mill.agents.refining import RefineResult, TriageResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import RefineStage
+
+# Saved before the autouse fixture replaces it — tests that call
+# triage_refine directly (prompt-construction tests) restore it from this ref.
+_original_triage_refine = refining.triage_refine
 
 
 def _single(spec: str, file_map=None) -> RefineResult:
@@ -19,6 +23,17 @@ def ctx(settings, service, repo_config):
     return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
+@pytest.fixture(autouse=True)
+def _triage_refine_ok(monkeypatch):
+    """All pre-existing tests expect triage to pass through to refine.
+    Tests that need a different triage outcome override this fixture."""
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        lambda *a, **kw: TriageResult(decision="REFINE", reason="test"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # triage pass tests
 # ---------------------------------------------------------------------------
@@ -27,8 +42,11 @@ def ctx(settings, service, repo_config):
 def test_triage_refine_agent_config(monkeypatch, tmp_path):
     """triage_refine builds an agent with zero tools,
     web_knowledge=False, and the triage level (1) from triage.yaml."""
+    # Restore the real triage_refine (autouse fixture replaced it).
+    monkeypatch.setattr(refining, "triage_refine", _original_triage_refine)
+
     from robotsix_mill.agents import base as base_mod
-    from robotsix_mill.agents.refining import triage_refine, TriageResult
+    from robotsix_mill.agents.refining import TriageResult, triage_refine
 
     seen_kwargs: dict = {}
 
@@ -81,8 +99,11 @@ def test_triage_refine_wires_read_file_with_repo_dir(monkeypatch, tmp_path):
     """With repo_dir provided, triage_refine wires exactly an ``explore``
     tool plus a read-only ``read_file`` tool — and no write/edit/delete/
     run_command/list_dir."""
+    # Restore the real triage_refine (autouse fixture replaced it).
+    monkeypatch.setattr(refining, "triage_refine", _original_triage_refine)
+
     from robotsix_mill.agents import base as base_mod
-    from robotsix_mill.agents.refining import triage_refine, TriageResult
+    from robotsix_mill.agents.refining import TriageResult, triage_refine
 
     seen_kwargs: dict = {}
 
@@ -410,8 +431,8 @@ def test_triage_sendback_always_refines(ctx, service, monkeypatch):
 
 
 def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
-    """When triage_refine raises, a warning is logged and full refine
-    proceeds normally."""
+    """When triage_refine raises, the stage short-circuits to
+    HUMAN_ISSUE_APPROVAL instead of falling through to expensive refine."""
     refine_called = False
 
     def boom_triage(*, settings, title, draft):
@@ -441,9 +462,9 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
     t = service.create("Add X", "make x happen")
     out = RefineStage().run(t, ctx)
 
-    assert refine_called
-    assert out.next_state is State.READY
-    assert out.note == "refined"
+    assert not refine_called
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "triage classifier failed" in (out.note or "")
 
 
 # ---------------------------------------------------------------------------
@@ -729,8 +750,9 @@ def _ctx(require_approval=True, auto_approve_enabled=False):
 def test_auto_approve_yaml_criteria_permissive_tie_breaker():
     """The auto-approve YAML must encode the permissive tie-breaker and the
     five NEEDS_APPROVAL gates. Protects against prompt regressions."""
-    import yaml as _yaml
     from pathlib import Path
+
+    import yaml as _yaml
 
     text = (
         Path(__file__).parents[2] / "agent_definitions" / "auto-approve.yaml"

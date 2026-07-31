@@ -6,12 +6,12 @@ from robotsix_mill.agents.refining import (
     ChildSpec,
     RefineResult,
     SpecReviewResult,
+    TriageResult,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import RefineStage
-
 
 VERBOSE_SPEC = """## Problem
 
@@ -192,6 +192,10 @@ def test_flag_off_no_review_and_no_artifact(
     monkeypatch.setattr(
         "robotsix_mill.stages.refine.refining.run_refine_agent",
         lambda **kw: RefineResult(spec_markdown=VERBOSE_SPEC, split=False),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.refining.triage_refine",
+        lambda *a, **kw: TriageResult(decision="REFINE", reason="test"),
     )
 
     ticket = service.create("Add docstring to frobnicate", VERBOSE_SPEC)
