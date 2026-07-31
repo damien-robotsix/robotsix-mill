@@ -203,7 +203,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
                 return mock_ticket
             return None
 
-        def history(self, ticket_id):
+        def history(self, ticket_id, offset=0, limit=None):
             called_methods.add("history")
             return []
 
@@ -267,10 +267,10 @@ def test_truncation_many_history_events(settings, service, monkeypatch):
 
     original_history = TicketService.history
 
-    def fake_history(self, ticket_id):
+    def fake_history(self, ticket_id, offset=0, limit=None):
         if ticket_id == t.id:
             return events
-        return original_history(self, ticket_id)
+        return original_history(self, ticket_id, offset=offset, limit=limit)
 
     monkeypatch.setattr(TicketService, "history", fake_history)
 
@@ -322,10 +322,10 @@ def test_overall_output_truncation(settings, service, monkeypatch):
 
     original_history = TicketService.history
 
-    def fake_history(self, ticket_id):
+    def fake_history(self, ticket_id, offset=0, limit=None):
         if ticket_id == t.id:
             return events
-        return original_history(self, ticket_id)
+        return original_history(self, ticket_id, offset=offset, limit=limit)
 
     monkeypatch.setattr(TicketService, "history", fake_history)
 

@@ -95,6 +95,32 @@ def test_transition_records_history(service):
     assert hist[-1].note == "refined"
 
 
+def test_history_pagination(service):
+    t = service.create("pagination test")
+    for i in range(5):
+        service.transition(t.id, State.READY, note=f"event {i}")
+        service.transition(t.id, State.CODE_REVIEW, note=f"back to review {i}")
+
+    full = service.history(t.id)
+    assert len(full) >= 6  # created + 5 transitions
+
+    # offset
+    offset_2 = service.history(t.id, offset=2)
+    assert len(offset_2) == len(full) - 2
+    assert offset_2[0].id == full[2].id
+
+    # limit
+    limited = service.history(t.id, limit=3)
+    assert len(limited) == 3
+    assert limited[0].id == full[0].id
+
+    # offset + limit
+    page = service.history(t.id, offset=2, limit=2)
+    assert len(page) == 2
+    assert page[0].id == full[2].id
+    assert page[1].id == full[3].id
+
+
 def test_illegal_transition_rejected(service):
     t = service.create("x")
     with pytest.raises(TransitionError):
