@@ -105,6 +105,46 @@ def test_check_returns_outcome_on_hash_match(tmp_path):
     assert result.note == "cached"
 
 
+def test_blocked_outcome_is_not_written_to_the_cache(tmp_path):
+    """A BLOCKED outcome must never be persisted.
+
+    Regression (2026-07-31): caching it made a blocked ticket unrecoverable.
+    Ticket …-22ec was resumed after the refine fix written for it had been
+    deployed, and the stage logged
+    ``refine cache hit (hash=6dce913eed7a…) → blocked`` — replaying the
+    pre-fix outcome verbatim without running the fixed code.
+    """
+    ws = Workspace(tmp_path, "T-1")
+    _update(ws, "refine", "abc", Outcome(next_state=State.BLOCKED, note="stuck"))
+    assert _load(ws) == {}
+    assert _check(ws, "refine", "abc") is None
+
+
+def test_blocked_outcome_does_not_clobber_an_existing_entry(tmp_path):
+    """Declining to cache BLOCKED must not wipe a good prior entry."""
+    ws = Workspace(tmp_path, "T-1")
+    _update(ws, "refine", "abc", Outcome(next_state=State.READY, note="good"))
+    _update(ws, "refine", "abc", Outcome(next_state=State.BLOCKED, note="stuck"))
+    result = _check(ws, "refine", "abc")
+    assert result is not None
+    assert result.next_state == State.READY
+    assert result.note == "good"
+
+
+def test_check_ignores_a_preexisting_blocked_entry(tmp_path):
+    """Already-poisoned caches on disk recover without manual deletion.
+
+    Twenty live workspaces held a cached BLOCKED entry when this was found,
+    so the read side has to tolerate them rather than only the write side.
+    """
+    ws = Workspace(tmp_path, "T-1")
+    _save(
+        ws,
+        {"refine": {"input_hash": "abc", "next_state": "blocked", "note": "stuck"}},
+    )
+    assert _check(ws, "refine", "abc") is None
+
+
 def test_check_returns_none_when_entry_has_no_next_state(tmp_path):
     ws = Workspace(tmp_path, "T-1")
     _save(ws, {"refine": {"input_hash": "abc", "note": ""}})
