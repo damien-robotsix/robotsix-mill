@@ -2572,9 +2572,7 @@ def test_eligible_success_auto_merges_to_done(tmp_path, monkeypatch):
     assert out.next_state is State.DONE
 
 
-def test_eligible_forge_merge_failed_goes_to_blocked(
-    tmp_path, monkeypatch
-):
+def test_eligible_forge_merge_failed_goes_to_blocked(tmp_path, monkeypatch):
     """Eligible + CI success + forge rejects → BLOCKED + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
