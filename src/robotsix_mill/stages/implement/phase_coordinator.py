@@ -414,6 +414,35 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 )
                 feedback = review_feedback
 
+        # Guard (review-feedback injection): after a review->READY bounce
+        # the corrective review comment MUST reach the next implement
+        # prompt -- including on a blocked-resume re-spawn, where the
+        # branch above is skipped (blocked_from set) and the agent would
+        # otherwise re-run with no knowledge of what the reviewer asked
+        # for.  Surface the most recent open review-authored comment so
+        # the re-spawn addresses the reviewer's gaps instead of blindly
+        # re-emitting the prior (rejected) diff.
+        if not feedback:
+            try:
+                _review_comments = [
+                    c
+                    for c in ctx.service.list_comments(ticket.id)
+                    if c.author == "review"
+                    and c.parent_id is None
+                    and c.closed_at is None
+                ]
+            except Exception:
+                _review_comments = []
+            if _review_comments:
+                _latest = _review_comments[-1]
+                feedback = (
+                    f"[REVIEW id={_latest.id} @ "
+                    f"{_latest.created_at.isoformat()}] {_latest.body}"
+                )
+                if open_thread_ids is None:
+                    open_thread_ids = set()
+                open_thread_ids.add(_latest.id)
+
         previous_attempt_summary: str | None = None
         summary_path = ws.artifacts_dir / "implement_summary.md"
         if summary_path.exists():
@@ -521,6 +550,23 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         cls._stuck_no_diff_passes = 0
         cls._stuck_total_tool_calls_no_diff = 0
 
+        # No-progress review guard: capture the branch head at loop entry
+        # so the guard below can measure the diff THIS spawn produced
+        # (relative to commits that already existed from prior spawns).
+        _entry_head: str | None = None
+        try:
+            _entry_head = (
+                subprocess.run(
+                    ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                ).stdout.strip()
+                or None
+            )
+        except Exception:
+            _entry_head = None
+
         # Ordered history of the per-cycle distilled diagnosis. Drives the
         # circuit breaker below: a fix loop that keeps producing the SAME
         # diagnosis is not making progress, and an ENV-ERROR diagnosis is
@@ -612,6 +658,101 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             if result.next_action == "pause":
                 return result.outcome
             if result.next_action in ("proceed", "escalate"):
+                # No-progress short-circuit: a re-spawn triggered by a
+                # review->READY bounce that produced an empty diff or
+                # touched ONLY changelog fragments has not addressed the
+                # reviewer's gaps.  Routing it back into review just
+                # re-runs the identical verdict and burns another
+                # spawn/review cycle -- escalate straight to BLOCKED and
+                # write the most recent reviewer gap list into the note.
+                if (
+                    result.next_action == "proceed"
+                    and resuming
+                    and ticket.review_rounds > 0
+                    and _entry_head is not None
+                ):
+                    _changed: set[str] = set()
+                    try:
+                        _d = subprocess.run(
+                            [
+                                "git",
+                                "-C",
+                                str(repo_dir),
+                                "diff",
+                                "--name-only",
+                                _entry_head,
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        ).stdout
+                        _u = subprocess.run(
+                            [
+                                "git",
+                                "-C",
+                                str(repo_dir),
+                                "ls-files",
+                                "--others",
+                                "--exclude-standard",
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        ).stdout
+                        _changed.update(f.strip() for f in _d.splitlines() if f.strip())
+                        _changed.update(f.strip() for f in _u.splitlines() if f.strip())
+                    except Exception:
+                        _changed = {"__unknown__"}
+
+                    def _changelog_only(p: str) -> bool:
+                        return (
+                            p == "CHANGELOG.md"
+                            or p.startswith("changelog.d/")
+                            or "/changelog.d/" in p
+                        )
+
+                    _substantive = [f for f in _changed if not _changelog_only(f)]
+                    if not _substantive:
+                        _gaps = ""
+                        try:
+                            _rc = [
+                                c
+                                for c in ctx.service.list_comments(ticket.id)
+                                if c.author == "review"
+                                and c.parent_id is None
+                                and c.closed_at is None
+                            ]
+                            if _rc:
+                                _gaps = _rc[-1].body.strip()
+                        except Exception:
+                            _gaps = ""
+                        if not _gaps and ic.feedback:
+                            _gaps = ic.feedback.strip()
+                        _kind = (
+                            "an empty diff"
+                            if not _changed
+                            else "only changelog fragment(s)"
+                        )
+                        note = (
+                            "no-progress re-attempt after review bounce "
+                            f"-- the implement re-spawn produced {_kind} "
+                            "and did not address the reviewer's gaps. "
+                            "Escalating to BLOCKED instead of consuming "
+                            "another review cycle."
+                        )
+                        if _gaps:
+                            note += "\n\nMost recent reviewer gap list:\n" + _gaps
+                        cls._finalize(
+                            ctx,
+                            ticket,
+                            repo_dir,
+                            branch,
+                            note,
+                            ok=False,
+                            reference_files=ic.reference_files,
+                            extra_roots=extra_roots,
+                        )
+                        return Outcome(State.BLOCKED, note)
                 return result.outcome
 
             # next_action == "retry" — update for next iteration.
@@ -894,7 +1035,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             # operator-initiated resume-blocked clears of implement.md).
             try:
                 _stall = json.loads(stall_state_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError, OSError:
+            except (json.JSONDecodeError, OSError):
                 _stall = {}
             old_summary_fp = _stall.get("summary_fingerprint", "")
             old_stall_count = _stall.get("stall_count", 0)
