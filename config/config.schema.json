@@ -37,8 +37,8 @@
       "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
       "properties": {
         "auto_merge_enabled": {
-          "default": false,
-          "description": "When true, the merge stage may auto-merge green PRs for this repo (opt-in per repo).",
+          "default": true,
+          "description": "When true, the merge stage may auto-merge green PRs for this repo (per-repo opt-out).",
           "title": "Auto Merge Enabled",
           "type": "boolean"
         },

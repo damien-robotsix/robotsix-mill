@@ -270,7 +270,15 @@ class CIPollMixin(_MergeStageBase):
             # target, the failure was not introduced by this PR and cannot be
             # fixed by it — rebasing onto a red main can't help, so block before
             # the branch-behind-main rebase decision below.
-            if s.auto_merge_main_debt_detection_enabled:
+            # A ci_fix dependency ticket EXISTS to repair that debt, so
+            # blocking it on the debt is a deadlock: the repair for red main
+            # is refused because main is red, and only a human merging by
+            # hand breaks the cycle. Observed live — one red Dockerfile check
+            # on robotsix-chat wedged 22 tickets plus all three ci_fix
+            # tickets spawned to clear it. Let these through to the auto-fix
+            # loop below, which is separately bounded by the cycle counter.
+            is_ci_fix = ticket.source == SourceKind.CI_FIX_DEPENDENCY
+            if s.auto_merge_main_debt_detection_enabled and not is_ci_fix:
                 debt = self._main_branch_ci_debt(
                     forge=get_forge(s, repo_config=ctx.repo_config),
                     pr=pr,
