@@ -782,11 +782,7 @@ def run_agent_pass(
     # findings, instead of filing N individual tickets.  This cuts ~80%
     # of scanner ticket inflow.  The existing for-loop below then
     # creates exactly one ticket.
-    if (
-        settings.scanner_rollup
-        and source_label in _SCANNER_SOURCES
-        and limit >= 2
-    ):
+    if settings.scanner_rollup and source_label in _SCANNER_SOURCES and limit >= 2:
         from datetime import date as _date
 
         sections: list[str] = []
@@ -798,8 +794,7 @@ def run_agent_pass(
             if i < len(gap_ids) and gap_ids[i]:
                 all_gap_ids.append(gap_ids[i])
         rollup_title = (
-            f"{source_label} scan: {limit} findings "
-            f"({_date.today().isoformat()})"
+            f"{source_label} scan: {limit} findings ({_date.today().isoformat()})"
         )
         rollup_body = "\n\n".join(sections)
         # Replace the multi-draft lists with a single rollup entry.

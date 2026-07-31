@@ -165,6 +165,9 @@ settings_customise_sources
 dotenv_settings
 ci_patterns_file
 get_field_value
+# Pydantic Settings field — wired in a future PR (retrospect throttle);
+# vulture (60% confidence) cannot trace attribute reads on BaseModel fields.
+retrospect_max_drafts_per_run
 
 # -- core --------------------------------------------------------------------
 # resolve_under_src — called from tests only; vulture cannot trace test calls.

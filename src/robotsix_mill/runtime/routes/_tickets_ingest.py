@@ -41,6 +41,16 @@ from ..worker import Worker
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_log_value(value: str) -> str:
+    """Replace newlines so a user-controlled string cannot inject
+    forged log entries (``py/log-injection``).
+    """
+    if not isinstance(value, str):
+        return str(value)
+    return value.replace("\r", "\\r").replace("\n", "\\n")
+
+
 router = APIRouter(tags=["Tickets"])
 
 # Patterns stripped during title normalization for fingerprint dedup.
@@ -50,18 +60,33 @@ router = APIRouter(tags=["Tickets"])
 # (titles are case-folded before matching).
 _NORMALIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Full ticket-id pattern: YYYYMMDDTHHMMSSZ-slug-hex4
-    (re.compile(r"\b\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{4}\b",
-                re.IGNORECASE), " "),
+    (
+        re.compile(
+            r"\b\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{4}\b", re.IGNORECASE
+        ),
+        " ",
+    ),
     # ISO-8601 date + optional time: 2026-07-31, 2026-07-31T15:26:00Z
-    (re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?\b",
-                re.IGNORECASE), " "),
+    (
+        re.compile(
+            r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?\b",
+            re.IGNORECASE,
+        ),
+        " ",
+    ),
     # Compact timestamp: 20260731, 20260731T155119Z
     (re.compile(r"\b\d{8}(?:T\d{6}Z)?\b", re.IGNORECASE), " "),
     # File paths with optional line numbers: src/foo/bar.py:123
-    (re.compile(r"""(?:\S+/)+   # one or more path segments ending with /
+    (
+        re.compile(
+            r"""(?:\S+/)+   # one or more path segments ending with /
                      \S+\.\w+    # filename with extension
                      (?::\d+)?   # optional :line_number
-                     """, re.VERBOSE), " "),
+                     """,
+            re.VERBOSE,
+        ),
+        " ",
+    ),
     # Bare line-reference suffixes: :123, :45-67
     (re.compile(r":\d+(?:-\d+)?"), " "),
     # Hex suffixes often used as dedup counters: -a1b2, -deadbeef
@@ -197,9 +222,9 @@ def ingest_ticket(
         )
         logger.info(
             "ingest fingerprint match: %r → %s (source=%s)",
-            body.title,
+            _sanitize_log_value(body.title),
             dup_id,
-            body.source_tag,
+            _sanitize_log_value(body.source_tag),
         )
         return JSONResponse(
             status_code=200,
@@ -222,6 +247,34 @@ def ingest_ticket(
         return _create_ticket(body, board_id, board_svc, worker, settings)
 
     # 5. LLM dedup.
+    dup_id = _run_llm_dedup(body, candidates, board_svc, worker, settings)
+    if dup_id is not None:
+        board_svc.add_history_note(
+            dup_id,
+            f"re-reported by {body.source_tag} on {date.today().isoformat()}",
+        )
+        return JSONResponse(
+            status_code=200,
+            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
+        )
+
+    # already_done is deliberately not acted on — fall through to create.
+    return _create_ticket(body, board_id, board_svc, worker, settings)
+
+
+def _run_llm_dedup(
+    body: TicketIngest,
+    candidates: list,
+    board_svc: TicketService,
+    worker: Worker,
+    settings: Settings,
+) -> str | None:
+    """Run the LLM dedup check against the top-ranked candidates.
+
+    Returns a ``ticket_id`` when a duplicate is found, or ``None``
+    when no duplicate was detected (fail-open: LLM errors also return
+    ``None`` so the ticket is created).
+    """
     top = rank_candidates_by_similarity(
         draft_title=body.title,
         draft_body=body.body,
@@ -251,21 +304,9 @@ def ingest_ticket(
         )
     except Exception as exc:
         logger.warning("ingest dedup LLM failed, creating ticket (fail-open): %s", exc)
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return None
 
-    if verdict.get("duplicate_of"):
-        dup_id: str = verdict["duplicate_of"]
-        board_svc.add_history_note(
-            dup_id,
-            f"re-reported by {body.source_tag} on {date.today().isoformat()}",
-        )
-        return JSONResponse(
-            status_code=200,
-            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
-        )
-
-    # already_done is deliberately not acted on — fall through to create.
-    return _create_ticket(body, board_id, board_svc, worker, settings)
+    return verdict.get("duplicate_of")
 
 
 def _count_open_tickets(board_svc: TicketService, board_id: str) -> int:

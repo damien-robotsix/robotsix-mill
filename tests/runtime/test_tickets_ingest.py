@@ -347,7 +347,7 @@ def test_ingest_fingerprint_dedup_hit(client, service):
 def test_ingest_fingerprint_no_false_match(client, service):
     """Different symptoms with different normalized titles still reach the
     LLM dedup step (no fingerprint false-positive)."""
-    existing = service.create(
+    _ = service.create(
         "mail-ingester unhealthy on 2026-07-30",
         "health check failure for the ingester service",
         source=SourceKind.USER,
@@ -357,7 +357,11 @@ def test_ingest_fingerprint_no_false_match(client, service):
 
     with patch(
         "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        return_value={"duplicate_of": None, "already_done": None, "reason": "different"},
+        return_value={
+            "duplicate_of": None,
+            "already_done": None,
+            "reason": "different",
+        },
     ) as mock_dedup:
         r = client.post(
             "/tickets/ingest",
