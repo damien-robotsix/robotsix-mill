@@ -1091,6 +1091,17 @@ class _StagesSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Maximum number of automatic CI re-runs for transient/infrastructure
+    # failures (network flakes, runner shutdowns, buildkit boot timeouts,
+    # etc.) before escalating to a blocking ci_fix_dependency ticket.
+    # Set to 0 to disable automatic transient re-runs entirely.
+    ci_transient_max_retries: int = Field(
+        description="Maximum automatic CI re-runs for transient failures before escalating. 0 disables.",
+        default=3,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # Per-run request budget for the ci-fix agent.  Must cover ALL the agent's
     # fix→push→verify iterations (reads, edits, run_command, push, wait_for_ci),
     # so it is larger than the legacy per-cycle budget.  When exhausted,

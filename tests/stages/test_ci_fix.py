@@ -2313,6 +2313,237 @@ def test_codeql_403_readable_alerts_still_works(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Transient CI failure auto-retry (before spawning dependency fix)
+# ---------------------------------------------------------------------------
+
+
+def test_transient_econnreset_triggers_rerun_not_spawn(tmp_path, monkeypatch):
+    """An ECONNRESET-classified OUT_OF_SCOPE triggers a workflow re-run
+    (rerun_workflow) and returns IMPLEMENT_COMPLETE instead of spawning a
+    blocking ci_fix_dependency ticket."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "CodeQL",
+                    "summary": "CodeQL analysis failed",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+    # list_workflow_runs returns one failing run with id 42.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [
+            {
+                "id": 42,
+                "name": "CodeQL",
+                "workflow_id": 1,
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "html_url": "",
+                "created_at": "",
+                "event": "push",
+                "head_branch": "test-branch",
+                "path": "",
+            }
+        ],
+    )
+    # Job logs must contain the transient signature so the classifier
+    # detects it in the failing_summary built by _build_failure_detail.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, *, run_id, full_log=False: (
+            "Run github/codeql-action/analyze@v3\nError: ECONNRESET\n"
+        ),
+    )
+    rerun_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "rerun_workflow",
+        lambda self, *, run_id: rerun_calls.append(run_id) or {"rerun": True},
+    )
+
+    # The ci_fix agent returns OUT_OF_SCOPE.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(
+            status="OUT_OF_SCOPE",
+            summary="transient — CodeQL ECONNRESET",
+            out_of_scope_reason="CodeQL analysis failed with ECONNRESET",
+            failing_check="CodeQL",
+            required_change_area="CodeQL analysis",
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    # Should return IMPLEMENT_COMPLETE (re-poll CI), not BLOCKED.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # rerun_workflow should have been called with run_id=42.
+    assert rerun_calls == [42]
+    # No dependency fix ticket should have been spawned.
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+
+
+def test_transient_retry_exhausted_falls_through_to_spawn(tmp_path, monkeypatch):
+    """When transient retries are exhausted (ci_transient_max_retries), the
+    failure falls through to spawning a ci_fix_dependency ticket."""
+    ctx = _gh(
+        tmp_path,
+        ci_transient_max_retries=0,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "CodeQL",
+                    "summary": "CodeQL analysis failed",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+    # list_workflow_runs returns one failing run with id 42.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [
+            {
+                "id": 42,
+                "name": "CodeQL",
+                "workflow_id": 1,
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "html_url": "",
+                "created_at": "",
+                "event": "push",
+                "head_branch": "test-branch",
+                "path": "",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, *, run_id, full_log=False: (
+            "Run github/codeql-action/analyze@v3\nError: ECONNRESET\n"
+        ),
+    )
+    rerun_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "rerun_workflow",
+        lambda self, *, run_id: rerun_calls.append(run_id) or {"rerun": True},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(
+            status="OUT_OF_SCOPE",
+            summary="transient — CodeQL ECONNRESET",
+            out_of_scope_reason="CodeQL analysis failed with ECONNRESET",
+            failing_check="CodeQL",
+            required_change_area="CodeQL analysis",
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    # Should fall through to BLOCKED (spawn dependency fix).
+    assert out.next_state is State.BLOCKED
+    # rerun_workflow should NOT have been called (retries=0).
+    assert rerun_calls == []
+    # A dependency fix ticket should have been spawned.
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+
+def test_deterministic_failure_still_spawns_fix_ticket(tmp_path, monkeypatch):
+    """A deterministic failure (e.g. ruff lint error) should still spawn a
+    ci_fix_dependency ticket, bypassing the transient auto-retry path."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    rerun_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "rerun_workflow",
+        lambda self, *, run_id: rerun_calls.append(run_id) or {"rerun": True},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    # rerun_workflow should NOT have been called (deterministic failure).
+    assert rerun_calls == []
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+
+# ---------------------------------------------------------------------------
 # Duplicate changelog fragment dedup (before LLM agent)
 # ---------------------------------------------------------------------------
 

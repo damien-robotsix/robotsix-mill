@@ -964,6 +964,68 @@ class CIFixStage(Stage):
                 # update_branch failed (PR not found / HTTP error) — fall
                 # through to the normal spawn path so we don't get stuck.
 
+        # --- transient failure auto-retry ---
+        # Before spawning a blocking fix ticket, classify the failure as
+        # transient (infrastructure flake) vs deterministic (lint/test/type
+        # error).  Transient failures get automatic CI re-runs (up to
+        # ci_transient_max_retries) instead of spawning a fix ticket.
+        from .ci_transient import (
+            _CI_TRANSIENT_RETRY_COUNTER,
+            is_transient_ci_failure,
+        )
+
+        if is_transient_ci_failure(failing_summary):
+            transient_counter = _read_counter(
+                artifacts_dir / _CI_TRANSIENT_RETRY_COUNTER
+            )
+            if transient_counter < s.ci_transient_max_retries:
+                rerun_count = 0
+                try:
+                    forge = get_forge(s, repo_config=ctx.repo_config)
+                    runs = forge.list_workflow_runs(head_sha=head_sha)
+                    for run in runs:
+                        if run.get("conclusion") == "failure":
+                            result_rerun = forge.rerun_workflow(run_id=run["id"])
+                            if result_rerun.get("rerun"):
+                                rerun_count += 1
+                except Exception as exc:
+                    log.warning("%s: rerun_workflow failed: %s", ticket.id, exc)
+
+                _write_counter(
+                    artifacts_dir / _CI_TRANSIENT_RETRY_COUNTER,
+                    transient_counter + 1,
+                )
+
+                try:
+                    ctx.service.add_history_note(
+                        ticket.id,
+                        f"transient CI failure detected — auto re-run "
+                        f"attempt {transient_counter + 1}/"
+                        f"{s.ci_transient_max_retries} "
+                        f"({rerun_count} workflow(s) re-queued)",
+                    )
+                except Exception:
+                    log.warning(
+                        "%s: failed to record transient-retry note",
+                        ticket.id,
+                    )
+
+                return Outcome(State.IMPLEMENT_COMPLETE)
+
+            # Retries exhausted — fall through to spawn a fix ticket.
+            try:
+                ctx.service.add_history_note(
+                    ticket.id,
+                    f"transient CI failure persists after "
+                    f"{s.ci_transient_max_retries} re-run attempts — "
+                    f"escalating to fix ticket",
+                )
+            except Exception:
+                log.warning(
+                    "%s: failed to record transient-exhausted note",
+                    ticket.id,
+                )
+
         # Deterministic title so the spawn is idempotent across cycles.
         title = (
             f"ci_fix: out-of-scope CI failure — "

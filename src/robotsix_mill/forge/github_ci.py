@@ -314,6 +314,18 @@ class GitHubForgeCIMixin:
             full_log=full_log,
         )
 
+    def rerun_workflow(self, *, run_id: int) -> dict[str, Any]:
+        """Re-run a GitHub Actions workflow run by id.
+
+        Returns ``{"rerun": True}`` on success, ``{"rerun": False,
+        "reason": ...}`` on any failure.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._rerun_workflow(owner=owner, repo=repo, run_id=run_id)
+        except Exception as e:
+            return {"rerun": False, "reason": str(e)}
+
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _check_status(
@@ -540,3 +552,16 @@ class GitHubForgeCIMixin:
             parts.append("\n")
 
         return "\n".join(parts)
+
+    def _rerun_workflow(self, *, owner: str, repo: str, run_id: int) -> dict[str, Any]:
+        """POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun."""
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            r = c.post(
+                f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/rerun",
+                headers=headers,
+            )
+            if r.status_code == 401:
+                continue
+            r.raise_for_status()
+            return {"rerun": True}
+        return {"rerun": False, "reason": "max retries exhausted (401 loop)"}
