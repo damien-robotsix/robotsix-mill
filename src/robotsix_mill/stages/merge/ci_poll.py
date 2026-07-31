@@ -383,11 +383,58 @@ class CIPollMixin(_MergeStageBase):
             last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
             with contextlib.suppress(FileNotFoundError):
                 last_stage_path.unlink()
-            log.info("%s: gates passed → HUMAN_MR_APPROVAL", ticket.id)
-            return Outcome(
-                State.HUMAN_MR_APPROVAL,
-                "CI checks green and PR is mergeable — awaiting human merge approval",
+
+            # Gates passed — attempt mill-native merge (not forge auto-merge).
+            feature_tip_sha = pr.get("sha", "")
+            eligible, eligibility_reason = self._auto_merge_eligible(
+                ticket, ctx, pr_head_sha=feature_tip_sha, forge=get_forge(s, repo_config=ctx.repo_config), pr=pr
             )
+            if eligible:
+                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(source_branch=branch)
+                if result.get("merged"):
+                    repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
+                    target = target_branch_for(s, ctx.repo_config)
+                    if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id, target):
+                        ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                            "merge.md"
+                        ).write_text(
+                            f"merged: {pr.get('url', '')}\n",
+                            encoding="utf-8",
+                        )
+                        self._cleanup_branch_on_done(ticket, ctx, branch)
+                        log.info("%s: merged → done", ticket.id)
+                        return Outcome(
+                            State.DONE,
+                            f"merged: {pr.get('url', '')}",
+                        )
+                    log.warning(
+                        "%s: merge reported success but commit %s is not an "
+                        "ancestor of origin/%s — falling back to IMPLEMENT_COMPLETE",
+                        ticket.id,
+                        feature_tip_sha[:8] if feature_tip_sha else "(none)",
+                        target,
+                    )
+                    return Outcome(
+                        State.IMPLEMENT_COMPLETE,
+                        f"merge reported success but commit not confirmed on origin/{target}: {pr.get('url', '')}",
+                    )
+                # Forge rejected the merge — fail-closed to BLOCKED.
+                reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
+                self._maybe_comment(ticket, ctx, reason_text)
+                log.warning(
+                    "%s: merge rejected: %s → BLOCKED",
+                    ticket.id,
+                    result.get("reason", "unknown"),
+                )
+                return Outcome(State.BLOCKED, reason_text)
+            else:
+                # Gates pass but not eligible for autonomous merge → ask human.
+                log.info("%s: gates passed but not eligible for autonomous merge → HUMAN_MR_APPROVAL", ticket.id)
+                self._maybe_comment(ticket, ctx, eligibility_reason)
+                return Outcome(
+                    State.HUMAN_MR_APPROVAL,
+                    f"CI green and mergeable — {eligibility_reason}",
+                )
 
         ms = pr.get("mergeable_state")
         if conclusion == "success" and ms == "behind":
@@ -622,44 +669,14 @@ class CIPollMixin(_MergeStageBase):
                         State.DONE,
                         f"auto-merged: {pr.get('url', '')}",
                     )
-                # Forge rejected the merge.
-                reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
-                # If the branch is merely out of date with the target (CI green,
-                # no conflict), try a server-side update-branch and retry instead
-                # of bouncing to human approval.
-                if pr.get("mergeable_state") == "behind":
-                    log.info(
-                        "%s: merge rejected (%s) but branch is behind target — "
-                        "attempting update-branch",
-                        ticket.id,
-                        result.get("reason", "unknown"),
-                    )
-                    self._maybe_comment(
-                        ticket,
-                        ctx,
-                        f"Auto-merge rejected: {result.get('reason', 'unknown')}. "
-                        "Branch is behind target; attempting update-branch API.",
-                    )
-                    update_result = forge.update_branch(source_branch=branch)
-                    if update_result.get("updated"):
-                        self._maybe_comment(
-                            ticket,
-                            ctx,
-                            "Branch auto-updated via update-branch API. "
-                            "Waiting for CI to re-run before retrying auto-merge.",
-                        )
-                        return Outcome(State.WAITING_AUTO_MERGE)
-                    reason_text = (
-                        f"update-branch failed after merge rejection: "
-                        f"{update_result.get('reason', 'unknown')}"
-                    )
-                self._maybe_comment(ticket, ctx, reason_text)
+                # Forge rejected the merge — fail-closed to BLOCKED.
+                reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"                self._maybe_comment(ticket, ctx, reason_text)
                 log.warning(
-                    "%s: auto-merge failed: %s — falling back to human",
+                    "%s: merge rejected: %s → BLOCKED",
                     ticket.id,
                     result.get("reason", "unknown"),
                 )
-                return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
+                return Outcome(State.BLOCKED, reason_text)
             else:
                 # CI green but not eligible → human approval needed.
                 self._maybe_comment(ticket, ctx, eligibility_reason)
@@ -711,15 +728,18 @@ class CIPollMixin(_MergeStageBase):
         *eligible* is True when ALL of the following hold:
         1. Global ``settings.auto_merge_enabled`` is True
         2. ``settings.auto_merge_kill_switch`` is False
-        3. Per-repo ``repo_config.auto_merge_enabled`` is True
-        4. ``settings.review_enabled`` is True
-        5. Repo is NOT in ``settings.auto_merge_infra_denylist``
-        6. PR author is the mill/chat agent (only when *forge* + *pr* given)
-        7. No sensitive paths touched (only when *forge* + *pr* given)
+        3. ``settings.review_enabled`` is True
+        4. Repo is NOT in ``settings.auto_merge_infra_denylist``
+        5. PR author is the mill/chat agent (only when *forge* + *pr* given)
+        6. No sensitive paths touched (only when *forge* + *pr* given)
 
         When *forge* + *pr* are not provided, only config-only gates
-        (1–5) are evaluated.  Provide both to enable the forge-dependent
-        safety checks (6–7).  The review artifact is no longer required.
+        (1–4) are evaluated.  Provide both to enable the forge-dependent
+        safety checks (5–6).  The review artifact is no longer required.
+
+        The per-repo ``auto_merge_enabled`` toggle is NOT checked here —
+        it controls routing (autonomous merge vs. human-in-the-loop), not
+        whether mill is *allowed* to merge.
 
         *reason* explains the blocking condition when eligible is False.
         """
@@ -733,8 +753,6 @@ class CIPollMixin(_MergeStageBase):
             return False, "auto-merge disabled in global config"
         if s.auto_merge_kill_switch:
             return False, "auto-merge kill-switch is active"
-        if not rc.auto_merge_enabled:
-            return False, "auto-merge disabled for this repo"
         if not s.review_enabled:
             return False, "review gate disabled — human approval required"
         if rc.repo_id in s.auto_merge_infra_denylist:
@@ -742,7 +760,7 @@ class CIPollMixin(_MergeStageBase):
 
         # --- Forge-dependent safety gates ---
         if forge is not None and pr is not None:
-            # 6. PR author must be the mill/chat agent.
+            # 5. PR author must be the mill/chat agent.
             author = (pr or {}).get("author", "")
             if author:
                 bot_logins = s.orphaned_pr_bot_logins or []
@@ -757,7 +775,7 @@ class CIPollMixin(_MergeStageBase):
                         f"allowed: {sorted(allowed)}"
                     )
 
-            # 7. No sensitive paths touched.
+            # 6. No sensitive paths touched.
             try:
                 files = forge.pr_files(source_branch=ticket.branch or "")
             except Exception:
@@ -889,44 +907,14 @@ class CIPollMixin(_MergeStageBase):
                     State.IMPLEMENT_COMPLETE,
                     f"auto-merge reported success but merge not confirmed on origin/{target}: {pr.get('url', '')}",
                 )
-            # Forge rejected the merge.
-            reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
-            # If the branch is merely out of date with the target (CI green,
-            # no conflict), try a server-side update-branch and retry instead
-            # of bouncing to human approval.
-            if pr.get("mergeable_state") == "behind":
-                log.info(
-                    "%s: merge rejected (%s) but branch is behind target — "
-                    "attempting update-branch",
-                    ticket.id,
-                    result.get("reason", "unknown"),
-                )
-                self._maybe_comment(
-                    ticket,
-                    ctx,
-                    f"Auto-merge rejected: {result.get('reason', 'unknown')}. "
-                    "Branch is behind target; attempting update-branch API.",
-                )
-                update_result = forge.update_branch(source_branch=branch)
-                if update_result.get("updated"):
-                    self._maybe_comment(
-                        ticket,
-                        ctx,
-                        "Branch auto-updated via update-branch API. "
-                        "Waiting for CI to re-run before retrying auto-merge.",
-                    )
-                    return Outcome(State.WAITING_AUTO_MERGE)
-                reason_text = (
-                    f"update-branch failed after merge rejection: "
-                    f"{update_result.get('reason', 'unknown')}"
-                )
-            self._maybe_comment(ticket, ctx, reason_text)
+            # Forge rejected the merge — fail-closed to BLOCKED.
+            reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"            self._maybe_comment(ticket, ctx, reason_text)
             log.warning(
-                "%s: auto-merge failed: %s — falling back to human",
+                "%s: merge rejected: %s → BLOCKED",
                 ticket.id,
                 result.get("reason", "unknown"),
             )
-            return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
+            return Outcome(State.BLOCKED, reason_text)
 
         if conclusion == "success" and pr.get("mergeable_state") == "behind":
             # Green CI on a stale head — try the server-side update-branch
