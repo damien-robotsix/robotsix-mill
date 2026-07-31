@@ -28,7 +28,9 @@ from ._shared import (
     _is_pr_check_run,
     _latest_failing_workflows,
     _read_counter,
+    _refresh_branch_for_ci,
     _verify_merge_ancestor,
+    _workspace_repo_dir,
     _write_counter,
     log,
 )
@@ -248,6 +250,28 @@ class CIPollMixin(_MergeStageBase):
             return Outcome(
                 State.HUMAN_MR_APPROVAL,
                 "CI gate skipped for this repo (skip_ci); PR mergeable — awaiting human merge approval",
+            )
+
+        # --- Refresh branch to force a fresh CI run before evaluating ---
+        # When resuming from BLOCKED the branch HEAD may be identical to the
+        # remote — the same SHA whose CI run was already failing.  Rebase onto
+        # the target (or push an empty commit) to produce a new head SHA so the
+        # forge triggers a fresh pull_request run.  Without this, a transient
+        # flake that has since resolved keeps re-reading the same stale
+        # failing run and the ticket loops forever.
+        _repo_dir = _workspace_repo_dir(ctx, ticket)
+        _target = target_branch_for(s, ctx.repo_config)
+        try:
+            from ...forge.auth import _resolve_remote_url, github_push_token
+
+            _remote_url = _resolve_remote_url(s, ctx.repo_config)
+            _token = github_push_token(s, repo_config=ctx.repo_config)
+        except Exception:
+            _remote_url = ""
+            _token = None
+        if _remote_url and _repo_dir is not None:
+            _refresh_branch_for_ci(
+                _repo_dir, branch, _target, _remote_url, _token, ticket.id
             )
 
         # Check remote CI.

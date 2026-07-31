@@ -75,7 +75,23 @@ def _gh(tmp_path, **extra):
 def _setup_repo(ctx, ticket):
     repo_dir = ctx.service.workspace(ticket).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
-    (repo_dir / ".git").mkdir(exist_ok=True)
+    import subprocess
+
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "init"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "commit", "--allow-empty", "-m", "init"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@test",
+             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@test",
+             "HOME": str(repo_dir.parent)},
+    )
     return str(repo_dir)
 
 

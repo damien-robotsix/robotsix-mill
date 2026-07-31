@@ -27,6 +27,7 @@ from ._shared import (
     _build_failing_summary,
     _read_counter,
     _reconcile_with_remote_pr,
+    _refresh_branch_for_ci,
     _write_counter,
     log,
 )
@@ -67,6 +68,26 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         except ConfigError as e:
             return Outcome(
                 State.BLOCKED, f"unknown repo_id '{repo_id}': {e} — resumable"
+            )
+
+        # --- Refresh branch to force a fresh CI run before evaluating ---
+        # When resuming from BLOCKED the branch HEAD may be identical to the
+        # remote — the same SHA whose CI run was already failing.  Rebase onto
+        # the target (or push an empty commit) to produce a new head SHA so the
+        # forge triggers a fresh pull_request run.
+        try:
+            _remote_url = _facade._resolve_remote_url(s, rc)
+            _token = _facade.github_push_token(s, repo_config=rc)
+            _target = target_branch_for(s, rc)
+            _refresh_branch_for_ci(
+                str(repo_dir), branch, _target, _remote_url, _token, ticket.id
+            )
+        except Exception:
+            log.warning(
+                "%s: branch refresh failed for %s — proceeding with existing HEAD",
+                ticket.id,
+                repo_id,
+                exc_info=True,
             )
 
         # Fetch CI status BEFORE the attempt cap so FP triage can

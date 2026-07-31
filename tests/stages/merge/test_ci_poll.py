@@ -1455,3 +1455,105 @@ def test_main_debt_does_not_block_a_ci_fix_ticket(tmp_path, monkeypatch):
 
     assert out.next_state is not State.BLOCKED
     assert out.next_state is State.FIXING_CI
+
+
+# === Branch refresh before CI evaluation ===================================
+
+
+def test_branch_refreshed_before_ci_check_in_poll_implement_complete(
+    tmp_path, monkeypatch
+):
+    """_poll_implement_complete calls _refresh_branch_for_ci before check_status.
+
+    When resuming from BLOCKED the branch may carry a stale SHA whose CI
+    run was already failing.  The refresh (rebase + optional empty commit)
+    must happen BEFORE CI is evaluated so a fresh run is triggered.
+    """
+    from robotsix_mill.stages import merge as merge_mod
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+
+    # Record call order.
+    call_order: list[str] = []
+
+    def _tracking_refresh(*a, **kw):
+        call_order.append("refresh")
+        return True
+
+    monkeypatch.setattr(ci_poll_mod, "_refresh_branch_for_ci", _tracking_refresh)
+    monkeypatch.setattr(ci_poll_mod, "_workspace_repo_dir", lambda c, t: "/repo")
+
+    # Also track check_status calls.
+    _orig_cs = github.GitHubForge.check_status
+
+    def _tracking_cs(self, *, source_branch, require_checks=False):
+        call_order.append("check_status")
+        return _orig_cs(self, source_branch=source_branch)
+
+    monkeypatch.setattr(github.GitHubForge, "check_status", _tracking_cs)
+
+    t = _implement_complete(ctx)
+    # Point workspace repo dir to our real tmp dir.
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_workspace_repo_dir",
+        lambda c, tkt: str(repo_path) if tkt.id == t.id else None,
+    )
+
+    MergeStage().run(t, ctx)
+
+    # Refresh must appear before check_status in the call order.
+    assert "refresh" in call_order, f"refresh not called; order={call_order}"
+    assert call_order.index("refresh") < call_order.index("check_status"), (
+        f"_refresh_branch_for_ci must be called before check_status; "
+        f"got order={call_order}"
+    )
+
+
+def test_stale_failing_run_replaced_by_fresh_green_after_refresh(tmp_path, monkeypatch):
+    """Regression: a stale failing CI run on an unchanged branch is
+    superseded by a fresh green run after the branch is refreshed.
+
+    The forge's check_status is called exactly once after the refresh,
+    and the fresh result (green) advances the ticket rather than
+    re-reading the old stale failure.
+    """
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda c, t: "/repo")
+
+    # Create a real .git dir so the refresh guard passes.
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    monkeypatch.setattr(
+        merge_mod,
+        "_workspace_repo_dir",
+        lambda c, tkt: str(repo_path),
+    )
+
+    # Mock git ops for the refresh.
+    monkeypatch.setattr(merge_mod.git_ops, "head_sha", lambda p: "abc123")
+    monkeypatch.setattr(merge_mod.git_ops, "ls_remote_sha", lambda *a, **kw: "abc123")
+    monkeypatch.setattr(merge_mod.git_ops, "try_rebase_onto", lambda *a, **kw: False)
+    monkeypatch.setattr(merge_mod.git_ops, "empty_commit", lambda *a, **kw: None)
+    monkeypatch.setattr(merge_mod.git_ops, "push", lambda *a, **kw: None)
+
+    # The forge returns GREEN CI — as if the refresh triggered a new
+    # run that passed (the transient flake resolved).
+    _ci_green_mergeable(monkeypatch)
+
+    t = _implement_complete(ctx)
+
+    out = MergeStage().run(t, ctx)
+
+    # The ticket should advance past CI to human approval.
+    assert out.next_state is State.HUMAN_MR_APPROVAL, (
+        f"Expected HUMAN_MR_APPROVAL after fresh green CI, got {out.next_state}: {out.note}"
+    )

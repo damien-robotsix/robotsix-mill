@@ -78,7 +78,12 @@ def _reconcile_with_remote_pr(
     return None
 
 
-__all__ = ["_read_counter", "_reconcile_with_remote_pr", "_write_counter"]
+__all__ = [
+    "_read_counter",
+    "_reconcile_with_remote_pr",
+    "_refresh_branch_for_ci",
+    "_write_counter",
+]
 
 log = logging.getLogger("robotsix_mill.stages.merge")
 
@@ -193,6 +198,89 @@ def _workspace_repo_dir(ctx, ticket) -> str | None:
     if not (repo / ".git").exists():
         return None
     return str(repo)
+
+
+def _refresh_branch_for_ci(
+    repo_dir: str,
+    branch: str,
+    target: str,
+    remote_url: str,
+    token: str | None,
+    ticket_id: str,
+) -> bool:
+    """Force a fresh CI run by rebasing onto *target* or pushing an empty commit.
+
+    When the branch is already current (rebase is a no-op) and the remote
+    HEAD matches local, a new commit is needed to trigger a fresh
+    pull_request CI run — a stale SHA pins old check-runs that can never
+    turn green.  Call this BEFORE evaluating CI status so a resume from
+    BLOCKED on a transient flake un-sticks in one cycle.
+
+    Returns ``True`` when a commit was pushed (new CI run triggered).
+    Errors are logged and return ``False`` (caller proceeds with existing
+    HEAD).
+    """
+    repo_path = Path(repo_dir)
+    pushed = False
+
+    # 1. Rebase onto target so the branch is current.
+    try:
+        did_rebase = git_ops.try_rebase_onto(
+            repo_path,
+            target,
+            remote_url=remote_url,
+            token=token,
+        )
+        if did_rebase:
+            git_ops.push(repo_path, branch, remote_url, token)
+            pushed = True
+            log.info(
+                "%s: rebased onto %s and pushed before CI scan",
+                ticket_id,
+                target,
+            )
+        else:
+            log.info(
+                "%s: rebase onto %s was a no-op or unnecessary — "
+                "proceeding with existing branch HEAD",
+                ticket_id,
+                target,
+            )
+    except Exception:
+        log.warning(
+            "%s: rebase step failed — proceeding with existing branch",
+            ticket_id,
+            exc_info=True,
+        )
+
+    # 2. When the branch HEAD hasn't changed, push an empty commit to
+    #    produce a fresh SHA so the forge triggers a new pull_request run.
+    #    This un-sticks tickets whose original CI failure was a transient
+    #    flake that has since resolved (the old, failing check-runs are
+    #    pinned to the stale SHA and can never turn green).
+    try:
+        local_sha = git_ops.head_sha(repo_path)
+        remote_sha = git_ops.ls_remote_sha(remote_url, f"refs/heads/{branch}", token)
+        if remote_sha is not None and local_sha == remote_sha:
+            git_ops.empty_commit(
+                repo_path,
+                "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+            )
+            git_ops.push(repo_path, branch, remote_url, token)
+            pushed = True
+            log.info(
+                "%s: pushed empty commit to force fresh CI run "
+                "(branch was already current)",
+                ticket_id,
+            )
+    except Exception:
+        log.warning(
+            "%s: empty-commit push failed — proceeding with existing HEAD",
+            ticket_id,
+            exc_info=True,
+        )
+
+    return pushed
 
 
 def _verify_merge_ancestor(
