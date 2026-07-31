@@ -414,6 +414,35 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 )
                 feedback = review_feedback
 
+        # Guard (review-feedback injection): after a review->READY bounce
+        # the corrective review comment MUST reach the next implement
+        # prompt -- including on a blocked-resume re-spawn, where the
+        # branch above is skipped (blocked_from set) and the agent would
+        # otherwise re-run with no knowledge of what the reviewer asked
+        # for.  Surface the most recent open review-authored comment so
+        # the re-spawn addresses the reviewer's gaps instead of blindly
+        # re-emitting the prior (rejected) diff.
+        if not feedback:
+            try:
+                _all_comments = ctx.service.list_comments(ticket.id)
+            except Exception:
+                _all_comments = []
+            _latest = None
+            for _c in _all_comments:
+                if _c.author != "review":
+                    continue
+                if _c.parent_id is not None:
+                    continue
+                if _c.closed_at is not None:
+                    continue
+                _latest = _c
+            if _latest is not None:
+                _ts = _latest.created_at.isoformat()
+                feedback = f"[REVIEW id={_latest.id} @ {_ts}] {_latest.body}"
+                if open_thread_ids is None:
+                    open_thread_ids = set()
+                open_thread_ids.add(_latest.id)
+
         previous_attempt_summary: str | None = None
         summary_path = ws.artifacts_dir / "implement_summary.md"
         if summary_path.exists():
@@ -521,6 +550,21 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         cls._stuck_no_diff_passes = 0
         cls._stuck_total_tool_calls_no_diff = 0
 
+        # No-progress review guard: capture the branch head at loop entry
+        # so the guard below can measure the diff THIS spawn produced
+        # (relative to commits that already existed from prior spawns).
+        _entry_head: str | None = None
+        try:
+            _cp = subprocess.run(
+                ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            _entry_head = _cp.stdout.strip() or None
+        except Exception:
+            _entry_head = None
+
         # Ordered history of the per-cycle distilled diagnosis. Drives the
         # circuit breaker below: a fix loop that keeps producing the SAME
         # diagnosis is not making progress, and an ENV-ERROR diagnosis is
@@ -546,8 +590,6 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         # Compute git diff --stat for the compact resume
                         # history so the agent knows which files were
                         # modified during the prior session.
-                        import subprocess
-
                         git_stat: str | None = None
                         try:
                             git_stat = (
@@ -612,6 +654,101 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             if result.next_action == "pause":
                 return result.outcome
             if result.next_action in ("proceed", "escalate"):
+                # No-progress short-circuit: a re-spawn triggered by a
+                # review->READY bounce that produced an empty diff or
+                # touched ONLY changelog fragments has not addressed the
+                # reviewer's gaps.  Routing it back into review just
+                # re-runs the identical verdict and burns another
+                # spawn/review cycle -- escalate straight to BLOCKED and
+                # write the most recent reviewer gap list into the note.
+                _guard_on = result.next_action == "proceed" and resuming
+                if _guard_on and ticket.review_rounds > 0 and _entry_head is not None:
+                    _changed: set[str] = set()
+                    try:
+                        _d = subprocess.run(
+                            [
+                                "git",
+                                "-C",
+                                str(repo_dir),
+                                "diff",
+                                "--name-only",
+                                _entry_head,
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        ).stdout
+                        _u = subprocess.run(
+                            [
+                                "git",
+                                "-C",
+                                str(repo_dir),
+                                "ls-files",
+                                "--others",
+                                "--exclude-standard",
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        ).stdout
+                        for _f in _d.splitlines():
+                            if _f.strip():
+                                _changed.add(_f.strip())
+                        for _f in _u.splitlines():
+                            if _f.strip():
+                                _changed.add(_f.strip())
+                    except Exception:
+                        _changed = {"__unknown__"}
+
+                    def _changelog_only(p: str) -> bool:
+                        if p == "CHANGELOG.md":
+                            return True
+                        if p.startswith("changelog.d/"):
+                            return True
+                        return "/changelog.d/" in p
+
+                    _substantive = [f for f in _changed if not _changelog_only(f)]
+                    if not _substantive:
+                        _gaps = ""
+                        try:
+                            _rc_all = ctx.service.list_comments(ticket.id)
+                        except Exception:
+                            _rc_all = []
+                        _latest_rc = None
+                        for _c in _rc_all:
+                            if _c.author != "review":
+                                continue
+                            if _c.parent_id is not None:
+                                continue
+                            if _c.closed_at is not None:
+                                continue
+                            _latest_rc = _c
+                        if _latest_rc is not None:
+                            _gaps = _latest_rc.body.strip()
+                        if not _gaps and ic.feedback:
+                            _gaps = ic.feedback.strip()
+                        if _changed:
+                            _kind = "only changelog fragment(s)"
+                        else:
+                            _kind = "an empty diff"
+                        note = "no-progress re-attempt after review bounce "
+                        note += f"-- the implement re-spawn produced {_kind} "
+                        note += "and did not address the reviewer's gaps. "
+                        note += "Escalating to BLOCKED instead of consuming "
+                        note += "another review cycle."
+                        if _gaps:
+                            note += "\n\nMost recent reviewer gap list:\n" + _gaps
+                        cls._finalize(
+                            ctx,
+                            ticket,
+                            repo_dir,
+                            branch,
+                            note,
+                            ok=False,
+                            reference_files=ic.reference_files,
+                            extra_roots=extra_roots,
+                        )
+                        return Outcome(State.BLOCKED, note)
                 return result.outcome
 
             # next_action == "retry" — update for next iteration.
