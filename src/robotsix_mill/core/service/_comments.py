@@ -38,9 +38,17 @@ class _CommentMixin(_ServiceBase):
         When *parent_id* is given, validates that the parent Comment
         exists and belongs to the same ticket, raising ``ValueError``
         otherwise.
+
+        When the comment is a reply to an open ``[ASK_USER]`` top-level
+        thread on a ticket in ``AWAITING_USER_REPLY``, the parent thread
+        is automatically closed and the ticket is resumed to its
+        ``paused_from`` state — the reply is treated as the answer and no
+        separate thread-close step is required.
         """
-        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
-            _get_ticket(s, ticket_id)
+        board = self._board_for(ticket_id)
+        auto_close_parent = False
+        with retry_on_db_full(self.settings, board) as s:
+            ticket = _get_ticket(s, ticket_id)
             if parent_id is not None:
                 parent = s.get(Comment, parent_id)
                 if parent is None:
@@ -59,13 +67,28 @@ class _CommentMixin(_ServiceBase):
                         f"parent comment {parent_id} does not belong to ticket {ticket_id}. "
                         f"Valid thread IDs for this ticket: {valid_threads}"
                     )
+                # Auto-answer: a reply to an open [ASK_USER] thread on a
+                # paused ticket closes the question and resumes the ticket.
+                if (
+                    ticket.state is State.AWAITING_USER_REPLY
+                    and parent.parent_id is None
+                    and parent.body.startswith(ASK_USER_MARKER)
+                    and parent.closed_at is None
+                ):
+                    parent.closed_at = datetime.now(timezone.utc)
+                    s.add(parent)
+                    auto_close_parent = True
             comment = Comment(
                 ticket_id=ticket_id, body=body, author=author, parent_id=parent_id
             )
             s.add(comment)
             s.commit()
             s.refresh(comment)
-            return comment
+
+        if auto_close_parent:
+            self._maybe_resume_awaiting_user_reply(ticket_id, board)
+
+        return comment
 
     def _board_for_comment(
         self,

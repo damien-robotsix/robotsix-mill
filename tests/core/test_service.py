@@ -2058,6 +2058,50 @@ def test_close_thread_resumes_when_all_ask_user_closed(service):
     assert any("all ask_user threads closed" in (ev.note or "") for ev in events)
 
 
+def test_reply_to_ask_user_thread_auto_closes_and_resumes(service):
+    """Posting a reply to an open [ASK_USER] thread on an
+    AWAITING_USER_REPLY ticket automatically closes the thread and
+    resumes the ticket — no separate close step required."""
+    t = service.create("Auto-answer test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.AWAITING_USER_REPLY
+    assert reloaded.paused_from == State.READY.value
+
+    # Create an [ASK_USER] thread.
+    c = service.add_comment(t.id, "[ASK_USER]\n\nWhat should I do?", author="refine")
+    assert c.parent_id is None
+    assert c.closed_at is None
+
+    # Reply to the thread — this should auto-close the parent and resume.
+    reply = service.add_comment(
+        t.id,
+        "Use the main branch",
+        author="operator",
+        parent_id=c.id,
+    )
+    assert reply.parent_id == c.id
+
+    # Parent thread should now be closed.
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Comment
+
+    with db.session(service.settings, service.board_id) as s:
+        parent = s.get(Comment, c.id)
+        assert parent is not None
+        assert parent.closed_at is not None
+
+    # Ticket should be resumed.
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.READY
+    assert reloaded.paused_from is None
+
+    # History has the resume event.
+    events = service.history(t.id)
+    assert any("all ask_user threads closed" in (ev.note or "") for ev in events)
+
+
 def test_close_thread_stays_paused_when_ask_user_still_open(service):
     """AC1: Closing one [ASK_USER] thread when another is still open
     keeps the ticket in AWAITING_USER_REPLY."""
@@ -2289,8 +2333,9 @@ def test_collect_ask_user_replies_single_thread(service, settings):
     ask = service.add_comment(
         t.id, "[ASK_USER]\n\nWhat is the answer?", author="refine"
     )
+    # Replying to an open [ASK_USER] thread auto-closes it and resumes the
+    # ticket — no separate close_thread call is needed.
     service.add_comment(t.id, "The answer is 42.", author="operator", parent_id=ask.id)
-    service.close_thread(ask.id)
 
     ctx = StageContext(settings=settings, service=service)
     result = _collect_ask_user_replies(ctx, t)
@@ -2309,11 +2354,11 @@ def test_collect_ask_user_replies_multiple_threads(service, settings):
 
     ask1 = service.add_comment(t.id, "[ASK_USER]\n\nQ1?", author="refine")
     ask2 = service.add_comment(t.id, "[ASK_USER]\n\nQ2?", author="implement")
+    # Replying to an open [ASK_USER] thread auto-closes it — no separate
+    # close_thread calls are needed.
     service.add_comment(t.id, "R1", author="op", parent_id=ask1.id)
     service.add_comment(t.id, "R2a", author="op", parent_id=ask2.id)
     service.add_comment(t.id, "R2b", author="op", parent_id=ask2.id)
-    service.close_thread(ask1.id)
-    service.close_thread(ask2.id)
 
     ctx = StageContext(settings=settings, service=service)
     result = _collect_ask_user_replies(ctx, t)
@@ -2354,8 +2399,8 @@ def test_collect_ask_user_replies_skips_open_ask_threads(service, settings):
 
     ask1 = service.add_comment(t.id, "[ASK_USER]\n\nClosed Q?", author="refine")
     service.add_comment(t.id, "[ASK_USER]\n\nOpen Q?", author="implement")
+    # Replying to ask1 auto-closes it; ask2 stays open.
     service.add_comment(t.id, "Reply", author="op", parent_id=ask1.id)
-    service.close_thread(ask1.id)
     # ask2 stays open
 
     ctx = StageContext(settings=settings, service=service)
