@@ -211,7 +211,7 @@ def ingest_ticket(
             f"re-reported by {body.source_tag} on {date.today().isoformat()} "
             "(fingerprint match)",
         )
-        logger.info("ingest fingerprint match: dup_id=%s", dup_id)
+        logger.info("ingest fingerprint match found")
         return JSONResponse(
             status_code=200,
             content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
