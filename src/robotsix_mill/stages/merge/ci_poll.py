@@ -670,7 +670,8 @@ class CIPollMixin(_MergeStageBase):
                         f"auto-merged: {pr.get('url', '')}",
                     )
                 # Forge rejected the merge — fail-closed to BLOCKED.
-                reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"                self._maybe_comment(ticket, ctx, reason_text)
+                reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
+                self._maybe_comment(ticket, ctx, reason_text)
                 log.warning(
                     "%s: merge rejected: %s → BLOCKED",
                     ticket.id,
@@ -908,7 +909,8 @@ class CIPollMixin(_MergeStageBase):
                     f"auto-merge reported success but merge not confirmed on origin/{target}: {pr.get('url', '')}",
                 )
             # Forge rejected the merge — fail-closed to BLOCKED.
-            reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"            self._maybe_comment(ticket, ctx, reason_text)
+            reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
+            self._maybe_comment(ticket, ctx, reason_text)
             log.warning(
                 "%s: merge rejected: %s → BLOCKED",
                 ticket.id,
