@@ -150,6 +150,15 @@ def run_preflight_checks(
     #    that attempt, re-spawning would produce the same result.
     #    Fail fast before a trace opens to prevent the $0.00 trace /
     #    no-op re-spawn pattern.
+    #
+    #    The guard is **suppressed** when a matching
+    #    ``implement_spec_override`` marker exists — this is written
+    #    by ``_clear_stale_implement_guard`` (called when the
+    #    operator issues ``resume-blocked`` with a justification
+    #    note).  Once overridden, the guard stays suppressed for
+    #    that exact spec fingerprint until the spec changes, so the
+    #    operator doesn't have to repeatedly call resume-blocked
+    #    for the same ticket lifecycle.
     implement_md = ws.artifacts_dir / "implement.md"
     if implement_md.exists():
         try:
@@ -166,25 +175,38 @@ def run_preflight_checks(
                 if epic_ctx2:
                     effective = epic_ctx2 + "\n\n" + effective
             current_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
-            # Extract stored fingerprint from implement.md.
-            stored_fp = ""
-            for line in md_content.splitlines():
-                if line.startswith("spec-fingerprint: "):
-                    stored_fp = line.split("spec-fingerprint: ", 1)[1].strip()
-                    break
-            if stored_fp and stored_fp == current_fp:
-                return Outcome(
-                    State.BLOCKED,
-                    "spec unchanged since last spec-determined "
-                    "implement attempt "
-                    f"(fingerprint {current_fp}) — "
-                    "re-implementing would produce the same "
-                    "result.  Update the specification to change "
-                    "the fingerprint, or force a retry via "
-                    "resume-blocked with a justification note, or "
-                    "use the reset-fingerprint endpoint to clear "
-                    "the guard.",
-                )
+            # Check whether the operator already overrode the guard
+            # for this exact fingerprint — if so, skip re-blocking.
+            override_path = ws.artifacts_dir / "implement_spec_override"
+            override_fp = ""
+            if override_path.exists():
+                try:
+                    override_fp = override_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    override_fp = ""
+            if override_fp == current_fp:
+                # Operator explicitly overrode — don't re-block.
+                pass
+            else:
+                # Extract stored fingerprint from implement.md.
+                stored_fp = ""
+                for line in md_content.splitlines():
+                    if line.startswith("spec-fingerprint: "):
+                        stored_fp = line.split("spec-fingerprint: ", 1)[1].strip()
+                        break
+                if stored_fp and stored_fp == current_fp:
+                    return Outcome(
+                        State.BLOCKED,
+                        "spec unchanged since last spec-determined "
+                        "implement attempt "
+                        f"(fingerprint {current_fp}) — "
+                        "re-implementing would produce the same "
+                        "result.  Update the specification to change "
+                        "the fingerprint, or force a retry via "
+                        "resume-blocked with a justification note, or "
+                        "use the reset-fingerprint endpoint to clear "
+                        "the guard.",
+                    )
 
     # 4.5. Cross-spawn stall guard: if a prior implement cycle
     #      already tripped the stall detector (summary unchanged

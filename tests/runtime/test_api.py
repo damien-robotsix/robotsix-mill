@@ -717,6 +717,39 @@ def test_resume_blocked_with_note_records_comment_and_clears_guard(client, servi
     )
 
 
+def test_resume_blocked_with_note_persists_spec_override(client, service):
+    """POST /tickets/{id}/resume-blocked with a note persists the
+    spec-fingerprint to ``implement_spec_override`` so the stale-spec
+    guard stays suppressed across subsequent spawns for the same spec."""
+    t = service.create("Resume with spec override")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="stuck in implement")
+
+    ws = service.workspace(t)
+    stale = ws.artifacts_dir / "implement.md"
+    stale.write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test\n"
+        "spec-fingerprint: abc123def456\n"
+        "summary-fingerprint: deadbeef00000001\n"
+        "stall-count: 0\n"
+        "\nblocked\n",
+        encoding="utf-8",
+    )
+    override_path = ws.artifacts_dir / "implement_spec_override"
+    assert not override_path.exists()
+
+    r = client.post(
+        f"/tickets/{t.id}/resume-blocked",
+        json={"note": "retry — transient failure"},
+    )
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+    assert not stale.exists(), "implement.md must be cleared"
+    assert override_path.exists(), "override marker must be persisted"
+    assert override_path.read_text(encoding="utf-8").strip() == "abc123def456"
+
+
 def test_resume_blocked_missing_ticket_404(client):
     """POST /tickets/{id}/resume-blocked with bogus id returns 404."""
     r = client.post("/tickets/nonexistent/resume-blocked")
@@ -1001,6 +1034,33 @@ def test_reset_fingerprint_success(client, service):
     data = r.json()
     assert data["id"] == t.id
     assert not (ws.artifacts_dir / "implement.md").exists()
+
+
+def test_reset_fingerprint_clears_spec_override(client, service):
+    """POST /tickets/{id}/reset-fingerprint also clears the
+    implement_spec_override marker so a subsequent resume-blocked
+    doesn't inadvertently suppress the guard."""
+    t = service.create("Reset fingerprint + override")
+    service.transition(t.id, State.READY)
+
+    ws = service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test\n"
+        "spec-fingerprint: abc123\n"
+        "\nblocked\n",
+        encoding="utf-8",
+    )
+    (ws.artifacts_dir / "implement_spec_override").write_text(
+        "abc123", encoding="utf-8"
+    )
+    assert (ws.artifacts_dir / "implement_spec_override").exists()
+
+    r = client.post(f"/tickets/{t.id}/reset-fingerprint")
+    assert r.status_code == 200
+    assert not (ws.artifacts_dir / "implement.md").exists()
+    assert not (ws.artifacts_dir / "implement_spec_override").exists()
 
 
 def test_reset_fingerprint_missing_ticket_404(client):

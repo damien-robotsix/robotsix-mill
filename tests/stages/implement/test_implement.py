@@ -4967,6 +4967,12 @@ def test_stale_respawn_guard_blocks_unchanged_spec(ctx_factory, tmp_path, monkey
 
     # Write implement.md simulating a prior BLOCKED outcome.
     ws = ctx.service.workspace(t)
+    # The BLOCKED→READY transition above persists a spec-fingerprint
+    # override (durable suppress).  Clear it here so this test
+    # exercises the non-override (guard-fires) path.
+    override = ws.artifacts_dir / "implement_spec_override"
+    with contextlib.suppress(FileNotFoundError):
+        override.unlink()
     import hashlib
 
     body = ws.read_description() or ""
@@ -5138,6 +5144,12 @@ def test_spec_determined_blocked_persists_fingerprint_and_guards(
 
     # Write implement.md with "BLOCKED — resumable" + matching fingerprint.
     ws = ctx.service.workspace(t)
+    # The BLOCKED→READY transition above persists a spec-fingerprint
+    # override (durable suppress).  Clear it here so this test
+    # exercises the non-override (guard-fires) path.
+    override = ws.artifacts_dir / "implement_spec_override"
+    with contextlib.suppress(FileNotFoundError):
+        override.unlink()
     import hashlib
 
     body = ws.read_description() or ""
@@ -5165,8 +5177,9 @@ def test_resume_blocked_with_note_allows_implement_after_fingerprint_match(
     ctx_factory, tmp_path, monkeypatch
 ):
     """A blocked ticket with an unchanged spec, resumed with an operator
-    justification note, must proceed to a fresh implement cycle exactly
-    once and must not immediately re-block on the fingerprint match."""
+    justification note, must proceed to a fresh implement cycle, and
+    the guard stays suppressed for that spec fingerprint across
+    subsequent cycles — only re-blocking when the spec actually changes."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -5244,10 +5257,12 @@ def test_resume_blocked_with_note_allows_implement_after_fingerprint_match(
         encoding="utf-8",
     )
 
-    # Preflight should block again — the guard re-armed after one cycle.
+    # Preflight should NOT block — the durable override persists across
+    # cycles for the same spec fingerprint (operator already overrode).
     out5 = ImplementStage().preflight(t, ctx)
-    assert out5 is not None
-    assert out5.next_state is State.BLOCKED
+    assert out5 is None, (
+        f"durable override must suppress re-block for same fingerprint, got: {out5}"
+    )
 
 
 def test_resume_blocked_without_note_does_not_clear_fingerprint_guard(
