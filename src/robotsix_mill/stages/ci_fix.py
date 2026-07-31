@@ -114,6 +114,7 @@ class CIFixStage(Stage):
             changed_paths,
             alerts_unreadable,
             head_sha,
+            _failing_run_ids,
         ) = resolved
 
         # --- Emit CI_FAILURE diagnostic event ---
@@ -300,9 +301,14 @@ class CIFixStage(Stage):
 
         # --- CI is failing → attempt fix ---
         failing = status.get("failing", [])
-        failing_summary, alerts, changed_paths, alerts_unreadable, head_sha = (
-            self._build_failure_detail(ticket, ctx, branch, failing)
-        )
+        (
+            failing_summary,
+            alerts,
+            changed_paths,
+            alerts_unreadable,
+            head_sha,
+            failing_run_ids,
+        ) = self._build_failure_detail(ticket, ctx, branch, failing)
         # Persist the failure detail for observability.
         self._write_failing_summary_artifact(ctx, ticket, failing_summary, failing)
         return _FailingContext(
@@ -314,6 +320,7 @@ class CIFixStage(Stage):
             changed_paths,
             alerts_unreadable,
             head_sha,
+            failing_run_ids,
         )
 
     def _build_failure_detail(
@@ -322,14 +329,14 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
-    ) -> tuple[str, list[dict[str, Any]], set[str], bool, str]:
+    ) -> tuple[str, list[dict[str, Any]], set[str], bool, str, list[int]]:
         """Enrich the failing-check list with job logs + code-scanning alerts.
 
         Returns ``(failing_summary, alerts, changed_paths, alerts_unreadable,
-        head_sha)`` so callers can inspect the raw alert data (e.g. for FP
-        triage gating), detect when alerts were unreadable due to a 403
-        permission gap, and include the branch HEAD SHA in the failure
-        fingerprint.
+        head_sha, failing_run_ids)`` so callers can inspect the raw alert data
+        (e.g. for FP triage gating), detect when alerts were unreadable due
+        to a 403 permission gap, include the branch HEAD SHA in the failure
+        fingerprint, and pass a run_id to ``fetch_ci_logs``.
         """
         s = ctx.settings
 
@@ -340,6 +347,7 @@ class CIFixStage(Stage):
         changed_paths: set[str] = set()
         alerts_unreadable = False
         head_sha = ""
+        failing_run_ids: list[int] = []
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
             alerts = forge.list_code_scanning_alerts(source_branch=branch)
@@ -350,6 +358,7 @@ class CIFixStage(Stage):
                 runs = forge.list_workflow_runs(head_sha=head_sha)
                 for run in runs:
                     if run.get("conclusion") == "failure":
+                        failing_run_ids.append(run["id"])
                         logs = forge.fetch_workflow_job_logs(run_id=run["id"])
                         if logs:
                             log_text += (
@@ -374,6 +383,7 @@ class CIFixStage(Stage):
                     runs = forge.list_workflow_runs(head_sha=head_sha)
                     for run in runs:
                         if run.get("conclusion") == "failure":
+                            failing_run_ids.append(run["id"])
                             logs = forge.fetch_workflow_job_logs(run_id=run["id"])
                             if logs:
                                 log_text += (
@@ -391,6 +401,7 @@ class CIFixStage(Stage):
             changed_paths,
             alerts_unreadable,
             head_sha,
+            failing_run_ids,
         )
 
     def _write_failing_summary_artifact(
@@ -854,11 +865,12 @@ class CIFixStage(Stage):
 
             if conclusion == "failure":
                 failing = status.get("failing", [])
-                summary, _alerts, _changed, _unreadable, _head = (
+                summary, _alerts, _changed, _unreadable, _head, failing_run_ids = (
                     self._build_failure_detail(ticket, ctx, branch, failing)
                 )
                 if sha:
-                    summary = f"[sha: {sha[:7]}]\n{summary}"
+                    run_info = f", run: {failing_run_ids[0]}" if failing_run_ids else ""
+                    summary = f"[sha: {sha[:7]}{run_info}]\n{summary}"
                 return ("failure", summary)
             # pending / None / unknown — not terminal yet.
             return ("pending", "")

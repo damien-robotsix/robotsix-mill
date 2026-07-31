@@ -339,3 +339,4 @@ class _FailingContext(NamedTuple):
     changed_paths: set[str] = set()
     alerts_unreadable: bool = False
     head_sha: str = ""
+    failing_run_ids: list[int] = []
