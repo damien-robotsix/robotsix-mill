@@ -1,7 +1,7 @@
 """Preflight gate checks for the implement phase.
 
 Extracted from :class:`PhaseCoordinatorMixin` to reduce file size.
-All nine gate checks run BEFORE a Langfuse trace opens, catching
+All gate checks run BEFORE a Langfuse trace opens, catching
 known-no-op conditions without consuming a spawn slot or emitting
 a $0.00 trace.
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -18,6 +19,7 @@ from robotsix_mill._resources import (
 
 from ..._resources import agent_definitions_dir
 from ...agents.yaml_loader import load_agent_definition
+from ...config import effective_target_branch
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...deploy import check_deploy_freshness
@@ -239,6 +241,21 @@ def run_preflight_checks(
                 "Consider re-scoping or splitting the ticket.",
             )
 
+    # 4.6. Changelog-only review re-spawn short-circuit: a ticket that
+    #      came back from review with OPEN feedback threads and whose
+    #      previous implement attempt committed only changelog
+    #      fragments did NOT address that feedback — re-spawning would
+    #      re-review the same diff and burn the remaining spawn budget
+    #      (ticket b92d / faa8: three identical review verdicts, two
+    #      changelog-only no-op attempts, 3/3 → BLOCKED with no
+    #      progress).  Escalate to BLOCKED before the agent loop —
+    #      without consuming a spawn — and surface the reviewer's open
+    #      gap list (not the summary tail) in the block note.
+    _changelog_guard = _changelog_only_review_respawn_guard(ticket, ctx)
+    if _changelog_guard is not None:
+        clear_conversation_state(ws, "implement")
+        return _changelog_guard
+
     # 5. Agent tool-definition integrity: the assembled tool list
     #    must be non-empty before we open a trace.  Load the agent-
     #    definition YAML and verify it declares at least one tool.
@@ -319,3 +336,90 @@ def run_preflight_checks(
             )
 
     return None
+
+
+def _changelog_only_review_respawn_guard(
+    ticket: Ticket,
+    ctx: StageContext,
+) -> Outcome | None:
+    """Detect a changelog-only re-attempt with unaddressed review feedback.
+
+    A review re-spawn whose previous implement attempt committed only
+    changelog fragment(s) while review threads remain open would
+    re-review the same diff and burn the remaining spawn budget.
+    Returns the BLOCKED outcome for preflight to short-circuit with,
+    or ``None`` when the guard does not apply.
+    """
+    ws = ctx.service.workspace(ticket)
+    repo_dir = ws.dir / "repo"
+    if ticket.review_rounds <= 0 or not (repo_dir / ".git").exists():
+        return None
+
+    # ``mill``/``system`` comments are diagnostic auto-posts (trace
+    # links, timeout-escalation pings), not reviewer feedback — the
+    # same filter refine's sendback guard uses.
+    non_feedback_authors = {"mill", "system"}
+    try:
+        comments = ctx.service.list_comments(ticket.id)
+    except Exception:
+        return None
+    open_feedback = [
+        c
+        for c in comments
+        if c.parent_id is None
+        and c.closed_at is None
+        and c.author not in non_feedback_authors
+    ]
+    if not open_feedback:
+        return None
+
+    target = effective_target_branch(ctx.settings, ctx.repo_config)
+    try:
+        ahead = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "rev-list",
+                "--count",
+                f"origin/{target}..HEAD",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+        if not ahead or int(ahead) <= 0:
+            return None
+        last_files = [
+            ln.strip()
+            for ln in subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "show",
+                    "--name-only",
+                    "--format=",
+                    "HEAD",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.splitlines()
+            if ln.strip()
+        ]
+    except (subprocess.SubprocessError, OSError, ValueError):  # fmt: skip
+        return None
+    if not last_files or not all(f.startswith("changelog.d/") for f in last_files):
+        return None
+
+    gaps = "\n".join(f"- [review #{c.id}] {c.body.strip()}" for c in open_feedback)
+    return Outcome(
+        State.BLOCKED,
+        "changelog-only re-attempt with unaddressed review "
+        "feedback — the previous implement attempt committed "
+        "only changelog fragment(s) while review threads are "
+        "still open; re-spawning would re-review the same "
+        "diff without addressing the feedback.  "
+        "Unaddressed review feedback:\n" + gaps,
+    )
