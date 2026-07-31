@@ -1469,7 +1469,6 @@ def test_branch_refreshed_before_ci_check_in_poll_implement_complete(
     run was already failing.  The refresh (rebase + optional empty commit)
     must happen BEFORE CI is evaluated so a fresh run is triggered.
     """
-    from robotsix_mill.stages import merge as merge_mod
     from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
 
     ctx = _gh(tmp_path)
