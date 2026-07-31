@@ -12,6 +12,7 @@ from robotsix_mill.agents.runners.periodic_runner import (
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
@@ -220,7 +221,7 @@ def test_run_docstring_coverage_pass_creates_draft_tickets(tmp_path, monkeypatch
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="docstring_coverage"
     tickets = service.list()
-    dc_tickets = [t for t in tickets if t.source == "docstring_coverage"]
+    dc_tickets = [t for t in tickets if t.source == "docstring_coverage" and t.kind == TicketKind.TASK]
     assert len(dc_tickets) == 2
     assert dc_tickets[0].state == State.DRAFT
 
@@ -641,7 +642,7 @@ def test_post_docstring_coverage_runs_in_background(
         # Verify the draft ticket was created
         svc = TicketService(settings, board_id="test-board")
         tickets = svc.list()
-        dc_tickets = [t for t in tickets if t.source == "docstring_coverage"]
+        dc_tickets = [t for t in tickets if t.source == "docstring_coverage" and t.kind == TicketKind.TASK]
         assert len(dc_tickets) == 1
         assert dc_tickets[0].title == "Docstring-coverage draft"
 

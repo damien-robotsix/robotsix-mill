@@ -17,7 +17,7 @@ from robotsix_mill.agents.trace_inspector import (
     TraceInspectResult,
 )
 from robotsix_mill.config import Settings, _reset_secrets
-from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.agents.runners.trace_review_runner import (
     _Baselines,
@@ -755,7 +755,7 @@ class TestRunTraceReviewPass:
         # Verify it landed on the board with the right source.
         svc = TicketService(settings, board_id="test-board")
         all_tickets = svc.list()
-        review_tickets = [t for t in all_tickets if t.source == SourceKind.TRACE_REVIEW]
+        review_tickets = [t for t in all_tickets if t.source == SourceKind.TRACE_REVIEW and t.kind == TicketKind.TASK]
         assert len(review_tickets) == 1
         body = svc.workspace(review_tickets[0]).read_description()
         assert "run_command kept failing" in body
@@ -1364,8 +1364,9 @@ class TestTargetRepoRouting:
         # Draft lives on the TARGET board, not the source board.
         target_svc = TicketService(s, board_id="mill-board")
         target_tickets = target_svc.list()
-        assert len(target_tickets) == 1
-        assert target_tickets[0].source == SourceKind.TRACE_REVIEW
+        target_drafts = [t for t in target_tickets if t.kind == TicketKind.TASK]
+        assert len(target_drafts) == 1
+        assert target_drafts[0].source == SourceKind.TRACE_REVIEW
 
         source_svc = TicketService(s, board_id="source-board")
         assert source_svc.list() == []

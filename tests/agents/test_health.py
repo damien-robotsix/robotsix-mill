@@ -13,6 +13,7 @@ from robotsix_mill.agents.runners.periodic_runner import (
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
@@ -240,7 +241,7 @@ def test_run_health_pass_creates_draft_tickets(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="health"
     tickets = service.list()
-    health_tickets = [t for t in tickets if t.source == "health"]
+    health_tickets = [t for t in tickets if t.source == "health" and t.kind == TicketKind.TASK]
     assert len(health_tickets) == 2
     assert health_tickets[0].state == State.DRAFT
 
@@ -716,7 +717,7 @@ def test_post_health_check_runs_in_background(tmp_path, monkeypatch, repos_regis
         # Verify the draft ticket was created
         svc = TicketService(settings, board_id="test-board")
         tickets = svc.list()
-        health_tickets = [t for t in tickets if t.source == "health"]
+        health_tickets = [t for t in tickets if t.source == "health" and t.kind == TicketKind.TASK]
         assert len(health_tickets) == 1
         assert health_tickets[0].title == "Health draft"
 

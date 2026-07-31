@@ -25,6 +25,7 @@ from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.core.models import (
     SourceKind,
     TicketEvent,
+    TicketKind,
 )
 
 
@@ -115,10 +116,13 @@ def test_happy_path_drafts_created_and_memory_persisted(tmp_path, monkeypatch):
     assert "id" in result.drafts_created[0]
     assert result.drafts_created[0]["title"] == "Fix thing"
 
-    # Ticket in DB with correct source and origin_session
+    # Ticket in DB with correct source and origin_session.
+    # Scanner sources (like AUDIT) also get a rollup epic created
+    # alongside the draft — filter for the task ticket.
     tickets = service.list()
-    assert len(tickets) == 1
-    ticket = tickets[0]
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
+    ticket = draft_tickets[0]
     assert ticket.source == "audit"
     assert ticket.origin_session == "test-session-1"
     assert ticket.state == State.DRAFT
@@ -496,10 +500,13 @@ def test_marker_round_trip(tmp_path):
         settings=settings,
     )
 
-    # Now verify the marker was written
+    # Now verify the marker was written.
+    # Scanner sources (like "health") also get a rollup epic.
     tickets = service.list()
-    assert len(tickets) == 1
-    tid = tickets[0].id
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
+    tid = draft_tickets[0].id
     desc = Workspace(settings.workspaces_dir_for("test-board"), tid).read_description()
     assert "<!-- health-gap-id: fix_z -->" in desc
 
@@ -562,9 +569,11 @@ def test_missing_gap_ids_no_crash(tmp_path):
 
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
     desc = Workspace(
-        settings.workspaces_dir_for("test-board"), tickets[0].id
+        settings.workspaces_dir_for("test-board"), draft_tickets[0].id
     ).read_description()
     # No marker appended
     assert "gap-id:" not in desc
@@ -1613,7 +1622,7 @@ def test_present_source_module_files_test_gap_draft(tmp_path):
     )
 
     assert len(result.drafts_created) == 1
-    assert len(service.list()) == 1
+    assert len(service.list()) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -1897,7 +1906,7 @@ def test_max_drafts_none_backward_compat(tmp_path, monkeypatch):
 
     assert len(result.drafts_created) == 5
     tickets = service.list()
-    assert len(tickets) == 5
+    assert len(tickets) == 6  # 5 drafts + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -2010,8 +2019,10 @@ def test_repo_specific_draft_stays_on_audited_board(tmp_path):
 
         # Draft landed on the audited board.
         on_audited = audited_svc.list()
-        assert len(on_audited) == 1
-        assert on_audited[0].title == "Fix user authentication in src/auth/login.py"
+        assert len(on_audited) == 2  # 1 draft + 1 rollup EPIC
+        on_audited_drafts = [t for t in on_audited if t.kind == TicketKind.TASK]
+        assert len(on_audited_drafts) == 1
+        assert on_audited_drafts[0].title == "Fix user authentication in src/auth/login.py"
 
         # Mill board is empty.
         on_mill = mill_svc.list()
@@ -2347,7 +2358,7 @@ def test_module_curator_files_when_missing_premise_is_true(tmp_path):
     )
 
     assert len(result.drafts_created) == 1
-    assert len(service.list()) == 1
+    assert len(service.list()) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -2383,9 +2394,11 @@ def test_module_curator_annotates_stale_classify(tmp_path):
 
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
     desc = Workspace(
-        settings.workspaces_dir_for("test-board"), tickets[0].id
+        settings.workspaces_dir_for("test-board"), draft_tickets[0].id
     ).read_description()
     assert "[!warning]" in desc
     assert "no longer exists on HEAD" in desc
@@ -2430,9 +2443,11 @@ def test_module_curator_legitimate_classify_unaffected(tmp_path):
 
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
     desc = Workspace(
-        settings.workspaces_dir_for("test-board"), tickets[0].id
+        settings.workspaces_dir_for("test-board"), draft_tickets[0].id
     ).read_description()
     assert "[!warning]" not in desc
 
@@ -2656,7 +2671,7 @@ def test_module_curator_guard_not_fired_for_other_sources(tmp_path):
     )
 
     assert len(result.drafts_created) == 1
-    assert len(service.list()) == 1
+    assert len(service.list()) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -2687,7 +2702,7 @@ def test_module_curator_guard_not_fired_without_repo_dir(tmp_path):
     )
 
     assert len(result.drafts_created) == 1
-    assert len(service.list()) == 1
+    assert len(service.list()) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
