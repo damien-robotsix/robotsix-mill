@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 from ..db import retry_on_db_full
 from ..models import (
@@ -24,7 +24,6 @@ from ._helpers import (
     _parse_depends_on_str,
     verify_merge_before_done,
 )
-import contextlib
 
 log = logging.getLogger("robotsix_mill.service")
 
@@ -418,7 +417,7 @@ class _TransitionMixin(_ServiceBase):
             if ticket.state is State.READY and dst in _IMPLEMENT_PROGRESS_STATES:
                 _reset_implement_spawn_counter(self.workspace(ticket))
             ticket.state = dst
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=note))
@@ -509,7 +508,7 @@ class _TransitionMixin(_ServiceBase):
             ticket.next_retry_at = None
             ticket.pre_redraft_trace_count = -1  # sentinel: set baseline on next poll
             ticket.state = dst
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             note = note.strip()
             if note:
@@ -595,7 +594,7 @@ class _TransitionMixin(_ServiceBase):
             ticket.retry_attempt = retry_attempt
             ticket.last_transient_error = last_transient_error
             ticket.next_retry_at = next_retry_at
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -623,7 +622,7 @@ class _TransitionMixin(_ServiceBase):
                 s.add(comment)
             note = f"changes requested: {body}"
             ticket.state = State.DRAFT
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note))
@@ -679,7 +678,7 @@ class _TransitionMixin(_ServiceBase):
             s.add(comment)
             note = f"implementation changes requested: {body}"
             ticket.state = State.READY
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=State.READY, note=note))
@@ -718,7 +717,7 @@ class _TransitionMixin(_ServiceBase):
             ticket.blocked_from = None
             ticket.paused_from = None
             ticket.state = State.CLOSED
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(
@@ -822,7 +821,7 @@ class _TransitionMixin(_ServiceBase):
             # Record the fact in the note so it's visible in history.
             open_ask = self._has_open_ask_user_threads(ticket_id, s)
             if open_ask:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 for c in open_ask:
                     c.closed_at = now
                     s.add(c)
@@ -839,7 +838,7 @@ class _TransitionMixin(_ServiceBase):
                 s.add(comment)
             event_note = f"mark done: {note}" if note else "mark done"
             ticket.state = State.DONE
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(
