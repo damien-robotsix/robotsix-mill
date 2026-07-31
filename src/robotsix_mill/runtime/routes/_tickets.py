@@ -372,6 +372,7 @@ def get_history(
     ticket_id: str,
     offset: int = 0,
     limit: int | None = None,
+    tail: int | None = None,
     svc=Depends(get_service),
 ) -> list[TicketEvent]:
     """Return event history for a ticket (``GET /tickets/{ticket_id}/history``).
@@ -380,13 +381,15 @@ def get_history(
 
     * ``offset`` — skip the first N events (default 0).
     * ``limit`` — return at most N events (default: all).
+    * ``tail`` — return the last N events (mutually exclusive with
+      *offset*/*limit*).
 
     Raises 404 when the ticket does not exist.
     """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     if svc.get(ticket_id) is None:
         raise HTTPException(404, "ticket not found")
-    return svc.history(ticket_id, offset=offset, limit=limit)
+    return svc.history(ticket_id, offset=offset, limit=limit, tail=tail)
 
 
 @router.get("/tickets/{ticket_id}/description")

@@ -99,7 +99,7 @@ def test_history_pagination(service):
     t = service.create("pagination test")
     for i in range(5):
         service.transition(t.id, State.READY, note=f"event {i}")
-        service.transition(t.id, State.DRAFT, note=f"back to draft {i}")
+        service.transition(t.id, State.CODE_REVIEW, note=f"back to review {i}")
 
     full = service.history(t.id)
     assert len(full) >= 6  # created + 5 transitions
