@@ -211,12 +211,15 @@ class _QueryMixin(_ServiceBase):
         """
         board = self._board_for(ticket_id)
         with db.session(self.settings, board) as s:
+            direction = (
+                TicketEvent.at.desc()  # type: ignore[attr-defined]
+                if order == "desc"
+                else TicketEvent.at.asc()  # type: ignore[attr-defined]
+            )
             stmt = (
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
-                .order_by(
-                    TicketEvent.at.desc() if order == "desc" else TicketEvent.at.asc()
-                )  # type: ignore[attr-defined]
+                .order_by(direction)
             )
             if offset:
                 stmt = stmt.offset(offset)
