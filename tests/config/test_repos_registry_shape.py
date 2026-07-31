@@ -154,3 +154,43 @@ def test_flat_and_nested_same_repo_are_equivalent(tmp_path, monkeypatch):
 
     assert flat_reg.repos == nested_reg.repos
     assert flat_reg.repos["foo"].max_concurrency == 2
+
+
+# ---------------------------------------------------------------------------
+#  auto_merge_enabled wiring — reads from config, defaults to False
+# ---------------------------------------------------------------------------
+
+
+def test_auto_merge_enabled_true_when_set(tmp_path, monkeypatch):
+    """A repos entry with ``auto_merge_enabled: true`` yields a
+    ``RepoConfig`` whose ``auto_merge_enabled`` is ``True``."""
+    _write_config(
+        tmp_path,
+        monkeypatch,
+        {
+            "foo": {
+                "board_id": "board-foo",
+                "forge_remote_url": "https://github.com/o/foo",
+                "auto_merge_enabled": True,
+            }
+        },
+    )
+    reg = load_repos_config()
+    assert reg.repos["foo"].auto_merge_enabled is True
+
+
+def test_auto_merge_enabled_defaults_to_true(tmp_path, monkeypatch):
+    """Omitting ``auto_merge_enabled`` defaults to ``True`` — matching
+    the ``RepoConfig`` model default (opt-out, not opt-in)."""
+    _write_config(
+        tmp_path,
+        monkeypatch,
+        {
+            "foo": {
+                "board_id": "board-foo",
+                "forge_remote_url": "https://github.com/o/foo",
+            }
+        },
+    )
+    reg = load_repos_config()
+    assert reg.repos["foo"].auto_merge_enabled is True
