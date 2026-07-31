@@ -1126,6 +1126,14 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     cwd=repo_dir,
                     check=True,
                 )
+            # Regenerate config schema if settings files changed
+            # — avoids a stale-schema CI auto-fix commit.
+            if any(f.startswith("src/robotsix_mill/config/") for f in _changed):
+                subprocess.run(
+                    ["uv", "run", "python", "scripts/emit_config_schema.py"],
+                    cwd=repo_dir,
+                    check=True,
+                )
             _commit_or_raise(repo_dir, commit_message)
         # Commit extra repos (skip primary — already done above).
         if extra_roots is not None:
@@ -1139,6 +1147,25 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         repo_path, ticket.id, ticket.title
                     )
                     cls._validate_changelog_fragments(repo_path)
+                    # Regenerate config schema if settings files
+                    # changed in this extra-root repo.
+                    _xtra_target = effective_target_branch(
+                        ctx.settings, ctx.repo_config
+                    )
+                    _xtra_changed = git_ops.changed_files(repo_path, _xtra_target)
+                    if any(
+                        f.startswith("src/robotsix_mill/config/") for f in _xtra_changed
+                    ):
+                        subprocess.run(
+                            [
+                                "uv",
+                                "run",
+                                "python",
+                                "scripts/emit_config_schema.py",
+                            ],
+                            cwd=repo_path,
+                            check=True,
+                        )
                     _commit_or_raise(repo_path, commit_message)
             # Write the artifact — even if empty (no-change-needed path).
             try:

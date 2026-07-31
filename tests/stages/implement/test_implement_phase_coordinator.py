@@ -1833,6 +1833,166 @@ def test_preflight_stall_guard_reads_json_fallback(ctx_factory, tmp_path, monkey
     assert "STALL DETECTED" in out.note
 
 
+# --- config schema auto-regeneration ------------------------------------
+
+
+class _ConfigFakeGitOps:
+    """Records ``commit_all`` calls; ``has_changes`` answers from a set;
+    ``changed_files`` returns configurable paths (for testing the
+    config-schema regeneration hook)."""
+
+    def __init__(self, changed, changed_files=None):
+        self.changed = {str(p) for p in changed}
+        self.commits = []
+        self._changed_files = changed_files or []
+
+    def has_changes(self, repo):
+        return str(repo) in self.changed
+
+    def commit_all(self, repo, message):
+        self.commits.append((str(repo), message))
+
+    def changed_files(self, repo, target_branch):
+        return list(self._changed_files)
+
+
+def test_finalize_regenerates_config_schema_when_settings_changed(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When ``changed_files`` contains a path under
+    ``src/robotsix_mill/config/``, _finalize runs
+    ``emit_config_schema.py`` before committing."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _ConfigFakeGitOps(
+        changed={repo_dir},
+        changed_files=["src/robotsix_mill/config/settings.py"],
+    )
+    monkeypatch.setattr(pc, "git_ops", fake)
+    subprocess_calls = []
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda *a, **kw: subprocess_calls.append((a, kw)),
+    )
+
+    ImplementStage._finalize(
+        ctx,
+        t,
+        repo_dir,
+        "mill/x",
+        "summary",
+        ok=True,
+        reference_files=None,
+    )
+
+    # emit_config_schema.py was called.
+    schema_calls = [
+        c
+        for c in subprocess_calls
+        if any("emit_config_schema.py" in str(arg) for arg in c[0])
+    ]
+    assert len(schema_calls) == 1
+    # commit_all still called.
+    assert len(fake.commits) == 1
+
+
+def test_finalize_skips_config_schema_when_no_config_files_changed(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When ``changed_files`` contains NO paths under
+    ``src/robotsix_mill/config/``, _finalize does NOT run
+    ``emit_config_schema.py``."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _ConfigFakeGitOps(
+        changed={repo_dir},
+        changed_files=["src/robotsix_mill/agents/base.py"],
+    )
+    monkeypatch.setattr(pc, "git_ops", fake)
+    subprocess_calls = []
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda *a, **kw: subprocess_calls.append((a, kw)),
+    )
+
+    ImplementStage._finalize(
+        ctx,
+        t,
+        repo_dir,
+        "mill/x",
+        "summary",
+        ok=True,
+        reference_files=None,
+    )
+
+    # emit_config_schema.py NOT called.
+    schema_calls = [
+        c
+        for c in subprocess_calls
+        if any("emit_config_schema.py" in str(arg) for arg in c[0])
+    ]
+    assert len(schema_calls) == 0
+    # commit_all still called.
+    assert len(fake.commits) == 1
+
+
+def test_finalize_extra_roots_regenerates_config_schema(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When an extra_roots repo has config file changes, _finalize runs
+    ``emit_config_schema.py`` in that repo before committing."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    fake = _ConfigFakeGitOps(
+        changed={primary, extra},
+        changed_files=["src/robotsix_mill/config/settings.py"],
+    )
+    monkeypatch.setattr(pc, "git_ops", fake)
+    subprocess_calls = []
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda *a, **kw: subprocess_calls.append((a, kw)),
+    )
+
+    ImplementStage._finalize(
+        ctx,
+        t,
+        primary,
+        "mill/x",
+        "summary",
+        ok=True,
+        reference_files=None,
+        extra_roots=[primary, extra],
+    )
+
+    # emit_config_schema.py called for both primary and extra.
+    schema_calls = [
+        c
+        for c in subprocess_calls
+        if any("emit_config_schema.py" in str(arg) for arg in c[0])
+    ]
+    assert len(schema_calls) == 2
+    # Both repos committed.
+    assert {c[0] for c in fake.commits} == {str(primary), str(extra)}
+
+
 def test_resume_clears_cached_summary_and_ref_files(ctx_factory, tmp_path, monkeypatch):
     """After resume-blocked (with note, dst=READY), implement_summary.md
     and reference_files.json are deleted so the next implement cycle
