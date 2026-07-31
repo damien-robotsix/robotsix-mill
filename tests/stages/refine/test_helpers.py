@@ -1025,3 +1025,58 @@ class TestFastPathScopeChecks:
         assert isinstance(checks["scope"], str)
         assert checks["scope"].startswith("fail:")
         assert "10 distinct file paths" in checks["scope"]
+
+
+# ---------------------------------------------------------------------------
+# NO_CHANGE reasons must not self-reject
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "The deliverable already exists in the working tree; no change is needed",
+        "All five deliverables are already in place — no code change is needed",
+        "The key is already present in config; no changes needed",
+    ],
+)
+def test_no_change_reason_would_self_reject_if_forwarded(reason):
+    """A NO_CHANGE reason matches the rejection patterns verbatim.
+
+    This is why the NO_CHANGE→implement route must not forward its own
+    reason as ``triage_note``: the route's premise ("this is already
+    done") is exactly what the rejection gate scans for. Forwarding it
+    turned an intentional "route to READY so implement can verify the
+    claim" into HUMAN_ISSUE_APPROVAL — where the ticket sat forever,
+    since nothing auto-closes it and no human approves a ticket whose
+    own note says there is nothing to do.
+    """
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        "## Problem\nA genuine, real spec body",
+        "t1",
+        triage_note=reason,
+    )
+    assert state is State.HUMAN_ISSUE_APPROVAL
+    assert note is not None and "REJECTED" in note
+
+
+def test_no_change_route_does_not_forward_triage_note():
+    """The NO_CHANGE→implement branch must not pass ``triage_note``.
+
+    Guards the fix at its source: if a future edit re-adds
+    ``triage_note=triage.reason`` on that branch, every already-done
+    ticket silently starts parking for human approval again.
+    """
+    import inspect
+    from robotsix_mill.stages.refine import _triage
+
+    src = inspect.getsource(_triage)
+    marker = 'f"triage NO_CHANGE — routing to implement: {short_reason}"'
+    assert marker in src, "NO_CHANGE→implement branch not found"
+    # Inspect the call that emits that note, up to its closing paren.
+    tail = src.split(marker, 1)[1].split(")", 1)[0]
+    assert "triage_note" not in tail, (
+        "NO_CHANGE→implement must not forward triage_note — its reason "
+        "matches _TRIAGE_REJECTION_PATTERNS and self-rejects"
+    )
