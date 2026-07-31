@@ -81,17 +81,36 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
           ``.yaml``, ``.toml``, etc. — no code to test).
 
         Returns ``None`` otherwise (keep the default level-2 model).
+
+        The LLM-bypass levels (``-2``, ``-1``, ``0``) are suppressed whenever
+        ``ic.feedback`` is set: they cannot act on reviewer feedback, so
+        taking one on a sendback re-emits the rejected diff unchanged.
         """
         prev = (ic.previous_attempt_summary or "") + (ic.feedback or "")
         if "no change needed" in prev.lower():
             return 1
-        if _is_trivial_config_only_change(repo_dir, target_branch):
+
+        # A reviewer sendback carries specific requested changes. The three
+        # LLM-bypass levels below (-2, 0, -1) re-derive their edit from what is
+        # already in the working tree and never read ``feedback``, so on a
+        # sendback they reproduce the exact diff the reviewer just rejected:
+        # review sends it back, implement bypasses again, and the ticket burns
+        # its cycle ceiling and blocks. That loop was the largest blocked class
+        # on the board after the refine fix — four tickets, each with a review
+        # asking for a concrete edit and four identical "trivial config-only
+        # addition" passes that never made it.
+        #
+        # Level 1 stays reachable: it is a real (cheaper) LLM pass, so it can
+        # act on the feedback.
+        has_feedback = bool((ic.feedback or "").strip())
+
+        if not has_feedback and _is_trivial_config_only_change(repo_dir, target_branch):
             return -2
         if _is_config_only_change(repo_dir, target_branch):
             return 1
-        if _is_rename_only_change(repo_dir, target_branch):
+        if not has_feedback and _is_rename_only_change(repo_dir, target_branch):
             return 0
-        if _is_spec_exact_edits(ic.spec, repo_dir):
+        if not has_feedback and _is_spec_exact_edits(ic.spec, repo_dir):
             # Sentinel check: if a prior spec-exact attempt already
             # failed (no edits applied), fall through to the LLM path
             # instead of re-entering the same doomed deterministic path.

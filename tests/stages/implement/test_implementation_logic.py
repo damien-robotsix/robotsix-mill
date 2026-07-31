@@ -104,6 +104,82 @@ class TestSelectAgentLevel:
         result = self._call(ic)
         assert result is None
 
+    def test_trivial_config_bypass_suppressed_by_reviewer_feedback(
+        self, tmp_path, monkeypatch
+    ):
+        """A reviewer sendback must not take the deterministic no-LLM path.
+
+        Regression (2026-07-31): level -2 applies whatever is already in the
+        working tree without reading ``feedback``, so on a review sendback it
+        re-emitted the exact diff the reviewer had rejected. Review sent it
+        back, implement bypassed again, and after four identical passes the
+        cycle ceiling blocked the ticket — four tickets on the live board,
+        each with a review naming a concrete edit and four passes summarised
+        "trivial config-only addition: 1 new file(s)".
+        """
+        import robotsix_mill.stages.implement.implementation_logic as mod
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        monkeypatch.setattr(mod, "_is_trivial_config_only_change", lambda *a, **k: True)
+        monkeypatch.setattr(mod, "_is_config_only_change", lambda *a, **k: False)
+        monkeypatch.setattr(mod, "_is_rename_only_change", lambda *a, **k: False)
+        monkeypatch.setattr(mod, "_is_spec_exact_edits", lambda *a, **k: False)
+
+        # No feedback → the cheap deterministic path is still taken.
+        assert self._call(_ic(), repo_dir=repo_dir) == -2
+
+        # With reviewer feedback → must reach an LLM level instead.
+        ic = _ic(feedback="Remove the docs/modules.yaml line; it contradicts the rule.")
+        assert self._call(ic, repo_dir=repo_dir) != -2
+
+    @pytest.mark.parametrize(
+        ("detector", "bypass_level"),
+        [
+            ("_is_rename_only_change", 0),
+            ("_is_spec_exact_edits", -1),
+        ],
+    )
+    def test_other_llm_bypasses_suppressed_by_feedback(
+        self, tmp_path, monkeypatch, detector, bypass_level
+    ):
+        """The rename-only and spec-exact bypasses are equally LLM-free."""
+        import robotsix_mill.stages.implement.implementation_logic as mod
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        for name in (
+            "_is_trivial_config_only_change",
+            "_is_config_only_change",
+            "_is_rename_only_change",
+            "_is_spec_exact_edits",
+        ):
+            monkeypatch.setattr(mod, name, lambda *a, **k: False)
+        monkeypatch.setattr(mod, detector, lambda *a, **k: True)
+
+        assert self._call(_ic(), repo_dir=repo_dir) == bypass_level
+
+        ic = _ic(feedback="Please address the two points above.")
+        assert self._call(ic, repo_dir=repo_dir) != bypass_level
+
+    def test_config_only_level_1_still_allowed_with_feedback(
+        self, tmp_path, monkeypatch
+    ):
+        """Level 1 is a real LLM pass, so feedback must not suppress it."""
+        import robotsix_mill.stages.implement.implementation_logic as mod
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        monkeypatch.setattr(
+            mod, "_is_trivial_config_only_change", lambda *a, **k: False
+        )
+        monkeypatch.setattr(mod, "_is_config_only_change", lambda *a, **k: True)
+        monkeypatch.setattr(mod, "_is_rename_only_change", lambda *a, **k: False)
+        monkeypatch.setattr(mod, "_is_spec_exact_edits", lambda *a, **k: False)
+
+        ic = _ic(feedback="Complete the truncated sentence in the newsfragment.")
+        assert self._call(ic, repo_dir=repo_dir) == 1
+
     def test_config_only_change_returns_level_1(self, tmp_path, monkeypatch):
         """A ticket whose diff is all .md/.yaml gets level-1."""
         import subprocess
