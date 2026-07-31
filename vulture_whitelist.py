@@ -61,6 +61,9 @@ DocstringCoverageResult
 # ModuleSizeResult — type alias (PeriodicAgentResult); used in tests and
 # via agent YAML; vulture (60% confidence) cannot trace the usage.
 ModuleSizeResult
+# MyPyBaselineResult — type alias (PeriodicAgentResult); used in tests and
+# via agent YAML; vulture (60% confidence) cannot trace the usage.
+MyPyBaselineResult
 model_config
 chunk_size
 max_chunks
@@ -81,6 +84,7 @@ run_triage_boilerplate_agent
 run_state_sync_agent
 run_docstring_coverage_agent
 run_module_size_agent
+run_mypy_baseline_agent
 parameters
 web_fetch_budget
 correct_form
@@ -327,6 +331,7 @@ run_pin_bump_pass
 run_repo_description_sync_pass
 run_docstring_coverage_pass
 run_module_size_pass
+run_mypy_baseline_pass
 # run_langfuse_cleanup_pass_wrapper — called from _passes.py via
 # _run_periodic_pass wrapper; vulture (60% confidence) cannot trace it.
 run_langfuse_cleanup_pass_wrapper

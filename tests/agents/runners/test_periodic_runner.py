@@ -653,8 +653,8 @@ def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
 # ------------------------------------------------------------------ PERIODIC_PASS_CONFIGS registry
 
 
-def test_periodic_pass_configs_registry_has_all_sixteen_entries():
-    """All 16 periodic passes are registered."""
+def test_periodic_pass_configs_registry_has_all_seventeen_entries():
+    """All 17 periodic passes are registered."""
     expected = {
         "audit",
         "agent_check",
@@ -668,6 +668,7 @@ def test_periodic_pass_configs_registry_has_all_sixteen_entries():
         "health",
         "module_curator",
         "module_size",
+        "mypy_baseline",
         "test_gap",
         "state_sync",
         "frontend_sync",
@@ -689,6 +690,7 @@ def test_periodic_pass_configs_requires_repo():
             "docstring_coverage",
             "module_curator",
             "module_size",
+            "mypy_baseline",
             "test_gap",
             "state_sync",
             "frontend_sync",

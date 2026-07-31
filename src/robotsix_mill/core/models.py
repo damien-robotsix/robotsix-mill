@@ -51,6 +51,7 @@ class SourceKind(StrEnum):
     TRIAGE_BOILERPLATE = "triage_boilerplate"
     DOCSTRING_COVERAGE = "docstring_coverage"
     MODULE_SIZE = "module_size"
+    MYPY_BASELINE = "mypy_baseline"
     META = "meta"
     RUN_HEALTH = "run-health"
     LANGFUSE_CLEANUP = "langfuse-cleanup"
