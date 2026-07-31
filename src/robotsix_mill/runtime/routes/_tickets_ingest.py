@@ -28,7 +28,7 @@ from ...agents.dedup import (
     run_dedup_check,
 )
 from ...config import RepoConfig, ReposRegistry, Settings
-from ...core.models import TicketKind
+from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
 from ..deps import (
@@ -40,15 +40,6 @@ from ..deps import (
 from ..worker import Worker
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_log_value(value: str) -> str:
-    """Replace newlines so a user-controlled string cannot inject
-    forged log entries (``py/log-injection``).
-    """
-    if not isinstance(value, str):
-        return str(value)
-    return value.replace("\r", "\\r").replace("\n", "\\n")
 
 
 router = APIRouter(tags=["Tickets"])
@@ -115,7 +106,7 @@ def _normalize_title(title: str) -> str:
 
 def _fingerprint_match(
     draft_title: str,
-    candidates: list,
+    candidates: list[Ticket],
 ) -> str | None:
     """Return the first candidate ticket id whose normalized title
     matches *draft_title*, or ``None``.
@@ -126,7 +117,7 @@ def _fingerprint_match(
     for t in candidates:
         candidate_fp = _normalize_title(t.title)
         if candidate_fp and candidate_fp == draft_fp:
-            return t.id
+            return str(t.id) if t.id is not None else None
     return None
 
 
@@ -221,10 +212,10 @@ def ingest_ticket(
             "(fingerprint match)",
         )
         logger.info(
-            "ingest fingerprint match: %r → %s (source=%s)",
-            _sanitize_log_value(body.title),
+            "ingest fingerprint match: %s → %s (source=%s)",
+            repr(body.title),
             dup_id,
-            _sanitize_log_value(body.source_tag),
+            repr(body.source_tag),
         )
         return JSONResponse(
             status_code=200,
@@ -264,7 +255,7 @@ def ingest_ticket(
 
 def _run_llm_dedup(
     body: TicketIngest,
-    candidates: list,
+    candidates: list[Ticket],
     board_svc: TicketService,
     worker: Worker,
     settings: Settings,
