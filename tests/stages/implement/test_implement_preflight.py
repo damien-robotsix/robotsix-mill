@@ -1486,3 +1486,92 @@ def test_stale_respawn_guard_allows_without_fingerprint(
     # was not a spec-determined implement outcome.
     out = ImplementStage().preflight(t, ctx)
     assert out is None, f"preflight must allow when fingerprint is absent, got: {out}"
+
+
+def test_stale_respawn_guard_skips_when_override_matches(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When implement_spec_override exists and its fingerprint matches
+    the current spec, the stale-spec guard must NOT block — the
+    operator already overrode the guard via resume-blocked."""
+    import hashlib
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Override match", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    spec = ctx.service.workspace(t).read_description() or ""
+    effective = spec
+    current_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+
+    ws = ctx.service.workspace(t)
+    # Write a BLOCKED implement.md with matching fingerprint.
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {current_fp}\n"
+        "summary-fingerprint: deadbeef00000001\n"
+        "stall-count: 0\n"
+        "\nprior attempt failed\n",
+        encoding="utf-8",
+    )
+    # Write the override marker — operator already overrode.
+    (ws.artifacts_dir / "implement_spec_override").write_text(
+        current_fp, encoding="utf-8"
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, (
+        f"preflight must allow when override matches fingerprint, got: {out}"
+    )
+
+
+def test_stale_respawn_guard_fires_when_override_mismatches(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When implement_spec_override exists but its fingerprint does NOT
+    match the current spec, the stale-spec guard must still fire — the
+    override was for a different spec and the operator hasn't cleared
+    it for this one."""
+    import hashlib
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Override mismatch", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    spec = ctx.service.workspace(t).read_description() or ""
+    effective = spec
+    current_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+
+    ws = ctx.service.workspace(t)
+    # Write a BLOCKED implement.md with the CURRENT fingerprint.
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {current_fp}\n"
+        "summary-fingerprint: deadbeef00000001\n"
+        "stall-count: 0\n"
+        "\nprior attempt failed\n",
+        encoding="utf-8",
+    )
+    # Write an override for a DIFFERENT fingerprint.
+    (ws.artifacts_dir / "implement_spec_override").write_text(
+        "completely_different_hash", encoding="utf-8"
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None, "must block when override doesn't match fingerprint"
+    assert out.next_state is State.BLOCKED
+    assert "spec unchanged" in out.note.lower()

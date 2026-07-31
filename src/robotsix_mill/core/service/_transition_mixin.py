@@ -78,11 +78,46 @@ def _clear_stale_implement_guard(ws: Workspace) -> None:
     Before deleting, the stall-detection state (summary-fingerprint
     and stall-count) is extracted from ``implement.md`` and persisted
     to ``implement_stall_state.json`` so the cross-spawn stall guard
-    survives operator-initiated resume/reset cycles.
+    survives operator-initiated resume/reset cycles.  The
+    spec-fingerprint is also persisted to ``implement_spec_override``
+    so the stale-spec guard stays suppressed across subsequent spawns
+    for the same ticket lifecycle — re-blocking only when the spec
+    actually changes.
     """
     _persist_stall_state_from_implement_md(ws)
+    _persist_spec_fingerprint_override(ws)
     with contextlib.suppress(FileNotFoundError):
         (ws.artifacts_dir / "implement.md").unlink()
+
+
+def _persist_spec_fingerprint_override(ws: Workspace) -> None:
+    """Extract the ``spec-fingerprint`` from ``artifacts/implement.md``
+    and persist it to ``artifacts/implement_spec_override``.
+
+    This marker tells the preflight stale-spec guard that the operator
+    has explicitly overridden the guard for this exact spec fingerprint
+    — the guard will skip re-blocking until the spec changes (i.e. the
+    current fingerprint no longer matches the stored override).
+
+    Best-effort — silently no-ops when ``implement.md`` is absent or
+    has no spec-fingerprint line.
+    """
+    md_path = ws.artifacts_dir / "implement.md"
+    if not md_path.exists():
+        return
+    try:
+        md_content = md_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in md_content.splitlines():
+        if line.startswith("spec-fingerprint: "):
+            spec_fp = line.split("spec-fingerprint: ", 1)[1].strip()
+            if spec_fp:
+                with contextlib.suppress(OSError):
+                    (ws.artifacts_dir / "implement_spec_override").write_text(
+                        spec_fp, encoding="utf-8"
+                    )
+            return
 
 
 def _persist_stall_state_from_implement_md(ws: Workspace) -> None:

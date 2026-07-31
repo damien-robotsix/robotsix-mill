@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -336,6 +337,11 @@ def reset_fingerprint(
             500,
             "failed to delete implement.md — check filesystem permissions",
         ) from None
+    # Also clear the spec-fingerprint override marker so a subsequent
+    # resume-blocked doesn't inadvertently suppress the guard.
+    override_path = ws.artifacts_dir / "implement_spec_override"
+    with contextlib.suppress(FileNotFoundError):
+        override_path.unlink()
 
     maybe_enqueue(ticket, worker)
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
