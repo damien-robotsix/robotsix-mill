@@ -216,6 +216,39 @@ Content-Type: application/json
 
 Marks a ticket `done` from any non-terminal state.  The `note` parameter is optional; if provided it is recorded as the transition note.
 
+### POST /tickets/{id}/request-implementation-changes — send a PR back for rework  🛑
+
+```
+POST /tickets/<ticket-id>/request-implementation-changes
+Content-Type: application/json
+
+{
+  "body": "<what the operator wants changed>",
+  "author": "robotsix-chat"
+}
+```
+
+Use when the operator has reviewed the open PR of a `human_mr_approval`
+ticket and wants the **implementation** adjusted.  The ticket returns to
+`ready` and the implement stage re-runs against the same spec.
+
+This is the counterpart to `merge-now`: from `human_mr_approval` the
+operator either merges or asks for rework.  Do not use
+`request-changes` for this — that is for `human_issue_approval` and
+re-refines the spec from `draft`, discarding the implementation.
+
+`body` is **required** and carries the operator's instructions: it is
+recorded as a comment, which is the channel the implement stage reads
+feedback from.  Relay what the operator actually said; an empty or vague
+body re-runs implement with nothing to act on and is rejected with 409.
+
+The stale-spec guard and the implement spawn counter are cleared
+automatically, so an operator request is never refused for an unchanged
+spec or an exhausted retry budget.
+
+Returns 409 when the ticket is not in `human_mr_approval` or the body is
+empty, 404 when the ticket does not exist.
+
 ### POST /tickets/{id}/merge-now — merge the PR of a ticket awaiting approval  🛑
 
 ```

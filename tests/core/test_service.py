@@ -3626,3 +3626,89 @@ def test_spawn_counter_survives_an_unproductive_block(service):
     service.transition(t.id, State.BLOCKED)
 
     assert _spawn_counter(service, t).read_text(encoding="utf-8") == "3"
+
+
+# --- request_implementation_changes: PR review → back to implement -------
+
+
+def _at_mr_approval(service):
+    t = service.create("needs rework", "spec")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        service.transition(t.id, st)
+    return service.get(t.id)
+
+
+def test_request_implementation_changes_returns_ticket_to_ready(service):
+    """An operator reviewing the PR can send it back for rework.
+
+    The spec is fine — only the implementation needs adjusting — so this
+    re-runs implement rather than re-refining from DRAFT the way
+    request_changes does.
+    """
+    t = _at_mr_approval(service)
+
+    comment, ticket = service.request_implementation_changes(
+        t.id, "Use a context manager instead of manual close()", author="robotsix-chat"
+    )
+
+    assert ticket.state is State.READY
+    assert comment.body.startswith("Use a context manager")
+
+
+def test_request_implementation_changes_feedback_reaches_implement(service):
+    """The body must land as a comment the implement stage will read.
+
+    The implement stage builds its ``feedback`` input from comments whose
+    author is neither ``mill`` nor ``system``. If the instructions were
+    only recorded as a history note, implement would re-run with no idea
+    what to change.
+    """
+    t = _at_mr_approval(service)
+
+    service.request_implementation_changes(t.id, "Handle the None case", author="user")
+
+    comments = service.list_comments(t.id)
+    bodies = [c.body for c in comments if c.author not in {"mill", "system"}]
+    assert "Handle the None case" in bodies
+
+
+def test_request_implementation_changes_clears_the_blocking_guards(service):
+    """The stale-spec guard and spawn budget must not refuse the operator.
+
+    The spec is deliberately unchanged — the operator's note is the new
+    information — so the stale-spec fingerprint guard would otherwise
+    re-block immediately, and an exhausted spawn budget would refuse the
+    rework outright.
+    """
+    t = _at_mr_approval(service)
+    arts = service.workspace(t).artifacts_dir
+    (arts / "implement.md").write_text("stale spec fingerprint", encoding="utf-8")
+    (arts / "implement_spawn_count").write_text("3", encoding="utf-8")
+
+    service.request_implementation_changes(t.id, "Rename the helper", author="user")
+
+    assert not (arts / "implement.md").exists()
+    assert not (arts / "implement_spawn_count").exists()
+
+
+def test_request_implementation_changes_requires_a_body(service):
+    """An empty body is rejected — it is the only actionable input."""
+    t = _at_mr_approval(service)
+
+    with pytest.raises(TransitionError):
+        service.request_implementation_changes(t.id, "   ", author="user")
+
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+
+def test_request_implementation_changes_rejects_wrong_state(service):
+    """Only a ticket awaiting merge approval can be sent back this way."""
+    t = service.create("not at mr approval", "spec")
+
+    with pytest.raises(TransitionError):
+        service.request_implementation_changes(t.id, "change this", author="user")
