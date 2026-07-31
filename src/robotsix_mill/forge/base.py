@@ -409,6 +409,15 @@ class Forge(ABC):
         """
         return {"updated": False, "reason": "not supported"}
 
+    def rerun_workflow(self, *, run_id: int) -> dict[str, Any]:
+        """Re-run a single workflow run identified by *run_id*.
+
+        Returns ``{"rerun": True}`` on success, ``{"rerun": False, "reason":
+        ...}`` when the forge does not support workflow re-runs or the
+        operation fails.  Must NEVER raise.
+        """
+        return {"rerun": False, "reason": "not supported"}
+
     def delete_branch(self, *, branch: str) -> bool:
         """Delete the remote head branch *branch* after merge.
 

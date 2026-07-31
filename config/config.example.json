@@ -47,6 +47,7 @@
     "ci_fix_request_limit": 120,
     "ci_fix_wait_poll_interval_s": 30.0,
     "ci_fix_wait_timeout_s": 1500.0,
+    "ci_transient_max_retries": 3,
     "ci_log_max_bytes": 65536,
     "ci_patterns_path": null,
     "claude_sdk_vision_enabled": false,

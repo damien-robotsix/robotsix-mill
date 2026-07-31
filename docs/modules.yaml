@@ -269,6 +269,7 @@ modules:
       - src/robotsix_mill/stages/ci_fix.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
       - src/robotsix_mill/stages/ci_fix_codeql.py
+      - src/robotsix_mill/stages/ci_transient.py
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
       - src/robotsix_mill/stages/short_circuit_verify.py
@@ -305,6 +306,7 @@ modules:
       - tests/stages/merge/conftest.py
       - tests/stages/test_ci_fix.py
       - tests/stages/test_ci_fix_helpers.py
+      - tests/stages/test_ci_transient.py
       - tests/stages/test_stage_cache.py
       - tests/stages/merge/test_ci_poll.py
       - tests/stages/test_codeql_fp_triage.py

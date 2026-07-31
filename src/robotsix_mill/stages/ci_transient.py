@@ -1,0 +1,73 @@
+"""Transient CI failure classifier and automatic re-run logic.
+
+When CI fails, the ci-fix agent may produce an OUT_OF_SCOPE verdict.
+Before spawning a blocking ``ci_fix_dependency`` ticket, we classify
+the failure as transient (infrastructure flake: network reset,
+buildkit boot timeout, runner shutdown, etc.) or deterministic
+(lint/test/type error).  Transient failures get automatic CI re-runs
+(up to a configurable limit) instead of spawning a fix ticket.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+# Compiled regex patterns that identify transient / infrastructure CI
+# failures.  These are applied against the full failing_summary text,
+# which includes check names, annotations, and job logs.
+TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
+    # Network-level failures
+    re.compile(r"ECONNRESET|ECONNREFUSED|econnreset|econnrefused", re.IGNORECASE),
+    re.compile(r"connection reset by peer|connection refused", re.IGNORECASE),
+    re.compile(r"TLS? handshake.*timeout|SSL.*error", re.IGNORECASE),
+    # buildx / Docker infrastructure flakes
+    re.compile(r"booting buildkit|cannot boot buildkit", re.IGNORECASE),
+    re.compile(r"error pulling.*docker.*timeout", re.IGNORECASE),
+    re.compile(
+        r"Error response from daemon.*(?:pull|timeout|connection refused)",
+        re.IGNORECASE,
+    ),
+    # Tool / action fetcher failures
+    re.compile(r"setup-uv.*failed|astral-sh/setup-uv.*error", re.IGNORECASE),
+    re.compile(
+        r"Failed to download action|unable to download|download.*failed.*action",
+        re.IGNORECASE,
+    ),
+    # GitHub Actions runner infrastructure failures
+    re.compile(
+        r"The runner.*has received a shutdown signal|runner.*lost communication",
+        re.IGNORECASE,
+    ),
+    re.compile(r"runner.*is not healthy|runner.*unavailable", re.IGNORECASE),
+    re.compile(
+        r"The job was canceled|The operation was canceled|job was abandoned",
+        re.IGNORECASE,
+    ),
+    # API rate limiting / server errors
+    re.compile(r"API rate limit exceeded|secondary rate limit", re.IGNORECASE),
+    re.compile(r"HTTP 5\d\d|502 Bad Gateway|503 Service", re.IGNORECASE),
+    re.compile(r"500 Internal Server Error", re.IGNORECASE),
+    # Transient package-manager fetch failures
+    re.compile(
+        r"(?:npm|pip|uv|apt-get|apk).*network.*unreachable",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(
+        r"Temporary failure resolving|Could not resolve host",
+        re.IGNORECASE,
+    ),
+]
+
+
+def is_transient_ci_failure(
+    failing_summary: str,
+    failing: list[dict[str, Any]] | None = None,
+) -> bool:
+    """Return ``True`` when *failing_summary* matches a known transient pattern.
+
+    The full *failing_summary* string (check names, annotations, and job
+    logs) is searched; *failing* (the raw check dicts) is accepted for
+    future use but currently ignored.
+    """
+    return any(pattern.search(failing_summary) for pattern in TRANSIENT_PATTERNS)

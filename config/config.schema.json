@@ -936,6 +936,14 @@
           "description": "Path to the CI-fix agent's structured pattern memory (JSON). When unset, derives from data_dir/ci_patterns.json.",
           "title": "Ci Patterns Path"
         },
+        "ci_transient_max_retries": {
+          "advanced": true,
+          "default": 3,
+          "description": "Maximum automatic CI re-runs for transient failures before escalating. 0 disables.",
+          "minimum": 0,
+          "title": "Ci Transient Max Retries",
+          "type": "integer"
+        },
         "claude_sdk_vision_enabled": {
           "advanced": true,
           "default": false,
