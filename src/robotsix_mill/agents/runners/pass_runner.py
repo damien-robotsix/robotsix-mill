@@ -21,6 +21,7 @@ from ...config import Settings
 from ...core.models import (
     SourceKind,
     Ticket,
+    TicketKind,
 )
 from ...core.service import TicketService
 from ...core.states import State
@@ -29,6 +30,92 @@ from ...core.workspace import Workspace
 from ...core.dedup import _extract_paths, annotate_child_body, find_inflight_overlap
 
 log = logging.getLogger("robotsix_mill.pass_runner")
+
+# SourceKind values that represent automated scanner/finding agents.
+# Drafts from these sources are grouped under rollup epics so the
+# board shows one card per category instead of dozens of micro-tickets.
+_SCANNER_SOURCES: frozenset[SourceKind] = frozenset(
+    {
+        SourceKind.AUDIT,
+        SourceKind.SURVEY,
+        SourceKind.AGENT,
+        SourceKind.HEALTH,
+        SourceKind.TEST_GAP,
+        SourceKind.AGENT_CHECK,
+        SourceKind.BC_CHECK,
+        SourceKind.COMPLETENESS_CHECK,
+        SourceKind.COPY_PASTE,
+        SourceKind.FORGE_PARITY,
+        SourceKind.TRACE_HEALTH,
+        SourceKind.TRACE_REVIEW,
+        SourceKind.MODULE_CURATOR,
+        SourceKind.MODULE_SIZE,
+        SourceKind.DOCSTRING_COVERAGE,
+        SourceKind.MYPY_BASELINE,
+        SourceKind.META,
+        SourceKind.RUN_HEALTH,
+        SourceKind.CONFIG_STANDARD,
+    }
+)
+
+_ROLLUP_EPIC_TITLE_PREFIX = "Rollup: "
+
+
+def _find_or_create_scanner_epic(
+    service: TicketService,
+    board_id: str,
+    source_label: SourceKind,
+    settings: Settings,
+) -> str:
+    """Find or create an EPIC_OPEN rollup for scanner findings from
+    *source_label* on *board_id*.
+
+    Returns the ticket ID of the rollup epic.  If an existing epic
+    with the matching rollup title is found it is reused; otherwise a
+    new epic is created.
+    """
+    rollup_title = f"{_ROLLUP_EPIC_TITLE_PREFIX}{source_label}"
+    try:
+        all_tickets = service.list()
+    except Exception:
+        log.debug(
+            "_find_or_create_scanner_epic: service.list() failed — "
+            "creating new epic (DB may not be initialised)"
+        )
+        # Create without checking — this is best-effort grouping.
+        epic = service.create(
+            title=rollup_title,
+            description=(
+                f"Rollup epic for {source_label} findings on {board_id}. "
+                f"Individual findings are filed as children of this epic."
+            ),
+            source=source_label,
+            kind=TicketKind.EPIC,
+            board_id=board_id,
+        )
+        return epic.id
+
+    for t in all_tickets:
+        if (
+            t.board_id == board_id
+            and t.title == rollup_title
+            and t.state == State.EPIC_OPEN
+            and t.kind == TicketKind.EPIC
+        ):
+            return t.id
+
+    epic = service.create(
+        title=rollup_title,
+        description=(
+            f"Rollup epic for {source_label} findings on {board_id}. "
+            f"Individual findings are filed as children of this epic."
+        ),
+        source=source_label,
+        kind=TicketKind.EPIC,
+        board_id=board_id,
+    )
+    return epic.id
+
 
 # Matches <!-- {label}-gap-id: foo_bar --> style markers in ticket descriptions.
 # Label is a non-whitespace run with the optional `bespoke:<name>` shape that
@@ -796,6 +883,24 @@ def run_agent_pass(
         # Append gap-id marker if available.
         if i < len(gap_ids) and gap_ids[i]:
             body += f"\n\n<!-- {source_label}-gap-id: {gap_ids[i]} -->"
+
+        # Resolve parent epic for scanner sources — group findings
+        # under one rollup epic per (source, board) so the board shows
+        # one card per category instead of dozens of micro-tickets.
+        parent_id: str | None = None
+        if source_label in _SCANNER_SOURCES:
+            try:
+                parent_id = _find_or_create_scanner_epic(
+                    target_service, target_board_id, source_label, settings
+                )
+            except Exception:
+                log.exception(
+                    "%s: failed to find/create scanner rollup epic for board %s",
+                    source_label,
+                    target_board_id,
+                )
+                # Best-effort: proceed without parent grouping.
+
         try:
             ticket = target_service.create(
                 title,
@@ -803,6 +908,7 @@ def run_agent_pass(
                 source=source_label,
                 origin_session=origin_session,
                 board_id=target_board_id,
+                parent_id=parent_id,
             )
             created.append({"id": ticket.id, "title": ticket.title})
             # Track which gap_ids were actually filed — used to

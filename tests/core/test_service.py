@@ -3116,6 +3116,7 @@ class TestDbMaintenancePass:
         and does not error."""
         summary = service.db_maintenance_pass()
         assert summary == {
+            "drafts_auto_closed": 0,
             "archived_purged": 0,
             "events_pruned": 0,
             "comments_pruned": 0,
@@ -3441,6 +3442,7 @@ class TestDbMaintenancePass:
 
         # Spot-check: the summary contract is unchanged.
         assert set(summary.keys()) == {
+            "drafts_auto_closed",
             "archived_purged",
             "events_pruned",
             "comments_pruned",

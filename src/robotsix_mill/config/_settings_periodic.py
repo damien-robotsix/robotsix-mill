@@ -825,3 +825,35 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between roadmap-sync passes.",
         json_schema_extra={"advanced": True},
     )
+
+    # --- board-hygiene (draft TTL auto-close + open-ticket cap) ---
+
+    # When True, the board-hygiene pass runs during the existing
+    # db-maintenance tick (``db_maintenance_periodic``).  When False,
+    # draft TTL auto-close is skipped entirely regardless of the TTL
+    # setting below.
+    board_hygiene_periodic: bool = Field(
+        default=True,
+        description="When true, run board-hygiene draft TTL auto-close during db-maintenance passes.",
+    )
+    # Maximum age (days) a draft ticket can remain untouched before it is
+    # auto-closed by the board-hygiene pass.  "Untouched" means no state
+    # transition, comment, or event has updated ``Ticket.updated_at``.
+    # Drafts that are children of an epic (``parent_id IS NOT NULL``) and
+    # epics themselves are skipped — only standalone drafts are closed.
+    # Set to 0 to disable (no drafts will be auto-closed regardless of age).
+    board_hygiene_draft_ttl_days: int = Field(
+        default=7,
+        ge=0,
+        description="Maximum age (days) of an untouched draft before auto-close. 0 = disabled.",
+    )
+    # Ceiling on total open (non-terminal) tickets per board.  When the
+    # count reaches this cap, machine-ingest requests (``POST /tickets/ingest``)
+    # append their findings to a rollup epic instead of creating new
+    # standalone tickets.  Human-created tickets (``POST /tickets``) are
+    # exempt.  Set to 0 to disable the cap (no limit).
+    board_hygiene_max_open_tickets: int = Field(
+        default=0,
+        ge=0,
+        description="Ceiling on total open tickets per board. 0 = disabled.",
+    )

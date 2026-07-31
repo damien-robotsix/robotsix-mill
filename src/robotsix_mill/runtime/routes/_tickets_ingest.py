@@ -5,6 +5,10 @@
 periodically).  It applies a cheap token-overlap prefilter followed
 by an LLM dedup check before creating the ticket, so repeated
 reports of the same incident do not create duplicate drafts.
+
+When the board's open-ticket count reaches the configured cap
+(``board_hygiene_max_open_tickets``), machine-ingest findings are
+appended to a rollup epic instead of creating new standalone tickets.
 """
 
 from __future__ import annotations
@@ -179,6 +183,66 @@ def ingest_ticket(
     return _create_ticket(body, board_id, board_svc, worker, settings)
 
 
+def _count_open_tickets(board_svc: TicketService, board_id: str) -> int:
+    """Count non-terminal tickets on *board_id*.
+
+    Terminal states: CLOSED, DONE, ANSWERED, EPIC_CLOSED, ERRORED.
+    """
+    all_tickets = board_svc.list()
+    return sum(
+        1
+        for t in all_tickets
+        if t.board_id == board_id
+        and t.state
+        not in {
+            State.CLOSED,
+            State.DONE,
+            State.ANSWERED,
+            State.EPIC_CLOSED,
+            State.ERRORED,
+        }
+    )
+
+
+_ROLLUP_TITLE_PREFIX = "Rollup: "
+
+
+def _find_or_create_rollup_epic(
+    board_svc: TicketService,
+    board_id: str,
+    source_tag: str,
+) -> str:
+    """Find or create an epic that rolls up findings for *source_tag*.
+
+    Returns the ticket ID of the rollup epic.  If a matching epic
+    already exists on *board_id* it is reused; otherwise a new
+    EPIC_OPEN ticket is created.
+    """
+    rollup_title = f"{_ROLLUP_TITLE_PREFIX}{source_tag}"
+    all_tickets = board_svc.list()
+    for t in all_tickets:
+        if (
+            t.board_id == board_id
+            and t.title == rollup_title
+            and t.state == State.EPIC_OPEN
+            and t.kind == TicketKind.EPIC
+        ):
+            return t.id
+    # No existing rollup — create one.
+    epic = board_svc.create(
+        title=rollup_title,
+        description=(
+            f"Rollup epic for findings from ``{source_tag}``. "
+            f"Individual findings are appended as history notes when "
+            f"the board is at the open-ticket cap."
+        ),
+        source=source_tag,
+        kind=TicketKind.EPIC,
+        board_id=board_id,
+    )
+    return epic.id
+
+
 def _create_ticket(
     body: TicketIngest,
     board_id: str,
@@ -188,7 +252,29 @@ def _create_ticket(
 ) -> JSONResponse:
     """Create a new draft ticket and enqueue it.  Shared between the
     dedup-miss path and the fail-open path.
+
+    When the board's open-ticket count has reached the configured cap
+    (``board_hygiene_max_open_tickets``), the finding is appended as a
+    history note to a rollup epic instead of creating a new standalone
+    ticket.
     """
+    max_open = settings.board_hygiene_max_open_tickets
+    if max_open > 0:
+        open_count = _count_open_tickets(board_svc, board_id)
+        if open_count >= max_open:
+            rollup_id = _find_or_create_rollup_epic(
+                board_svc, board_id, body.source_tag
+            )
+            note = (
+                f"Finding deferred (open-ticket cap {max_open} reached): "
+                f"**{body.title}**\n\n{body.body}"
+            )
+            board_svc.add_history_note(rollup_id, note)
+            return JSONResponse(
+                status_code=200,
+                content=IngestResult(ticket_id=rollup_id, deduped=False).model_dump(),
+            )
+
     ticket = board_svc.create(
         title=body.title,
         description=body.body,

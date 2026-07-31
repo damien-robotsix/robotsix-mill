@@ -755,7 +755,7 @@ def test_test_file_absent_creates_ticket(tmp_path, monkeypatch):
     # Ticket IS created.
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -788,7 +788,7 @@ def test_parse_failure_falls_through(tmp_path, monkeypatch):
     # Ticket IS created (conservative pass-through).
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -828,7 +828,7 @@ def test_repo_dir_none_backward_compat(tmp_path, monkeypatch):
     # Ticket created despite existing test file because repo_dir is None.
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -867,7 +867,7 @@ def test_non_test_gap_source_never_gated(tmp_path, monkeypatch):
     # Ticket IS created — guard only fires for TEST_GAP.
     assert len(result.drafts_created) == 1
     tickets = service.list()
-    assert len(tickets) == 1
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -1833,7 +1833,7 @@ def test_max_drafts_clips_excess_titles(tmp_path, monkeypatch):
 
     assert len(result.drafts_created) == 2
     tickets = service.list()
-    assert len(tickets) == 2
+    assert len(tickets) == 3  # 2 drafts + 1 rollup EPIC
 
     db.reset_engine()
 
@@ -1865,7 +1865,7 @@ def test_max_drafts_gte_titles_no_clipping(tmp_path, monkeypatch):
 
     assert len(result.drafts_created) == 3
     tickets = service.list()
-    assert len(tickets) == 3
+    assert len(tickets) == 4  # 3 drafts + 1 rollup EPIC
 
     db.reset_engine()
 
