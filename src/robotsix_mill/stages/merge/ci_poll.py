@@ -624,6 +624,35 @@ class CIPollMixin(_MergeStageBase):
                     )
                 # Forge rejected the merge.
                 reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
+                # If the branch is merely out of date with the target (CI green,
+                # no conflict), try a server-side update-branch and retry instead
+                # of bouncing to human approval.
+                if pr.get("mergeable_state") == "behind":
+                    log.info(
+                        "%s: merge rejected (%s) but branch is behind target — "
+                        "attempting update-branch",
+                        ticket.id,
+                        result.get("reason", "unknown"),
+                    )
+                    self._maybe_comment(
+                        ticket,
+                        ctx,
+                        f"Auto-merge rejected: {result.get('reason', 'unknown')}. "
+                        "Branch is behind target; attempting update-branch API.",
+                    )
+                    update_result = forge.update_branch(source_branch=branch)
+                    if update_result.get("updated"):
+                        self._maybe_comment(
+                            ticket,
+                            ctx,
+                            "Branch auto-updated via update-branch API. "
+                            "Waiting for CI to re-run before retrying auto-merge.",
+                        )
+                        return Outcome(State.WAITING_AUTO_MERGE)
+                    reason_text = (
+                        f"update-branch failed after merge rejection: "
+                        f"{update_result.get('reason', 'unknown')}"
+                    )
                 self._maybe_comment(ticket, ctx, reason_text)
                 log.warning(
                     "%s: auto-merge failed: %s — falling back to human",
@@ -637,18 +666,25 @@ class CIPollMixin(_MergeStageBase):
                 return Outcome(State.HUMAN_MR_APPROVAL)
 
         if conclusion == "success" and pr.get("mergeable_state") == "behind":
-            # Green CI on a stale head — the PR cannot merge until the
-            # branch is caught up. Silent fallback to IMPLEMENT_COMPLETE
-            # (mirroring the conflict fallback above) so the gate check
-            # dispatches the rebase agent.
+            # Green CI on a stale head — try the server-side update-branch
+            # API to bring the PR head current without a full local rebase.
             log.info(
-                "%s: CI green but branch behind target — falling back to "
-                "IMPLEMENT_COMPLETE",
+                "%s: CI green but branch behind target — attempting update-branch",
                 ticket.id,
             )
+            update_result = forge.update_branch(source_branch=branch)
+            if update_result.get("updated"):
+                self._maybe_comment(
+                    ticket,
+                    ctx,
+                    "Branch was behind target; auto-updated via update-branch API. "
+                    "Waiting for CI to re-run before retrying auto-merge.",
+                )
+                return Outcome(State.WAITING_AUTO_MERGE)
             return Outcome(
                 State.IMPLEMENT_COMPLETE,
-                "branch is behind the target; gates no longer pass",
+                f"branch behind target; update-branch failed: "
+                f"{update_result.get('reason', 'unknown')}",
             )
 
         # pending, None, or a premature success (mergeable_state not yet
@@ -855,6 +891,35 @@ class CIPollMixin(_MergeStageBase):
                 )
             # Forge rejected the merge.
             reason_text = f"forge merge failed: {result.get('reason', 'unknown')}"
+            # If the branch is merely out of date with the target (CI green,
+            # no conflict), try a server-side update-branch and retry instead
+            # of bouncing to human approval.
+            if pr.get("mergeable_state") == "behind":
+                log.info(
+                    "%s: merge rejected (%s) but branch is behind target — "
+                    "attempting update-branch",
+                    ticket.id,
+                    result.get("reason", "unknown"),
+                )
+                self._maybe_comment(
+                    ticket,
+                    ctx,
+                    f"Auto-merge rejected: {result.get('reason', 'unknown')}. "
+                    "Branch is behind target; attempting update-branch API.",
+                )
+                update_result = forge.update_branch(source_branch=branch)
+                if update_result.get("updated"):
+                    self._maybe_comment(
+                        ticket,
+                        ctx,
+                        "Branch auto-updated via update-branch API. "
+                        "Waiting for CI to re-run before retrying auto-merge.",
+                    )
+                    return Outcome(State.WAITING_AUTO_MERGE)
+                reason_text = (
+                    f"update-branch failed after merge rejection: "
+                    f"{update_result.get('reason', 'unknown')}"
+                )
             self._maybe_comment(ticket, ctx, reason_text)
             log.warning(
                 "%s: auto-merge failed: %s — falling back to human",
@@ -864,20 +929,32 @@ class CIPollMixin(_MergeStageBase):
             return Outcome(State.HUMAN_MR_APPROVAL, reason_text)
 
         if conclusion == "success" and pr.get("mergeable_state") == "behind":
-            # Green CI on a stale head — auto-merge can never fire under a
-            # strict up-to-date policy until the branch is caught up. Fall
-            # back to IMPLEMENT_COMPLETE so the gate check dispatches the
-            # rebase agent (WAITING_AUTO_MERGE → REBASING is not a legal
-            # transition).
+            # Green CI on a stale head — try the server-side update-branch
+            # API to bring the PR head current without a full local rebase.
             log.info(
-                "%s: CI green but branch behind target while waiting for "
-                "auto-merge → IMPLEMENT_COMPLETE",
+                "%s: CI green but branch behind target — attempting update-branch",
                 ticket.id,
+            )
+            update_result = forge.update_branch(source_branch=branch)
+            if update_result.get("updated"):
+                self._maybe_comment(
+                    ticket,
+                    ctx,
+                    "Branch was behind target; auto-updated via update-branch API. "
+                    "Waiting for CI to re-run before retrying auto-merge.",
+                )
+                return Outcome(State.WAITING_AUTO_MERGE)
+            self._maybe_comment(
+                ticket,
+                ctx,
+                f"Branch is behind target but update-branch failed: "
+                f"{update_result.get('reason', 'unknown')} — falling back to "
+                f"IMPLEMENT_COMPLETE",
             )
             return Outcome(
                 State.IMPLEMENT_COMPLETE,
-                "CI green but branch is behind the target; rebase needed "
-                "before auto-merge",
+                f"branch behind target; update-branch failed: "
+                f"{update_result.get('reason', 'unknown')}",
             )
 
         # Pending or None — keep waiting.
