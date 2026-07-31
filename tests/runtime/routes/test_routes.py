@@ -65,6 +65,57 @@ def test_get_history_404(client):
     assert r.status_code == 404
 
 
+def test_get_history_with_offset(client, service):
+    """GET /tickets/{id}/history?offset=N skips the first N events."""
+    t = service.create("Offset test")
+    for i in range(5):
+        service.transition(t.id, State.READY, note=f"event {i}")
+        service.transition(t.id, State.DRAFT, note=f"back to draft {i}")
+
+    full = client.get(f"/tickets/{t.id}/history").json()
+    assert len(full) >= 6  # created + 5 transitions
+
+    r = client.get(f"/tickets/{t.id}/history", params={"offset": 2})
+    assert r.status_code == 200
+    offset_data = r.json()
+    assert len(offset_data) == len(full) - 2
+    # First event in the offset result should be the third event overall.
+    assert offset_data[0]["id"] == full[2]["id"]
+
+
+def test_get_history_with_limit(client, service):
+    """GET /tickets/{id}/history?limit=N caps the result to N events."""
+    t = service.create("Limit test")
+    for i in range(5):
+        service.transition(t.id, State.READY, note=f"event {i}")
+        service.transition(t.id, State.DRAFT, note=f"back to draft {i}")
+
+    r = client.get(f"/tickets/{t.id}/history", params={"limit": 3})
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 3
+
+
+def test_get_history_with_offset_and_limit(client, service):
+    """GET /tickets/{id}/history?offset=N&limit=M paginates correctly."""
+    t = service.create("Page test")
+    for i in range(5):
+        service.transition(t.id, State.READY, note=f"event {i}")
+        service.transition(t.id, State.DRAFT, note=f"back to draft {i}")
+
+    # Page 1: events 0-2 (offset=0, limit=3)
+    page1 = client.get(f"/tickets/{t.id}/history", params={"offset": 0, "limit": 3}).json()
+    # Page 2: events 3-5 (offset=3, limit=3)
+    page2 = client.get(f"/tickets/{t.id}/history", params={"offset": 3, "limit": 3}).json()
+    # Page 3: remainder (offset=6, limit=3)
+    page3 = client.get(f"/tickets/{t.id}/history", params={"offset": 6, "limit": 3}).json()
+
+    all_page_ids = [e["id"] for e in page1 + page2 + page3]
+    full_ids = [e["id"] for e in client.get(f"/tickets/{t.id}/history").json()]
+    assert all_page_ids == full_ids
+
+
 # -- GET /tickets/{id}/comments -----------------------------------------
 
 

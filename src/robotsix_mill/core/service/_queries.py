@@ -196,15 +196,27 @@ class _QueryMixin(_ServiceBase):
         if default:
             ticket.board_id = default
 
-    def history(self, ticket_id: str) -> list[TicketEvent]:
-        """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``."""
+    def history(
+        self,
+        ticket_id: str,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[TicketEvent]:
+        """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``.
+
+        *offset* and *limit* control pagination.  When *limit* is ``None``
+        (the default) every event is returned.
+        """
         board = self._board_for(ticket_id)
         with db.session(self.settings, board) as s:
             stmt = (
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
                 .order_by(TicketEvent.at)
+                .offset(offset)
             )
+            if limit is not None:
+                stmt = stmt.limit(limit)
             return list(s.exec(stmt).all())
 
     def recent_proposals_for(

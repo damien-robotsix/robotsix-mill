@@ -1690,7 +1690,7 @@ class _FakeEpicService:
     def get(self, ticket_id):
         return self.tickets.get(ticket_id)
 
-    def history(self, ticket_id):
+    def history(self, ticket_id, offset=0, limit=None):
         return self.histories.get(ticket_id, [])
 
     def workspace(self, obj):
