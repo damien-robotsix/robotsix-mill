@@ -1940,20 +1940,19 @@ def test_no_change_needed_on_resume_still_routes_to_done(
     assert "5678" in out.note
 
 
-def test_resume_with_ahead_branch_and_clean_tree_routes_to_done(
+def test_resume_with_ahead_branch_and_clean_tree_proceeds_to_review(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """Regression (ticket 3e44 / #2552 follow-up): when the workspace
-    branch already carries prior commits (from earlier implement passes)
-    and the current resume pass produces zero new working-tree changes,
-    the ticket must route to DONE — not CODE_REVIEW (which would
-    re-review the same prior work and loop back, burning spawn budget).
+    """When the workspace branch already carries prior commits (from
+    earlier implement passes) and the current resume pass produces zero
+    new working-tree changes, the ticket must proceed to CODE_REVIEW →
+    deliver instead of short-circuiting to DONE.  Routing to DONE strands
+    the WIP commits — they never reach deliver, no PR is opened, and the
+    gap regrows.  Proceeding to CODE_REVIEW lets the deliver stage detect
+    the ahead-of-target commits, push, and create the PR.
 
-    The original zero-edit detection in :meth:`_detect_no_change_contradiction`
-    was gated on ``_any_repo_has_changes`` returning False, which bundles
-    both working-tree cleanliness AND branch-not-ahead.  On a resume the
-    branch IS ahead (prior commits), so the guard never fired and the
-    ticket fell through to CODE_REVIEW → re-implement → spawn-limit BLOCKED.
+    A convergence backstop (``implement_cycles``) guards against a true
+    review→implement loop.
     """
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
@@ -1998,9 +1997,7 @@ def test_resume_with_ahead_branch_and_clean_tree_routes_to_done(
 
     monkeypatch.setattr(coding, "run_implement_agent", _run_resume)
     out2 = ImplementStage().run(t, ctx)
-    assert out2.next_state is State.DONE
-    assert "already satisfied" in out2.note.lower()
-    assert "clean working tree" in out2.note.lower()
+    assert out2.next_state is State.CODE_REVIEW
 
 
 # --- unit tests for _run_scope_guardrail --------------------------------
