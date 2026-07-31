@@ -27,7 +27,6 @@ _TRIGGER_STATES: set[State] = {
     State.HUMAN_MR_APPROVAL,
     State.BLOCKED,
     State.ERRORED,
-    State.AWAITING_USER_REPLY,
 }
 
 
