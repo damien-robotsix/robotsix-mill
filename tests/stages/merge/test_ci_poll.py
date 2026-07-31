@@ -10,6 +10,7 @@ Covers:
 
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
@@ -1358,3 +1359,99 @@ def test_tracker_ticket_merged_pr_blocks(tmp_path, monkeypatch):
     outcome = MergeStage()._poll_implement_complete(t, ctx)
     assert outcome.next_state is State.BLOCKED
     assert "merged" in outcome.note.lower()
+
+
+# === Pre-existing target-branch CI debt: ci_fix exemption ==================
+
+
+def _main_debt(monkeypatch):
+    """Patch the forge so the PR's only failing workflow also fails on main.
+
+    That is exactly the shape ``_main_branch_ci_debt`` treats as
+    pre-existing debt: every workflow failing on the PR head is failing on
+    the merge target too.
+    """
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha=None, branch=None: [
+            {
+                "name": "CI",
+                "workflow_id": 1,
+                "conclusion": "failure",
+                "created_at": "2026-01-01T00:00:00Z",
+                # A push run only counts as a PR check when head_branch is
+                # set (a tag push is a release, not a check).
+                "event": "pull_request" if head_sha else "push",
+                "head_branch": "main",
+            }
+        ],
+    )
+
+
+def _debt_ctx(tmp_path, monkeypatch):
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_merge_main_debt_detection_enabled=True)
+    _ci_failing_mergeable(monkeypatch, mergeable_state="clean")
+    # The debt check keys off the PR head sha; without it the helper
+    # short-circuits to "no debt" and the guard never fires.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "sha": "deadbeef",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        },
+    )
+    _main_debt(monkeypatch)
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+    return ctx
+
+
+def _implement_complete_with_source(ctx, source):
+    t = ctx.service.create("x", "y", source=source)
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    return ctx.service.get(t.id)
+
+
+def test_main_debt_blocks_an_ordinary_ticket(tmp_path, monkeypatch):
+    """A normal ticket whose CI failure is pure main debt is still BLOCKED.
+
+    Pins the guard itself so the ci_fix exemption below can't be mistaken
+    for the detection having simply stopped working.
+    """
+    ctx = _debt_ctx(tmp_path, monkeypatch)
+    t = _implement_complete_with_source(ctx, SourceKind.USER)
+
+    out = MergeStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert "pre-existing target-branch debt" in out.note
+
+
+def test_main_debt_does_not_block_a_ci_fix_ticket(tmp_path, monkeypatch):
+    """A ci_fix dependency ticket is exempt from the main-debt guard.
+
+    The ticket exists to repair that exact debt, so blocking it on the
+    debt deadlocks the board: the repair for red main is refused because
+    main is red. It must fall through to the bounded auto-fix loop.
+    """
+    ctx = _debt_ctx(tmp_path, monkeypatch)
+    t = _implement_complete_with_source(ctx, SourceKind.CI_FIX_DEPENDENCY)
+
+    out = MergeStage().run(t, ctx)
+
+    assert out.next_state is not State.BLOCKED
+    assert out.next_state is State.FIXING_CI
