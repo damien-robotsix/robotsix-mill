@@ -18,6 +18,7 @@ from robotsix_mill._resources import (
 )
 
 from ..._resources import agent_definitions_dir
+from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...agents.yaml_loader import load_agent_definition
 from ...config import effective_target_branch
 from ...core.models import Comment, Ticket, TicketKind
@@ -121,6 +122,32 @@ def run_preflight_checks(
                     tail = summary_text[-500:].strip()
                     if tail:
                         note += f"\n\nLast attempt summary tail:\n{tail}"
+            # Emit a structured diagnostic event so agents
+            # (including the periodic diagnostic agent) can
+            # discover the exhaustion programmatically and
+            # decide whether to request a counter reset or
+            # file a deeper bug ticket.
+            try:
+                board_id = ctx.memory_board_id(ticket)
+                normalized_key = (
+                    "spawn_limit_exhausted:"
+                    + hashlib.sha256(
+                        f"{ticket.id}:{spawn_count}:{spawn_limit}".encode()
+                    ).hexdigest()[:16]
+                )
+                emit_diagnostic_event(
+                    ctx.settings,
+                    board_id,
+                    category="SPAWN_LIMIT_EXHAUSTED",
+                    ticket_id=ticket.id,
+                    reason=note,
+                    normalized_key=normalized_key,
+                )
+            except Exception:
+                log.exception(
+                    "%s: failed to emit SPAWN_LIMIT_EXHAUSTED event",
+                    ticket.id,
+                )
             # Discard any stale conversation state so a
             # resume-blocked restart begins a fresh agent
             # conversation instead of replaying the prior
