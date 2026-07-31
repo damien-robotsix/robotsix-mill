@@ -3540,3 +3540,44 @@ def test_purge_archived_survives_retired_state_in_history(service, settings):
 
     remaining = [t for t in service.list() if t.state is State.CLOSED]
     assert len(remaining) <= 1
+
+
+# --- implement spawn budget resets on productive work --------------------
+
+
+def _spawn_counter(service, ticket):
+    return service.workspace(ticket).artifacts_dir / "implement_spawn_count"
+
+
+def test_spawn_counter_cleared_when_implement_delivers(service):
+    """Leaving READY for a later stage must return the spawn budget.
+
+    The counter caps implement invocations so a BLOCKED→READY→BLOCKED
+    loop can't burn unbounded quota, but nothing reset it on success —
+    it was monotonic for the ticket's whole life. A ticket therefore got
+    three implement passes EVER, and a fourth (routine after review
+    feedback) dead-ended it at "spawn limit reached (3/3)". That became
+    the largest BLOCKED class on the live board.
+    """
+    t = service.create("delivers", "x")
+    service.transition(t.id, State.READY)
+    _spawn_counter(service, t).write_text("3", encoding="utf-8")
+
+    service.transition(t.id, State.CODE_REVIEW)
+
+    assert not _spawn_counter(service, t).exists()
+
+
+def test_spawn_counter_survives_an_unproductive_block(service):
+    """READY → BLOCKED must NOT refund the budget.
+
+    Otherwise the cap could never fire and the loop protection it exists
+    to provide would be gone.
+    """
+    t = service.create("goes nowhere", "x")
+    service.transition(t.id, State.READY)
+    _spawn_counter(service, t).write_text("3", encoding="utf-8")
+
+    service.transition(t.id, State.BLOCKED)
+
+    assert _spawn_counter(service, t).read_text(encoding="utf-8") == "3"

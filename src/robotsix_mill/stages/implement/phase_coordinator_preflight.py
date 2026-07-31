@@ -103,8 +103,8 @@ def run_preflight_checks(
                 f"implement spawn limit reached "
                 f"({spawn_count}/{spawn_limit}) — "
                 "escalating to BLOCKED for human inspection.  "
-                "Delete artifacts/implement_spawn_count in the "
-                "workspace to reset."
+                "Resume-blocked to retry: it clears the counter "
+                "automatically (no workspace surgery needed)."
             )
             # Append the tail of the last implement summary so the
             # operator sees the genuine failure cause instead of only
