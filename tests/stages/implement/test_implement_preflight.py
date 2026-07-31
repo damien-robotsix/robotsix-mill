@@ -1377,6 +1377,101 @@ def test_stuck_cumulative_tool_calls_aborts_loop(ctx_factory, tmp_path, monkeypa
     assert call_count[0] <= 3
 
 
+def test_branch_ahead_with_no_edits_advances_to_deliverable(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Regression: when the branch already carries committed
+    implementation work ahead of origin/main and the implement
+    agent produces no new file edits (only tool calls like explore
+    or read_file), the stuck-loop detector must advance to
+    DELIVERABLE instead of looping until the spawn limit trips."""
+    from robotsix_mill.vcs import git_ops
+
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="false",  # gate always fails → retry path
+        max_fix_iterations="5",
+    )
+    agent_calls = [0]
+
+    def _run(*, repo_dir, **_kwargs):
+        agent_calls[0] += 1
+        if agent_calls[0] == 1:
+            # First pass: commit implementation work to the branch.
+            (Path(repo_dir) / "feature.txt").write_text("done")
+            git_ops.commit_all(repo_dir, "implement feature")
+            # Agent explored but made tool calls in its message history.
+            import json
+
+            msgs = json.dumps(
+                [
+                    {
+                        "parts": [
+                            {
+                                "part_kind": "tool-call",
+                                "tool_name": "explore",
+                                "args": {},
+                                "tool_call_id": "call_ex_1",
+                            },
+                            {
+                                "part_kind": "tool-call",
+                                "tool_name": "read_file",
+                                "args": {},
+                                "tool_call_id": "call_rf_1",
+                            },
+                        ]
+                    }
+                ]
+            ).encode()
+            return ("committed feature implementation", [], "", None, msgs, False, "")
+        else:
+            # Subsequent pass (retry): agent explores but makes no edits.
+            import json
+
+            msgs = json.dumps(
+                [
+                    {
+                        "parts": [
+                            {
+                                "part_kind": "tool-call",
+                                "tool_name": "explore",
+                                "args": {},
+                                "tool_call_id": f"call_ex_{agent_calls[0]}",
+                            },
+                        ]
+                    }
+                ]
+            ).encode()
+            return (
+                f"explored pass {agent_calls[0]}",
+                [],
+                "",
+                None,
+                msgs,
+                False,
+                "",
+            )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+    # Disable the prerequisite gate so we don't need file_map setup.
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+
+    # Must advance to DELIVERABLE — not block on stuck detection.
+    assert out.next_state is State.DELIVERABLE, (
+        f"Expected DELIVERABLE, got {out.next_state}: {out.note}"
+    )
+    assert "no new file changes" in out.note.lower()
+    # The agent should have been invoked at most 2 times (initial +
+    # one retry before the committed-ahead detector fires).
+    assert agent_calls[0] <= 2
+
+
 # --- stale re-spawn guard (spec-fingerprint) ----------------------------
 
 
