@@ -7,7 +7,7 @@ import shutil
 from datetime import datetime, timezone
 
 from sqlalchemy import delete
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from ..db import retry_on_db_full
 from ..models import (
@@ -27,7 +27,7 @@ from ._helpers import (
 log = logging.getLogger("robotsix_mill.service")
 
 
-def _bulk_delete_ticket_rows(session: object, ticket_id: str) -> None:
+def _bulk_delete_ticket_rows(session: Session, ticket_id: str) -> None:
     """Delete every :class:`TicketEvent` and :class:`Comment` row for *ticket_id*.
 
     Issues two bulk ``DELETE`` statements instead of loading the rows as
@@ -39,8 +39,8 @@ def _bulk_delete_ticket_rows(session: object, ticket_id: str) -> None:
     :class:`State`.  A row that is about to be deleted never needs to be
     decoded.
     """
-    session.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
-    session.exec(delete(Comment).where(Comment.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
+    session.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[arg-type]
+    session.exec(delete(Comment).where(Comment.ticket_id == ticket_id))  # type: ignore[arg-type]
 
 
 class _DeleteMixin(_ServiceBase):
@@ -162,7 +162,7 @@ class _DeleteMixin(_ServiceBase):
             # the genesis of a fresh hash chain (prev_hash is None) ---
             # Bulk DELETE — see _bulk_delete_ticket_rows: loading these
             # rows would decode a ``state`` retired from State and raise.
-            s.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
+            s.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[arg-type]
             s.flush()
 
             # --- delete the local workspace clone/branch ---

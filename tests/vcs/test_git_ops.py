@@ -2436,3 +2436,101 @@ def test_timeout_error_redacts_the_token(tmp_path, monkeypatch):
 
     assert "sekrit" not in str(ei.value.cmd)
     assert "***" in str(ei.value.cmd)
+
+
+# --- rebase integrity: "already upstream" is not a silent drop -----------
+
+
+def _init_repo_with_target(tmp_path):
+    """Build a repo with an origin/main ref and a feature branch on top."""
+    repo = tmp_path / "r"
+    repo.mkdir()
+
+    def run(*a):
+        return subprocess.run(
+            ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+        )
+
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@t")
+    run("config", "user.name", "t")
+    (repo / "Dockerfile").write_text("FROM base\n")
+    (repo / "keep.py").write_text("x = 0\n")
+    run("add", "-A")
+    run("commit", "-qm", "base")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    return repo, run
+
+
+def test_change_already_landed_upstream_is_not_a_drop(tmp_path):
+    """A sibling PR landing the same change first must not block this one.
+
+    The rebase correctly collapses the now-redundant delta to nothing.
+    Live, this dead-ended ten tickets on the identical `Dockerfile`
+    immediately after the canonical fix for it merged from another PR.
+    """
+    repo, run = _init_repo_with_target(tmp_path)
+    # What THIS branch wanted to deliver for Dockerfile.
+    (repo / "Dockerfile").write_text("FROM base:1.2.3\n")
+    run("add", "-A")
+    run("commit", "-qm", "pin base image")
+    pre_files = ["Dockerfile"]
+    pre_blobs = git_ops.file_blobs(repo, pre_files)
+
+    # A sibling PR lands byte-identical content on main, so after the
+    # rebase this branch carries no Dockerfile delta any more.
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    (repo / "keep.py").write_text("x = 1\n")
+    run("add", "-A")
+    run("commit", "-qm", "the branch's real work")
+
+    ok, dropped = git_ops.check_rebase_diff_integrity(
+        repo, "main", pre_files, pre_blobs
+    )
+
+    assert ok is True
+    assert dropped == []
+
+
+def test_discarded_change_is_still_reported_as_a_drop(tmp_path):
+    """A rebase that threw the branch's work away must still block.
+
+    This is the bug the guard exists to catch, and it produces the same
+    "HEAD agrees with target" end state as the healthy case above — only
+    the pre-rebase blob distinguishes them. Without this the exemption
+    would silently swallow real data loss.
+    """
+    repo, run = _init_repo_with_target(tmp_path)
+    # The branch's intended Dockerfile content, captured pre-rebase.
+    (repo / "Dockerfile").write_text("FROM base:1.2.3\n")
+    run("add", "-A")
+    run("commit", "-qm", "pin base image")
+    pre_files = ["Dockerfile"]
+    pre_blobs = git_ops.file_blobs(repo, pre_files)
+
+    # The rebase agent resolves a conflict by discarding that change:
+    # HEAD reverts to main's ORIGINAL Dockerfile.
+    run("reset", "-q", "--hard", "origin/main")
+    (repo / "keep.py").write_text("x = 1\n")
+    run("add", "-A")
+    run("commit", "-qm", "only the other file survived")
+
+    ok, dropped = git_ops.check_rebase_diff_integrity(
+        repo, "main", pre_files, pre_blobs
+    )
+
+    assert ok is False
+    assert dropped == ["Dockerfile"]
+
+
+def test_without_blob_snapshot_behaviour_is_unchanged(tmp_path):
+    """Omitting the snapshot keeps the original conservative reporting."""
+    repo, run = _init_repo_with_target(tmp_path)
+    (repo / "keep.py").write_text("x = 1\n")
+    run("add", "-A")
+    run("commit", "-qm", "other")
+
+    ok, dropped = git_ops.check_rebase_diff_integrity(repo, "main", ["Dockerfile"])
+
+    assert ok is False
+    assert dropped == ["Dockerfile"]

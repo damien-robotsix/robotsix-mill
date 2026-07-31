@@ -1067,10 +1067,29 @@ def changed_source_files(
     return [line for line in out.split("\n") if line] if out else []
 
 
+def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str]:
+    """Map each of *paths* to its blob object id at *ref*.
+
+    Paths missing at *ref* are omitted. Blob ids identify content
+    exactly, so comparing them answers "is this the same file content?"
+    without reading or transferring the content itself.
+    """
+    blobs: dict[str, str] = {}
+    for path in paths:
+        try:
+            sha = _git(repo, "rev-parse", f"{ref}:{path}")
+        except subprocess.CalledProcessError:
+            continue
+        if sha:
+            blobs[path] = sha
+    return blobs
+
+
 def check_rebase_diff_integrity(
     repo: Path,
     target_branch: str,
     pre_rebase_files: list[str],
+    pre_rebase_blobs: dict[str, str] | None = None,
 ) -> tuple[bool, list[str]]:
     """Check that every source file from the pre-rebase diff survived the rebase.
 
@@ -1078,6 +1097,20 @@ def check_rebase_diff_integrity(
     ``changelog.d/`` entries — changelog fragments are expected to
     change / be removed during rebase cycles and are not implement-stage
     content whose loss signals a silent drop.
+
+    A file can also leave the post-rebase diff for an entirely healthy
+    reason: another PR landed the *same* change first, so the rebase
+    correctly collapses this branch's now-redundant delta to nothing.
+    Reporting that as a silent drop dead-ends a working ticket — live,
+    ten tickets blocked on the identical ``Dockerfile`` right after the
+    canonical fix for it merged from a sibling PR.
+
+    Telling the two apart needs the branch's *pre-rebase* content, since
+    both cases leave HEAD agreeing with the target afterwards. Pass
+    *pre_rebase_blobs* (from :func:`file_blobs` before the rebase): when
+    the target now carries exactly the blob the branch had, the work is
+    upstream and the file is excused. Without it the check keeps its
+    original conservative behaviour and reports every missing file.
     """
     post_files = changed_source_files(repo, target_branch)
     if not pre_rebase_files or not post_files:
@@ -1090,7 +1123,19 @@ def check_rebase_diff_integrity(
         if not any(f == p or f.startswith(p) for p in excluded_prefixes)
     }
     post_set = set(post_files)
-    dropped = sorted(pre_set - post_set)
+    candidates = sorted(pre_set - post_set)
+    if not pre_rebase_blobs:
+        return (len(candidates) == 0, candidates)
+
+    target_blobs = file_blobs(repo, candidates, ref=f"origin/{target_branch}")
+    dropped = [
+        f
+        for f in candidates
+        # Excused only when the target's content for this path is byte-for-byte
+        # what the branch was trying to deliver. A discarded change leaves the
+        # target on its ORIGINAL content, which never matches.
+        if not (f in pre_rebase_blobs and target_blobs.get(f) == pre_rebase_blobs[f])
+    ]
     return (len(dropped) == 0, dropped)
 
 

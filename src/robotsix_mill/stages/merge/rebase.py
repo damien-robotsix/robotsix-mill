@@ -102,7 +102,7 @@ class RebaseMixin(_MergeStageBase):
 
         if isinstance(run, Outcome):
             return run  # e.g. BLOCKED on a diverged PR branch
-        ok, detail, pre_rebase_files = run
+        ok, detail, pre_rebase_files, pre_rebase_blobs = run
         if ok:
             return self._handle_rebase_success(
                 ticket,
@@ -113,6 +113,7 @@ class RebaseMixin(_MergeStageBase):
                 attempt,
                 max_attempts,
                 pre_rebase_files,
+                pre_rebase_blobs,
             )
         return self._handle_rebase_failure(
             ticket, repo_dir, counter_path, attempt, max_attempts, detail
@@ -151,7 +152,7 @@ class RebaseMixin(_MergeStageBase):
         branch: str,
         target: str,
         attempt: int,
-    ) -> tuple[bool, str, list[str]] | Outcome:
+    ) -> tuple[bool, str, list[str], dict[str, str]] | Outcome:
         """Invoke the rebase agent with bridged git tools.
 
         The agent now drives its own fetch + rebase + push via the
@@ -169,6 +170,7 @@ class RebaseMixin(_MergeStageBase):
         from robotsix_mill.stages import merge as _facade
 
         pre_rebase_files: list[str] = []
+        pre_rebase_blobs: dict[str, str] = {}
         try:
             # The merge stage is traced=False (poll-driven, normally no
             # LLM), so the worker does NOT open the ticket's root span.
@@ -208,6 +210,13 @@ class RebaseMixin(_MergeStageBase):
                 pre_rebase_files = _facade.git_ops.changed_source_files(
                     Path(repo_dir), target
                 )
+                # Also snapshot each file's blob id. After the rebase,
+                # HEAD agrees with the target both when the change was
+                # discarded AND when a sibling PR already landed it —
+                # only the pre-rebase content tells those apart.
+                pre_rebase_blobs = _facade.git_ops.file_blobs(
+                    Path(repo_dir), pre_rebase_files
+                )
 
                 # The agent now drives fetch + rebase + push via bridged
                 # git tools — pass the per-repo remote_url and token so
@@ -238,7 +247,7 @@ class RebaseMixin(_MergeStageBase):
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
             detail = f"rebase agent crashed: {e}"
-        return (ok, detail, pre_rebase_files)
+        return (ok, detail, pre_rebase_files, pre_rebase_blobs)
 
     def _handle_rebase_success(
         self,
@@ -250,6 +259,7 @@ class RebaseMixin(_MergeStageBase):
         attempt: int,
         max_attempts: int,
         pre_rebase_files: list[str] | None = None,
+        pre_rebase_blobs: dict[str, str] | None = None,
     ) -> Outcome:
         """Post-check after the agent-driven rebase+push.
 
@@ -288,7 +298,7 @@ class RebaseMixin(_MergeStageBase):
             # snapshot taken before the agent ran.
             if pre_rebase_files:
                 ok, dropped = _facade.git_ops.check_rebase_diff_integrity(
-                    Path(repo_dir), target, pre_rebase_files
+                    Path(repo_dir), target, pre_rebase_files, pre_rebase_blobs
                 )
                 if not ok:
                     shown = ", ".join(f"`{p}`" for p in dropped[:10])
