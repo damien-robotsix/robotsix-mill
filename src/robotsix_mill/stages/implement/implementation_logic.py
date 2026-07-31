@@ -369,8 +369,10 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             # agent's previous iterations already produced the diff),
             # routing to DONE silently strands that work in the
             # workspace — it never reaches deliver, no PR is opened.
-            # Treat that as a normal proceed instead of a no-change
-            # bypass; deliver will pick it up.
+            # The guard lives inside _detect_no_change_contradiction:
+            # the "resuming with clean working tree, branch ahead of
+            # target" path now returns None (proceed to deliver) instead
+            # of routing to DONE.
             # --- no-change contradiction detection ---
             # Two branches: (a) agent explicitly signalled no_change_needed,
             # (b) empty diff on a fresh run.  Both route through the same
@@ -871,29 +873,20 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                         "(empty diff after edit calls on resume-with-ahead)",
                     ),
                 )
-            resume_ahead_done_note = (
-                "already satisfied — no changes needed "
-                "(resuming with clean working tree, branch ahead of target)"
-            )
-            cls._finalize(
-                ctx,
-                ticket,
-                repo_dir,
-                branch,
-                f"{resume_ahead_done_note}\n\n{summary or 'Agent found no work to do.'}",
-                ok=True,
-                reference_files=ref_files,
-                extra_roots=extra_roots,
-            )
+            # Branch is ahead of target with a clean working tree on a
+            # resuming run — prior passes already committed the work.
+            # Instead of short-circuiting to DONE (which strands the
+            # WIP commits — they never reach deliver, no PR is opened),
+            # return None to let the normal flow proceed through
+            # _verify_repo_changes → CODE_REVIEW → deliver. The deliver
+            # stage will detect the ahead-of-target commits, push, and
+            # create the PR.
             log.info(
                 "%s: clean working tree on resuming run with branch ahead — "
-                "DONE (already satisfied)",
+                "proceeding to deliver (not DONE; WIP commits need to land)",
                 ticket.id,
             )
-            return _SinglePassResult(
-                next_action="return",
-                outcome=Outcome(State.DONE, resume_ahead_done_note),
-            )
+            return None
         return None
 
     @classmethod
