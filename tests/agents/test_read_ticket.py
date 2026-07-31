@@ -203,7 +203,8 @@ def test_no_write_paths_reachable(settings, monkeypatch):
                 return mock_ticket
             return None
 
-        def history(self, ticket_id, limit=None, offset=0, order="asc"):            called_methods.add("history")
+        def history(self, ticket_id, limit=None, offset=0, order="asc"):
+            called_methods.add("history")
             return []
 
         def list_comments(self, ticket_id):
