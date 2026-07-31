@@ -6,6 +6,7 @@ import logging
 import shutil
 from datetime import datetime, timezone
 
+from sqlalchemy import delete
 from sqlmodel import select
 
 from ..db import retry_on_db_full
@@ -26,6 +27,22 @@ from ._helpers import (
 log = logging.getLogger("robotsix_mill.service")
 
 
+def _bulk_delete_ticket_rows(session: object, ticket_id: str) -> None:
+    """Delete every :class:`TicketEvent` and :class:`Comment` row for *ticket_id*.
+
+    Issues two bulk ``DELETE`` statements instead of loading the rows as
+    ORM objects first.  Beyond being one statement per table rather than
+    a SELECT plus N deletes, this is what keeps deletion working on
+    history written by an older mill: materialising a ``TicketEvent``
+    decodes its ``state`` column through the strict SQLModel ``Enum``,
+    which raises ``KeyError`` for any value since retired from
+    :class:`State`.  A row that is about to be deleted never needs to be
+    decoded.
+    """
+    session.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
+    session.exec(delete(Comment).where(Comment.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
+
+
 class _DeleteMixin(_ServiceBase):
     """Hard-delete and redraft (re-create after delete)."""
 
@@ -43,14 +60,15 @@ class _DeleteMixin(_ServiceBase):
             ticket = s.get(Ticket, ticket_id)
             if ticket is None:
                 return False
-            for ev in s.exec(
-                select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
-            ).all():
-                s.delete(ev)
-            for c in s.exec(
-                select(Comment).where(Comment.ticket_id == ticket_id)
-            ).all():
-                s.delete(c)
+            # Bulk DELETE rather than loading each row as an ORM object.
+            # Materialising a TicketEvent decodes its ``state`` column
+            # through the strict SQLModel Enum, which raises KeyError on
+            # any value retired from ``State`` since the row was written
+            # (live: 200 legacy 'MAINTENANCE' rows across 5 boards made
+            # every archived-ticket purge explode). Rows being deleted
+            # never need decoding — and this is a single statement each
+            # instead of one SELECT plus N DELETEs.
+            _bulk_delete_ticket_rows(s, ticket_id)
             s.delete(ticket)
             s.commit()
         # Remove the workspace dir directly (don't construct Workspace —
@@ -142,10 +160,9 @@ class _DeleteMixin(_ServiceBase):
 
             # --- delete ticket history so the DRAFT event below becomes
             # the genesis of a fresh hash chain (prev_hash is None) ---
-            for ev in s.exec(
-                select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
-            ).all():
-                s.delete(ev)
+            # Bulk DELETE — see _bulk_delete_ticket_rows: loading these
+            # rows would decode a ``state`` retired from State and raise.
+            s.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
             s.flush()
 
             # --- delete the local workspace clone/branch ---

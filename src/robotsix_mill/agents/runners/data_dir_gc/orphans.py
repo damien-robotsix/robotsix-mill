@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlmodel import select
 
 from ....config import Settings
@@ -447,12 +447,13 @@ def _cascade_delete_ticket(settings: Settings, board_id: str, ticket_id: str) ->
     then the ``Ticket`` itself — mirrors ``TicketService.delete``.
     """
     with retry_on_db_full(settings, board_id) as s:
-        for ev in s.exec(
-            select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)
-        ).all():
-            s.delete(ev)
-        for c in s.exec(select(Comment).where(Comment.ticket_id == ticket_id)).all():
-            s.delete(c)
+        # Bulk DELETE, mirroring TicketService.delete: loading a
+        # TicketEvent as an ORM object decodes its ``state`` through the
+        # strict Enum and raises KeyError on values retired from State,
+        # which would make the GC unable to reap exactly the oldest
+        # (most likely to be legacy) tickets it exists to clean up.
+        s.exec(delete(TicketEvent).where(TicketEvent.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
+        s.exec(delete(Comment).where(Comment.ticket_id == ticket_id))  # type: ignore[attr-defined,call-overload]
         t = s.get(Ticket, ticket_id)
         if t is not None:
             s.delete(t)

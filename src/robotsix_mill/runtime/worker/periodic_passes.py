@@ -947,7 +947,11 @@ class PeriodicPassesMixin(_WorkerBase):
                             )
 
                         try:
-                            await self._tracked_to_thread(_do_clone)
+                            # Semaphore-gated: repo refresh must never
+                            # claim every thread in the shared pool and
+                            # starve ticket stages.
+                            async with self._repo_refresh_sem:
+                                await self._tracked_to_thread(_do_clone)
                         except Exception:
                             log.exception(
                                 "bespoke supervisor (%s): clone failed",
@@ -977,10 +981,15 @@ class PeriodicPassesMixin(_WorkerBase):
                                 ],
                                 check=False,
                                 capture_output=True,
+                                # Local-only, but this runs on the shared
+                                # thread pool — a wedge here costs a worker
+                                # for the process lifetime, so bound it.
+                                timeout=git_ops.NETWORK_GIT_TIMEOUT,
                             )
 
                         try:
-                            await self._tracked_to_thread(_do_fetch_and_reset)
+                            async with self._repo_refresh_sem:
+                                await self._tracked_to_thread(_do_fetch_and_reset)
                         except Exception:
                             log.exception(
                                 "bespoke supervisor (%s): refresh failed",

@@ -477,7 +477,7 @@ class TestTryRebaseOnto:
         orig_git = git_ops._git
         call_count = [0]
 
-        def _failing_git(repo, *args):
+        def _failing_git(repo, *args, **kwargs):
             call_count[0] += 1
             # Fail on the first fetch call
             if call_count[0] == 1 and args and args[0] == "fetch":
@@ -620,7 +620,7 @@ class TestBranchIsAheadOfMain:
 
         orig_git = git_ops._git
 
-        def _failing_git(repo, *args):
+        def _failing_git(repo, *args, **kwargs):
             # Fail on the "fetch" call
             if args and args[0] == "fetch":
                 raise subprocess.CalledProcessError(128, ["git", "fetch"])
@@ -2064,7 +2064,7 @@ class TestPushWithLeaseErrorRedaction:
         # push_with_lease enters the --force-with-lease branch.
         # _git needs to succeed for the rev-parse call but fail for
         # the push call.
-        def _git_side_effect(repo, *args):
+        def _git_side_effect(repo, *args, **kwargs):
             if args and args[0] == "rev-parse":
                 return "abc1234"  # canned SHA for remote_branch_sha
             raise error
@@ -2366,3 +2366,73 @@ class TestCheckPushAccess:
         assert result["ok"] is False
         assert result["status"] == "error"
         assert "no git binary" in str(result["detail"])
+
+
+# --- network git calls must be bounded and non-interactive ---------------
+
+
+def test_network_git_calls_pass_a_timeout(tmp_path, monkeypatch):
+    """fetch/push must hand subprocess.run a timeout.
+
+    Without one a stalled connection hangs the calling thread forever.
+    Because every stage offloads blocking work to a shared, small thread
+    pool, each hung git permanently removes one worker from that pool —
+    observed live as the entire pool wedged in the periodic repo refresh
+    while merge stages sat "active" for 10+ minutes doing nothing.
+    """
+    seen: list[dict] = []
+
+    def _fake_run(cmd, **kw):
+        seen.append(kw)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(git_ops.subprocess, "run", _fake_run)
+
+    git_ops.fetch(tmp_path, remote_url="https://x/y.git", token="t", branch="main")
+    git_ops.push(tmp_path, "main", "https://x/y.git", "t")
+
+    assert seen, "no git subprocess was invoked"
+    for kw in seen:
+        assert kw.get("timeout") == git_ops.NETWORK_GIT_TIMEOUT
+
+
+def test_git_never_prompts_for_credentials(tmp_path, monkeypatch):
+    """Git must run with GIT_TERMINAL_PROMPT=0.
+
+    A git process that decides it needs credentials can block on
+    /dev/tty indefinitely, turning a bad or expired token into a hang
+    instead of a clean failure.
+    """
+    seen: list[dict] = []
+
+    def _fake_run(cmd, **kw):
+        seen.append(kw)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(git_ops.subprocess, "run", _fake_run)
+    git_ops.fetch(tmp_path, remote_url="https://x/y.git", token="t", branch="main")
+
+    assert seen
+    assert seen[0]["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_timeout_error_redacts_the_token(tmp_path, monkeypatch):
+    """A TimeoutExpired must not leak the tokenized remote URL.
+
+    Its ``cmd`` carries the same https://oauth2:<token>@... URL that
+    CalledProcessError does, and these errors land in ticket notes and
+    Langfuse traces.
+    """
+
+    def _fake_run(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, 1)
+
+    monkeypatch.setattr(git_ops.subprocess, "run", _fake_run)
+
+    with pytest.raises(subprocess.TimeoutExpired) as ei:
+        git_ops.fetch(
+            tmp_path, remote_url="https://x/y.git", token="sekrit", branch="main"
+        )
+
+    assert "sekrit" not in str(ei.value.cmd)
+    assert "***" in str(ei.value.cmd)

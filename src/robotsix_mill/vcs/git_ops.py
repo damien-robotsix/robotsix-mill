@@ -8,6 +8,7 @@ the container only needs the git binary (already in the image).
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -96,21 +97,58 @@ def _authed_url(url: str, token: str | None) -> str:
     return url
 
 
-def _git(repo: Path, *args: str) -> str:
+# Wall-clock ceiling for git operations that talk to a remote (clone,
+# fetch, push). Without one, a stalled connection hangs the calling
+# thread forever — and because every stage offloads its blocking work to
+# a shared thread pool, each hung git permanently removes one worker from
+# that pool until the process is restarted. Observed live: the whole pool
+# wedged in the periodic repo-refresh fetch while merge stages sat
+# "active" for 10+ minutes doing nothing. Local-only git calls (log,
+# diff, rev-parse) cannot hang on the network and stay unbounded.
+NETWORK_GIT_TIMEOUT = 300
+
+
+def _git_env() -> dict[str, str]:
+    """Environment for git subprocesses: never prompt for credentials.
+
+    A git process that decides it needs a username/password will block on
+    the terminal indefinitely. There is no terminal here, but git can
+    still wait on ``/dev/tty``, so a bad or expired token would hang the
+    call rather than failing it. ``GIT_TERMINAL_PROMPT=0`` turns that
+    into a clean non-zero exit.
+    """
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
+
+def _git(repo: Path, *args: str, timeout: float | None = None) -> str:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
         check=True,
         capture_output=True,
         text=True,
+        timeout=timeout,
+        env=_git_env(),
     ).stdout.strip()
 
 
-def _git_redacted(repo: Path, *args: str) -> str:
+def _git_redacted(repo: Path, *args: str, timeout: float | None = None) -> str:
     """Like :func:`_git` but redacts credentials from any
     :class:`CalledProcessError` before propagation.
+
+    Also redacts :class:`subprocess.TimeoutExpired`, whose ``cmd`` holds
+    the same token-bearing URL.
     """
     try:
-        return _git(repo, *args)
+        return _git(repo, *args, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise subprocess.TimeoutExpired(
+            [redact_credentials(str(a)) for a in exc.cmd],
+            exc.timeout,
+            output=redact_credentials(exc.output or ""),
+            stderr=redact_credentials(exc.stderr or ""),
+        ) from None
     except subprocess.CalledProcessError as exc:
         raise subprocess.CalledProcessError(
             exc.returncode,
@@ -140,8 +178,10 @@ def _remote_has_branches(remote_url: str, token: str | None) -> bool:
             check=True,
             capture_output=True,
             text=True,
+            timeout=NETWORK_GIT_TIMEOUT,
+            env=_git_env(),
         )
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError, subprocess.TimeoutExpired:
         # Can't determine — assume non-empty to avoid dangerous bootstrap.
         return True
     return bool(result.stdout.strip())
@@ -216,7 +256,16 @@ def clone(
             check=True,
             capture_output=True,
             text=True,
+            timeout=NETWORK_GIT_TIMEOUT,
+            env=_git_env(),
         )
+    except subprocess.TimeoutExpired as exc:
+        raise subprocess.TimeoutExpired(
+            [redact_credentials(str(a)) for a in exc.cmd],
+            exc.timeout,
+            output=redact_credentials(exc.output or ""),
+            stderr=redact_credentials(exc.stderr or ""),
+        ) from None
     except subprocess.CalledProcessError as exc:
         stderr_str = redact_credentials(exc.stderr or "")
         # When git reports the branch doesn't exist on the remote, the
@@ -362,7 +411,7 @@ def try_rebase_onto(
     # tests), _authed_url passes the URL through unchanged.
     fetch_remote = _authed_url(remote_url, token) if remote_url else "origin"
     try:
-        _git(repo, "fetch", fetch_remote, target)
+        _git(repo, "fetch", fetch_remote, target, timeout=NETWORK_GIT_TIMEOUT)
     except subprocess.CalledProcessError:
         return False
     # `git fetch <explicit-url> <target>` writes to FETCH_HEAD but does
@@ -650,6 +699,7 @@ def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
         "--force",
         _authed_url(remote_url, token),
         f"{branch}:{branch}",
+        timeout=NETWORK_GIT_TIMEOUT,
     )
 
 
@@ -664,6 +714,7 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
         "fetch",
         _authed_url(remote_url, token),
         f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
+        timeout=NETWORK_GIT_TIMEOUT,
     )
 
 
@@ -820,6 +871,7 @@ def push_with_lease(
             "--force",
             _authed_url(remote_url, token),
             f"{branch}:{branch}",
+            timeout=NETWORK_GIT_TIMEOUT,
         )
     else:
         _git_redacted(
@@ -828,6 +880,7 @@ def push_with_lease(
             f"--force-with-lease=refs/heads/{branch}:{expected_sha}",
             _authed_url(remote_url, token),
             f"{branch}:{branch}",
+            timeout=NETWORK_GIT_TIMEOUT,
         )
 
 
@@ -922,7 +975,7 @@ def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:
     would rather hit the forge API than block a real change.
     """
     try:
-        _git(repo, "fetch", "origin", target_branch)
+        _git(repo, "fetch", "origin", target_branch, timeout=NETWORK_GIT_TIMEOUT)
     except subprocess.CalledProcessError:
         # fetch failed — assume ahead so we don't block a real change
         return True
@@ -972,7 +1025,7 @@ def branch_has_net_diff(
     would rather hit the forge API than silently DONE a real change.
     """
     try:
-        _git(repo, "fetch", "origin", target_branch)
+        _git(repo, "fetch", "origin", target_branch, timeout=NETWORK_GIT_TIMEOUT)
     except subprocess.CalledProcessError:
         return True
 
@@ -1056,7 +1109,7 @@ def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:
     transient git error; the genuine-failure path (ci_fix) runs instead.
     """
     try:
-        _git(repo, "fetch", "origin", target_branch)
+        _git(repo, "fetch", "origin", target_branch, timeout=NETWORK_GIT_TIMEOUT)
     except subprocess.CalledProcessError:
         return False
     result = subprocess.run(
@@ -1338,7 +1391,7 @@ def diff_base(
             f"+refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
         )
     else:
-        _git(repo, "fetch", "origin", target_branch)
+        _git(repo, "fetch", "origin", target_branch, timeout=NETWORK_GIT_TIMEOUT)
     return subprocess.run(
         ["git", "-C", str(repo), "diff", f"origin/{target_branch}...HEAD"],
         check=True,
