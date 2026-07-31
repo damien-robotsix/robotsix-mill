@@ -274,6 +274,16 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
         "runner_func": "run_config_sync_pass",
         "label": "Config Sync",
     },
+    "credit_balance": {
+        "kind": "schedule_only",
+        "runner_module": "robotsix_mill.agents.runners.credit_balance_runner",
+        "runner_func": "run_credit_balance_pass",
+        "label": "Credit Balance",
+        "uses_tracing": False,
+        "extra_runner_kwargs": lambda request: {
+            "settings": request.app.state.settings,
+        },
+    },
     "data_dir_gc": {
         "kind": "schedule_only",
         "runner_module": "robotsix_mill.agents.runners.data_dir_gc",

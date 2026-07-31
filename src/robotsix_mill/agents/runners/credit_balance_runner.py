@@ -130,3 +130,17 @@ def run_credit_balance_check(
             threshold_usd=result.threshold_usd,
         )
     return result
+
+
+def run_credit_balance_pass(
+    repo_config: object = None,
+    settings: object = None,
+) -> CreditBalanceResult:
+    """Pass-compatible wrapper for manual / board triggering.
+
+    Conforms to the generic dispatcher contract ``(repo_config, **extra)``
+    used by ``_PASS_REGISTRY`` schedule_only passes.
+    """
+    return run_credit_balance_check(
+        settings=settings,  # type: ignore[arg-type]
+    )
