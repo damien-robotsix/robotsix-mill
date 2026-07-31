@@ -143,6 +143,33 @@ before.
 - This optimization reduces spurious dependency-fix tickets on fast-moving
   target branches where fixes land frequently.
 
+### Transient CI failure auto-retry
+
+Before spawning a `ci_fix_dependency` fix ticket, the ci-fix stage
+classifies the failure as **transient** (an infrastructure flake) vs
+**deterministic** (a real lint/test/type error). Transient failures —
+network resets (`ECONNRESET`/`ECONNREFUSED`), buildx "booting buildkit"
+timeouts, `astral-sh/setup-uv` fetch failures, runner shutdown / lost
+communication, HTTP 5xx / API rate limits, package-manager network
+unreachability — are not code-fixable, so instead of spawning a blocking
+fix ticket the stage automatically re-runs the failing workflow runs via
+the forge's `rerun_workflow` primitive, records a history note, and
+returns to `IMPLEMENT_COMPLETE` to re-poll CI.
+
+- Classification is performed by a signature-pattern matcher
+  (`stages/ci_transient.py`) against the full failing summary.
+- Retries are bounded by `ci_transient_max_retries` (default `3`, set to
+  `0` to disable) and tracked across pipeline passes via a persistent
+  per-ticket counter.
+- Once the retry budget is exhausted, the failure escalates to a
+  deterministic `ci_fix_dependency` fix ticket as before.
+- Only the failed workflow runs for the current head SHA are re-queued;
+  the operation is best-effort and never raises.
+
+This prevents transient infra flakes from being converted into
+deterministic fix tickets that block, and de-duplicates identical flakes
+that would otherwise spawn duplicate dependency-fix tickets.
+
 ## Auto-fix of review feedback (opt-in)
 
 When `MILL_REVIEW_FEEDBACK_ENABLED=true` and a human reviewer submits a
