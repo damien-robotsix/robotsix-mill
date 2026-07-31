@@ -133,8 +133,15 @@ def test_newer_than_threshold_untouched(settings, service, monkeypatch):
     assert len(notifications) == 0
 
 
-def test_operator_reply_unclosed_thread_skipped(settings, service, monkeypatch):
-    """AC5.3: Ticket with operator reply (unclosed thread) → skipped."""
+def test_operator_reply_auto_resumes_ticket_skipped(settings, service, monkeypatch):
+    """AC5.3: Ticket with operator reply → auto-resumed, no longer a
+    candidate for timeout escalation.
+
+    Posting a reply to an open [ASK_USER] thread on an
+    AWAITING_USER_REPLY ticket now auto-closes the thread and resumes
+    the ticket — the runner never sees it (neither escalated nor
+    skipped).
+    """
     from robotsix_mill.agents.runners.timeout_escalation_runner import (
         run_timeout_escalation,
     )
@@ -152,17 +159,18 @@ def test_operator_reply_unclosed_thread_skipped(settings, service, monkeypatch):
     settings.timeout_escalation_threshold_seconds = 86400  # 1 day
     t = _make_ticket(service, settings, updated_at_delta=timedelta(days=4))
     thread = _add_ask_user_thread(service, t.id)
-    # Add a child reply — operator responded.
+    # Add a child reply — operator responded.  This auto-closes the
+    # [ASK_USER] thread and auto-resumes the ticket to READY.
     service.add_comment(
         t.id, "Here's the info you asked for", author="user", parent_id=thread.id
     )
 
     result = run_timeout_escalation(settings)
     assert result["escaped"] == 0
-    assert result["skipped"] == 1
+    assert result["skipped"] == 0
 
     updated = service.get(t.id)
-    assert updated.state is State.AWAITING_USER_REPLY
+    assert updated.state is State.READY
     assert len(notifications) == 0
 
 
