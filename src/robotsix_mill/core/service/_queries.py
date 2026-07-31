@@ -214,7 +214,9 @@ class _QueryMixin(_ServiceBase):
             stmt = (
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
-                .order_by(TicketEvent.at.desc() if order == "desc" else TicketEvent.at)
+                .order_by(
+                    TicketEvent.at.desc() if order == "desc" else TicketEvent.at.asc()
+                )  # type: ignore[attr-defined]
             )
             if offset:
                 stmt = stmt.offset(offset)
@@ -256,7 +258,7 @@ class _QueryMixin(_ServiceBase):
             stmt = select(Ticket)
             if sources is not None:
                 stmt = stmt.where(Ticket.source.in_(list(sources)))
-            stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)
+            stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)  # type: ignore[attr-defined]
             return list(s.exec(stmt).all())
 
     def list_children(self, ticket_id: str) -> list[Ticket]:
