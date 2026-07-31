@@ -1,20 +1,23 @@
 import hashlib
 import json
+from datetime import UTC
 from pathlib import Path
 
 import pytest
 
-from robotsix_mill.agents import dedup
-from robotsix_mill.agents import freshness
-from robotsix_mill.agents import obsolescence
-from robotsix_mill.agents import refining
-from robotsix_mill.agents.refining import ChildSpec, FileMapEntry, RefineResult
+from robotsix_mill.agents import dedup, freshness, obsolescence, refining
+from robotsix_mill.agents.refining import (
+    ChildSpec,
+    FileMapEntry,
+    RefineResult,
+    TriageResult,
+)
 from robotsix_mill.config import Settings
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.states import State
+from robotsix_mill.runtime.worker import process_ticket
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import OBSOLESCENCE_GAP_PREFIX, RefineStage
-from robotsix_mill.runtime.worker import process_ticket
 
 
 def _single(spec: str, file_map=None) -> RefineResult:
@@ -80,6 +83,22 @@ def _dedup_clean(monkeypatch):
         dedup,
         "run_dedup_check",
         lambda **_: {"duplicate_of": None, "already_done": None, "reason": "no match"},
+    )
+
+
+# Saved before the autouse fixture replaces it — tests that need the real
+# triage_refine (e.g. prompt-construction tests) restore it from this ref.
+_original_triage_refine = refining.triage_refine
+
+
+@pytest.fixture(autouse=True)
+def _triage_refine_ok(monkeypatch):
+    """All pre-existing tests expect triage to pass through to refine.
+    Tests that need a different triage outcome override this fixture."""
+    monkeypatch.setattr(
+        refining,
+        "triage_refine",
+        lambda *a, **kw: TriageResult(decision="REFINE", reason="test"),
     )
 
 
@@ -512,12 +531,12 @@ def test_strip_explore_call_directives_satisfies_consistency_guard():
     must be stripped — otherwise build_agent_from_definition's
     prompt/tool-consistency guard raises ValueError (the regression that
     blocked every 'simple' refine ticket)."""
+    from robotsix_mill.agents.prompt_tool_consistency import (
+        unregistered_call_directives,
+    )
     from robotsix_mill.agents.refining import (
         SYSTEM_PROMPT,
         _strip_explore_call_directives,
-    )
-    from robotsix_mill.agents.prompt_tool_consistency import (
-        unregistered_call_directives,
     )
 
     known = {"explore", "parallel_explore", "read_file", "list_dir", "run_command"}
@@ -1227,8 +1246,8 @@ def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
 
 def test_draft_to_closed_transition_is_legal():
     """DRAFT → CLOSED is a valid transition in the state machine."""
-    from robotsix_mill.core.states import can_transition
     from robotsix_mill.core.states import State as S
+    from robotsix_mill.core.states import can_transition
 
     assert can_transition(S.DRAFT, S.CLOSED) is True
 
@@ -1785,20 +1804,18 @@ def test_obsolescence_gate_failure_degrades_gracefully(
 def test_ticket_roundtrip_preserves_tzinfo(service):
     """AC #1: Ticket.created_at and updated_at are timezone-aware after
     a create() + get() round-trip."""
-    from datetime import timezone as tz
 
     t = service.create("roundtrip test", "body")
     reloaded = service.get(t.id)
 
     assert reloaded.created_at.tzinfo is not None
-    assert reloaded.created_at.tzinfo == tz.utc
+    assert reloaded.created_at.tzinfo == UTC
     assert reloaded.updated_at.tzinfo is not None
-    assert reloaded.updated_at.tzinfo == tz.utc
+    assert reloaded.updated_at.tzinfo == UTC
 
 
 def test_event_roundtrip_preserves_tzinfo(service):
     """AC #2: TicketEvent.at is timezone-aware after a history() call."""
-    from datetime import timezone as tz
 
     t = service.create("event tz test", "body")
     service.transition(t.id, State.READY, "refined")
@@ -1807,13 +1824,13 @@ def test_event_roundtrip_preserves_tzinfo(service):
     assert len(events) >= 2  # created + refined
     for ev in events:
         assert ev.at.tzinfo is not None, f"event {ev.state} at is naive"
-        assert ev.at.tzinfo == tz.utc
+        assert ev.at.tzinfo == UTC
 
 
 def test_aware_vs_aware_comparison_no_typeerror(service):
     """AC #4: Comparing DB-loaded datetimes against aware datetimes
     must succeed without TypeError."""
-    from datetime import datetime, timedelta, timezone as tz
+    from datetime import datetime, timedelta
 
     t = service.create("compare test", "body")
     service.transition(t.id, State.CLOSED, "done")
@@ -1823,12 +1840,12 @@ def test_aware_vs_aware_comparison_no_typeerror(service):
     ticket = next(x for x in tickets if x.id == t.id)
 
     # This must not raise TypeError:
-    assert ticket.updated_at >= datetime.now(tz.utc) - timedelta(days=30)
-    assert ticket.created_at >= datetime.now(tz.utc) - timedelta(days=30)
+    assert ticket.updated_at >= datetime.now(UTC) - timedelta(days=30)
+    assert ticket.created_at >= datetime.now(UTC) - timedelta(days=30)
 
     # Also test fromtimestamp path used by the dedup lookback:
-    now = datetime.now(tz.utc)
-    cutoff = datetime.fromtimestamp(now.timestamp() - 30 * 86400, tz=tz.utc)
+    now = datetime.now(UTC)
+    cutoff = datetime.fromtimestamp(now.timestamp() - 30 * 86400, tz=UTC)
     assert ticket.updated_at >= cutoff  # must not raise TypeError
     assert ticket.created_at >= cutoff
 
@@ -2948,7 +2965,7 @@ def test_memory_prompt_forbids_per_ticket_diary():
     instruct the agent to record general repo knowledge only — not
     per-ticket diaries. Regression: the previous wording produced
     `## Refine run for <ticket-id>` sections in refine_memory.md."""
-    from robotsix_mill.agents.refining import SYSTEM_PROMPT, REVIEWER_SENDBACK_PROMPT
+    from robotsix_mill.agents.refining import REVIEWER_SENDBACK_PROMPT, SYSTEM_PROMPT
 
     for label, prompt in (
         ("SYSTEM_PROMPT", SYSTEM_PROMPT),
@@ -3520,6 +3537,7 @@ def test_trimmed_prompt_still_loads():
     """The trimmed refine.yaml system prompt must still load and validate
     against the agent loader — output_type RefineResult, tool list match."""
     from pathlib import Path
+
     from robotsix_mill.agents.yaml_loader import load_agent_definition
 
     definition = load_agent_definition(
@@ -3593,8 +3611,8 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
     """When finish_reason == 'tool_call', the guard triggers a single
     continuation call with message_history=all_messages() and returns
     the continuation's RefineResult."""
-    import robotsix_mill.agents.retry as retry_module
     import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
 
     first_messages = [{"role": "tool", "content": "tool result"}]
     expected_spec = RefineResult(split=False, spec_markdown="## Problem\nfixed\n")
@@ -3665,8 +3683,8 @@ def test_continuation_guard_fires_on_tool_calls(monkeypatch, settings):
 def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
     """When finish_reason == 'stop', no continuation occurs — the
     original result passes through unchanged."""
-    import robotsix_mill.agents.retry as retry_module
     import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
 
     expected_spec = RefineResult(split=False, spec_markdown="## Problem\nok\n")
     run_sync_calls = []
@@ -3706,8 +3724,8 @@ def test_continuation_guard_not_triggered_on_stop(monkeypatch, settings):
 def test_continuation_guard_skipped_when_response_missing(monkeypatch, settings):
     """When result.response is None (missing attribute), the guard is
     skipped entirely — no AttributeError, no continuation."""
-    import robotsix_mill.agents.retry as retry_module
     import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
 
     expected_spec = RefineResult(split=False, spec_markdown="## Problem\nok\n")
     run_sync_calls = []
@@ -3748,8 +3766,8 @@ def test_continuation_guard_skipped_when_already_valid_output(monkeypatch, setti
     """When finish_reason == 'tool_call' but the agent already produced a
     valid RefineResult in an earlier turn, skip the continuation to avoid
     burning quota on verification loops."""
-    import robotsix_mill.agents.retry as retry_module
     import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
 
     # A RefineResult with real content — spec_markdown is non-empty.
     valid_output = RefineResult(split=False, spec_markdown="## Problem\ndone\n")
@@ -3790,8 +3808,8 @@ def test_continuation_guard_skipped_when_already_valid_output(monkeypatch, setti
 def test_continuation_guard_skipped_when_low_remaining_quota(monkeypatch, settings):
     """When finish_reason == 'tool_call' but remaining requests ≤ 5,
     skip the continuation to avoid failing mid-turn."""
-    import robotsix_mill.agents.retry as retry_module
     import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
 
     empty_output = RefineResult(split=False, spec_markdown="")
     run_sync_calls = []
@@ -3996,7 +4014,7 @@ def test_test_warnings_block_skips_when_no_repo(tmp_path):
 def test_test_warnings_block_injects_summary(tmp_path, monkeypatch):
     """A warnings-hardening draft triggers ONE sandbox run and injects the
     summary as a <test-warnings> block telling the agent not to re-run."""
-    import robotsix_mill.sandbox as sandbox
+    from robotsix_mill import sandbox
 
     s = Settings(data_dir=str(tmp_path))
     calls = {}
@@ -4020,7 +4038,7 @@ def test_test_warnings_block_injects_summary(tmp_path, monkeypatch):
 
 
 def test_test_warnings_block_best_effort_on_sandbox_failure(tmp_path, monkeypatch):
-    import robotsix_mill.sandbox as sandbox
+    from robotsix_mill import sandbox
 
     s = Settings(data_dir=str(tmp_path))
 
@@ -4035,7 +4053,7 @@ def test_test_warnings_block_best_effort_on_sandbox_failure(tmp_path, monkeypatc
 
 
 def test_test_warnings_block_empty_output(tmp_path, monkeypatch):
-    import robotsix_mill.sandbox as sandbox
+    from robotsix_mill import sandbox
 
     s = Settings(data_dir=str(tmp_path))
     monkeypatch.setattr(sandbox, "run", lambda *a, **k: (0, "   "))
@@ -4165,8 +4183,8 @@ class TestRefineTraceWebBudgetDefaults:
         from robotsix_mill.agents.web_tools import (
             _cache,
             make_web_fetch,
-            reset_web_fetch_budget,
             reset_trace_web_fetch_budget,
+            reset_web_fetch_budget,
         )
 
         s = Settings(data_dir=str(tmp_path))
@@ -4483,6 +4501,7 @@ def test_run_refine_agent_explore_cap_enforcement(monkeypatch, settings, tmp_pat
     """When max_refine_explore_calls=1, the 2nd explore call is rejected
     with a cap-exhausted message."""
     import asyncio
+
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
 
@@ -4536,6 +4555,7 @@ def test_run_refine_agent_explore_cap_zero_disables_enforcement(
 ):
     """When max_refine_explore_calls=0, exploration is never capped."""
     import asyncio
+
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
 
@@ -4580,9 +4600,10 @@ def test_run_refine_agent_logs_exploration_skipped(
     caplog, monkeypatch, settings, tmp_path
 ):
     """When include_explore=False, a structured log line records 'skipped'."""
+    import logging
+
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
-    import logging
 
     caplog.set_level(logging.INFO, logger="robotsix_mill.agents.refining")
 
@@ -4616,9 +4637,10 @@ def test_run_refine_agent_logs_exploration_invoked(
     caplog, monkeypatch, settings, tmp_path
 ):
     """When include_explore=True, a structured log line records 'invoked' + cap."""
+    import logging
+
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
-    import logging
 
     caplog.set_level(logging.INFO, logger="robotsix_mill.agents.refining")
 
@@ -4859,8 +4881,8 @@ def test_triage_findings_artifact_write_read():
     from pathlib import Path
 
     from robotsix_mill.stages.refine.orchestration import (
-        _write_triage_complexity,
         _read_triage_findings,
+        _write_triage_complexity,
     )
 
     tmp = Path(tempfile.mkdtemp())
@@ -5246,9 +5268,10 @@ def test_run_refine_agent_no_request_limit_override_uses_default(
 def test_warning_logged_when_usage_exceeds_threshold(monkeypatch, settings, caplog):
     """When the refine agent uses > refine_usage_warning_threshold of its
     request_limit, a warning is logged."""
+    import logging
+
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
-    import logging
 
     effective_limit = settings.refine_request_limit
     high_usage = int(effective_limit * 0.9)
@@ -5289,9 +5312,10 @@ def test_warning_logged_when_usage_exceeds_threshold(monkeypatch, settings, capl
 def test_no_warning_when_usage_below_threshold(monkeypatch, settings, caplog):
     """When the refine agent uses ≤ refine_usage_warning_threshold of its
     request_limit, no warning is logged."""
+    import logging
+
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
-    import logging
 
     effective_limit = settings.refine_request_limit
     low_usage = int(effective_limit * 0.5)
@@ -5466,6 +5490,7 @@ def test_auto_approve_yaml_no_budget_discipline_note():
     """The auto-approve.yaml system prompt must NOT contain the
     'Budget discipline' section."""
     from pathlib import Path
+
     import yaml as _yaml
 
     path = (
@@ -5673,12 +5698,15 @@ def test_triage_result_migrate_target_board_preserved():
     assert r2.target_board == "other-board"
 
 
-def test_triage_prompt_includes_registered_boards():
+def test_triage_prompt_includes_registered_boards(monkeypatch):
     """The triage prompt built by triage_refine includes a registered-boards
     catalog section when get_repos_config succeeds."""
+    # Restore the real triage_refine (autouse fixture replaced it).
+    monkeypatch.setattr(refining, "triage_refine", _original_triage_refine)
+
     from unittest.mock import patch
 
-    from robotsix_mill.agents.refining import triage_refine, TriageResult
+    from robotsix_mill.agents.refining import TriageResult, triage_refine
     from robotsix_mill.config import RepoConfig, ReposRegistry
 
     # Build a fake repos registry with a few boards.
@@ -5746,12 +5774,15 @@ def test_triage_prompt_includes_registered_boards():
     assert "- board-c" in prompt
 
 
-def test_triage_prompt_graceful_on_repos_config_failure():
+def test_triage_prompt_graceful_on_repos_config_failure(monkeypatch):
     """When get_repos_config raises, the triage prompt does NOT include the
     registered-boards section, and triage_refine still succeeds."""
+    # Restore the real triage_refine (autouse fixture replaced it).
+    monkeypatch.setattr(refining, "triage_refine", _original_triage_refine)
+
     from unittest.mock import patch
 
-    from robotsix_mill.agents.refining import triage_refine, TriageResult
+    from robotsix_mill.agents.refining import TriageResult, triage_refine
 
     captured_prompts: list[str] = []
 
@@ -5862,8 +5893,8 @@ def test_guard_implementation_done_blocks_unrecognized_done(ctx, service):
     ticket = service.create("A feature", "draft body")
     assert ticket.branch is None
 
-    from robotsix_mill.stages.refine.core import RefineStage
     from robotsix_mill.stages.base import Outcome
+    from robotsix_mill.stages.refine.core import RefineStage
 
     # A DONE outcome with a note that is NOT a recognised prefix.
     bad_outcome = Outcome(State.DONE, "all done!")
@@ -5881,9 +5912,9 @@ def test_guard_implementation_done_allows_legitimate_prefix(ctx, service):
     ticket = service.create("A feature", "draft body")
     assert ticket.branch is None
 
-    from robotsix_mill.stages.refine.core import RefineStage
-    from robotsix_mill.stages.base import Outcome
     from robotsix_mill.core.constants import DEDUP_DUPLICATE_PREFIX
+    from robotsix_mill.stages.base import Outcome
+    from robotsix_mill.stages.refine.core import RefineStage
 
     good_outcome = Outcome(
         State.DONE,
