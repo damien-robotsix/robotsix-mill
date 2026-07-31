@@ -314,9 +314,9 @@ def build_fs_tools(
             (unbounded). The counter is per ``build_fs_tools`` invocation.
 
     Returns:
-        A list of the six tool closures, in the order ``read_file``,
+        A list of the seven tool closures, in the order ``read_file``,
         ``write_file``, ``edit_file``, ``delete_file``, ``list_dir``,
-        ``run_command``.
+        ``run_command``, ``parallel_commands``.
     """
     root = Path(root).resolve()
 
