@@ -369,7 +369,7 @@ class _TransitionMixin(_ServiceBase):
                         and dst is State.CLOSED
                         and ticket.blocked_from == State.AWAITING_USER_REPLY.value
                     ):
-                        now = datetime.now(timezone.utc)
+                        now = datetime.now(UTC)
                         for t in open_threads:
                             t.closed_at = now
                             s.add(t)

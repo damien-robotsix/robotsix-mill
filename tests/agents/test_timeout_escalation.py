@@ -403,7 +403,8 @@ def test_ask_user_timeout_blocked_answered_resumed(settings, service, monkeypatc
     # Verify the [ASK_USER] thread is closed.
     comments = service.list_comments(t.id)
     ask_threads = [
-        c for c in comments
+        c
+        for c in comments
         if c.parent_id is None and (c.body or "").startswith("[ASK_USER]")
     ]
     assert len(ask_threads) >= 1
@@ -412,7 +413,6 @@ def test_ask_user_timeout_blocked_answered_resumed(settings, service, monkeypatc
 
 def test_answer_blocked_ask_user_via_route_guard(settings, service):
     """The answer route rejects tickets not in an answerable state."""
-    from robotsix_mill.core.service._comments import _CommentMixin
 
     # A READY ticket is not answerable.
     t = service.create("not-paused", source=SourceKind.AGENT)
@@ -487,7 +487,8 @@ def test_blocked_to_closed_legal_for_ask_user_timeout(settings, service, monkeyp
     # Verify the [ASK_USER] thread was auto-closed.
     comments = service.list_comments(t.id)
     ask_threads = [
-        c for c in comments
+        c
+        for c in comments
         if c.parent_id is None and (c.body or "").startswith("[ASK_USER]")
     ]
     assert len(ask_threads) >= 1

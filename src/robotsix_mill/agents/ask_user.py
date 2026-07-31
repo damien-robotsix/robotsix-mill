@@ -12,7 +12,8 @@ so a retrying agent can't spam duplicate comments.
 from __future__ import annotations
 
 from ..config import Settings
-from ..core.states import ASK_USER_MARKER
+from ..core.states import ASK_USER_MARKER, State
+from ..notify import send_notification
 
 
 def make_ask_user_tool(settings: Settings, agent_name: str):
@@ -98,6 +99,9 @@ def make_ask_user_tool(settings: Settings, agent_name: str):
                 f"{ASK_USER_MARKER}\n\n{question}",
                 author=agent_name,
             )
+            ticket = svc.get(ticket_id)
+            if ticket is not None:
+                send_notification(ticket, State.AWAITING_USER_REPLY, question, settings)
             return "__ASK_USER_PAUSE__"
         except Exception as e:
             return f"ask_user: could not post question ({e!r})"
