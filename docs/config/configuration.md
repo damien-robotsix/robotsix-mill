@@ -929,9 +929,11 @@ These four periodic agents each carry one or two extra fields beyond the generic
 
 #### Board hygiene (draft TTL auto-close + open-ticket cap)
 
-The board-hygiene guards run during the `db_maintenance` periodic sweep
-(they do not have their own dedicated pass). Three settings control the
-behaviour:
+The board-hygiene guards cover two faces of standing-stock hygiene: the
+**draft TTL auto-close** runs during the `db_maintenance` periodic sweep
+(no dedicated pass of its own), while the **open-ticket cap** is enforced
+in real time on every `POST /tickets/ingest` request. Three settings
+control the behaviour:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
@@ -948,10 +950,15 @@ the parent.
 
 **Open-ticket cap.** When the board reaches
 `board_hygiene_max_open_tickets` (counting all non-terminal states),
-machine-ingest requests (`POST /tickets/ingest`) append their findings
-as history notes to a `Rollup: <source_tag>` epic instead of creating
-new standalone tickets. The rollup epic is created once per `source_tag`
-per board and reused on subsequent capped reports.
+each machine-ingest request (`POST /tickets/ingest`) appends its
+finding as a history note to a `Rollup: <source_tag>` epic instead of
+creating a new standalone ticket. The rollup epic is created once per
+`source_tag` per board and reused on subsequent capped reports. This
+guard is evaluated per request at ingest time — it does **not** wait
+for a periodic sweep, and it applies to machine ingest regardless of
+`board_hygiene_periodic`.
+Human/operator-created tickets (`POST /tickets`) are exempt from the
+cap.
 
 **Config file keys.** The flat JSON keys in `config/config.json` match the
 env-var names: `"board_hygiene_periodic"`, `"board_hygiene_draft_ttl_days"`,
