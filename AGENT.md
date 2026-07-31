@@ -280,6 +280,17 @@ module. Doing this in the deleting commit prevents the registry from
 referencing nonexistent files and saves the `module_curator` from
 filing a "stale paths" cleanup ticket after the fact.
 
+## Config & docs conventions
+
+- **Document config.example.json overrides.** When
+  `config/config.example.json` (or example YAML) intentionally
+  diverges from a Python Settings model default, document the
+  override in the corresponding row of
+  `docs/config/configuration.md` using the `sandbox.image`
+  pattern: "Code default is X; config.example.json overrides to Y
+  for <reason>."  Never leave a documented model default silently
+  contradicting the example template.
+
 ## Forge adapter conventions
 
 - **Public-method / private-HTTP-seam split.** Every new abstract

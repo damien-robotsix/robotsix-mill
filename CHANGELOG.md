@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Added "Config & docs conventions" section to `AGENT.md`: when `config.example.json` intentionally diverges from a Settings model default, document the override in `docs/config/configuration.md` using the established `sandbox.image` pattern.
 - Document the intentional `refine_trivial_model_level` override in `config.example.json` (`3` for flat-cost Claude subscription vs. code default `2` for pay-per-token DeepSeek Pro) in `docs/config/configuration.md`.
 - Add reverse-check invariant (#4) to `scripts/check_config_docs_sync.py`: `_check_stale_no_doc_exceptions` flags every `_MODEL_FIELDS_NOT_IN_DOCS` entry whose env var now resolves in `docs/config/configuration.md`, so a field that gains documentation without removing its exception causes the script to exit non-zero.
 - `explore` sub-agent: stop retrying on non-transient errors (e.g. account-out-of-credits 402) instead of burning 3 retry attempts against a model that will never succeed.
