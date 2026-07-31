@@ -689,6 +689,7 @@ def test_periodic_pass_configs_requires_repo():
             "docstring_coverage",
             "module_curator",
             "module_size",
+            "mypy_baseline",
             "test_gap",
             "state_sync",
             "frontend_sync",
