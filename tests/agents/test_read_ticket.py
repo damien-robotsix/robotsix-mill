@@ -273,6 +273,7 @@ def test_truncation_many_history_events(settings, service, monkeypatch):
         return original_history(
             self, ticket_id, limit=limit, offset=offset, order=order
         )
+
     monkeypatch.setattr(TicketService, "history", fake_history)
 
     tool = make_read_ticket_tool(settings)
@@ -329,6 +330,7 @@ def test_overall_output_truncation(settings, service, monkeypatch):
         return original_history(
             self, ticket_id, limit=limit, offset=offset, order=order
         )
+
     monkeypatch.setattr(TicketService, "history", fake_history)
 
     tool = make_read_ticket_tool(settings)

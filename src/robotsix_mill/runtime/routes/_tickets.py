@@ -373,7 +373,8 @@ def get_history(
     ticket_id: str,
     limit: int | None = Query(None, ge=1),
     offset: int = Query(0, ge=0),
-    order: str = Query("asc", pattern="^(asc|desc)$"),    svc=Depends(get_service),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    svc=Depends(get_service),
 ) -> list[TicketEvent]:
     """Return event history for a ticket (``GET /tickets/{ticket_id}/history``).
 
@@ -389,6 +390,7 @@ def get_history(
     if svc.get(ticket_id) is None:
         raise HTTPException(404, "ticket not found")
     return svc.history(ticket_id, limit=limit, offset=offset, order=order)
+
 
 @router.get("/tickets/{ticket_id}/description")
 def get_description(

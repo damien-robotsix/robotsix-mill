@@ -126,6 +126,7 @@ def test_get_history_desc_limit_tail(client, service):
     assert data[0]["state"] == "blocked"
     assert data[0]["note"] == "block reason"
 
+
 # -- GET /tickets/{id}/comments -----------------------------------------
 
 
