@@ -107,6 +107,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Changelog Autofill pass",
         "format": "memory_drafts",
     },
+    "credit-balance": {
+        "module": "runners.credit_balance_runner",
+        "function": "run_credit_balance_pass",
+        "label": "Credit Balance",
+        "format": "credit_balance",
+    },
     "completeness-check": {
         "module": "runners.periodic_runner",
         "function": "run_completeness_check_pass",
@@ -260,6 +266,11 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 + result.alignment_drafts_created
                 + result.todo_drafts_created
             )
+        elif cmd == "credit-balance":
+            from ..config import Settings
+
+            settings = Settings()
+            result = func(settings=settings)
         elif cmd == "data-dir-gc":
             from ..runtime.tracing import make_session_id
 
@@ -372,6 +383,18 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                         "orphans_pruned": result.orphans_pruned,
                         "memory_ledgers_truncated": result.memory_ledgers_truncated,
                         "summary": result.summary,
+                    },
+                    indent=2,
+                )
+            )
+        elif entry["format"] == "credit_balance":
+            print(
+                json.dumps(
+                    {
+                        "balance_usd": result.balance_usd,
+                        "threshold_usd": result.threshold_usd,
+                        "low": result.low,
+                        "error": result.error,
                     },
                     indent=2,
                 )
@@ -494,6 +517,18 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
                 f"Orphans pruned: {result.orphans_pruned} | "
                 f"Memory ledgers truncated: {result.memory_ledgers_truncated}"
             )
+        elif entry["format"] == "credit_balance":
+            print(f"{entry['label']} check complete.")
+            if result.error and "no OpenRouter key" in result.error:
+                print("No OpenRouter key configured — skipped.")
+            elif result.error:
+                print(f"API error: {result.error}")
+            else:
+                print(
+                    f"Balance: ${result.balance_usd:.4f} | "
+                    f"Threshold: ${result.threshold_usd:.2f} | "
+                    f"Low: {'YES' if result.low else 'no'}"
+                )
         else:
             print(f"{entry['label']} complete.")
             print(f"Memory updated: {len(result.updated_memory)} chars")
@@ -787,6 +822,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_changelog_autofill.add_argument(
         "--repo-id",
         help="repository to run changelog-autofill for (required if multiple repos)",
+    )
+
+    # --- credit-balance command ---
+    p_credit_balance = sub.add_parser(
+        "credit-balance",
+        help="check OpenRouter credit balance",
+    )
+    p_credit_balance.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
     )
 
     # --- completeness-check command ---
