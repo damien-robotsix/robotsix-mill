@@ -494,6 +494,19 @@ def triage_skip(
             # so implement can verify the "no change" claim against the
             # live tree.
             if ticket.kind == TicketKind.TASK and not ticket.branch:
+                # Deliberately NOT passing triage_note here. A NO_CHANGE
+                # reason says, by definition, "this is already done /
+                # no change is needed" — which is verbatim what
+                # _TRIAGE_REJECTION_PATTERNS looks for. Forwarding it
+                # made the rejection gate fire on the premise of this
+                # very route, converting "route to READY so implement
+                # can verify the claim" into HUMAN_ISSUE_APPROVAL, where
+                # the ticket then sat forever: nothing auto-closes it and
+                # no human ever approves a ticket whose own note says
+                # there is nothing to do. Live, these accumulated for up
+                # to six days. The spec still faces the normal
+                # auto-approve triage below; only the self-referential
+                # rejection match is skipped.
                 return _triage_outcome(
                     ctx,
                     ws,
@@ -501,7 +514,6 @@ def triage_skip(
                     ticket.id,
                     f"triage NO_CHANGE — routing to implement: {short_reason}",
                     source=ticket.source,
-                    triage_note=triage.reason,
                 )
             return _triage_outcome(
                 ctx,
