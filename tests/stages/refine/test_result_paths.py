@@ -818,6 +818,7 @@ class TestSingleScopePath:
         outcome = _result_paths.single_scope_path(
             ctx,
             t,
+            _REAL_SPEC,
             ws,
             ctx.settings,
             result,
@@ -853,6 +854,7 @@ class TestSingleScopePath:
         outcome = _result_paths.single_scope_path(
             ctx,
             t,
+            _REAL_SPEC,
             ws,
             ctx.settings,
             result,
@@ -862,6 +864,66 @@ class TestSingleScopePath:
 
         assert outcome.next_state == State.READY
         assert "no usable spec" in outcome.note
+
+    def test_degenerate_spec_with_usable_draft_does_not_block(self, ctx_factory):
+        """A degenerate spec falls back to the draft instead of hard-blocking.
+
+        Regression (2026-07-31, largest BLOCKED class on the live board): both
+        degenerate-spec paths called ``_resolve_next_state`` with a literal
+        ``""``, which always tripped its "never auto-approve an empty spec"
+        guard (#2438) and returned BLOCKED — while the note still said the
+        draft had been kept. Every ticket whose refiner returned nothing was
+        silently blocked from 2026-07-18 on, including ones with 13k-character
+        drafts.
+
+        Deliberately does NOT monkeypatch ``_resolve_next_state``: the previous
+        test mocked exactly the function under test, which is why the bug
+        survived. Resolution must be exercised for real.
+        """
+        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        t = _ticket(ctx)
+        ws = ctx.service.workspace(t)
+
+        outcome = _result_paths.single_scope_path(
+            ctx,
+            t,
+            _REAL_SPEC,  # the original draft is substantive
+            ws,
+            ctx.settings,
+            RefineResult(spec_markdown="tbd"),  # ...but refine returned nothing
+            reviewer_comments=None,
+            open_thread_ids=set(),
+        )
+
+        assert outcome.next_state is not State.BLOCKED
+        assert outcome.next_state is State.HUMAN_ISSUE_APPROVAL
+        assert "kept original draft" in outcome.note
+
+    def test_degenerate_spec_and_degenerate_draft_still_blocks(self, ctx_factory):
+        """With nothing usable anywhere, blocking is still the right answer.
+
+        The fix must not paper over genuinely empty tickets — two of the live
+        blocked ones had drafts of ``"..."`` and a 41-char stub. Those should
+        block, but say so accurately rather than claiming a draft was kept.
+        """
+        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        t = _ticket(ctx)
+        ws = ctx.service.workspace(t)
+
+        outcome = _result_paths.single_scope_path(
+            ctx,
+            t,
+            "...",  # draft is degenerate too
+            ws,
+            ctx.settings,
+            RefineResult(spec_markdown="tbd"),
+            reviewer_comments=None,
+            open_thread_ids=set(),
+        )
+
+        assert outcome.next_state is State.BLOCKED
+        assert "original draft is empty too" in outcome.note
+        assert "kept original draft" not in outcome.note
 
     def test_spec_review_enabled_no_reviewer_comments(self, ctx_factory, monkeypatch):
         """When spec_review_enabled and no reviewer comments, runs conciseness review."""
@@ -897,6 +959,7 @@ class TestSingleScopePath:
         _result_paths.single_scope_path(
             ctx,
             t,
+            _REAL_SPEC,
             ws,
             ctx.settings,
             result,
@@ -942,6 +1005,7 @@ class TestSingleScopePath:
         _result_paths.single_scope_path(
             ctx,
             t,
+            _REAL_SPEC,
             ws,
             ctx.settings,
             result,
