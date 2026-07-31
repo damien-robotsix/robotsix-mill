@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -20,8 +21,20 @@ from robotsix_mill.vcs.git_ops import PostPushResult
 # ---------------------------------------------------------------------------
 
 
-def _git(cwd, *args):
-    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+def _git(cwd, *args, env: dict[str, str] | None = None):
+    """Run git in *cwd*. *env* overlays the ambient environment.
+
+    The overlay exists so a test can set GIT_COMMITTER_* independently of
+    the author — git has no ``committer.email`` config knob, and the
+    post-push check inspects author and committer separately.
+    """
+    run_env = {**os.environ, **env} if env else None
+    subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=True,
+        capture_output=True,
+        env=run_env,
+    )
 
 
 def make_bare_repo(tmp_path: Path) -> str:
@@ -2192,6 +2205,60 @@ class TestPostPushCheck:
 
         result = git_ops.post_push_check(dest, "feature", "main", remote, token=None)
         assert result == PostPushResult.FOREIGN_DIVERGENCE
+
+    @pytest.mark.parametrize(
+        ("author_email", "committer_email", "label"),
+        [
+            (
+                "github-actions[bot]@users.noreply.github.com",
+                "mill@robotsix.local",
+                "repo CI auto-format commit",
+            ),
+            (
+                "285582353+robotsix-mill[bot]@users.noreply.github.com",
+                "noreply@github.com",
+                "mill's own GitHub App via the API",
+            ),
+        ],
+    )
+    def test_automation_authors_are_not_foreign(
+        self, tmp_path, author_email, committer_email, label
+    ):
+        """Bot-authored commits must not read as "a human pushed".
+
+        Regression (2026-07-31): ``_MILL_EMAILS`` held only
+        ``mill@robotsix.local`` and required BOTH author and committer to
+        match it, so the two identities below — mill's own CI auto-format
+        commit and mill's own GitHub App — were reported as foreign. Three
+        live tickets were blocked with "a human likely pushed to the PR
+        branch. Manual reconciliation required" when no human was involved.
+        """
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "dest"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+
+        (dest / "automated.txt").write_text(f"{label}\n")
+        _git(dest, "add", ".")
+        _git(
+            dest,
+            "-c",
+            f"user.email={author_email}",
+            "-c",
+            "user.name=Automation",
+            "commit",
+            "-q",
+            "-m",
+            label,
+            env={
+                "GIT_COMMITTER_EMAIL": committer_email,
+                "GIT_COMMITTER_NAME": "Automation",
+            },
+        )
+        git_ops.push(dest, "feature", remote, token=None)
+
+        result = git_ops.post_push_check(dest, "feature", "main", remote, token=None)
+        assert result == PostPushResult.PASS
 
     def test_unavailable(self, tmp_path):
         """Unreachable URL → fetch fails → UNAVAILABLE."""
