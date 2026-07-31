@@ -252,10 +252,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     timeout=10,
                 ).stdout.strip()
                 ahead = int(count) if count else 0
-            except (
-                subprocess.CalledProcessError,
-                ValueError,
-            ):
+            except subprocess.CalledProcessError, ValueError:
                 ahead = -1  # can't determine → don't block
             if ahead == 0:
                 # The branch has no commits beyond origin/<target> —
@@ -1035,7 +1032,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             # operator-initiated resume-blocked clears of implement.md).
             try:
                 _stall = json.loads(stall_state_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 _stall = {}
             old_summary_fp = _stall.get("summary_fingerprint", "")
             old_stall_count = _stall.get("stall_count", 0)
