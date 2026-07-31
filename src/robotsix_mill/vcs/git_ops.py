@@ -892,8 +892,9 @@ class PostPushResult(str, Enum):
     ``NOT_LANDED`` — the remote HEAD does not match the local HEAD; the
         agent's push did not actually land on the remote.
     ``FOREIGN_DIVERGENCE`` — the remote branch carries commits ahead of
-        the target that are NOT attributable to the mill (foreign
-        authorship).  The push may have clobbered a human commit.
+        the target that are NOT attributable to automation (the mill, a
+        GitHub App, or an Action).  The push may have clobbered a human
+        commit.
     ``UNAVAILABLE`` — the remote could not be reached (fetch failed
         transiently, etc.).  Callers should re-poll rather than block.
     """
@@ -905,6 +906,35 @@ class PostPushResult(str, Enum):
 
 
 _MILL_EMAILS: frozenset[str] = frozenset({"mill@robotsix.local"})
+
+# GitHub attributes automation commits to identities that are not
+# ``mill@robotsix.local`` but are still emphatically not a human:
+#
+#   github-actions[bot]@users.noreply.github.com   repo CI (e.g. auto-format)
+#   285582353+robotsix-mill[bot]@users.noreply…    mill's OWN GitHub App
+#   noreply@github.com                             committer on API merges
+#
+# Treating these as foreign made the post-push check report "a human likely
+# pushed to the PR branch" for mill's own CI and mill's own bot, and blocked
+# the ticket. Every GitHub App and Action shares the ``[bot]@users.noreply``
+# suffix, so match on that rather than enumerating app ids that change per
+# installation.
+_BOT_EMAIL_SUFFIX = "[bot]@users.noreply.github.com"
+_GITHUB_API_COMMITTER = "noreply@github.com"
+
+
+def _is_automation_identity(email: str) -> bool:
+    """True when *email* belongs to the mill, a GitHub App, or an Action.
+
+    The post-push check exists to catch a *human* commit being clobbered.
+    Anything matching here is automation, so it is not the divergence the
+    check is guarding against.
+    """
+    return (
+        email in _MILL_EMAILS
+        or email.endswith(_BOT_EMAIL_SUFFIX)
+        or email == _GITHUB_API_COMMITTER
+    )
 
 
 def post_push_check(
@@ -920,8 +950,9 @@ def post_push_check(
     2. Verifies the remote branch HEAD == the local HEAD (the push
        actually landed).
     3. Verifies every commit the remote branch carries ahead of
-       ``origin/<target>`` is attributable to the mill (no foreign
-       authorship — nothing was clobbered).
+       ``origin/<target>`` is attributable to automation — the mill, a
+       GitHub App, or an Action (no *human* authorship, so nothing a
+       person wrote was clobbered).
 
     Returns a :class:`PostPushResult`.  This is a pure host-side check
     with no LLM involvement — it runs AFTER the agent reports DONE.
@@ -942,12 +973,14 @@ def post_push_check(
     if remote is None or local != remote:
         return PostPushResult.NOT_LANDED
 
-    # 3. Every ahead-of-target commit must be mill-authored.
+    # 3. Every ahead-of-target commit must come from automation, not a human.
     commits = branch_ancestry(repo, branch, target)
     for c in commits:
         author = c.get("author_email", "")
         committer = c.get("committer_email", "")
-        if author not in _MILL_EMAILS or committer not in _MILL_EMAILS:
+        if not _is_automation_identity(author) or not _is_automation_identity(
+            committer
+        ):
             return PostPushResult.FOREIGN_DIVERGENCE
 
     return PostPushResult.PASS
