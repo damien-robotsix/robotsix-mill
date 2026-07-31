@@ -256,6 +256,34 @@ class CIFixStage(Stage):
                 exc_info=True,
             )
 
+        # --- Force a fresh CI run when the rebase didn't change HEAD ---
+        # If the rebase was a no-op (branch already current) or failed,
+        # the remote branch SHA still matches the local HEAD and no new
+        # CI run was triggered.  Push an empty commit to produce a fresh
+        # head SHA so the forge triggers a new pull_request run — this
+        # un-sticks tickets whose original CI failure was a transient
+        # flake that has since resolved (the old, failing check-runs
+        # are pinned to the stale SHA and can never turn green).
+        _local_sha = git_ops.head_sha(Path(repo_dir))
+        _remote_sha = git_ops.ls_remote_sha(_remote_url, f"refs/heads/{branch}", _token)
+        if _remote_sha is not None and _local_sha == _remote_sha:
+            try:
+                git_ops.empty_commit(
+                    Path(repo_dir),
+                    "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+                )
+                git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                log.info(
+                    "%s: pushed empty commit to force fresh CI run (branch was already current)",
+                    ticket.id,
+                )
+            except Exception:
+                log.warning(
+                    "%s: empty-commit push failed — proceeding with existing HEAD",
+                    ticket.id,
+                    exc_info=True,
+                )
+
         # Fetch check status from the forge.
         try:
             status = get_forge(s, repo_config=ctx.repo_config).check_status(

@@ -587,7 +587,27 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
-    (repo_dir / ".git").mkdir(exist_ok=True)
+    import subprocess
+
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "init"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "commit", "--allow-empty", "-m", "init"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "test@test",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "test@test",
+            "HOME": str(repo_dir.parent),
+        },
+    )
 
     out = CFS().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE

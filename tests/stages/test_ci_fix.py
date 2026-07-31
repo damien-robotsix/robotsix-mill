@@ -39,6 +39,9 @@ def _mock_proactive_rebase_git_ops(monkeypatch):
 
     * ``try_rebase_onto`` → ``False`` (nothing to rebase)
     * ``push`` → no-op
+    * ``head_sha`` → ``"abc123"`` (fake commit SHA)
+    * ``ls_remote_sha`` → ``None`` (no remote branch — skips empty-commit path)
+    * ``empty_commit`` → no-op
     * ``reconcile_with_remote_pr`` → ``SYNCED`` (no foreign commits)
     * ``post_push_check`` → ``PASS`` (push landed cleanly)
 
@@ -54,6 +57,18 @@ def _mock_proactive_rebase_git_ops(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.push",
         lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.ls_remote_sha",
+        lambda remote_url, ref, token=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
+        lambda repo, message: None,
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.reconcile_with_remote_pr",
@@ -2803,3 +2818,195 @@ def test_ci_fix_and_rebase_use_same_token_function(
 
     assert ci_fix_mod.github_token is canonical
     assert merge_mod.github_token is canonical
+
+
+# ---------------------------------------------------------------------------
+# Regression: resume-blocked must force a fresh CI run
+# ---------------------------------------------------------------------------
+
+
+def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkeypatch):
+    """When the rebase doesn't change HEAD (branch already current),
+    the stage pushes an empty commit to produce a fresh head SHA so
+    the forge triggers a new pull_request CI run — un-sticking tickets
+    whose original CI failure was a transient flake that has since
+    resolved.
+    """
+    ctx = _gh(tmp_path)
+
+    # Simulate a branch that is already current: rebase succeeds but
+    # produces no diff.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
+        lambda *a, **k: True,
+    )
+
+    push_calls = []
+    empty_commit_calls = []
+
+    def track_push(repo, branch, remote_url, token):
+        push_calls.append((branch, remote_url))
+
+    def track_empty_commit(repo, message):
+        empty_commit_calls.append(message)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push",
+        track_push,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
+        track_empty_commit,
+    )
+    # head_sha and ls_remote_sha return the same value → empty-commit
+    # path triggers.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.ls_remote_sha",
+        lambda remote_url, ref, token=None: "abc123",
+    )
+
+    # After the empty-commit push, check_status returns success —
+    # the transient flake is gone and the fresh run is green.
+    check_status_calls = []
+
+    def fake_check_status(self, *, source_branch, require_checks=False):
+        check_status_calls.append(source_branch)
+        return {"conclusion": "success", "failing": []}
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        fake_check_status,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    # The fresh green run allows the ticket to advance.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # The empty commit was created and pushed.
+    assert len(empty_commit_calls) == 1
+    assert "trigger fresh CI run" in empty_commit_calls[0]
+    # Two pushes: one for the (no-op) rebase, one for the empty commit.
+    assert len(push_calls) >= 2
+    # check_status was called at least once.
+    assert len(check_status_calls) >= 1
+
+
+def test_branch_changed_by_rebase_skips_empty_commit(tmp_path, monkeypatch):
+    """When the rebase actually changes HEAD (e.g. main advanced), the
+    push already triggers a fresh CI run — no empty commit is needed.
+    """
+    ctx = _gh(tmp_path)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
+        lambda *a, **k: True,
+    )
+
+    empty_commit_calls = []
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
+        lambda repo, message: empty_commit_calls.append(message),
+    )
+    # head_sha and ls_remote_sha differ → empty-commit path skipped.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "new_sha",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.ls_remote_sha",
+        lambda remote_url, ref, token=None: "old_sha",
+    )
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "new_sha"},
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # No empty commit was created — the rebase already changed HEAD.
+    assert len(empty_commit_calls) == 0
+
+
+def test_remote_sha_unavailable_skips_empty_commit(tmp_path, monkeypatch):
+    """When the remote branch SHA cannot be resolved (e.g. PR not yet
+    created, token expired), the empty-commit path is skipped safely
+    rather than crashing.
+    """
+    ctx = _gh(tmp_path)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
+        lambda *a, **k: False,
+    )
+
+    empty_commit_calls = []
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
+        lambda repo, message: empty_commit_calls.append(message),
+    )
+    # head_sha returns a value but ls_remote_sha returns None.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.head_sha",
+        lambda repo: "abc123",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.ls_remote_sha",
+        lambda remote_url, ref, token=None: None,
+    )
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    # The stage proceeds to the agent (which returns DONE).
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # No empty commit — ls_remote_sha returned None.
+    assert len(empty_commit_calls) == 0

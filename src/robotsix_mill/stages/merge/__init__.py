@@ -79,6 +79,7 @@ from ._shared import (
     _load_pr_urls,
     _read_counter,
     _read_reason,
+    _refresh_branch_for_ci,
     _repo_config_for_entry,
     _verify_merge_ancestor,
     _workspace_repo_dir,
@@ -103,6 +104,7 @@ __all__ = [
     "_load_pr_urls",
     "_read_counter",
     "_read_reason",
+    "_refresh_branch_for_ci",
     "_repo_config_for_entry",
     # patchable seams
     "_resolve_remote_url",
