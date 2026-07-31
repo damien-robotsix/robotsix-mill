@@ -134,7 +134,10 @@ system_prompt: |
   - Re-verification cap: ≤ 3 total `read_file` + `run_command` after initial
     explore (excludes `read_ticket`, `list_dir`, `detect_duplication`).
   - `run_command` from repo root; never create/modify files. For targeted
-    one-liners only.
+    one-liners only.  Batch N serial grep / lint / stat one-liners into a
+    SINGLE `run_command` (chain with `&&` or `;`) or delegate to `explore` /
+    `parallel_explore` — do NOT issue dozens of sequential `run_command`
+    calls each waiting for the prior one to complete.
   - `detect_duplication` once per pass; `ask_web_knowledge` for external
     best-practices only.
 

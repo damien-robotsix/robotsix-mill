@@ -9,6 +9,7 @@ hints + docstrings — pydantic-ai derives the schema from those.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -313,9 +314,9 @@ def build_fs_tools(
             (unbounded). The counter is per ``build_fs_tools`` invocation.
 
     Returns:
-        A list of the six tool closures, in the order ``read_file``,
+        A list of the seven tool closures, in the order ``read_file``,
         ``write_file``, ``edit_file``, ``delete_file``, ``list_dir``,
-        ``run_command``.
+        ``run_command``, ``parallel_commands``.
     """
     root = Path(root).resolve()
 
@@ -1039,6 +1040,63 @@ def build_fs_tools(
             return f"The command failed with exit code {rc} and produced no output."
         return f"exit={rc}\n{out}"
 
+    # Maximum number of commands accepted per parallel_commands call.
+    _PARALLEL_COMMANDS_BATCH_CAP = 20
+
+    async def parallel_commands(commands: list[str]) -> str:
+        """Run several independent shell commands concurrently and return
+        their combined output. Use this to batch multiple grep, find, or
+        other independent lookups — commands that do NOT depend on each
+        other's output — so they execute in parallel instead of one at a
+        time. Each command runs in its own sandbox container; all start
+        together and results are aggregated when the last one finishes.
+
+        At most 20 commands per call. Commands that depend on a
+        previous result must still use ``run_command`` sequentially.
+        """
+        if not commands:
+            return "parallel_commands: no commands provided"
+
+        if len(commands) > _PARALLEL_COMMANDS_BATCH_CAP:
+            return (
+                f"parallel_commands: at most {_PARALLEL_COMMANDS_BATCH_CAP} "
+                f"commands per call (received {len(commands)}). "
+                "Split into smaller batches."
+            )
+
+        async def _run_one(idx: int, cmd: str) -> tuple[int, str, int, str]:
+            try:
+                rc, out = await asyncio.to_thread(
+                    sandbox.run,
+                    cmd,
+                    repo_dir=root,
+                    settings=settings,
+                    sandbox_image=sandbox_image,
+                )
+            except sandbox.SandboxError as e:
+                return (idx, cmd, -1, f"sandbox error: {e}")
+            return (idx, cmd, rc, out)
+
+        results = await asyncio.gather(
+            *(_run_one(i, cmd) for i, cmd in enumerate(commands))
+        )
+
+        parts: list[str] = []
+        for idx, cmd, rc, out in sorted(results, key=lambda r: r[0]):
+            header = f"### [{idx + 1}/{len(commands)}] {cmd}"
+            if not out.strip():
+                if rc == 0:
+                    parts.append(f"{header}\nexit={rc}\n(no output)")
+                else:
+                    parts.append(
+                        f"{header}\nexit={rc}\n"
+                        f"The command failed with exit code {rc} "
+                        f"and produced no output."
+                    )
+            else:
+                parts.append(f"{header}\nexit={rc}\n{out}")
+        return "\n\n".join(parts)
+
     # Register every fs/shell tool in the system-wide capability catalog.
     from .tool_registry import ToolInfo, ToolRegistry
 
@@ -1099,5 +1157,21 @@ def build_fs_tools(
             parameters={"command": "str"},
         )
     )
+    ToolRegistry.register(
+        ToolInfo(
+            name="parallel_commands",
+            description="Run several independent shell commands concurrently and return their combined output.",
+            category="shell",
+            parameters={"commands": "list[str]"},
+        )
+    )
 
-    return [read_file, write_file, edit_file, delete_file, list_dir, run_command]
+    return [
+        read_file,
+        write_file,
+        edit_file,
+        delete_file,
+        list_dir,
+        run_command,
+        parallel_commands,
+    ]
