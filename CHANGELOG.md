@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- fix(implement): advance to DELIVERABLE when the branch has committed-ahead work and the agent produces no new file edits (non-zero tool calls but zero edit calls), instead of looping until the spawn limit trips
 - Added `tail` query parameter to `GET /tickets/{id}/history`, returning the last N events in chronological order without requiring the caller to know the total event count.
 - Emit a SPAWN_LIMIT_EXHAUSTED diagnostic event when the implement spawn
   counter hits its limit, with the last attempt's summary tail included in

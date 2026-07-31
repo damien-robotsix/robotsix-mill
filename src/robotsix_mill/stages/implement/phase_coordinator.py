@@ -635,11 +635,13 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 cls, "_stuck_total_tool_calls_no_diff", 0
             )
             try:
-                has_diff = git_ops.has_changes(
-                    repo_dir
-                ) or git_ops.branch_is_ahead_of_main(repo_dir)
+                has_changes = git_ops.has_changes(repo_dir)
+                branch_ahead = git_ops.branch_is_ahead_of_main(repo_dir)
+                has_diff = has_changes or branch_ahead
             except Exception:
+                has_changes = True
                 has_diff = True
+                branch_ahead = True  # assume ahead — don't block deliverable work
             if extra_roots:
                 for repo_path in extra_roots:
                     if repo_path == repo_dir:
@@ -682,6 +684,27 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             # pass); rename-only / spec-exact / test-stub passes carry
             # new_msgs=None and are exempt.
             if progress["total"] == 0 and result.new_msgs is not None:
+                if branch_ahead:
+                    # Committed work exists on the branch — the agent
+                    # has nothing left to do.  Advance to DELIVERABLE so
+                    # the deliver stage opens a PR instead of blocking.
+                    note = (
+                        "branch has committed implementation work ahead of "
+                        "origin/main and the implement agent produced no "
+                        "further changes — advancing to DELIVERABLE for "
+                        "PR delivery"
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        note,
+                        ok=True,
+                        reference_files=ic.reference_files,
+                        extra_roots=extra_roots,
+                    )
+                    return Outcome(State.DELIVERABLE, note)
                 detail = (
                     "and produced no file changes"
                     if not has_diff
@@ -708,6 +731,31 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     extra_roots=extra_roots,
                 )
                 return Outcome(State.BLOCKED, note)
+
+            # Committed-ahead with no new edits: the branch already
+            # carries implementation work ahead of origin/main, the
+            # working tree is clean, and the agent made tool calls
+            # but produced no file edits on this pass.  Advance to
+            # DELIVERABLE so the deliver stage opens a PR instead of
+            # looping until the spawn limit trips.
+            if branch_ahead and not has_changes and progress["edit_calls"] == 0:
+                note = (
+                    "branch has committed implementation work ahead of "
+                    "origin/main and the implement agent produced no "
+                    "new file changes — advancing to DELIVERABLE for "
+                    "PR delivery"
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    note,
+                    ok=True,
+                    reference_files=ic.reference_files,
+                    extra_roots=extra_roots,
+                )
+                return Outcome(State.DELIVERABLE, note)
 
             if no_diff_passes >= _STUCK_NO_DIFF_PASSES:
                 # progress is always set in the not-has_diff branch above.
