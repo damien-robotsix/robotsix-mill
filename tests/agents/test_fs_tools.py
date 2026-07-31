@@ -1204,9 +1204,7 @@ class TestParallelCommands:
             return (0, f"out: {cmd}")
 
         monkeypatch.setattr(sandbox, "run", _fake_run)
-        result = asyncio.run(
-            tools["parallel_commands"](["cat a.txt", "cat b.txt"])
-        )
+        result = asyncio.run(tools["parallel_commands"](["cat a.txt", "cat b.txt"]))
         assert "exit=0" in result
         assert "cat a.txt" in result
         assert "cat b.txt" in result
@@ -1220,9 +1218,7 @@ class TestParallelCommands:
             return (0, f"out: {cmd}")
 
         monkeypatch.setattr(sandbox, "run", _fake_run)
-        result = asyncio.run(
-            tools["parallel_commands"](["echo one", "echo two"])
-        )
+        result = asyncio.run(tools["parallel_commands"](["echo one", "echo two"]))
         assert "[1/2]" in result
         assert "[2/2]" in result
         assert "one" in result
@@ -1232,9 +1228,7 @@ class TestParallelCommands:
         root = tmp_path / "repo"
         root.mkdir()
         tools = _build(root, settings)
-        result = asyncio.run(
-            tools["parallel_commands"](["echo hi"] * 30)
-        )
+        result = asyncio.run(tools["parallel_commands"](["echo hi"] * 30))
         assert "at most" in result
 
     def test_sandbox_error_per_command(self, tmp_path, settings, monkeypatch):
@@ -1252,9 +1246,7 @@ class TestParallelCommands:
             return (0, f"ok: {cmd}")
 
         monkeypatch.setattr(sandbox, "run", _fake_run)
-        result = asyncio.run(
-            tools["parallel_commands"](["cmd-a", "cmd-b", "cmd-c"])
-        )
+        result = asyncio.run(tools["parallel_commands"](["cmd-a", "cmd-b", "cmd-c"]))
         assert "ok: cmd-a" in result
         assert "sandbox error" in result
         assert "ok: cmd-c" in result

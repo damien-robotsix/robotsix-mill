@@ -137,9 +137,15 @@ def test_fs_tools_roundtrip_and_sandbox(tmp_path, fake_sandbox):
     from robotsix_mill.config import Settings
 
     s = Settings(data_dir=str(tmp_path))
-    read_file, write_file, _edit_file, _delete_file, list_dir, run_command, _parallel = (
-        build_fs_tools(tmp_path, s)
-    )
+    (
+        read_file,
+        write_file,
+        _edit_file,
+        _delete_file,
+        list_dir,
+        run_command,
+        _parallel,
+    ) = build_fs_tools(tmp_path, s)
     assert "wrote" in write_file("a/b.txt", "hi")
     assert read_file(path="a/b.txt") == "hi"
     assert "a/" in list_dir(".")
