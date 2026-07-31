@@ -404,9 +404,40 @@ def promote_to_epic_path(
 # -- phase: normal single-scope -----------------------------------------
 
 
+def _degenerate_spec_outcome(
+    ctx: StageContext,
+    ticket: Ticket,
+    draft: str,
+    *,
+    prefix: str = "refined (no usable spec",
+) -> Outcome:
+    """Route a ticket whose refined spec is degenerate, falling back to *draft*.
+
+    The next state is resolved from the ORIGINAL DRAFT, not from the empty
+    spec. Passing ``""`` here instead — as both callers used to — always hit
+    ``_resolve_next_state``'s "degenerate spec" guard and hard-blocked the
+    ticket, while the note still claimed it had kept the draft and carried on.
+    That guard (#2438, "never auto-approve empty specs") was written for specs
+    and did not account for these two call sites deliberately signalling "no
+    spec, use the draft"; every such ticket has been silently blocked since.
+
+    Resolving from the draft keeps both intents: a substantive draft proceeds
+    to its normal approval route, and a draft that is *also* degenerate still
+    blocks — correctly, since there is then genuinely nothing to implement.
+    """
+    draft_usable = not _spec_is_degenerate(draft)
+    base_note = (
+        f"{prefix} — kept original draft)"
+        if draft_usable
+        else f"{prefix}, and the original draft is empty too)"
+    )
+    return resolved_outcome(ctx, draft, ticket.id, base_note, source=ticket.source)
+
+
 def single_scope_path(
     ctx: StageContext,
     ticket: Ticket,
+    draft: str,
     ws: Workspace,
     s: Settings,
     result: refining.RefineResult,
@@ -422,10 +453,7 @@ def single_scope_path(
             ticket.id,
             spec[:60],
         )
-        next_state, _auto_reason = _resolve_next_state(
-            ctx, "", ticket.id, source=ticket.source
-        )
-        return Outcome(next_state, "refined (no usable spec — kept original draft)")
+        return _degenerate_spec_outcome(ctx, ticket, draft)
 
     if s.spec_review_enabled and not reviewer_comments:
         spec = review_spec_conciseness(s, ws, ticket, spec, "refine-verbose.md")
@@ -463,13 +491,9 @@ def multi_scope_path(
                 "proceeding with original draft",
                 ticket.id,
             )
-            next_state, _auto_reason = _resolve_next_state(
-                ctx, "", ticket.id, source=ticket.source
-            )
             ack_threads(ctx, ticket, reviewer_comments, open_thread_ids)
-            return Outcome(
-                next_state,
-                "refined (empty spec, split degraded — kept original draft)",
+            return _degenerate_spec_outcome(
+                ctx, ticket, draft, prefix="refined (empty spec, split degraded"
             )
 
         if s.spec_review_enabled and not reviewer_comments:

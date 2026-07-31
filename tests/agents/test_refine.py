@@ -282,10 +282,25 @@ def test_empty_spec_proceeds_to_ready(ctx, service, monkeypatch):
     ).read_text() == "draft"
 
 
-def test_empty_spec_proceeds_to_blocked_when_gated(
+def test_empty_spec_gated_goes_to_approval_not_blocked(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):
-    """Whitespace-only spec + gated → BLOCKED (refine produced no spec)."""
+    """Whitespace-only spec + gated + usable draft → HUMAN_ISSUE_APPROVAL.
+
+    Previously asserted BLOCKED. That was the behaviour of the "never
+    auto-approve an empty spec" guard, which the degenerate-spec paths hit by
+    resolving from a literal "" — and it made this the largest blocked class
+    on the live board.
+
+    BLOCKED is the wrong destination here and is self-perpetuating: resuming a
+    blocked ticket re-runs refine, which produces the same empty spec, which
+    blocks it again. HUMAN_ISSUE_APPROVAL is the ordinary gated route — the
+    same one a successfully refined ticket takes under `require_approval` — so
+    the draft can be approved and move on.
+
+    The guard's actual intent is preserved: the ticket is still NOT
+    auto-approved to READY.
+    """
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
     gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
     gated_ctx = StageContext(
@@ -293,9 +308,30 @@ def test_empty_spec_proceeds_to_blocked_when_gated(
     )
     t = service.create("x", "draft")
     out = RefineStage().run(t, gated_ctx)
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is not State.READY  # never auto-approved
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
     assert "no usable spec" in out.note
     assert service.workspace(t).read_description() == "draft"
+
+
+def test_empty_spec_and_empty_draft_gated_still_blocks(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
+    """Whitespace-only spec + gated + degenerate draft → BLOCKED.
+
+    With nothing usable in either the spec or the draft there is genuinely
+    nothing to implement from, so blocking remains correct. This is the half
+    of the guard that must survive the fix above.
+    """
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single("  \n "))
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
+    )
+    t = service.create("x", "TBD")
+    out = RefineStage().run(t, gated_ctx)
+    assert out.next_state is State.BLOCKED
+    assert "original draft is empty too" in out.note
 
 
 async def test_chains_draft_to_implement(ctx, service, monkeypatch):
@@ -2287,10 +2323,14 @@ def test_split_empty_children_proceeds(ctx, service, monkeypatch):
     assert service.workspace(t).read_description() == "draft"
 
 
-def test_split_empty_children_proceeds_to_blocked_when_gated(
+def test_split_empty_children_gated_goes_to_approval_not_blocked(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):
-    """No children in split + gated → BLOCKED (refine produced no spec)."""
+    """A degraded split + gated + usable draft → HUMAN_ISSUE_APPROVAL.
+
+    The multi-scope twin of ``test_empty_spec_gated_goes_to_approval_not_blocked``:
+    same "" -> BLOCKED path, same fix. Still never auto-approved to READY.
+    """
     monkeypatch.setattr(
         refining,
         "run_refine_agent",
@@ -2304,8 +2344,30 @@ def test_split_empty_children_proceeds_to_blocked_when_gated(
 
     t = service.create("Empty split gated", "draft")
     out = RefineStage().run(t, gated_ctx)
-    assert out.next_state is State.BLOCKED
+    assert out.next_state is not State.READY
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
     assert service.workspace(t).read_description() == "draft"
+
+
+def test_split_empty_children_and_empty_draft_gated_still_blocks(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
+    """Degraded split + gated + degenerate draft → BLOCKED, as before."""
+    monkeypatch.setattr(
+        refining,
+        "run_refine_agent",
+        lambda **_: RefineResult(split=True, children=[]),
+    )
+
+    gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
+    gated_ctx = StageContext(
+        settings=gated_settings, service=service, repo_config=repo_config
+    )
+
+    t = service.create("Empty split gated", "TBD")
+    out = RefineStage().run(t, gated_ctx)
+    assert out.next_state is State.BLOCKED
+    assert "original draft is empty too" in out.note
 
 
 def test_split_malformed_children_skipped(ctx, service, monkeypatch):

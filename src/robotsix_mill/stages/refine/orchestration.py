@@ -292,7 +292,14 @@ class RefineAgentMixin:
             return cast(
                 Outcome,
                 _result_paths.single_scope_path(
-                    ctx, ticket, ws, s, result, reviewer_comments, open_thread_ids
+                    ctx,
+                    ticket,
+                    draft,
+                    ws,
+                    s,
+                    result,
+                    reviewer_comments,
+                    open_thread_ids,
                 ),
             )
 
