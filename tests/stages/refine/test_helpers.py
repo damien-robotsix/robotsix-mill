@@ -1115,3 +1115,47 @@ def test_no_change_route_does_not_forward_triage_note():
         "NO_CHANGE→implement must not forward triage_note — its reason "
         "matches _TRIAGE_REJECTION_PATTERNS and self-rejects"
     )
+
+
+# ---------------------------------------------------------------------------
+# prior-SKIP replay must not carry the old routing verdict
+# ---------------------------------------------------------------------------
+
+
+def test_prior_skip_replay_strips_the_appended_routing_verdict():
+    """Replaying a prior SKIP must keep only the triage's own reasoning.
+
+    The stored note also carries the routing verdict appended to it
+    (" | auto-approve: …"). Replaying that verbatim rewrote it into the
+    new history entry — where it reads as a fresh decision — and fed it
+    back in as ``triage_note``, so an obsolete verdict re-derived itself
+    on every pass and the ticket could never be re-judged. Live, 11
+    tickets kept replaying an "auto-approve: REJECTED" suffix produced
+    by a gate that no longer exists.
+    """
+    import inspect
+    from robotsix_mill.stages.refine import _triage
+
+    src = inspect.getsource(_triage)
+    assert 'prior_reason.split(" | auto-approve:", 1)[0]' in src, (
+        "prior-SKIP replay must strip the appended auto-approve verdict"
+    )
+
+
+@pytest.mark.parametrize(
+    "stored,expected",
+    [
+        (
+            "reason text | auto-approve: REJECTED — triage note contains x",
+            "reason text",
+        ),
+        ("reason text | auto-approve: APPROVE — fine", "reason text"),
+        (
+            "reason text with no verdict appended",
+            "reason text with no verdict appended",
+        ),
+    ],
+)
+def test_prior_skip_reason_split_semantics(stored, expected):
+    """The split keeps the reasoning and drops any appended verdict."""
+    assert stored.split(" | auto-approve:", 1)[0].strip() == expected

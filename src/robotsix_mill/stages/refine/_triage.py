@@ -431,6 +431,16 @@ def triage_skip(
     for ev in ticket_history:  # type: ignore[attr-defined]
         if ev.note and ev.note.startswith("triage SKIP:"):
             prior_reason = ev.note[len("triage SKIP: ") :]
+            # Keep only the triage's own reasoning. The stored note also
+            # carries the routing verdict that was appended to it
+            # (" | auto-approve: …"), and replaying that verbatim both
+            # rewrites it into the new history entry — where it reads as
+            # a fresh decision — and feeds it back in as *triage_note*,
+            # so an obsolete verdict re-derives itself on every pass and
+            # the ticket can never be re-judged. Live, 11 tickets kept
+            # replaying an "auto-approve: REJECTED" suffix produced by a
+            # gate that no longer exists.
+            prior_reason = prior_reason.split(" | auto-approve:", 1)[0].strip()
             log.info(
                 "%s: prior triage SKIP found in history — "
                 "short-circuiting triage (reason: %s)",
