@@ -3018,8 +3018,12 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     assert "gates no longer pass" in out.note
 
 
-def _green_behind_forge(monkeypatch):
-    """Patch the forge: PR open+mergeable but behind target, CI green."""
+def _green_behind_forge(monkeypatch, *, update_branch_result=None):
+    """Patch the forge: PR open+mergeable but behind target, CI green.
+
+    *update_branch_result* — dict return value for ``update_branch``.
+    Defaults to ``{"updated": True, "reason": "update-branch accepted"}``.
+    """
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
@@ -3040,17 +3044,33 @@ def _green_behind_forge(monkeypatch):
             "pending": [],
         },
     )
+    if update_branch_result is None:
+        update_branch_result = {"updated": True, "reason": "update-branch accepted"}
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: update_branch_result,
+    )
 
 
-def test_waiting_auto_merge_green_behind_falls_back_to_implement_complete(
+def test_waiting_auto_merge_green_behind_auto_updates_and_retries(
     tmp_path, monkeypatch
 ):
     """WAITING_AUTO_MERGE + green CI + branch behind target →
-    IMPLEMENT_COMPLETE, so the gate check dispatches the rebase agent.
-    Without this the ticket waits forever — a behind PR never merges
-    under a strict up-to-date branch policy."""
+    update-branch API called, returns WAITING_AUTO_MERGE to retry
+    after CI re-runs."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    update_calls = []
     _green_behind_forge(monkeypatch)
+    # Track update_branch invocations.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: (
+            update_calls.append(source_branch)
+            or {"updated": True, "reason": "update-branch accepted"}
+        ),
+    )
 
     t = _human_mr_approval(ctx)
     _write_review_artifact(ctx, t)
@@ -3058,24 +3078,34 @@ def test_waiting_auto_merge_green_behind_falls_back_to_implement_complete(
     t = ctx.service.get(t.id)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert "behind" in (out.note or "")
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert update_calls, "update_branch should have been called"
+    assert f"mill/{t.id}" in update_calls
 
 
-def test_human_mr_approval_green_behind_falls_back_to_implement_complete(
-    tmp_path, monkeypatch
-):
+def test_human_mr_approval_green_behind_auto_updates_and_retries(tmp_path, monkeypatch):
     """HUMAN_MR_APPROVAL + green CI + branch behind target →
-    silent fallback to IMPLEMENT_COMPLETE (mirrors the conflict fallback)
-    so the rebase agent catches the branch up."""
+    update-branch API called, returns WAITING_AUTO_MERGE to retry
+    after CI re-runs."""
     ctx = _gh(tmp_path)
+    update_calls = []
     _green_behind_forge(monkeypatch)
+    # Track update_branch invocations.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: (
+            update_calls.append(source_branch)
+            or {"updated": True, "reason": "update-branch accepted"}
+        ),
+    )
 
     t = _human_mr_approval(ctx)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert "behind" in (out.note or "")
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert update_calls, "update_branch should have been called"
+    assert f"mill/{t.id}" in update_calls
 
 
 # Branch cleanup on DONE-via-merge (delete_branch_on_merge)

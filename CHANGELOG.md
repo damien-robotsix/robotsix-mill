@@ -9,6 +9,7 @@
 - Added `mypy_baseline` periodic agent: monitors `mypy-baseline.txt` and `mypy-baseline-test.txt` entry counts, detects growth across file boundaries, and files draft tickets categorized by error code (`[type-arg]`, `[no-untyped-def]`, etc.) — closes the gap where pre-commit (staged-files-only) and advisory CI let cross-file mypy regressions silently grow the baseline.
 - Wire per-repo `auto_merge_enabled` from `repos.yaml`/`repos.json` through `load_repos_config()` to `RepoConfig`. Previously the field was declared and documented but never passed from the config data, so per-repo opt-in was silently ignored.
 - Auto-answer: replying to an open `[ASK_USER]` thread on an `awaiting_user_reply` ticket now automatically closes the thread and resumes the ticket — no separate close-thread step required.
+- Auto-heal stuck auto-merge tickets whose PR is merely out-of-date with the target branch: mill now calls the forge's update-branch API (server-side) and retries auto-merge after CI re-runs, instead of bouncing to `human_mr_approval`. Genuine failures (conflict, red CI) still bounce as before.
 - Document `MILL_DIAGNOSTIC_EVENTS_PATH` env var in the periodic-agents config table (`docs/config/configuration.md`).
 - Document `gates.delta_context_retry_enabled` (`MILL_DELTA_CONTEXT_RETRY_ENABLED`, default `true`) in the configuration reference under section 11.3 Refine routing.
 - config-sync: `max_refine_passes_per_ticket` — already documented in section 11.2 (Stages tuning) of `docs/config/configuration.md`; no docs change needed.
