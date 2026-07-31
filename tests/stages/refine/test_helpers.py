@@ -260,19 +260,61 @@ def test_resolve_next_state_triage_error_falls_back(monkeypatch):
 
 
 @pytest.mark.parametrize("pattern", refine_module._TRIAGE_REJECTION_PATTERNS)
-def test_resolve_next_state_triage_note_rejection(pattern):
-    """Every rejection pattern triggers HUMAN_ISSUE_APPROVAL for a
-    deterministic auto-approve source when present in the triage note."""
+def test_suspicious_pattern_defers_to_classifier(pattern, monkeypatch):
+    """A suspicious pattern suppresses the deterministic shortcut.
+
+    It must NOT decide by itself: these are substrings of free-form LLM
+    prose where the same phrase means opposite things ("the test file
+    does not exist" is the work to do; "'mail-ingester' does not exist"
+    is an ungrounded premise). Deciding on the substring rejected healthy
+    tickets into HUMAN_ISSUE_APPROVAL, which has no automated stage and
+    nothing that closes it, so they piled up for days.
+    """
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda *, settings, spec, **kw: AutoApproveResult(
+            decision="NEEDS_APPROVAL", reason="classifier says so"
+        ),
+    )
     state, note = refine_module._resolve_next_state(
         _ctx(auto_approve_enabled=True),
         "## Problem\nA genuine, real spec body",
         "t1",
-        source="test_gap",
+        source="test_gap",  # deterministic source — shortcut must be skipped
         triage_note=f"SKIP: the entire gap assertion is {pattern}",
     )
     assert state is State.HUMAN_ISSUE_APPROVAL
-    assert "REJECTED" in (note or "")
-    assert pattern in (note or "")
+    assert "classifier says so" in (note or "")
+
+
+def test_suspicious_pattern_still_reaches_ready_when_classifier_approves(monkeypatch):
+    """A healthy ticket whose note merely *contains* the phrase proceeds.
+
+    Verbatim from a live false positive: a test-coverage ticket whose
+    triage said "Grounding is confirmed — the source file exists, the
+    test file does not exist". The old gate rejected it on "does not
+    exist"; the module is real and the ticket was valid.
+    """
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda *, settings, spec, **kw: AutoApproveResult(
+            decision="APPROVE", reason="grounded, no design decision"
+        ),
+    )
+    state, note = refine_module._resolve_next_state(
+        _ctx(auto_approve_enabled=True),
+        "## Problem\nA genuine, real spec body",
+        "t1",
+        source="audit",
+        triage_note=(
+            "Grounding is confirmed — the source file exists, the test "
+            "file does not exist, and no existing test covers this module."
+        ),
+    )
+    assert state is State.READY
+    assert "APPROVE" in (note or "")
 
 
 def test_resolve_next_state_triage_note_clean_passes():
@@ -1041,24 +1083,17 @@ class TestFastPathScopeChecks:
     ],
 )
 def test_no_change_reason_would_self_reject_if_forwarded(reason):
-    """A NO_CHANGE reason matches the rejection patterns verbatim.
+    """A NO_CHANGE reason matches the suspicion patterns verbatim.
 
     This is why the NO_CHANGE→implement route must not forward its own
     reason as ``triage_note``: the route's premise ("this is already
-    done") is exactly what the rejection gate scans for. Forwarding it
-    turned an intentional "route to READY so implement can verify the
-    claim" into HUMAN_ISSUE_APPROVAL — where the ticket sat forever,
-    since nothing auto-closes it and no human approves a ticket whose
-    own note says there is nothing to do.
+    done") is exactly what the patterns scan for, so forwarding it would
+    make every already-done ticket permanently suspicious and pay a
+    classifier call to re-litigate a question refine has already
+    answered.
     """
-    state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
-        "## Problem\nA genuine, real spec body",
-        "t1",
-        triage_note=reason,
-    )
-    assert state is State.HUMAN_ISSUE_APPROVAL
-    assert note is not None and "REJECTED" in note
+    lowered = reason.lower()
+    assert any(p in lowered for p in refine_module._TRIAGE_REJECTION_PATTERNS)
 
 
 def test_no_change_route_does_not_forward_triage_note():
