@@ -708,7 +708,7 @@ class CIPollMixin(_MergeStageBase):
                 reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
                 self._maybe_comment(ticket, ctx, reason_text)
                 log.warning(
-                    "%s: merge rejected: %s → BLOCKED",
+                    "%s: auto-merge failed: %s — transition to BLOCKED",
                     ticket.id,
                     result.get("reason", "unknown"),
                 )
@@ -947,7 +947,7 @@ class CIPollMixin(_MergeStageBase):
             reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
             self._maybe_comment(ticket, ctx, reason_text)
             log.warning(
-                "%s: merge rejected: %s → BLOCKED",
+                "%s: auto-merge failed: %s — transition to BLOCKED",
                 ticket.id,
                 result.get("reason", "unknown"),
             )

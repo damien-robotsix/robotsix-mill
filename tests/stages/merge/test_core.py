@@ -2434,8 +2434,8 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
     assert merge_called == []
 
 
-def test_merge_pr_failure_goes_to_blocked(tmp_path, monkeypatch):
-    """merge_pr returns {'merged': False} → BLOCKED."""
+def test_merge_pr_failure_blocks_on_forge_rejection(tmp_path, monkeypatch):
+    """merge_pr returns {'merged': False} → BLOCKED with forge error in history."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2572,8 +2572,8 @@ def test_eligible_success_auto_merges_to_done(tmp_path, monkeypatch):
     assert out.next_state is State.DONE
 
 
-def test_eligible_forge_merge_failed_goes_to_blocked(tmp_path, monkeypatch):
-    """Eligible + CI success + forge rejects → BLOCKED + comment."""
+def test_eligible_forge_merge_failed_blocks_with_comment(tmp_path, monkeypatch):
+    """Eligible + CI success + forge rejects → BLOCKED with forge error in history."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,

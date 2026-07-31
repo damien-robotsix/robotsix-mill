@@ -205,10 +205,10 @@ class _StagesSettings(BaseModel):
     # When true (and review is enabled + the review agent marks the
     # change as auto-merge-eligible), the merge stage will attempt to
     # merge its own green PR via the forge API without waiting for a
-    # human. Default False (opt-in).
+    # human. Default True (opt-out).
     auto_merge_enabled: bool = Field(
         description="When true, the merge stage auto-merges green PRs via the forge API.",
-        default=False,
+        default=True,
     )
     # When True (default), the single-repo auto-merge decision detects
     # pre-existing main-branch CI debt: if every workflow failing on the
