@@ -4879,6 +4879,44 @@ def test_spawn_counter_blocked_note_no_summary_when_file_missing(ctx_factory, tm
     assert "Last attempt summary tail:" not in out.note
 
 
+def test_spawn_limit_exhausted_emits_diagnostic_event(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spawn limit is reached, a SPAWN_LIMIT_EXHAUSTED diagnostic
+    event is emitted so agents can discover the exhaustion programmatically."""
+    from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Spawn cap event", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    (ws.artifacts_dir / "implement_summary.md").write_text(
+        "## Implement result\n\nFailed.\n", encoding="utf-8"
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spawn limit reached" in out.note.lower()
+
+    events = list_diagnostic_events(ctx.settings, "test-board")
+    spawn_events = [e for e in events if e.category == "SPAWN_LIMIT_EXHAUSTED"]
+    assert len(spawn_events) == 1
+    assert spawn_events[0].ticket_id == t.id
+    assert "spawn limit reached" in spawn_events[0].reason.lower()
+    assert spawn_events[0].normalized_key.startswith("spawn_limit_exhausted:")
+
+
 # --- epic context in preflight spec check --------------------------------
 
 

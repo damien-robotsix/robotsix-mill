@@ -1,6 +1,11 @@
 ## 0.0.0 (unreleased)
 
 - Added `tail` query parameter to `GET /tickets/{id}/history`, returning the last N events in chronological order without requiring the caller to know the total event count.
+- Emit a SPAWN_LIMIT_EXHAUSTED diagnostic event when the implement spawn
+  counter hits its limit, with the last attempt's summary tail included in
+  the event reason. Agents (including the periodic diagnostic agent) can
+  now discover spawn-limit exhaustion programmatically via the shared
+  diagnostic event store.
 - Add reverse-check invariant (#4) to `scripts/check_config_docs_sync.py`: `_check_stale_no_doc_exceptions` flags every `_MODEL_FIELDS_NOT_IN_DOCS` entry whose env var now resolves in `docs/config/configuration.md`, so a field that gains documentation without removing its exception causes the script to exit non-zero.
 - Added "Config & docs conventions" section to `AGENT.md`: when `config.example.json` intentionally diverges from a Settings model default, document the override in `docs/config/configuration.md` using the established `sandbox.image` pattern.
 - Added `mypy_baseline` periodic agent: monitors `mypy-baseline.txt` and `mypy-baseline-test.txt` entry counts, detects growth across file boundaries, and files draft tickets categorized by error code (`[type-arg]`, `[no-untyped-def]`, etc.) — closes the gap where pre-commit (staged-files-only) and advisory CI let cross-file mypy regressions silently grow the baseline.
