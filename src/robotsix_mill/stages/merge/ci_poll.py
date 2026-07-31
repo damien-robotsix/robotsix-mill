@@ -387,14 +387,22 @@ class CIPollMixin(_MergeStageBase):
             # Gates passed — attempt mill-native merge (not forge auto-merge).
             feature_tip_sha = pr.get("sha", "")
             eligible, eligibility_reason = self._auto_merge_eligible(
-                ticket, ctx, pr_head_sha=feature_tip_sha, forge=get_forge(s, repo_config=ctx.repo_config), pr=pr
+                ticket,
+                ctx,
+                pr_head_sha=feature_tip_sha,
+                forge=get_forge(s, repo_config=ctx.repo_config),
+                pr=pr,
             )
             if eligible:
-                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(source_branch=branch)
+                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
+                    source_branch=branch
+                )
                 if result.get("merged"):
                     repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
                     target = target_branch_for(s, ctx.repo_config)
-                    if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id, target):
+                    if _verify_merge_ancestor(
+                        repo_dir, feature_tip_sha, ticket.id, target
+                    ):
                         ctx.service.workspace(ticket).artifacts_dir.joinpath(
                             "merge.md"
                         ).write_text(
@@ -429,7 +437,10 @@ class CIPollMixin(_MergeStageBase):
                 return Outcome(State.BLOCKED, reason_text)
             else:
                 # Gates pass but not eligible for autonomous merge → ask human.
-                log.info("%s: gates passed but not eligible for autonomous merge → HUMAN_MR_APPROVAL", ticket.id)
+                log.info(
+                    "%s: gates passed but not eligible for autonomous merge → HUMAN_MR_APPROVAL",
+                    ticket.id,
+                )
                 self._maybe_comment(ticket, ctx, eligibility_reason)
                 return Outcome(
                     State.HUMAN_MR_APPROVAL,
