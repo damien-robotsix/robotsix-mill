@@ -2027,7 +2027,7 @@
         },
         "refine_trivial_model_level": {
           "advanced": true,
-          "default": 3,
+          "default": 2,
           "description": "Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
           "maximum": 3,
           "minimum": 1,

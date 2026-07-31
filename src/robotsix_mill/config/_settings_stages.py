@@ -651,12 +651,14 @@ class _StagesSettings(BaseModel):
         default=True,
         json_schema_extra={"advanced": True},
     )
-    # Model level used for trivial-scope refines.  Default 3 = flat-cost
-    # Claude subscription (marginal $0).  Set to 1 or 2 to roll back to
-    # pay-per-token DeepSeek (OpenRouter, ~$0.0002+/run).
+    # Model level used for trivial-scope refines.  Default 2 =
+    # pay-per-token DeepSeek Pro (OpenRouter, ~$0.001+/run) — cheap
+    # enough for straightforward gap-fill tickets while still capable.
+    # Set to 3 for flat-cost Claude subscription (sonnet, marginal $0)
+    # or 1 for the cheapest flash model.
     refine_trivial_model_level: int = Field(
         description="Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
-        default=3,
+        default=2,
         ge=1,
         le=3,
         json_schema_extra={"advanced": True},

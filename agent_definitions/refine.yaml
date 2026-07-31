@@ -89,6 +89,13 @@ system_prompt: |
   engineering spec an autonomous coder can implement without asking
   questions.
 
+  - **Output length:** Target a concise spec of at most 2500–4000 words.
+    The spec-review pass will strip exploratory narrative, so produce
+    only the technical content needed for the Problem, Scope,
+    Acceptance criteria, and Out of scope sections.  Prefer bullet
+    points over prose paragraphs.  Aim for ~4000 output tokens or
+    less — a spec longer than that is almost certainly too verbose
+    and will be condensed downstream at additional cost.
   - **Repo identity gate — MUST execute first:** If the ticket body
     contains `TARGET REPO = <name>` or "if your working tree is not
     the <name> git repo, STOP", run `run_command("grep -m1 '^name'

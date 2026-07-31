@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Refine stage: add output-length guidance to system prompt (target 2500–4000 words, prefer bullets, aim for ~4000 tokens). Lower `refine_trivial_model_level` default from 3 (Claude sonnet) to 2 (DeepSeek Pro) so straightforward gap-fill tickets use a cheaper model, saving ~$0.90 per trivial refine.
 - Document `MILL_DIAGNOSTIC_EVENTS_PATH` env var in the periodic-agents config table (`docs/config/configuration.md`).
 - Document `gates.delta_context_retry_enabled` (`MILL_DELTA_CONTEXT_RETRY_ENABLED`, default `true`) in the configuration reference under section 11.3 Refine routing.
 - config-sync: `max_refine_passes_per_ticket` — already documented in section 11.2 (Stages tuning) of `docs/config/configuration.md`; no docs change needed.
