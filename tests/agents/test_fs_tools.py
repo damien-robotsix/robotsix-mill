@@ -1,6 +1,7 @@
 """Tests for ``robotsix_mill.agents.fs_tools`` — the sole I/O gateway
 for every agent."""
 
+import asyncio
 import types
 
 import pytest
@@ -156,12 +157,12 @@ class TestSafe:
 # ===================================================================
 
 
-def test_build_fs_tools_returns_six_callables(tmp_path, settings):
+def test_build_fs_tools_returns_seven_callables(tmp_path, settings):
     root = tmp_path / "repo"
     root.mkdir()
     tools = build_fs_tools(root, settings)
     assert isinstance(tools, list)
-    assert len(tools) == 6
+    assert len(tools) == 7
     for t in tools:
         assert callable(t)
 
@@ -173,6 +174,7 @@ def test_build_fs_tools_returns_six_callables(tmp_path, settings):
         "delete_file",
         "list_dir",
         "run_command",
+        "parallel_commands",
     }
 
     for t in tools:
@@ -1143,7 +1145,7 @@ class TestNeverRaises:
         root = tmp_path / "nonexistent"
         tools = _build(root, settings)
 
-        # All six tools, every failure path returns a string
+        # All seven tools, every failure path returns a string
         for name, tool in tools.items():
             if name == "read_file":
                 r = tool(path="f.txt")
@@ -1157,10 +1159,105 @@ class TestNeverRaises:
                 r = tool(".")
             elif name == "run_command":
                 r = tool("echo hi")
+            elif name == "parallel_commands":
+                r = asyncio.run(tool(["echo hi"]))
             else:
                 continue
             assert isinstance(r, str), f"{name} returned {type(r)}"
             assert "error" in r.lower(), f"{name}: {r!r}"
+
+
+# ===================================================================
+# parallel_commands
+# ===================================================================
+
+
+class TestParallelCommands:
+    """Tests for the parallel_commands tool that batches independent
+    shell commands for concurrent execution."""
+
+    def test_empty_commands_returns_message(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = asyncio.run(tools["parallel_commands"]([]))
+        assert "no commands provided" in result
+
+    def test_single_command_runs(self, tmp_path, settings, monkeypatch):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        def _fake_run(cmd, **kw):
+            return (0, f"output: {cmd}")
+
+        monkeypatch.setattr(sandbox, "run", _fake_run)
+        result = asyncio.run(tools["parallel_commands"](["cat hello.txt"]))
+        assert "exit=0" in result
+
+    def test_multiple_independent_commands(self, tmp_path, settings, monkeypatch):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        def _fake_run(cmd, **kw):
+            return (0, f"out: {cmd}")
+
+        monkeypatch.setattr(sandbox, "run", _fake_run)
+        result = asyncio.run(
+            tools["parallel_commands"](["cat a.txt", "cat b.txt"])
+        )
+        assert "exit=0" in result
+        assert "cat a.txt" in result
+        assert "cat b.txt" in result
+
+    def test_results_are_labeled(self, tmp_path, settings, monkeypatch):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        def _fake_run(cmd, **kw):
+            return (0, f"out: {cmd}")
+
+        monkeypatch.setattr(sandbox, "run", _fake_run)
+        result = asyncio.run(
+            tools["parallel_commands"](["echo one", "echo two"])
+        )
+        assert "[1/2]" in result
+        assert "[2/2]" in result
+        assert "one" in result
+        assert "two" in result
+
+    def test_exceeds_batch_cap_returns_error(self, tmp_path, settings):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = asyncio.run(
+            tools["parallel_commands"](["echo hi"] * 30)
+        )
+        assert "at most" in result
+
+    def test_sandbox_error_per_command(self, tmp_path, settings, monkeypatch):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        call_count = 0
+
+        def _fake_run(cmd, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise sandbox.SandboxError("infra failure")
+            return (0, f"ok: {cmd}")
+
+        monkeypatch.setattr(sandbox, "run", _fake_run)
+        result = asyncio.run(
+            tools["parallel_commands"](["cmd-a", "cmd-b", "cmd-c"])
+        )
+        assert "ok: cmd-a" in result
+        assert "sandbox error" in result
+        assert "ok: cmd-c" in result
 
 
 # ===================================================================

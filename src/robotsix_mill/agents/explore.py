@@ -119,6 +119,27 @@ SCOPE DISCIPLINE — always follow these limits:
   ``grep`` calls — this saves a model turn and reduces total output.
   Example:
     run_command("grep -rn -E 'symbol_a|symbol_b|symbol_c'")
+- BATCH INDEPENDENT COMMANDS WITH parallel_commands: when you need to run
+  several commands that do NOT depend on each other's output (e.g. grep
+  for 3 unrelated symbols in different files, or check existence of 4
+  separate paths with find/ls), use ``parallel_commands`` to run them
+  concurrently instead of issuing several sequential ``run_command``
+  calls. This can cut total latency by half or more. Each command still
+  runs in its own sandbox container; results are labeled by command and
+  returned together.
+  Examples:
+    parallel_commands([
+      "grep -rn 'def build_fs_tools' src/",
+      "grep -rn 'class Agent' src/",
+      "grep -rn 'make_explore_tool' src/",
+    ])
+    parallel_commands([
+      "find src/ -name '*.yaml' -type f",
+      "wc -l README.md",
+      "ls -la tests/",
+    ])
+  Do NOT use ``parallel_commands`` when the second command depends on the
+  first's output — keep those sequential with ``run_command``.
 - PINPOINT WITH grep -n BEFORE read_file: before calling read_file on a
   large file, use ``grep -n`` to find the exact line numbers of
   interest, then pass them as ``offset``/``limit``.  Do not read wide
@@ -372,7 +393,9 @@ async def run_explore(
     # read-only subset of the fs tools (no write_file / edit_file / delete_file)
     all_fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
     ro_tools = [
-        t for t in all_fs if t.__name__ in ("read_file", "list_dir", "run_command")
+        t
+        for t in all_fs
+        if t.__name__ in ("read_file", "list_dir", "run_command", "parallel_commands")
     ]
 
     from .base import _aclose_async_client, build_openrouter_model

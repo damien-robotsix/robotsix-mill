@@ -178,6 +178,7 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         "list_dir",
         "list_threads",
         "run_command",
+        "parallel_commands",
         "explore",
         "ask_web_knowledge",
         "report_issue",

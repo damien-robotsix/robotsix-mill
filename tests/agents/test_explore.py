@@ -422,6 +422,7 @@ def test_explore_subagent_is_read_only_and_uses_flash_model(tmp_path, monkeypatc
     assert cap["model"] == "deepseek/deepseek-v4-flash"
     assert cap["tools"] == [
         "list_dir",
+        "parallel_commands",
         "read_file",
         "run_command",
     ]  # NO write/edit/delete
