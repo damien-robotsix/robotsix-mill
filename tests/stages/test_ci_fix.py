@@ -2825,9 +2825,7 @@ def test_ci_fix_and_rebase_use_same_token_function(
 # ---------------------------------------------------------------------------
 
 
-def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(
-    tmp_path, monkeypatch
-):
+def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkeypatch):
     """When the rebase doesn't change HEAD (branch already current),
     the stage pushes an empty commit to produce a fresh head SHA so
     the forge triggers a new pull_request CI run — un-sticking tickets
@@ -2906,9 +2904,7 @@ def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(
     assert len(check_status_calls) >= 1
 
 
-def test_branch_changed_by_rebase_skips_empty_commit(
-    tmp_path, monkeypatch
-):
+def test_branch_changed_by_rebase_skips_empty_commit(tmp_path, monkeypatch):
     """When the rebase actually changes HEAD (e.g. main advanced), the
     push already triggers a fresh CI run — no empty commit is needed.
     """
@@ -2958,9 +2954,7 @@ def test_branch_changed_by_rebase_skips_empty_commit(
     assert len(empty_commit_calls) == 0
 
 
-def test_remote_sha_unavailable_skips_empty_commit(
-    tmp_path, monkeypatch
-):
+def test_remote_sha_unavailable_skips_empty_commit(tmp_path, monkeypatch):
     """When the remote branch SHA cannot be resolved (e.g. PR not yet
     created, token expired), the empty-commit path is skipped safely
     rather than crashing.

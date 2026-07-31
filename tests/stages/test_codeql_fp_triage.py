@@ -88,9 +88,13 @@ def _setup_repo(ctx, ticket):
         check=True,
         capture_output=True,
         text=True,
-        env={"GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@test",
-             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@test",
-             "HOME": str(repo_dir.parent)},
+        env={
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "test@test",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "test@test",
+            "HOME": str(repo_dir.parent),
+        },
     )
     return str(repo_dir)
 

@@ -600,9 +600,13 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
         check=True,
         capture_output=True,
         text=True,
-        env={"GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@test",
-             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@test",
-             "HOME": str(repo_dir.parent)},
+        env={
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "test@test",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "test@test",
+            "HOME": str(repo_dir.parent),
+        },
     )
 
     out = CFS().run(t, ctx)
