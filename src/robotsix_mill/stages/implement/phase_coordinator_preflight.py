@@ -20,7 +20,7 @@ from robotsix_mill._resources import (
 from ..._resources import agent_definitions_dir
 from ...agents.yaml_loader import load_agent_definition
 from ...config import effective_target_branch
-from ...core.models import Ticket, TicketKind
+from ...core.models import Comment, Ticket, TicketKind
 from ...core.states import State
 from ...deploy import check_deploy_freshness
 from ..base import Outcome, StageContext
@@ -359,6 +359,7 @@ def _changelog_only_review_respawn_guard(
     # links, timeout-escalation pings), not reviewer feedback — the
     # same filter refine's sendback guard uses.
     non_feedback_authors = {"mill", "system"}
+    comments: list[Comment] = []
     try:
         comments = ctx.service.list_comments(ticket.id)
     except Exception:
