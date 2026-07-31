@@ -292,6 +292,7 @@ def test_dedup_duplicate_short_circuits_to_done(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
     )
+    monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
     monkeypatch.setattr(
         dedup,
         "run_dedup_check",
@@ -358,6 +359,7 @@ def test_dedup_already_done_short_circuits_to_done(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
     )
+    monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
     monkeypatch.setattr(
         dedup,
         "run_dedup_check",
@@ -1331,6 +1333,7 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
     monkeypatch.setattr(
         refining, "run_refine_agent", lambda *a, **k: agent_called.append(1)
     )
+    monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
 
     out = RefineStage().run(child, ctx)
 
@@ -1366,6 +1369,8 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
         sess.commit()
 
     child = ctx.service.create("Child ticket", "", parent_id=parent.id)
+
+    monkeypatch.setattr(refining, "triage_refine", _mock_triage_refine())
 
     out = RefineStage().run(child, ctx)
 
