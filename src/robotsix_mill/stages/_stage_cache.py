@@ -48,7 +48,13 @@ def _save(ws: Workspace, data: dict[str, Any]) -> None:
 
 
 def _check(ws: Workspace, stage_name: str, input_hash: str) -> Outcome | None:
-    """Return the cached :class:`Outcome` when *input_hash* matches, else ``None``."""
+    """Return the cached :class:`Outcome` when *input_hash* matches, else ``None``.
+
+    A cached BLOCKED outcome is never served — see :func:`_update`. The check
+    is repeated here, not just at write time, so workspaces that already hold
+    a poisoned entry recover on the next pass instead of needing the file
+    deleted by hand.
+    """
     cache = _load(ws)
     entry = cache.get(stage_name)
     if entry is None:
@@ -64,12 +70,42 @@ def _check(ws: Workspace, stage_name: str, input_hash: str) -> Outcome | None:
         next_state = State(state_raw)
     except ValueError:
         return None
+    if next_state is State.BLOCKED:
+        log.info(
+            "%s: ignoring cached BLOCKED outcome (hash=%s…) — re-running the stage",
+            stage_name,
+            input_hash[:12],
+        )
+        return None
     note = entry.get("note", "")
     return Outcome(next_state=next_state, note=note)
 
 
 def _update(ws: Workspace, stage_name: str, input_hash: str, outcome: Outcome) -> None:
-    """Persist *outcome* keyed by *stage_name* and *input_hash*."""
+    """Persist *outcome* keyed by *stage_name* and *input_hash*.
+
+    BLOCKED outcomes are deliberately NOT cached. The cache's premise is
+    "same input, so the same result — skip the expensive re-run", and that
+    premise does not hold for BLOCKED: it means a human must intervene, and
+    every way of intervening (resume-blocked, a code fix, a config change)
+    exists precisely to produce a *different* result on the next pass.
+
+    Caching it made a blocked ticket unrecoverable unless its description
+    changed. Observed 2026-07-31: ticket …-22ec was resumed after the refine
+    fix that specifically addressed it had been deployed, and the stage
+    logged ``refine cache hit (hash=6dce913eed7a…) → blocked`` — replaying
+    the pre-fix outcome verbatim, note and all, without running the fixed
+    code at all. Three separate root-cause fixes could not reach the tickets
+    they were written for.
+
+    Not caching costs one re-run per deliberate resume, which is exactly when
+    the re-run is wanted. Blocked tickets have no automated stage, so the
+    reconcile sweep does not re-enqueue them in a loop.
+    """
+    from ..core.states import State
+
+    if outcome.next_state is State.BLOCKED:
+        return
     cache = _load(ws)
     cache[stage_name] = {
         "input_hash": input_hash,
