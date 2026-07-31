@@ -186,6 +186,11 @@ TRANSITIONS: dict[State, set[State]] = {
         State.WAITING_AUTO_MERGE,
         State.IMPLEMENT_COMPLETE,
         State.ADDRESSING_REVIEW,
+        # An operator reviewing the open PR can send it back for rework
+        # (TicketService.request_implementation_changes). The spec is
+        # fine; the implementation needs adjusting, so this re-runs
+        # implement rather than re-refining from DRAFT.
+        State.READY,
         State.ERRORED,
         State.BLOCKED,
         State.AWAITING_USER_REPLY,

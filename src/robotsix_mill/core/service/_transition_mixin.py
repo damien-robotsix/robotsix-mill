@@ -600,6 +600,64 @@ class _TransitionMixin(_ServiceBase):
                 self._on_transition(ticket)
             return comment, ticket
 
+    def request_implementation_changes(
+        self, ticket_id: str, body: str, author: str = "user"
+    ) -> tuple[Comment, Ticket]:
+        """Send a ticket awaiting merge approval back to implement.
+
+        The operator has reviewed the open PR and wants the
+        implementation adjusted.  The spec itself is fine, so this
+        re-runs implement rather than re-refining from DRAFT the way
+        :meth:`request_changes` does.
+
+        *body* is required and becomes a :class:`Comment` — that is the
+        channel the implement stage reads operator feedback from
+        (comments whose author is neither ``mill`` nor ``system`` are
+        collected into the agent's ``feedback`` input).  A transition
+        without it would silently re-run implement with no idea what to
+        change.
+
+        Two guards would otherwise defeat the request and are cleared:
+        the stale-spec fingerprint guard (the spec is deliberately
+        unchanged — the operator's note is the new information), and the
+        implement spawn counter (an operator asking for rework must not
+        be refused because earlier attempts used the budget).
+
+        Returns ``(Comment, Ticket)``.  Raises ``KeyError`` if the ticket
+        does not exist, ``TransitionError`` if it is not in
+        ``human_mr_approval`` or if *body* is empty.
+        """
+        if not body.strip():
+            raise TransitionError(
+                f"{ticket_id}: cannot request implementation changes — "
+                "a non-empty body is required; it is the only thing that "
+                "tells the implement agent what to change"
+            )
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
+            ticket = _get_ticket(s, ticket_id)
+            if ticket.state is not State.HUMAN_MR_APPROVAL:
+                raise TransitionError(
+                    f"{ticket_id}: cannot request implementation changes — "
+                    f"not human_mr_approval (currently {ticket.state})"
+                )
+            comment = Comment(ticket_id=ticket_id, body=body, author=author)
+            s.add(comment)
+            note = f"implementation changes requested: {body}"
+            ticket.state = State.READY
+            ticket.updated_at = datetime.now(timezone.utc)
+            s.add(ticket)
+            s.flush()
+            s.add(_make_event(s, ticket_id=ticket_id, state=State.READY, note=note))
+            s.commit()
+            s.refresh(comment)
+            s.refresh(ticket)
+        ws = self.workspace(ticket)
+        _clear_stale_implement_guard(ws)
+        _reset_implement_spawn_counter(ws)
+        if self._on_transition is not None:
+            self._on_transition(ticket)
+        return comment, ticket
+
     def close_tracker(self, ticket_id: str, note: str = "") -> Ticket:
         """Close a tracking ticket from any non-terminal state.
 

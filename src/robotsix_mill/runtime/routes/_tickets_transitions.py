@@ -52,6 +52,43 @@ def request_changes(
     }
 
 
+@router.post("/tickets/{ticket_id}/request-implementation-changes")
+def request_implementation_changes(
+    ticket_id: str,
+    body: CommentCreate,
+    request: Request,
+    svc: TicketService = Depends(get_service),
+    worker: Worker = Depends(get_worker),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    """Send a ticket awaiting merge approval back to implement for rework.
+
+    For when the operator has reviewed the open PR and wants the
+    implementation adjusted.  The spec is fine, so this re-runs implement
+    rather than re-refining from draft the way ``request-changes`` does.
+
+    ``body`` is required: it becomes a comment, which is how the
+    implement stage receives operator feedback.  Without it the stage
+    would re-run with no idea what to change.
+
+    Returns 409 when the ticket is not in ``human_mr_approval`` or the
+    body is empty, 404 when the ticket does not exist.
+    """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
+    try:
+        comment, ticket = svc.request_implementation_changes(
+            ticket_id, body.body, author=body.author
+        )
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    maybe_enqueue(ticket, worker)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return {
+        "comment": comment,
+        "ticket": enrich_ticket_read(ticket, settings, svc, repo_config=repo_config),
+    }
+
+
 @router.post("/tickets/{ticket_id}/priority", response_model=TicketRead)
 def set_priority(
     ticket_id: str,

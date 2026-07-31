@@ -1580,3 +1580,64 @@ def test_short_id_resolution_longer_suffix(client, service):
     r = client.get(f"/tickets/{suffix}")
     assert r.status_code == 200
     assert r.json()["id"] == t.id
+
+
+# -- POST /tickets/{id}/request-implementation-changes -------------------
+
+
+def _mr_approval_ticket(service):
+    t = service.create("pr needs rework", "spec")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        service.transition(t.id, st)
+    return service.get(t.id)
+
+
+def test_request_implementation_changes_route(client, service):
+    """The endpoint returns the ticket to ready with the feedback attached.
+
+    This is the path robotsix-chat uses when the operator reviews an open
+    PR and wants the implementation adjusted rather than merged.
+    """
+    t = _mr_approval_ticket(service)
+
+    r = client.post(
+        f"/tickets/{t.id}/request-implementation-changes",
+        json={
+            "body": "Extract the retry loop into a helper",
+            "author": "robotsix-chat",
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["ticket"]["state"] == "ready"
+    assert "Extract the retry loop" in r.json()["comment"]["body"]
+
+
+def test_request_implementation_changes_route_rejects_empty_body(client, service):
+    """An empty body is refused — implement would have nothing to act on."""
+    t = _mr_approval_ticket(service)
+
+    r = client.post(
+        f"/tickets/{t.id}/request-implementation-changes",
+        json={"body": "  ", "author": "robotsix-chat"},
+    )
+
+    assert r.status_code == 409, r.text
+    assert service.get(t.id).state is State.HUMAN_MR_APPROVAL
+
+
+def test_request_implementation_changes_route_rejects_wrong_state(client, service):
+    """Only a ticket awaiting merge approval can be sent back this way."""
+    t = service.create("fresh draft", "spec")
+
+    r = client.post(
+        f"/tickets/{t.id}/request-implementation-changes",
+        json={"body": "change this", "author": "robotsix-chat"},
+    )
+
+    assert r.status_code == 409, r.text
