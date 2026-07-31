@@ -3012,6 +3012,26 @@
           "title": "Trace Review Tool Request Limit",
           "type": "integer"
         },
+        "scanner_rollup": {
+          "default": true,
+          "description": "Roll up multi-finding scanner passes into a single ticket per run.",
+          "title": "Scanner Rollup",
+          "type": "boolean"
+        },
+        "scanner_max_drafts_per_run": {
+          "advanced": true,
+          "default": 5,
+          "description": "Hard cap on drafts a single scanner pass may file.",
+          "title": "Scanner Max Drafts Per Run",
+          "type": "integer"
+        },
+        "retrospect_max_drafts_per_run": {
+          "advanced": true,
+          "default": 2,
+          "description": "Hard cap on drafts a single retrospect pass may file.",
+          "title": "Retrospect Max Drafts Per Run",
+          "type": "integer"
+        },
         "triage_boilerplate_interval_seconds": {
           "advanced": true,
           "default": 604800,

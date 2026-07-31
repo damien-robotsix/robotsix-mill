@@ -50,6 +50,19 @@
 - Branch-protection rejections during auto-merge now transition the ticket to
   `blocked` with the forge error message recorded in history, instead of
   silently parking in `human_mr_approval`.
+- **Scanner rollup**: periodic scanner passes (docstring_coverage, module_size,
+  test_gap, health, completeness_check) now roll up multiple findings into a
+  single ticket per run when `scanner_rollup` is enabled (default true),
+  cutting ~80% of scanner ticket inflow. Configurable via `scanner_rollup`
+  and `scanner_max_drafts_per_run`.
+- **Ingest dedup hardening**: `POST /tickets/ingest` now applies a normalized-title
+  fingerprint check before the LLM dedup, catching same-symptom reports that
+  differ only in timestamps, file paths, or counters. Re-reporting a symptom
+  whose normalized title matches an existing open ticket appends a history
+  note instead of creating a duplicate.
+- **Per-source rate caps**: added `scanner_max_drafts_per_run` (default 5) and
+  `retrospect_max_drafts_per_run` (default 2) settings to cap high-volume
+  feedback sources.
 - Classify transient CI failures (ECONNRESET, buildkit boot timeouts, setup-uv fetch errors, runner shutdowns, etc.) before spawning a blocking `ci_fix_dependency` ticket. Transient failures now trigger automatic workflow re-runs (up to `ci_transient_max_retries`, default 3) instead of immediately spawning a fix ticket.
 - `resume-blocked` for CI-failed tickets now refreshes the PR branch (rebase + empty-commit) **before** evaluating CI, so a transient flake that has since resolved un-sticks in one resume instead of re-reading the same stale failing run forever.
 - fix(implement): advance to DELIVERABLE when the branch has committed-ahead work and the agent produces no new file edits (non-zero tool calls but zero edit calls), instead of looping until the spawn limit trips

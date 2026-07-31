@@ -186,7 +186,7 @@ def test_run_completeness_check_pass_writes_memory_verbatim(tmp_path, monkeypatc
 def test_run_completeness_check_pass_creates_draft_tickets(tmp_path, monkeypatch):
     """Runner creates draft tickets for each proposed gap with
     source='completeness_check'."""
-    settings = _make_settings(tmp_path)
+    settings = _make_settings(tmp_path, scanner_rollup=False)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
@@ -549,7 +549,7 @@ def test_run_completeness_check_pass_clips_to_max_gaps(tmp_path, monkeypatch):
     just inside the (monkeypatched) agent function."""
     from robotsix_mill.agents.completeness_check import MAX_GAPS
 
-    settings = _make_settings(tmp_path)
+    settings = _make_settings(tmp_path, scanner_rollup=False)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
 
