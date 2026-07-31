@@ -185,6 +185,18 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # before tearing the loops down so a survey / audit / etc.
         # mid-run isn't killed by a container restart.
         self._inflight_passes: set[asyncio.Task] = set()
+        # Bounds how many per-repo clone/fetch refreshes may occupy the
+        # shared thread pool at once. Every stage offloads its blocking
+        # work to the SAME default executor, which holds only
+        # ``min(32, cpu_count + 4)`` threads — 8 on the deploy host. The
+        # supervisor deliberately skips its start-up delay, so with ~22
+        # registered repos every one of them fetched simultaneously on
+        # boot and took every thread: merge stages sat "active" for 10+
+        # minutes having done nothing, waiting for a worker that repo
+        # refresh had already claimed. Capping refresh concurrency keeps
+        # threads available for ticket work no matter how many repos are
+        # registered.
+        self._repo_refresh_sem = asyncio.Semaphore(2)
         self._health_task: asyncio.Task | None = None
         self._agent_check_task: asyncio.Task | None = None
         self._bc_check_task: asyncio.Task | None = None
