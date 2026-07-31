@@ -686,6 +686,16 @@ def commit_file(repo: Path, filename: str, message: str) -> bool:
     return True
 
 
+def empty_commit(repo: Path, message: str) -> None:
+    """Create an empty commit (``git commit --allow-empty -q -m``).
+
+    Used to force a new CI run on a branch whose HEAD is already
+    current — the new (empty) commit produces a fresh head SHA,
+    which triggers a new pull_request workflow run on the forge.
+    """
+    _git(repo, "commit", "--allow-empty", "-q", "-m", message)
+
+
 def push(repo: Path, branch: str, remote_url: str, token: str | None) -> None:
     """Push ``branch`` to ``remote_url`` (token-auth for https). Uses
     ``--force`` so a re-delivery updates the bot-owned branch; pushes to
