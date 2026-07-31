@@ -29,6 +29,44 @@ import contextlib
 log = logging.getLogger("robotsix_mill.service")
 
 
+# States a ticket can only reach by the implement stage having actually
+# produced deliverable work. Reaching any of them proves the spawn budget
+# was spent productively, so it is returned to full.
+_IMPLEMENT_PROGRESS_STATES: frozenset[State] = frozenset(
+    {
+        State.CODE_REVIEW,
+        State.DOCUMENTING,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+    }
+)
+
+
+def _reset_implement_spawn_counter(ws: Workspace) -> None:
+    """Clear ``artifacts/implement_spawn_count`` after productive work.
+
+    The counter caps implement-stage invocations so a ticket looping
+    through BLOCKED→READY→BLOCKED cannot burn unbounded LLM quota. But
+    nothing reset it on success, so it was monotonic across the ticket's
+    whole life: a ticket got three implement invocations *ever*, and a
+    fourth pass — an entirely normal outcome after review feedback —
+    dead-ended it at ``spawn limit reached (3/3)`` no matter how much
+    genuine progress it had made. That became the largest BLOCKED class
+    on the live board, on tickets whose own summaries reported every gate
+    passing.
+
+    Resetting here does not weaken the loop protections: the
+    implement↔review ping-pong is separately bounded by
+    ``ticket.implement_cycles`` against ``max_implement_review_cycles``,
+    and an unproductive ticket never reaches these states at all, so its
+    budget still runs out.
+
+    Best-effort and silent when absent.
+    """
+    with contextlib.suppress(OSError):
+        (ws.artifacts_dir / "implement_spawn_count").unlink(missing_ok=True)
+
+
 def _clear_stale_implement_guard(ws: Workspace) -> None:
     """Delete a stale ``implement.md`` so the stage's stale-respawn
     guard (see ``phase_coordinator.preflight``) doesn't immediately
@@ -340,6 +378,10 @@ class _TransitionMixin(_ServiceBase):
                 ticket.paused_from = ticket.state.value
             elif ticket.state is State.AWAITING_USER_REPLY:
                 ticket.paused_from = None
+            # Leaving READY for a later stage means the implement stage
+            # actually delivered — reset its spawn budget.
+            if ticket.state is State.READY and dst in _IMPLEMENT_PROGRESS_STATES:
+                _reset_implement_spawn_counter(self.workspace(ticket))
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)

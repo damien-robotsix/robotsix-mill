@@ -762,11 +762,18 @@ _AUTO_APPROVE_SOURCES: set[str] = {
     "config_standard",
 }
 
-# Substrings (lowercased) in a triage note that signal a draft should NOT be
-# auto-approved — even for _AUTO_APPROVE_SOURCES.  When any pattern matches,
-# _resolve_next_state returns HUMAN_ISSUE_APPROVAL instead of READY so a human
-# can inspect the ticket.  The list is deliberately conservative: a legitimate
-# SKIP reason should never contain one of these phrases.
+# Substrings (lowercased) in a triage note that make a draft SUSPICIOUS —
+# it may be describing something that doesn't exist.  A match suppresses the
+# deterministic _AUTO_APPROVE_SOURCES shortcut so the LLM classifier decides
+# instead; it is NOT a rejection on its own.
+#
+# These are substrings of free-form LLM prose, and the identical phrase means
+# opposite things depending on its referent ("the test file does not exist"
+# is the work to do; "'mail-ingester' does not exist" is an ungrounded
+# premise).  Treating a match as a verdict rejected healthy tickets into
+# HUMAN_ISSUE_APPROVAL, which has no automated stage and nothing that closes
+# it, so they accumulated for days.  Keep the list broad — over-matching only
+# costs one classifier call now, instead of stranding a ticket.
 _TRIAGE_REJECTION_PATTERNS: list[str] = [
     "no change is needed",
     "no change needed",
@@ -864,15 +871,32 @@ def _resolve_next_state(
     # rule in 28a6b02) joins the same family. Three rounds of
     # rubber-stamping all 21+ tickets from these sources without
     # rejection (see 09cc) made the LLM hop pure toil.
+    # A matched pattern DOWNGRADES to the LLM classifier — it does not
+    # decide by itself.
+    #
+    # These patterns are substrings of free-form LLM prose, and the same
+    # phrase carries opposite meanings depending on what it refers to:
+    #
+    #   "Grounding is confirmed — the source file exists, the test file
+    #    does not exist"            → healthy: that's the work to do
+    #   "'mail-ingester' does not exist anywhere in this repository"
+    #                               → genuinely ungrounded
+    #
+    # Deciding on the substring alone rejected the first kind too. Live,
+    # that parked healthy tickets in HUMAN_ISSUE_APPROVAL — a state with
+    # no automated stage, which nothing ever closes — and they piled up
+    # for days (verified false positives: a test-coverage ticket whose
+    # target module exists, a devcontainer fix rejected over an unrelated
+    # footnote, a NO_CHANGE audit describing its desired end state).
+    #
+    # So a match now only means "suspicious — do not take the
+    # deterministic auto-approve shortcut". The classifier below reads
+    # the actual spec and can tell the two cases apart.
+    suspicious = False
     if triage_note:
         triage_lower = triage_note.lower()
-        for pattern in _TRIAGE_REJECTION_PATTERNS:
-            if pattern in triage_lower:
-                return State.HUMAN_ISSUE_APPROVAL, (
-                    f"auto-approve: REJECTED — triage note contains "
-                    f"rejection signal matching '{pattern}'"
-                )
-    if source in _AUTO_APPROVE_SOURCES:
+        suspicious = any(p in triage_lower for p in _TRIAGE_REJECTION_PATTERNS)
+    if source in _AUTO_APPROVE_SOURCES and not suspicious:
         return State.READY, (
             f"auto-approve: APPROVE — {source} (deterministic rule: "
             "mill-internal periodic-agent proposal, no design risk)"

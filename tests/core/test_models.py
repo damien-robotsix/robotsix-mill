@@ -86,6 +86,7 @@ def test_sourcekind_member_count():
         "REPO_DESCRIPTION_SYNC",
         "MODULE_SIZE",
         "CONFIG_STANDARD",
+        "MYPY_BASELINE",
     }
     assert set(SourceKind.__members__) == expected
 

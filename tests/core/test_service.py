@@ -3477,3 +3477,107 @@ def test_resolve_by_suffix_exact_full_id(service):
     t = service.create("full id suffix test")
     result = service.resolve_by_suffix(t.id)
     assert result == t.id
+
+
+# --- retired State values in history must not block deletion -------------
+
+
+def _write_retired_state_event(settings, service, ticket_id: str) -> None:
+    """Stamp one history row with a ``state`` no longer in ``State``.
+
+    Simulates history written by an older mill. Goes through raw SQL
+    because the ORM would refuse to *write* the value too — the point is
+    that such rows already exist on disk (live: 200 'MAINTENANCE' rows
+    across 5 boards, left behind when that state was retired).
+    """
+    from sqlalchemy import text
+    from robotsix_mill.core.db import session as db_session
+
+    with db_session(settings, service.board_id) as s:
+        s.exec(
+            text(
+                "INSERT INTO ticketevent (ticket_id, state, note, at, hash) "
+                "VALUES (:tid, 'MAINTENANCE', 'legacy', :at, 'h')"
+            ),
+            params={"tid": ticket_id, "at": "2026-01-01 00:00:00"},
+        )
+        s.commit()
+
+
+def test_delete_succeeds_with_retired_state_in_history(service, settings):
+    """A history row whose state was retired must not block deletion.
+
+    Loading such a row as an ORM object decodes ``state`` through the
+    strict Enum and raises ``KeyError``. Live, that made every
+    archived-ticket purge crash, so archived tickets accumulated forever
+    and the crash aborted the worker's post-transition stage chaining.
+    """
+    t = service.create("has legacy history", "x")
+    _write_retired_state_event(settings, service, t.id)
+
+    assert service.delete(t.id) is True
+    assert service.get(t.id) is None
+
+
+def test_purge_archived_survives_retired_state_in_history(service, settings):
+    """The archived-ticket purge must reap a ticket with legacy history.
+
+    This is the exact live failure path: ``transition`` →
+    ``_maybe_purge_archived`` → ``delete`` → KeyError('MAINTENANCE').
+    """
+    settings.max_archived_tickets = 1
+    # The purge deletes oldest-first, so the legacy-history ticket must be
+    # created FIRST or it is never the one reaped and the test passes
+    # vacuously against the unfixed code.
+    old = service.create("old with legacy history", "x")
+    service.transition(old.id, State.CLOSED)
+    _write_retired_state_event(settings, service, old.id)
+    keep = service.create("keep", "x")
+    service.transition(keep.id, State.CLOSED)
+
+    # Must not raise — and must actually purge down to the cap.
+    service._maybe_purge_archived()
+
+    remaining = [t for t in service.list() if t.state is State.CLOSED]
+    assert len(remaining) <= 1
+
+
+# --- implement spawn budget resets on productive work --------------------
+
+
+def _spawn_counter(service, ticket):
+    return service.workspace(ticket).artifacts_dir / "implement_spawn_count"
+
+
+def test_spawn_counter_cleared_when_implement_delivers(service):
+    """Leaving READY for a later stage must return the spawn budget.
+
+    The counter caps implement invocations so a BLOCKED→READY→BLOCKED
+    loop can't burn unbounded quota, but nothing reset it on success —
+    it was monotonic for the ticket's whole life. A ticket therefore got
+    three implement passes EVER, and a fourth (routine after review
+    feedback) dead-ended it at "spawn limit reached (3/3)". That became
+    the largest BLOCKED class on the live board.
+    """
+    t = service.create("delivers", "x")
+    service.transition(t.id, State.READY)
+    _spawn_counter(service, t).write_text("3", encoding="utf-8")
+
+    service.transition(t.id, State.CODE_REVIEW)
+
+    assert not _spawn_counter(service, t).exists()
+
+
+def test_spawn_counter_survives_an_unproductive_block(service):
+    """READY → BLOCKED must NOT refund the budget.
+
+    Otherwise the cap could never fire and the loop protection it exists
+    to provide would be gone.
+    """
+    t = service.create("goes nowhere", "x")
+    service.transition(t.id, State.READY)
+    _spawn_counter(service, t).write_text("3", encoding="utf-8")
+
+    service.transition(t.id, State.BLOCKED)
+
+    assert _spawn_counter(service, t).read_text(encoding="utf-8") == "3"

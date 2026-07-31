@@ -114,6 +114,7 @@
     implement_baseline_dependency: "implement-baseline-dependency",
     repo_description_sync: "repo-description-sync",
     orphaned_pr_check: "orphaned-pr-check",
+    mypy_baseline: "mypy-baseline",
   };
 
   const STATE_ARTIFACT = {

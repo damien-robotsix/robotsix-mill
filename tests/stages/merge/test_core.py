@@ -995,7 +995,7 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
-        lambda repo, target_branch, pre_rebase_files: (
+        lambda repo, target_branch, pre_rebase_files, pre_rebase_blobs=None: (
             False,
             ["src/dropped.py"],
         ),

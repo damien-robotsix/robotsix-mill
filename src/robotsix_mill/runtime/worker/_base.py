@@ -34,6 +34,10 @@ class _WorkerBase:
         run_registry: RunRegistry | None
         run_registries: dict[str, RunRegistry]
         _inflight_passes: set[asyncio.Task]
+        # Caps concurrent per-repo clone/fetch refreshes so repo
+        # maintenance can never occupy the whole shared thread pool and
+        # starve ticket stages. Defined on Worker.
+        _repo_refresh_sem: asyncio.Semaphore
 
         # --- class constants (defined on Worker / a sibling mixin) ---
         _META_BOARD: str
