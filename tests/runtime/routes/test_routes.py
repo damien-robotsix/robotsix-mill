@@ -1461,6 +1461,73 @@ def test_chat_skill_returns_markdown(client):
     assert "Safety rules" in body
 
 
+def test_chat_skill_documents_merge_now(client):
+    """The chat skill must advertise merge-now.
+
+    A `human_mr_approval` ticket is one the merge stage deliberately
+    declined to auto-merge (sensitive path, infra denylist). The PR is
+    green and mergeable and only needs a human decision. `merge-now`
+    existed and was served, but was absent from this document — so the
+    chat agent could not know about it and told operators to go merge by
+    hand in the forge UI instead, which is exactly the manual toil the
+    endpoint exists to remove.
+    """
+    body = client.get("/chat-skill").text
+    assert "/merge-now" in body
+    assert "human_mr_approval" in body
+
+
+# Ticket routes deliberately absent from /chat-skill as of the day this
+# guard was added. They are operator//internal surfaces, not part of the
+# chat agent's vocabulary. This is a BASELINE, not an endorsement: the
+# point of the test below is that a NEWLY added route cannot silently
+# join this list. Removing an entry (by documenting it) is always safe;
+# adding one should be a conscious decision, not a default.
+_CHAT_SKILL_UNDOCUMENTED_BASELINE = {
+    "/screenshots",
+    "/migrate",
+    "/unblocks",
+    "/redraft",
+    "/reset-fingerprint",
+    "/abandon-epic",
+    "/generate-children",
+}
+
+
+def test_chat_skill_documents_every_state_changing_ticket_route(client):
+    """Every POST/DELETE ticket route must appear in the chat skill.
+
+    The skill document is the chat agent's only description of this API.
+    A route missing from it is invisible to the agent — indistinguishable
+    from not existing — so it falls back to telling a human to do the job
+    by hand. That is exactly what happened with `merge-now`: the endpoint
+    was implemented and served, but undocumented, so operators were being
+    sent to the forge UI to merge PRs mill could have merged for them.
+
+    Enumerated from the live router so a new endpoint cannot quietly ship
+    undocumented.
+    """
+    body = client.get("/chat-skill").text
+    missing = []
+    for route in client.app.routes:
+        path = getattr(route, "path", "")
+        methods = getattr(route, "methods", set()) or set()
+        if not path.startswith("/tickets"):
+            continue
+        if not (methods & {"POST", "DELETE"}):
+            continue
+        # The doc writes the trailing action segment (e.g. "/merge-now");
+        # ingest/bulk helpers are documented under their own headings.
+        tail = path.rsplit("}", 1)[-1]
+        if not tail or tail == "/":
+            continue
+        if tail in _CHAT_SKILL_UNDOCUMENTED_BASELINE:
+            continue
+        if tail not in body:
+            missing.append(f"{sorted(methods & {'POST', 'DELETE'})} {path}")
+    assert not missing, f"ticket routes absent from /chat-skill: {missing}"
+
+
 # --- short-ID resolution via routes ------------------------------------
 
 

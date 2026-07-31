@@ -216,6 +216,33 @@ Content-Type: application/json
 
 Marks a ticket `done` from any non-terminal state.  The `note` parameter is optional; if provided it is recorded as the transition note.
 
+### POST /tickets/{id}/merge-now — merge the PR of a ticket awaiting approval  🛑
+
+```
+POST /tickets/<ticket-id>/merge-now
+```
+
+Merges the ticket's PR through the forge API and advances the ticket to
+`done`.  No request body.
+
+**This is how a `human_mr_approval` ticket gets merged.**  A ticket parks
+in `human_mr_approval` when the merge stage deliberately declines to
+auto-merge — the PR touches a sensitive path (`.github/workflows/**`,
+secrets, `.env*`), its repo is on the auto-merge infra denylist, or the
+repo opted out.  The PR is already green and mergeable; what is missing
+is a human decision.  Once the operator gives it, call this endpoint —
+do **not** send them to the forge UI to merge by hand.  Report the
+blocking reason (it is in the ticket's history) so they can decide
+knowingly, then act on their answer yourself.
+
+Multi-repo (meta-board) tickets merge every PR in the manifest; repos
+already merged are skipped, so a re-press after a partial failure is
+safe to retry.
+
+Returns 409 when the ticket is not in `human_mr_approval` or when the
+forge rejects the merge (branch protection, conflict, …), 404 when the
+ticket does not exist.
+
 ### POST /tickets/{id}/resume-blocked — unblock a ticket
 
 ```
