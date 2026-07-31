@@ -21,8 +21,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
 
@@ -383,6 +381,8 @@ async def run_explore(
 
     from pydantic_ai.exceptions import UsageLimitExceeded
 
+    from .retry import is_transient
+
     last_error: Exception | None = None
 
     for attempt in range(1, _EXPLORE_MAX_ATTEMPTS + 1):
@@ -426,6 +426,16 @@ async def run_explore(
             return f"explore failed: budget exhausted after {attempt} attempt(s)"
         except Exception as e:
             last_error = e
+            if not is_transient(e):
+                log.warning(
+                    "explore attempt %d/%d failed with non-transient error "
+                    "(%s: %s) — not retrying",
+                    attempt,
+                    _EXPLORE_MAX_ATTEMPTS,
+                    type(e).__name__,
+                    e,
+                )
+                break
             if attempt < _EXPLORE_MAX_ATTEMPTS:
                 delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
                 delay += random.uniform(0, delay / 2)

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- `explore` sub-agent: stop retrying on non-transient errors (e.g. account-out-of-credits 402) instead of burning 3 retry attempts against a model that will never succeed.
 - Refine stage: add output-length guidance to system prompt (target 2500–4000 words, prefer bullets, aim for ~4000 tokens). Lower `refine_trivial_model_level` default from 3 (Claude sonnet) to 2 (DeepSeek Pro) so straightforward gap-fill tickets use a cheaper model, saving ~$0.90 per trivial refine.
 - Document `MILL_DIAGNOSTIC_EVENTS_PATH` env var in the periodic-agents config table (`docs/config/configuration.md`).
 - Document `gates.delta_context_retry_enabled` (`MILL_DELTA_CONTEXT_RETRY_ENABLED`, default `true`) in the configuration reference under section 11.3 Refine routing.
