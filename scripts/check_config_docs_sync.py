@@ -24,6 +24,9 @@ Invariants (each contributes drift lines; the run fails if any fire):
     3. For every field present in both model and docs, the Python default
        must match the documented default, unless listed in
        ``_DEFAULT_MISMATCH_EXCEPTIONS``.
+    4. Every field listed in ``_MODEL_FIELDS_NOT_IN_DOCS`` whose env var
+       now resolves in the doc settings tables is a stale exception —
+       it should be removed from the exception set.
 
 This script is meant to be invoked from the repo root (which CI and the
 ``validate-config-docs-sync`` pre-commit hook both guarantee).
@@ -69,7 +72,6 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         "forge_repo_create_token",
         "github_app_id",
         "github_app_private_key",
-        "github_app_private_key_path",
         "langfuse_base_url",
         "langfuse_public_key",
         "langfuse_secret_key",
@@ -79,17 +81,12 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         "ntfy_url",
         "ntfy_token",
         # -- Credentials leaked from Secrets model into Settings (legacy
-        #    compatibility). These live in the secrets block, not settings --
-        "forge_auth",
+        #    compatibility).  Now has a documented entry; removed from
+        #    exceptions —
         # -- default_factory fields whose effective default depends on
         #    runtime resolution (Path via importlib.resources, dict
         #    constructed at class-load, etc.) —
-        "skills_dir",
-        "language_instructions_dir",
         "coordinator_timeout_overrides",
-        "stage_timeout_overrides",
-        "diagnostic_monitored_repo_ids",
-        "orphaned_pr_bot_logins",
         # -- Config-file-only fields — documented with ``—`` env var
         #    so they can't be matched by env-var name.  The doc still
         #    records their defaults, but the mapping key is missing --
@@ -109,10 +106,6 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         "trace_health_interval_seconds",
         "timeout_escalation_periodic",
         "timeout_escalation_interval_seconds",
-        "docstring_coverage_periodic",
-        "docstring_coverage_interval_seconds",
-        "module_size_periodic",
-        "module_size_interval_seconds",
         "agent_check_periodic",
         "agent_check_interval_seconds",
         "health_periodic",
@@ -422,6 +415,34 @@ def _check_doc_env_vars_in_model(
     return drift
 
 
+def _check_stale_no_doc_exceptions(
+    model: type,
+    doc_defaults: dict[str, str],
+    exceptions: frozenset[str],
+) -> list[str]:
+    """Reverse-check: flag exception entries whose env var now has a doc entry.
+
+    Each field name in *exceptions* is resolved to its env-var name
+    via the live model.  If that env var appears in *doc_defaults*
+    (the parsed settings-reference tables), the exception is stale —
+    the field is now documented and should be removed from the
+    exception set.
+    """
+    drift: list[str] = []
+    for name in sorted(exceptions):
+        field = model.model_fields.get(name)
+        if field is None:
+            continue  # field no longer exists on the model; skip
+        env_var = _field_env_var(name, field)
+        if env_var in doc_defaults:
+            drift.append(
+                f"Stale exception: field {name!r} (env {env_var}) is in "
+                "_MODEL_FIELDS_NOT_IN_DOCS but has a documented entry "
+                "in docs/config/configuration.md"
+            )
+    return drift
+
+
 def _build_valid_env_vars(model: type) -> set[str]:
     """Return the set of all valid env-var names for a Settings model."""
     names: set[str] = set()
@@ -450,6 +471,9 @@ def collect_drift() -> list[str]:
     )
     drift += _check_doc_env_vars_in_model(
         doc_defaults, valid_env_vars, _DOC_ENV_VARS_NOT_IN_MODEL
+    )
+    drift += _check_stale_no_doc_exceptions(
+        Settings, doc_defaults, _MODEL_FIELDS_NOT_IN_DOCS
     )
     return drift
 
