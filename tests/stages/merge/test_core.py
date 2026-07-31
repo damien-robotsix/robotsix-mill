@@ -2434,8 +2434,8 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
     assert merge_called == []
 
 
-def test_merge_pr_failure_stays_human_mr_approval(tmp_path, monkeypatch):
-    """merge_pr returns {'merged': False} → HUMAN_MR_APPROVAL (not BLOCKED)."""
+def test_merge_pr_failure_goes_to_blocked(tmp_path, monkeypatch):
+    """merge_pr returns {'merged': False} → BLOCKED."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2465,7 +2465,7 @@ def test_merge_pr_failure_stays_human_mr_approval(tmp_path, monkeypatch):
     _write_review_artifact(ctx, t)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.BLOCKED
 
 
 def test_auto_merge_writes_merge_artifact(tmp_path, monkeypatch):
@@ -2572,10 +2572,10 @@ def test_eligible_success_auto_merges_to_done(tmp_path, monkeypatch):
     assert out.next_state is State.DONE
 
 
-def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
+def test_eligible_forge_merge_failed_goes_to_blocked(
     tmp_path, monkeypatch
 ):
-    """Eligible + CI success + forge rejects → HUMAN_MR_APPROVAL + comment."""
+    """Eligible + CI success + forge rejects → BLOCKED + comment."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2605,7 +2605,7 @@ def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
     _write_review_artifact(ctx, t)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert out.next_state is State.BLOCKED
 
     merge_events = [
         e for e in ctx.service.history(t.id) if (e.note or "").startswith("merge:")
@@ -2613,7 +2613,7 @@ def test_eligible_forge_merge_failed_stays_human_mr_approval_with_comment(
 
     assert len(merge_events) == 1
 
-    assert "forge merge failed: branch protection" in (merge_events[0].note or "")
+    assert "forge merge rejected: branch protection" in (merge_events[0].note or "")
 
 
 def test_not_eligible_disabled_flag_stays_human_mr_approval_with_comment(
