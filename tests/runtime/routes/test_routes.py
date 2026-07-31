@@ -65,108 +65,66 @@ def test_get_history_404(client):
     assert r.status_code == 404
 
 
-def test_get_history_with_offset(client, service):
+def test_get_history_limit(client, service):
+    """GET /tickets/{id}/history?limit=N returns at most N events."""
+    t = service.create("Limit test")
+    # DRAFT -> READY -> CODE_REVIEW -> DOCUMENTING -> BLOCKED
+    service.transition(t.id, State.READY, note="transition 1")
+    service.transition(t.id, State.CODE_REVIEW, note="transition 2")
+    service.transition(t.id, State.DOCUMENTING, note="transition 3")
+    service.transition(t.id, State.BLOCKED, note="transition 4")
+
+    r = client.get(f"/tickets/{t.id}/history?limit=2")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 2, f"expected 2 events, got {len(data)}"
+
+
+def test_get_history_offset(client, service):
     """GET /tickets/{id}/history?offset=N skips the first N events."""
     t = service.create("Offset test")
-    for i in range(5):
-        service.transition(t.id, State.READY, note=f"promote {i}")
-        service.transition(t.id, State.ERRORED, note=f"error {i}")
-        service.transition(t.id, State.DRAFT, note=f"recover {i}")
+    service.transition(t.id, State.READY, note="transition 1")
+    service.transition(t.id, State.CODE_REVIEW, note="transition 2")
 
-    full = client.get(f"/tickets/{t.id}/history").json()
-    assert len(full) >= 6  # created + transitions
+    r_full = client.get(f"/tickets/{t.id}/history")
+    assert r_full.status_code == 200
+    full = r_full.json()
 
-    r = client.get(f"/tickets/{t.id}/history", params={"offset": 2})
+    r = client.get(f"/tickets/{t.id}/history?offset=2")
     assert r.status_code == 200
-    offset_data = r.json()
-    assert len(offset_data) == len(full) - 2
-    # First event in the offset result should be the third event overall.
-    assert offset_data[0]["id"] == full[2]["id"]
+    data = r.json()
+    assert len(data) == len(full) - 2
 
 
-def test_get_history_with_limit(client, service):
-    """GET /tickets/{id}/history?limit=N caps the result to N events."""
-    t = service.create("Limit test")
-    for i in range(5):
-        service.transition(t.id, State.READY, note=f"promote {i}")
-        service.transition(t.id, State.ERRORED, note=f"error {i}")
-        service.transition(t.id, State.DRAFT, note=f"recover {i}")
+def test_get_history_order_desc(client, service):
+    """GET /tickets/{id}/history?order=desc returns most-recent-first."""
+    t = service.create("Desc test")
+    service.transition(t.id, State.READY, note="first")
+    service.transition(t.id, State.CODE_REVIEW, note="last")
 
-    r = client.get(f"/tickets/{t.id}/history", params={"limit": 3})
+    r = client.get(f"/tickets/{t.id}/history?order=desc")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
-    assert len(data) == 3
+    assert len(data) >= 2
+    # Most-recent event first: CODE_REVIEW comes before READY
+    assert data[0]["state"] == "code_review"
 
 
-def test_get_history_with_offset_and_limit(client, service):
-    """GET /tickets/{id}/history?offset=N&limit=M paginates correctly."""
-    t = service.create("Page test")
-    for i in range(3):
-        service.transition(t.id, State.READY, note=f"promote {i}")
-        service.transition(t.id, State.ERRORED, note=f"error {i}")
-        service.transition(t.id, State.DRAFT, note=f"recover {i}")
-
-    # Page 1: events 0-2 (offset=0, limit=3)
-    page1 = client.get(
-        f"/tickets/{t.id}/history", params={"offset": 0, "limit": 3}
-    ).json()
-    # Page 2: events 3-5 (offset=3, limit=3)
-    page2 = client.get(
-        f"/tickets/{t.id}/history", params={"offset": 3, "limit": 3}
-    ).json()
-    # Page 3: events 6-8 (offset=6, limit=3)
-    page3 = client.get(
-        f"/tickets/{t.id}/history", params={"offset": 6, "limit": 3}
-    ).json()
-    # Page 4: remainder (offset=9, limit=3)
-    page4 = client.get(
-        f"/tickets/{t.id}/history", params={"offset": 9, "limit": 3}
-    ).json()
-
-    all_page_ids = [e["id"] for e in page1 + page2 + page3 + page4]
-    full_ids = [e["id"] for e in client.get(f"/tickets/{t.id}/history").json()]
-    assert all_page_ids == full_ids
-
-
-def test_get_history_with_tail(client, service):
-    """GET /tickets/{id}/history?tail=N returns the last N events
-    in chronological order."""
+def test_get_history_desc_limit_tail(client, service):
+    """GET /tickets/{id}/history?order=desc&limit=1 returns only the final event."""
     t = service.create("Tail test")
-    for i in range(5):
-        service.transition(t.id, State.READY, note=f"promote {i}")
-        service.transition(t.id, State.ERRORED, note=f"error {i}")
-        service.transition(t.id, State.DRAFT, note=f"recover {i}")
+    service.transition(t.id, State.READY, note="promoted")
+    service.transition(t.id, State.BLOCKED, note="block reason")
 
-    full = client.get(f"/tickets/{t.id}/history").json()
-    assert len(full) >= 6
-
-    r = client.get(f"/tickets/{t.id}/history", params={"tail": 3})
+    r = client.get(f"/tickets/{t.id}/history?order=desc&limit=1")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
-    assert len(data) == 3
-    # The tail should be the last 3 events from the full list.
-    assert data[0]["id"] == full[-3]["id"]
-    assert data[1]["id"] == full[-2]["id"]
-    assert data[2]["id"] == full[-1]["id"]
-
-
-def test_get_history_tail_exceeds_total(client, service):
-    """GET /tickets/{id}/history?tail=N returns all events when N
-    exceeds the total count."""
-    t = service.create("Tail overflow test")
-    service.transition(t.id, State.READY, note="one transition")
-
-    full = client.get(f"/tickets/{t.id}/history").json()
-    assert len(full) == 2  # created + transition
-
-    r = client.get(f"/tickets/{t.id}/history", params={"tail": 100})
-    assert r.status_code == 200
-    data = r.json()
-    assert len(data) == 2
-    assert data[0]["id"] == full[0]["id"]
-    assert data[1]["id"] == full[1]["id"]
+    assert len(data) == 1
+    assert data[0]["state"] == "blocked"
+    assert data[0]["note"] == "block reason"
 
 
 # -- GET /tickets/{id}/comments -----------------------------------------

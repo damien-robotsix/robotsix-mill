@@ -75,14 +75,15 @@ def _description_section(desc: str) -> list[str]:
 
 
 def _history_section(history) -> list[str]:
-    """``### History`` block — all events, most recent first."""
+    """``### History`` block — most recent events first."""
     n = len(history)
-    lines = [f"### History ({n} events)", ""]
+    label = f"### History (most recent {n} event{'' if n == 1 else 's'})"
+    lines = [label, ""]
     if not history:
         lines.append("(no history)")
         lines.append("")
         return lines
-    for ev in reversed(history):
+    for ev in history:
         lines.append(f"- [{ev.state.value}] {ev.at} — {ev.note or '(no note)'}")
     lines.append("")
     return lines
@@ -142,7 +143,9 @@ def make_read_ticket_tool(settings: Settings):
 
             lines = _header_lines(ticket)
             lines += _description_section(service.workspace(ticket).read_description())
-            lines += _history_section(service.history(ticket_id))
+            lines += _history_section(
+                service.history(ticket_id, limit=50, order="desc")
+            )
             lines += _comments_section(service.list_comments(ticket_id))
 
             return _truncate_at_boundary(

@@ -16,6 +16,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
 )
@@ -370,26 +371,25 @@ def get_ticket(
 @router.get("/tickets/{ticket_id}/history", response_model=list[TicketEvent])
 def get_history(
     ticket_id: str,
-    offset: int = 0,
-    limit: int | None = None,
-    tail: int | None = None,
+    limit: int | None = Query(None, ge=1),
+    offset: int = Query(0, ge=0),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     svc=Depends(get_service),
 ) -> list[TicketEvent]:
     """Return event history for a ticket (``GET /tickets/{ticket_id}/history``).
 
-    Query parameters:
+    Returns ``TicketEvent`` rows ordered by ``at``.  Query params:
 
-    * ``offset`` — skip the first N events (default 0).
-    * ``limit`` — return at most N events (default: all).
-    * ``tail`` — return the last N events (mutually exclusive with
-      *offset*/*limit*).
-
+    * ``limit`` — max events to return (unbounded when omitted).
+    * ``offset`` — events to skip before the first returned event.
+    * ``order`` — ``asc`` (chronological, default) or ``desc``
+      (most-recent-first — useful for retrieving the final event).
     Raises 404 when the ticket does not exist.
     """
     ticket_id = resolve_ticket_id(ticket_id, svc)
     if svc.get(ticket_id) is None:
         raise HTTPException(404, "ticket not found")
-    return svc.history(ticket_id, offset=offset, limit=limit, tail=tail)
+    return svc.history(ticket_id, limit=limit, offset=offset, order=order)
 
 
 @router.get("/tickets/{ticket_id}/description")

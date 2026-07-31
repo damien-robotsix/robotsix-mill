@@ -7,6 +7,7 @@
 - `resume-blocked` for CI-failed tickets now refreshes the PR branch (rebase + empty-commit) **before** evaluating CI, so a transient flake that has since resolved un-sticks in one resume instead of re-reading the same stale failing run forever.
 - fix(implement): advance to DELIVERABLE when the branch has committed-ahead work and the agent produces no new file edits (non-zero tool calls but zero edit calls), instead of looping until the spawn limit trips)
 - Added `tail` query parameter to `GET /tickets/{id}/history`, returning the last N events in chronological order without requiring the caller to know the total event count.
+- `read_ticket` tool now fetches only the most recent 50 history events (``order="desc"``, ``limit=50``) so the final event is always visible even for tickets with very large histories. The chat skill doc now documents the history endpoint's ``limit``, ``offset``, and ``order`` query params.
 - Emit a SPAWN_LIMIT_EXHAUSTED diagnostic event when the implement spawn
   counter hits its limit, with the last attempt's summary tail included in
   the event reason. Agents (including the periodic diagnostic agent) can

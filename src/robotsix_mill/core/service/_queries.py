@@ -199,37 +199,30 @@ class _QueryMixin(_ServiceBase):
     def history(
         self,
         ticket_id: str,
-        offset: int = 0,
         limit: int | None = None,
-        tail: int | None = None,
+        offset: int = 0,
+        order: str = "asc",
     ) -> list[TicketEvent]:
-        """Return the :class:`TicketEvent` log for *ticket_id*, ordered by ``at``.
+        """Return the :class:`TicketEvent` log for *ticket_id*.
 
-        *offset* and *limit* control forward pagination.  When *limit* is ``None``
-        (the default) every event is returned.
-
-        *tail* returns the last N events in chronological order.  It is mutually
-        exclusive with *offset*/*limit* — only one pagination mode is honoured.
+        Events are ordered by ``at`` (ascending by default; pass
+        ``order="desc"`` for most-recent-first).  *limit* and *offset*
+        enable windowed retrieval.
         """
         board = self._board_for(ticket_id)
         with db.session(self.settings, board) as s:
-            if tail is not None:
-                stmt = (
-                    select(TicketEvent)
-                    .where(TicketEvent.ticket_id == ticket_id)
-                    .order_by(TicketEvent.at.desc())  # type: ignore[attr-defined]
-                    .limit(tail)
-                )
-                rows = list(s.exec(stmt).all())
-                rows.reverse()
-                return rows
-
+            direction = (
+                TicketEvent.at.desc()  # type: ignore[attr-defined]
+                if order == "desc"
+                else TicketEvent.at.asc()  # type: ignore[attr-defined]
+            )
             stmt = (
                 select(TicketEvent)
                 .where(TicketEvent.ticket_id == ticket_id)
-                .order_by(TicketEvent.at)
-                .offset(offset)
+                .order_by(direction)
             )
+            if offset:
+                stmt = stmt.offset(offset)
             if limit is not None:
                 stmt = stmt.limit(limit)
             return list(s.exec(stmt).all())
@@ -268,7 +261,7 @@ class _QueryMixin(_ServiceBase):
             stmt = select(Ticket)
             if sources is not None:
                 stmt = stmt.where(Ticket.source.in_(list(sources)))
-            stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)
+            stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit)  # type: ignore[attr-defined]
             return list(s.exec(stmt).all())
 
     def list_children(self, ticket_id: str) -> list[Ticket]:

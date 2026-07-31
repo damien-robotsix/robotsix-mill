@@ -21,3 +21,18 @@ the dedicated Python tools:
 
 When running inside a **network-isolated sandbox** (e.g. `--network none`),
 fall back to the dedicated `read_ticket` tool.
+
+### History paging
+
+The `GET /tickets/{id}/history` endpoint supports pagination:
+
+- `?limit=N` — return at most N events (default: unbounded).
+- `?offset=N` — skip the first N events (default: 0).
+- `?order=asc|desc` — chronological (default) or most-recent-first.
+
+To retrieve the final (most-recent) history event of a ticket whose full
+history is too large to read in one response, use:
+
+    GET /tickets/{id}/history?order=desc&limit=1
+
+This returns a single-event response regardless of total history size.
