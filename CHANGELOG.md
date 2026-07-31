@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add reverse-check invariant (#4) to `scripts/check_config_docs_sync.py`: `_check_stale_no_doc_exceptions` flags every `_MODEL_FIELDS_NOT_IN_DOCS` entry whose env var now resolves in `docs/config/configuration.md`, so a field that gains documentation without removing its exception causes the script to exit non-zero.
 - `explore` sub-agent: stop retrying on non-transient errors (e.g. account-out-of-credits 402) instead of burning 3 retry attempts against a model that will never succeed.
 - Refine stage: add output-length guidance to system prompt (target 2500–4000 words, prefer bullets, aim for ~4000 tokens). Lower `refine_trivial_model_level` default from 3 (Claude sonnet) to 2 (DeepSeek Pro) so straightforward gap-fill tickets use a cheaper model, saving ~$0.90 per trivial refine.
 - Cleaned up ~70 stale entries from `_MODEL_FIELDS_NOT_IN_DOCS` in `scripts/check_config_docs_sync.py`: removed fields already documented in `docs/config/configuration.md`, moved `deliver_max_identical_blocks` and `refine_web_fetch_*` to the config-file-only group, and removed two nonexistent fields (`trace_review_max_inspector_runs_per_pass`, `sandbox_push_token`). Added `review_diff_max_chars` to the default-mismatch exceptions (doc uses `200_000` for readability; model stores `200000`).
