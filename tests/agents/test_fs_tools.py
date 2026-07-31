@@ -1236,12 +1236,8 @@ class TestParallelCommands:
         root.mkdir()
         tools = _build(root, settings)
 
-        call_count = 0
-
         def _fake_run(cmd, **kw):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 2:
+            if cmd == "cmd-b":
                 raise sandbox.SandboxError("infra failure")
             return (0, f"ok: {cmd}")
 
