@@ -969,10 +969,9 @@ class CIFixStage(Stage):
         # transient (infrastructure flake) vs deterministic (lint/test/type
         # error).  Transient failures get automatic CI re-runs (up to
         # ci_transient_max_retries) instead of spawning a fix ticket.
-        from .ci_transient import (
-            _CI_TRANSIENT_RETRY_COUNTER,
-            is_transient_ci_failure,
-        )
+        from .ci_transient import is_transient_ci_failure
+
+        _CI_TRANSIENT_RETRY_COUNTER = "ci_transient_retry.txt"
 
         if is_transient_ci_failure(failing_summary):
             transient_counter = _read_counter(

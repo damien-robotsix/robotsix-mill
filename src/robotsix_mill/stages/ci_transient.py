@@ -59,9 +59,6 @@ TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
     ),
 ]
 
-# Counter filename — persists retry count across pipeline passes.
-_CI_TRANSIENT_RETRY_COUNTER = "ci_transient_retry.txt"
-
 
 def is_transient_ci_failure(
     failing_summary: str,
