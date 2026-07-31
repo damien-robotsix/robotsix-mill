@@ -66,7 +66,11 @@ Returns the full `TicketRead` for one ticket (includes `unmet_deps`, `dependenci
 GET /tickets/<ticket-id>/history
 ```
 
-Returns a JSON array of `TicketEvent` objects (state transitions, comments, priority toggles, …) ordered oldest-first.
+Returns a JSON array of `TicketEvent` objects (state transitions, comments, priority toggles, …) ordered oldest-first.  Query params:
+
+- `limit` — max events to return (omit for all).
+- `offset` — events to skip before the first returned event (default 0).
+- `order` — `asc` (chronological, default) or `desc` (most-recent-first).
 
 ### GET /tickets/{id}/description — raw description text
 
