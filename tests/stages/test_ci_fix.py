@@ -2825,16 +2825,11 @@ def test_ci_fix_and_rebase_use_same_token_function(
 # ---------------------------------------------------------------------------
 
 
-def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkeypatch):
-    """When the rebase doesn't change HEAD (branch already current),
-    the stage pushes an empty commit to produce a fresh head SHA so
-    the forge triggers a new pull_request CI run — un-sticking tickets
-    whose original CI failure was a transient flake that has since
-    resolved.
-
-    Having pushed, the stage returns WITHOUT reading check status: the run
-    it just triggered cannot have finished, so the read could only ever
-    return "pending". The fresh result is picked up on the next poll.
+def test_stale_branch_reruns_workflow_for_transient_failure(tmp_path, monkeypatch):
+    """When a CI failure is transient (e.g. ECONNRESET), the stage re-runs
+    the failing workflow(s) via the forge API instead of pushing an empty
+    commit — no noise commits, and the identical-failure gate bounds
+    repeated re-triggers.
     """
     ctx = _gh(tmp_path)
 
@@ -2846,24 +2841,16 @@ def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkey
     )
 
     push_calls = []
-    empty_commit_calls = []
 
     def track_push(repo, branch, remote_url, token):
         push_calls.append((branch, remote_url))
-
-    def track_empty_commit(repo, message):
-        empty_commit_calls.append(message)
 
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.push",
         track_push,
     )
-    monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
-        track_empty_commit,
-    )
-    # head_sha and ls_remote_sha return the same value → empty-commit
-    # path triggers.
+    # head_sha and ls_remote_sha — still needed by the rebase path but
+    # the empty-commit logic is removed; these just prevent crashes.
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.head_sha",
         lambda repo: "abc123",
@@ -2873,42 +2860,79 @@ def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkey
         lambda remote_url, ref, token=None: "abc123",
     )
 
-    # Would report the fresh run as green — but the stage must not read it
-    # in the same pass that invalidated it.
-    check_status_calls = []
-
-    def fake_check_status(self, *, source_branch, require_checks=False):
-        check_status_calls.append(source_branch)
-        return {"conclusion": "success", "failing": []}
-
+    # check_status returns failure with transient signature in the logs.
     monkeypatch.setattr(
         github.GitHubForge,
         "check_status",
-        fake_check_status,
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "tests",
+                    "summary": "test suite failed",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
         lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [
+            {
+                "id": 42,
+                "name": "tests",
+                "workflow_id": 1,
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "html_url": "",
+                "created_at": "",
+                "event": "push",
+                "head_branch": "test-branch",
+                "path": "",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, *, run_id, full_log=False: "pytest failed: ECONNRESET\n",
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+
+    rerun_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "rerun_workflow",
+        lambda self, *, run_id: rerun_calls.append(run_id) or {"rerun": True},
+    )
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
 
     out = CIFixStage().run(t, ctx)
-    # Re-poll from implement_complete; the fresh run is read next time.
+    # The transient failure is re-run; ticket re-polls.
     assert out.next_state is State.IMPLEMENT_COMPLETE
 
-    # The empty commit was created and pushed.
-    assert len(empty_commit_calls) == 1
-    assert "trigger fresh CI run" in empty_commit_calls[0]
-    # Two pushes: one for the (no-op) rebase, one for the empty commit.
-    assert len(push_calls) >= 2
-    # ...and the status it just invalidated was NOT read.
-    assert check_status_calls == [], (
-        "reading check status right after pushing the refresh commit can only "
-        "ever return 'pending' — that read is what starved the fix path"
-    )
+    # rerun_workflow was called (not empty_commit).
+    assert rerun_calls == [42]
+    # Only one push: the rebase push (no empty commit).
+    assert len(push_calls) == 1
 
 
 def test_branch_changed_by_rebase_skips_empty_commit(tmp_path, monkeypatch):
@@ -3017,75 +3041,3 @@ def test_remote_sha_unavailable_skips_empty_commit(tmp_path, monkeypatch):
     assert out.next_state is State.IMPLEMENT_COMPLETE
     # No empty commit — ls_remote_sha returned None.
     assert len(empty_commit_calls) == 0
-
-
-# --- empty-commit refresh is bounded (livelock regression) -----------
-
-
-def test_second_pass_skips_empty_commit_and_reaches_the_failure_path(
-    tmp_path, monkeypatch
-):
-    """Regression: the empty-commit refresh must be bounded, or ci_fix can
-    never diagnose a genuinely failing CI.
-
-    Pushing the refresh commit invalidates the very status this stage
-    reads. Unbounded, every entry into FIXING_CI pushed another no-op
-    commit and returned in seconds, so the failure path was never
-    reached — observed on robotsix-auto-mail ticket ...-6a4e, which
-    cycled for hours against a real red CI without the fix agent ever
-    running once.
-
-    First pass may refresh; the second must fall through and read the
-    real (failing) status.
-    """
-    ctx = _gh(tmp_path)
-
-    empty_commit_calls: list[str] = []
-    monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
-        lambda repo, message: empty_commit_calls.append(message),
-    )
-    # Branch is already current on every pass → the refresh path is live.
-    monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.head_sha", lambda repo: "abc123"
-    )
-    monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.ls_remote_sha",
-        lambda remote_url, ref, token=None: "abc123",
-    )
-
-    check_status_calls: list[str] = []
-
-    def fake_check_status(self, *, source_branch, require_checks=False):
-        check_status_calls.append(source_branch)
-        return {
-            "conclusion": "failure",
-            "failing": [{"name": "Python CI / Tests", "summary": ""}],
-        }
-
-    monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "pr_status",
-        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
-    )
-
-    t = _fixing_ci(ctx)
-    _setup_repo(ctx, t)
-
-    # Pass 1: refreshes and returns without reading the status it invalidated.
-    CIFixStage().run(t, ctx)
-    assert len(empty_commit_calls) == 1
-    assert check_status_calls == []
-
-    # Pass 2: same ticket re-entering FIXING_CI, same workspace (so the
-    # refresh counter carries over, as it does in production).
-    CIFixStage().run(t, ctx)
-    assert len(empty_commit_calls) == 1, (
-        "a second empty commit re-invalidates the status and restarts the "
-        f"livelock; got {empty_commit_calls}"
-    )
-    assert check_status_calls, (
-        "with the refresh budget spent the stage must read the real CI status "
-        "so the failure path can run"
-    )
