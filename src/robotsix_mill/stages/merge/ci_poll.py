@@ -37,6 +37,25 @@ from ._shared import (
 import contextlib
 
 
+def _ci_run_in_flight(ci_status: dict[str, Any]) -> bool:
+    """True when the forge still has checks running for this branch.
+
+    A refresh (rebase or empty commit) produces a new head SHA, which makes
+    the forge start a fresh run and abandon the one in progress. Doing that
+    while checks are in flight is self-defeating: the poll interval is far
+    shorter than a CI run, so every poll would restart the checks it is
+    waiting on and no run could ever conclude.
+
+    Treats an absent conclusion as in-flight — a status with neither a
+    conclusion nor a pending list is not evidence that anything finished,
+    and declining to push is always the safe direction.
+    """
+    if ci_status.get("pending"):
+        return True
+    conclusion = ci_status.get("conclusion")
+    return conclusion in (None, "", "pending", "in_progress", "queued", "waiting")
+
+
 def _extract_tracked_pr_url(description: str) -> str | None:
     """Extract the tracked PR URL from a tracker ticket description.
 
@@ -269,10 +288,36 @@ class CIPollMixin(_MergeStageBase):
         except Exception:
             _remote_url = ""
             _token = None
+        # Never refresh while checks are still running. A refresh produces a
+        # new head SHA, which makes the forge abandon the in-progress run and
+        # start a fresh one; since the poll interval is far shorter than a CI
+        # run, every poll would restart the checks it is waiting on and no run
+        # could ever conclude. Observed 2026-08-01: 472 empty commits in one
+        # hour across 15 tickets — one looping for 20 hours, restarting 18
+        # checks every 2 minutes — with 22 tickets stacked in
+        # IMPLEMENT_COMPLETE because none of them could finish CI.
+        #
+        # This is a separate, cheap probe rather than a reordering: when the
+        # run HAS concluded, the refresh must still happen before the status
+        # the stage acts on is read, so a stale failing SHA is replaced by a
+        # fresh run instead of being re-diagnosed as a real failure.
         if _remote_url and _repo_dir is not None:
-            _refresh_branch_for_ci(
-                _repo_dir, branch, _target, _remote_url, _token, ticket.id
-            )
+            try:
+                _pre_status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                    source_branch=branch
+                )
+            except Exception:
+                _pre_status = None
+            if _pre_status is not None and _ci_run_in_flight(_pre_status):
+                log.info(
+                    "%s: CI still running — skipping branch refresh so the "
+                    "in-flight run can finish",
+                    ticket.id,
+                )
+            else:
+                _refresh_branch_for_ci(
+                    _repo_dir, branch, _target, _remote_url, _token, ticket.id
+                )
 
         # Check remote CI.
         try:
