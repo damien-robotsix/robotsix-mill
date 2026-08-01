@@ -27,6 +27,7 @@ from ..core.workspace import prune_clone
 from ..forge import get_forge
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
+from typing import Any
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
 
@@ -468,7 +469,7 @@ class RetrospectStage(Stage):
         from ..core.dedup import find_agent_md_proposal_overlap
 
         now = datetime.now(timezone.utc)
-        kept: list[dict] = []
+        kept: list[dict[str, Any]] = []
         for prop in proposals:
             section = prop.get("section", "")
             rule = prop.get("rule", "")

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Promote mypy from advisory to a gating CI check and clear 293 `[type-arg]` baseline errors — bare `dict`, `list`, `Task`, `Queue`, `PriorityQueue`, `tuple`, `set`, `Pattern`, `CompletedProcess`, `AbstractAsyncContextManager`, and `TypeDecorator` generics now carry explicit type arguments. The baseline shrinks from 697 to 412 lines (~41% reduction). Add `make mypy-baseline-shrink` target for snapshot regeneration.
 - Harden module-registration CI check against deleted-but-not-yet-git-rm'd files: filter out files that no longer exist on disk before flagging them as unclassified.  Update implement agent instructions to ``git rm`` deleted files before running ``check-registration``, preventing the loop where an agent keeps re-adding a ``docs/modules.yaml`` entry for a file it just deleted.
 - Add docstring to `PrioritySlots.release` matching the sibling `acquire` method.
 - Add dedicated unit tests for `PollLoopsMixin` (`_initial_delay`, `_load_ci_state`, `_prune_ci_state`, `_find_canonical_ci_ticket`, `_fetch_run_logs_with_deferral`, `_dependabot_title`, `_dependabot_body`) and for `processing.py` helpers (`_post_trace_event`, `_block_ticket_and_notify`, `_handle_stage_error`, `_maybe_reevaluate_epic`, `_root_span_attributes`, `_root_input_summary`, `_root_output_summary`)

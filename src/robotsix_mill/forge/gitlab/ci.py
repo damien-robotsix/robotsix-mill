@@ -68,7 +68,7 @@ class GitLabForgeCIMixin:
 
     def check_status(
         self, *, source_branch: str, require_checks: bool = False
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         try:
             from .core import _parse_gitlab_project_path
 
@@ -84,7 +84,7 @@ class GitLabForgeCIMixin:
             status = pipeline.get("status", "")
             conclusion = _map_pipeline_status(status)
 
-            failing: list[dict] = []
+            failing: list[dict[str, Any]] = []
             if conclusion == "failure":
                 failing = self._get_failed_jobs(project_path, pipeline["id"])
 
@@ -94,7 +94,7 @@ class GitLabForgeCIMixin:
 
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         from .core import _parse_gitlab_project_path
 
         project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
@@ -126,7 +126,9 @@ class GitLabForgeCIMixin:
 
     # -- HTTP seams (monkeypatched in tests) -------------------------------
 
-    def _get_latest_pipeline(self, project_path: str, mr_iid: int) -> dict | None:
+    def _get_latest_pipeline(
+        self, project_path: str, mr_iid: int
+    ) -> dict[str, Any] | None:
         """GET /projects/:id/merge_requests/:iid/pipelines?per_page=1."""
         pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
         r = self._http.get(  # type: ignore[attr-defined]
@@ -139,7 +141,9 @@ class GitLabForgeCIMixin:
             return None
         return items[0]
 
-    def _get_failed_jobs(self, project_path: str, pipeline_id: int) -> list[dict]:
+    def _get_failed_jobs(
+        self, project_path: str, pipeline_id: int
+    ) -> list[dict[str, Any]]:
         """GET /projects/:id/pipelines/:pipeline_id/jobs?scope=failed&per_page=20.
 
         Each failed job's trace (``GET /projects/:id/jobs/:job_id/trace``) is
@@ -203,10 +207,10 @@ class GitLabForgeCIMixin:
         project_path: str,
         branch: str | None,
         head_sha: str | None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """GET /projects/:id/pipelines?ref=…&sha=…&per_page=30."""
         pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
-        params: dict = {"per_page": 30}
+        params: dict[str, Any] = {"per_page": 30}
         if branch is not None:
             params["ref"] = branch
         if head_sha is not None:

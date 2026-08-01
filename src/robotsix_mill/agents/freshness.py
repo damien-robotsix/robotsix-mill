@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 log = logging.getLogger("robotsix_mill.agents.freshness")
 
@@ -195,7 +196,7 @@ def run_freshness_check(
     *,
     draft: str,
     repo_dir: Path | None,
-) -> dict:
+) -> dict[str, Any]:
     """Verify that cited file paths exist on HEAD.
 
     Returns a dict with keys ``stale`` (bool) and ``reason`` (str).

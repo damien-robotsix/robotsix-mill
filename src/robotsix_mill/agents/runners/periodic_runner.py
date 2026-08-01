@@ -39,7 +39,7 @@ class PeriodicPassResult:
     """
 
     updated_memory: str
-    drafts_created: list[dict]
+    drafts_created: list[dict[str, Any]]
     session_id: str = ""
 
 

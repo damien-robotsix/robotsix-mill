@@ -324,7 +324,7 @@ def run_review_agent(
 
     definition = load_agent_definition(agent_definitions_dir() / "review.yaml")
 
-    tools: list = []
+    tools: list[Any] = []
     if repo_dir is not None:
         from .fs_tools import build_fs_tools
 

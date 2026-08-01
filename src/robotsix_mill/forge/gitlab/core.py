@@ -20,7 +20,7 @@ from .code_scanning import GitLabForgeCodeScanningMixin
 from .dependabot import GitLabForgeDependabotMixin
 
 
-def _build_headers(token: str) -> dict:
+def _build_headers(token: str) -> dict[str, Any]:
     return {
         "PRIVATE-TOKEN": token,
     }
@@ -140,7 +140,7 @@ class GitLabForge(
             description=body,
         )
 
-    def pr_status(self, *, source_branch: str) -> dict | None:
+    def pr_status(self, *, source_branch: str) -> dict[str, Any] | None:
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -150,7 +150,7 @@ class GitLabForge(
         except Exception:
             return None
 
-    def pr_status_by_url(self, *, url: str) -> dict | None:
+    def pr_status_by_url(self, *, url: str) -> dict[str, Any] | None:
         m = re.search(r"merge_requests/(\d+)", url or "")
         if not m:
             return None
@@ -163,7 +163,7 @@ class GitLabForge(
         except Exception:
             return None
 
-    def pr_files(self, *, source_branch: str) -> list[dict]:
+    def pr_files(self, *, source_branch: str) -> list[dict[str, Any]]:
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -176,7 +176,7 @@ class GitLabForge(
         except Exception:
             return []
 
-    def merge_pr(self, *, source_branch: str) -> dict:
+    def merge_pr(self, *, source_branch: str) -> dict[str, Any]:
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -234,7 +234,7 @@ class GitLabForge(
             )
             return False
 
-    def update_branch(self, *, source_branch: str) -> dict:
+    def update_branch(self, *, source_branch: str) -> dict[str, Any]:
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -244,7 +244,7 @@ class GitLabForge(
         except Exception as e:
             return {"updated": False, "reason": str(e)}
 
-    def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
+    def list_pr_reviews(self, *, source_branch: str) -> list[dict[str, Any]]:
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
         if mr is None:
@@ -264,13 +264,13 @@ class GitLabForge(
             if n.get("system") is False and not n.get("position")
         ]
 
-    def list_review_comments(self, *, source_branch: str) -> list[dict]:
+    def list_review_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
         if mr is None:
             return []
         notes = self._mr_notes(project_path=project_path, mr_iid=mr["iid"])
-        result: list[dict] = []
+        result: list[dict[str, Any]] = []
         for n in notes:
             position = n.get("position")
             if not position:
@@ -290,7 +290,7 @@ class GitLabForge(
             )
         return result
 
-    def pr_review_status(self, *, source_branch: str) -> dict | None:
+    def pr_review_status(self, *, source_branch: str) -> dict[str, Any] | None:
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
         if mr is None:
@@ -391,7 +391,7 @@ class GitLabForge(
 
     def _find_mr(
         self, project_path: str, source_branch: str, state: str = "all"
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """GET /projects/:id/merge_requests?source_branch=…&state=…&per_page=1."""
         pid = self._resolve_project_id(project_path)
         r = self._http.get(
@@ -408,7 +408,9 @@ class GitLabForge(
             return None
         return items[0]
 
-    def _get_mr_by_iid(self, *, project_path: str, mr_iid: int) -> dict | None:
+    def _get_mr_by_iid(
+        self, *, project_path: str, mr_iid: int
+    ) -> dict[str, Any] | None:
         """GET /projects/:id/merge_requests/:iid → MR dict (by IID).
 
         Resolves a recorded MR web url to its current status independent
@@ -422,7 +424,7 @@ class GitLabForge(
         r.raise_for_status()
         return r.json()
 
-    def _mr_notes(self, *, project_path: str, mr_iid: int) -> list[dict]:
+    def _mr_notes(self, *, project_path: str, mr_iid: int) -> list[dict[str, Any]]:
         """GET /projects/:id/merge_requests/:iid/notes?per_page=100."""
         pid = self._resolve_project_id(project_path)
         r = self._http.get(
@@ -432,7 +434,7 @@ class GitLabForge(
         r.raise_for_status()
         return r.json()
 
-    def _pr_review_status(self, *, project_path: str, mr_iid: int) -> dict:
+    def _pr_review_status(self, *, project_path: str, mr_iid: int) -> dict[str, Any]:
         """Aggregate review state from MR approvals + general/inline notes.
 
         Five-state heuristic derived from the approvals object plus the
@@ -477,7 +479,7 @@ class GitLabForge(
         else:
             state = "PENDING"
 
-        comments: list[dict] = []
+        comments: list[dict[str, Any]] = []
         for n in relevant:
             position = n.get("position")
             comments.append(
@@ -501,7 +503,7 @@ class GitLabForge(
     # -- shared helpers ---------------------------------------------------
 
     @staticmethod
-    def _to_repo_info(data: dict) -> RepoInfo:
+    def _to_repo_info(data: dict[str, Any]) -> RepoInfo:
         """Build a RepoInfo from a GitLab 201 project-creation response."""
         return RepoInfo(
             id=data["id"],
@@ -532,7 +534,7 @@ class GitLabForge(
         token = get_secrets().forge_repo_create_token or gitlab_token()
         custom_headers = _build_headers(token)
 
-        payload: dict = {
+        payload: dict[str, Any] = {
             "name": name,
             "visibility": "private" if private else "public",
             "description": description,
@@ -583,7 +585,7 @@ class GitLabForge(
 
         source_path = f"{source_owner}/{source_repo}"
         pid = self._resolve_project_id(source_path)
-        payload: dict = {}
+        payload: dict[str, Any] = {}
         if target_namespace is not None:
             payload["namespace"] = target_namespace
 
@@ -652,7 +654,7 @@ class GitLabForge(
         self,
         project_path: str,
         mr_iid: int,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """GET /projects/:id/merge_requests/:iid/changes → normalized file list."""
         pid = self._resolve_project_id(project_path)
         try:

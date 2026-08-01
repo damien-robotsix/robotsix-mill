@@ -30,6 +30,7 @@ import logging
 from pathlib import Path
 
 import yaml
+from typing import Any
 
 log = logging.getLogger("robotsix_mill.config.repo_settings")
 
@@ -147,7 +148,7 @@ def load_repo_skip_ci(repo_dir: Path | None) -> bool:
     return value
 
 
-def _load_repo_config_dict(repo_dir: Path | None) -> dict | None:
+def _load_repo_config_dict(repo_dir: Path | None) -> dict[str, Any] | None:
     """Read + validate ``<repo_dir>/.robotsix-mill/config.yaml`` into a dict.
 
     Shared hardened reader: returns the parsed top-level mapping, or

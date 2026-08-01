@@ -84,7 +84,7 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def pr_status(self, *, source_branch: str) -> dict | None:
+    def pr_status(self, *, source_branch: str) -> dict[str, Any] | None:
         """Status of the PR/MR for ``source_branch``:
         ``{"merged": bool, "state": "open"|"closed", "url": str,
         "mergeable": bool | None, "author": str}`` or ``None`` if no PR/MR exists yet.
@@ -97,7 +97,7 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def pr_status_by_url(self, *, url: str) -> dict | None:
+    def pr_status_by_url(self, *, url: str) -> dict[str, Any] | None:
         """Status of the PR/MR identified by its recorded *url*
         (as stored in pr_urls.json), independent of whether the head
         branch still exists. Returns the same shape as ``pr_status``
@@ -109,7 +109,7 @@ class Forge(ABC):
     @abstractmethod
     def check_status(
         self, *, source_branch: str, require_checks: bool = False
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Return remote CI check-run status for the PR of *source_branch*.
 
         Returns ``None`` when no PR exists for the branch.
@@ -146,7 +146,7 @@ class Forge(ABC):
         20 per failing check (adapter-enforced truncation).
         """
 
-    def commit_ci_conclusion(self, *, sha: str) -> dict | None:
+    def commit_ci_conclusion(self, *, sha: str) -> dict[str, Any] | None:
         """Aggregate CI conclusion for an arbitrary commit SHA (no PR).
 
         Default returns ``None`` (CI status unavailable) — non-GitHub forges
@@ -157,7 +157,7 @@ class Forge(ABC):
         return None
 
     @abstractmethod
-    def pr_files(self, *, source_branch: str) -> list[dict]:
+    def pr_files(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return the file-list diff of the PR/MR for *source_branch*.
 
         Returns ``[]`` when no PR exists or files are unavailable.
@@ -169,7 +169,7 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def pr_review_status(self, *, source_branch: str) -> dict | None:
+    def pr_review_status(self, *, source_branch: str) -> dict[str, Any] | None:
         """Return the aggregate review state of the PR for *source_branch*.
 
         Returns ``None`` when no PR exists for the branch.
@@ -200,7 +200,7 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def merge_pr(self, *, source_branch: str) -> dict:
+    def merge_pr(self, *, source_branch: str) -> dict[str, Any]:
         """Merge the PR for *source_branch* (squash merge).
 
         Returns ``{"merged": True, "reason": "..."}`` on success,
@@ -233,7 +233,7 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
+    def list_pr_reviews(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return formal PR reviews (approve/request-changes/comment).
 
         Returns ``[]`` when no PR exists for the branch.  Each dict has:
@@ -251,7 +251,7 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def list_review_comments(self, *, source_branch: str) -> list[dict]:
+    def list_review_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return inline code-review comments on the PR for *source_branch*.
 
         Returns ``[]`` when no PR exists for the branch.  Each dict has:
@@ -262,7 +262,7 @@ class Forge(ABC):
     @abstractmethod
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """List completed workflow runs, optionally filtered by branch or head SHA.
 
         Returns a list of dicts, each with keys:
@@ -333,7 +333,7 @@ class Forge(ABC):
         """
         return ""
 
-    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
+    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict[str, Any]]:
         """List OPEN code-scanning (e.g. CodeQL) alerts on *source_branch*.
 
         Concrete (not abstract) with a ``[]`` default — code-scanning is a
@@ -410,7 +410,7 @@ class Forge(ABC):
         """
         return self.enable_vulnerability_alerts()
 
-    def update_branch(self, *, source_branch: str) -> dict:
+    def update_branch(self, *, source_branch: str) -> dict[str, Any]:
         """Merge the PR's base branch into the PR branch (server-side) so its
         CI re-runs against the current base tip. Default: unsupported no-op.
         """

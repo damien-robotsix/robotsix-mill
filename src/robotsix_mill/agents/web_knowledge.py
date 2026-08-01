@@ -51,6 +51,7 @@ from pathlib import Path
 
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -435,7 +436,7 @@ Plan your turns accordingly:
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings) -> list:
+def _make_tools(settings: Settings) -> list[Any]:
     """Build the closures the agent calls during a consult."""
     from .web_research import run_web_research
 

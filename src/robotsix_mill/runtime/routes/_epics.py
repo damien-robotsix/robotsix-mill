@@ -26,7 +26,7 @@ router = APIRouter(tags=["Epics"])
 
 @router.post("/epics", response_model=TicketRead, status_code=201)
 def create_epic(
-    body: dict,
+    body: dict[str, Any],
     request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
@@ -157,7 +157,7 @@ def generate_children(
     svc=Depends(get_service),
     settings=Depends(get_settings),
     registry=Depends(get_run_registry),
-) -> dict:
+) -> dict[str, Any]:
     """Generate child tickets from an epic description using the LLM
     epic-breakdown agent.  Returns ``202 Accepted`` immediately — the
     agent runs in a background thread.

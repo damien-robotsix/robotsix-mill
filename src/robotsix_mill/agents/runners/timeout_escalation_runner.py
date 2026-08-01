@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from sqlmodel import select
 
@@ -55,7 +55,7 @@ def _boards_to_scan(settings: Settings) -> list[str]:
     return boards
 
 
-def run_timeout_escalation(settings: Settings) -> dict:
+def run_timeout_escalation(settings: Settings) -> dict[str, Any]:
     """Execute one timeout-escalation pass.
 
     Scans across all known boards (per-repo DBs + legacy default DB)

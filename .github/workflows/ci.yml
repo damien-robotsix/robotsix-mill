@@ -29,7 +29,7 @@ jobs:
       coverage-threshold: 80
       pytest-args: -m "not docker" -n auto
       bandit-severity: "medium"
-      mypy-advisory: true
+      mypy-advisory: false
       # CVE ignores mirroring security-audit.yml:
       #   PYSEC-2025-183 (pyjwt): disputed advisory — key strength is the
       #     caller's responsibility; mill supplies ≥2048-bit GitHub App keys.

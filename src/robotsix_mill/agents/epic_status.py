@@ -8,7 +8,7 @@ the caller.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -43,7 +43,7 @@ class EpicStatusResult(BaseModel):
     child_closures: dict[str, str] | list[str] | None = Field(default=None)
 
 
-def _build_children_table(children: list[dict]) -> str:
+def _build_children_table(children: list[dict[str, Any]]) -> str:
     """Build a compact Markdown table of child tickets.
 
     Columns: ID, Title, State, Delivery, Deps, Summary.  The Delivery
@@ -90,7 +90,7 @@ def run_epic_status_agent(
     settings: Settings,
     epic_title: str,
     epic_description: str,
-    children: list[dict],
+    children: list[dict[str, Any]],
 ) -> EpicStatusResult:
     """Evaluate whether an epic's goal has been achieved.
 
