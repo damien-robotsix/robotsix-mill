@@ -32,7 +32,7 @@ class _StagesSettings(BaseModel):
     )
     web_research_request_limit: int = Field(
         description="Request budget for the web_research sub-agent spawned by refine/implement.",
-        default=12,
+        default=16,
         ge=1,
         json_schema_extra={"advanced": True},
     )

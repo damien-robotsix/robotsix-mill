@@ -2880,7 +2880,7 @@
         },
         "web_knowledge_request_limit": {
           "advanced": true,
-          "default": 12,
+          "default": 16,
           "description": "Request budget for the web_knowledge sub-agent per consultation.",
           "title": "Web Knowledge Request Limit",
           "type": "integer"
@@ -2902,7 +2902,7 @@
         },
         "web_research_request_limit": {
           "advanced": true,
-          "default": 12,
+          "default": 16,
           "description": "Request budget for the web_research sub-agent spawned by refine/implement.",
           "minimum": 1,
           "title": "Web Research Request Limit",

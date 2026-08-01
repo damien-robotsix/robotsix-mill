@@ -321,10 +321,10 @@
     "web_fetch_timeout": 30,
     "web_knowledge_cache_ttl_hours": 72,
     "web_knowledge_model": "deepseek/deepseek-v4-flash",
-    "web_knowledge_request_limit": 12,
+    "web_knowledge_request_limit": 16,
     "web_knowledge_stale_days": 30,
     "web_research_fetch_max_calls": 4,
-    "web_research_request_limit": 12,
+    "web_research_request_limit": 16,
     "web_search": true
   },
   "secrets": {

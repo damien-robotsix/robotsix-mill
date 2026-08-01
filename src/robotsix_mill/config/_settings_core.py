@@ -120,7 +120,7 @@ class _CoreSettings(BaseModel):
     # consultation. Each request is one Markdown read, one web_search,
     # or one Markdown write.
     web_knowledge_request_limit: int = Field(
-        default=12,
+        default=16,
         description="Request budget for the web_knowledge sub-agent per consultation.",
         json_schema_extra={"advanced": True},
     )
