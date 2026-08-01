@@ -27,6 +27,7 @@ from ..run_registry import RunRegistry
 
 if TYPE_CHECKING:
     from ...core.service import TicketService
+    from ...forge import Forge
 
 from ._base import _WorkerBase
 
@@ -546,6 +547,154 @@ class PollLoopsMixin(_WorkerBase):
                 canonical_activity = last_activity
         return canonical, canonical_activity
 
+    # ------------------------------------------------------------------
+    # _poll_one_repo_ci helpers — extracted from the original god-method
+    # to keep the coordinator lean.  See the docstring on each helper.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load_ci_state(
+        state_path: Path,
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """Load CI monitor dedup state from ``ci_monitor_state.json``.
+
+        Returns ``(state, seen, deferred)`` where *state* is the
+        full deserialised dict and *seen* / *deferred* are guaranteed
+        to exist (defaulting to empty dicts on missing or corrupt
+        files).
+        """
+        state: dict[str, Any] = {"seen": {}}
+        if state_path.exists():
+            try:
+                state = json.loads(state_path.read_text("utf-8"))
+            except json.JSONDecodeError, OSError:
+                state = {"seen": {}}
+        seen = state.setdefault("seen", {})
+        # Per-key deferral bookkeeping for runs whose logs could not be
+        # fetched yet: ``{key: {"n": <cycles deferred>, "ts": <epoch>}}``.
+        deferred = state.setdefault("deferred", {})
+        return state, seen, deferred
+
+    @staticmethod
+    def _prune_ci_state(
+        seen: dict[str, Any],
+        deferred: dict[str, Any],
+        now: float,
+        ttl_seconds: int,
+    ) -> None:
+        """Prune ``seen`` entries older than *ttl_seconds* and drop
+        ``deferred`` records that have been handled or aged out.
+
+        Mutates *seen* and *deferred* in place.
+        """
+        stale = [
+            key
+            for key, val in seen.items()
+            if isinstance(val, (int, float)) and (now - val) > ttl_seconds
+        ]
+        for key in stale:
+            del seen[key]
+        # Drop deferral records that resolved (now seen) or aged out.
+        for key in [
+            k
+            for k, v in deferred.items()
+            if k in seen
+            or not isinstance(v, dict)
+            or (now - v.get("ts", now)) > ttl_seconds
+        ]:
+            del deferred[key]
+
+    @staticmethod
+    async def _latest_runs_by_workflow(forge: "Forge", target: str) -> dict[str, Any]:
+        """List completed workflow runs on *target* and return only
+        the latest run per ``workflow_id``.
+
+        The GitHub API returns runs newest-first, so the first run
+        seen for each workflow is the latest.
+        """
+        runs = await asyncio.to_thread(
+            forge.list_workflow_runs,
+            branch=target,
+        )
+        latest_by_wf: dict[str, Any] = {}
+        for run in runs:
+            wf = run.get("workflow_id")
+            if wf is not None and wf not in latest_by_wf:
+                latest_by_wf[wf] = run
+        return latest_by_wf
+
+    async def _fetch_run_logs_with_deferral(
+        self,
+        forge: "Forge",
+        run_id_val: Any,
+        key: str,
+        deferred: dict[str, Any],
+        now: float,
+        repo_label: str,
+        wf_name: str,
+    ) -> tuple[str, str, bool]:
+        """Fetch job logs for *run_id_val* with retry/backoff.
+
+        Returns ``(logs, fetch_error, deferred_flag)``.  When
+        *deferred_flag* is ``True`` the caller must ``continue`` to
+        the next iteration — the failure has been booked for a later
+        poll cycle.  When ``False`` the caller proceeds to file a
+        draft (with or without logs).
+        """
+        logs = ""
+        fetch_error = ""
+        for attempt in range(1, _CI_LOG_FETCH_ATTEMPTS + 1):
+            try:
+                logs = await asyncio.to_thread(
+                    forge.fetch_workflow_job_logs, run_id=run_id_val
+                )
+                fetch_error = ""
+                break
+            except Exception as exc:
+                fetch_error = f"{type(exc).__name__}: {exc}"
+                log.warning(
+                    "CI monitor: failed to fetch logs for run %s (attempt %d/%d): %s",
+                    run_id_val,
+                    attempt,
+                    _CI_LOG_FETCH_ATTEMPTS,
+                    fetch_error,
+                )
+                if attempt < _CI_LOG_FETCH_ATTEMPTS:
+                    await asyncio.sleep(_CI_LOG_FETCH_BACKOFF_SECONDS * attempt)
+
+        if not logs and fetch_error:
+            record = deferred.get(key)
+            count = record.get("n", 0) if isinstance(record, dict) else 0
+            count += 1
+            if count <= _CI_LOG_FETCH_MAX_DEFERRALS:
+                deferred[key] = {"n": count, "ts": now}
+                log.warning(
+                    "CI monitor (%s): log fetch failed for %s (run %s) — "
+                    "deferring to next poll (%d/%d): %s",
+                    repo_label,
+                    wf_name,
+                    run_id_val,
+                    count,
+                    _CI_LOG_FETCH_MAX_DEFERRALS,
+                    fetch_error or "no logs returned",
+                )
+                return "", fetch_error, True
+            log.warning(
+                "CI monitor (%s): log fetch still failing for %s (run %s) "
+                "after %d deferrals — filing draft without logs",
+                repo_label,
+                wf_name,
+                run_id_val,
+                _CI_LOG_FETCH_MAX_DEFERRALS,
+            )
+            deferred.pop(key, None)
+
+        return logs, fetch_error, False
+
+    # ------------------------------------------------------------------
+    # _poll_one_repo_ci — coordinator
+    # ------------------------------------------------------------------
+
     async def _poll_one_repo_ci(
         self,
         rc: RepoConfig,
@@ -568,52 +717,13 @@ class PollLoopsMixin(_WorkerBase):
         state_path = state_dir / "ci_monitor_state.json"
         log.info("CI monitor poll starting for repo %s", repo_label)
 
-        # 1. Load dedup state.
-        state: dict = {"seen": {}}
-        if state_path.exists():
-            try:
-                state = json.loads(state_path.read_text("utf-8"))
-            except json.JSONDecodeError, OSError:
-                state = {"seen": {}}
-        seen = state.setdefault("seen", {})
-        # Per-key deferral bookkeeping for runs whose logs could not be
-        # fetched yet: ``{key: {"n": <cycles deferred>, "ts": <epoch>}}``.
-        deferred = state.setdefault("deferred", {})
+        # 1. Load + prune dedup state.
+        state, seen, deferred = self._load_ci_state(state_path)
+        self._prune_ci_state(seen, deferred, now, ttl_seconds)
 
-        # 2. Prune entries older than TTL.
-        stale = [
-            key
-            for key, val in seen.items()
-            if isinstance(val, (int, float)) and (now - val) > ttl_seconds
-        ]
-        for key in stale:
-            del seen[key]
-        # Drop deferral records that resolved (now seen) or aged out.
-        for key in [
-            k
-            for k, v in deferred.items()
-            if k in seen
-            or not isinstance(v, dict)
-            or (now - v.get("ts", now)) > ttl_seconds
-        ]:
-            del deferred[key]
-
-        # 3. List completed workflow runs on the target branch.
+        # 2. Latest run per workflow on the target branch.
         forge = get_forge(settings, repo_config=rc)
-        runs = await asyncio.to_thread(
-            forge.list_workflow_runs,
-            branch=target,
-        )
-
-        # 4. Only the LATEST run per workflow reflects current
-        # state (the GitHub API returns runs newest-first). Take
-        # one run per workflow_id and act only on that — never
-        # backfill every historical failed run.
-        latest_by_wf: dict = {}
-        for run in runs:
-            wf = run.get("workflow_id")
-            if wf is not None and wf not in latest_by_wf:
-                latest_by_wf[wf] = run
+        latest_by_wf = await self._latest_runs_by_workflow(forge, target)
 
         existing = service.list()
 
@@ -632,9 +742,7 @@ class PollLoopsMixin(_WorkerBase):
             if key in seen:
                 continue
 
-            # Robust (workflow, branch) dedup: consolidate
-            # recurring failures into the canonical ticket via a
-            # comment instead of filing a new ticket.
+            # 3. Canonical-ticket consolidation.
             canonical, _ = self._find_canonical_ci_ticket(
                 existing, service, wf_name, target
             )
@@ -678,64 +786,21 @@ class PollLoopsMixin(_WorkerBase):
                 target,
             )
 
-            # Fetch job logs, retrying within this poll to ride out a
-            # momentary blip before giving up for this cycle.
-            logs = ""
-            fetch_error = ""
-            for attempt in range(1, _CI_LOG_FETCH_ATTEMPTS + 1):
-                try:
-                    logs = await asyncio.to_thread(
-                        forge.fetch_workflow_job_logs, run_id=run_id_val
-                    )
-                    fetch_error = ""
-                    break
-                except Exception as exc:
-                    fetch_error = f"{type(exc).__name__}: {exc}"
-                    log.warning(
-                        "CI monitor: failed to fetch logs for run %s "
-                        "(attempt %d/%d): %s",
-                        run_id_val,
-                        attempt,
-                        _CI_LOG_FETCH_ATTEMPTS,
-                        fetch_error,
-                    )
-                    if attempt < _CI_LOG_FETCH_ATTEMPTS:
-                        await asyncio.sleep(_CI_LOG_FETCH_BACKOFF_SECONDS * attempt)
+            # 4. Fetch job logs with retry/backoff + deferral.
+            logs, fetch_error, deferred_flag = await self._fetch_run_logs_with_deferral(
+                forge,
+                run_id_val,
+                key,
+                deferred,
+                now,
+                repo_label,
+                wf_name,
+            )
+            if deferred_flag:
+                # Do NOT mark seen: the next poll retries this commit.
+                continue
 
-            # Logs could not be FETCHED (the call errored on every
-            # attempt): defer to a later poll rather than filing an empty
-            # draft, unless we have already deferred this commit too many
-            # times — then file with the error surfaced. A successful fetch
-            # that simply returned no text is not an error and files now.
-            if not logs and fetch_error:
-                record = deferred.get(key)
-                count = record.get("n", 0) if isinstance(record, dict) else 0
-                count += 1
-                if count <= _CI_LOG_FETCH_MAX_DEFERRALS:
-                    deferred[key] = {"n": count, "ts": now}
-                    log.warning(
-                        "CI monitor (%s): log fetch failed for %s (run %s) — "
-                        "deferring to next poll (%d/%d): %s",
-                        repo_label,
-                        wf_name,
-                        run_id_val,
-                        count,
-                        _CI_LOG_FETCH_MAX_DEFERRALS,
-                        fetch_error or "no logs returned",
-                    )
-                    # Do NOT mark seen: the next poll retries this commit.
-                    continue
-                log.warning(
-                    "CI monitor (%s): log fetch still failing for %s (run %s) "
-                    "after %d deferrals — filing draft without logs",
-                    repo_label,
-                    wf_name,
-                    run_id_val,
-                    _CI_LOG_FETCH_MAX_DEFERRALS,
-                )
-                deferred.pop(key, None)
-
-            # Build draft body.
+            # 5. Build draft body.
             body_parts = [
                 f"**Workflow:** {wf_name}",
                 f"**Path:** {wf_path}",
@@ -766,11 +831,7 @@ class PollLoopsMixin(_WorkerBase):
 
             body = "\n".join(body_parts)
 
-            # Content-based dedup: hash the error content (repo,
-            # workflow path, error message prefix, affected file)
-            # and check for a recent (≤ lookback_days) ticket with
-            # the same signature.  When matched, add a consolidation
-            # comment instead of filing a duplicate draft.
+            # 6. Content-fingerprint dedup.
             fingerprint = _ci_draft_fingerprint(body, path=wf_path)
             prior = find_prior_matching_ticket(
                 service,
@@ -817,6 +878,7 @@ class PollLoopsMixin(_WorkerBase):
                 deferred.pop(key, None)
                 continue
 
+            # 7. Create ticket + set labels.
             try:
                 ticket = service.create(
                     title=title,
@@ -842,7 +904,7 @@ class PollLoopsMixin(_WorkerBase):
             seen[key] = now
             deferred.pop(key, None)
 
-        # 5. Persist state.
+        # 8. Persist state.
         state_path.write_text(json.dumps(state), "utf-8")
 
         log.info("CI monitor poll completed for repo %s", repo_label)
