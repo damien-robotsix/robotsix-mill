@@ -32,6 +32,15 @@ def _build(root, settings):
     return {t.__name__: t for t in tools}
 
 
+def _build_blocked(root, settings, write_blocked_prefixes):
+    """Like ``_build`` but passes ``write_blocked_prefixes`` so the
+    write-blocked guard is exercised."""
+    tools = build_fs_tools(
+        root, settings, write_blocked_prefixes=write_blocked_prefixes
+    )
+    return {t.__name__: t for t in tools}
+
+
 def _build_extra(root, settings, extra_roots):
     """Like ``_build`` but threads ``extra_roots`` so the cross-repo
     (meta multi-repo) sandbox branch is exercised."""
@@ -3209,3 +3218,142 @@ class TestListDirSrcFallback:
 
         result = tools["list_dir"]("pkg")
         assert "error" in result.lower()
+
+
+# -- write_blocked_prefixes --------------------------------------------
+
+
+class TestWriteBlockedPrefixes:
+    """Tests for the ``write_blocked_prefixes`` parameter of
+    ``build_fs_tools`` — the guard that prevents the document agent
+    from overwriting source/test files."""
+
+    def test_write_file_blocked_by_prefix(self, tmp_path, settings):
+        """``write_file`` returns an error when the path starts with a
+        blocked prefix."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build_blocked(
+            root, settings, write_blocked_prefixes=["src/", "tests/"]
+        )
+
+        result = tools["write_file"]("src/robotsix_mill/foo.py", "# test")
+        assert "write blocked" in result
+        assert "src/" in result
+        assert not (root / "src" / "robotsix_mill" / "foo.py").exists()
+
+    def test_edit_file_blocked_by_prefix(self, tmp_path, settings):
+        """``edit_file`` returns an error when the path starts with a
+        blocked prefix."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "src/robotsix_mill/foo.py", "x = 1")
+        tools = _build_blocked(
+            root, settings, write_blocked_prefixes=["src/", "tests/"]
+        )
+
+        result = tools["edit_file"]("src/robotsix_mill/foo.py", "x = 1", "x = 2")
+        assert "write blocked" in result
+        assert "src/" in result
+
+    def test_delete_file_blocked_by_prefix(self, tmp_path, settings):
+        """``delete_file`` returns an error when the path starts with a
+        blocked prefix."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "tests/test_foo.py", "# test")
+        tools = _build_blocked(
+            root, settings, write_blocked_prefixes=["src/", "tests/"]
+        )
+
+        result = tools["delete_file"]("tests/test_foo.py")
+        assert "write blocked" in result
+        assert "tests/" in result
+        assert (root / "tests" / "test_foo.py").exists()
+
+    def test_write_allowed_when_no_prefix_match(self, tmp_path, settings):
+        """Writes to paths that do not match any blocked prefix succeed."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build_blocked(
+            root, settings, write_blocked_prefixes=["src/", "tests/"]
+        )
+
+        result = tools["write_file"]("docs/readme.md", "# Hello")
+        assert "wrote" in result
+        assert (root / "docs" / "readme.md").exists()
+
+    def test_write_allowed_when_prefixes_is_none(self, tmp_path, settings):
+        """When ``write_blocked_prefixes`` is ``None`` (the default),
+        all writes are allowed."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build_blocked(root, settings, write_blocked_prefixes=None)
+
+        result = tools["write_file"]("src/foo.py", "# test")
+        assert "wrote" in result
+        assert (root / "src" / "foo.py").exists()
+
+    def test_write_allowed_when_prefixes_is_empty(self, tmp_path, settings):
+        """When ``write_blocked_prefixes`` is an empty list, all writes
+        are allowed."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build_blocked(root, settings, write_blocked_prefixes=[])
+
+        result = tools["write_file"]("tests/foo.py", "# test")
+        assert "wrote" in result
+        assert (root / "tests" / "foo.py").exists()
+
+    def test_read_file_not_blocked(self, tmp_path, settings):
+        """``read_file`` is never blocked — the guard only applies to
+        write/edit/delete."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "src/robotsix_mill/foo.py", "x = 1")
+        tools = _build_blocked(
+            root, settings, write_blocked_prefixes=["src/", "tests/"]
+        )
+
+        result = tools["read_file"](path="src/robotsix_mill/foo.py")
+        assert "x = 1" in result
+
+    def test_list_dir_not_blocked(self, tmp_path, settings):
+        """``list_dir`` is never blocked — the guard only applies to
+        write/edit/delete."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "src" / "robotsix_mill").mkdir(parents=True)
+        (root / "src" / "robotsix_mill" / "foo.py").write_text("x = 1")
+        tools = _build_blocked(
+            root, settings, write_blocked_prefixes=["src/", "tests/"]
+        )
+
+        result = tools["list_dir"]("src/robotsix_mill")
+        assert "foo.py" in result
+
+    def test_multiple_blocked_prefixes(self, tmp_path, settings):
+        """Multiple blocked prefixes are all enforced."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build_blocked(
+            root,
+            settings,
+            write_blocked_prefixes=["www/", "src/", "tests/"],
+        )
+
+        for path in ("www/index.html", "src/foo.py", "tests/bar.py"):
+            result = tools["write_file"](path, "# content")
+            assert "write blocked" in result, f"should block {path}"
+            assert path.split("/")[0] in result
+
+    def test_default_build_has_no_blocked_prefixes(self, tmp_path, settings):
+        """The default ``_build`` (no ``write_blocked_prefixes``) allows
+        all writes."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+
+        result = tools["write_file"]("src/foo.py", "# test")
+        assert "wrote" in result
+        assert (root / "src" / "foo.py").exists()

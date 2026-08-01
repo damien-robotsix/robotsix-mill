@@ -722,3 +722,50 @@ def test_agent_exception_credential_redaction(ctx_factory, monkeypatch):
     assert len(notifications) == 1
     assert "SECRET" not in notifications[0][1]
     assert "***@" in notifications[0][1]
+
+
+# --- write_blocked_prefixes propagation --------------------------------
+
+
+def test_doc_stage_preserves_source_files(ctx_factory, monkeypatch):
+    """The document stage passes ``write_blocked_prefixes`` through to
+    ``build_fs_tools`` so that a document agent cannot overwrite
+    implement-stage source-code changes under ``src/``, ``tests/``, or
+    ``www/``."""
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    captured_kwargs: dict = {}
+
+    def _spy_build_fs_tools(root, settings, **kwargs):
+        captured_kwargs.update(kwargs)
+        # Return the 6 dummy tools the doc agent filters down to 4.
+        from tests.agents.test_documenting import _dummy_fs_tool
+
+        return [
+            _dummy_fs_tool(n)
+            for n in (
+                "read_file",
+                "write_file",
+                "list_dir",
+                "edit_file",
+                "run_command",
+                "delete_file",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.fs_tools.build_fs_tools",
+        _spy_build_fs_tools,
+    )
+
+    DocumentStage().run(t, ctx)
+
+    assert captured_kwargs.get("write_blocked_prefixes") == [
+        "www/",
+        "src/",
+        "tests/",
+    ], (
+        f"Expected write_blocked_prefixes=['www/', 'src/', 'tests/'], "
+        f"got {captured_kwargs.get('write_blocked_prefixes')!r}"
+    )

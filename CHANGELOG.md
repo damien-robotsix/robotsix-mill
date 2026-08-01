@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Document stage: prevent the doc agent from overwriting source/test files under `src/`, `tests/`, and `www/` by passing `write_blocked_prefixes` to `build_fs_tools`. The `write_file`, `edit_file`, and `delete_file` tools now refuse to mutate paths that start with any blocked prefix.
 - Refine stage-cache now keys on a hash of the refine module's Python source
   files in addition to the ticket description content, so pipeline-code
   changes (e.g. gate fixes) automatically invalidate the cache and force
