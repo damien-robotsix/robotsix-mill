@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- `run_command` now consults `read_file`'s read-dedup state: shell commands that re-read already-served file content (sed, cat, awk, head, tail) are refused with a REFUSED message, closing a loophole where agents could bypass the read_file dedup guard by reading through a shell command.
 - Board UI: add **Re‑implement** button for tickets in `human_mr_approval` — posts a change-request comment via the existing `request-implementation-changes` API, transitions the ticket back to `READY` so the implement agent re-runs against the existing PR branch without requiring the PR to be closed first.
 - Cap web_fetch calls per web_research sub-agent invocation at 4 (new `web_research_fetch_max_calls` setting), raise `web_research_request_limit` from 8 to 12, and return a distinct "budget exhausted" error when the sub-agent hits `UsageLimitExceeded` — prevents the sub-agent from exhausting its request budget on excessive fetches before synthesizing an answer.
 - Fix Re‑implement button flicker on fresh drawer open by including it in `updateMergeButton()` (both render paths now build identical HTML for `ticket-merge-btn-area`). Also add `.reimplement-btn:disabled` to the in-flight-lock CSS list so the button dims during `lockWhile`.

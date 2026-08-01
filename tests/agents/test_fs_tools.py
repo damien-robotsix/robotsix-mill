@@ -1074,6 +1074,159 @@ class TestRunCommand:
         result = tools["run_command"]("grep -n 'class Baz' src/foo.py")
         assert "REFUSED" not in result
 
+    # -- file-read dedup tests: sed/cat/awk re-reads of served content ---
+
+    def test_refuses_sed_re_read_of_served_range(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """After read_file serves a line range, sed re-reading the same
+        range through run_command is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "foo.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("\n".join(f"line {i}" for i in range(1, 51)))
+
+        tools = _build(root, settings)
+
+        # Serve lines 10–19 via read_file.
+        r = tools["read_file"](path="src/foo.py", offset=10, limit=10)
+        assert "REFUSED" not in r
+        assert "line 10" in r
+
+        # sed -n '10,19p' re-reads the same range → refused.
+        r = tools["run_command"]("sed -n '10,19p' src/foo.py")
+        assert "REFUSED" in r
+        assert "src/foo.py" in r
+        assert "lines 10–19" in r
+
+    def test_refuses_cat_re_read_of_served_full_file(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """After read_file serves a full file, cat re-reading it is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "bar.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("hello\nworld\n")
+
+        tools = _build(root, settings)
+
+        # Full-file read.
+        r = tools["read_file"](path="src/bar.py")
+        assert "REFUSED" not in r
+
+        # cat re-reads full file → refused.
+        r = tools["run_command"]("cat src/bar.py")
+        assert "REFUSED" in r
+        assert "src/bar.py" in r
+        assert "already loaded in full" in r
+
+    def test_refuses_awk_re_read_of_served_range(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """After read_file serves a line range, awk re-reading the same
+        range through run_command is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "baz.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("\n".join(f"line {i}" for i in range(1, 31)))
+
+        tools = _build(root, settings)
+
+        # Serve lines 5–14 via read_file.
+        r = tools["read_file"](path="src/baz.py", offset=5, limit=10)
+        assert "REFUSED" not in r
+        assert "line 5" in r
+
+        # awk 'NR>=5&&NR<=14' re-reads the same range → refused.
+        r = tools["run_command"]("awk 'NR>=5&&NR<=14' src/baz.py")
+        assert "REFUSED" in r
+        assert "src/baz.py" in r
+        assert "lines 5–14" in r
+
+    def test_sed_non_overlapping_range_allowed(self, tmp_path, settings, fake_sandbox):
+        """sed on a range NOT covered by any prior read_file is allowed."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "qux.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("\n".join(f"line {i}" for i in range(1, 51)))
+
+        tools = _build(root, settings)
+
+        # Serve only lines 10–19.
+        r = tools["read_file"](path="src/qux.py", offset=10, limit=10)
+        assert "REFUSED" not in r
+
+        # sed -n '30,39p' targets lines 30–39 — NOT covered.
+        r = tools["run_command"]("sed -n '30,39p' src/qux.py")
+        assert "REFUSED" not in r
+
+    def test_non_file_read_commands_not_affected(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """Regular commands (echo, ls, git) are never treated as file reads."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "mod.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x = 1\n")
+
+        tools = _build(root, settings)
+
+        # Prime _served_reads.
+        tools["read_file"](path="src/mod.py")
+        # Then repo-level commands must still work.
+        for cmd in ("echo hello", "ls -la", "git status"):
+            r = tools["run_command"](cmd)
+            assert "REFUSED" not in r, cmd
+
+    def test_refuses_head_re_read_of_served_range(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """After read_file serves the first N lines, head -n N is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "head_test.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("\n".join(f"line {i}" for i in range(1, 21)))
+
+        tools = _build(root, settings)
+
+        # Serve first 10 lines.
+        r = tools["read_file"](path="src/head_test.py", offset=1, limit=10)
+        assert "REFUSED" not in r
+
+        # head -n 10 re-reads the same range → refused.
+        r = tools["run_command"]("head -n 10 src/head_test.py")
+        assert "REFUSED" in r
+        assert "src/head_test.py" in r
+        assert "lines 1–10" in r
+
+    def test_refuses_tail_re_read_of_served_range(
+        self, tmp_path, settings, fake_sandbox
+    ):
+        """After read_file serves from line N onward, tail -n +N is refused."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        f = root / "src" / "tail_test.py"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("\n".join(f"line {i}" for i in range(1, 21)))
+
+        tools = _build(root, settings)
+
+        # Serve from line 10 onward.
+        r = tools["read_file"](path="src/tail_test.py", offset=10, limit=None)
+        assert "REFUSED" not in r
+
+        # tail -n +10 re-reads the same range → refused.
+        r = tools["run_command"]("tail -n +10 src/tail_test.py")
+        assert "REFUSED" in r
+        assert "src/tail_test.py" in r
+        assert "lines 10 onward" in r
+
 
 # ===================================================================
 # Error-return semantics (the defining invariant)

@@ -524,6 +524,81 @@ def build_fs_tools(
             )
             return None
 
+    def _parse_file_read_cmd(command: str) -> tuple[str, int, int | None] | None:
+        """Parse shell commands that re-read file content.
+
+        Returns ``(path, offset, limit)`` for recognized file-read
+        commands, or ``None`` for anything else.  ``path`` is the
+        raw (unresolved) path string from the command line.
+        """
+        stripped = command.strip()
+
+        # sed -n '<start>,<end>p' <path>  /  sed -n '<start>p' <path>
+        m = re.match(
+            r"sed\s+(?:-[a-zA-Z]*n[a-zA-Z]*\s+)*"
+            r"['\"](\d+)(?:,(\d+|\$))?p['\"]\s+(.+)",
+            stripped,
+        )
+        if m:
+            start = int(m.group(1))
+            end_str = m.group(2)
+            path = m.group(3).strip().strip("'\"")
+            if end_str is None:
+                return (path, start, 1)
+            if end_str == "$":
+                return (path, start, None)
+            end = int(end_str)
+            if end < start:
+                return None
+            return (path, start, end - start + 1)
+
+        # cat <path>
+        m = re.match(r"cat\s+(.+)", stripped)
+        if m:
+            path = m.group(1).strip().strip("'\"")
+            return (path, 1, None)
+
+        # awk 'NR>=<start>&&NR<=<end>' <path>
+        m = re.match(
+            r"awk\s+['\"]NR>=(\d+)\s*&&\s*NR<=(\d+)['\"]\s+(.+)",
+            stripped,
+        )
+        if m:
+            start = int(m.group(1))
+            end = int(m.group(2))
+            path = m.group(3).strip().strip("'\"")
+            if end < start:
+                return None
+            return (path, start, end - start + 1)
+
+        # awk 'NR>=<start>' <path>  (from line to end)
+        m = re.match(
+            r"awk\s+['\"]NR>=(\d+)['\"]\s+(.+)",
+            stripped,
+        )
+        if m:
+            start = int(m.group(1))
+            path = m.group(2).strip().strip("'\"")
+            return (path, start, None)
+
+        # head -n <N> <path>  /  head -<N> <path>  (first N lines)
+        m = re.match(r"head\s+(?:-n\s+)?(\d+)\s+(.+)", stripped)
+        if m:
+            n = int(m.group(1))
+            path = m.group(2).strip().strip("'\"")
+            if n < 1:
+                return None
+            return (path, 1, n)
+
+        # tail -n +<N> <path>  (from line N to end)
+        m = re.match(r"tail\s+-n\s+\+(\d+)\s+(.+)", stripped)
+        if m:
+            start = int(m.group(1))
+            path = m.group(2).strip().strip("'\"")
+            return (path, start, None)
+
+        return None
+
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
     # run aborting on an exception.
@@ -1018,6 +1093,51 @@ def build_fs_tools(
                         f"and return your answer now. Do NOT issue "
                         f"more grep commands on the same file."
                     )
+        # -- file-read dedup: refuse sed/cat/awk/head/tail re-reads of ----
+        # -- already-served file content (the agent is circumventing the   --
+        # -- read_file dedup guard by reading through a shell command).    --
+        _read_cmd = _parse_file_read_cmd(command)
+        if _read_cmd is not None:
+            raw_path, cmd_offset, cmd_limit = _read_cmd
+            try:
+                resolved = str((root / raw_path).resolve())
+            except Exception:
+                resolved = raw_path
+            records = _served_reads.get(resolved, [])
+            if records:
+                req_end = (
+                    cmd_offset + cmd_limit if cmd_limit is not None else float("inf")
+                )
+                for stored_offset, stored_limit in records:
+                    cov_end = (
+                        stored_offset + stored_limit
+                        if stored_limit is not None
+                        else float("inf")
+                    )
+                    if cmd_offset >= stored_offset and req_end <= cov_end:
+                        if stored_offset == 1 and stored_limit is None:
+                            return (
+                                f"REFUSED (do NOT retry): {raw_path} "
+                                f"— already loaded in full earlier in "
+                                f"this conversation.  Scroll back to "
+                                f"find it; synthesise from context "
+                                f"instead of re-reading through a "
+                                f"shell command."
+                            )
+                        else:
+                            if stored_limit is None:
+                                cov_range = f"lines {stored_offset} onward"
+                            else:
+                                cov_end_line = stored_offset + stored_limit - 1
+                                cov_range = f"lines {stored_offset}–{cov_end_line}"
+                            return (
+                                f"REFUSED (do NOT retry): {raw_path} "
+                                f"{cov_range} — already loaded earlier "
+                                f"in this conversation.  Scroll back "
+                                f"to find them; synthesise from "
+                                f"context instead of re-reading "
+                                f"through a shell command."
+                            )
         _command_history.append(command)
         if not root.exists():
             return (
