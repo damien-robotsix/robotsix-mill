@@ -23,8 +23,7 @@ def run_answer_agent(
 ) -> str:
     """Return a free-form Markdown answer string. When *repo_dir* is
     given the agent grounds its answer in that local clone via
-    explore/read_file/list_dir/run_command. Always has web_research
-    and Langfuse tools. Raises RuntimeError if no OpenRouter key is
+    explore/read_file/list_dir/run_command. Always has web access (via web_knowledge flag) and Langfuse tools. Raises RuntimeError if no OpenRouter key is
     configured.
 
     When *repo_config* is provided, its Langfuse credentials are

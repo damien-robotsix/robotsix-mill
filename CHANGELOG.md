@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix stale docstring in `run_answer_agent`: the answer agent now gets web access via the `web_knowledge` flag (injecting `ask_web_knowledge`), not a direct `web_research` tool.
 - Add missing `PeriodicAgentResult` import and `TriageBoilerplateResult` alias in `triage_boilerplate.py` — the triage-boilerplate periodic agent would crash with `AttributeError` on `getattr(module, "PeriodicAgentResult")` before reaching its prompt. Updated YAML `output_type` to `TriageBoilerplateResult` for consistency.
 - Add `scripts/resolve_docker_digest.py`: resolves `image:tag` → sha256 digest via the Docker Hub REST API and OCI registry manifest API, so "pin Docker base images" tickets can resolve digests programmatically without pausing for operator input. (mill: Autonomously resolve Docker base-image digests instead of asking the operator (20260731T123627Z-autonomously-resolve-docker-base-image-d-d662))
 - `run_command` now consults `read_file`'s read-dedup state: shell commands that re-read already-served file content (sed, cat, awk, head, tail) are refused with a REFUSED message, closing a loophole where agents could bypass the read_file dedup guard by reading through a shell command.
