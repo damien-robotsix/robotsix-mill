@@ -126,16 +126,33 @@ def web_fetch_budget() -> tuple[int, int]:
     return _fetch_calls, _fetch_bytes
 
 
-def _budget_sentinel(settings: Settings) -> str | None:
+def _budget_sentinel(
+    settings: Settings,
+    *,
+    max_calls_override: int | None = None,
+    max_bytes_override: int | None = None,
+) -> str | None:
     """Return the budget-exhausted sentinel string when either the
     per-consult fetch budget OR the per-survey-run trace budget is
     spent, else ``None``. Checked before a real sandbox fetch (cache
     hits / raw-mode never reach here). A ``web_fetch_max_total_bytes``
     of 0 disables the byte ceiling.
+
+    *max_calls_override* and *max_bytes_override* let a caller (e.g.
+    ``web_research``) enforce a tighter per-invocation cap without
+    affecting the global settings.
     """
     # Check the per-consult budget first.
-    max_calls = settings.web_fetch_max_calls
-    max_total_bytes = settings.web_fetch_max_total_bytes
+    max_calls = (
+        max_calls_override
+        if max_calls_override is not None
+        else settings.web_fetch_max_calls
+    )
+    max_total_bytes = (
+        max_bytes_override
+        if max_bytes_override is not None
+        else settings.web_fetch_max_total_bytes
+    )
     if _fetch_calls >= max_calls or (
         max_total_bytes > 0 and _fetch_bytes >= max_total_bytes
     ):
@@ -215,7 +232,12 @@ def _apply_text_cap(body: str, max_bytes: int) -> str:
     return truncate_at_boundary(body, max_bytes)
 
 
-def make_web_fetch(settings: Settings):
+def make_web_fetch(
+    settings: Settings,
+    *,
+    max_calls: int | None = None,
+    max_bytes: int | None = None,
+):
     """Build the ``web_fetch`` tool exposed to web-knowledge agents.
 
     The returned callable performs an http(s) GET via the dedicated
@@ -230,6 +252,9 @@ def make_web_fetch(settings: Settings):
             the byte/call budgets (``web_fetch_max_calls``,
             ``web_fetch_max_total_bytes``), and the text cap
             (``web_fetch_max_text_bytes``).
+        max_calls: Optional override for ``web_fetch_max_calls``
+            (e.g. a tighter per-invocation cap from ``web_research``).
+        max_bytes: Optional override for ``web_fetch_max_total_bytes``.
 
     Returns:
         A ``web_fetch(url)`` closure returning the (possibly
@@ -281,7 +306,17 @@ def make_web_fetch(settings: Settings):
         # count. ``*_request_limit`` bounds model requests, not fetches,
         # so this is the only thing that caps the fetch fan-out across a
         # consult's web_research sub-agents.
-        if not raw_mode and (sentinel := _budget_sentinel(settings)) is not None:
+        if (
+            not raw_mode
+            and (
+                sentinel := _budget_sentinel(
+                    settings,
+                    max_calls_override=max_calls,
+                    max_bytes_override=max_bytes,
+                )
+            )
+            is not None
+        ):
             return sentinel
 
         try:

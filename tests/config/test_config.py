@@ -134,7 +134,7 @@ def test_default_explore_max_tokens():
 
 def test_default_web_research_request_limit():
     s = Settings()
-    assert s.web_research_request_limit == 8
+    assert s.web_research_request_limit == 12
 
 
 def test_default_audit_requests():
@@ -231,9 +231,9 @@ def test_default_dedup_candidate_body_max_chars():
 
 
 def test_default_web_research_requests():
-    """web_research_request_limit defaults to 8."""
+    """web_research_request_limit defaults to 12."""
     s = Settings()
-    assert s.web_research_request_limit == 8
+    assert s.web_research_request_limit == 12
 
 
 def test_default_sandbox_image():

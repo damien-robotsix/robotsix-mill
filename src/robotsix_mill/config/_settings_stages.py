@@ -32,7 +32,13 @@ class _StagesSettings(BaseModel):
     )
     web_research_request_limit: int = Field(
         description="Request budget for the web_research sub-agent spawned by refine/implement.",
-        default=8,
+        default=12,
+        ge=1,
+        json_schema_extra={"advanced": True},
+    )
+    web_research_fetch_max_calls: int = Field(
+        description="Maximum real (cache-miss) web_fetch calls per web_research sub-agent invocation.",
+        default=4,
         ge=1,
         json_schema_extra={"advanced": True},
     )
