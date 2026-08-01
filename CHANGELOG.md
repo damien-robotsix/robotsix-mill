@@ -1,5 +1,7 @@
 ## 0.0.0 (unreleased)
 
+- Remove the deprecated legacy `robotsix_mill/runners/` shim package. All CLI
+  subcommands now import directly from `robotsix_mill.agents.runners.*`.
 - Fix stale docstring in `run_answer_agent`: the answer agent now gets web access via the `web_knowledge` flag (injecting `ask_web_knowledge`), not a direct `web_research` tool.
 - Fix ``init_db()`` missing ``from . import models`` import that was
   accidentally dropped during the ``_init_locks`` refactor, which could

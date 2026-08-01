@@ -269,7 +269,7 @@ def test_copy_paste_registered_in_runners():
     from robotsix_mill.cli import _RUNNERS
 
     entry = _RUNNERS["copy-paste"]
-    assert entry["module"] == "runners.periodic_runner"
+    assert entry["module"] == "agents.runners.periodic_runner"
     assert entry["function"] == "run_copy_paste_pass"
     assert entry["format"] == "memory_drafts"
 
@@ -279,7 +279,7 @@ def test_forge_parity_registered_in_runners():
     from robotsix_mill.cli import _RUNNERS
 
     entry = _RUNNERS["forge-parity"]
-    assert entry["module"] == "runners.periodic_runner"
+    assert entry["module"] == "agents.runners.periodic_runner"
     assert entry["function"] == "run_forge_parity_pass"
     assert entry["format"] == "memory_drafts"
 
