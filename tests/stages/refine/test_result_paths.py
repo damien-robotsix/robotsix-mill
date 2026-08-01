@@ -925,6 +925,106 @@ class TestSingleScopePath:
         assert "original draft is empty too" in outcome.note
         assert "kept original draft" not in outcome.note
 
+    def test_degenerate_spec_block_note_includes_reason(self, ctx_factory):
+        """When spec is degenerate, the note includes WHY (empty/placeholder)."""
+        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        t = _ticket(ctx)
+        ws = ctx.service.workspace(t)
+
+        # Case 1: spec is a placeholder phrase
+        outcome = _result_paths.single_scope_path(
+            ctx,
+            t,
+            _REAL_SPEC,  # substantive draft
+            ws,
+            ctx.settings,
+            RefineResult(spec_markdown="tbd"),
+            reviewer_comments=None,
+            open_thread_ids=set(),
+        )
+        assert "no usable spec" in outcome.note
+        assert "tbd" in outcome.note  # reason includes the matched phrase
+        assert "kept original draft" in outcome.note
+
+    def test_prescriptive_draft_with_git_mv_passes_refine(self, ctx_factory):
+        """ef86-style prescriptive draft (git mv + module.yaml) is not blocked.
+
+        Regression: refine rejected a prescriptive draft containing concrete
+        git mv commands and docs/modules.yaml glob updates, even though the
+        draft was implementation-ready.  The draft must proceed to at least
+        HUMAN_ISSUE_APPROVAL (or READY) rather than BLOCKED.
+        """
+        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        t = _ticket(ctx)
+        ws = ctx.service.workspace(t)
+
+        prescriptive_draft = (
+            "Reorganize module core: move test files into tests/core/\n\n"
+            "```bash\n"
+            "git mv tests/test_foo.py tests/core/test_foo.py\n"
+            "git mv tests/test_bar.py tests/core/test_bar.py\n"
+            "git mv tests/test_baz.py tests/core/test_baz.py\n"
+            "```\n\n"
+            "Update `docs/modules.yaml`:\n"
+            "- Change glob `tests/test_*.py` → `tests/core/test_*.py`\n"
+            "- Add `tests/core/` to module paths\n\n"
+            "## Acceptance criteria\n"
+            "- All three test files live under `tests/core/`\n"
+            "- `docs/modules.yaml` globs point to `tests/core/test_*.py`\n"
+        )
+
+        # Refiner returned a degenerate spec (e.g. "see above")
+        outcome = _result_paths.single_scope_path(
+            ctx,
+            t,
+            prescriptive_draft,
+            ws,
+            ctx.settings,
+            RefineResult(spec_markdown="see above"),
+            reviewer_comments=None,
+            open_thread_ids=set(),
+        )
+
+        assert outcome.next_state is not State.BLOCKED, (
+            f"prescriptive draft must not be blocked; got {outcome.next_state}"
+        )
+        assert outcome.next_state is State.HUMAN_ISSUE_APPROVAL
+        assert "kept original draft" in outcome.note
+        # The note should include the reason the spec was degenerate
+        assert "see above" in outcome.note or "placeholder" in outcome.note
+
+    def test_degenerate_spec_note_distinguishes_empty_vs_placeholder(self, ctx_factory):
+        """Empty spec vs placeholder-phrase spec produce distinct notes."""
+        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        t = _ticket(ctx)
+        ws = ctx.service.workspace(t)
+
+        # Empty spec
+        outcome_empty = _result_paths.single_scope_path(
+            ctx,
+            t,
+            _REAL_SPEC,
+            ws,
+            ctx.settings,
+            RefineResult(spec_markdown=""),
+            reviewer_comments=None,
+            open_thread_ids=set(),
+        )
+        assert "body is empty" in outcome_empty.note
+
+        # Placeholder spec
+        outcome_tbd = _result_paths.single_scope_path(
+            ctx,
+            t,
+            _REAL_SPEC,
+            ws,
+            ctx.settings,
+            RefineResult(spec_markdown="tbd"),
+            reviewer_comments=None,
+            open_thread_ids=set(),
+        )
+        assert "tbd" in outcome_tbd.note
+
     def test_spec_review_enabled_no_reviewer_comments(self, ctx_factory, monkeypatch):
         """When spec_review_enabled and no reviewer comments, runs conciseness review."""
         ctx = ctx_factory(spec_review_enabled=True)
