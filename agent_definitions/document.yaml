@@ -21,7 +21,7 @@ reply_to_thread: false
 close_thread: false
 list_threads: false
 output_type: DocResult
-retries: 2
+retries: 3
 module: documenting
 skills: []
 
