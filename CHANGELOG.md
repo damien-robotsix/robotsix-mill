@@ -13,6 +13,7 @@
 - AGENT.md: add "## Import hygiene" rule codifying that side-effect imports
   (e.g. ORM table registration) must be module-level with `# noqa: F401`,
   never function-local, to survive Ruff/vulture auto-fix passes.
+- Wire `parallel_commands` into the audit periodic agent's toolset via a new `include_parallel_commands` flag on `make_agent_runner` / `run_periodic_agent` / `_build_periodic_tools`, so the agent that originally motivated the tool can actually use it.
 - **Breaking (sandbox):** `sandbox.run()` now defaults `install_project=True` so the workspace clone is the imported tree in ALL sandbox paths — not just the test gate. Callers that must skip the install (e.g. ad-hoc commands with no egress proxy) can pass `install_project=False` explicitly. This fixes the root cause behind the `implement.yaml` step-0 stopgap (PR #2679), where coordinating/chat agents wasted ~69 LLM rounds discovering the workspace clone wasn't on the import path.
 - Document CLI shell-completion convention in AGENT.md: when adding a CLI subcommand, regenerate `contrib/completions/` and commit in the same change to avoid CI failures.
 - Promote `from . import models` to module-level in `db.py`
