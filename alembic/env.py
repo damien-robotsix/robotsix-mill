@@ -115,6 +115,7 @@ def run_migrations_online() -> None:
     _setup_alembic_logging()
     connectable = create_engine(
         context.config.get_main_option("sqlalchemy.url"),
+        connect_args={"timeout": 5},
     )
 
     try:
