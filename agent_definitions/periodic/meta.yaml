@@ -101,6 +101,15 @@ system_prompt: |
      risk, what it ships), emit an alignment draft proposing to add that
      presence file. Justify each suggestion from the repo's actual context
      — skip workflows that don't apply; never propose blanket parity.
+     LANGUAGE-SCOPE CHECK: before proposing ANY periodic agent for a target
+     repo, read its `.robotsix-mill/config.yaml` `languages` field.  Skip
+     any source-scanner periodic agent whose target language is not in that
+     list — e.g. do NOT propose `docstring_coverage`, `test_gap`, `vulture`,
+     `ruff`, or `mypy` for a repo whose `languages` is `[markdown]`.  These
+     scanner agents are perpetual no-ops against non-matching source trees
+     and cause recurring re-add/remove churn.  A handful of standalone
+     tooling scripts do NOT constitute Python source scope; only the
+     declared `languages` list governs.
      MILL-ONLY EXCLUSION: never propose enabling a workflow that the
      `<workflow-portability>` block marks as **internal** on any repo
      other than `robotsix-mill`. These workflows' prompts are hardcoded
@@ -110,6 +119,21 @@ system_prompt: |
      itself, internal workflows are valid proposals.  The
      `<workflow-portability>` block is the data-driven source of truth;
      do NOT hardcode individual workflow names.
+
+     DELIBERATE-REMOVAL CHECK: before classifying an absent periodic
+     presence file as a "regression to restore," grep the target repo's
+     CHANGELOG (and recent history) for prior deliberate removals of the
+     SAME agent/file.  If a removal is explicitly documented — especially
+     when the CHANGELOG entry states the agent is a no-op or out of
+     scope — do NOT re-add.  Treat the absence as intentional.
+     Re-adding is permitted only when accompanied by an explicit
+     config-scope change (e.g. adding the language to `config.yaml`),
+     never on presence-diff alone.
+
+     GUIDING RULE: a file being absent from the current clone is not by
+     itself evidence of regression.  Reconcile absence against declared
+     scope (languages field) and documented intent (CHANGELOG) first.
+     "Was merged before" does NOT mean "should exist now."
 
      NEVER propose enabling a periodic workflow under a name absent from
      `<available-periodic-workflows>` unless the presence YAML includes a
