@@ -1506,12 +1506,80 @@ def test_branch_refreshed_before_ci_check_in_poll_implement_complete(
 
     MergeStage().run(t, ctx)
 
-    # Refresh must appear before check_status in the call order.
+    # A concluded (failing) run must still be refreshed, and the refresh must
+    # land before the status the stage ACTS on is read — otherwise a stale
+    # failing SHA gets re-diagnosed as a real failure instead of re-run.
     assert "refresh" in call_order, f"refresh not called; order={call_order}"
-    assert call_order.index("refresh") < call_order.index("check_status"), (
-        f"_refresh_branch_for_ci must be called before check_status; "
+    assert call_order[-1] == "check_status", (
+        f"the status the stage acts on must be read after the refresh; "
         f"got order={call_order}"
     )
+    assert call_order.index("refresh") < len(call_order) - 1, (
+        f"_refresh_branch_for_ci must precede the acted-on check_status; "
+        f"got order={call_order}"
+    )
+
+
+def test_no_branch_refresh_while_ci_is_still_running(tmp_path, monkeypatch):
+    """A refresh must never fire while checks are in flight.
+
+    Regression (2026-08-01): the refresh ran unconditionally on every poll.
+    A new head SHA makes the forge abandon the in-progress run and start a
+    fresh one, and the poll interval (120s) is far shorter than a CI run — so
+    each poll restarted the checks it was waiting on and no run could ever
+    conclude. 472 empty commits in one hour across 15 tickets; one looped for
+    20 hours restarting 18 checks every 2 minutes, and 22 tickets stacked up
+    in IMPLEMENT_COMPLETE because none could finish CI.
+    """
+    from robotsix_mill.stages.merge import ci_poll as ci_poll_mod
+
+    ctx = _gh(tmp_path)
+
+    # CI reports checks still pending — nothing has concluded.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "pending",
+            "mergeable_state": "blocked",
+            "pending": ["test", "lint"],
+        },
+    )
+
+    refreshed: list[str] = []
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_refresh_branch_for_ci",
+        lambda *a, **kw: refreshed.append("refresh") or True,
+    )
+
+    t = _implement_complete(ctx)
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir(exist_ok=True)
+    (repo_path / ".git").mkdir(exist_ok=True)
+    monkeypatch.setattr(
+        ci_poll_mod,
+        "_workspace_repo_dir",
+        lambda c, tkt: str(repo_path) if tkt.id == t.id else None,
+    )
+
+    out = MergeStage().run(t, ctx)
+
+    assert refreshed == [], "must not push a new SHA while checks are running"
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_ci_run_in_flight_predicate():
+    """Anything short of a real conclusion counts as in-flight."""
+    from robotsix_mill.stages.merge.ci_poll import _ci_run_in_flight
+
+    assert _ci_run_in_flight({"pending": ["test"], "conclusion": "failure"}) is True
+    assert _ci_run_in_flight({"conclusion": "pending"}) is True
+    assert _ci_run_in_flight({"conclusion": "in_progress"}) is True
+    assert _ci_run_in_flight({"conclusion": None}) is True
+    assert _ci_run_in_flight({}) is True
+    assert _ci_run_in_flight({"conclusion": "failure"}) is False
+    assert _ci_run_in_flight({"conclusion": "success"}) is False
 
 
 def test_stale_failing_run_replaced_by_fresh_green_after_refresh(tmp_path, monkeypatch):
