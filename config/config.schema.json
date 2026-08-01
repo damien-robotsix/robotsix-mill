@@ -2892,9 +2892,17 @@
           "title": "Web Knowledge Stale Days",
           "type": "integer"
         },
+        "web_research_fetch_max_calls": {
+          "advanced": true,
+          "default": 4,
+          "description": "Maximum real (cache-miss) web_fetch calls per web_research sub-agent invocation.",
+          "minimum": 1,
+          "title": "Web Research Fetch Max Calls",
+          "type": "integer"
+        },
         "web_research_request_limit": {
           "advanced": true,
-          "default": 8,
+          "default": 12,
           "description": "Request budget for the web_research sub-agent spawned by refine/implement.",
           "minimum": 1,
           "title": "Web Research Request Limit",

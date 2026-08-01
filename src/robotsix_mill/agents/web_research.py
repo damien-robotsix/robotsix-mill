@@ -41,7 +41,8 @@ sufficient.
 
 async def run_web_research(*, settings: Settings, query: str) -> str:
     """Run the cheap research sub-agent for ``query`` and return only
-    its conclusion string. Bounded by ``web_research_request_limit``.
+    its conclusion string. Bounded by ``web_research_request_limit``
+    and a per-invocation ``web_research_fetch_max_calls`` cap.
     Never raises out — research failure degrades to a short message so
     the main agent can carry on.
     """
@@ -50,17 +51,27 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
 
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
+    from pydantic_ai.exceptions import UsageLimitExceeded
     from pydantic_ai.usage import UsageLimits
 
     from .base import _aclose_async_client, build_openrouter_model
-    from .web_tools import make_web_fetch
+    from .web_tools import make_web_fetch, reset_web_fetch_budget
+
+    # Give this sub-agent a fresh per-invocation fetch budget so its
+    # web_fetch calls are capped independently of the parent consult.
+    reset_web_fetch_budget()
 
     model, client = build_openrouter_model(1, online=settings.web_search)
     agent = Agent(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
         output_type=str,
-        tools=[make_web_fetch(settings)],
+        tools=[
+            make_web_fetch(
+                settings,
+                max_calls=settings.web_research_fetch_max_calls,
+            )
+        ],
         name="web_research",
     )
     limits = UsageLimits(request_limit=settings.web_research_request_limit)
@@ -70,6 +81,13 @@ async def run_web_research(*, settings: Settings, query: str) -> str:
         result = await acall_with_retry(
             lambda: agent.run(query, usage_limits=limits),
             what="web_research",
+        )
+    except UsageLimitExceeded:
+        return (
+            "web research budget exhausted: the sub-agent ran out of "
+            f"model requests (limit {settings.web_research_request_limit}). "
+            "Do NOT retry the same query — answer from what you already "
+            "know or fall back to repo-local research."
         )
     except Exception as e:
         return f"web research failed: {e}"
