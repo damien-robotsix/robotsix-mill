@@ -176,7 +176,12 @@ def run_doc_agent(
         else ""
     )
 
-    fs = build_fs_tools(repo_dir, settings, extra_roots=extra_roots)
+    fs = build_fs_tools(
+        repo_dir,
+        settings,
+        extra_roots=extra_roots,
+        write_blocked_prefixes=["www/", "src/", "tests/"],
+    )
     overrides: dict[str, Any] = {}
     if level is not None:
         overrides["level"] = level

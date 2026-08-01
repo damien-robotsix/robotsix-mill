@@ -508,7 +508,7 @@ class TestRunDocAgent:
         # FS tools — return 6 tools, only 4 should survive the filter.
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [
                 _dummy_fs_tool(n)
                 for n in (
                     "read_file",
@@ -561,7 +561,7 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [
                 _dummy_fs_tool(n)
                 for n in (
                     "read_file",
@@ -625,7 +625,7 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [],
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [],
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
@@ -671,7 +671,7 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [],
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [],
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
@@ -794,7 +794,7 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [],
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [],
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
@@ -837,7 +837,7 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [],
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [],
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
@@ -883,7 +883,7 @@ class TestRunDocAgent:
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: [],
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [],
         )
         monkeypatch.setattr(
             "robotsix_mill.agents.explore.make_explore_tool",
@@ -941,7 +941,7 @@ class TestRunDocAgent:
         self._patch_dependencies(monkeypatch, fake_agent)
         monkeypatch.setattr(
             "robotsix_mill.agents.fs_tools.build_fs_tools",
-            lambda repo_dir, settings, extra_roots=None: (
+            lambda repo_dir, settings, extra_roots=None, **kwargs: (
                 captured.append(extra_roots) or []
             ),
         )
@@ -1199,3 +1199,71 @@ class TestRunDocAgent:
         assert result is expected
         assert result.user_facing is True
         assert result.summary == "updated README and docs/config.md"
+
+    # -- write_blocked_prefixes propagation ----------------------------
+
+    def test_write_blocked_prefixes_propagates_to_build_fs_tools(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """``run_doc_agent`` passes ``write_blocked_prefixes`` to
+        ``build_fs_tools`` so the document agent cannot overwrite
+        source or test files."""
+        captured_kwargs: dict = {}
+
+        def _spy_build_fs_tools(root, settings, **kwargs):
+            captured_kwargs.update(kwargs)
+            return [
+                _dummy_fs_tool(n)
+                for n in (
+                    "read_file",
+                    "write_file",
+                    "list_dir",
+                    "edit_file",
+                    "run_command",
+                    "delete_file",
+                )
+            ]
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.fs_tools.build_fs_tools",
+            _spy_build_fs_tools,
+        )
+        fake_agent = _FakeAgent(DocResult(user_facing=False, summary="noop"))
+        _patch_build_agent_from_definition(
+            monkeypatch,
+            lambda *a, tools=None, **kw: fake_agent,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.yaml_loader.load_agent_definition",
+            lambda path: _make_definition(system_prompt="Doc system prompt."),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_explore_tool",
+            lambda *a, **kw: _dummy_fs_tool("explore"),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_parallel_explore_tool",
+            lambda *a, **kw: _dummy_fs_tool("parallel_explore"),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.pass_runner.load_memory",
+            lambda path, max_chars=None: "",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.pass_runner.persist_memory",
+            lambda path, text: None,
+        )
+
+        run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="test-board",
+        )
+
+        assert captured_kwargs.get("write_blocked_prefixes") == [
+            "www/",
+            "src/",
+            "tests/",
+        ]

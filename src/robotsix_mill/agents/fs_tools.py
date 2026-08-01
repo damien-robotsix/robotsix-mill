@@ -283,6 +283,7 @@ def build_fs_tools(
     extra_roots: list[Path] | None = None,
     sandbox_image: str | None = None,
     read_file_max_calls: int | None = None,
+    write_blocked_prefixes: list[str] | None = None,
 ) -> list:
     """Build the filesystem + shell tool closures sandboxed to *root*.
 
@@ -312,6 +313,14 @@ def build_fs_tools(
             calls. When set, the 1+read_file_max_calls th call returns an
             error string instead of reading the file. Default ``None``
             (unbounded). The counter is per ``build_fs_tools`` invocation.
+        write_blocked_prefixes: Optional list of path prefixes that the
+            ``write_file``, ``edit_file``, and ``delete_file`` tools are
+            forbidden from touching. When a write/delete targets a path
+            starting with any of these prefixes, the tool returns an error
+            string instead of mutating the file. Default ``None`` (all
+            writes allowed). Used by the document agent to block writes
+            under ``www/``, ``src/``, and ``tests/`` so that a document
+            pass cannot overwrite source-code changes from implement.
 
     Returns:
         A list of the seven tool closures, in the order ``read_file``,
@@ -344,6 +353,23 @@ def build_fs_tools(
     # duplicates and detect when the agent is spinning on grep
     # commands against the same file.
     _command_history: list[str] = []
+
+    def _check_write_allowed(path: str) -> str | None:
+        """Return an error string if *path* is blocked by
+        *write_blocked_prefixes*, or ``None`` if the write should
+        proceed.
+        """
+        if not write_blocked_prefixes:
+            return None
+        for prefix in write_blocked_prefixes:
+            if path.startswith(prefix):
+                return (
+                    f"write blocked: path {path!r} starts with "
+                    f"blocked prefix {prefix!r}. The document agent "
+                    f"is not permitted to modify files under "
+                    f"{prefix!r} — those are source/test directories."
+                )
+        return None
 
     def _check_read_file_cap() -> str | None:
         """Return an error string if the read_file cap is exceeded,
@@ -867,6 +893,9 @@ def build_fs_tools(
 
     def write_file(path: str, content: str) -> str:
         """Create or overwrite a file in the repository with ``content``."""
+        blocked = _check_write_allowed(path)
+        if blocked is not None:
+            return blocked
         syntax_error = _check_python_syntax(path, content)
         if syntax_error is not None:
             return syntax_error
@@ -901,6 +930,9 @@ def build_fs_tools(
         Returns a short result string — prefer this for surgical edits
         over ``write_file``.
         """
+        blocked = _check_write_allowed(path)
+        if blocked is not None:
+            return blocked
         try:
             with trace_stage("edit_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
@@ -936,6 +968,9 @@ def build_fs_tools(
 
     def delete_file(path: str) -> str:
         """Delete a file from the repository. Returns a short status string."""
+        blocked = _check_write_allowed(path)
+        if blocked is not None:
+            return blocked
         try:
             with trace_stage("delete_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
