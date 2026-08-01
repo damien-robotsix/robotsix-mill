@@ -481,11 +481,18 @@ system_prompt: |
   local gate.
 
   **When ``PY_FILES=0`` (no Python files touched):** skip ruff, mypy,
-  and deptry entirely.  Run only the module-registration check (which
-  is fast and catches missing entries for any new non-Python files):
+  and deptry entirely.
+
+  **Module-registration check (always runs, regardless of ``PY_FILES``):**
+  after the Python-specific toolchain (if any), run the
+  module-registration validation.  This catches glob drift from file
+  moves, deletions, and directory restructuring — not just new files:
   ```bash
   uv run --frozen robotsix-modules check-registration docs/modules.yaml --root .
   ```
+  If the check fails, fix the globs in ``docs/modules.yaml`` and re-run
+  until it passes.
+
   1. **Re-read the spec.** Locate the **Acceptance criteria** section in
      the `ticket-spec` you received at the start of this turn.
   2. **Verify every criterion.** For each acceptance criterion, use
@@ -531,7 +538,8 @@ system_prompt: |
   `docs/modules.yaml`. Every newly created source or test file must be
   registered there.
 
-  **Before you stop**, if you created any new files, run:
+  **Before you stop**, run the module-registration check (this is also
+  part of the pre-flight toolchain above — it runs unconditionally):
 
   ```bash
   uv run --frozen robotsix-modules check-registration docs/modules.yaml --root .
@@ -539,9 +547,9 @@ system_prompt: |
 
   - If the check passes (exit 0), no action needed.
   - If the check fails (non-zero exit), it will list unregistered
-    files.  Update `docs/modules.yaml` by adding each new file path to
-    the appropriate module's `paths` list, then re-run the check to
-    confirm it passes.
+    files or stale globs.  Update `docs/modules.yaml` by adding each
+    new file path to the appropriate module's `paths` list or removing
+    stale entries, then re-run the check to confirm it passes.
 
   ## reference_files
 
