@@ -18,6 +18,7 @@
   files in addition to the ticket description content, so pipeline-code
   changes (e.g. gate fixes) automatically invalidate the cache and force
   a fresh re-refine rather than replaying a stale pre-fix verdict.
+- **Board discovery tests**: Added 7 tests covering `_collect_candidate_boards` (own-board inclusion, `default_repo_id` fallback, disk-scan-failure resilience, dedup), `resolve_by_suffix`/`list_children_across_boards` bound-board coverage, and `_board_for` default-repo discovery from board-less services — the scenario closest to the reported "ticket not found" error.
 - **Board discovery**: `_collect_candidate_boards` now always includes the service's own `board_id` (not only when `prepend_self` was set), and falls back to `default_repo_id` when its on-disk DB exists but the repo is absent from `repos.yaml`. Fixes "ticket not found in any configured board" errors for the config_sync and bespoke agents whose tickets can land on boards outside the managed-repo registry.
 - Remove the deprecated legacy `robotsix_mill/runners/` shim package. All CLI
   subcommands now import directly from `robotsix_mill.agents.runners.*`.

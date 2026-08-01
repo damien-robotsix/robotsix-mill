@@ -2790,6 +2790,212 @@ def test_board_for_comment_returns_bound_board_when_ticket_id_given(service):
     assert result == "test-board"
 
 
+# -- _collect_candidate_boards ----------------------------------------------
+
+
+def test_collect_candidate_boards_includes_own_board_id(service):
+    """_collect_candidate_boards always includes self.board_id first,
+    before the registry scan."""
+    candidates = service._collect_candidate_boards(caller_name="test")
+    assert candidates[0] == "test-board"
+
+
+def test_collect_candidate_boards_includes_default_repo_when_db_exists(
+    settings, service
+):
+    """When default_repo_id is set, its mill.db exists, and it's not
+    in the registry, _collect_candidate_boards includes it."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.core import db as _db
+
+    # Register a different board (not "default-board") so the default
+    # repo isn't discoverable via the registry or disk-scan of the
+    # registered board's DB.
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    settings.default_repo_id = "default-board"
+    _db.init_db(settings, board_id="default-board")
+    svc = TicketService(settings, board_id="test-board")
+    try:
+        candidates = svc._collect_candidate_boards(caller_name="test")
+        assert "default-board" in candidates
+    finally:
+        _cfg._repos_config = None
+
+
+def test_collect_candidate_boards_default_repo_survives_disk_scan_failure(
+    settings, monkeypatch
+):
+    """When iterdir raises OSError, the default_repo_id fallback still
+    ensures the mill's own board is discoverable."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.core import db as _db
+
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    settings.default_repo_id = "default-board"
+    _db.init_db(settings, board_id="default-board")
+
+    # Simulate a disk-scan failure (e.g. permission error on data_dir).
+    import pathlib
+    from unittest.mock import patch
+
+    _real_iterdir = pathlib.Path.iterdir
+
+    def _failing_iterdir(self):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(pathlib.Path, "iterdir", _failing_iterdir)
+
+    svc = TicketService(settings, board_id="")
+    try:
+        candidates = svc._collect_candidate_boards(caller_name="test")
+        # Registry boards still present.
+        assert "other-board" in candidates
+        # default_repo_id fallback saves us when disk scan is dead.
+        assert "default-board" in candidates
+    finally:
+        _cfg._repos_config = None
+
+
+def test_collect_candidate_boards_does_not_duplicate_board_ids(service):
+    """When a board appears in both the registry and disk scan,
+    it is only listed once."""
+    candidates = service._collect_candidate_boards(caller_name="test")
+    # test-board appears once, not twice.
+    assert candidates.count("test-board") == 1
+
+
+# -- resolve_by_suffix / list_children_across_boards with bound board -----
+
+
+def test_resolve_by_suffix_finds_ticket_on_bound_board_not_in_registry(
+    settings,
+):
+    """resolve_by_suffix searches self.board_id even when the board
+    isn't in the repos registry, so tickets on the bound board are
+    always visible."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    # Registry only knows about other-board, not test-board.
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    svc = TicketService(settings, board_id="test-board")
+    try:
+        t = svc.create("resolve-by-suffix bound-board test")
+        suffix = t.id[-4:]
+        result = svc.resolve_by_suffix(suffix)
+        assert result == t.id
+    finally:
+        _cfg._repos_config = None
+
+
+def test_list_children_across_boards_finds_children_on_bound_board(
+    settings,
+):
+    """list_children_across_boards includes self.board_id in its
+    candidate list, so children on the bound board are found even
+    when that board is absent from the registry."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    svc = TicketService(settings, board_id="test-board")
+    try:
+        parent = svc.create("parent on bound board")
+        child = svc.create("child on bound board", parent_id=parent.id)
+        children = svc.list_children_across_boards(parent.id)
+        assert child.id in {c.id for c in children}
+    finally:
+        _cfg._repos_config = None
+
+
+# -- _board_for finds ticket on default_repo board from board-less svc ---
+
+
+def test_board_for_finds_ticket_on_default_repo_board(
+    settings,
+):
+    """A board-less service can find a ticket on the default_repo_id
+    board even when that board is absent from the repos registry.
+
+    This is the scenario closest to the "ticket not found in any
+    configured board" error — the ticket lives on a board (the mill's
+    own default board) that isn't in the managed-repo registry, and a
+    board-less lookup (e.g. from read_ticket) must still find it.
+    """
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.core import db as _db
+
+    # Registry only knows about managed repos — the mill's own board is absent.
+    _cfg._repos_config = ReposRegistry(
+        repos={
+            "other-repo": RepoConfig(
+                repo_id="other-repo",
+                board_id="other-board",
+                langfuse_project_name="proj-b",
+                langfuse_public_key="pk-b",
+                langfuse_secret_key="sk-b",
+            ),
+        }
+    )
+    settings.default_repo_id = "mill-board"
+    _db.init_db(settings, board_id="mill-board")
+
+    # Create a ticket on the mill's own board (not in the registry).
+    mill_svc = TicketService(settings, board_id="mill-board")
+    t = mill_svc.create("ticket on mill board", source="config_sync")
+
+    # A board-less service (like read_ticket) must be able to resolve it.
+    boardless = TicketService(settings)
+    try:
+        resolved = boardless._board_for(t.id)
+        assert resolved == "mill-board"
+    finally:
+        _cfg._repos_config = None
+
+
 # ---------------------------------------------------------------------------
 # Cross-board migration
 # ---------------------------------------------------------------------------
