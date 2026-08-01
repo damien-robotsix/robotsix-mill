@@ -410,20 +410,18 @@ def run(
     *,
     repo_dir: Path,
     settings: Settings,
-    install_project: bool = False,
+    install_project: bool = True,
     sandbox_image: str | None = None,
 ) -> tuple[int, str]:
     """Execute ``command`` against ``repo_dir`` in a disposable
     container. Returns ``(exit_code, combined_output)``. Raises
     :class:`SandboxError` on isolation-infrastructure failure.
 
-    When *install_project* is set (the test gate passes it), the repo's
-    own dependencies are installed before *command* runs. The gate
-    otherwise executes against the sandbox image's FROZEN site-packages,
-    so a ticket that adds a new third-party runtime dependency (e.g.
-    converting to Jinja2 templates → adds ``jinja2``) fails forever with
-    ``ModuleNotFoundError`` no matter how the agent edits the code —
-    because nothing ever installs the declared dependency. See
+    By default the repo's own dependencies are installed before
+    *command* runs so that the workspace clone — not the image's frozen
+    site-packages — is the imported tree.  Callers that must skip the
+    install (e.g. ad-hoc commands in an environment with no egress
+    proxy) can pass *install_project=False*.  See
     ``_maybe_install_prefix`` for how the install is made
     read-only-safe.
     """
