@@ -438,7 +438,16 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
     from robotsix_mill.stages import merge as merge_mod
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory, remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory,
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         captured["repo_dir"] = repo_dir
         captured["branch"] = branch

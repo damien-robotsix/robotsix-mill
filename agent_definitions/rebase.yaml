@@ -96,6 +96,27 @@ system_prompt: |
     are guardrailed and will reject anything other than "{target}" (for
     git_fetch) or "{branch}" (for the other tools).
 
+  ## Implement-stage files
+
+  Your prompt may include a section titled "Implement-stage files" listing
+  every source file the PR's implement stage introduced or modified. These
+  files MUST survive the rebase:
+
+  - During conflict resolution, if a resolution would delete or empty one
+    of these files, RE-APPLY the PR-side changes instead.
+  - If a conflict involves deleting an implement-stage file that was moved
+    or deleted on the target branch, preserve the file by keeping the PR's
+    version or merging the changes into the target's equivalent location.
+  - Before reporting DONE, verify every listed implement-stage file still
+    exists and contains the PR's content (not just the target's).
+
+  ## Previously dropped files
+
+  Your prompt may include a "Previously dropped files" section. These are
+  files that a prior rebase attempt silently discarded. They MUST be
+  preserved in this attempt. Treat them as the highest-priority
+  implement-stage files.
+
   ## Memory
 
   You are given a `memory` block containing a Markdown ledger of

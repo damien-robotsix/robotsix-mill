@@ -823,7 +823,16 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -877,7 +886,16 @@ def test_rebase_clears_stale_review_artifact_and_cache(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -959,7 +977,16 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1011,13 +1038,100 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
     assert "src/dropped.py" in (out.note or "")
 
 
+def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
+    """When a prior rebase dropped files (recorded in rebase_dropped_files.txt),
+    the next run_rebase_agent call receives them as previously_dropped_files."""
+    ctx = _gh(tmp_path)
+
+    rebase_calls = []
+
+    def fake_rebase(
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
+    ):
+        rebase_calls.append(
+            {
+                "pre_rebase_files": pre_rebase_files,
+                "previously_dropped_files": previously_dropped_files,
+            }
+        )
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda repo, target_branch="main", ref="HEAD": ["src/mod.py"],
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    # Pre-populate the dropped-files artifact from a prior failed attempt.
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    artifacts.mkdir(parents=True, exist_ok=True)
+    dropped_path = artifacts / "rebase_dropped_files.txt"
+    dropped_path.write_text("docs/modules.yaml\nsrc/search.py\n", encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    # The rebase should succeed (post-check passes, integrity clean).
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # Verify the agent received the previously-dropped file list.
+    assert len(rebase_calls) == 1
+    assert rebase_calls[0]["previously_dropped_files"] == [
+        "docs/modules.yaml",
+        "src/search.py",
+    ]
+    assert rebase_calls[0]["pre_rebase_files"] == ["src/mod.py"]
+
+
 def test_rebase_success_no_pre_rebase_files_passes_integrity(tmp_path, monkeypatch):
     """When pre_rebase_files is empty (e.g. git plumbing failure), the
     integrity check is skipped and the rebase succeeds normally."""
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1085,7 +1199,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None: (
+        lambda *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None, pre_rebase_files=None, previously_dropped_files=None: (
             RebaseResult(status="DONE", summary="ok")
         ),
     )
@@ -1129,7 +1243,16 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1279,7 +1402,16 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
     )
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="FAILED", summary="nope")
 
@@ -1312,7 +1444,16 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, rebase_max_attempts="1")
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="FAILED", summary="nope")
 
@@ -1402,7 +1543,16 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
     calls = {}
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         calls.update(repo_dir=repo_dir, branch=branch, target=target)
         return RebaseResult(status="DONE", summary="ok")  # success
@@ -1478,7 +1628,16 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
     agent_calls = []
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         agent_calls.append(1)
         return RebaseResult(status="FAILED", summary="nope")
@@ -1542,7 +1701,16 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
     ctx = _gh(tmp_path, rebase_max_attempts="1")
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="FAILED", summary="nope")
 
@@ -1579,7 +1747,16 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1617,7 +1794,16 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
     call_count = [0]
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         call_count[0] += 1
         # First call fails, second succeeds.
@@ -1694,7 +1880,16 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
     ctx = _gh(tmp_path)
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         return RebaseResult(status="DONE", summary="ok")
 
@@ -1989,7 +2184,16 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
         calls.append("fetch")
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         calls.append("agent")
         return RebaseResult(status="DONE", summary="ok")
@@ -2030,7 +2234,16 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
         raise subprocess.CalledProcessError(1, "git fetch")
 
     def fake_rebase(
-        *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
     ):
         agent_called.append(1)
         return RebaseResult(status="DONE", summary="ok")

@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Re-synced `mypy-baseline.txt`: removed 2 stale entries for resolved strict-mode violations, fixing CI's baseline-ratchet step on main.
+- Rebase agent now receives the PR's implement-stage file list and any previously-dropped files as context, so it preserves them during conflict resolution instead of silently discarding them. Fixed a short-circuit bug in `check_rebase_diff_integrity` that missed drops when all PR files were removed.
 - **Breaking (sandbox):** `sandbox.run()` now defaults `install_project=True` so the workspace clone is the imported tree in ALL sandbox paths — not just the test gate. Callers that must skip the install (e.g. ad-hoc commands with no egress proxy) can pass `install_project=False` explicitly. This fixes the root cause behind the `implement.yaml` step-0 stopgap (PR #2679), where coordinating/chat agents wasted ~69 LLM rounds discovering the workspace clone wasn't on the import path.
 - Document CLI shell-completion convention in AGENT.md: when adding a CLI subcommand, regenerate `contrib/completions/` and commit in the same change to avoid CI failures.
 - Promote `from . import models` to module-level in `db.py`

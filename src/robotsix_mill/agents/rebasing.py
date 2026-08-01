@@ -41,6 +41,8 @@ def run_rebase_agent(
     memory: str = "",
     remote_url: str | None = None,
     token: str | None = None,
+    pre_rebase_files: list[str] | None = None,
+    previously_dropped_files: list[str] | None = None,
 ) -> RebaseResult:
     """Run one rebase attempt of *branch* onto ``origin/<target>``.
 
@@ -82,8 +84,33 @@ def run_rebase_agent(
     user_prompt = (
         f"Rebase branch '{branch}' onto origin/{target} in {repo_dir}. "
         + "Follow the system prompt exactly.\n\n"
-        + section("memory", memory or "(empty — start a new ledger)")
     )
+
+    if pre_rebase_files:
+        shown = "\n".join(f"  - {p}" for p in pre_rebase_files)
+        user_prompt += (
+            f"## Implement-stage files (MUST survive the rebase)\n\n"
+            f"These files were introduced or modified by the PR's implement "
+            f"stage. Every one of them must still exist and contain the PR's "
+            f"changes after the rebase completes. If a conflict resolution "
+            f"would delete or empty one of these files, you MUST re-apply the "
+            f"PR-side change — do NOT accept a resolution that discards the "
+            f"PR's work.\n\n"
+            f"{shown}\n\n"
+        )
+
+    if previously_dropped_files:
+        shown = "\n".join(f"  - {p}" for p in previously_dropped_files)
+        user_prompt += (
+            f"## Previously dropped files (DO NOT drop again)\n\n"
+            f"The previous rebase attempt silently dropped these files. "
+            f"They MUST be preserved in this attempt. If git would delete "
+            f"them during conflict resolution, re-apply the PR's changes "
+            f"instead.\n\n"
+            f"{shown}\n\n"
+        )
+
+    user_prompt += section("memory", memory or "(empty — start a new ledger)")
 
     result = load_and_run_agent(
         settings=settings,

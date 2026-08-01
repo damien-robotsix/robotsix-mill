@@ -1156,7 +1156,7 @@ def check_rebase_diff_integrity(
     original conservative behaviour and reports every missing file.
     """
     post_files = changed_source_files(repo, target_branch)
-    if not pre_rebase_files or not post_files:
+    if not pre_rebase_files:
         return (True, [])
 
     excluded_prefixes = ("CHANGELOG.md", "changelog.d/")

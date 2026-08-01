@@ -21,9 +21,12 @@ from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
     _REBASE_COUNTER,
+    _REBASE_DROPPED,
     _read_counter,
+    _read_dropped_files,
     _reconcile_with_remote_pr,
     _write_counter,
+    _write_dropped_files,
     log,
 )
 
@@ -96,8 +99,18 @@ class RebaseMixin(_MergeStageBase):
             target,
         )
 
+        dropped_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_DROPPED
+        previously_dropped = _read_dropped_files(dropped_path)
+
         run = self._fetch_and_run_rebase(
-            ticket, s, ctx.repo_config, repo_dir, branch, target, attempt
+            ticket,
+            s,
+            ctx.repo_config,
+            repo_dir,
+            branch,
+            target,
+            attempt,
+            previously_dropped,
         )
 
         if isinstance(run, Outcome):
@@ -152,6 +165,7 @@ class RebaseMixin(_MergeStageBase):
         branch: str,
         target: str,
         attempt: int,
+        previously_dropped_files: list[str] | None = None,
     ) -> tuple[bool, str, list[str], dict[str, str]] | Outcome:
         """Invoke the rebase agent with bridged git tools.
 
@@ -238,6 +252,10 @@ class RebaseMixin(_MergeStageBase):
                     memory=memory_text,
                     remote_url=remote_url,
                     token=token,
+                    pre_rebase_files=pre_rebase_files or None,
+                    previously_dropped_files=(
+                        previously_dropped_files if previously_dropped_files else None
+                    ),
                 )
                 ok = result.status == "DONE"
                 detail = result.summary or ""
@@ -304,6 +322,10 @@ class RebaseMixin(_MergeStageBase):
                     shown = ", ".join(f"`{p}`" for p in dropped[:10])
                     more = f" (+{len(dropped) - 10} more)" if len(dropped) > 10 else ""
                     _write_counter(counter_path, 0)
+                    # Persist the dropped file list so the next rebase
+                    # attempt receives it as context.
+                    dropped_path = counter_path.parent / _REBASE_DROPPED
+                    _write_dropped_files(dropped_path, dropped)
                     return Outcome(
                         State.BLOCKED,
                         f"rebase succeeded but silently dropped {len(dropped)} "
@@ -312,6 +334,11 @@ class RebaseMixin(_MergeStageBase):
                         "during conflict resolution. "
                         "Resume-blocked to retry from human_mr_approval.",
                     )
+                # Integrity check passed — clear any stale dropped-files
+                # artifact from a prior attempt.
+                dropped_cleanup_path = counter_path.parent / _REBASE_DROPPED
+                with contextlib.suppress(FileNotFoundError):
+                    dropped_cleanup_path.unlink()
 
             # The rebase changed the branch tip — any review verdict
             # (and its stage-outcome cache entry) produced against the
