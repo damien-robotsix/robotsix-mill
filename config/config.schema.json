@@ -2359,6 +2359,13 @@
           "title": "Retrospect Log Max Chars",
           "type": "integer"
         },
+        "retrospect_max_drafts_per_run": {
+          "advanced": true,
+          "default": 2,
+          "description": "Hard cap on drafts a single retrospect pass may file.",
+          "title": "Retrospect Max Drafts Per Run",
+          "type": "integer"
+        },
         "retrospect_memory_path": {
           "anyOf": [
             {
@@ -2591,6 +2598,19 @@
           "default": true,
           "description": "When true, periodically force-remove leaked/orphaned sandbox containers.",
           "title": "Sandbox Reaper Periodic",
+          "type": "boolean"
+        },
+        "scanner_max_drafts_per_run": {
+          "advanced": true,
+          "default": 5,
+          "description": "Hard cap on drafts a single scanner pass may file.",
+          "title": "Scanner Max Drafts Per Run",
+          "type": "integer"
+        },
+        "scanner_rollup": {
+          "default": true,
+          "description": "Roll up multi-finding scanner passes into a single ticket per run.",
+          "title": "Scanner Rollup",
           "type": "boolean"
         },
         "shutdown_grace_seconds": {
@@ -3010,26 +3030,6 @@
           "default": 15,
           "description": "Request budget for the interactive langfuse_inspect_trace tool.",
           "title": "Trace Review Tool Request Limit",
-          "type": "integer"
-        },
-        "scanner_rollup": {
-          "default": true,
-          "description": "Roll up multi-finding scanner passes into a single ticket per run.",
-          "title": "Scanner Rollup",
-          "type": "boolean"
-        },
-        "scanner_max_drafts_per_run": {
-          "advanced": true,
-          "default": 5,
-          "description": "Hard cap on drafts a single scanner pass may file.",
-          "title": "Scanner Max Drafts Per Run",
-          "type": "integer"
-        },
-        "retrospect_max_drafts_per_run": {
-          "advanced": true,
-          "default": 2,
-          "description": "Hard cap on drafts a single retrospect pass may file.",
-          "title": "Retrospect Max Drafts Per Run",
           "type": "integer"
         },
         "triage_boilerplate_interval_seconds": {
