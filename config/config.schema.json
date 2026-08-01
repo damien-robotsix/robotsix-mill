@@ -1749,6 +1749,19 @@
           "title": "Module Size Request Limit",
           "type": "integer"
         },
+        "mypy_baseline_interval_seconds": {
+          "advanced": true,
+          "default": 604800,
+          "description": "Seconds between periodic mypy-baseline passes.",
+          "title": "Mypy Baseline Interval Seconds",
+          "type": "integer"
+        },
+        "mypy_baseline_periodic": {
+          "default": true,
+          "description": "When true, run periodic mypy-baseline passes for type-check baseline management.",
+          "title": "Mypy Baseline Periodic",
+          "type": "boolean"
+        },
         "network_outage_retry_seconds": {
           "advanced": true,
           "default": 120,

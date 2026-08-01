@@ -225,6 +225,12 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
         "runner_func": "run_module_curator_pass",
         "label": "Module Curator",
     },
+    "mypy_baseline": {
+        "kind": "llm_agent",
+        "runner_module": "robotsix_mill.agents.runners.periodic_runner",
+        "runner_func": "run_mypy_baseline_pass",
+        "label": "MyPy Baseline",
+    },
     "module_size": {
         "kind": "llm_agent",
         "runner_module": "robotsix_mill.agents.runners.periodic_runner",

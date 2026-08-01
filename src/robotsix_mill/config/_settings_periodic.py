@@ -306,6 +306,19 @@ class _PeriodicSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # --- mypy-baseline agent (mypy type-check baseline management) ---
+    # When True, the worker runs periodic mypy-baseline passes.
+    mypy_baseline_periodic: bool = Field(
+        default=True,
+        description="When true, run periodic mypy-baseline passes for type-check baseline management.",
+    )
+    # Interval between periodic mypy-baseline passes (seconds).
+    mypy_baseline_interval_seconds: int = Field(
+        default=604800,  # 7d — weekly default; per-repo override via YAML
+        description="Seconds between periodic mypy-baseline passes.",
+        json_schema_extra={"advanced": True},
+    )
+
     # --- data-dir GC — deterministic periodic disk reclamation ---
     # Master switch for the periodic data-dir GC pass.
     # Default True — the agent is harmless when idle (no findings).
