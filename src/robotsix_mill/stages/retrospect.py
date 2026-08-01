@@ -21,7 +21,7 @@ from ..config import Settings, get_repo_config
 from ..config import ConfigError
 from ..core.models import SourceKind, Ticket
 from ..core.states import DONE_OR_CLOSED, State
-from ..core.text_noop import is_noop_report
+from ..core.text_noop import is_degenerate_body, is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
 from ..forge import get_forge
@@ -318,6 +318,23 @@ class RetrospectStage(Stage):
             )
             return None
 
+        # Third guard — real title, placeholder body. The spawn condition
+        # above only tests ``res.draft_body`` for truthiness, and a body of
+        # literally "..." is truthy. Such a draft reaches the board with a
+        # plausible title, then refine cannot build a spec from it and the
+        # ticket blocks with nothing anyone can act on. Filing it costs a
+        # refine pass and a permanent board entry; dropping it costs one
+        # under-specified finding the agent can raise again next run.
+        if is_degenerate_body(res.draft_body):
+            log.info(
+                "%s: retrospect proposed draft %r with a placeholder body "
+                "(%r) — skipped, nothing to refine from",
+                ticket.id,
+                res.draft_title,
+                (res.draft_body or "")[:40],
+            )
+            return None
+
         # Happy path: build body, create ticket on the target board,
         # set parent if on the same board, log, and return the ID.
         body = res.draft_body
@@ -355,6 +372,19 @@ class RetrospectStage(Stage):
         Returns the spawned draft ID, or None if no follow-up was created.
         """
         if not res.follow_up_title or not res.follow_up_body:
+            return None
+
+        # Same placeholder-body guard as the improvement-draft path: a
+        # truthiness test alone lets "..." through, and the resulting
+        # ticket blocks in refine with nothing to act on.
+        if is_degenerate_body(res.follow_up_body):
+            log.info(
+                "%s: retrospect follow-up %r has a placeholder body (%r) "
+                "— skipped, nothing to refine from",
+                ticket.id,
+                res.follow_up_title,
+                (res.follow_up_body or "")[:40],
+            )
             return None
 
         follow_up_title = res.follow_up_title.strip()
