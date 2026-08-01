@@ -2838,11 +2838,10 @@ def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkey
     """
     ctx = _gh(tmp_path)
 
-    # Simulate a branch that is already current: rebase succeeds but
-    # produces no diff.
+    # Simulate a branch that is already current: rebase is a no-op.
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto",
-        lambda *a, **k: True,
+        lambda *a, **k: False,
     )
 
     push_calls = []
@@ -2902,9 +2901,9 @@ def test_stale_branch_pushes_empty_commit_to_force_fresh_ci_run(tmp_path, monkey
     # The empty commit was created and pushed.
     assert len(empty_commit_calls) == 1
     assert "trigger fresh CI run" in empty_commit_calls[0]
-    # Two pushes: one for the (no-op) rebase, one for the empty commit.
-    assert len(push_calls) >= 2
-    # ...and the status it just invalidated was NOT read.
+    # Only the empty-commit push (rebase was a no-op, gated on not _pushed).
+    assert len(push_calls) == 1
+    # The status was NOT read — early return prevents reading stale status.
     assert check_status_calls == [], (
         "reading check status right after pushing the refresh commit can only "
         "ever return 'pending' — that read is what starved the fix path"
@@ -2928,14 +2927,15 @@ def test_branch_changed_by_rebase_skips_empty_commit(tmp_path, monkeypatch):
         "robotsix_mill.stages.ci_fix.git_ops.empty_commit",
         lambda repo, message: empty_commit_calls.append(message),
     )
-    # head_sha and ls_remote_sha differ → empty-commit path skipped.
+    # Realistic post-rebase state: after push, local and remote SHAs match.
+    # The `not _pushed` guard (not SHA mismatch) prevents the empty commit.
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.head_sha",
-        lambda repo: "new_sha",
+        lambda repo: "abc123",
     )
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.ls_remote_sha",
-        lambda remote_url, ref, token=None: "old_sha",
+        lambda remote_url, ref, token=None: "abc123",
     )
 
     monkeypatch.setattr(
@@ -2949,7 +2949,7 @@ def test_branch_changed_by_rebase_skips_empty_commit(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
-        lambda self, *, source_branch, require_checks=False: {"sha": "new_sha"},
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
     )
 
     t = _fixing_ci(ctx)

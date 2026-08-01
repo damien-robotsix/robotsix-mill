@@ -307,16 +307,14 @@ def _refresh_branch_for_ci(
             exc_info=True,
         )
 
-    # 2. When the branch HEAD hasn't changed, push an empty commit to
-    #    produce a fresh SHA so the forge triggers a new pull_request run.
-    #    This un-sticks tickets whose original CI failure was a transient
-    #    flake that has since resolved (the old, failing check-runs are
-    #    pinned to the stale SHA and can never turn green).
-    #    Skipped when the rebase above already pushed: that push produced a
-    #    new head SHA and therefore a fresh run, so an empty commit on top
-    #    would only invalidate the run we just triggered.
-    try:
-        if not pushed:
+    # 2. When the branch HEAD hasn't changed AND step 1 didn't already push,
+    #    push an empty commit to produce a fresh SHA so the forge triggers a
+    #    new pull_request run.  This un-sticks tickets whose original CI
+    #    failure was a transient flake that has since resolved (the old,
+    #    failing check-runs are pinned to the stale SHA and can never turn
+    #    green).
+    if not pushed:
+        try:
             local_sha = git_ops.head_sha(repo_path)
             remote_sha = git_ops.ls_remote_sha(
                 remote_url, f"refs/heads/{branch}", token
@@ -333,12 +331,12 @@ def _refresh_branch_for_ci(
                     "(branch was already current)",
                     ticket_id,
                 )
-    except Exception:
-        log.warning(
-            "%s: empty-commit push failed — proceeding with existing HEAD",
-            ticket_id,
-            exc_info=True,
-        )
+        except Exception:
+            log.warning(
+                "%s: empty-commit push failed — proceeding with existing HEAD",
+                ticket_id,
+                exc_info=True,
+            )
 
     if pushed and sentinel_path is not None:
         # Record the head we just produced so the next poll is a no-op until

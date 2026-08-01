@@ -229,6 +229,7 @@ class CIFixStage(Stage):
         # upstream issue has already been resolved.
         _target = target_branch_for(s, ctx.repo_config)
         _remote_url = _resolve_remote_url(s, ctx.repo_config)
+        _pushed = False
         _token = github_push_token(s, repo_config=ctx.repo_config)
         try:
             _did_rebase = git_ops.try_rebase_onto(
@@ -239,6 +240,7 @@ class CIFixStage(Stage):
             )
             if _did_rebase:
                 git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                _pushed = True
                 log.info(
                     "%s: rebased onto %s and pushed before CI scan",
                     ticket.id,
@@ -281,21 +283,26 @@ class CIFixStage(Stage):
         # failure. Once the budget is spent, fall through and read the real
         # status — a failure that survives a fresh run is not a stale one,
         # and belongs to the fix agent.
-        empty_commit_counter_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _CI_EMPTY_COMMIT_COUNTER
-        )
-        _local_sha = git_ops.head_sha(Path(repo_dir))
-        _remote_sha = git_ops.ls_remote_sha(_remote_url, f"refs/heads/{branch}", _token)
-        if _remote_sha is not None and _local_sha == _remote_sha:
-            _refreshes = _read_counter(empty_commit_counter_path)
-            if _refreshes >= _MAX_CI_EMPTY_COMMIT_REFRESHES:
-                log.info(
-                    "%s: already refreshed CI %d time(s) for this failure — "
-                    "not pushing another empty commit; reading the real status",
-                    ticket.id,
-                    _refreshes,
-                )
-            else:
+        #
+        # The "not _pushed" guard avoids a double-empty-commit when the
+        # rebase step above already pushed a new SHA — that push already
+        # triggers a fresh CI run.
+        if not _pushed:
+            empty_commit_counter_path = (
+                ctx.service.workspace(ticket).artifacts_dir / _CI_EMPTY_COMMIT_COUNTER
+            )
+            _local_sha = git_ops.head_sha(Path(repo_dir))
+            _remote_sha = git_ops.ls_remote_sha(_remote_url, f"refs/heads/{branch}", _token)
+            if _remote_sha is not None and _local_sha == _remote_sha:
+                _refreshes = _read_counter(empty_commit_counter_path)
+                if _refreshes >= _MAX_CI_EMPTY_COMMIT_REFRESHES:
+                    log.info(
+                        "%s: already refreshed CI %d time(s) for this failure — "
+                        "not pushing another empty commit; reading the real status",
+                        ticket.id,
+                        _refreshes,
+                    )
+                else:
                 try:
                     git_ops.empty_commit(
                         Path(repo_dir),

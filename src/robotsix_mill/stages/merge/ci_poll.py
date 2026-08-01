@@ -37,6 +37,8 @@ from ._shared import (
 )
 import contextlib
 
+_CI_POLL_REFRESH_COUNTER = "ci_poll_refresh_attempts.txt"
+
 
 def _ci_run_in_flight(ci_status: dict[str, Any]) -> bool:
     """True when the forge still has checks running for this branch.
@@ -459,6 +461,7 @@ class CIPollMixin(_MergeStageBase):
             _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
             _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
             _write_counter(artifacts_dir / _PING_PONG_COUNT, 0)
+            _write_counter(artifacts_dir / _CI_POLL_REFRESH_COUNTER, 0)
             last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
             with contextlib.suppress(FileNotFoundError):
                 last_stage_path.unlink()

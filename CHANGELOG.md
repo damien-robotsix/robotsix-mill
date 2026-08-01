@@ -1,6 +1,13 @@
 ## 0.0.0 (unreleased)
 
 - ci_fix agent: add pre-commit hook verification guidance to the system prompt — fetch upstream `.pre-commit-hooks.yaml` before guessing hook config, verify Docker image tags exist before pushing, and confirm the pinned revision actually exposes the hook manifest.  Reduces the guess-and-push loop that burns CI verification iterations on misconfigured pre-commit entries.
+- Fix double-empty-commit after successful rebase in `_refresh_branch_for_ci`
+  and its duplicate in `CIFixStage._resolve_clone_and_status`: gate the
+  empty-commit step on `not pushed` so a rebase that already pushed a new
+  SHA does not also push an empty commit.  Add a `_CI_POLL_REFRESH_COUNTER`
+  sentinel to the merge-stage CI poll so the branch refresh fires at most
+  once per `IMPLEMENT_COMPLETE` entry, preventing multi-commit pollution
+  when CI is pending across many re-polls.
 - Re-synced `mypy-baseline.txt`: removed 2 stale entries for resolved strict-mode violations, fixing CI's baseline-ratchet step on main.
 - Rebase agent now receives the PR's implement-stage file list and any previously-dropped files as context, so it preserves them during conflict resolution instead of silently discarding them. Fixed a short-circuit bug in `check_rebase_diff_integrity` that missed drops when all PR files were removed.
 - Wire `mypy_baseline` into the pass registry, CLI, and periodic config toggles, matching the sibling `llm_agent` passes so it can be triggered on-demand via `mill mypy-baseline` or the board pass-run endpoint.
