@@ -96,7 +96,7 @@ other code depends on.
 | `MILL_MAX_SPEND_USD_PER_TICKET` | `max_spend_usd_per_ticket` | `0.0` | `float` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | `0.0` = disabled |
 | `MILL_STAGE_TIMEOUT_SECONDS` | `stage_timeout_seconds` | `1800` | `int` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | `≤ 0` disables |
 | `MILL_STAGE_TIMEOUT_OVERRIDES` | `stage_timeout_overrides` | `{}` | `dict` | Settings | non-sensitive | default | §3 | `runtime/worker.py` | JSON dict; `"stage": 0` disables per-stage |
-| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web_research_request_limit` | `8` | `int` | Settings | non-sensitive | default | §2, §8 | Web-research sub-agent | Mentioned in both §2 and §8 |
+| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web_research_request_limit` | `16` | `int` | Settings | non-sensitive | default | §2, §8 | Web-research sub-agent | Mentioned in both §2 and §8 |
 
 ### 1.4  Core — memory & reference files
 

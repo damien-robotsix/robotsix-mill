@@ -532,7 +532,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `web.search_enabled` | `MILL_WEB_SEARCH` | `true` | Enable web-search capability (delegated to sub-agent) |
-| `web.research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `12` | Per-call request cap for web research (also reachable via `core.limits.web_research_requests`) |
+| `web.research_request_limit` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `16` | Per-call request cap for web research (also reachable via `core.limits.web_research_requests`) |
 | `web.research_fetch_max_calls` | `MILL_WEB_RESEARCH_FETCH_MAX_CALLS` | `4` | Maximum real (cache-miss) `web_fetch` calls per `web_research` sub-agent invocation |
 | `web.fetch_image` | `MILL_FETCH_IMAGE` | `curlimages/curl:8.17.0` | Docker image for isolated `web_fetch` container |
 | `web.fetch_max_bytes` | `MILL_WEB_FETCH_MAX_BYTES` | `2000000` | Max bytes fetched per URL |
@@ -547,7 +547,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | — | `MILL_WEB_KNOWLEDGE_MODEL` | `deepseek/deepseek-v4-flash` | Web-knowledge gateway sub-agent model — multi-turn flash agent that owns the per-library Markdown knowledge base and decides autonomously whether to answer from cache or web-search. Every agent's route to the internet flows through this gateway. |
 | — | `MILL_WEB_KNOWLEDGE_STALE_DAYS` | `30` | Days before a cached web-knowledge .md file is considered stale. A consult that hits a stale file is allowed to web-search and update it. Users can tune this to match their tolerance for stale documentation. |
 | `core.web_knowledge_cache_ttl_hours` | — | `72` | (config-file-only) Hours since the last `last_verified` touch before a cached knowledge file is flagged `[STALE]` in the agent's index. When flagged, the web_knowledge agent's system prompt warns it to cross-check claims with `web_search` before trusting cached data. |
-| — | `MILL_WEB_KNOWLEDGE_REQUEST_LIMIT` | `12` | Per-consult request cap for the web-knowledge sub-agent. Each request is one Markdown read, one web-search, or one Markdown write. |
+| — | `MILL_WEB_KNOWLEDGE_REQUEST_LIMIT` | `16` | Per-consult request cap for the web-knowledge sub-agent. Each request is one Markdown read, one web-search, or one Markdown write. |
 
 ### 11. Pipeline tail (merge stage)
 

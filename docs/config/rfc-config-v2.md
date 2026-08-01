@@ -170,7 +170,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 | `MILL_TEST_REQUEST_LIMIT` | `core.limits.test_requests` | `8` | |
 | `MILL_EXPLORE_REQUEST_LIMIT` | `core.limits.explore_requests` | `20` | |
 | `MILL_DEDUP_REQUEST_LIMIT` | `core.limits.dedup_requests` | `4` | |
-| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `core.limits.web_research_requests` | `8` | |
+| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `core.limits.web_research_requests` | `16` | |
 | `MILL_MAX_CONCURRENCY` | `core.limits.max_concurrency` | `4` | |
 | `MILL_MAX_FIX_ITERATIONS` | `core.limits.max_fix_iterations` | `8` | |
 | `MILL_MAX_STUCK_CYCLES` | `core.limits.max_stuck_cycles` | `3` | |
@@ -219,7 +219,7 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 |---|---|---|---|
 | `MILL_WEB_SEARCH` | `web.search_enabled` | `true` | |
 | `MILL_WEB_RESEARCH_MODEL` | `web.research_model` | `deepseek/deepseek-v4-pro` | Also in `core.models` |
-| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web.research_request_limit` | `8` | Also in `core.limits` |
+| `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `web.research_request_limit` | `16` | Also in `core.limits` |
 | `MILL_FETCH_IMAGE` | `web.fetch_image` | `curlimages/curl:8.17.0` | |
 | `MILL_WEB_FETCH_MAX_BYTES` | `web.fetch_max_bytes` | `2000000` | |
 | `MILL_WEB_FETCH_TIMEOUT` | `web.fetch_timeout` | `30` | seconds |
