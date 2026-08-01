@@ -58,6 +58,18 @@ _DOC_ONLY_PATH_RE = re.compile(r"`([^`]*\.[a-zA-Z]{1,10})`")
 # Extensions that signal a code/config change (not doc-only).
 _CODE_EXTENSIONS: frozenset[str] = frozenset({".py", ".ts", ".js", ".yaml", ".yml"})
 
+# Terms that, when present in a draft title or body, indicate the
+# change is NOT documentation-only — even when every backtick path
+# looks like a .md file.  Used as a pre-check in _is_doc_only_change
+# (and _is_doc_only_draft in _triage.py) to prevent false doc-only
+# classification that would short-circuit refine for code tickets.
+_NOT_DOC_ONLY_TERMS_RE = re.compile(
+    r"\b(implement|refactor|migrate|deploy|pipeline|workflow|"
+    r"mypy|ruff|lint|bandit|type:\s*ignore|"
+    r"hotfix|rollback|revert)\b",
+    re.IGNORECASE,
+)
+
 
 def _is_doc_only_change(draft: str, title: str = "") -> bool:
     """Return True if *draft* describes a documentation-only change.
@@ -68,6 +80,8 @@ def _is_doc_only_change(draft: str, title: str = "") -> bool:
     ``.js``, ``.yaml``, ``.yml``) is mentioned.
     """
     text = f"{title}\n\n{draft}" if title else draft
+    if _NOT_DOC_ONLY_TERMS_RE.search(text):
+        return False
     paths = _DOC_ONLY_PATH_RE.findall(text)
     if not paths:
         return False

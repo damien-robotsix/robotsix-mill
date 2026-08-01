@@ -399,20 +399,19 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # write to history (see worker._post_trace_event) but the
         # filter stays as defence-in-depth.
         _NON_FEEDBACK_AUTHORS = {"mill", "system"}
-        if ticket.blocked_from is None:  # not a BLOCKED resume
-            comments = ctx.service.list_comments(ticket.id)
-            comments = [c for c in comments if c.author not in _NON_FEEDBACK_AUTHORS]
-            if comments:
-                open_threads = [
-                    c for c in comments if c.parent_id is None and c.closed_at is None
-                ]
-                if open_threads:
-                    open_thread_ids = {c.id for c in open_threads}
-                review_feedback = "\n".join(
-                    f"[REVIEW id={c.id} @ {c.created_at.isoformat()}] {c.body}"
-                    for c in comments
-                )
-                feedback = review_feedback
+        comments = ctx.service.list_comments(ticket.id)
+        comments = [c for c in comments if c.author not in _NON_FEEDBACK_AUTHORS]
+        if comments:
+            open_threads = [
+                c for c in comments if c.parent_id is None and c.closed_at is None
+            ]
+            if open_threads:
+                open_thread_ids = {c.id for c in open_threads}
+            review_feedback = "\n".join(
+                f"[REVIEW id={c.id} @ {c.created_at.isoformat()}] {c.body}"
+                for c in comments
+            )
+            feedback = review_feedback
 
         previous_attempt_summary: str | None = None
         summary_path = ws.artifacts_dir / "implement_summary.md"

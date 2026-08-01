@@ -24,6 +24,7 @@ from . import _result_paths
 from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     _AUTO_APPROVE_SOURCES,
+    _NOT_DOC_ONLY_TERMS_RE,
     _draft_has_complete_spec,
     _fast_path_scope_checks,
     _summarize_spec_for_auto_approve,
@@ -124,6 +125,8 @@ def _is_doc_only_draft(draft: str) -> bool:
     Returns ``False`` when no paths are found or when any path is a
     code file — the caller should fall through to normal triage.
     """
+    if _NOT_DOC_ONLY_TERMS_RE.search(draft):
+        return False
     paths = _DOC_PATH_RE.findall(draft)
     if not paths:
         return False
