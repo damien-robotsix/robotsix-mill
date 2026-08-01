@@ -1096,6 +1096,7 @@
           '<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ' + esc(_ms.reason || 'not mergeable') + '</p>' :
           '<button class="merge-btn" onclick="event.stopPropagation();mergePR(' + jsq(tData.id) + ')">Merge</button>'
         ) +
+        '<button class="reimplement-btn" style="margin-left:6px" title="Send back to implement for rework without closing the PR" onclick="event.stopPropagation();requestImplementationChanges(' + jsq(tData.id) + ')">Re‑implement</button>' +
         (_mr && _mr.reason ? '<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ' + esc(_mr.reason) + '</p>' : "");
     }
 
