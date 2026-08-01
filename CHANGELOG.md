@@ -7,6 +7,7 @@
   SQLModel schema creation. The module-level pattern already
   exists in `alembic/env.py`; this aligns `db.py` with it.
 - Document stage: prevent the doc agent from overwriting source/test files under `src/`, `tests/`, and `www/` by passing `write_blocked_prefixes` to `build_fs_tools`. The `write_file`, `edit_file`, and `delete_file` tools now refuse to mutate paths that start with any blocked prefix. (mill: AGENT.md: CLI — When adding a CLI subcommand (a `_RUNNERS` entry in `src/robotsix_mill/cli/__in… (20260801T012300Z-agent-md-cli-when-adding-a-cli-subcomman-3530))
+- Decomposed `_poll_one_repo_ci` (301-line god-method) into four focused helpers (`_load_ci_state`, `_prune_ci_state`, `_latest_runs_by_workflow`, `_fetch_run_logs_with_deferral`) plus a lean coordinator that sequences high-level steps, mirroring the review.py `run` decomposition style.
 - Refine stage-cache now keys on a hash of the refine module's Python source
   files in addition to the ticket description content, so pipeline-code
   changes (e.g. gate fixes) automatically invalidate the cache and force
