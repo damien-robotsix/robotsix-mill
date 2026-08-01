@@ -130,6 +130,41 @@ class TestResolveDigest:
             digest = resolve_docker_digest.resolve_digest("myorg/myimage:v1")
         assert digest == "sha256:fff666"
 
+    def test_dockerhub_non_library_manifest_url_uses_registry_host(self):
+        """The manifest URL uses registry-1.docker.io, not auth.docker.io."""
+        token_mock = MagicMock()
+        token_mock.read.return_value = json.dumps({"token": "test-token"}).encode()
+        token_mock.__enter__.return_value = token_mock
+
+        manifest_mock = MagicMock()
+        manifest_mock.headers = {"Docker-Content-Digest": "sha256:registry-digest"}
+        manifest_mock.__enter__.return_value = manifest_mock
+
+        captured_urls = []
+        call_count = 0
+        responses = [token_mock, manifest_mock]
+
+        def side_effect(req, **kwargs):
+            nonlocal call_count
+            captured_urls.append(req.get_full_url())
+            resp = responses[call_count]
+            call_count += 1
+            return resp
+
+        with patch.object(urllib.request, "urlopen", side_effect=side_effect):
+            digest = resolve_docker_digest.resolve_digest("myorg/myimage:v1")
+
+        assert digest == "sha256:registry-digest"
+        assert any("auth.docker.io/token" in u for u in captured_urls), (
+            f"token URL should use auth.docker.io, got: {captured_urls}"
+        )
+        assert any("registry-1.docker.io/v2/" in u for u in captured_urls), (
+            f"manifest URL should use registry-1.docker.io, got: {captured_urls}"
+        )
+        assert not any("auth.docker.io/v2/" in u for u in captured_urls), (
+            f"manifest URL should NOT use auth.docker.io, got: {captured_urls}"
+        )
+
     def test_ghcr_image(self):
         """ghcr.io images use the registry v2 token+manifest flow."""
         token_mock = MagicMock()
