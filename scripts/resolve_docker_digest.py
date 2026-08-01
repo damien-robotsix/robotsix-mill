@@ -61,13 +61,15 @@ def _registry_token(repo: str, registry: str, service: str) -> str:
     return token
 
 
-def _registry_digest(repo: str, ref: str, registry: str, service: str) -> str:
+def _registry_digest(
+    repo: str, ref: str, token_host: str, manifest_host: str, service: str
+) -> str:
     """Resolve a digest via the OCI registry manifest API (Docker-Content-Digest header)."""
-    token = _registry_token(repo, registry, service)
+    token = _registry_token(repo, token_host, service)
 
     # Accept both OCI and Docker v2 manifest formats.
     # The registry returns the digest in the Docker-Content-Digest response header.
-    url = f"https://{registry}/v2/{repo}/manifests/{ref}"
+    url = f"https://{manifest_host}/v2/{repo}/manifests/{ref}"
     req = urllib.request.Request(
         url,
         headers={
@@ -136,9 +138,20 @@ def resolve_digest(image_ref: str, platform: str = "linux/amd64") -> str:
             repo = "/".join(slash_parts)
 
         if registry == "ghcr.io":
-            return _registry_digest(repo, tag, "ghcr.io", "ghcr.io")
-        else:
-            return _registry_digest(repo, tag, "auth.docker.io", "registry.docker.io")
+            return _registry_digest(repo, tag, "ghcr.io", "ghcr.io", "ghcr.io")
+        # Docker Hub non-library images: token goes to auth.docker.io,
+        # manifest goes to registry-1.docker.io.
+        if registry in ("docker.io", "registry-1.docker.io"):
+            return _registry_digest(
+                repo,
+                tag,
+                "auth.docker.io",
+                "registry-1.docker.io",
+                "registry.docker.io",
+            )
+        # Other registries (quay.io, etc.): use the registry host for
+        # both token and manifest.
+        return _registry_digest(repo, tag, registry, registry, registry)
 
     raise SystemExit(f"Could not parse image reference: {image_ref!r}")
 
