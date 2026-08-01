@@ -708,17 +708,23 @@ def make_ask_web_knowledge_tool(
         to retrieve from.
 
         BUDGET: Each ask_web_knowledge call has a limited request
-        budget (12 model turns) and a shared 15-page fetch budget
-        (2 MB total text body) per consult. Prefer explore() for
-        repo-local questions — ask_web_knowledge is for external
-        APIs/frameworks. If the question is about code in a private
-        org repo, skip it — web search cannot reach private repos.
+        budget and a shared 15-page fetch budget (2 MB total text
+        body) per consult. Prefer explore() for repo-local questions
+        — ask_web_knowledge is for external APIs/frameworks. If the
+        question is about code in a private org repo, skip it — web
+        search cannot reach private repos.
 
         Args:
             question: A focused question. The web-knowledge agent
                 figures out which library file (if any) to read and
                 whether to refresh from the web.
         """
+        rl = settings.web_knowledge_request_limit
+        if ask_web_knowledge.__doc__ is not None:
+            ask_web_knowledge.__doc__ = ask_web_knowledge.__doc__.replace(
+                "a limited request budget",
+                f"a limited request budget ({rl} model turns)",
+            )
         if block_reason is not None:
             return block_reason
         return await run_web_knowledge(settings=settings, question=question)
@@ -734,7 +740,8 @@ def make_ask_web_knowledge_tool(
                 "owns a per-repo knowledge base and decides whether to "
                 "answer from cache or web-search. This is your ONLY route "
                 "to the internet — there is no direct web_search tool. "
-                "BUDGET: 12 model turns + 15-page fetch budget per consult. "
+                f"BUDGET: {settings.web_knowledge_request_limit} model turns "
+                "+ 15-page fetch budget per consult. "
                 "Prefer explore() for repo-local questions."
             ),
             category="exploration",
