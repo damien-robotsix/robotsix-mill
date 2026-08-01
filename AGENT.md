@@ -84,6 +84,17 @@ under `src/`.
   [docs/dev-tooling/ci-policy.md](docs/dev-tooling/ci-policy.md) before adding any CI step.
 - Don't reintroduce a regression a test or this file already guards.
 
+## CLI
+
+- **Regenerate shell completions with every new subcommand.** When
+  adding a CLI subcommand (a `_RUNNERS` entry in
+  `src/robotsix_mill/cli/__init__.py` plus its `add_parser`),
+  regenerate the shell completions in `contrib/completions/`
+  (`uv run python scripts/gen_completions.py` or `make completions`)
+  and commit them in the same change. CI's "Check shell completions
+  are up-to-date" step (`.github/workflows/ci.yml`,
+  `git diff --exit-code contrib/completions/`) fails otherwise.
+
 ## Agent behavior
 
 - `report_issue` is for a real blocking/degrading problem you hit

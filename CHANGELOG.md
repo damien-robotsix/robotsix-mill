@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
-- Document stage: prevent the doc agent from overwriting source/test files under `src/`, `tests/`, and `www/` by passing `write_blocked_prefixes` to `build_fs_tools`. The `write_file`, `edit_file`, and `delete_file` tools now refuse to mutate paths that start with any blocked prefix.
+- Document CLI shell-completion convention in AGENT.md: when adding a CLI subcommand, regenerate `contrib/completions/` and commit in the same change to avoid CI failures.
+- Document stage: prevent the doc agent from overwriting source/test files under `src/`, `tests/`, and `www/` by passing `write_blocked_prefixes` to `build_fs_tools`. The `write_file`, `edit_file`, and `delete_file` tools now refuse to mutate paths that start with any blocked prefix. (mill: AGENT.md: CLI — When adding a CLI subcommand (a `_RUNNERS` entry in `src/robotsix_mill/cli/__in… (20260801T012300Z-agent-md-cli-when-adding-a-cli-subcomman-3530))
 - Refine stage-cache now keys on a hash of the refine module's Python source
   files in addition to the ticket description content, so pipeline-code
   changes (e.g. gate fixes) automatically invalidate the cache and force
