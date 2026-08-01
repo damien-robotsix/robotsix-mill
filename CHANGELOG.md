@@ -1,6 +1,7 @@
 ## 0.0.0 (unreleased)
 
 - Audit agent: add `run_command` batching guidance to prevent serial tool-call storms (chain multiple one-liners with `&&` or delegate to `explore`/`parallel_explore`).
+- Document board-hygiene settings (draft TTL auto-close, open-ticket cap, rollup epics) in the configuration reference
 - `wait_for_ci` now includes the GitHub Actions `run_id` in the `CI_FAILING` output
   prefix (e.g. `[sha: 04cdd8f, run: 30399400000]`), so the ci-fix agent can pass it
   directly to `fetch_ci_logs` without blindly guessing run IDs.

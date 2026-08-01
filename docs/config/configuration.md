@@ -927,6 +927,43 @@ These four periodic agents each carry one or two extra fields beyond the generic
 | `MILL_DEPENDABOT_INGEST_MAX_DRAFTS_PER_PASS` | `5` | Maximum number of Dependabot drafts created per ingest pass (across all repos) |
 | `MILL_MODULE_CURATOR_REQUEST_LIMIT` | `120` | Per-call request budget for the module-curator agent |
 
+#### Board hygiene (draft TTL auto-close + open-ticket cap)
+
+The board-hygiene guards cover two faces of standing-stock hygiene: the
+**draft TTL auto-close** runs during the `db_maintenance` periodic sweep
+(no dedicated pass of its own), while the **open-ticket cap** is enforced
+in real time on every `POST /tickets/ingest` request. Three settings
+control the behaviour:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_BOARD_HYGIENE_PERIODIC` | `true` | Master toggle — when `false`, draft TTL auto-close is skipped entirely regardless of the TTL setting |
+| `MILL_BOARD_HYGIENE_DRAFT_TTL_DAYS` | `7` | Maximum age (days) an untouched draft can remain before auto-close. Only standalone drafts (no parent epic) are eligible; epics and their children are skipped. Set to `0` to disable (no drafts auto-closed regardless of age) |
+| `MILL_BOARD_HYGIENE_MAX_OPEN_TICKETS` | `0` | Ceiling on total open (non-terminal) tickets per board. When reached, `POST /tickets/ingest` findings are appended to a rollup epic instead of creating standalone tickets. Human-created tickets are exempt. Set to `0` to disable the cap |
+
+**Draft TTL auto-close.** During each `db_maintenance` sweep
+(`db_maintenance_interval_seconds`, default 86400 s), all standalone DRAFT
+tickets whose `updated_at` is older than `board_hygiene_draft_ttl_days`
+are closed via `close_tracker` with a note explaining the TTL policy.
+Epics and children of epics are skipped — their lifecycle is governed by
+the parent.
+
+**Open-ticket cap.** When the board reaches
+`board_hygiene_max_open_tickets` (counting all non-terminal states),
+each machine-ingest request (`POST /tickets/ingest`) appends its
+finding as a history note to a `Rollup: <source_tag>` epic instead of
+creating a new standalone ticket. The rollup epic is created once per
+`source_tag` per board and reused on subsequent capped reports. This
+guard is evaluated per request at ingest time — it does **not** wait
+for a periodic sweep, and it applies to machine ingest regardless of
+`board_hygiene_periodic`.
+Human/operator-created tickets (`POST /tickets`) are exempt from the
+cap.
+
+**Config file keys.** The flat JSON keys in `config/config.json` match the
+env-var names: `"board_hygiene_periodic"`, `"board_hygiene_draft_ttl_days"`,
+`"board_hygiene_max_open_tickets"`.
+
 ### 13. Skills & language instructions
 
 | YAML path | Env var | Default | Description |

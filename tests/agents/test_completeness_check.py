@@ -10,6 +10,7 @@ from robotsix_mill.agents.runners.periodic_runner import (
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
@@ -209,7 +210,11 @@ def test_run_completeness_check_pass_creates_draft_tickets(tmp_path, monkeypatch
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="completeness_check"
     tickets = service.list()
-    cc_tickets = [t for t in tickets if t.source == "completeness_check"]
+    cc_tickets = [
+        t
+        for t in tickets
+        if t.source == "completeness_check" and t.kind == TicketKind.TASK
+    ]
     assert len(cc_tickets) == 2
     assert cc_tickets[0].state == State.DRAFT
 

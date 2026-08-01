@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from sqlmodel import col, select
@@ -12,7 +13,9 @@ from ..models import (
     Comment,
     Ticket,
     TicketEvent,
+    TicketKind,
 )
+from ..states import State
 from ._base import _ServiceBase
 
 log = logging.getLogger("robotsix_mill.service")
@@ -186,19 +189,77 @@ class _MaintenanceMixin(_ServiceBase):
             s.commit()
             return deleted
 
-    def db_maintenance_pass(self) -> dict[str, int]:
-        """Run one DB maintenance sweep: archive purge, per-ticket event
-        cap, and SQLite ``PRAGMA optimize``.
+    def _maybe_auto_close_stale_drafts(self) -> int:
+        """Auto-close DRAFT tickets untouched longer than the TTL.
 
-        Returns a summary dict with keys ``archived_purged``,
-        ``events_pruned``, ``comments_pruned``, and ``tickets_pruned``.
+        Reads ``board_hygiene_draft_ttl_days`` and
+        ``board_hygiene_periodic`` from settings.  When either is
+        disabled (ttl_days <= 0 or periodic is False) this is a no-op.
+
+        Only standalone DRAFT tickets are eligible — epics and children
+        of epics are skipped (the parent epic governs their lifecycle).
+        Each closed ticket receives a history note explaining the TTL
+        policy so an operator can reopen if still relevant.
+
+        Returns the number of drafts closed.
+        """
+        if not self.settings.board_hygiene_periodic:
+            return 0
+        ttl_days = self.settings.board_hygiene_draft_ttl_days
+        if ttl_days <= 0:
+            return 0
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
+
+        with retry_on_db_full(self.settings, self.board_id) as s:
+            stmt = (
+                select(Ticket)
+                .where(
+                    Ticket.state == State.DRAFT,
+                    Ticket.updated_at < cutoff,
+                    Ticket.kind != TicketKind.EPIC,
+                )
+                .order_by(col(Ticket.updated_at))
+            )
+            stale = list(s.exec(stmt).all())
+
+        closed = 0
+        for ticket in stale:
+            # Skip children of epics — the parent epic governs lifecycle.
+            if ticket.parent_id is not None:
+                continue
+            note = (
+                f"Auto-closed by board-hygiene pass: draft untouched for "
+                f"{ttl_days} day(s) (TTL policy). Reopen or refile if "
+                f"still relevant."
+            )
+            try:
+                self.close_tracker(ticket.id, note=note)
+                closed += 1
+            except Exception:
+                log.exception(
+                    "board-hygiene: failed to auto-close stale draft %s", ticket.id
+                )
+        return closed
+
+    def db_maintenance_pass(self) -> dict[str, int]:
+        """Run one DB maintenance sweep: draft TTL auto-close, archive
+        purge, per-ticket event cap, and SQLite ``PRAGMA optimize``.
+
+        Returns a summary dict with keys ``drafts_auto_closed``,
+        ``archived_purged``, ``events_pruned``, ``comments_pruned``,
+        and ``tickets_pruned``.
         """
         result: dict[str, int] = {
+            "drafts_auto_closed": 0,
             "archived_purged": 0,
             "events_pruned": 0,
             "comments_pruned": 0,
             "tickets_pruned": 0,
         }
+
+        # 0. Auto-close stale drafts (board hygiene TTL).
+        result["drafts_auto_closed"] = self._maybe_auto_close_stale_drafts()
 
         # 1. Count terminal tickets before purge, then run it.
         with retry_on_db_full(self.settings, self.board_id) as s:

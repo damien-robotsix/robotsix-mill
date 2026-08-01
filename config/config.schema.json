@@ -805,6 +805,26 @@
           "title": "Bespoke Periodic",
           "type": "boolean"
         },
+        "board_hygiene_draft_ttl_days": {
+          "default": 7,
+          "description": "Maximum age (days) of an untouched draft before auto-close. 0 = disabled.",
+          "minimum": 0,
+          "title": "Board Hygiene Draft Ttl Days",
+          "type": "integer"
+        },
+        "board_hygiene_max_open_tickets": {
+          "default": 0,
+          "description": "Ceiling on total open tickets per board. 0 = disabled.",
+          "minimum": 0,
+          "title": "Board Hygiene Max Open Tickets",
+          "type": "integer"
+        },
+        "board_hygiene_periodic": {
+          "default": true,
+          "description": "When true, run board-hygiene draft TTL auto-close during db-maintenance passes.",
+          "title": "Board Hygiene Periodic",
+          "type": "boolean"
+        },
         "board_list_cache_ttl_seconds": {
           "advanced": true,
           "default": 3.0,

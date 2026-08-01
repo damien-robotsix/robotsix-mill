@@ -11,6 +11,7 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.core.models import TicketKind
 
 
 def _test_repo_config():
@@ -215,7 +216,9 @@ def test_run_survey_pass_creates_draft_tickets(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="survey"
     tickets = service.list()
-    survey_tickets = [t for t in tickets if t.source == "survey"]
+    survey_tickets = [
+        t for t in tickets if t.source == "survey" and t.kind == TicketKind.TASK
+    ]
     assert len(survey_tickets) == 2
     assert survey_tickets[0].state == State.DRAFT
 
