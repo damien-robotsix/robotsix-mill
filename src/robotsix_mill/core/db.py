@@ -308,6 +308,13 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
     path = _db_path(settings, board_id)
     db_url = f"sqlite:///{path}"
 
+    # Ensure the per-board directory exists before Alembic tries to
+    # open the database.  ``get_engine()`` creates it earlier in
+    # ``init_db()``, but this guard defends against edge cases
+    # (e.g. concurrent cleanup, test isolation gaps under xdist)
+    # that could remove the directory between the two calls.
+    path.parent.mkdir(parents=True, exist_ok=True)
+
     # Resolve alembic.ini relative to the repo root.  We walk up from
     # this file's location (src/robotsix_mill/core/) until we find it.
     _here = Path(__file__).resolve().parent  # .../core/
@@ -372,6 +379,7 @@ def init_db(settings: Settings, board_id: str) -> None:
         with lock:
             if board_id not in _initialized:
                 # import models so SQLModel.metadata is populated before create_all
+                from . import models  # noqa: F401
 
                 engine = get_engine(settings, board_id)
                 SQLModel.metadata.create_all(engine)
