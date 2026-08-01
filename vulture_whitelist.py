@@ -332,6 +332,9 @@ run_repo_description_sync_pass
 run_docstring_coverage_pass
 run_module_size_pass
 run_mypy_baseline_pass
+# run_credit_balance_pass — called from _passes.py via _run_periodic_pass
+# wrapper; vulture (60% confidence) cannot trace it.
+run_credit_balance_pass
 # run_langfuse_cleanup_pass_wrapper — called from _passes.py via
 # _run_periodic_pass wrapper; vulture (60% confidence) cannot trace it.
 run_langfuse_cleanup_pass_wrapper
