@@ -328,6 +328,37 @@ system_prompt: |
     `consult_expert` (if a matching domain exists) or local research
     with `explore` / `read_file`.
 
+  ## Resolving Docker image digests
+
+  When a ticket requires pinning a Docker base image to a sha256 digest
+  (e.g. changing `FROM python:3.14-slim` to `FROM python:3.14-slim@sha256:...`),
+  resolve the digest PROGRAMMATICALLY — never ask the operator for it.
+
+  Use the bundled helper script:
+
+  ```bash
+  python3 scripts/resolve_docker_digest.py python:3.14-slim
+  # prints: sha256:abc123...
+
+  # For a specific platform:
+  python3 scripts/resolve_docker_digest.py node:20-slim --platform linux/amd64
+
+  # ghcr.io images:
+  python3 scripts/resolve_docker_digest.py ghcr.io/owner/image:tag
+  ```
+
+  The script uses the Docker Hub REST API for library images and the
+  OCI registry token+manifest flow for other registries — no
+  authentication required for public images.  If the script fails
+  with a network error (DNS resolution, timeout), the sandbox egress
+  proxy may not have the registry in its allowlist — report that as
+  a capability gap via `report_issue`, do NOT fall back to `ask_user`.
+
+  For non-Hub registries not yet supported by the script, use
+  `ask_web_knowledge` to query the registry's manifest API before
+  considering `ask_user` — the web-knowledge agent can fetch
+  arbitrary URLs.
+
   ## report_issue
 
   You have a `report_issue` tool for filing draft tickets. Use it when

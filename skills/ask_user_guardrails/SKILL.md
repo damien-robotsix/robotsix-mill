@@ -40,6 +40,12 @@ deliberate about when you reach for it.
 - **(Implement only) Ambiguities that don't block progress.** If you can
   pick a reasonable default and keep coding, do that and note the
   assumption in your summary.
+- **Mechanically derivable facts reachable via public HTTP.** E.g. Docker
+  image digests (resolvable with `scripts/resolve_docker_digest.py` or a
+  `curl` call to hub.docker.com), git commit SHAs for a known tag
+  (resolvable with `git ls-remote`), or any other piece of data that
+  a deterministic command or API call can produce.  These are capability
+  bugs, not legitimate questions — resolve them programmatically.
 
 ### Examples
 
