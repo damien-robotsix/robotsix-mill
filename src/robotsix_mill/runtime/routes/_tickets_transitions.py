@@ -282,7 +282,10 @@ def answer_pending_question(
     ticket = svc.get(ticket_id_u)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    if ticket.state is not State.AWAITING_USER_REPLY:
+    if ticket.state is not State.AWAITING_USER_REPLY and not (
+        ticket.state is State.BLOCKED
+        and ticket.blocked_from == State.AWAITING_USER_REPLY.value
+    ):
         raise HTTPException(
             409,
             f"ticket is not awaiting a user reply (currently {ticket.state})",

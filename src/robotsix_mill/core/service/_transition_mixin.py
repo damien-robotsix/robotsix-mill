@@ -17,6 +17,7 @@ from ..models import (
 from ..states import State, can_transition
 from ..workspace import Workspace
 from ._base import _ServiceBase
+from ._comments import _sanitize_log_value
 from ._helpers import (
     TransitionError,
     _get_ticket,
@@ -355,15 +356,38 @@ class _TransitionMixin(_ServiceBase):
             # Refuse to transition to a terminal state while any
             # [ASK_USER] threads remain open — those questions must be
             # resolved (thread closed) before the pipeline completes.
+            #
+            # Exception: BLOCKED → CLOSED for ask_user-blocked tickets.
+            # When the operator force-closes an abandoned ask_user
+            # ticket, auto-close the open threads with a system note
+            # rather than blocking the transition.
             if dst in _TERMINAL_STATES:
                 open_threads = self._has_open_ask_user_threads(ticket_id, s)
                 if open_threads:
-                    ids = ", ".join(str(t.id) for t in open_threads)
-                    raise TransitionError(
-                        f"{ticket_id}: cannot transition to {dst} while "
-                        f"{len(open_threads)} [ASK_USER] thread(s) are "
-                        f"open (IDs: {ids})"
-                    )
+                    if (
+                        ticket.state is State.BLOCKED
+                        and dst is State.CLOSED
+                        and ticket.blocked_from == State.AWAITING_USER_REPLY.value
+                    ):
+                        now = datetime.now(UTC)
+                        for t in open_threads:
+                            t.closed_at = now
+                            s.add(t)
+                        ids = ", ".join(str(t.id) for t in open_threads)
+                        log.info(
+                            "%s: BLOCKED → CLOSED — auto-closed %d open [ASK_USER] "
+                            "thread(s) (IDs: %s)",
+                            _sanitize_log_value(ticket_id),
+                            len(open_threads),
+                            ids,
+                        )
+                    else:
+                        ids = ", ".join(str(t.id) for t in open_threads)
+                        raise TransitionError(
+                            f"{ticket_id}: cannot transition to {dst} while "
+                            f"{len(open_threads)} [ASK_USER] thread(s) are "
+                            f"open (IDs: {ids})"
+                        )
             # Refuse transition to DONE when duplicate changelog
             # fragments exist on the ticket's branch.  This gate
             # prevents a BLOCKED ticket from being force-closed
@@ -407,10 +431,15 @@ class _TransitionMixin(_ServiceBase):
                 if dst is State.READY and note and note.strip():
                     _clear_stale_implement_guard(self.workspace(ticket))
             # Record originating state when pausing mid-stage; clear when
-            # leaving AWAITING_USER_REPLY (resume path).
+            # leaving AWAITING_USER_REPLY (resume path), except when
+            # escalating to BLOCKED — paused_from must survive so the
+            # operator can answer and resume to the original state.
             if dst is State.AWAITING_USER_REPLY:
-                ticket.paused_from = ticket.state.value
-            elif ticket.state is State.AWAITING_USER_REPLY:
+                # Preserve an existing paused_from (e.g. when resuming
+                # from BLOCKED back through AWAITING_USER_REPLY).
+                if not ticket.paused_from:
+                    ticket.paused_from = ticket.state.value
+            elif ticket.state is State.AWAITING_USER_REPLY and dst is not State.BLOCKED:
                 ticket.paused_from = None
             # Leaving READY for a later stage means the implement stage
             # actually delivered — reset its spawn budget.

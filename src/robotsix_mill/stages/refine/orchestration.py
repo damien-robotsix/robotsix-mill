@@ -681,6 +681,16 @@ class RefineAgentMixin:
                 State.AWAITING_USER_REPLY,
                 note="paused — agent asked a clarifying question",
             )
+            updated = ctx.service.get(ticket.id)
+            if updated:
+                from ...notify import send_notification
+
+                send_notification(
+                    updated,
+                    State.AWAITING_USER_REPLY,
+                    "agent asked a clarifying question",
+                    ctx.settings,
+                )
             log.info(
                 "%s: paused refine — agent invoked ask_user",
                 ticket.id,

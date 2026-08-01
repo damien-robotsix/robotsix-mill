@@ -341,3 +341,155 @@ async def test_worker_timeout_escalation_task_not_created_when_periodic_false(
 
     await worker.stop()
     db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# ask_user timeout → blocked → answered → resumed round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_ask_user_timeout_blocked_answered_resumed(settings, service, monkeypatch):
+    """Full round-trip: ask_user timeout → BLOCKED → answer → resumed to paused_from."""
+    from robotsix_mill.agents.runners.timeout_escalation_runner import (
+        run_timeout_escalation,
+    )
+
+    notifications = []
+
+    def fake_notify(ticket, dst, note, s):
+        notifications.append((ticket.id, dst, note))
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.timeout_escalation_runner.send_notification",
+        fake_notify,
+    )
+
+    settings.timeout_escalation_threshold_seconds = 86400  # 1 day
+
+    # 1. Create ticket in AWAITING_USER_REPLY, paused_from=READY.
+    t = _make_ticket(
+        service,
+        settings,
+        title="ask-user-round-trip",
+        updated_at_delta=timedelta(days=4),
+    )
+    _add_ask_user_thread(service, t.id)
+    assert t.paused_from == State.READY.value
+    assert t.state is State.AWAITING_USER_REPLY
+
+    # 2. Timeout escalation → BLOCKED.
+    result = run_timeout_escalation(settings)
+    assert result["escaped"] == 1
+    t = service.get(t.id)
+    assert t.state is State.BLOCKED
+    assert t.blocked_from == State.AWAITING_USER_REPLY.value
+    # paused_from must survive the BLOCKED transition.
+    assert t.paused_from == State.READY.value
+
+    # 3. Operator answers the question.
+    reply = service.answer_pending_question(
+        t.id,
+        "Here is the clarification you needed.",
+        author="operator",
+    )
+    assert reply is not None
+
+    # 4. Ticket resumes to paused_from (READY).
+    t = service.get(t.id)
+    assert t.state is State.READY
+    assert t.blocked_from is None
+    assert t.paused_from is None
+
+    # Verify the [ASK_USER] thread is closed.
+    comments = service.list_comments(t.id)
+    ask_threads = [
+        c
+        for c in comments
+        if c.parent_id is None and (c.body or "").startswith("[ASK_USER]")
+    ]
+    assert len(ask_threads) >= 1
+    assert all(t.closed_at is not None for t in ask_threads)
+
+
+def test_answer_blocked_ask_user_via_route_guard(settings, service):
+    """The answer route rejects tickets not in an answerable state."""
+
+    # A READY ticket is not answerable.
+    t = service.create("not-paused", source=SourceKind.AGENT)
+    with db.session(settings, service.board_id) as s:
+        row = s.get(Ticket, t.id)
+        row.state = State.READY
+        s.add(row)
+        s.commit()
+    t = service.get(t.id)
+
+    with pytest.raises(ValueError, match="not awaiting a user reply"):
+        service.answer_pending_question(
+            t.id,
+            "answer",
+            author="operator",
+        )
+
+    # A BLOCKED ticket that wasn't blocked from AWAITING_USER_REPLY
+    # is also not answerable.
+    t2 = service.create("blocked-not-ask", source=SourceKind.AGENT)
+    with db.session(settings, service.board_id) as s:
+        row = s.get(Ticket, t2.id)
+        row.state = State.BLOCKED
+        row.blocked_from = State.READY.value  # blocked from implement, not ask_user
+        s.add(row)
+        s.commit()
+    t2 = service.get(t2.id)
+
+    with pytest.raises(ValueError, match="not awaiting a user reply"):
+        service.answer_pending_question(
+            t2.id,
+            "answer",
+            author="operator",
+        )
+
+
+def test_blocked_to_closed_legal_for_ask_user_timeout(settings, service, monkeypatch):
+    """BLOCKED (from ask_user timeout) → CLOSED is a legal terminal edge."""
+    from robotsix_mill.agents.runners.timeout_escalation_runner import (
+        run_timeout_escalation,
+    )
+
+    notifications = []
+
+    def fake_notify(ticket, dst, note, s):
+        notifications.append((ticket.id, dst, note))
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.timeout_escalation_runner.send_notification",
+        fake_notify,
+    )
+
+    settings.timeout_escalation_threshold_seconds = 86400
+
+    # Escalate a stale ask_user ticket to BLOCKED.
+    t = _make_ticket(
+        service,
+        settings,
+        title="close-me",
+        updated_at_delta=timedelta(days=4),
+    )
+    _add_ask_user_thread(service, t.id)
+    result = run_timeout_escalation(settings)
+    assert result["escaped"] == 1
+    t = service.get(t.id)
+    assert t.state is State.BLOCKED
+
+    # Transition to CLOSED — must succeed (open threads auto-closed).
+    updated = service.transition(t.id, State.CLOSED, note="operator closed")
+    assert updated.state is State.CLOSED
+
+    # Verify the [ASK_USER] thread was auto-closed.
+    comments = service.list_comments(t.id)
+    ask_threads = [
+        c
+        for c in comments
+        if c.parent_id is None and (c.body or "").startswith("[ASK_USER]")
+    ]
+    assert len(ask_threads) >= 1
+    assert all(th.closed_at is not None for th in ask_threads)
