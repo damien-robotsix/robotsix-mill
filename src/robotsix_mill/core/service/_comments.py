@@ -119,9 +119,7 @@ class _CommentMixin(_ServiceBase):
         if ticket_id is not None:
             return self._board_for(ticket_id)
 
-        candidates = self._collect_candidate_boards(
-            caller_name="_board_for_comment", prepend_self=True
-        )
+        candidates = self._collect_candidate_boards(caller_name="_board_for_comment")
         matches: list[str] = []
         for board_id in candidates:
             with db.session(self.settings, board_id) as s:

@@ -92,22 +92,19 @@ class _ServiceBase:
     def _collect_candidate_boards(
         self,
         caller_name: str,
-        *,
-        prepend_self: bool = False,
     ) -> list[str]:
         """Collect every known board id from the repos registry and a
         disk scan of ``data_dir``, deduplicated in registry-first order.
 
         *caller_name* is used in log messages so each call-site produces a
         distinct warning when the registry is unreachable.
-        When *prepend_self* is ``True`` and ``self.board_id`` is truthy,
-        the service's own ``board_id`` is prepended to the candidate list
-        before the registry scan.
+        The service's own ``board_id`` (when non-empty) is always included
+        first, before the registry scan.
         """
         from ...config import get_repos_config
 
         candidates: list[str] = []
-        if prepend_self and self.board_id:
+        if self.board_id:
             candidates.append(self.board_id)
         try:
             for rc in get_repos_config().repos.values():
@@ -128,4 +125,12 @@ class _ServiceBase:
                         candidates.append(sub.name)
         except OSError:
             pass
+        # When the default repo is not registered in repos.yaml but its
+        # on-disk DB exists (mill's own board managing external repos),
+        # include it so cross-board lookups from unbound services can
+        # find tickets filed on the mill board.
+        default_repo = self.settings.default_repo_id
+        if default_repo and default_repo not in candidates:
+            if (self.settings.data_dir / default_repo / "mill.db").exists():
+                candidates.append(default_repo)
         return candidates
