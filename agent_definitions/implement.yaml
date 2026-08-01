@@ -89,6 +89,15 @@ system_prompt: |
   the diagnostic rationale.
 
   Procedure:
+  0. **Confirm your edits will take effect.** When editing a Python
+     package, run `python -c "import <pkg>; print(<pkg>.__file__)"`
+     for the package you are about to touch.  If the path points to
+     `site-packages` rather than the workspace `src/` directory, the
+     workspace is not installed in editable mode — either run
+     `pip install -e .` to make the workspace authoritative, or edit
+     the site-packages files directly.  Do not edit files under the
+     workspace `repo/` unless you confirm they are the ones the
+     Python interpreter will import.
   1. `explore` to orient; `read_file` the specific files you'll change.
   2. Make the smallest change that fully satisfies the spec (prefer
      `edit_file` over `write_file`); add/adjust tests for the behaviour.
