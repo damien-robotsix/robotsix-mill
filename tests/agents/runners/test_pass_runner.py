@@ -2022,7 +2022,9 @@ def test_repo_specific_draft_stays_on_audited_board(tmp_path):
         assert len(on_audited) == 2  # 1 draft + 1 rollup EPIC
         on_audited_drafts = [t for t in on_audited if t.kind == TicketKind.TASK]
         assert len(on_audited_drafts) == 1
-        assert on_audited_drafts[0].title == "Fix user authentication in src/auth/login.py"
+        assert (
+            on_audited_drafts[0].title == "Fix user authentication in src/auth/login.py"
+        )
 
         # Mill board is empty.
         on_mill = mill_svc.list()

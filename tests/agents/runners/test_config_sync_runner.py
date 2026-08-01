@@ -149,7 +149,9 @@ def test_run_config_sync_pass_creates_draft_tickets(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="config_sync"
     tickets = service.list()
-    config_sync_tickets = [t for t in tickets if t.source == "config_sync" and t.kind == TicketKind.TASK]
+    config_sync_tickets = [
+        t for t in tickets if t.source == "config_sync" and t.kind == TicketKind.TASK
+    ]
     assert len(config_sync_tickets) == 2
     assert config_sync_tickets[0].state == State.DRAFT
 

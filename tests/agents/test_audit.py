@@ -251,7 +251,9 @@ def test_run_audit_pass_creates_draft_tickets(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="audit"
     tickets = service.list()
-    audit_tickets = [t for t in tickets if t.source == SourceKind.AUDIT and t.kind == TicketKind.TASK]
+    audit_tickets = [
+        t for t in tickets if t.source == SourceKind.AUDIT and t.kind == TicketKind.TASK
+    ]
     assert len(audit_tickets) == 2
     assert audit_tickets[0].state == State.DRAFT
     # Each draft should have origin_session == the audit run's session_id.

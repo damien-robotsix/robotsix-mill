@@ -258,7 +258,9 @@ def test_run_agent_check_pass_creates_draft_tickets(tmp_path, monkeypatch):
     # Verify tickets are in DB with source="agent_check".
     # Scanner sources also get a rollup epic — filter for task tickets.
     tickets = service.list()
-    ac_tickets = [t for t in tickets if t.source == "agent_check" and t.kind == TicketKind.TASK]
+    ac_tickets = [
+        t for t in tickets if t.source == "agent_check" and t.kind == TicketKind.TASK
+    ]
     assert len(ac_tickets) == 2
     assert ac_tickets[0].state == State.DRAFT
     # Each draft should have origin_session == the run's session_id.
