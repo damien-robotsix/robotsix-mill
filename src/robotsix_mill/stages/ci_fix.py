@@ -227,6 +227,7 @@ class CIFixStage(Stage):
         # upstream issue has already been resolved.
         _target = target_branch_for(s, ctx.repo_config)
         _remote_url = _resolve_remote_url(s, ctx.repo_config)
+        _pushed = False
         _token = github_push_token(s, repo_config=ctx.repo_config)
         try:
             _did_rebase = git_ops.try_rebase_onto(
@@ -237,6 +238,7 @@ class CIFixStage(Stage):
             )
             if _did_rebase:
                 git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                _pushed = True
                 log.info(
                     "%s: rebased onto %s and pushed before CI scan",
                     ticket.id,
@@ -264,25 +266,28 @@ class CIFixStage(Stage):
         # un-sticks tickets whose original CI failure was a transient
         # flake that has since resolved (the old, failing check-runs
         # are pinned to the stale SHA and can never turn green).
-        _local_sha = git_ops.head_sha(Path(repo_dir))
-        _remote_sha = git_ops.ls_remote_sha(_remote_url, f"refs/heads/{branch}", _token)
-        if _remote_sha is not None and _local_sha == _remote_sha:
-            try:
-                git_ops.empty_commit(
-                    Path(repo_dir),
-                    "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
-                )
-                git_ops.push(Path(repo_dir), branch, _remote_url, _token)
-                log.info(
-                    "%s: pushed empty commit to force fresh CI run (branch was already current)",
-                    ticket.id,
-                )
-            except Exception:
-                log.warning(
-                    "%s: empty-commit push failed — proceeding with existing HEAD",
-                    ticket.id,
-                    exc_info=True,
-                )
+        if not _pushed:
+            _local_sha = git_ops.head_sha(Path(repo_dir))
+            _remote_sha = git_ops.ls_remote_sha(
+                _remote_url, f"refs/heads/{branch}", _token
+            )
+            if _remote_sha is not None and _local_sha == _remote_sha:
+                try:
+                    git_ops.empty_commit(
+                        Path(repo_dir),
+                        "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+                    )
+                    git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                    log.info(
+                        "%s: pushed empty commit to force fresh CI run (branch was already current)",
+                        ticket.id,
+                    )
+                except Exception:
+                    log.warning(
+                        "%s: empty-commit push failed — proceeding with existing HEAD",
+                        ticket.id,
+                        exc_info=True,
+                    )
 
         # Fetch check status from the forge.
         try:

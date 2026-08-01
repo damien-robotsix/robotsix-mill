@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- Fix double-empty-commit after successful rebase in `_refresh_branch_for_ci`
+  and its duplicate in `CIFixStage._resolve_clone_and_status`: gate the
+  empty-commit step on `not pushed` so a rebase that already pushed a new
+  SHA does not also push an empty commit.  Add a `_CI_POLL_REFRESH_COUNTER`
+  sentinel to the merge-stage CI poll so the branch refresh fires at most
+  once per `IMPLEMENT_COMPLETE` entry, preventing multi-commit pollution
+  when CI is pending across many re-polls.
 - **Breaking (sandbox):** `sandbox.run()` now defaults `install_project=True` so the workspace clone is the imported tree in ALL sandbox paths — not just the test gate. Callers that must skip the install (e.g. ad-hoc commands with no egress proxy) can pass `install_project=False` explicitly. This fixes the root cause behind the `implement.yaml` step-0 stopgap (PR #2679), where coordinating/chat agents wasted ~69 LLM rounds discovering the workspace clone wasn't on the import path.
 - Document CLI shell-completion convention in AGENT.md: when adding a CLI subcommand, regenerate `contrib/completions/` and commit in the same change to avoid CI failures.
 - Promote `from . import models` to module-level in `db.py`

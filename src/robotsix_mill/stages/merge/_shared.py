@@ -253,32 +253,36 @@ def _refresh_branch_for_ci(
             exc_info=True,
         )
 
-    # 2. When the branch HEAD hasn't changed, push an empty commit to
-    #    produce a fresh SHA so the forge triggers a new pull_request run.
-    #    This un-sticks tickets whose original CI failure was a transient
-    #    flake that has since resolved (the old, failing check-runs are
-    #    pinned to the stale SHA and can never turn green).
-    try:
-        local_sha = git_ops.head_sha(repo_path)
-        remote_sha = git_ops.ls_remote_sha(remote_url, f"refs/heads/{branch}", token)
-        if remote_sha is not None and local_sha == remote_sha:
-            git_ops.empty_commit(
-                repo_path,
-                "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+    # 2. When the branch HEAD hasn't changed AND step 1 didn't already push,
+    #    push an empty commit to produce a fresh SHA so the forge triggers a
+    #    new pull_request run.  This un-sticks tickets whose original CI
+    #    failure was a transient flake that has since resolved (the old,
+    #    failing check-runs are pinned to the stale SHA and can never turn
+    #    green).
+    if not pushed:
+        try:
+            local_sha = git_ops.head_sha(repo_path)
+            remote_sha = git_ops.ls_remote_sha(
+                remote_url, f"refs/heads/{branch}", token
             )
-            git_ops.push(repo_path, branch, remote_url, token)
-            pushed = True
-            log.info(
-                "%s: pushed empty commit to force fresh CI run "
-                "(branch was already current)",
+            if remote_sha is not None and local_sha == remote_sha:
+                git_ops.empty_commit(
+                    repo_path,
+                    "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+                )
+                git_ops.push(repo_path, branch, remote_url, token)
+                pushed = True
+                log.info(
+                    "%s: pushed empty commit to force fresh CI run "
+                    "(branch was already current)",
+                    ticket_id,
+                )
+        except Exception:
+            log.warning(
+                "%s: empty-commit push failed — proceeding with existing HEAD",
                 ticket_id,
+                exc_info=True,
             )
-    except Exception:
-        log.warning(
-            "%s: empty-commit push failed — proceeding with existing HEAD",
-            ticket_id,
-            exc_info=True,
-        )
 
     return pushed
 
