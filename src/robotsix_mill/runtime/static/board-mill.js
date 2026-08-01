@@ -1096,6 +1096,7 @@
           '<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ' + esc(_ms.reason || 'not mergeable') + '</p>' :
           '<button class="merge-btn" onclick="event.stopPropagation();mergePR(' + jsq(tData.id) + ')">Merge</button>'
         ) +
+        '<button class="reimplement-btn" style="margin-left:6px" title="Send back to implement for rework without closing the PR" onclick="event.stopPropagation();requestImplementationChanges(' + jsq(tData.id) + ')">Re‑implement</button>' +
         (_mr && _mr.reason ? '<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ' + esc(_mr.reason) + '</p>' : "");
     }
 
@@ -1331,6 +1332,7 @@
           '<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ ' + esc(ms.reason || 'not mergeable') + '</p>' :
           '<button class="merge-btn" onclick="event.stopPropagation();mergePR(' + jsq(t.id) + ')">Merge</button>'
         ) +
+        '<button class="reimplement-btn" style="margin-left:6px" title="Send back to implement for rework without closing the PR" onclick="event.stopPropagation();requestImplementationChanges(' + jsq(t.id) + ')">Re‑implement</button>' +
         (mr && mr.reason ? '<p style="color:#f59e0b;font-size:11px;margin-top:4px">⚠ auto-merge not eligible: ' + esc(mr.reason) + '</p>' : "")
       ) : "";
       var k = "ticket-merge-btn-area:" + id;
@@ -1369,6 +1371,17 @@
       }
       var r = await jpost("/tickets/" + id + "/request-changes", { body: body.trim() });
       if (!r.ok) { var e = await r.text(); alert("request-changes failed: " + e); }
+      else { refresh(); if (sel === id) open_(id); }
+    });
+  }
+
+  async function requestImplementationChanges(id) {
+    await lockWhile(async function () {
+      var body = prompt("Send this ticket back to implement for rework — the PR stays open and the implement agent pushes updated commits.\n\nWhat needs to change?");
+      if (body === null) return;
+      if (!body.trim()) { alert("A comment is required when requesting implementation changes."); return; }
+      var r = await jpost("/tickets/" + id + "/request-implementation-changes", { body: body.trim() });
+      if (!r.ok) { var e = await r.text(); alert("request-implementation-changes failed: " + e); }
       else { refresh(); if (sel === id) open_(id); }
     });
   }
@@ -2248,6 +2261,7 @@
   window.approve = approve;
   window.mergePR = mergePR;
   window.requestChanges = requestChanges;
+  window.requestImplementationChanges = requestImplementationChanges;
   window.redraft = redraft;
   window.del_ = del_;
   window.addComment = addComment;

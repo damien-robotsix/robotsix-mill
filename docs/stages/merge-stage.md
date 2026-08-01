@@ -26,6 +26,28 @@ This means humans are only notified when the PR is actually ready for
 review and merge — no premature noise for PRs with failing CI or
 conflicts.
 
+## Operator-initiated re-implement from `HUMAN_MR_APPROVAL`
+
+While reviewing a PR in `HUMAN_MR_APPROVAL`, an operator who wants code
+changes **without closing and reopening the PR** can send the ticket back
+to the implement stage via the board's **Re‑implement** button (or the
+`POST /tickets/{id}/request-implementation-changes` API / chat skill).
+This posts a change-request comment and transitions the ticket from
+`HUMAN_MR_APPROVAL` → `READY`, so the implement agent re-runs against the
+existing PR branch — picking up the change-request context from the
+comment — and pushes updated commits to the same PR, which then returns
+to `HUMAN_MR_APPROVAL` for re-review once green.
+
+This is distinct from `request-changes` (the `human_issue_approval`
+rework path, which re-refines the spec from a new `draft` and discards
+the implementation). Requesting implementation changes keeps the branch,
+the open PR, and the implemented work; only the code is reworked. The
+operator's comment body is required (a blank request is rejected) and is
+recorded as a ticket comment — the channel the implement stage reads
+operator feedback from. The stale-spec fingerprint guard and the
+implement spawn counter are cleared, so an operator request is never
+refused for an unchanged spec or an exhausted retry budget.
+
 ## Silent fallback from `HUMAN_MR_APPROVAL`
 
 If a ticket is already in `HUMAN_MR_APPROVAL` (gates passed) and the
@@ -230,6 +252,8 @@ HUMAN_MR_APPROVAL                                      │
     ├── CI failing           → IMPLEMENT_COMPLETE ─────┘
     ├── conflicting          → IMPLEMENT_COMPLETE ─────┘
     ├── changes requested    → ADDRESSING_REVIEW ──────┐
+    ├── operator Re‑implement (request-implementation-changes)
+    │                         → READY ─────────────────┤
     ├── CI green + eligible  → DONE (auto-merge)       │
     ├── CI pending + eligible → WAITING_AUTO_MERGE     │
     └── CI green + not eligible → HUMAN_MR_APPROVAL (wait)
@@ -239,6 +263,11 @@ ADDRESSING_REVIEW                                      │
     ├── agent success        → HUMAN_MR_APPROVAL ──────┘
     ├── agent retry          → ADDRESSING_REVIEW
     └── agent exhausted      → BLOCKED
+
+READY
+    │ (implement agent re-runs against the existing PR branch;
+    │  reads the change-request comment, pushes updated commits)
+    │ → DELIVERABLE → IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL (re-review)
 ```
 
 ## See also
