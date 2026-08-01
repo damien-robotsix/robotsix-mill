@@ -142,7 +142,9 @@ def _compute_refine_module_hash() -> str:
         try:
             h.update(py_file.read_bytes())
         except OSError:
-            log.debug("Failed to read %s for refine-module hash", py_file, exc_info=True)
+            log.debug(
+                "Failed to read %s for refine-module hash", py_file, exc_info=True
+            )
     return h.hexdigest()
 
 
