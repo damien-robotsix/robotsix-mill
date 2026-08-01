@@ -3740,3 +3740,81 @@ def test_request_implementation_changes_rejects_wrong_state(service):
 
     with pytest.raises(TransitionError):
         service.request_implementation_changes(t.id, "change this", author="user")
+
+
+# --- promote_to_epic ---
+
+
+def test_promote_to_epic_flips_kind(service):
+    """A TASK ticket's kind is changed to EPIC after promote_to_epic."""
+    t = service.create("promote me", "spec")
+    assert t.kind == TicketKind.TASK
+
+    service.promote_to_epic(t.id)
+    updated = service.get(t.id)
+    assert updated.kind == TicketKind.EPIC
+
+
+def test_promote_to_epic_noop_when_epic(service):
+    """Calling promote_to_epic on an already-EPIC ticket is a no-op."""
+    t = service.create("already epic", kind=TicketKind.EPIC)
+    assert t.kind == TicketKind.EPIC
+
+    # Should not raise
+    service.promote_to_epic(t.id)
+    updated = service.get(t.id)
+    assert updated.kind == TicketKind.EPIC
+
+
+def test_promote_to_epic_unknown_id(service):
+    """Promoting a nonexistent ticket raises KeyError."""
+    with pytest.raises(KeyError):
+        service.promote_to_epic("nonexistent-id")
+
+
+# --- cumulative_cost ---
+
+
+def test_cumulative_cost_sums_descendants(service, monkeypatch):
+    """cumulative_cost sums session_cost for the ticket and all descendants."""
+    import robotsix_mill.langfuse.client as lf_client
+
+    parent = service.create("cost parent")
+    child1 = service.create("cost child 1", parent_id=parent.id)
+    child2 = service.create("cost child 2", parent_id=parent.id)
+
+    # Return known costs per session id
+    costs = {
+        parent.id: 1.0,
+        child1.id: 2.0,
+        child2.id: 3.0,
+    }
+    monkeypatch.setattr(
+        lf_client,
+        "session_cost",
+        lambda settings, sid, repo_config=None, force=False: costs.get(sid, 0.0),
+    )
+
+    total = service.cumulative_cost(parent.id, service.settings, blocking=True)
+    assert total == 6.0  # 1.0 + 2.0 + 3.0
+
+
+def test_cumulative_cost_cache_mode(service, monkeypatch):
+    """cumulative_cost with blocking=False uses session_cost_cached instead."""
+    import robotsix_mill.langfuse.client as lf_client
+
+    parent = service.create("cache parent")
+    child = service.create("cache child", parent_id=parent.id)
+
+    cached_costs = {
+        parent.id: 5.0,
+        child.id: 10.0,
+    }
+    monkeypatch.setattr(
+        lf_client,
+        "session_cost_cached",
+        lambda sid, repo_config=None: cached_costs.get(sid, 0.0),
+    )
+
+    total = service.cumulative_cost(parent.id, service.settings, blocking=False)
+    assert total == 15.0  # 5.0 + 10.0
