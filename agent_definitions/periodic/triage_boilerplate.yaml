@@ -26,7 +26,7 @@ close_thread: false
 list_threads: false
 read_ticket: true
 
-output_type: PeriodicAgentResult
+output_type: TriageBoilerplateResult
 retries: 4
 
 # Module path for the agent and its output type.

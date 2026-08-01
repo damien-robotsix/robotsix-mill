@@ -8,9 +8,12 @@ output so the runner has a clear result to work with.
 from __future__ import annotations
 
 from .periodic_base import (
+    PeriodicAgentResult,
     load_periodic_system_prompt,
     make_agent_runner,
 )
+
+TriageBoilerplateResult = PeriodicAgentResult
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 SYSTEM_PROMPT: str = load_periodic_system_prompt("triage_boilerplate")
