@@ -70,16 +70,16 @@ class _SecretsModelFields(dict[str, SimpleNamespace]):
     ``set(Secrets.model_fields)`` call in ``check_config_sync.py`` works.
     """
 
-    def __iter__(self) -> Any:  # noqa: ANN401
+    def __iter__(self) -> Any:
         return iter(_secret_field_info)
 
-    def items(self) -> Any:  # noqa: ANN401
+    def items(self) -> Any:
         return _secret_field_info.items()
 
-    def keys(self) -> Any:  # noqa: ANN401
+    def keys(self) -> Any:
         return _secret_field_info.keys()
 
-    def values(self) -> Any:  # noqa: ANN401
+    def values(self) -> Any:
         return _secret_field_info.values()
 
     def __contains__(self, key: object) -> bool:
@@ -195,62 +195,77 @@ class Secrets:
 
     @property
     def openrouter_api_key(self) -> str | None:
+        """Return the OpenRouter API key."""
         return self._openrouter_api_key  # type: ignore[no-any-return]
 
     @property
     def forge_token(self) -> str | None:
+        """Return the forge authentication token."""
         return self._forge_token  # type: ignore[no-any-return]
 
     @property
     def forge_repo_create_token(self) -> str | None:
+        """Return the forge repo-creation token."""
         return self._forge_repo_create_token  # type: ignore[no-any-return]
 
     @property
     def sandbox_push_token(self) -> str | None:
+        """Return the sandbox git-push token."""
         return self._sandbox_push_token  # type: ignore[no-any-return]
 
     @property
     def github_app_id(self) -> str | None:
+        """Return the GitHub App ID."""
         return self._github_app_id  # type: ignore[no-any-return]
 
     @property
     def github_app_private_key(self) -> str | None:
+        """Return the GitHub App private key."""
         return self._github_app_private_key  # type: ignore[no-any-return]
 
     @property
     def github_app_private_key_path(self) -> str | None:
+        """Return the GitHub App private key path."""
         return self._github_app_private_key_path  # type: ignore[no-any-return]
 
     @property
     def langfuse_public_key(self) -> str | None:
+        """Return the Langfuse public key."""
         return self._langfuse_public_key  # type: ignore[no-any-return]
 
     @property
     def langfuse_secret_key(self) -> str | None:
+        """Return the Langfuse secret key."""
         return self._langfuse_secret_key  # type: ignore[no-any-return]
 
     @property
     def langfuse_base_url(self) -> str | None:
+        """Return the Langfuse base URL."""
         return self._langfuse_base_url  # type: ignore[no-any-return]
 
     @property
     def langfuse_project_id(self) -> str | None:
+        """Return the Langfuse project ID."""
         return self._langfuse_project_id  # type: ignore[no-any-return]
 
     @property
     def langfuse_project_name(self) -> str | None:
+        """Return the Langfuse project name."""
         return self._langfuse_project_name  # type: ignore[no-any-return]
 
     @property
     def openrouter_management_key(self) -> str | None:
+        """Return the OpenRouter management API key."""
         return self._openrouter_management_key  # type: ignore[no-any-return]
 
     @property
     def ntfy_url(self) -> str | None:
+        """Return the ntfy.sh topic URL."""
         return self._ntfy_url  # type: ignore[no-any-return]
 
     @property
     def ntfy_token(self) -> str | None:
+        """Return the ntfy.sh bearer token."""
         return self._ntfy_token  # type: ignore[no-any-return]
 
     # --- Debug logging for field access ----------------------------------
@@ -286,8 +301,9 @@ class Secrets:
     # --- model_dump (backward-compat) ------------------------------------
 
     def model_dump(self, *, redact: bool = True, **kwargs: Any) -> dict[str, Any]:
+        """Return a dict representation (redacted by default)."""
         if redact:
-            return {name: "***" for name in sorted(_SECRET_FIELD_NAMES)}
+            return dict.fromkeys(sorted(_SECRET_FIELD_NAMES), "***")
         return {name: getattr(self, name) for name in sorted(_SECRET_FIELD_NAMES)}
 
 
