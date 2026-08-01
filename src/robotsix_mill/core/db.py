@@ -37,6 +37,11 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from ..config import Settings
 
+# Import models so SQLModel.metadata is populated before create_all.
+# Must be module-level — a function-local import can be silently deleted
+# by a ruff/vulture auto-fix pass, breaking schema creation.
+from . import models  # noqa: F401
+
 log = logging.getLogger("robotsix_mill.db")
 
 # Per-board engine cache.
@@ -378,9 +383,6 @@ def init_db(settings: Settings, board_id: str) -> None:
         lock = _init_locks.setdefault(board_id, threading.Lock())
         with lock:
             if board_id not in _initialized:
-                # import models so SQLModel.metadata is populated before create_all
-                from . import models  # noqa: F401
-
                 engine = get_engine(settings, board_id)
                 SQLModel.metadata.create_all(engine)
 
