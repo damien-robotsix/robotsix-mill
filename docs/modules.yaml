@@ -562,6 +562,7 @@ modules:
       - CONTRIBUTING.md
       - CHANGELOG.md
       - doc-agent-ledger.md
+      - .doc_memory_ledger.md
       - LICENSE
       - SECURITY.md
       - AGENT.md

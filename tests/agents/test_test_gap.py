@@ -15,7 +15,6 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.core.models import TicketKind
-from robotsix_mill.core.states import State
 
 
 def _test_repo_config():
@@ -225,7 +224,9 @@ def test_run_test_gap_pass_creates_draft_tickets(tmp_path, monkeypatch):
     assert len(result.drafts_created) == 2
     # Verify tickets are in DB with source="test_gap"
     tickets = service.list()
-    test_gap_tickets = [t for t in tickets if t.source == "test_gap" and t.kind == TicketKind.TASK]
+    test_gap_tickets = [
+        t for t in tickets if t.source == "test_gap" and t.kind == TicketKind.TASK
+    ]
     assert len(test_gap_tickets) == 2
     assert test_gap_tickets[0].state == State.DRAFT
 
@@ -618,7 +619,9 @@ def test_post_test_gap_runs_in_background(tmp_path, monkeypatch, repos_registry)
         # Verify the draft ticket was created
         svc = TicketService(settings, board_id="test-board")
         tickets = svc.list()
-        test_gap_tickets = [t for t in tickets if t.source == "test_gap" and t.kind == TicketKind.TASK]
+        test_gap_tickets = [
+            t for t in tickets if t.source == "test_gap" and t.kind == TicketKind.TASK
+        ]
         assert len(test_gap_tickets) == 1
         assert test_gap_tickets[0].title == "Test-gap draft"
 
