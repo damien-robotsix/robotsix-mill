@@ -486,6 +486,61 @@ def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     assert len(ctx.service.list()) == 1
 
 
+def test_placeholder_draft_body_skips_spawn(ctx_factory, monkeypatch):
+    """A real title with a placeholder body must not reach the board.
+
+    Regression (2026-07-31): the spawn condition only tested
+    ``res.draft_body`` for truthiness, and "..." is truthy. Ticket
+    …-b419 was filed this way — a plausible title, a body of literally
+    "..." — then blocked in refine, which could not build a spec from it,
+    with nothing anyone could act on.
+    """
+    from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.agents.runners import pass_runner
+
+    ctx = ctx_factory()
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            propose_draft=True,
+            draft_title="Refactor watcher._query_pr_merge_status to reuse get_pr",
+            draft_body="...",
+        ),
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id, **kw: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    # Only the original ticket — no unactionable draft was spawned.
+    assert len(ctx.service.list()) == 1
+
+
 # ------------------------------------------------------------------
 # 7. Follow-up ticket
 # ------------------------------------------------------------------

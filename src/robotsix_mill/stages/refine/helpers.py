@@ -24,6 +24,10 @@ from ...config.settings import Settings
 from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
+from ...core.text_noop import (
+    PLACEHOLDER_BODY_PHRASES,
+    is_degenerate_body,
+)
 from ...core.states import State
 from ..base import StageContext
 
@@ -145,23 +149,9 @@ OPERATOR_SENDBACK_PREFIX = "changes requested:"
 # structured spec field *instead of* the actual spec — the real content was
 # only in its prose ("…as written above"). Matched against a normalized,
 # length-capped string so a genuine (always far longer) spec never trips it.
-_PLACEHOLDER_SPEC_PHRASES = (
-    "see spec above",
-    "see the spec above",
-    "see above",
-    "see spec",
-    "see the spec",
-    "see description",
-    "see the description",
-    "spec above",
-    "as above",
-    "as written above",
-    "see previous",
-    "see below",
-    "refer to spec",
-    "tbd",
-    "todo",
-)
+# Kept as an alias so existing references resolve; the list itself now
+# lives in core.text_noop alongside the predicate that consumes it.
+_PLACEHOLDER_SPEC_PHRASES = PLACEHOLDER_BODY_PHRASES
 
 
 # File extensions that are safe to preview as text (last 100 lines).
@@ -310,19 +300,11 @@ def _spec_is_degenerate(spec: str | None) -> bool:
     ticket body on the board). Treat such degenerate output as "no spec"
     so refine falls back to the original draft instead of clobbering it.
 
-    Only short (≤120-char) single-idea strings can match; a genuine spec
-    is much longer, so real content is never dropped.
+    Thin wrapper over :func:`core.text_noop.is_degenerate_body`, which is
+    shared with the ticket-spawning agents so a body they would file and a
+    spec refine would reject can never disagree.
     """
-    text = (spec or "").strip()
-    if not text:
-        return True
-    if len(text) > 120:
-        return False
-    # Drop markdown/punctuation, collapse whitespace, lowercase.
-    norm = " ".join(re.sub(r"[^a-z0-9 ]+", " ", text.lower()).split())
-    if not norm:
-        return True
-    return any(p in norm for p in _PLACEHOLDER_SPEC_PHRASES)
+    return is_degenerate_body(spec)
 
 
 def _draft_is_near_empty(draft: str, min_chars: int = 50) -> bool:
