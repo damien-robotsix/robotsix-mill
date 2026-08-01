@@ -28,4 +28,5 @@ run_mypy_baseline_agent = make_agent_runner(
     prompt_tail="Count baseline entries, compare against memory, triage growth, and return your result.",
     max_gaps=MAX_GAPS,
     include_run_command=True,
+    include_parallel_commands=True,
 )

@@ -45,5 +45,6 @@ run_test_gap_agent = make_agent_runner(
     max_gaps=MAX_GAPS,
     include_forge_url=True,
     include_run_command=True,
+    include_parallel_commands=True,
     dynamic_kwargs_fn=_test_gap_dynamic_kwargs,
 )
