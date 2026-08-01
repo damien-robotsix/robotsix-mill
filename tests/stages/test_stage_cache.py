@@ -207,11 +207,14 @@ def test_update_handles_note_none(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_refine_input_hash_delegates_to_content_hash(tmp_path):
+def test_refine_input_hash_is_deterministic(tmp_path):
     ws = Workspace(tmp_path, "T-1")
     ws.write_description("hello world")
-    expected = ws.content_hash()
-    assert refine_input_hash(ws) == expected
+    h1 = refine_input_hash(ws)
+    h2 = refine_input_hash(ws)
+    assert h1 == h2
+    assert isinstance(h1, str)
+    assert len(h1) == 64  # sha256 hex digest
 
 
 def test_refine_input_hash_differs_when_description_differs(tmp_path):
@@ -221,6 +224,37 @@ def test_refine_input_hash_differs_when_description_differs(tmp_path):
     ws.write_description("second")
     h2 = refine_input_hash(ws)
     assert h1 != h2
+
+
+def test_refine_input_hash_includes_module_hash(tmp_path):
+    """The refine-input hash must include a hash of the refine module
+    sources so that a pipeline-code change invalidates the stage cache."""
+    from robotsix_mill.stages._stage_cache import _compute_refine_module_hash
+
+    # Force re-compute so we can inspect the value
+    mod_hash = _compute_refine_module_hash()
+    assert mod_hash and mod_hash != "no-refine-dir"
+    assert len(mod_hash) == 64  # sha256 hex digest
+
+    # Verify the module hash is deterministically computed
+    mod_hash2 = _compute_refine_module_hash()
+    assert mod_hash == mod_hash2
+
+    # Verify the module hash contributes to refine_input_hash output
+    ws = Workspace(tmp_path, "T-1")
+    ws.write_description("hello")
+    h1 = refine_input_hash(ws)
+
+    # If we monkeypatch the cached module hash, the input hash changes
+    import robotsix_mill.stages._stage_cache as cache_mod
+
+    saved = cache_mod._REFINE_MODULE_HASH
+    try:
+        cache_mod._REFINE_MODULE_HASH = "deadbeef"
+        h2 = refine_input_hash(ws)
+        assert h1 != h2
+    finally:
+        cache_mod._REFINE_MODULE_HASH = saved
 
 
 # ---------------------------------------------------------------------------

@@ -122,21 +122,58 @@ def _invalidate(ws: Workspace, stage_name: str) -> None:
     _save(ws, cache)
 
 
+_REFINE_MODULE_HASH: str | None = None
+
+
+def _compute_refine_module_hash() -> str:
+    """Return a stable SHA-256 hash over the refine pipeline's Python sources.
+
+    When the refine module files change (e.g. a gate fix lands), the
+    hash changes, forcing the refine stage-cache to miss and produce a
+    fresh outcome rather than replaying a pre-fix verdict.  The hash is
+    computed once and cached on the module — the refine sources do not
+    change during the mill's lifetime.
+    """
+    refine_dir = Path(__file__).resolve().parent / "refine"
+    if not refine_dir.is_dir():
+        return "no-refine-dir"
+    h = hashlib.sha256()
+    for py_file in sorted(refine_dir.glob("**/*.py")):
+        try:
+            h.update(py_file.read_bytes())
+        except OSError:
+            log.debug("Failed to read %s for refine-module hash", py_file, exc_info=True)
+    return h.hexdigest()
+
+
 def refine_input_hash(ws: Workspace) -> str:
     """Compute the input hash for the refine stage.
 
-    Based on the current ticket description content — the primary input
-    that determines the refine agent's output.  This reads the workspace
-    file directly so it reflects whatever is on disk at call time.
+    Combines the current ticket description content (the primary input
+    that determines the refine agent's output) with a hash of the
+    refine pipeline's own source code, so a pipeline-code change (e.g.
+    a gate fix) automatically invalidates the stage cache and forces a
+    fresh re-refine.
+
+    This reads the workspace file directly so it reflects whatever is
+    on disk at call time.
 
     IMPORTANT: refine rewrites ``description.md`` (draft → spec), so
-    the hash changes between the first successful refine and any
-    subsequent re-entry.  The cache therefore only hits on runs where
-    the on-disk content is unchanged from the previous run — which is
-    exactly the tail-collapse scenario (repeated polls over the same
-    already-refined spec).
+    the description-hash component changes between the first successful
+    refine and any subsequent re-entry.  The cache therefore only hits
+    on runs where both the on-disk content AND the refine module code
+    are unchanged from the previous run — which is exactly the
+    tail-collapse scenario (repeated polls over the same already-refined
+    spec with the same pipeline code).
     """
-    return ws.content_hash()
+    global _REFINE_MODULE_HASH
+    if _REFINE_MODULE_HASH is None:
+        _REFINE_MODULE_HASH = _compute_refine_module_hash()
+
+    h = hashlib.sha256()
+    h.update(ws.content_hash().encode("utf-8", errors="replace"))
+    h.update(_REFINE_MODULE_HASH.encode("utf-8", errors="replace"))
+    return h.hexdigest()
 
 
 def review_input_hash(ws: Workspace, diff: str, head_sha: str = "") -> str:

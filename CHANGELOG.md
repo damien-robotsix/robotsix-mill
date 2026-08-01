@@ -1,5 +1,9 @@
 ## 0.0.0 (unreleased)
 
+- Refine stage-cache now keys on a hash of the refine module's Python source
+  files in addition to the ticket description content, so pipeline-code
+  changes (e.g. gate fixes) automatically invalidate the cache and force
+  a fresh re-refine rather than replaying a stale pre-fix verdict.
 - Remove the deprecated legacy `robotsix_mill/runners/` shim package. All CLI
   subcommands now import directly from `robotsix_mill.agents.runners.*`.
 - Fix stale docstring in `run_answer_agent`: the answer agent now gets web access via the `web_knowledge` flag (injecting `ask_web_knowledge`), not a direct `web_research` tool.
