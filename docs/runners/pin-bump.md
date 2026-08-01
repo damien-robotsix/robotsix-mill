@@ -82,7 +82,7 @@ entry lives in `_SCHEDULE_ONLY_RUNNERS` (`poll_loops.py`):
 "pin_bump": "robotsix_mill.agents.runners.pin_bump_runner:run_pin_bump_pass"
 ```
 
-The runner (`src/robotsix_mill/runners/pin_bump_runner.py`) performs a
+The runner (`src/robotsix_mill/agents/runners/pin_bump_runner.py`) performs a
 **detection + PR actuator** pass:
 
 1. Loads the repos registry (`get_repos_config()`).

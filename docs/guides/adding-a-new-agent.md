@@ -163,7 +163,7 @@ Step 4.
 
 ## Step 3 — Register the pass
 
-Open `src/robotsix_mill/runners/periodic_runner.py` and add an entry
+Open `src/robotsix_mill/agents/runners/periodic_runner.py` and add an entry
 to `PERIODIC_PASS_CONFIGS` (a `dict[str, PeriodicPassConfig]`).
 
 For `health`:
@@ -198,7 +198,7 @@ or create a dedicated `@dataclass` if you need extra fields.
 
 ### Create a thin runner stub
 
-Create `src/robotsix_mill/runners/<name>_runner.py`.  It is a
+Create `src/robotsix_mill/agents/runners/<name>_runner.py`.  It is a
 backward-compatibility shim that lets the HTTP route layer (Step 6)
 call into the generic `run_periodic_pass`.  Example (`health_runner.py`):
 
@@ -414,9 +414,9 @@ Key points:
 - [ ] `SourceKind` member added in `src/robotsix_mill/core/models.py`
 - [ ] YAML definition at `agent_definitions/periodic/<name>.yaml`
 - [ ] Python module at `src/robotsix_mill/agents/<name>.py`
-- [ ] `PERIODIC_PASS_CONFIGS` entry in `src/robotsix_mill/runners/periodic_runner.py`
+- [ ] `PERIODIC_PASS_CONFIGS` entry in `src/robotsix_mill/agents/runners/periodic_runner.py`
 - [ ] Result dataclass alias (e.g. `HealthPassResult`) in `periodic_runner.py`
-- [ ] Thin runner stub at `src/robotsix_mill/runners/<name>_runner.py`
+- [ ] Thin runner stub at `src/robotsix_mill/agents/runners/<name>_runner.py`
 - [ ] Config defaults in `config/config.example.yaml` (model + per-agent block)
 - [ ] Task attribute in `src/robotsix_mill/runtime/worker/core.py`
 - [ ] Poll-loop wiring (periodic) **or** HTTP route (`_passes.py`)

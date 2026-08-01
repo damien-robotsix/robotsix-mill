@@ -305,14 +305,14 @@ convention = "google"
 "src/robotsix_mill/config/json_source.py" = ["D102"]
 "src/robotsix_mill/core/datetime_utils.py" = ["D102"]
 "src/robotsix_mill/forge/gitlab/*.py" = ["D102"]
-"src/robotsix_mill/runners/diagnostic_check_errors.py" = ["D102"]
-"src/robotsix_mill/runners/diagnostic_check_recurring_ci.py" = ["D102"]
+"src/robotsix_mill/agents/runners/diagnostic_check_errors.py" = ["D102"]
+"src/robotsix_mill/agents/runners/diagnostic_check_recurring_ci.py" = ["D102"]
 "src/robotsix_mill/runtime/middleware.py" = ["D102"]
 "src/robotsix_mill/runtime/run_registry.py" = ["D102"]
 # D417: missing argument descriptions — add Args: sections.
 "src/robotsix_mill/agents/agent_check.py" = ["D417"]
 "src/robotsix_mill/agents/module_curator.py" = ["D417"]
-"src/robotsix_mill/runners/periodic_runner.py" = ["D417"]
+"src/robotsix_mill/agents/runners/periodic_runner.py" = ["D417"]
 
 # --- expanded lint rules: pre-existing violations ---------------------------
 # SIM102 (collapsible-if), SIM105 (suppressible-exception), SIM108

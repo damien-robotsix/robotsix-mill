@@ -353,7 +353,6 @@ modules:
     paths:
       - src/robotsix_mill/agents/*.py
       - src/robotsix_mill/agents/runners/**/*.py
-      - src/robotsix_mill/runners/__init__.py
       - src/robotsix_mill/_resources.py
       - tests/agents/*.py
       - tests/agents/runners/**/*.py
