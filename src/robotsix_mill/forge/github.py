@@ -22,6 +22,7 @@ from .github_code_scanning import GitHubForgeCodeScanningMixin
 from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
 from .github_security import GitHubForgeSecurityMixin
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Shared module-level helpers
@@ -35,7 +36,7 @@ _REMOTE_RE = re.compile(
 _MAX_REPO_DESCRIPTION = 350
 
 
-def _build_headers(token: str) -> dict:
+def _build_headers(token: str) -> dict[str, Any]:
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -63,7 +64,7 @@ def _clamp_repo_description(description: str) -> str:
     return text[: _MAX_REPO_DESCRIPTION - 1].rstrip() + "…"
 
 
-def _parse_repo_info(r: dict) -> RepoInfo:
+def _parse_repo_info(r: dict[str, Any]) -> RepoInfo:
     """Extract ``RepoInfo`` from a GitHub ``POST /repos`` response dict."""
     return RepoInfo(
         id=r["id"],
@@ -296,7 +297,7 @@ class GitHubForge(
 
         s = self.settings
         url = f"/repos/{source_owner}/{source_repo}/forks"
-        payload: dict = {}
+        payload: dict[str, Any] = {}
         if target_namespace is not None:
             payload["organization"] = target_namespace
 

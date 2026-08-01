@@ -17,6 +17,8 @@ from ...vcs import git_ops
 from .. import short_circuit_verify
 from .._conventional import conventional_subject, drop_fragments
 from ..base import Outcome, StageContext
+from typing import Any
+
 from ..pause import (
     build_compact_resume_message_history,
     check_for_pause,
@@ -540,7 +542,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
         for attempt in range(1, max_iters + 1):
             # --- resume awareness: detect if returning from a pause ---
-            resume_history: list | None = None
+            resume_history: list[Any] | None = None
             if attempt == 1:
                 ws = ctx.service.workspace(ticket)
                 saved_state = load_conversation_state(ws, "implement")
@@ -1107,7 +1109,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # Write a touched_repos.json artifact listing every repo that
         # received a commit so the downstream deliver stage knows which
         # repos to open PRs for.
-        touched_repos: list[dict] = []
+        touched_repos: list[dict[str, Any]] = []
         if extra_roots is not None:
             # Check all repos for changes BEFORE committing any, so
             # has_changes returns the correct answer for every repo.

@@ -27,6 +27,7 @@ from .. import tracing
 from ..tracing import langfuse_trace_url
 from ..transient_errors import first_full_path
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
+from typing import Any
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -90,7 +91,7 @@ class _StageDeadlineExceeded(Exception):
 
 
 async def process_ticket(
-    ticket_id: str, ctx: StageContext, active_map: dict | None = None
+    ticket_id: str, ctx: StageContext, active_map: dict[str, Any] | None = None
 ) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain.
@@ -359,7 +360,7 @@ def _root_span_attributes(
 
 def _root_input_summary(
     ticket, ticket_id: str, stage_name: str, dispatch_count: int = 0
-) -> dict:
+) -> dict[str, Any]:
     """Build the input-summary dict attached to the Langfuse root span.
 
     Includes ticket identity, current state, retry/review counters,
@@ -388,7 +389,7 @@ def _root_input_summary(
     }
 
 
-def _root_output_summary(outcome: Outcome | None, ticket: Ticket) -> dict:
+def _root_output_summary(outcome: Outcome | None, ticket: Ticket) -> dict[str, Any]:
     """Build the output-summary dict attached to the Langfuse root span."""
     return {
         "next_state": outcome.next_state.value
@@ -400,7 +401,7 @@ def _root_output_summary(outcome: Outcome | None, ticket: Ticket) -> dict:
 
 
 async def _process_ticket_inner(
-    ticket_id: str, ctx: StageContext, active_map: dict | None = None
+    ticket_id: str, ctx: StageContext, active_map: dict[str, Any] | None = None
 ) -> None:
     dispatch_counts: Counter[str] = Counter()
     while True:

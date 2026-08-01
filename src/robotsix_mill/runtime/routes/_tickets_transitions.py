@@ -12,6 +12,8 @@ from ...core.models import CommentCreate, TicketRead
 from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
 from ...deploy import check_deploy_freshness
+from typing import Any
+
 from ..deps import (
     enrich_ticket_read,
     get_service,
@@ -36,7 +38,7 @@ def request_changes(
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
-) -> dict:
+) -> dict[str, Any]:
     """Add a comment AND transition from human_issue_approval back to draft
     in one atomic operation.
     """
@@ -93,7 +95,7 @@ def request_implementation_changes(
 @router.post("/tickets/{ticket_id}/priority", response_model=TicketRead)
 def set_priority(
     ticket_id: str,
-    body: dict,
+    body: dict[str, Any],
     request: Request,
     svc=Depends(get_service),
     worker=Depends(get_worker),
@@ -135,7 +137,7 @@ def redraft(
     svc=Depends(get_service),
     worker=Depends(get_worker),
     settings=Depends(get_settings),
-) -> dict:
+) -> dict[str, Any]:
     """Redraft a ticket from any active state back to DRAFT with an
     optional comment.
     """
@@ -158,7 +160,7 @@ def redraft(
 def mark_done(
     ticket_id: str,
     request: Request,
-    body: dict = Body({}),
+    body: dict[str, Any] = Body({}),
     svc=Depends(get_service),
     settings=Depends(get_settings),
 ) -> TicketRead:
@@ -357,7 +359,7 @@ def cost_breakdown(
     request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
-) -> dict:
+) -> dict[str, Any]:
     """Per-trace cost breakdown for a ticket, used by the drawer to
     overlay agent-step costs on history rows.
 

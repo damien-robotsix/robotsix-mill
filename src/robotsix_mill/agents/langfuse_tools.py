@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..config import RepoConfig, Settings
@@ -36,7 +36,7 @@ def _make_session_cost_tool(settings: Settings, repo_config=None):
         """
         from ..langfuse.client import session_cost
 
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if repo_config is not None:
             kwargs["repo_config"] = repo_config
         cost = session_cost(settings, session_id, **kwargs)
@@ -73,7 +73,7 @@ def _make_session_summary_tool(settings: Settings, repo_config=None):
         """
         from ..langfuse.client import fetch_session_summary
 
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if repo_config is not None:
             kwargs["repo_config"] = repo_config
         summary = fetch_session_summary(settings, session_id, **kwargs)
@@ -115,7 +115,7 @@ def _make_list_traces_tool(settings: Settings, repo_config=None):
         """
         from ..langfuse.client import _langfuse_api_get
 
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if repo_config is not None:
             kwargs["repo_config"] = repo_config
         data = _langfuse_api_get(
@@ -168,7 +168,7 @@ def _make_trace_detail_tool(settings: Settings, repo_config=None):
         """
         from ..langfuse.client import fetch_trace_detail
 
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if repo_config is not None:
             kwargs["repo_config"] = repo_config
         detail = fetch_trace_detail(settings, trace_id, **kwargs)
@@ -264,7 +264,7 @@ def make_cost_inspect_tool(
         """
         from ..langfuse.client import session_cost, session_traces
 
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if repo_config is not None:
             kwargs["repo_config"] = repo_config
         total = session_cost(settings, session_id, **kwargs)
@@ -409,7 +409,7 @@ def make_langfuse_inspect_tool(
         from ..langfuse.client import fetch_trace_detail
         from .trace_inspector import run_trace_inspector
 
-        kwargs: dict = {}
+        kwargs: dict[str, Any] = {}
         if repo_config is not None:
             kwargs["repo_config"] = repo_config
         detail = fetch_trace_detail(settings, trace_id, **kwargs)

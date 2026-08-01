@@ -10,6 +10,7 @@ from ...config import Settings
 from ...core import db
 from ...core.models import TicketEvent
 from ...core.service import _event_hash
+from typing import Any
 
 
 @dataclass
@@ -18,7 +19,7 @@ class VerifyResult:
 
     total_events: int = 0
     tickets_verified: int = 0
-    breaks: list[dict] = field(default_factory=list)
+    breaks: list[dict[str, Any]] = field(default_factory=list)
 
 
 def run_verify_pass(

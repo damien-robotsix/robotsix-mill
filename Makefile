@@ -39,6 +39,9 @@ lint: install  ## Lint Python source files (check only)
 	uv run mypy src/ --strict
 	$(MAKE) lint-sh
 
+mypy-baseline-shrink: install  ## Regenerate the mypy baseline snapshot
+	uv run mypy src/ --strict | uv run mypy-baseline sync
+
 lint-sh:  ## Lint shell scripts with ShellCheck
 	shellcheck --severity=warning scripts/*.sh dev/*.sh entrypoint.sh
 

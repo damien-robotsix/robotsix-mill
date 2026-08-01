@@ -9,6 +9,8 @@ import threading
 import time
 from datetime import UTC, datetime
 
+from typing import Any
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -408,7 +410,7 @@ def get_history(
 def get_description(
     ticket_id: str,
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Return the current description for a ticket (``GET /tickets/{ticket_id}/description``).
 
     Reads the description from the ticket's workspace on disk.
@@ -427,7 +429,7 @@ def update_description(
     ticket_id: str,
     body: TicketDescriptionUpdate,
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Update a ticket's spec description (``PUT /tickets/{ticket_id}/description``).
 
     Replaces the ticket's ``description.md``, recomputes the spec
@@ -477,7 +479,7 @@ async def upload_screenshot(
     ticket_id: str,
     file: UploadFile = File(...),
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Attach an image screenshot to a ticket for the refine agent to view.
 
     Stores the bytes under the ticket's ``screenshots/`` directory (a
@@ -520,7 +522,7 @@ async def upload_screenshot(
 def get_retrospect(
     ticket_id: str,
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Return the retrospect.md artifact for a ticket, or empty if
     retrospect has not run yet (or the artifact was lost). Lets the
     board surface what retrospect actually wrote — without this the
@@ -564,7 +566,7 @@ _STAGE_ARTIFACTS: dict[str, list[str]] = {
 def list_artifacts(
     ticket_id: str,
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """List artifact files in this ticket's workspace.
 
     Returns ``{"artifacts": [{"name": str, "size": int, "mtime": str},
@@ -578,7 +580,7 @@ def list_artifacts(
         raise HTTPException(404, "ticket not found")
     ws = svc.workspace(ticket)
     d = ws.artifacts_dir
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     if d.exists():
         for p in d.iterdir():
             if not p.is_file():
@@ -608,7 +610,7 @@ def get_artifact(
     ticket_id: str,
     name: str,
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Return the text content of a single artifact file.
 
     Refuses path-traversal (``..``, ``/``) so the route only serves
@@ -704,7 +706,7 @@ def migrate_ticket(
 @router.post("/tickets/{ticket_id}/unblocks", response_model=TicketRead)
 def set_unblocks(
     ticket_id: str,
-    body: dict = Body(...),
+    body: dict[str, Any] = Body(...),
     request: Request = None,
     svc=Depends(get_service),
     settings=Depends(get_settings),

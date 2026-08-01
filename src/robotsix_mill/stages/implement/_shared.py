@@ -20,7 +20,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Any, TYPE_CHECKING, Literal
 
 from ..base import Outcome
 
@@ -756,7 +756,7 @@ class _ImplementContext:
 
     spec: str
     memory_text: str
-    reference_files: list | None
+    reference_files: list[Any] | None
     file_map: set[str] | None
     feedback: str | None
     previous_attempt_summary: str | None
@@ -798,7 +798,7 @@ class _AgentRunOutcome:
     dual-path complexity.
     """
 
-    success: tuple | None = None
+    success: tuple[Any, ...] | None = None
     failure: _SinglePassResult | None = None
 
 

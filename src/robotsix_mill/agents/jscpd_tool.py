@@ -90,7 +90,7 @@ def run_jscpd(repo_dir: Path) -> str:
         shutil.rmtree(output_dir, ignore_errors=True)
 
 
-def _jscpd_diagnostics_error(result: subprocess.CompletedProcess) -> str:
+def _jscpd_diagnostics_error(result: subprocess.CompletedProcess[Any]) -> str:
     """Build a descriptive ``ERROR:`` string surfacing raw jscpd diagnostics.
 
     Used when no valid ``jscpd-report.json`` could be read, so that

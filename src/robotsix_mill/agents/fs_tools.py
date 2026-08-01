@@ -23,6 +23,7 @@ from ..config import Settings
 from ..core.repo_layout import src_path_candidates
 from ..runtime.tracing import trace_stage
 from .periodic_loader import validate_periodic_file_content
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ def build_preseed_history(
     user_prompt: str | None = None,
     max_files: int = 20,
     max_total_bytes: int = 200_000,
-) -> list:
+) -> list[Any]:
     """Build a synthetic ``message_history`` that pre-loads *paths*
     under *repo_dir* into the agent's context.
 
@@ -151,8 +152,8 @@ def build_preseed_history(
         UserPromptPart,
     )
 
-    calls: list = []
-    returns: list = []
+    calls: list[Any] = []
+    returns: list[Any] = []
     total_bytes = 0
     for path in paths:
         if len(calls) >= max_files:
@@ -206,7 +207,7 @@ def build_preseed_history(
             )
         )
 
-    history: list = []
+    history: list[Any] = []
     if user_prompt is not None:
         history.append(
             ModelRequest(
@@ -283,7 +284,7 @@ def build_fs_tools(
     sandbox_image: str | None = None,
     read_file_max_calls: int | None = None,
     write_blocked_prefixes: list[str] | None = None,
-) -> list:
+) -> list[Any]:
     """Build the filesystem + shell tool closures sandboxed to *root*.
 
     Returns the ``read_file``, ``write_file``, ``edit_file``,
@@ -509,7 +510,8 @@ def build_fs_tools(
                     if not tc_id:
                         continue
                     o = args.get("offset", 1) or 1
-                    o = max(o, 1)
+                    if o < 1:
+                        o = 1
                     lim = args.get("limit")
                     call_info[tc_id] = (o, lim)
 
@@ -746,7 +748,7 @@ def build_fs_tools(
                 )
 
         # Normalize offset (offset ≤ 0 is treated as 1).
-        _offset = max(offset, 1)
+        _offset = offset if offset >= 1 else 1
         is_full_read = _offset == 1 and limit is None
 
         # Refuse partial slices when the file's content (or the

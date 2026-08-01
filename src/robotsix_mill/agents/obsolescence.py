@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from ..config import Settings
 from .prompt_blocks import section
+from typing import Any
 
 
 class ObsolescenceResult(BaseModel):
@@ -55,7 +56,7 @@ def run_obsolescence_check(
     draft_title: str,
     draft_body: str,
     repo_dir: Path | None,
-) -> dict:
+) -> dict[str, Any]:
     """Return ``{"obsolete": bool, "reason": str}``.
 
     Degrades gracefully: on any exception, returns ``obsolete=False``
@@ -70,7 +71,7 @@ def run_obsolescence_check(
     # obsolescence agent is read-only — only read_file and list_dir are
     # exposed so it can open the cited files and inspect their content
     # on HEAD.
-    tools: list = []
+    tools: list[Any] = []
     if repo_dir is not None:
         from .fs_tools import build_fs_tools
 

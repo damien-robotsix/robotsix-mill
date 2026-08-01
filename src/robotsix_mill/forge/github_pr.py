@@ -27,7 +27,7 @@ def _api_message(response: Any) -> str:
     return str(message) if message else response.text[:200]
 
 
-def _parse_pr_detail(pr: dict) -> dict:
+def _parse_pr_detail(pr: dict[str, Any]) -> dict[str, Any]:
     """Normalize a GitHub PR detail dict into the standard status shape
     (the same dict ``_get_pr`` / ``pr_status`` return).
 
@@ -179,7 +179,7 @@ class GitHubForgePRMixin:
             break  # success or non-401 failure
         raise RuntimeError(f"GitHub PR create failed: {r.status_code} {r.text[:300]}")
 
-    def pr_status(self, *, source_branch: str) -> dict | None:
+    def pr_status(self, *, source_branch: str) -> dict[str, Any] | None:
         """Return the PR status for the PR whose head is *source_branch*.
 
         Looks the PR up by head branch and returns the normalized status
@@ -190,7 +190,7 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._get_pr(owner=owner, repo=repo, head=source_branch)
 
-    def pr_status_by_url(self, *, url: str) -> dict | None:
+    def pr_status_by_url(self, *, url: str) -> dict[str, Any] | None:
         """Return the PR status resolved directly from a PR *url*.
 
         Parses the ``/pull/<number>`` segment out of *url* and fetches the
@@ -207,7 +207,7 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._get_pr_by_number(owner=owner, repo=repo, number=int(m.group(1)))
 
-    def pr_files(self, *, source_branch: str) -> list[dict]:
+    def pr_files(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return the list of files changed in *source_branch*'s PR.
 
         Each entry is a ``dict`` with ``path``, ``status``, ``additions``,
@@ -223,7 +223,7 @@ class GitHubForgePRMixin:
             pull_number=pr["number"],
         )
 
-    def merge_pr(self, *, source_branch: str) -> dict:
+    def merge_pr(self, *, source_branch: str) -> dict[str, Any]:
         """Merge (squash) the PR whose head is *source_branch*.
 
         Returns a ``dict`` with ``merged`` (bool) and a ``reason`` string.
@@ -274,7 +274,7 @@ class GitHubForgePRMixin:
             body=body,
         )
 
-    def update_branch(self, *, source_branch: str) -> dict:
+    def update_branch(self, *, source_branch: str) -> dict[str, Any]:
         """Update *source_branch*'s PR head with the latest base branch.
 
         Calls the GitHub ``update-branch`` API (merges the base into the PR
@@ -300,7 +300,7 @@ class GitHubForgePRMixin:
         except Exception as e:
             return {"updated": False, "reason": str(e)}
 
-    def list_pr_reviews(self, *, source_branch: str) -> list[dict]:
+    def list_pr_reviews(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return the reviews submitted on *source_branch*'s PR.
 
         Each entry is a ``dict`` with ``id``, ``author``, ``created_at``,
@@ -333,7 +333,7 @@ class GitHubForgePRMixin:
             review_id=review_id,
         )
 
-    def list_review_comments(self, *, source_branch: str) -> list[dict]:
+    def list_review_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return the inline review comments on *source_branch*'s PR.
 
         Each entry is a ``dict`` with ``id``, ``author``, ``created_at``,
@@ -350,7 +350,7 @@ class GitHubForgePRMixin:
             pull_number=pr["number"],
         )
 
-    def pr_review_status(self, *, source_branch: str) -> dict | None:
+    def pr_review_status(self, *, source_branch: str) -> dict[str, Any] | None:
         """Return the aggregate review status for *source_branch*'s PR.
 
         Returns a ``dict`` with ``state`` (the latest non-dismissed review
@@ -412,7 +412,7 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._list_open_pr_branches(owner=owner, repo=repo)
 
-    def list_open_prs(self) -> list[dict]:
+    def list_open_prs(self) -> list[dict[str, Any]]:
         """Return [{branch, author_login}, ...] for all open PRs. Returns [] on failure."""
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._list_open_prs(owner=owner, repo=repo)
@@ -448,7 +448,7 @@ class GitHubForgePRMixin:
 
     # --- HTTP seams (monkeypatched in tests) ---
 
-    def _get_pr(self, *, owner: str, repo: str, head: str) -> dict | None:
+    def _get_pr(self, *, owner: str, repo: str, head: str) -> dict[str, Any] | None:
         # For cross-repo targets the head branch lives on the fork,
         # so the head filter must use the fork owner (not the upstream
         # owner passed in *owner*).  _head_owner resolves accordingly.
@@ -474,7 +474,9 @@ class GitHubForgePRMixin:
             return _parse_pr_detail(pr)
         return None
 
-    def _get_pr_by_number(self, *, owner: str, repo: str, number: int) -> dict | None:
+    def _get_pr_by_number(
+        self, *, owner: str, repo: str, number: int
+    ) -> dict[str, Any] | None:
         """Fetch a PR's status directly by number via a single
         ``GET /repos/{owner}/{repo}/pulls/{number}``.
 
@@ -495,7 +497,7 @@ class GitHubForgePRMixin:
         owner: str,
         repo: str,
         pull_number: int,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         return _paginated_get(
             self._http,  # type: ignore[attr-defined]
             f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
@@ -514,7 +516,7 @@ class GitHubForgePRMixin:
         owner: str,
         repo: str,
         pull_number: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         try:
             r = self._http.put(  # type: ignore[attr-defined]
                 f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
@@ -660,7 +662,7 @@ class GitHubForgePRMixin:
         )
         return {ref for ref in result if ref}
 
-    def _list_open_prs(self, *, owner: str, repo: str) -> list[dict]:
+    def _list_open_prs(self, *, owner: str, repo: str) -> list[dict[str, Any]]:
         """Return per-PR metadata dicts for all open PRs.
 
         Each dict carries: ``branch`` (head ref), ``author_login``,
@@ -707,7 +709,7 @@ class GitHubForgePRMixin:
         owner: str,
         repo: str,
         pull_number: int,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         return _paginated_get(
             self._http,  # type: ignore[attr-defined]
             f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
@@ -726,7 +728,7 @@ class GitHubForgePRMixin:
         owner: str,
         repo: str,
         pull_number: int,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         return _paginated_get(
             self._http,  # type: ignore[attr-defined]
             f"/repos/{owner}/{repo}/pulls/{pull_number}/comments",
@@ -788,7 +790,7 @@ class GitHubForgePRMixin:
         owner: str,
         repo: str,
         pull_number: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         # Fetch reviews (raw dicts — need state field that _list_pr_reviews
         # drops) and inline comments with full pagination.  Each call
         # independently retries on 401 via _paginated_get's retrying_client.
@@ -835,7 +837,7 @@ class GitHubForgePRMixin:
             review_state_map[rev["id"]] = rev.get("state", "COMMENTED")
 
         # Merge review body comments + inline comments into one list.
-        comments: list[dict] = []
+        comments: list[dict[str, Any]] = []
         for rev in reviews_raw:
             body = rev.get("body")
             if body and body.strip():

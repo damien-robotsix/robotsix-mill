@@ -18,6 +18,7 @@ from sqlmodel import Field, SQLModel
 
 from .datetime_utils import TZDateTime
 from .states import State
+from typing import Any
 
 
 class SourceKind(StrEnum):
@@ -337,7 +338,7 @@ class TicketRead(SQLModel):
     # no dependencies. The legacy ``depends_on`` JSON string and
     # ``unmet_deps`` ID list are kept for back-compat (the worker
     # gate keys off ``unmet_deps``).
-    dependencies: list[dict] = []
+    dependencies: list[dict[str, Any]] = []
     pr_url: str | None = None
     retry_attempt: int
     last_transient_error: str | None

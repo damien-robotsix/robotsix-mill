@@ -268,7 +268,7 @@ def claude_sdk_supports_inline_image(settings: Settings) -> bool:
     return bool(settings.claude_sdk_vision_enabled)
 
 
-def _render_module_map(module_list: list[dict]) -> str:
+def _render_module_map(module_list: list[dict[str, Any]]) -> str:
     """Render a scannable ``## Module Map`` section from the taxonomy.
 
     If *module_list* has more than 20 entries, only modules without
@@ -375,7 +375,7 @@ def compose_prompt(
         except (FileNotFoundError, yaml.YAMLError) as exc:
             logger.warning("Cannot load module taxonomy: %s", exc)
         else:
-            module_list: list[dict] = (
+            module_list: list[dict[str, Any]] = (
                 taxonomy.get("modules", []) if isinstance(taxonomy, dict) else []
             )
             if module_list:
