@@ -11,3 +11,7 @@
 # Git operations + release/asset downloads on GitHub:
 (^|\.)github\.com$
 (^|\.)githubusercontent\.com$
+# Docker Hub REST API + registry manifest pulls (no auth needed for public images):
+(^|\.)hub\.docker\.com$
+(^|\.)docker\.io$
+(^|\.)ghcr\.io$
