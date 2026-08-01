@@ -427,9 +427,12 @@ def test_install_project_noop_without_network(tmp_path, monkeypatch):
     assert seen["argv"][-1] == PATH_EXPORT + "pytest -q"
 
 
-def test_install_project_off_by_default(tmp_path, monkeypatch):
-    """Other sandbox.run callers (agent run_command, merge) must NOT
-    trigger a pip install — only the gate opts in."""
+def test_install_project_on_by_default(tmp_path, monkeypatch):
+    """The default install_project=True ensures every sandbox.run caller
+    (agent run_command, merge, etc.) gets the project install, so the
+    workspace clone — not the image's frozen site-packages — is the
+    imported tree.  Callers that must skip it pass install_project=False
+    explicitly."""
     repo = tmp_path / "ticket"
     repo.mkdir()
     (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
@@ -446,10 +449,10 @@ def test_install_project_off_by_default(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
-    sandbox.run(
-        "git status", repo_dir=repo, settings=s
-    )  # default install_project=False
-    assert seen["argv"][-1] == PATH_EXPORT + "git status"
+    sandbox.run("git status", repo_dir=repo, settings=s)  # default install_project=True
+    cmd = seen["argv"][-1]
+    assert cmd.startswith(PATH_EXPORT)
+    assert "pip install --user" in cmd[len(PATH_EXPORT) :]
 
 
 def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
