@@ -153,6 +153,18 @@ h1 {
 }
 .reject-btn:hover { background: #b45309; }
 
+.reimplement-btn {
+  font-size: 11px;
+  margin-top: 5px;
+  padding: 3px 8px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.reimplement-btn:hover { background: #6d28d9; }
+
 .redraft-btn {
   font-size: 11px;
   margin-top: 5px;

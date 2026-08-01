@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Board UI: add **Re‑implement** button for tickets in `human_mr_approval` — posts a change-request comment via the existing `request-implementation-changes` API, transitions the ticket back to `READY` so the implement agent re-runs against the existing PR branch without requiring the PR to be closed first.
 - Audit agent: add `run_command` batching guidance to prevent serial tool-call storms (chain multiple one-liners with `&&` or delegate to `explore`/`parallel_explore`).
 - `wait_for_ci` now includes the GitHub Actions `run_id` in the `CI_FAILING` output
   prefix (e.g. `[sha: 04cdd8f, run: 30399400000]`), so the ci-fix agent can pass it
