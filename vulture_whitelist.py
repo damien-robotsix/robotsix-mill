@@ -51,6 +51,7 @@ EnvDocSyncResult
 StateSyncResult
 SurveyResult
 TestGapResult
+TriageBoilerplateResult
 SecurityPostureResult
 # RepoDescriptionSyncResult — referenced only by string in agent YAML;
 # vulture (60% confidence) cannot trace it.

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add missing `PeriodicAgentResult` import and `TriageBoilerplateResult` alias in `triage_boilerplate.py` — the triage-boilerplate periodic agent would crash with `AttributeError` on `getattr(module, "PeriodicAgentResult")` before reaching its prompt. Updated YAML `output_type` to `TriageBoilerplateResult` for consistency.
 - `run_command` now consults `read_file`'s read-dedup state: shell commands that re-read already-served file content (sed, cat, awk, head, tail) are refused with a REFUSED message, closing a loophole where agents could bypass the read_file dedup guard by reading through a shell command.
 - Add a pre-flight step to the implement agent's system prompt: before editing Python source files, confirm the installed package resolves to the workspace `src/` directory rather than `site-packages`, to prevent wasted rounds editing the wrong tree.
 - Board UI: add **Re‑implement** button for tickets in `human_mr_approval` — posts a change-request comment via the existing `request-implementation-changes` API, transitions the ticket back to `READY` so the implement agent re-runs against the existing PR branch without requiring the PR to be closed first.
