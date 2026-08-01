@@ -79,15 +79,19 @@ def _reconcile_with_remote_pr(
 
 
 __all__ = [
+    "_REBASE_DROPPED",
     "_read_counter",
+    "_read_dropped_files",
     "_reconcile_with_remote_pr",
     "_refresh_branch_for_ci",
     "_write_counter",
+    "_write_dropped_files",
 ]
 
 log = logging.getLogger("robotsix_mill.stages.merge")
 
 _REBASE_COUNTER = "rebase_attempts.txt"
+_REBASE_DROPPED = "rebase_dropped_files.txt"
 _MERGE_REASON = "merge_reason.txt"
 _REV_REV_COUNTER = "review_revision_attempts.txt"
 _AUTO_FIX_CYCLES = "auto_fix_cycles.txt"
@@ -176,6 +180,23 @@ def _build_failing_summary(
     from ..ci_fix_helpers import _build_failing_summary as _ci_fix_summary
 
     return _ci_fix_summary(failing, log_text, alerts, changed_paths)
+
+
+def _read_dropped_files(path: Path) -> list[str]:
+    """Read the previously-dropped file list from *path*, returning an empty list when absent."""
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+        if not text:
+            return []
+        return text.splitlines()
+    except FileNotFoundError:
+        return []
+
+
+def _write_dropped_files(path: Path, files: list[str]) -> None:
+    """Persist *files* as a newline-delimited list at *path*, creating parent directories."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(files) + "\n", encoding="utf-8")
 
 
 def _read_reason(path) -> set[str]:

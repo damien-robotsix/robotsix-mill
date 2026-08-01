@@ -1039,6 +1039,33 @@ class TestCheckRebaseDiffIntegrity:
         assert ok is True
         assert dropped == []
 
+    def test_dropped_when_base_deleted_file_pr_modified(self, tmp_path):
+        """When the base branch deleted a file the PR modified, and the
+        rebase agent accepts the deletion, the integrity check must flag
+        the file as dropped (the pre-rebase blob differs from the
+        non-existent target blob)."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        # Simulate a PR branch that modified mod.py
+        git_ops.create_branch(dest, "feature")
+        (dest / "mod.py").write_text("branch work")
+        git_ops.commit_all(dest, "implement: modify mod.py")
+        pre_files = git_ops.changed_source_files(dest, "main")
+        assert "mod.py" in pre_files
+        pre_blobs = git_ops.file_blobs(dest, pre_files)
+
+        # Simulate: the rebase agent erroneously accepted the target's
+        # deletion of mod.py. After rebase, mod.py is gone.
+        (dest / "mod.py").unlink()
+        git_ops.commit_all(dest, "rebase: incorrectly dropped mod.py")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", pre_files, pre_blobs
+        )
+        assert ok is False, "integrity check must flag the dropped file"
+        assert "mod.py" in dropped
+
 
 # ===========================================================================
 # 13c. introduced_files — integration (real git)
