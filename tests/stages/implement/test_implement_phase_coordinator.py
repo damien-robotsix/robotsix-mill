@@ -571,13 +571,16 @@ def test_load_context_blocked_resume_skips_feedback(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx)
     ctx.service.add_comment(t.id, "real review feedback", author="reviewer")
-    t.blocked_from = "READY"  # mark as a BLOCKED resume → no comments read
+    t.blocked_from = "READY"  # BLOCKED resume — feedback still injected (b92d)
     monkeypatch.setattr(pc, "load_memory", lambda p: "")
 
     ic = ImplementStage._load_implement_context(ctx, t, ctx.settings)
 
-    assert ic.feedback is None
-    assert ic.open_thread_ids is None
+    # b92d: feedback is injected on every resume, including BLOCKED→READY
+    # bounces (the old `if ticket.blocked_from is None` guard was removed).
+    assert ic.feedback is not None
+    assert "real review feedback" in ic.feedback
+    assert ic.open_thread_ids is not None
 
 
 def test_load_context_memory_wiring(ctx_factory, monkeypatch):

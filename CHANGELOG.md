@@ -8,6 +8,7 @@
   defensive ``mkdir`` before Alembic commands and a ``timeout=5``
   connect arg in ``alembic/env.py`` to guard against transient
   "unable to open database file" failures under xdist.
+- mill: Land stranded implement loop-escalation fixes (b92d): remove the `blocked_from` guard in `_load_implement_context` so review feedback is injected on every resume including review→READY bounces, and add `_NOT_DOC_ONLY_TERMS_RE` refine doc-only pre-check to prevent false doc-only classification.
 - Add missing `PeriodicAgentResult` import and `TriageBoilerplateResult` alias in `triage_boilerplate.py` — the triage-boilerplate periodic agent would crash with `AttributeError` on `getattr(module, "PeriodicAgentResult")` before reaching its prompt. Updated YAML `output_type` to `TriageBoilerplateResult` for consistency.
 - Add `scripts/resolve_docker_digest.py`: resolves `image:tag` → sha256 digest via the Docker Hub REST API and OCI registry manifest API, so "pin Docker base images" tickets can resolve digests programmatically without pausing for operator input. (mill: Autonomously resolve Docker base-image digests instead of asking the operator (20260731T123627Z-autonomously-resolve-docker-base-image-d-d662))
 - `run_command` now consults `read_file`'s read-dedup state: shell commands that re-read already-served file content (sed, cat, awk, head, tail) are refused with a REFUSED message, closing a loophole where agents could bypass the read_file dedup guard by reading through a shell command.
