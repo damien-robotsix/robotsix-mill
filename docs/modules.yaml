@@ -189,6 +189,7 @@ modules:
       - src/robotsix_mill/runtime/tracing.py
       - src/robotsix_mill/runtime/transient_errors.py
       - src/robotsix_mill/runtime/credit_status.py
+      - src/robotsix_mill/runtime/credential_status.py
       - src/robotsix_mill/runtime/board_html.py
       - src/robotsix_mill/runtime/board_adapter.py
       - src/robotsix_mill/runtime/broadcaster.py
@@ -201,6 +202,7 @@ modules:
       - tests/runtime/test_api.py
       - tests/runtime/test_broadcaster.py
       - tests/runtime/test_cost_warm.py
+      - tests/runtime/test_credential_status.py
       - tests/runtime/test_credit_status.py
       - tests/runtime/test_deps.py
       - tests/runtime/test_errors.py

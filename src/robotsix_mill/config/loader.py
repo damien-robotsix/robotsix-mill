@@ -87,6 +87,30 @@ def load_settings_block() -> dict[str, Any]:
     return {k: v for k, v in data.items() if k not in ("secrets", "repos", "core")}
 
 
+def load_secrets_block() -> dict[str, Any]:
+    """Return the main config file's ``secrets`` block.
+
+    The sibling of :func:`load_settings_block`, for
+    :class:`~robotsix_mill.config.secrets.Secrets`. The clean-cutover
+    (#2525) rewrote ``Secrets`` as a plain accessor documented as "backed
+    by the live ``Settings``", but its ``__init__`` reads only explicit
+    kwargs and an explicit ``_secrets_file`` — nothing ever pointed it at
+    the config file, so every credential (OpenRouter key, GitHub App id +
+    private key, forge tokens, Langfuse keys, ntfy) read back as ``None``
+    and mill could neither call an LLM nor authenticate to GitHub.
+
+    ``MILL_SECRETS_FILE`` still overrides the path, matching the
+    pre-cutover behaviour. Never raises: a missing or malformed file means
+    "all unset", matching :func:`load_settings_block`.
+    """
+    override = os.environ.get("MILL_SECRETS_FILE")
+    main_path = Path(override) if override else _resolve_main_config_path()
+    if main_path is None:
+        return {}
+    block = _load_file(main_path).get("secrets")
+    return dict(block) if isinstance(block, dict) else {}
+
+
 def _resolve_data_dir() -> Path:
     """Resolve ``data_dir`` from the main config when available, else ``.data``."""
     main_path = _resolve_main_config_path()

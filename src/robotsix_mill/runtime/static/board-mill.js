@@ -492,6 +492,30 @@
   }
 
   // =========================================================================
+  // Credential status
+  //
+  // A missing credential kills every ticket individually, which reads as a
+  // wave of unrelated failures. This banner names the single cause.
+  // =========================================================================
+  async function fetchCredentialStatus() {
+    var s = await jget("/credential-status");
+    var banner = document.getElementById("credential-status");
+    if (!s || !banner) return;
+    if (s.ok) {
+      banner.style.display = "none";
+      banner.innerHTML = "";
+      return;
+    }
+    banner.style.display = "block";
+    banner.innerHTML =
+      '<strong>⛔ Mill is missing credentials — tickets cannot advance.</strong> ' +
+      s.missing.map(function(m) {
+        return '<code>' + esc(m.config_path) + '</code> unset (' + esc(m.impact) + ')';
+      }).join(' · ') +
+      ' — set them in config.json and restart mill.';
+  }
+
+  // =========================================================================
   // Langfuse status
   // =========================================================================
   async function fetchLangfuseStatus() {
@@ -2129,6 +2153,7 @@
     toggleMetaOnlyButtons();
     updatePassesMenu();
     fetchGates();
+    fetchCredentialStatus();
     fetchLangfuseStatus();
     fetchCreditStatus();
     refreshCandidateBadge();
@@ -2183,6 +2208,7 @@
     // Initial data fetch
     fetchRepos();
     fetchGates();
+    fetchCredentialStatus();
     fetchLangfuseStatus();
     fetchCreditStatus();
     refreshCandidateBadge();

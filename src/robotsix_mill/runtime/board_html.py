@@ -130,6 +130,7 @@ margin-left:4px" title="Component-owned config (Settings panel)">
   ⚙ Settings
 </button>
 </header>
+<div id="credential-status" style="display:none;background:#4a1414;border-bottom:1px solid #a12b2b;color:#fca5a5;padding:8px 12px;font-size:13px"></div>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 <div id="credit-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 {BOARD_SKELETON}

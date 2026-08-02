@@ -198,3 +198,15 @@ def test_board_html_constant_has_placeholders() -> None:
     assert "{ASSET_VERSION}" in BOARD_HTML
     assert "{CONFIG_SCRIPT}" in BOARD_HTML
     assert "{BOARD_SKELETON}" in BOARD_HTML
+
+
+def test_board_html_has_credential_banner_slot() -> None:
+    """The board shell carries the missing-credential banner container.
+
+    ``board-mill.js``'s ``fetchCredentialStatus()`` targets this id; without
+    the div a credential outage stays invisible on the board.
+    """
+    html = render_board_html("<script></script>", "<div></div>")
+    assert 'id="credential-status"' in html
+    # Rendered above the softer warning banners — it is a hard stop.
+    assert html.index('id="credential-status"') < html.index('id="lf-status"')

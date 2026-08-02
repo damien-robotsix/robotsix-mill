@@ -281,6 +281,24 @@ def credit_status() -> dict[str, object]:
     return get_credit_status()
 
 
+@router.get("/credential-status")
+def credential_status(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Return which required credentials are missing from the live config.
+
+    Polled by the board UI's ``fetchCredentialStatus()`` every refresh
+    cycle and rendered as a board-wide banner.  ``ok`` is ``false`` when
+    mill is missing a credential without which no ticket can advance —
+    the fleet-wide cause behind what otherwise just looks like every
+    ticket blocking on its own.
+
+    Deliberately not dismissible: unlike low credit, this is not a
+    warning the operator can ride out.
+    """
+    from ..credential_status import get_credential_status
+
+    return get_credential_status(settings)
+
+
 @router.post(
     "/credit-status/clear",
     status_code=204,

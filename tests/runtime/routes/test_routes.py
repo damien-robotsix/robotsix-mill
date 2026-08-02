@@ -1703,3 +1703,32 @@ def test_request_implementation_changes_route_rejects_wrong_state(client, servic
     )
 
     assert r.status_code == 409, r.text
+
+
+# -- GET /credential-status ---------------------------------------------
+
+
+def test_credential_status_reports_missing(client):
+    """The board's credential banner endpoint reports missing credentials.
+
+    The test config carries no ``secrets:`` block, which is exactly the
+    state #2525 left every deployment in.
+    """
+    r = client.get("/credential-status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "openrouter_api_key" in {m["name"] for m in body["missing"]}
+    for finding in body["missing"]:
+        assert finding["config_path"].startswith("secrets.")
+        assert finding["impact"]
+
+
+def test_credential_status_ok_when_configured(client, monkeypatch):
+    """``ok`` flips to true once the credentials resolve."""
+    from robotsix_mill.runtime import credential_status as cs
+
+    monkeypatch.setattr(cs, "_openrouter_missing", lambda: None)
+    monkeypatch.setattr(cs, "_forge_missing", lambda settings: None)
+    body = client.get("/credential-status").json()
+    assert body == {"ok": True, "missing": []}
