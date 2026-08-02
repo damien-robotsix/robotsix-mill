@@ -638,7 +638,7 @@
         "MILL_MAX_GLOBAL_CONCURRENCY": {
           "advanced": true,
           "default": 12,
-          "description": "Host-level cap on total concurrently-running stages across ALL boards.",
+          "description": "Host-level cap on total concurrently-running stages across ALL boards, and on live sandbox containers.",
           "minimum": 1,
           "title": "Mill Max Global Concurrency",
           "type": "integer"
@@ -2599,6 +2599,14 @@
           "description": "When true, periodically force-remove leaked/orphaned sandbox containers.",
           "title": "Sandbox Reaper Periodic",
           "type": "boolean"
+        },
+        "sandbox_slot_timeout": {
+          "advanced": true,
+          "default": 1800,
+          "description": "Seconds to wait for a free sandbox slot before failing (ceiling = max_global_concurrency).",
+          "minimum": 1,
+          "title": "Sandbox Slot Timeout",
+          "type": "integer"
         },
         "scanner_max_drafts_per_run": {
           "advanced": true,

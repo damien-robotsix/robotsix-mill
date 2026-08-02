@@ -28,7 +28,10 @@ import os
 import re
 import socket
 import subprocess
+import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -48,6 +51,71 @@ class SandboxError(RuntimeError):
     """Infrastructure failure (no Docker, daemon/image error) — distinct
     from the command itself exiting non-zero.
     """
+
+
+# Hard ceiling on live sandbox containers -----------------------------------
+#
+# ``max_global_concurrency`` used to be applied ONLY around the board
+# consumer's ``process_ticket`` call (``runtime/worker/core.py``), so it
+# bounded ticket *stages* and nothing else. Every other sandbox spawner runs
+# outside that semaphore: the ~20 per-repo periodic passes (audit, test-gap,
+# health, ...), the meta-agent, the diagnostic pass, and refine's warnings
+# collection. So the live sandbox count routinely exceeded the cap — observed
+# 2026-08-02 with the cap set to 1: three ``mill-sbx-*`` containers, one of
+# them a ``test_gap_workspace`` periodic pass, on a box already swapping.
+#
+# Sandboxes are what actually costs memory, so the ceiling belongs where they
+# are created rather than at one of several call paths into it. A module-level
+# semaphore here is unmissable: every spawner goes through ``run()``.
+#
+# ``threading`` (not ``asyncio``) because ``run()`` is synchronous and called
+# from worker threads — stage handlers offload to threads precisely because
+# the agent SDK is sync. Blocking here adds no new event-loop risk: the
+# ``subprocess.run`` below already blocks its caller for up to the op timeout.
+_slot_lock = threading.Lock()
+_slot_sem: threading.BoundedSemaphore | None = None
+_slot_cap = 0
+
+
+def _slot_semaphore(cap: int) -> threading.BoundedSemaphore:
+    """Return the process-wide sandbox-slot semaphore, sized to *cap*.
+
+    Rebuilt when *cap* changes so a settings override (and tests) take
+    effect; in-flight holders keep the object they acquired, so the
+    swap can't over-release.
+    """
+    global _slot_sem, _slot_cap
+    with _slot_lock:
+        if _slot_sem is None or _slot_cap != cap:
+            _slot_sem = threading.BoundedSemaphore(cap)
+            _slot_cap = cap
+        return _slot_sem
+
+
+@contextmanager
+def _sandbox_slot(settings: Settings) -> Iterator[None]:
+    """Hold one of ``max_global_concurrency`` sandbox slots for the block.
+
+    Raises :class:`SandboxError` if no slot frees up within
+    ``sandbox_slot_timeout`` — a bounded wait so a leaked slot surfaces
+    as a stage error instead of hanging a worker thread forever.
+    """
+    cap = max(1, settings.max_global_concurrency)
+    sem = _slot_semaphore(cap)
+    timeout = max(1, settings.sandbox_slot_timeout)
+    if not sem.acquire(blocking=False):
+        # Queueing is normal under load, but it is also the signal that the
+        # cap is what's slowing the board down — worth a line in the log.
+        log.info("sandbox cap (%d) saturated; waiting for a slot", cap)
+        if not sem.acquire(timeout=timeout):
+            raise SandboxError(
+                f"no sandbox slot free after {timeout}s "
+                f"(cap={cap}); too many concurrent sandboxes"
+            )
+    try:
+        yield
+    finally:
+        sem.release()
 
 
 # Deploy-mode (central-deploy) helpers --------------------------------------
@@ -560,44 +628,49 @@ def run(
         else settings.command_timeout
     )
     max_attempts = 3
-    for attempt in range(1, max_attempts + 1):
-        try:
-            r = subprocess.run(
-                argv,
-                capture_output=True,
-                text=False,
-                timeout=op_timeout,
-            )
-        except FileNotFoundError as e:
-            raise SandboxError("docker CLI not found in the mill image") from e
-        except subprocess.TimeoutExpired:
-            # the `docker run` client was killed; force-remove the container
-            subprocess.run(
-                ["docker", "rm", "-f", name], capture_output=True, text=False
-            )
-            return 124, f"command timed out after {op_timeout}s"
-
-        stdout = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
-        stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
-        # 125 == docker daemon/usage error (not the command's own exit code)
-        if r.returncode == 125:
-            eof_msg = stderr.strip()
-            if "unexpected EOF" in eof_msg and attempt < max_attempts:
-                log.warning(
-                    "sandbox spawn attempt %d/%d: docker wait stream EOF "
-                    "(socket-proxy timeout likely); retrying...",
-                    attempt,
-                    max_attempts,
-                )
-                # Clean up any container that may have leaked
-                subprocess.run(
-                    ["docker", "rm", "-f", name],
+    # The slot is held across the retries on purpose: a retry re-spawns the
+    # same container name, so releasing between attempts would let the live
+    # count exceed the cap. It is taken as late as possible — argv building
+    # and the extra-package probe above touch no containers.
+    with _sandbox_slot(settings):
+        for attempt in range(1, max_attempts + 1):
+            try:
+                r = subprocess.run(
+                    argv,
                     capture_output=True,
                     text=False,
+                    timeout=op_timeout,
                 )
-                continue
-            raise SandboxError(f"docker run failed: {eof_msg[:300]}")
-        return r.returncode, _truncate(stdout + stderr)
+            except FileNotFoundError as e:
+                raise SandboxError("docker CLI not found in the mill image") from e
+            except subprocess.TimeoutExpired:
+                # the `docker run` client was killed; force-remove the container
+                subprocess.run(
+                    ["docker", "rm", "-f", name], capture_output=True, text=False
+                )
+                return 124, f"command timed out after {op_timeout}s"
+
+            stdout = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
+            stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
+            # 125 == docker daemon/usage error (not the command's own exit code)
+            if r.returncode == 125:
+                eof_msg = stderr.strip()
+                if "unexpected EOF" in eof_msg and attempt < max_attempts:
+                    log.warning(
+                        "sandbox spawn attempt %d/%d: docker wait stream EOF "
+                        "(socket-proxy timeout likely); retrying...",
+                        attempt,
+                        max_attempts,
+                    )
+                    # Clean up any container that may have leaked
+                    subprocess.run(
+                        ["docker", "rm", "-f", name],
+                        capture_output=True,
+                        text=False,
+                    )
+                    continue
+                raise SandboxError(f"docker run failed: {eof_msg[:300]}")
+            return r.returncode, _truncate(stdout + stderr)
     # Should not be reachable — the last attempt either returns or raises
     # above (non-125 → return; 125 non-EOF → raise; 125 EOF on last
     # attempt → raise).  Included as a safety net.

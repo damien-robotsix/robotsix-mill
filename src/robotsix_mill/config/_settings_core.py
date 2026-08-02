@@ -46,11 +46,19 @@ class _CoreSettings(BaseModel):
     # modestly below the ~18 slots a typical multi-board setup would open with
     # per-board caps summed (2+1+...+1), providing a genuine backstop without
     # throttling normal operation.
+    #
+    # Also the hard ceiling on live ``mill-sbx-*`` sandbox containers — see
+    # ``sandbox._sandbox_slot``.  The board-consumer semaphore alone never
+    # bounded them: periodic passes and the meta-agent spawn sandboxes outside
+    # it, so the live count ran well above the cap.
     max_global_concurrency: int = Field(
         default=12,
         alias="MILL_MAX_GLOBAL_CONCURRENCY",
         ge=1,
-        description="Host-level cap on total concurrently-running stages across ALL boards.",
+        description=(
+            "Host-level cap on total concurrently-running stages across ALL "
+            "boards, and on live sandbox containers."
+        ),
         json_schema_extra={"advanced": True},
     )
     # Capability gate for inline-image (vision) input on the Claude SDK
@@ -846,6 +854,19 @@ class _CoreSettings(BaseModel):
     sandbox_pids_limit: int = Field(
         default=512,
         description="PID limit for sandbox containers.",
+        json_schema_extra={"advanced": True},
+    )
+    # How long a caller waits for a free sandbox slot before giving up.
+    # Generous by design: the cap is a memory guard, and a queued periodic
+    # pass should wait behind a long test run rather than fail. Bounded
+    # anyway so a leaked slot surfaces as an error instead of a hang.
+    sandbox_slot_timeout: int = Field(
+        default=1800,
+        ge=1,
+        description=(
+            "Seconds to wait for a free sandbox slot before failing "
+            "(ceiling = max_global_concurrency)."
+        ),
         json_schema_extra={"advanced": True},
     )
     sandbox_readonly: bool = Field(

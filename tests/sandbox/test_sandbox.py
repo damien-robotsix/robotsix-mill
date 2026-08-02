@@ -6,6 +6,8 @@ import pytest
 from robotsix_mill import sandbox
 from robotsix_mill.config import Settings
 import itertools
+import threading
+import time
 
 
 def _settings(tmp_path, **env):
@@ -1394,3 +1396,115 @@ def test_sandbox_op_timeout_zero_falls_back_to_command_timeout(monkeypatch, tmp_
     assert captured_timeout == 99, (
         f"Expected command_timeout=99, got {captured_timeout}"
     )
+
+
+# --- Hard ceiling on live sandbox containers -------------------------------
+#
+# max_global_concurrency used to be applied only around the board consumer's
+# process_ticket call, so periodic passes and the meta-agent spawned sandboxes
+# outside it and the live count ran above the cap. The ceiling now lives in
+# sandbox.run() itself; these tests pin that it is a real ceiling.
+
+
+@pytest.fixture(autouse=True)
+def _reset_sandbox_slots():
+    """Drop the process-wide slot semaphore around every test so a cap
+    from one test can't leak into the next."""
+    sandbox._slot_sem = None
+    sandbox._slot_cap = 0
+    yield
+    sandbox._slot_sem = None
+    sandbox._slot_cap = 0
+
+
+def _concurrency_probe(monkeypatch, tmp_path, cap, threads, run_impl=None):
+    """Drive `threads` concurrent sandbox.run() calls with the cap set to
+    `cap`; return the peak number seen inside the fake docker run."""
+    s = _settings(tmp_path, max_global_concurrency=cap)
+    live = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def fake_run(argv, **kwargs):
+        nonlocal live, peak
+        with lock:
+            live += 1
+            peak = max(peak, live)
+        try:
+            time.sleep(0.05)
+            if run_impl is not None:
+                return run_impl(argv)
+            return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+        finally:
+            with lock:
+                live -= 1
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+
+    def worker():
+        try:
+            sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+        except sandbox.SandboxError:
+            pass
+
+    ts = [threading.Thread(target=worker) for _ in range(threads)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(timeout=30)
+    return peak
+
+
+def test_live_sandboxes_never_exceed_cap(monkeypatch, tmp_path):
+    peak = _concurrency_probe(monkeypatch, tmp_path, cap=3, threads=10)
+    assert peak <= 3, f"cap=3 but {peak} sandboxes ran concurrently"
+    # ...and the gate isn't accidentally serializing everything to 1.
+    assert peak > 1
+
+
+def test_cap_of_one_serializes_sandboxes(monkeypatch, tmp_path):
+    peak = _concurrency_probe(monkeypatch, tmp_path, cap=1, threads=6)
+    assert peak == 1
+
+
+def test_slot_released_when_spawn_fails(monkeypatch, tmp_path):
+    """A docker failure must not leak its slot — otherwise the ceiling
+    ratchets down to zero and every later sandbox blocks."""
+
+    def boom(argv):
+        return subprocess.CompletedProcess(argv, 125, stdout=b"", stderr=b"nope")
+
+    # All 6 raise SandboxError; if slots leaked, the later threads would
+    # block until the slot timeout rather than reaching the fake at all.
+    peak = _concurrency_probe(monkeypatch, tmp_path, cap=2, threads=6, run_impl=boom)
+    assert peak > 0
+    # The semaphore is back to full capacity: acquiring `cap` slots succeeds.
+    sem = sandbox._slot_semaphore(2)
+    assert sem.acquire(timeout=1)
+    assert sem.acquire(timeout=1)
+    sem.release()
+    sem.release()
+
+
+def test_no_slot_available_raises(monkeypatch, tmp_path):
+    """Waiting forever would hang a worker thread; the wait is bounded."""
+    s = _settings(tmp_path, max_global_concurrency=1, sandbox_slot_timeout=1)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    # Occupy the only slot, then confirm the next caller fails instead of
+    # blocking indefinitely.
+    sem = sandbox._slot_semaphore(1)
+    assert sem.acquire(timeout=1)
+    try:
+        with pytest.raises(sandbox.SandboxError, match="no sandbox slot free"):
+            sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+    finally:
+        sem.release()
