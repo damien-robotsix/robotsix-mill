@@ -303,27 +303,27 @@ class CIFixStage(Stage):
                         _refreshes,
                     )
                 else:
-                try:
-                    git_ops.empty_commit(
-                        Path(repo_dir),
-                        "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
-                    )
-                    git_ops.push(Path(repo_dir), branch, _remote_url, _token)
-                    _write_counter(empty_commit_counter_path, _refreshes + 1)
-                    log.info(
-                        "%s: pushed empty commit to force fresh CI run (branch was already current)",
-                        ticket.id,
-                    )
-                    # The run we just triggered cannot have completed. Reading
-                    # check_status now would only ever return "pending", so
-                    # return directly and let the next poll see a real result.
-                    return Outcome(State.IMPLEMENT_COMPLETE)
-                except Exception:
-                    log.warning(
-                        "%s: empty-commit push failed — proceeding with existing HEAD",
-                        ticket.id,
-                        exc_info=True,
-                    )
+                    try:
+                        git_ops.empty_commit(
+                            Path(repo_dir),
+                            "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+                        )
+                        git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                        _write_counter(empty_commit_counter_path, _refreshes + 1)
+                        log.info(
+                            "%s: pushed empty commit to force fresh CI run (branch was already current)",
+                            ticket.id,
+                        )
+                        # The run we just triggered cannot have completed. Reading
+                        # check_status now would only ever return "pending", so
+                        # return directly and let the next poll see a real result.
+                        return Outcome(State.IMPLEMENT_COMPLETE)
+                    except Exception:
+                        log.warning(
+                            "%s: empty-commit push failed — proceeding with existing HEAD",
+                            ticket.id,
+                            exc_info=True,
+                        )
 
         # Fetch check status from the forge.
         try:
