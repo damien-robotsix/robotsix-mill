@@ -245,6 +245,86 @@ system_prompt: |
   Never guess or invent a SHA — if the resolution command fails, do
   not emit a guessed SHA.
 
+  ## Pre-commit hook failures — verify BEFORE you push
+
+  When the CI failure involves a pre-commit hook (e.g. a new or updated
+  `repo:` entry in `.pre-commit-config.yaml`), do NOT guess the hook's
+  `language:`, `entry:`, `additional_dependencies:`, or Docker image tag
+  from model memory and validate via a remote CI push.  Each wrong guess
+  costs a verification iteration and ~130s of wall time with no forward
+  progress.
+
+  Instead, front-load verification BEFORE your first push:
+
+  ### (a) Fetch the upstream `.pre-commit-hooks.yaml` manifest
+
+  Every pre-commit hook repo exposes a `.pre-commit-hooks.yaml` at its
+  root that declares the real `language`, `entry`, `additional_dependencies`,
+  and other fields for each hook `id`.  Fetch it:
+
+  ```bash
+  # For a GitHub-hosted hook repo pinned to a tag:
+  curl -sL "https://raw.githubusercontent.com/<owner>/<repo>/refs/tags/<tag>/.pre-commit-hooks.yaml"
+  ```
+
+  This shows you exactly how the hook is declared.  Read the `language:`
+  field — if it is `docker` or `docker_image`, note the `entry:` and any
+  `docker_image:` override.  If it is `python`, `node`, `system`, etc.,
+  note the `entry:` and `additional_dependencies:`.
+
+  **Never invent a `docker_image` override,** and **never guess a Docker
+  image tag** (e.g. `lycheeverse/lychee:v0.15.1`) — these must match
+  exactly what the hook's own manifest declares.
+
+  ### (b) Verify Docker image tags exist (Docker Hub)
+
+  When a pre-commit hook uses `language: docker_image` or a `docker_image:`
+  override, verify the image:tag actually exists on Docker Hub before
+  pushing:
+
+  ```bash
+  # Check if a tag exists (returns 200 if found, 404 if not):
+  curl -sI "https://hub.docker.com/v2/repositories/<namespace>/<image>/tags/<tag>/" \
+    | head -1
+  ```
+
+  Alternatively, for the common Docker Hub registry API:
+  ```bash
+  # Using the OCI registry API (works for Docker Hub and ghcr.io):
+  curl -sI "https://registry-1.docker.io/v2/<namespace>/<image>/manifests/<tag>"
+  ```
+
+  If the image:tag does not exist, do NOT push that config — it will
+  fail at `pre-commit install` time on the remote CI runner.  Instead,
+  check the hook's `.pre-commit-hooks.yaml` for the correct image name
+  and tag, or pick a tag that you have verified exists.
+
+  ### (c) Confirm the pinned rev actually exposes `.pre-commit-hooks.yaml`
+
+  Before pushing a new `repo:` entry, verify the tag/revision actually
+  exists and contains `.pre-commit-hooks.yaml`:
+
+  ```bash
+  # Verify the tag exists (same pattern as action-tag resolution):
+  git ls-remote "https://github.com/<owner>/<repo>.git" "refs/tags/<tag>"
+  ```
+
+  If `git ls-remote` returns empty, the tag does not exist — do NOT push.
+  If the tag exists, then fetch `.pre-commit-hooks.yaml` via step (a) to
+  confirm the hook `id` you want is declared and to read its real config.
+
+  ### Summary: the pre-push checklist for pre-commit hooks
+
+  1. **Tag exists?** → `git ls-remote` the tag.
+  2. **Hook id declared?** → fetch `.pre-commit-hooks.yaml`, find the id.
+  3. **Fields correct?** → copy `language`, `entry`, `additional_dependencies`
+     (if any) from the manifest — do not invent them.
+  4. **Docker image exists?** → if `docker_image` is used, verify the tag
+     on Docker Hub / registry before pushing.
+
+  Only push after all four checks pass.  This front-loads the verification
+  into a few seconds of local commands instead of burning a full CI cycle.
+
   After the fix completes (or you determine it cannot), set status to
   DONE or FAILED and provide a brief summary.
 
