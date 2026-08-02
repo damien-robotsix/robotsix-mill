@@ -718,12 +718,20 @@ class GitLabForge(
                     "reason": "merge_when_pipeline_succeeds set; awaiting pipeline",
                 }
             if r.status_code == 405:
+                # Mirrors the GitHub arm: 405 covers both a permanent
+                # refusal and an MR whose required pipeline has not
+                # reported yet, so keep the body and let the caller retry.
                 return {
                     "merged": False,
-                    "reason": "merge not allowed (branch protection?)",
+                    "retryable": True,
+                    "reason": f"merge not allowed: {r.text[:200]}",
                 }
             if r.status_code == 409:
-                return {"merged": False, "reason": "MR is not mergeable"}
+                return {
+                    "merged": False,
+                    "retryable": True,
+                    "reason": f"MR is not mergeable: {r.text[:200]}",
+                }
             return {
                 "merged": False,
                 "reason": f"HTTP {r.status_code}: {r.text[:200]}",

@@ -207,6 +207,13 @@ class Forge(ABC):
         ``{"merged": False, "reason": "..."}`` on failure. Must never
         raise for API-level failures (branch protection, not mergeable,
         conflict, network error) — catch and return a failure dict.
+
+        A failure dict may carry ``"retryable": True`` to mean "this
+        rejection is not necessarily permanent — re-poll and try again".
+        Forges use it for the status codes that cover both a permanent
+        refusal and a required check that has simply not reported yet;
+        the merge stage retries those a bounded number of times instead
+        of blocking the ticket outright.
         """
 
     @abstractmethod

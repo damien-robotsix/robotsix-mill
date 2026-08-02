@@ -12,6 +12,21 @@ from ._github_pagination import _paginated_get
 from .base import BranchInfo, _parse_iso_utc
 
 
+def _api_message(response: Any) -> str:
+    """Return GitHub's human-readable ``message`` from an error response.
+
+    The merge endpoint distinguishes a permanent refusal from a
+    still-settling required check only in the body, so the caller needs
+    it in the reason string. Falls back to the raw (truncated) text when
+    the body is not the usual ``{"message": ...}`` envelope.
+    """
+    try:
+        message = response.json().get("message")
+    except Exception:
+        message = None
+    return str(message) if message else response.text[:200]
+
+
 def _parse_pr_detail(pr: dict) -> dict:
     """Normalize a GitHub PR detail dict into the standard status shape
     (the same dict ``_get_pr`` / ``pr_status`` return).
@@ -508,12 +523,26 @@ class GitHubForgePRMixin:
             if r.status_code == 200:
                 return {"merged": True, "reason": "merged"}
             if r.status_code == 405:
+                # GitHub overloads 405 for both permanent refusals ("Merge
+                # commits are not allowed on this repository") and the
+                # transient "Required status check … is expected" that a
+                # still-settling required gate produces. The two are only
+                # distinguishable from the response body, so surface it
+                # verbatim and mark the merge retryable — the caller
+                # re-polls rather than blocking the ticket at the finish
+                # line (observed: seven robotsix-llmio tickets BLOCKED by a
+                # merge fired 24-68s before CodeQL/ci reported).
                 return {
                     "merged": False,
-                    "reason": "merge not allowed (branch protection?)",
+                    "retryable": True,
+                    "reason": f"merge not allowed: {_api_message(r)}",
                 }
             if r.status_code == 409:
-                return {"merged": False, "reason": "PR is not mergeable"}
+                return {
+                    "merged": False,
+                    "retryable": True,
+                    "reason": f"PR is not mergeable: {_api_message(r)}",
+                }
             return {
                 "merged": False,
                 "reason": f"HTTP {r.status_code}: {r.text[:200]}",
