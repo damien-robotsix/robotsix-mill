@@ -54,16 +54,27 @@ def _settings(tmp_path, **overrides):
     """Create a Settings pointed at tmp_path, with tracing enabled
     (Langfuse keys configured) so the runner doesn't short-circuit."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
-    # Populate Secrets so get_secrets() returns matching values
+    # The config-standard cutover moved the Langfuse credentials onto
+    # Settings itself; `Settings.tracing_enabled` reads those fields, not
+    # `get_secrets()`. Populating only the Secrets singleton (as this helper
+    # used to) left tracing_enabled False, so every runner short-circuited
+    # and returned total_traces=0.
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
 
+    base_url = overrides.pop("LANGFUSE_BASE_URL", "https://lf.example.com")
+    public_key = overrides.pop("LANGFUSE_PUBLIC_KEY", "pk-test")
+    secret_key = overrides.pop("LANGFUSE_SECRET_KEY", "sk-test")
+
     _reset_secrets()
     _cfg._secrets = Secrets(
-        langfuse_base_url=overrides.pop("LANGFUSE_BASE_URL", "https://lf.example.com"),
-        langfuse_public_key=overrides.pop("LANGFUSE_PUBLIC_KEY", "pk-test"),
-        langfuse_secret_key=overrides.pop("LANGFUSE_SECRET_KEY", "sk-test"),
+        langfuse_base_url=base_url,
+        langfuse_public_key=public_key,
+        langfuse_secret_key=secret_key,
     )
+    overrides.setdefault("langfuse_base_url", base_url)
+    overrides.setdefault("langfuse_public_key", public_key)
+    overrides.setdefault("langfuse_secret_key", secret_key)
     return __import__("robotsix_mill.config", fromlist=["Settings"]).Settings(
         **overrides
     )
@@ -76,16 +87,25 @@ def _init_db_for_test(settings):
 
 
 def _enable_tracing_secrets():
-    """Populate Secrets with Langfuse credentials so tracing is enabled."""
+    """Populate Secrets with Langfuse credentials and return the matching
+    ``Settings`` kwargs.
+
+    Both halves are needed: the config-standard cutover moved the Langfuse
+    credentials onto ``Settings`` itself, so a bare ``Settings()`` here has
+    none and the API helpers bail out early. Callers construct their
+    Settings as ``Settings(**_enable_tracing_secrets())``.
+    """
     from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
 
+    creds = {
+        "langfuse_base_url": "https://lf.example.com",
+        "langfuse_public_key": "pk-test",
+        "langfuse_secret_key": "sk-test",
+    }
     _reset_secrets()
-    _cfg._secrets = Secrets(
-        langfuse_base_url="https://lf.example.com",
-        langfuse_public_key="pk-test",
-        langfuse_secret_key="sk-test",
-    )
+    _cfg._secrets = Secrets(**creds)
+    return creds
 
 
 def _make_traces(n, with_session=True):
@@ -560,8 +580,7 @@ def test_list_all_traces_since_pagination(monkeypatch):
 
     from robotsix_mill.config import Settings
 
-    _enable_tracing_secrets()
-    s = Settings()
+    s = Settings(**_enable_tracing_secrets())
 
     result = list_all_traces_since(s, "2024-01-01T00:00:00Z")
 
@@ -620,8 +639,7 @@ def test_list_all_traces_since_max_traces_stops_early(monkeypatch):
 
     from robotsix_mill.config import Settings
 
-    _enable_tracing_secrets()
-    s = Settings()
+    s = Settings(**_enable_tracing_secrets())
 
     result = list_all_traces_since(s, "2024-01-01T00:00:00Z", max_traces=3)
 
@@ -659,8 +677,7 @@ def test_list_all_traces_since_http_error_returns_empty(monkeypatch):
 
     from robotsix_mill.config import Settings
 
-    _enable_tracing_secrets()
-    s = Settings()
+    s = Settings(**_enable_tracing_secrets())
 
     result = list_all_traces_since(s, "2024-01-01T00:00:00Z")
     assert result == []
@@ -687,8 +704,7 @@ def test_list_all_traces_since_exception_returns_empty(monkeypatch):
 
     from robotsix_mill.config import Settings
 
-    _enable_tracing_secrets()
-    s = Settings()
+    s = Settings(**_enable_tracing_secrets())
 
     result = list_all_traces_since(s, "2024-01-01T00:00:00Z")
     assert result == []
