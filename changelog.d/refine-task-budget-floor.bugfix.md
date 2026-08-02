@@ -1,0 +1,5 @@
+Unblock the refine agent, which was failing every call, and stop a permanent API error from being swallowed as a successful empty run.
+
+On the Claude SDK transport an agent's `max_tokens` becomes `task_budget.total`, which the API rejects below 20,000 tokens. `refine.yaml` set `8192`, so with `refine_subscription_tier_routing_enabled` on, every refine call was rejected with `400 \`task_budget.total\` must be at least 20,000 tokens for this model`. Raised to `20000` — a hard floor, not a preference.
+
+The failure was invisible because the SDK collapses the 400 into its degenerate-`success` frame, which `_is_claude_sdk_degenerate_result` matched through the cause chain — so the refine runner logged "treating as successful run with no changes" and returned an empty result. An API `400` now takes precedence over that signature in both `_is_claude_sdk_degenerate_result` and `is_transient`, so it fails loudly instead of silently no-opping (and is never retried — the retry re-sends an identically invalid request). Matched on the message so the guard holds regardless of the installed `robotsix_llmio` version; scoped to 400, since 429 and 5xx stay retryable.
