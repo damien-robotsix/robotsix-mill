@@ -10,6 +10,9 @@
 - Rebase agent now receives the PR's implement-stage file list and any previously-dropped files as context, so it preserves them during conflict resolution instead of silently discarding them. Fixed a short-circuit bug in `check_rebase_diff_integrity` that missed drops when all PR files were removed.
 - Wire `mypy_baseline` into the pass registry, CLI, and periodic config toggles, matching the sibling `llm_agent` passes so it can be triggered on-demand via `mill mypy-baseline` or the board pass-run endpoint. (mill: Implement agent must run `robotsix-modules check-registration` (or reconcile modules.yaml globs) before declare-DONE when moving files or editing module paths (20260731T180026Z-implement-agent-must-run-robotsix-module-3478))
 - Refine block notes now include a diagnostic reason when a refined spec is rejected as degenerate — distinguishing empty specs from placeholder-phrase matches (e.g. "tbd", "see above") so operators can tell real spec gaps from false negatives.
+- AGENT.md: add "## Import hygiene" rule codifying that side-effect imports
+  (e.g. ORM table registration) must be module-level with `# noqa: F401`,
+  never function-local, to survive Ruff/vulture auto-fix passes.
 - **Breaking (sandbox):** `sandbox.run()` now defaults `install_project=True` so the workspace clone is the imported tree in ALL sandbox paths — not just the test gate. Callers that must skip the install (e.g. ad-hoc commands with no egress proxy) can pass `install_project=False` explicitly. This fixes the root cause behind the `implement.yaml` step-0 stopgap (PR #2679), where coordinating/chat agents wasted ~69 LLM rounds discovering the workspace clone wasn't on the import path.
 - Document CLI shell-completion convention in AGENT.md: when adding a CLI subcommand, regenerate `contrib/completions/` and commit in the same change to avoid CI failures.
 - Promote `from . import models` to module-level in `db.py`

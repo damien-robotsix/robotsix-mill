@@ -60,6 +60,26 @@ under `src/`.
   (vitest/jest/jsdom/playwright) or a Node setup step in CI — the test
   sandbox is network-isolated and CI runs only pytest.
 
+## Import hygiene
+
+- **Side-effect imports must be module-level.** When an import exists
+  solely for its import-time side effect (e.g. registering ORM table
+  classes into `SQLModel.metadata` before `create_all`), keep it at
+  module scope and annotate it `# noqa: F401` so Ruff and vulture
+  don't flag it as unused:
+  ```python
+  # Import models so SQLModel.metadata is populated before create_all.
+  # Must be module-level — a function-local import can be silently deleted
+  # by a ruff/vulture auto-fix pass, breaking schema creation.
+  from . import models  # noqa: F401
+  ```
+- **Never bury side-effect imports inside a function.** A
+  function-local `# noqa: F401` import is fragile: a Ruff auto-fix
+  pass (or vulture dead-code sweep) can silently delete it, and the
+  side effect — table registration, plugin discovery, signal wiring —
+  is lost with no test-failure clue beyond missing tables or unbound
+  handlers at runtime.
+
 ## Board UI
 
 - The kanban CSS/JS live in `src/robotsix_mill/runtime/static/`
