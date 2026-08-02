@@ -92,15 +92,6 @@ class MillBoardAdapter:
             "updated": t.updated_at.strftime("%Y-%m-%d %H:%M"),
         }
 
-    def move_endpoint(self, card: object) -> tuple[str, str]:
-        """Return the ``(url, http_method)`` to move a card between columns."""
-        t = _ticket(card)
-        return (f"/board/move/{t.id}/{{target_status}}", "POST")
-
-    def move_endpoint_template(self) -> str:
-        """Return the URL template for the board config."""
-        return "/board/move/{card_id}/{target_status}"
-
     def render_mode(self) -> RenderMode:
         """Mill uses JSON_HYDRATION (FastAPI + board.js)."""
         return RenderMode.JSON_HYDRATION

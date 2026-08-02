@@ -1654,8 +1654,11 @@ wheels = [
 
 [[package]]
 name = "robotsix-board"
-version = "0.1.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17#338cf1698b5f9db9afa232445fb39e298d80ce17" }
+version = "0.2.0"
+source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=214eba160408b3d9e9d5775bc84d1531a2063d4f#214eba160408b3d9e9d5775bc84d1531a2063d4f" }
+dependencies = [
+    { name = "robotsix-modules" },
+]
 
 [[package]]
 name = "robotsix-config"
@@ -1761,7 +1764,7 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2" },
     { name = "pypdf", specifier = ">=6.14.2" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=338cf1698b5f9db9afa232445fb39e298d80ce17" },
+    { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=214eba160408b3d9e9d5775bc84d1531a2063d4f" },
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config?rev=d29de204db62910f062456e5055fc2fe232e04a9" },
     { name = "robotsix-llmio", extras = ["claude-sdk", "openrouter"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=5b615548398554f50c64f1163f7240ef53ec14da" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
