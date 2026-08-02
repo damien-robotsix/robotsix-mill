@@ -2552,6 +2552,21 @@
           "title": "Sandbox Network",
           "type": "string"
         },
+        "sandbox_package_cache": {
+          "advanced": true,
+          "default": true,
+          "description": "Mount a shared disk-backed uv/pip cache into sandboxes (keeps package downloads out of the RAM-backed /tmp).",
+          "title": "Sandbox Package Cache",
+          "type": "boolean"
+        },
+        "sandbox_package_cache_max_mb": {
+          "advanced": true,
+          "default": 4096,
+          "description": "Size budget for the shared sandbox package cache, in MiB; 0 disables pruning.",
+          "minimum": 0,
+          "title": "Sandbox Package Cache Max Mb",
+          "type": "integer"
+        },
         "sandbox_pids_limit": {
           "advanced": true,
           "default": 512,
@@ -2607,6 +2622,13 @@
           "minimum": 1,
           "title": "Sandbox Slot Timeout",
           "type": "integer"
+        },
+        "sandbox_tmpfs_size": {
+          "advanced": true,
+          "default": "512m",
+          "description": "Size limit for the sandbox's /tmp tmpfs (RAM-backed).",
+          "title": "Sandbox Tmpfs Size",
+          "type": "string"
         },
         "scanner_max_drafts_per_run": {
           "advanced": true,

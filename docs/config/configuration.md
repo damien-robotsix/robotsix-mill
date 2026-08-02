@@ -519,6 +519,9 @@ the `claude` CLI in the container). These knobs govern that path:
 | `sandbox.memory` | `MILL_SANDBOX_MEMORY` | `2g` | Memory limit for sandbox containers |
 | `sandbox.pids_limit` | `MILL_SANDBOX_PIDS_LIMIT` | `512` | PID limit for sandbox containers |
 | `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
+| `sandbox.tmpfs_size` | `MILL_SANDBOX_TMPFS_SIZE` | `512m` | Size limit for the sandbox's `/tmp` tmpfs. It is RAM charged to `sandbox.memory`; an unsized Docker tmpfs defaults to half the *host's* RAM, so bounding it turns an overflow into `ENOSPC` instead of an OOM kill. |
+| `sandbox.package_cache` | `MILL_SANDBOX_PACKAGE_CACHE` | `true` | Mount a shared disk-backed `uv`/`pip` cache at `/sbxcache`, keeping package downloads out of the RAM-backed `/tmp`. Sandboxes share it, so a poisoned wheel written by one is visible to the next — set `false` to isolate. |
+| `sandbox.package_cache_max_mb` | `MILL_SANDBOX_PACKAGE_CACHE_MAX_MB` | `4096` | Size budget (MiB) for the shared package cache. The sandbox-reaper pass drops the cache once it exceeds this; `0` disables pruning. |
 | `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `1800` | Wall-clock cap (seconds) for sandbox shell/test commands |
 | `sandbox.op_timeout` | `MILL_SANDBOX_OP_TIMEOUT` | `300` | Per-docker-exec timeout (seconds) for individual sandbox operations. `0` disables. |
 | `sandbox.slot_timeout` | `MILL_SANDBOX_SLOT_TIMEOUT` | `1800` | Seconds a caller waits for a free sandbox slot before failing. Live sandboxes are capped at `MILL_MAX_GLOBAL_CONCURRENCY`; this bounds the wait so a leaked slot surfaces as an error instead of hanging a worker. |

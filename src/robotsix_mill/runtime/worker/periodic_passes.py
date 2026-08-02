@@ -715,7 +715,7 @@ class PeriodicPassesMixin(_WorkerBase):
         to wait for the next restart (the startup reaper handles those). See
         :func:`robotsix_mill.sandbox.reap_orphan_sandboxes`.
         """
-        from ...sandbox import reap_orphan_sandboxes
+        from ...sandbox import prune_package_cache, reap_orphan_sandboxes
 
         settings = self.ctx.settings
         interval = max(300, settings.sandbox_reaper_interval_seconds)
@@ -734,6 +734,10 @@ class PeriodicPassesMixin(_WorkerBase):
                         reaped,
                         threshold,
                     )
+                # Same pass, same cadence: the shared package cache is on the
+                # data volume and only grows. prune_package_cache is a no-op
+                # until it exceeds its budget, and defers while sandboxes run.
+                await asyncio.to_thread(prune_package_cache, settings)
             except asyncio.CancelledError:
                 raise
             except Exception:

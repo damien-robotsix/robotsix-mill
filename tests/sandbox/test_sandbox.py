@@ -569,7 +569,11 @@ def test_tmp_tmpfs_mounted_exec(tmp_path, monkeypatch):
     a = seen["argv"]
     tmpfs_indices = [i for i, x in enumerate(a) if x == "--tmpfs"]
     tmpfs_targets = {a[i + 1] for i in tmpfs_indices}
-    assert "/tmp:exec,rw,nosuid,nodev" in tmpfs_targets
+    # exec/nosuid/nodev still set; size= is appended (see sandbox_tmpfs_size).
+    tmp_opts = next(t for t in tmpfs_targets if t.startswith("/tmp:"))
+    assert {"exec", "rw", "nosuid", "nodev"} <= set(
+        tmp_opts.split(":", 1)[1].split(",")
+    )
     assert "/tmp" not in tmpfs_targets
 
 
@@ -1508,3 +1512,90 @@ def test_no_slot_available_raises(monkeypatch, tmp_path):
             sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
     finally:
         sem.release()
+
+
+# --- Package cache lives on disk, not in the RAM-backed /tmp ---------------
+#
+# HOME=/tmp is a tmpfs charged to the sandbox's memory cgroup, so uv/pip
+# caching the project's dependency tree there ate the memory limit (measured
+# 625 MB of /tmp/.cache in one live sandbox).
+
+
+def _argv_for(tmp_path, monkeypatch, **overrides):
+    s = _settings(tmp_path, **overrides)
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+    return seen["argv"]
+
+
+def test_tmpfs_is_size_bounded(tmp_path, monkeypatch):
+    """An unsized Docker tmpfs defaults to half the HOST's RAM, so /tmp could
+    grow until the cgroup OOM-killed the command."""
+    a = _argv_for(tmp_path, monkeypatch, sandbox_tmpfs_size="256m")
+    tmpfs = [a[i + 1] for i, v in enumerate(a) if v == "--tmpfs"]
+    assert any(t.startswith("/tmp:") and "size=256m" in t for t in tmpfs)
+
+
+def test_package_cache_is_mounted_and_env_points_at_it(tmp_path, monkeypatch):
+    a = _argv_for(tmp_path, monkeypatch, data_volume="mill_data")
+    joined = " ".join(a)
+    assert "/sbxcache" in joined
+    env = [a[i + 1] for i, v in enumerate(a) if v == "-e"]
+    assert "UV_CACHE_DIR=/sbxcache/uv" in env
+    assert "PIP_CACHE_DIR=/sbxcache/pip" in env
+    assert "XDG_CACHE_HOME=/sbxcache" in env
+    # The cache must NOT be reachable as a whole-data-dir mount: the subpath
+    # scoping is what keeps mill.db and other workspaces out of the sandbox.
+    assert "volume-subpath=_sandbox_cache" in joined
+
+
+def test_package_cache_can_be_disabled(tmp_path, monkeypatch):
+    a = _argv_for(tmp_path, monkeypatch, sandbox_package_cache=False)
+    assert "/sbxcache" not in " ".join(a)
+
+
+def test_cache_mount_is_best_effort(tmp_path, monkeypatch):
+    """A cache dir that can't be created costs memory, not a failed spawn."""
+
+    def boom(*args, **kwargs):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(Path, "mkdir", boom)
+    s = _settings(tmp_path)
+    assert sandbox._cache_mount(s) == []
+
+
+def test_prune_skips_while_sandboxes_live(tmp_path, monkeypatch):
+    """Deleting cache entries under a concurrent uv sync would fail that
+    ticket's gate for no reason."""
+    s = _settings(tmp_path, sandbox_package_cache_max_mb=0)
+    cache = tmp_path / "_sandbox_cache"
+    cache.mkdir()
+    (cache / "blob").write_bytes(b"x" * 2048)
+
+    # budget 0 disables pruning outright
+    assert sandbox.prune_package_cache(s) == 0
+    assert (cache / "blob").exists()
+
+    s2 = _settings(tmp_path, sandbox_package_cache_max_mb=1)
+    (cache / "big").write_bytes(b"x" * (2 * 1024 * 1024))
+    monkeypatch.setattr(sandbox, "_list_sandbox_containers", lambda: [("id", "sbx")])
+    assert sandbox.prune_package_cache(s2) == 0
+    assert (cache / "big").exists()
+
+    # ...and prunes once the box is idle
+    monkeypatch.setattr(sandbox, "_list_sandbox_containers", lambda: [])
+    assert sandbox.prune_package_cache(s2) > 0
+    assert not (cache / "big").exists()
+    assert cache.is_dir()
