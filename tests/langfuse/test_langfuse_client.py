@@ -47,14 +47,22 @@ def _langfuse_settings(**overrides):
     # Populate Secrets so get_secrets() returns matching values.
     import robotsix_mill.config as _cfg
 
+    base_url = secrets_kwargs.get("langfuse_base_url", "https://lf.example.com")
+    public_key = secrets_kwargs.get("langfuse_public_key", "pk-test")
+    secret_key = secrets_kwargs.get("langfuse_secret_key", "sk-test")
+
     _reset_secrets()
     _cfg._secrets = Secrets(
-        langfuse_base_url=secrets_kwargs.get(
-            "langfuse_base_url", "https://lf.example.com"
-        ),
-        langfuse_public_key=secrets_kwargs.get("langfuse_public_key", "pk-test"),
-        langfuse_secret_key=secrets_kwargs.get("langfuse_secret_key", "sk-test"),
+        langfuse_base_url=base_url,
+        langfuse_public_key=public_key,
+        langfuse_secret_key=secret_key,
     )
+    # The config-standard cutover moved these onto Settings itself; the API
+    # helpers read the Settings fields, so populating only the Secrets
+    # singleton left them unset and every call bailed out returning None.
+    overrides.setdefault("langfuse_base_url", base_url)
+    overrides.setdefault("langfuse_public_key", public_key)
+    overrides.setdefault("langfuse_secret_key", secret_key)
     return Settings(**overrides)
 
 
