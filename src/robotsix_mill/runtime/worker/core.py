@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from .. import tracing
 from ..run_registry import RunRegistry
 
+from ._gate import PriorityGate
 from .epic import _EPIC_CHILD_TERMINAL
 from .processing import (
     process_ticket,
@@ -244,9 +245,15 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._cap_deferred: set[str] = set()
         # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
         self._active: dict[str, dict] = {}
-        # Global semaphore capping total concurrently-running stages across
-        # all boards. Created in start() to bind to the running event loop.
-        self._global_semaphore: asyncio.Semaphore | None = None
+        # Global gate capping total concurrently-running stages across all
+        # boards. Created in start() to bind to the running event loop.
+        # Priority-aware: the per-board queues rank tickets, but every board
+        # then contends for the SAME cap, so a plain FIFO semaphore here
+        # threw that ranking away — a flagged ticket that instantly won its
+        # own queue still waited behind ~25 other boards' unflagged tickets.
+        # The gate admits waiters by the same (priority_rank, stage_rank)
+        # tuple, making the order fleet-wide. See ._gate.PriorityGate.
+        self._global_semaphore: PriorityGate | None = None
 
     def queue_size(self) -> int:
         """Aggregate ticket count across all per-repo queues."""
@@ -461,13 +468,30 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 self._cap_deferred.discard(ticket_id)
 
                 # --- Global concurrency cap ---
+                # Admission is ranked, not FIFO: re-read the ticket's
+                # CURRENT (priority, stage) rather than reusing the popped
+                # entry's, which was captured at enqueue time and may be
+                # stale by now. The cap-deferral demotion doesn't apply here
+                # — a cap-deferred ticket never reaches this point.
                 if self._global_semaphore is not None:
+                    admission_rank = (
+                        (
+                            0 if getattr(before, "priority", False) else 1,
+                            self._stage_rank(before),
+                        )
+                        if before is not None
+                        else (popped_prio, popped_stage)
+                    )
                     if self._global_semaphore.locked():
                         log.debug(
-                            "global concurrency cap (%d) saturated; waiting for slot",
+                            "global concurrency cap (%d) saturated, %d queued; "
+                            "%s waiting for a slot at rank %s",
                             self.ctx.settings.max_global_concurrency,
+                            self._global_semaphore.waiting,
+                            ticket_id,
+                            admission_rank,
                         )
-                    async with self._global_semaphore:
+                    async with self._global_semaphore.slot(admission_rank):
                         await process_ticket(
                             ticket_id, per_ticket_ctx, active_map=self._active
                         )
@@ -781,7 +805,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         if not self._tasks:
             repos = get_repos_config()
             cap = max(1, self.ctx.settings.max_global_concurrency)
-            self._global_semaphore = asyncio.Semaphore(cap)
+            self._global_semaphore = PriorityGate(cap)
             log.info("global concurrency cap: %d", cap)
             pool_sizes = [
                 (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()

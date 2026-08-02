@@ -3582,3 +3582,74 @@ async def test_reconcile_consumers_cancels_for_deregistered_board(ctx, monkeypat
         assert board_b not in w.queues
     finally:
         await w.stop()
+
+
+# --- global slot admission is ranked, not FIFO -----------------------
+
+
+async def test_priority_ticket_wins_global_slot_over_earlier_other_board(
+    ctx, settings, monkeypatch
+):
+    """Cross-board regression: per-board queues rank tickets, but every
+    board contends for the SAME global concurrency cap.  With a FIFO
+    semaphore there, a flagged ticket that instantly won its own queue
+    still waited behind whichever board's unflagged ticket happened to
+    reach the cap first — so operators flagged a ticket and watched
+    unflagged work from another repo start ahead of it.
+    """
+    from robotsix_mill.core import db as _db
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.runtime.worker._gate import PriorityGate
+
+    _db.init_db(settings, board_id="board-a")
+    _db.init_db(settings, board_id="board-b")
+    svc_a = TicketService(settings, board_id="board-a")
+    svc_b = TicketService(settings, board_id="board-b")
+
+    normal = svc_a.create("unflagged work on board-a")
+    flagged = svc_b.create("flagged work on board-b")
+    svc_b.set_priority(flagged.id, True)
+
+    w = Worker(ctx)
+    # No repo config → the in-flight PR cap is skipped, isolating the
+    # global-slot behaviour under test.
+    monkeypatch.setattr(Worker, "_repo_config_for_ticket", lambda self, tid: None)
+    monkeypatch.setattr(Worker, "_check_progress", lambda self, *a, **k: None)
+
+    invoked: list[str] = []
+
+    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+        invoked.append(ticket_id)
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket", fake_process_ticket
+    )
+
+    # Saturate the cap so both consumers must queue for the one slot.
+    w._global_semaphore = PriorityGate(1)
+    await w._global_semaphore.acquire((0, 0))
+
+    w.enqueue(normal.id)
+    task_a = asyncio.create_task(w._run("board-a"))
+    await asyncio.sleep(0.05)  # board-a reaches the gate FIRST
+    assert w._global_semaphore.waiting == 1
+
+    w.enqueue(flagged.id)
+    task_b = asyncio.create_task(w._run("board-b"))
+    await asyncio.sleep(0.05)  # board-b arrives second, but flagged
+    assert w._global_semaphore.waiting == 2
+
+    w._global_semaphore.release()  # free the slot; ranked admission decides
+    try:
+        await asyncio.sleep(0.1)
+    finally:
+        for t in (task_a, task_b):
+            t.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await t
+
+    assert invoked[0] == flagged.id, (
+        "the flagged ticket must take the free global slot even though "
+        f"another board's unflagged ticket queued for it first; got {invoked}"
+    )
+    assert invoked == [flagged.id, normal.id]
