@@ -123,6 +123,20 @@ def create_lifespan(
         # authenticate process-wide — not just when the board-manager runs.
         _export_openrouter_key_to_env()
 
+        # Say once, loudly, that mill cannot work — otherwise the only
+        # evidence is one RuntimeError per ticket, buried in worker logs.
+        from .credential_status import get_credential_status
+
+        cred = get_credential_status(settings)
+        if not cred["ok"]:
+            for finding in cred["missing"]:
+                logging.getLogger(__name__).error(
+                    "STARTUP: required credential %s is unset (%s) — %s",
+                    finding["config_path"],
+                    finding["name"],
+                    finding["impact"],
+                )
+
         # Initialize each registered repo's DB so per-board services
         # have schema available without lazy-init races.
         # Every ticket lives in a per-repo DB.

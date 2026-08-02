@@ -287,3 +287,83 @@ def test_empty_secrets_block(tmp_path):
     s = load_secrets(str(json_path))
     for name in Secrets.model_fields:
         assert getattr(s, name) is None
+
+
+# ===========================================================================
+#  Main-config-file sourcing (regression: #2525 left Secrets with no source)
+# ===========================================================================
+
+
+def test_bare_secrets_reads_main_config_file(monkeypatch, tmp_path):
+    """A bare ``Secrets()`` picks up the main config file's secrets block.
+
+    The clean-cutover (#2525) rewrote Secrets to read only explicit kwargs
+    and an explicit ``_secrets_file``, so every credential in the
+    operator's ``config.json`` read back as None — mill could neither call
+    an LLM nor authenticate to GitHub.
+    """
+    cfg = tmp_path / "config.json"
+    cfg.write_text(
+        '{"settings": {"data_dir": "/tmp/x"},'
+        ' "secrets": {"openrouter_api_key": "sk-main", "github_app_id": "999"}}'
+    )
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    s = Secrets()
+    assert s.openrouter_api_key == "sk-main"
+    assert s.github_app_id == "999"
+    assert s.forge_token is None
+
+
+def test_get_secrets_reads_main_config_file(monkeypatch, tmp_path):
+    """The cached ``get_secrets()`` accessor sees the config file too.
+
+    This is the accessor every call site uses (``get_secrets().openrouter_api_key``).
+    """
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"secrets": {"openrouter_api_key": "sk-cached"}}')
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    _reset_secrets()
+    assert get_secrets().openrouter_api_key == "sk-cached"
+
+
+def test_mill_secrets_file_env_overrides_main_config(monkeypatch, tmp_path):
+    """``MILL_SECRETS_FILE`` wins over the main config file, as pre-cutover."""
+    main = tmp_path / "config.json"
+    main.write_text('{"secrets": {"openrouter_api_key": "sk-main"}}')
+    override = tmp_path / "override.json"
+    override.write_text('{"secrets": {"openrouter_api_key": "sk-override"}}')
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(main))
+    monkeypatch.setenv("MILL_SECRETS_FILE", str(override))
+    assert Secrets().openrouter_api_key == "sk-override"
+
+
+def test_explicit_secrets_file_beats_main_config(monkeypatch, tmp_path):
+    """An explicit ``_secrets_file`` still wins over the main config file."""
+    main = tmp_path / "config.json"
+    main.write_text('{"secrets": {"openrouter_api_key": "sk-main"}}')
+    explicit = tmp_path / "explicit.json"
+    explicit.write_text('{"secrets": {"openrouter_api_key": "sk-explicit"}}')
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(main))
+    assert Secrets(_secrets_file=str(explicit)).openrouter_api_key == "sk-explicit"
+
+
+def test_kwargs_override_main_config_file(monkeypatch, tmp_path):
+    """Explicit kwargs beat the main config file."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text(
+        '{"secrets": {"openrouter_api_key": "sk-main", "forge_token": "ghp-main"}}'
+    )
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    s = Secrets(openrouter_api_key="sk-kwarg")
+    assert s.openrouter_api_key == "sk-kwarg"
+    assert s.forge_token == "ghp-main"
+
+
+def test_malformed_main_config_yields_all_none(monkeypatch, tmp_path):
+    """A malformed config file means "all unset", never an exception."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text("{not json at all")
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    s = Secrets()
+    for name in Secrets.model_fields:
+        assert getattr(s, name) is None

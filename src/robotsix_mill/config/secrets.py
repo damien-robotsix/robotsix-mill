@@ -1,9 +1,10 @@
 """Thin accessor for secrets stored as SecretStr fields on Settings.
 
-Secrets are now first-class fields on :class:`~robotsix_mill.config.Settings`,
-loaded via ``robotsix_config.load_config(Settings)``. This module provides a
-backward-compatible :func:`get_secrets` that unwraps ``SecretStr`` → ``str | None``
-so existing callers (``get_secrets().openrouter_api_key``, etc.) keep working.
+Values come from the ``secrets:`` block of the main mill config file
+(``config/config.json``, or ``MILL_SECRETS_FILE`` when set), read via
+``loader.load_secrets_block``. :func:`get_secrets` returns a cached wrapper
+exposing each field as ``str | None``, so existing callers
+(``get_secrets().openrouter_api_key``, etc.) keep working.
 
 The class-level ``model_fields`` and ``model_json_schema()`` exist for
 backward-compat with ``check_config_sync.py`` and ``emit_config_schema.py``.
@@ -158,10 +159,17 @@ class Secrets:
     def __init__(self, **data: Any):
         secrets_file = data.pop("_secrets_file", None)
 
-        # 1. Overlay from explicit JSON file when given.
+        # 1. Overlay from the config file — the explicit one when given,
+        #    else the main config file's ``secrets:`` block. Without this
+        #    fallback every credential reads back as None (see
+        #    ``loader.load_secrets_block``).
         if secrets_file:
             file_data = self._load_secrets_file(secrets_file)
-            data = {**file_data, **data}
+        else:
+            from .loader import load_secrets_block
+
+            file_data = load_secrets_block()
+        data = {**file_data, **data}
 
         # 2. Apply kwargs (dropping "SECRET" sentinels).
         for name, value in data.items():
