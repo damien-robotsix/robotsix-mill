@@ -2,8 +2,8 @@
 
 Exercises every public method of ``MillBoardAdapter`` plus the
 module-level ``_ticket`` helper (type-narrowing guard).  Covers
-the ``RenderMode`` None fallback, badge logic, timestamp
-formatting, and move-endpoint URL construction.
+the ``RenderMode`` None fallback, badge logic, and timestamp
+formatting.
 """
 
 from __future__ import annotations
@@ -270,43 +270,6 @@ def test_card_timestamps_raises_typeerror_for_non_ticket():
     adapter = MillBoardAdapter()
     with pytest.raises(TypeError, match="expects TicketRead"):
         adapter.card_timestamps([])
-
-
-# ---------------------------------------------------------------------------
-# move_endpoint()
-# ---------------------------------------------------------------------------
-
-
-def test_move_endpoint_returns_url_and_post():
-    adapter = MillBoardAdapter()
-    ticket = _make_ticket(id="move-me-999")
-    url, method = adapter.move_endpoint(ticket)
-    assert url == "/board/move/move-me-999/{target_status}"
-    assert method == "POST"
-
-
-def test_move_endpoint_raises_typeerror_for_non_ticket():
-    adapter = MillBoardAdapter()
-    with pytest.raises(TypeError, match="expects TicketRead"):
-        adapter.move_endpoint({})
-
-
-# ---------------------------------------------------------------------------
-# move_endpoint_template()
-# ---------------------------------------------------------------------------
-
-
-def test_move_endpoint_template_is_static():
-    adapter = MillBoardAdapter()
-    assert adapter.move_endpoint_template() == "/board/move/{card_id}/{target_status}"
-
-
-def test_move_endpoint_template_accepts_no_args():
-    """Call with no arguments (card is not needed for the template)."""
-    adapter = MillBoardAdapter()
-    result = adapter.move_endpoint_template()
-    assert "{card_id}" in result
-    assert "{target_status}" in result
 
 
 # ---------------------------------------------------------------------------

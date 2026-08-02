@@ -2225,10 +2225,9 @@
     var board = document.getElementById("board");
     if (board) {
       board.addEventListener('click', function(evt) {
-        // Only intercept .board-card, not .board-card-move forms
+        // Only intercept .board-card, not mill's own action buttons
         var card = evt.target.closest('.board-card');
         if (!card) return;
-        if (evt.target.closest('.board-card-move')) return;
         if (evt.target.closest('.move-btn')) return;
         evt.stopPropagation();
         evt.preventDefault();
