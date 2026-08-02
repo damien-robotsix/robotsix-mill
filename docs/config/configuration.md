@@ -521,6 +521,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `sandbox.readonly` | `MILL_SANDBOX_READONLY` | `true` | Mount sandbox rootfs read-only (except tmpfs `/tmp`) |
 | `sandbox.command_timeout` | `MILL_COMMAND_TIMEOUT` | `1800` | Wall-clock cap (seconds) for sandbox shell/test commands |
 | `sandbox.op_timeout` | `MILL_SANDBOX_OP_TIMEOUT` | `300` | Per-docker-exec timeout (seconds) for individual sandbox operations. `0` disables. |
+| `sandbox.slot_timeout` | `MILL_SANDBOX_SLOT_TIMEOUT` | `1800` | Seconds a caller waits for a free sandbox slot before failing. Live sandboxes are capped at `MILL_MAX_GLOBAL_CONCURRENCY`; this bounds the wait so a leaked slot surfaces as an error instead of hanging a worker. |
 | `sandbox.data_volume` | `MILL_DATA_VOLUME` | `mill_data` | Named Docker volume for data (fallback when not bind-mounted) |
 | `sandbox.data_mount` | `MILL_SANDBOX_DATA_MOUNT` | `None` | Host path for bind-mounted data directory (overrides `data_volume`) |
 | `sandbox.network` | `MILL_SANDBOX_NETWORK` | `mill-sandbox-net` | Docker network sandbox containers connect to (internal, filtered through proxy) |
