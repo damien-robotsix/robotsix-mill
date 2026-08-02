@@ -1008,3 +1008,40 @@ def test_resolved_audit_prompt_has_standards_block(monkeypatch):
     assert "robotsix-standards" in ad.system_prompt
     # The old audit-specific header should NOT appear.
     assert "REPO-DECLARED STANDARDS" not in ad.system_prompt
+
+
+def test_every_agent_max_tokens_yields_a_valid_task_budget():
+    """Regression guard for the refine outage (llmio #526 / mill #2727).
+
+    On the Claude SDK transport an agent's ``max_tokens`` becomes
+    ``task_budget.total``, which the API rejects below 20,000 — so
+    ``refine.yaml``'s deliberate 8192 failed *every* refine call. The floor is
+    robotsix_llmio's to enforce (``build_task_budget`` clamps), not something
+    each agent definition should hand-tune, so assert the contract holds for
+    every definition rather than pinning individual values.
+    """
+    from robotsix_llmio.claude_sdk._task_budget import (
+        TASK_BUDGET_MIN_TOTAL,
+        build_task_budget,
+    )
+
+    root = Path("agent_definitions")
+    if not root.exists():
+        pytest.skip("agent_definitions/ not found")
+
+    checked = 0
+    for path in sorted(root.rglob("*.yaml")):
+        if path.parent.name == "_shared":
+            continue
+        try:
+            ad = load_agent_definition(path)
+        except Exception:
+            continue  # definitions needing runtime env are covered elsewhere
+        budget = build_task_budget(ad.max_tokens, path.stem)
+        assert budget is None or budget["total"] >= TASK_BUDGET_MIN_TOTAL, (
+            f"{path}: max_tokens={ad.max_tokens} produces {budget}, which the "
+            f"API rejects (floor {TASK_BUDGET_MIN_TOTAL})"
+        )
+        checked += 1
+
+    assert checked, "no agent definitions were checked"

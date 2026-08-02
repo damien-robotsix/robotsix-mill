@@ -23,6 +23,7 @@ import time
 from typing import Any, Awaitable, Callable, TypeVar
 
 from robotsix_llmio.claude_sdk.transient import (
+    is_claude_sdk_permanent_api_error as _is_permanent_api_error,
     is_claude_sdk_transient as _is_claude_sdk_transient,
 )
 from robotsix_llmio.core import (
@@ -35,36 +36,6 @@ from robotsix_llmio.core import is_rate_limited
 from robotsix_llmio.openrouter.transient import (
     is_openrouter_transient as _is_openrouter_transient,
 )
-
-
-def _chain_contains(exc: BaseException, signature: str) -> bool:
-    """True if *signature* (lowercase) appears in *exc* or its bounded
-    cause/context chain.
-    """
-    seen: set[int] = set()
-    cur: BaseException | None = exc
-    for _ in range(10):
-        if cur is None or id(cur) in seen:
-            break
-        seen.add(id(cur))
-        if signature in str(cur).lower():
-            return True
-        cur = cur.__cause__ or cur.__context__
-    return False
-
-
-def _is_permanent_api_error(exc: BaseException) -> bool:
-    """True if the chain carries an Anthropic API ``400`` — a request-validation
-    rejection (bad or out-of-range parameter), not a transport hiccup.
-
-    Matched on the message rather than via ``robotsix_llmio``'s
-    ``is_claude_sdk_permanent_api_error`` so this guard holds regardless of which
-    llmio version is installed; the library raises a dedicated error for the same
-    signature, and either shape is caught here.
-
-    Scoped to 400 deliberately: 429 and 5xx are genuinely retryable.
-    """
-    return _chain_contains(exc, "api error: 400")
 
 
 def _is_claude_sdk_degenerate_result(exc: BaseException) -> bool:
@@ -93,11 +64,22 @@ def _is_claude_sdk_degenerate_result(exc: BaseException) -> bool:
     degenerate message, so the signature matches even though the call genuinely
     failed and can never succeed. Treating it as an empty success made refine
     silently no-op on a config error (a `task_budget.total` below the API's
-    20,000 floor) — worse than failing, because nothing alerted.
+    20,000 floor) — worse than failing, because nothing alerted. The library
+    owns that classification (``is_claude_sdk_permanent_api_error``); this only
+    defers to it.
     """
     if _is_permanent_api_error(exc):
         return False
-    return _chain_contains(exc, "returned an error result: success")
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    for _ in range(10):
+        if cur is None or id(cur) in seen:
+            break
+        seen.add(id(cur))
+        if "returned an error result: success" in str(cur).lower():
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 
 def is_transient(exc: BaseException) -> bool:
@@ -111,19 +93,16 @@ def is_transient(exc: BaseException) -> bool:
     actually ran — previously only OpenRouter errors were retried, so a Claude
     CLI hiccup or query timeout skipped local retry entirely.
 
-    An API ``400`` is excluded first: the request itself is invalid, so every
-    retry re-sends the identical rejected payload. Checked here explicitly
-    rather than relying on the transports, because the SDK collapses the 400
-    into the degenerate-``success`` frame — a signature older ``robotsix_llmio``
-    releases classify as transient.
+    An API ``400`` (request validation — every retry re-sends the identical
+    rejected payload) needs no guard here: ``is_claude_sdk_transient`` already
+    excludes it, ahead of the degenerate-``success`` signature the SDK collapses
+    it into. That ordering lives in the library, so this function inherits it.
 
     The degenerate Claude SDK ``success`` result (``is_error=True`` with
-    ``subtype='success'``) is likewise excluded — it is deterministic for a
-    given input. The refine runner catches it at the agent-output level and
-    treats it as a successful empty result.
+    ``subtype='success'``) is excluded — it is deterministic for a given input.
+    The refine runner catches it at the agent-output level and treats it as a
+    successful empty result.
     """
-    if _is_permanent_api_error(exc):
-        return False
     if _is_claude_sdk_degenerate_result(exc):
         return False
     return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)

@@ -549,8 +549,14 @@ def test_run_agent_fallback_inside_running_loop():
 
 def test_is_transient_permanent_api_400_not_retried():
     """An API 400 is request validation — every retry re-sends the identical
-    rejected payload, so it must never be transient."""
-    exc = Exception("API Error: 400 `task_budget.total` must be at least 20,000 tokens")
+    rejected payload, so it must never be transient. The classification is
+    robotsix_llmio's (``ClaudeSDKPermanentAPIError``); mill only defers to it."""
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKPermanentAPIError
+
+    exc = ClaudeSDKPermanentAPIError(
+        "Anthropic API rejected the request (refine): API Error: 400 "
+        "`task_budget.total` must be at least 20,000 tokens"
+    )
     assert is_transient(exc) is False
 
     wrapped = RuntimeError("agent run failed")
@@ -559,20 +565,24 @@ def test_is_transient_permanent_api_400_not_retried():
 
 
 def test_permanent_api_400_beats_degenerate_success():
-    """The live refine outage: the CLI reports the 400 as assistant text and
-    the SDK collapses that frame into the degenerate-success message. Both
-    signatures are in the chain — the permanent one must win, or the error is
-    swallowed as an empty success and refine silently no-ops."""
+    """The live refine outage, in the shape llmio actually raises it: the
+    permanent error wraps the collapsed degenerate-success frame as its cause.
+    Both signatures are in the chain — the permanent one must win, or the error
+    is swallowed as an empty success and refine silently no-ops."""
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKPermanentAPIError
     from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
 
-    cause = Exception(
-        "API Error: 400 `task_budget.total` must be at least 20,000 tokens"
-    )
     collapsed = Exception("Claude Code returned an error result: success")
-    collapsed.__cause__ = cause
+    permanent = ClaudeSDKPermanentAPIError(
+        "Anthropic API rejected the request (refine): API Error: 400 "
+        "`task_budget.total` must be at least 20,000 tokens"
+    )
+    permanent.__cause__ = collapsed
 
-    assert _is_claude_sdk_degenerate_result(collapsed) is False
-    assert is_transient(collapsed) is False
+    # The degenerate signature IS in the chain, so without deferring to llmio
+    # this would be swallowed as a successful empty run.
+    assert _is_claude_sdk_degenerate_result(permanent) is False
+    assert is_transient(permanent) is False
 
 
 def test_degenerate_success_without_api_error_still_swallowed():
@@ -588,9 +598,12 @@ def test_degenerate_success_without_api_error_still_swallowed():
     )
 
 
-def test_retryable_api_status_codes_stay_transient():
-    """Scoped to 400 — rate limits and server errors must keep retrying."""
+def test_permanent_guard_is_the_library_predicate():
+    """mill must not carry its own copy of this classification — the guard is
+    llmio's ``is_claude_sdk_permanent_api_error``, re-exported under a private
+    alias. Pinning this keeps a local reimplementation from creeping back."""
+    from robotsix_llmio.claude_sdk.transient import is_claude_sdk_permanent_api_error
+
     from robotsix_mill.agents.retry import _is_permanent_api_error
 
-    assert _is_permanent_api_error(Exception("API Error: 429 rate limited")) is False
-    assert _is_permanent_api_error(Exception("API Error: 500 internal")) is False
+    assert _is_permanent_api_error is is_claude_sdk_permanent_api_error

@@ -62,7 +62,7 @@ default-groups = ["dev"]
 exclude-newer = "7d"
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "5b615548398554f50c64f1163f7240ef53ec14da" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "c65df6bbb6fdc26665f4494e9e994bcf87891145" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "214eba160408b3d9e9d5775bc84d1531a2063d4f" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "d29de204db62910f062456e5055fc2fe232e04a9" }
