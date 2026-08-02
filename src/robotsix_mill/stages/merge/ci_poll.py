@@ -19,6 +19,7 @@ from ...forge import Forge, get_forge
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
+    _CI_POLL_REFRESH_SHA,
     _AUTO_FIX_CYCLES,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
@@ -316,7 +317,16 @@ class CIPollMixin(_MergeStageBase):
                 )
             else:
                 _refresh_branch_for_ci(
-                    _repo_dir, branch, _target, _remote_url, _token, ticket.id
+                    _repo_dir,
+                    branch,
+                    _target,
+                    _remote_url,
+                    _token,
+                    ticket.id,
+                    sentinel_path=(
+                        ctx.service.workspace(ticket).artifacts_dir
+                        / _CI_POLL_REFRESH_SHA
+                    ),
                 )
 
         # Check remote CI.

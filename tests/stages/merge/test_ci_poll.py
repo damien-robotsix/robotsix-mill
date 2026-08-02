@@ -1624,3 +1624,123 @@ def test_stale_failing_run_replaced_by_fresh_green_after_refresh(tmp_path, monke
     assert out.next_state is State.HUMAN_MR_APPROVAL, (
         f"Expected HUMAN_MR_APPROVAL after fresh green CI, got {out.next_state}: {out.note}"
     )
+
+
+# --- the CI refresh is bounded to one empty commit per branch head ----
+
+
+def _refresh_env(tmp_path, monkeypatch, *, head_seq):
+    """Stub git_ops for _refresh_branch_for_ci: rebase is always a no-op and
+    the remote matches local, so the empty-commit path is live. ``head_seq``
+    supplies successive head SHAs."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    pushed: list[str] = []
+    state = {"head": head_seq[0], "i": 0}
+
+    monkeypatch.setattr(shared_mod.git_ops, "try_rebase_onto", lambda *a, **k: False)
+    monkeypatch.setattr(shared_mod.git_ops, "head_sha", lambda repo: state["head"])
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "ls_remote_sha",
+        lambda remote_url, ref, token=None: state["head"],
+    )
+
+    def _empty_commit(repo, message):
+        state["i"] += 1
+        state["head"] = head_seq[min(state["i"], len(head_seq) - 1)]
+
+    monkeypatch.setattr(shared_mod.git_ops, "empty_commit", _empty_commit)
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "push",
+        lambda repo, branch, url, token: pushed.append(state["head"]),
+    )
+    return pushed
+
+
+def test_refresh_pushes_at_most_one_empty_commit_per_head(tmp_path, monkeypatch):
+    """Regression: a ticket bouncing IMPLEMENT_COMPLETE -> FIXING_CI ->
+    IMPLEMENT_COMPLETE re-enters the merge poll each time, and each entry
+    pushed another empty commit. Observed 2026-08-02 on robotsix-http
+    ...-d320: three empty commits in 22 seconds from two call sites, each
+    one restarting the CI run the previous had triggered.
+    """
+    from robotsix_mill.stages.merge._shared import (
+        _CI_POLL_REFRESH_SHA,
+        _refresh_branch_for_ci,
+    )
+
+    pushed = _refresh_env(tmp_path, monkeypatch, head_seq=["sha-a", "sha-b", "sha-c"])
+    sentinel = tmp_path / "artifacts" / _CI_POLL_REFRESH_SHA
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    args = (str(repo), "br", "main", "https://remote", "tok", "tid")
+    assert _refresh_branch_for_ci(*args, sentinel_path=sentinel) is True
+    assert len(pushed) == 1
+
+    # Same head → no second commit, however many times the poll re-enters.
+    for _ in range(3):
+        assert _refresh_branch_for_ci(*args, sentinel_path=sentinel) is False
+    assert len(pushed) == 1, f"one refresh per head; got {pushed}"
+
+
+def test_refresh_allowed_again_once_the_branch_really_moves(tmp_path, monkeypatch):
+    """The sentinel must not wedge the refresh forever — a real push (a
+    landed fix) moves the head, and that new head gets its own budget."""
+    from robotsix_mill.stages.merge._shared import (
+        _CI_POLL_REFRESH_SHA,
+        _refresh_branch_for_ci,
+    )
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    pushed = _refresh_env(tmp_path, monkeypatch, head_seq=["sha-a", "sha-b"])
+    sentinel = tmp_path / "artifacts" / _CI_POLL_REFRESH_SHA
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    args = (str(repo), "br", "main", "https://remote", "tok", "tid")
+
+    assert _refresh_branch_for_ci(*args, sentinel_path=sentinel) is True
+    assert _refresh_branch_for_ci(*args, sentinel_path=sentinel) is False
+
+    # Something real pushes and moves the branch on.
+    monkeypatch.setattr(shared_mod.git_ops, "head_sha", lambda repo: "sha-landed")
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "ls_remote_sha",
+        lambda remote_url, ref, token=None: "sha-landed",
+    )
+    assert _refresh_branch_for_ci(*args, sentinel_path=sentinel) is True
+    assert len(pushed) == 2
+
+
+def test_successful_rebase_does_not_also_push_an_empty_commit(tmp_path, monkeypatch):
+    """A rebase that pushed already produced a fresh head and a fresh run;
+    an empty commit on top would only invalidate it."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
+    from robotsix_mill.stages.merge._shared import _refresh_branch_for_ci
+
+    empty_commits: list[str] = []
+    monkeypatch.setattr(shared_mod.git_ops, "try_rebase_onto", lambda *a, **k: True)
+    monkeypatch.setattr(shared_mod.git_ops, "push", lambda *a, **k: None)
+    monkeypatch.setattr(shared_mod.git_ops, "head_sha", lambda repo: "same")
+    monkeypatch.setattr(
+        shared_mod.git_ops, "ls_remote_sha", lambda remote_url, ref, token=None: "same"
+    )
+    monkeypatch.setattr(
+        shared_mod.git_ops,
+        "empty_commit",
+        lambda repo, message: empty_commits.append(message),
+    )
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    assert (
+        _refresh_branch_for_ci(str(repo), "br", "main", "https://remote", "tok", "tid")
+        is True
+    )
+    assert empty_commits == [], (
+        "the rebase push already triggered a fresh run; the empty commit "
+        "would abandon it"
+    )
