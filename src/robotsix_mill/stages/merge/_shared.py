@@ -79,6 +79,7 @@ def _reconcile_with_remote_pr(
 
 
 __all__ = [
+    "_CI_POLL_REFRESH_SHA",
     "_REBASE_DROPPED",
     "_read_counter",
     "_read_dropped_files",
@@ -97,6 +98,10 @@ _REV_REV_COUNTER = "review_revision_attempts.txt"
 _AUTO_FIX_CYCLES = "auto_fix_cycles.txt"
 _LAST_AUTO_FIX_STAGE = "last_auto_fix_stage.txt"
 _PING_PONG_COUNT = "ping_pong_count.txt"
+# Head SHA produced by the last CI-refresh push. Bounds the refresh to one
+# per branch head so a ticket re-entering the merge poll cannot accumulate
+# empty commits. See _refresh_branch_for_ci.
+_CI_POLL_REFRESH_SHA = "ci_poll_refresh_sha.txt"
 
 
 def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
@@ -228,6 +233,7 @@ def _refresh_branch_for_ci(
     remote_url: str,
     token: str | None,
     ticket_id: str,
+    sentinel_path: Path | None = None,
 ) -> bool:
     """Force a fresh CI run by rebasing onto *target* or pushing an empty commit.
 
@@ -237,12 +243,39 @@ def _refresh_branch_for_ci(
     turn green.  Call this BEFORE evaluating CI status so a resume from
     BLOCKED on a transient flake un-sticks in one cycle.
 
+    *sentinel_path* bounds the refresh to **once per branch head**. Without
+    it a ticket that keeps re-entering the caller's poll gets a fresh empty
+    commit every time: observed 2026-08-02 on ``robotsix-http`` ...-d320,
+    three empty commits in 22 seconds from two call sites, because the
+    ticket bounced IMPLEMENT_COMPLETE -> FIXING_CI -> IMPLEMENT_COMPLETE and
+    each transition re-polled. The sentinel stores the head SHA produced by
+    the last refresh, so the next call is a no-op until something real
+    pushes and moves the branch on.
+
     Returns ``True`` when a commit was pushed (new CI run triggered).
     Errors are logged and return ``False`` (caller proceeds with existing
     HEAD).
     """
     repo_path = Path(repo_dir)
     pushed = False
+
+    if sentinel_path is not None:
+        try:
+            if sentinel_path.exists() and sentinel_path.read_text(
+                encoding="utf-8"
+            ).strip() == git_ops.head_sha(repo_path):
+                log.info(
+                    "%s: CI already refreshed for the current head — "
+                    "not pushing another empty commit",
+                    ticket_id,
+                )
+                return False
+        except Exception:
+            log.warning(
+                "%s: could not read the CI-refresh sentinel — refreshing",
+                ticket_id,
+                exc_info=True,
+            )
 
     # 1. Rebase onto target so the branch is current.
     try:
@@ -279,27 +312,44 @@ def _refresh_branch_for_ci(
     #    This un-sticks tickets whose original CI failure was a transient
     #    flake that has since resolved (the old, failing check-runs are
     #    pinned to the stale SHA and can never turn green).
+    #    Skipped when the rebase above already pushed: that push produced a
+    #    new head SHA and therefore a fresh run, so an empty commit on top
+    #    would only invalidate the run we just triggered.
     try:
-        local_sha = git_ops.head_sha(repo_path)
-        remote_sha = git_ops.ls_remote_sha(remote_url, f"refs/heads/{branch}", token)
-        if remote_sha is not None and local_sha == remote_sha:
-            git_ops.empty_commit(
-                repo_path,
-                "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+        if not pushed:
+            local_sha = git_ops.head_sha(repo_path)
+            remote_sha = git_ops.ls_remote_sha(
+                remote_url, f"refs/heads/{branch}", token
             )
-            git_ops.push(repo_path, branch, remote_url, token)
-            pushed = True
-            log.info(
-                "%s: pushed empty commit to force fresh CI run "
-                "(branch was already current)",
-                ticket_id,
-            )
+            if remote_sha is not None and local_sha == remote_sha:
+                git_ops.empty_commit(
+                    repo_path,
+                    "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+                )
+                git_ops.push(repo_path, branch, remote_url, token)
+                pushed = True
+                log.info(
+                    "%s: pushed empty commit to force fresh CI run "
+                    "(branch was already current)",
+                    ticket_id,
+                )
     except Exception:
         log.warning(
             "%s: empty-commit push failed — proceeding with existing HEAD",
             ticket_id,
             exc_info=True,
         )
+
+    if pushed and sentinel_path is not None:
+        # Record the head we just produced so the next poll is a no-op until
+        # something real moves the branch on.
+        try:
+            sentinel_path.parent.mkdir(parents=True, exist_ok=True)
+            sentinel_path.write_text(git_ops.head_sha(repo_path), encoding="utf-8")
+        except Exception:
+            log.warning(
+                "%s: could not write the CI-refresh sentinel", ticket_id, exc_info=True
+            )
 
     return pushed
 
