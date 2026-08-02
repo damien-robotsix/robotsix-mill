@@ -21,11 +21,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 import robotsix_config
 
 from ._settings_core import _CoreSettings
+from .json_source import JsonSettingsSource
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
@@ -111,6 +116,38 @@ class Settings(
         # use their alias instead, unaffected by this prefix.
         env_prefix="MILL_",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Read the JSON config file at second-lowest priority — above only
+        the Field defaults, so ``os.environ`` still wins.
+
+        Precedence, highest first:
+
+        1. explicit ``Settings(k=v)`` kwargs
+        2. ``os.environ``
+        3. file secrets
+        4. the JSON config file
+        5. ``Field(default=...)``
+
+        Without this the model has no file source at all: the cutover (#2525)
+        moved file loading into ``load_settings()``, which nothing calls, so
+        ``Settings()`` returned defaults and the operator's config was
+        ignored everywhere.
+        """
+        return (
+            init_settings,
+            env_settings,
+            file_secret_settings,
+            JsonSettingsSource(settings_cls),
+        )
 
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. *board_id* is required —

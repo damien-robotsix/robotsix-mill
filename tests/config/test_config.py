@@ -823,3 +823,74 @@ def test_effective_skills_dir_honors_dir_created_after_first_call(
     assert effective_skills_dir(custom) == packaged_skills_dir()
     custom.mkdir()
     assert effective_skills_dir(custom) == custom
+
+
+# ===========================================================================
+#  JSON config file sourcing
+# ===========================================================================
+#
+# The config-standard cutover (#2525) removed Settings' JSON source in favour
+# of a load_settings() helper that nothing called, so every bare Settings()
+# silently returned model defaults. Undeployed, that would have reverted the
+# operator's entire configuration on the next deploy — the sandbox cap
+# included. These pin the file back as a real source.
+
+
+def _write_config(path: Path, settings_block: dict) -> None:
+    path.write_text(json.dumps({"settings": settings_block, "secrets": {}}))
+
+
+def test_settings_reads_the_json_config_file(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.json"
+    _write_config(cfg, {"api_port": 9123, "MILL_MAX_GLOBAL_CONCURRENCY": 7})
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    s = Settings()
+    assert s.api_port == 9123
+    # Aliased fields are keyed by their alias in the file.
+    assert s.max_global_concurrency == 7
+
+
+def test_env_overrides_the_json_config_file(tmp_path, monkeypatch):
+    """The file sits below os.environ, never above it."""
+    cfg = tmp_path / "config.json"
+    _write_config(cfg, {"MILL_MAX_GLOBAL_CONCURRENCY": 7})
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("MILL_MAX_GLOBAL_CONCURRENCY", "2")
+
+    assert Settings().max_global_concurrency == 2
+
+
+def test_settings_rereads_the_file_each_construction(tmp_path, monkeypatch):
+    """PUT /config rewrites the file; the next read must see it."""
+    cfg = tmp_path / "config.json"
+    _write_config(cfg, {"auto_approve_enabled": False})
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    assert Settings().auto_approve_enabled is False
+
+    _write_config(cfg, {"auto_approve_enabled": True})
+    assert Settings().auto_approve_enabled is True
+
+
+def test_unknown_keys_in_the_file_do_not_break_extra_forbid(tmp_path, monkeypatch):
+    """Real configs carry sibling blocks and retired keys; Settings has
+    extra='forbid', so the source must filter to known fields."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {"api_port": 9124, "a_retired_setting": "x"},
+                "secrets": {"openrouter_api_key": "sk-nope"},
+                "repos": {},
+                "core": {"anything": 1},
+            }
+        )
+    )
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    assert Settings().api_port == 9124
+
+
+def test_missing_config_file_falls_back_to_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(tmp_path / "nope.json"))
+    assert Settings().api_port == 8077

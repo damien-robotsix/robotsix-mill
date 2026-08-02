@@ -60,6 +60,33 @@ def _load_file(target: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def load_settings_block() -> dict[str, Any]:
+    """Return the main config file's ``settings`` block, alias-keyed.
+
+    Backs :class:`~robotsix_mill.config.json_source.JsonSettingsSource`, so
+    ``Settings()`` picks the operator's config up again. The clean-cutover to
+    the config-standard (#2525) dropped that source in favour of
+    ``load_settings()`` but never rewired the call sites, and nothing else
+    reads the file — so every one of the several hundred bare ``Settings()``
+    constructions silently fell back to model defaults. Undeployed, that
+    would have reverted mill's entire configuration on the next deploy.
+
+    Falls back to the top level for flat files (no ``settings`` block), and
+    strips the sibling blocks that belong to other models. Never raises: a
+    missing or malformed file means "all defaults", matching
+    ``robotsix_config.load_config`` semantics.
+    """
+    main_path = _resolve_main_config_path()
+    if main_path is None:
+        return {}
+    data = _load_file(main_path)
+    block = data.get("settings")
+    if isinstance(block, dict):
+        return dict(block)
+    # Flat file: everything except the sibling blocks is a setting.
+    return {k: v for k, v in data.items() if k not in ("secrets", "repos", "core")}
+
+
 def _resolve_data_dir() -> Path:
     """Resolve ``data_dir`` from the main config when available, else ``.data``."""
     main_path = _resolve_main_config_path()
