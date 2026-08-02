@@ -136,6 +136,14 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         "web_fetch_max_total_bytes",
         "web_fetch_max_text_bytes",
         "web_fetch_raw",
+        # -- sandbox_push_token is a secret field documented in the
+        #    "Secrets reference" table, not the settings tables.  Its
+        #    default is None and the secrets table has no "Default" column.
+        "sandbox_push_token",
+        # -- repos is configured via the "repos" key in config.json,
+        #    documented in the "Repos registry" section, not the
+        #    numbered settings tables.  Its default is an empty dict.
+        "repos",
     }
 )
 

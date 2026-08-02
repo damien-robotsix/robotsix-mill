@@ -563,6 +563,7 @@ modules:
       - CHANGELOG.md
       - doc-agent-ledger.md
       - .doc_memory_ledger.md
+      - doc_agent_output.json
       - LICENSE
       - SECURITY.md
       - AGENT.md

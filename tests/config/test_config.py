@@ -237,10 +237,10 @@ def test_default_web_research_requests():
 
 
 def test_default_sandbox_image():
-    """The sandbox image defaults to robotsix/mill-sandbox:latest via
-    the YAML config override (field default is python:3.14-slim)."""
+    """The sandbox image field default is python:3.14-slim.  Production
+    config overrides this to robotsix/mill-sandbox:latest."""
     s = Settings()
-    assert s.sandbox_image == "robotsix/mill-sandbox:latest"
+    assert s.sandbox_image == "python:3.14-slim"
 
 
 def test_default_language_instructions_dir():
