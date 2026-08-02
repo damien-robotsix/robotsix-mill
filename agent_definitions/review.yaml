@@ -22,7 +22,7 @@ list_threads: false
 # version-specific syntax in the diff.
 inject_language_conventions: true
 output_type: ReviewVerdict
-retries: 2
+retries: 3
 ask_user: false
 # Hard output-token cap backstopping runaway prose-narrative generations.
 # The DeepSeek reasoning model burns output tokens on internal reasoning
