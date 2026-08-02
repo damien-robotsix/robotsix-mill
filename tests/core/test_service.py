@@ -2858,7 +2858,6 @@ def test_collect_candidate_boards_default_repo_survives_disk_scan_failure(
 
     # Simulate a disk-scan failure (e.g. permission error on data_dir).
     import pathlib
-    from unittest.mock import patch
 
     _real_iterdir = pathlib.Path.iterdir
 
