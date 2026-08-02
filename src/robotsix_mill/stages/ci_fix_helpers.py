@@ -21,6 +21,14 @@ __all__ = ["_read_counter", "_write_counter"]
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
 _CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
+# Empty-commit CI refreshes attempted for the current failure. Bounded: the
+# refresh only ever pays off for a stale/flaky run, and pushing one
+# invalidates the very status this stage reads, so an unbounded retry can
+# never reach the fix agent. Reset on genuine forward progress.
+_CI_EMPTY_COMMIT_COUNTER = "ci_fix_empty_commit_attempts.txt"
+# One refresh is enough to rule out a stale run; a second would only
+# re-invalidate the status again.
+_MAX_CI_EMPTY_COMMIT_REFRESHES = 1
 
 # Check-run names that are CodeQL-related (case-insensitive contains).
 _CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})
