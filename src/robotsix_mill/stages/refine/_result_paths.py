@@ -16,6 +16,7 @@ from ...agents import refining
 from ...config.settings import Settings
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
+from ...core.text_noop import degenerate_body_reason
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from .helpers import (
@@ -410,6 +411,7 @@ def _degenerate_spec_outcome(
     draft: str,
     *,
     prefix: str = "refined (no usable spec",
+    spec_reason: str | None = None,
 ) -> Outcome:
     """Route a ticket whose refined spec is degenerate, falling back to *draft*.
 
@@ -426,11 +428,14 @@ def _degenerate_spec_outcome(
     blocks — correctly, since there is then genuinely nothing to implement.
     """
     draft_usable = not _spec_is_degenerate(draft)
-    base_note = (
-        f"{prefix} — kept original draft)"
-        if draft_usable
-        else f"{prefix}, and the original draft is empty too)"
-    )
+    spec_why = f" ({spec_reason})" if spec_reason else ""
+    if draft_usable:
+        base_note = f"{prefix}{spec_why} — kept original draft)"
+    else:
+        draft_why = degenerate_body_reason(draft) or "draft is degenerate"
+        base_note = (
+            f"{prefix}{spec_why}, and the original draft is empty too ({draft_why}))"
+        )
     return resolved_outcome(ctx, draft, ticket.id, base_note, source=ticket.source)
 
 
@@ -447,13 +452,14 @@ def single_scope_path(
     """Handle the normal (non-split) single-scope result."""
     spec = result.spec_markdown or ""
     if _spec_is_degenerate(spec):
+        spec_reason = degenerate_body_reason(spec)
         log.warning(
             "%s: refiner produced no usable spec (empty or "
             "placeholder %r) — proceeding with original draft",
             ticket.id,
             spec[:60],
         )
-        return _degenerate_spec_outcome(ctx, ticket, draft)
+        return _degenerate_spec_outcome(ctx, ticket, draft, spec_reason=spec_reason)
 
     if s.spec_review_enabled and not reviewer_comments:
         spec = review_spec_conciseness(s, ws, ticket, spec, "refine-verbose.md")
@@ -485,6 +491,7 @@ def multi_scope_path(
     if not children_raw or len(children_raw) == 0:
         spec = result.spec_markdown or ""
         if _spec_is_degenerate(spec):
+            spec_reason = degenerate_body_reason(spec)
             log.warning(
                 "%s: refiner produced no usable spec "
                 "(split with no children) — "
@@ -493,7 +500,11 @@ def multi_scope_path(
             )
             ack_threads(ctx, ticket, reviewer_comments, open_thread_ids)
             return _degenerate_spec_outcome(
-                ctx, ticket, draft, prefix="refined (empty spec, split degraded"
+                ctx,
+                ticket,
+                draft,
+                prefix="refined (empty spec, split degraded",
+                spec_reason=spec_reason,
             )
 
         if s.spec_review_enabled and not reviewer_comments:

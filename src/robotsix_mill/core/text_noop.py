@@ -77,6 +77,34 @@ PLACEHOLDER_BODY_PHRASES: tuple[str, ...] = (
 )
 
 
+def degenerate_body_reason(text: str | None) -> str | None:
+    """Return a human-readable reason *text* is degenerate, or ``None``.
+
+    Companion to :func:`is_degenerate_body` that explains WHY the body
+    was rejected — so refine block notes can distinguish real spec gaps
+    from false negatives (e.g. a 13k-char prescriptive draft that the
+    refiner returned as a placeholder pointer).
+
+    Returns a short sentence (no trailing period) like ``"body is empty"``,
+    ``"body is only punctuation"``, or ``"body matches placeholder phrase
+    'tbd'"``.  Returns ``None`` when the body passes all checks.
+    """
+    import re
+
+    stripped = (text or "").strip()
+    if not stripped:
+        return "body is empty"
+    if len(stripped) > 120:
+        return None
+    norm = " ".join(re.sub(r"[^a-z0-9 ]+", " ", stripped.lower()).split())
+    if not norm:
+        return "body is only punctuation"
+    for p in PLACEHOLDER_BODY_PHRASES:
+        if p in norm:
+            return f"body matches placeholder phrase {p!r}"
+    return None
+
+
 def is_degenerate_body(text: str | None) -> bool:
     """True when *text* is empty or a placeholder pointer, not real content.
 
@@ -86,14 +114,4 @@ def is_degenerate_body(text: str | None) -> bool:
     body was literally ``"..."`` reached the board and then blocked in
     refine, which is what this guards.
     """
-    import re
-
-    stripped = (text or "").strip()
-    if not stripped:
-        return True
-    if len(stripped) > 120:
-        return False
-    norm = " ".join(re.sub(r"[^a-z0-9 ]+", " ", stripped.lower()).split())
-    if not norm:
-        return True
-    return any(p in norm for p in PLACEHOLDER_BODY_PHRASES)
+    return degenerate_body_reason(text) is not None
