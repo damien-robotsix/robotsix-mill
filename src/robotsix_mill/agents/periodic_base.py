@@ -58,7 +58,14 @@ def _count_active_proposals(recent_proposals: str) -> int:
     active = 0
     for line in recent_proposals.splitlines():
         # Lines look like:  [state_value] ticket_id | title
+        # Skip the column-header line (ticket IDs always start with a digit).
         if line.startswith("[") and "] " in line:
+            rest = line.split("] ", 1)[1]
+            if " | " not in rest:
+                continue
+            ticket_part = rest.split(" | ", 1)[0].strip()
+            if not ticket_part or not ticket_part[0].isdigit():
+                continue
             state = line[1:].split("]", 1)[0].strip()
             if state not in (State.DONE.value, State.CLOSED.value):
                 active += 1

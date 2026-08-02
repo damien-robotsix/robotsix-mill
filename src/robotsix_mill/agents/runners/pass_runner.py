@@ -360,12 +360,13 @@ def _format_recent_proposals(tickets: list[Ticket], max_age_days: float = 7.0) -
     if max_age_days is not None and max_age_days > 0 and tickets:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
         tickets = [t for t in tickets if t.created_at and t.created_at >= cutoff]
+    lines = ["<recent_proposals>", "[STATE] id | title"]
     if not tickets:
-        return "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
-    lines = ["<recent_proposals>"]
-    for t in tickets:
-        state_val = t.state.value
-        lines.append(f"[{state_val}] {t.id} | {t.title}")
+        lines.append("(no recent proposals)")
+    else:
+        for t in tickets:
+            state_val = t.state.value
+            lines.append(f"[{state_val}] {t.id} | {t.title}")
     lines.append("</recent_proposals>")
     return "\n".join(lines)
 
