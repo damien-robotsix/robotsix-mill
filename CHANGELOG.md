@@ -1,6 +1,10 @@
 ## 0.0.0 (unreleased)
 
 - ci_fix agent: add pre-commit hook verification guidance to the system prompt — fetch upstream `.pre-commit-hooks.yaml` before guessing hook config, verify Docker image tags exist before pushing, and confirm the pinned revision actually exposes the hook manifest.  Reduces the guess-and-push loop that burns CI verification iterations on misconfigured pre-commit entries.
+- `scripts/emit_config_schema.py --check` now prints a unified diff showing
+  exactly what differs when the committed schema drifts from the generated
+  one, giving CI-fix agents (and humans) actionable signal instead of a
+  bare "stale" message.
 - Re-synced `mypy-baseline.txt`: removed 2 stale entries for resolved strict-mode violations, fixing CI's baseline-ratchet step on main.
 - Implement agent: always run `robotsix-modules check-registration` as a pre-DONE gate, not just when new files are created. This catches glob drift from file moves, deletions, and directory restructuring before the post-merge auto-fix cycle.
 - Rebase agent now receives the PR's implement-stage file list and any previously-dropped files as context, so it preserves them during conflict resolution instead of silently discarding them. Fixed a short-circuit bug in `check_rebase_diff_integrity` that missed drops when all PR files were removed.

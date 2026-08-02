@@ -10,11 +10,15 @@ Exit codes:
 """
 
 import copy
+import difflib
 import json
 import sys
 from pathlib import Path
 
 SCHEMA_PATH = Path("config/config.schema.json")
+
+# Max lines of unified diff to emit when --check finds drift.
+_MAX_DIFF_LINES = 200
 
 
 def _hoist_defs(schema: dict, root_defs: dict) -> dict:
@@ -36,6 +40,37 @@ def _hoist_defs(schema: dict, root_defs: dict) -> dict:
             if def_name not in root_defs:
                 root_defs[def_name] = def_schema
     return schema
+
+
+def _compute_diff(
+    committed: str,
+    generated: str,
+    fromfile: str = "committed",
+    tofile: str = "generated",
+    max_lines: int = _MAX_DIFF_LINES,
+) -> str:
+    """Return a unified diff between *committed* and *generated*.
+
+    Returns an empty string when the two texts are identical.
+    Caps output at *max_lines* lines to avoid flooding logs.
+    """
+    if committed == generated:
+        return ""
+    committed_lines = committed.splitlines(keepends=True)
+    generated_lines = generated.splitlines(keepends=True)
+    diff = list(
+        difflib.unified_diff(
+            committed_lines,
+            generated_lines,
+            fromfile=fromfile,
+            tofile=tofile,
+        )
+    )
+    if len(diff) > max_lines:
+        truncated = diff[:max_lines]
+        truncated.append(f"... (truncated; {len(diff) - max_lines} more lines)\n")
+        return "".join(truncated)
+    return "".join(diff)
 
 
 def build_schema() -> dict:
@@ -89,7 +124,16 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-        if SCHEMA_PATH.read_text() != generated:
+        committed = SCHEMA_PATH.read_text()
+        if committed != generated:
+            diff_text = _compute_diff(
+                committed,
+                generated,
+                fromfile=f"{SCHEMA_PATH} (committed)",
+                tofile="generated",
+            )
+            if diff_text:
+                print(diff_text, file=sys.stderr, end="")
             print(
                 f"ERROR: {SCHEMA_PATH} is stale. "
                 "Run: uv run python scripts/emit_config_schema.py",
