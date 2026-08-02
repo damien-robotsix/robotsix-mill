@@ -856,6 +856,25 @@ class _CoreSettings(BaseModel):
         description="PID limit for sandbox containers.",
         json_schema_extra={"advanced": True},
     )
+    # Sandboxes cap memory and PIDs but historically nothing bounded CPU, so
+    # ``max_global_concurrency`` sandboxes could each take as many cores as
+    # their test command's parallelism allowed — the cap bounded the container
+    # COUNT while host load stayed unbounded. A quota here makes the two
+    # proportional (N sandboxes ≤ N × this), which is what makes raising the
+    # concurrency cap safe rather than merely optimistic.
+    #
+    # 0 disables the limit — the previous behaviour, and the right default
+    # since the useful value depends on the host's core count. Set it when
+    # raising max_global_concurrency past roughly half your cores.
+    sandbox_cpus: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "CPU quota per sandbox container, in cores (e.g. 0.7); "
+            "0 disables the limit."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # How long a caller waits for a free sandbox slot before giving up.
     # Generous by design: the cap is a memory guard, and a queued periodic
     # pass should wait behind a long test run rather than fail. Bounded

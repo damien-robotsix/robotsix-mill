@@ -1599,3 +1599,32 @@ def test_prune_skips_while_sandboxes_live(tmp_path, monkeypatch):
     assert sandbox.prune_package_cache(s2) > 0
     assert not (cache / "big").exists()
     assert cache.is_dir()
+
+
+# --- CPU quota -------------------------------------------------------------
+#
+# Memory and PIDs were capped but CPU was not, so max_global_concurrency
+# bounded the sandbox COUNT while host load stayed unbounded.
+
+
+def test_cpu_quota_applied_when_set(tmp_path, monkeypatch):
+    a = _argv_for(tmp_path, monkeypatch, sandbox_cpus=0.7)
+    assert "--cpus" in a
+    assert a[a.index("--cpus") + 1] == "0.7"
+
+
+def test_cpu_quota_absent_when_zero(tmp_path, monkeypatch):
+    """0 keeps the pre-existing unlimited behaviour."""
+    a = _argv_for(tmp_path, monkeypatch, sandbox_cpus=0)
+    assert "--cpus" not in a
+
+
+def test_cpu_quota_is_plain_decimal(tmp_path, monkeypatch):
+    """Docker rejects scientific notation, which repr() emits for small floats."""
+    a = _argv_for(tmp_path, monkeypatch, sandbox_cpus=0.125)
+    value = a[a.index("--cpus") + 1]
+    assert "e" not in value.lower()
+    assert value == "0.125"
+    # Whole numbers stay clean too.
+    a2 = _argv_for(tmp_path, monkeypatch, sandbox_cpus=2.0)
+    assert a2[a2.index("--cpus") + 1] == "2"

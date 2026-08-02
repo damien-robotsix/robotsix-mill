@@ -603,6 +603,14 @@ def run(
         "-w",
         str(repo_dir),
     ]
+    # Bound CPU the way memory and PIDs already are. Without this the
+    # concurrency cap bounds the sandbox COUNT while host load stays
+    # unbounded — N sandboxes each take whatever their test command's
+    # parallelism allows, which is what kept the safe cap so low.
+    if settings.sandbox_cpus > 0:
+        # Docker wants a plain decimal; repr() on a float can emit
+        # scientific notation for very small values, which it rejects.
+        argv += ["--cpus", f"{settings.sandbox_cpus:.3f}".rstrip("0").rstrip(".")]
     # Keep the package caches OUT of the RAM-backed /tmp (see _cache_mount).
     # XDG_CACHE_HOME covers uv's default location and most other tools;
     # UV_CACHE_DIR/PIP_CACHE_DIR are set explicitly so neither depends on it.
