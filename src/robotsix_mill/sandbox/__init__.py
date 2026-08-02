@@ -314,6 +314,58 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
     ]
 
 
+# Package cache: on DISK, not in the tmpfs -----------------------------------
+#
+# ``HOME=/tmp`` and ``/tmp`` is a tmpfs, i.e. RAM charged to the sandbox's own
+# memory cgroup. So every byte ``uv``/``pip`` cached under ``$HOME/.cache`` ate
+# the container's memory limit. Since the test gate started installing the
+# project (``_maybe_install_prefix``), and especially since the ``uv sync``
+# path landed, that is the whole dependency tree: measured 2026-08-02 on the
+# deploy box, 625 MB of ``/tmp/.cache`` in one sandbox and another pinned at
+# 1022 MiB against its 1 GiB cap. tmpfs pages can't be reclaimed under
+# pressure either — they go to swap — which is how a few sandboxes put the
+# host into swap thrash.
+#
+# Pointing the caches at a volume subpath fixes the memory charge and, because
+# the cache then shares a filesystem with the repo mount, lets uv hardlink into
+# ``.venv`` instead of copying. Reuse across sandboxes also drops the repeated
+# download + unpack that showed up as ~100% CPU per container.
+#
+# The mount is subpath-scoped exactly like the repo mount, so the management
+# plane (``mill.db``, memory ledgers, other tickets' workspaces) stays
+# unreachable. What it does add is a channel BETWEEN sandboxes: a poisoned
+# wheel written by one is visible to the next. Acceptable here — sandboxes run
+# first-party repo code whose author could equally well edit the repo — and
+# ``sandbox_package_cache=false`` turns it off.
+_CACHE_SUBDIR = "_sandbox_cache"
+_CACHE_TARGET = "/sbxcache"
+
+
+def _cache_mount(settings: Settings) -> list[str]:
+    """Mount the shared, disk-backed package cache, or ``[]`` when
+    disabled or the directory can't be created (best-effort: a missing
+    cache must never fail a spawn — it only costs memory).
+    """
+    if not settings.sandbox_package_cache:
+        return []
+    cache_dir = Path(settings.data_dir).resolve() / _CACHE_SUBDIR
+    try:
+        # Created from inside the mill container, which has the data dir
+        # mounted; Docker needs the subpath to exist before it can mount it.
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        log.warning("sandbox package cache unavailable at %s", cache_dir, exc_info=True)
+        return []
+    if settings.sandbox_data_mount:
+        host_src = Path(settings.sandbox_data_mount) / _CACHE_SUBDIR
+        return ["-v", f"{host_src}:{_CACHE_TARGET}"]
+    return [
+        "--mount",
+        f"type=volume,src={settings.data_volume},dst={_CACHE_TARGET},"
+        f"volume-subpath={_CACHE_SUBDIR}",
+    ]
+
+
 def _has_uv_sources(repo_dir: Path) -> bool:
     """Return True when pyproject.toml declares dependencies that require
     ``uv sync`` rather than ``pip install``.
@@ -537,7 +589,12 @@ def run(
         # Mount exec (Docker's default tmpfs options include noexec): pip
         # --user console scripts land under $HOME/.local/bin = /tmp/.local/bin
         # and must be executable. Keep nosuid/nodev hardening.
-        "/tmp:exec,rw,nosuid,nodev",  # nosec B108 — /tmp here is a Docker tmpfs INSIDE the sandbox, not the host's
+        #
+        # size= matters: an unsized Docker tmpfs defaults to half of HOST RAM,
+        # so /tmp could grow until it hit the container's memory cgroup and the
+        # kernel OOM-killed the test process — a confusing "Killed" with no
+        # explanation. Sized, an overflowing sandbox fails loudly with ENOSPC.
+        f"/tmp:exec,rw,nosuid,nodev,size={settings.sandbox_tmpfs_size}",  # nosec B108 — /tmp here is a Docker tmpfs INSIDE the sandbox, not the host's
         "-e",
         "HOME=/tmp",  # nosec B108
         "-e",
@@ -546,6 +603,20 @@ def run(
         "-w",
         str(repo_dir),
     ]
+    # Keep the package caches OUT of the RAM-backed /tmp (see _cache_mount).
+    # XDG_CACHE_HOME covers uv's default location and most other tools;
+    # UV_CACHE_DIR/PIP_CACHE_DIR are set explicitly so neither depends on it.
+    cache_argv = _cache_mount(settings)
+    if cache_argv:
+        argv += cache_argv
+        argv += [
+            "-e",
+            f"XDG_CACHE_HOME={_CACHE_TARGET}",
+            "-e",
+            f"UV_CACHE_DIR={_CACHE_TARGET}/uv",
+            "-e",
+            f"PIP_CACHE_DIR={_CACHE_TARGET}/pip",
+        ]
     if needs_write_access:
         # apt must write to the root filesystem — drop --read-only and
         # add tmpfs mounts so apt state dirs don't dirty the overlay.
@@ -883,3 +954,69 @@ def reap_orphan_sandboxes(*, max_age_seconds: int | None = None) -> int:
             reaped += 1
             log.warning("reaped orphan sandbox container %s", name)
     return reaped
+
+
+def _dir_size_bytes(path: Path) -> int:
+    """Total size of *path*, ignoring anything that vanishes mid-walk."""
+    total = 0
+    for p in path.rglob("*"):
+        try:
+            if p.is_file() and not p.is_symlink():
+                total += p.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def prune_package_cache(settings: Settings) -> int:
+    """Drop the shared sandbox package cache when it outgrows its budget;
+    return the bytes freed (0 when nothing was done).
+
+    uv and pip caches only ever grow, and this one lives on the data
+    volume — the same volume whose exhaustion has taken the mill down
+    before. It is pure cache, so the cheap correct answer is to delete it
+    wholesale and let the next sandbox refill it.
+
+    Only runs when NO sandbox container is alive: deleting entries under a
+    concurrent ``uv sync`` would fail that ticket's gate for no reason. The
+    caller (the sandbox-reaper pass) retries every few minutes, so skipping
+    a busy moment costs nothing.
+
+    Best-effort: never raises — a failed prune must not kill the poll loop.
+    """
+    if not settings.sandbox_package_cache:
+        return 0
+    cache_dir = Path(settings.data_dir).resolve() / _CACHE_SUBDIR
+    if not cache_dir.is_dir():
+        return 0
+    budget = max(0, settings.sandbox_package_cache_max_mb) * 1024 * 1024
+    if budget <= 0:
+        return 0
+    try:
+        size = _dir_size_bytes(cache_dir)
+    except OSError:
+        return 0
+    if size <= budget:
+        return 0
+    if _list_sandbox_containers():
+        log.info(
+            "sandbox package cache is %d MiB (budget %d MiB) but sandboxes "
+            "are live; deferring prune",
+            size // (1024 * 1024),
+            settings.sandbox_package_cache_max_mb,
+        )
+        return 0
+    import shutil
+
+    try:
+        shutil.rmtree(cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        log.warning("sandbox package cache prune failed", exc_info=True)
+        return 0
+    log.info(
+        "pruned sandbox package cache: freed %d MiB (budget %d MiB)",
+        size // (1024 * 1024),
+        settings.sandbox_package_cache_max_mb,
+    )
+    return size

@@ -874,6 +874,37 @@ class _CoreSettings(BaseModel):
         description="When true, sandbox containers run with read-only root filesystem.",
         json_schema_extra={"advanced": True},
     )
+    # The sandbox's /tmp is a tmpfs — RAM charged to sandbox_memory. Bound it
+    # so a runaway write fails with ENOSPC instead of OOM-killing the command;
+    # an unsized Docker tmpfs defaults to half the HOST's RAM.
+    sandbox_tmpfs_size: str = Field(
+        default="512m",
+        description="Size limit for the sandbox's /tmp tmpfs (RAM-backed).",
+        json_schema_extra={"advanced": True},
+    )
+    # Share one disk-backed uv/pip cache across sandboxes instead of letting
+    # each one fill its RAM-backed /tmp with the project's dependency tree.
+    # See sandbox._cache_mount for the cross-sandbox visibility trade-off.
+    sandbox_package_cache: bool = Field(
+        default=True,
+        description=(
+            "Mount a shared disk-backed uv/pip cache into sandboxes "
+            "(keeps package downloads out of the RAM-backed /tmp)."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+    # The cache lives on the data volume, which has run out of space before,
+    # so the sandbox-reaper pass drops it once it exceeds this. Pure cache —
+    # the next sandbox refills it.
+    sandbox_package_cache_max_mb: int = Field(
+        default=4096,
+        ge=0,
+        description=(
+            "Size budget for the shared sandbox package cache, in MiB; "
+            "0 disables pruning."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # Docker network sandbox containers connect to. The network must be
     # internal (no direct internet) with a filtering proxy attached —
     # sandbox commands reach PyPI/GitHub ONLY through the proxy.
