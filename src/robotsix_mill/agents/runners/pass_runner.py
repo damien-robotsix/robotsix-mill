@@ -128,8 +128,13 @@ def _find_or_create_scanner_epic(
 _GAP_ID_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
 
 # Sources whose drafts are rolled up into a single ticket per run when
-# ``scanner_rollup`` is enabled.
-_SCANNER_SOURCES: frozenset[SourceKind] = frozenset(
+# ``scanner_rollup`` is enabled. Deliberately narrower than
+# ``_SCANNER_SOURCES`` above: that one decides which sources get an epic
+# PARENT (grouping, #2672), this one decides which collapse N findings into
+# ONE ticket (inflow throttling, #2667). The two landed as concurrent PRs and
+# both named their set ``_SCANNER_SOURCES``, so the second silently shadowed
+# the first — leaving epic parenting applied to 5 sources instead of 19.
+_ROLLUP_SOURCES: frozenset[SourceKind] = frozenset(
     {
         SourceKind.DOCSTRING_COVERAGE,
         SourceKind.MODULE_SIZE,
@@ -782,7 +787,7 @@ def run_agent_pass(
     # findings, instead of filing N individual tickets.  This cuts ~80%
     # of scanner ticket inflow.  The existing for-loop below then
     # creates exactly one ticket.
-    if settings.scanner_rollup and source_label in _SCANNER_SOURCES and limit >= 2:
+    if settings.scanner_rollup and source_label in _ROLLUP_SOURCES and limit >= 2:
         from datetime import date as _date
 
         sections: list[str] = []
@@ -802,7 +807,7 @@ def run_agent_pass(
         res.draft_bodies = [rollup_body]
         gap_ids = ["_".join(all_gap_ids)] if all_gap_ids else []
         limit = 1
-    elif source_label in _SCANNER_SOURCES and max_drafts is None:
+    elif source_label in _ROLLUP_SOURCES and max_drafts is None:
         # Apply per-source cap for scanner sources when rollup is off
         # and no explicit max_drafts was set by the caller.
         limit = min(limit, settings.scanner_max_drafts_per_run)
