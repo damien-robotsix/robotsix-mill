@@ -2955,3 +2955,26 @@ def test_strip_unverified_filed_annotations_no_filed_annotations():
     memory = "## Proposals\n- gap-foo: observed, not filed yet\n"
     result = _strip_unverified_filed_annotations(memory, ["gap-foo"])
     assert result == memory
+
+
+# --- _SCANNER_SOURCES vs _ROLLUP_SOURCES -----------------------------------
+#
+# Two features landed as concurrent PRs and both named their set
+# _SCANNER_SOURCES, so the second silently shadowed the first and epic
+# parenting quietly shrank from 19 sources to 5.
+
+
+def test_scanner_and_rollup_source_sets_are_distinct():
+    from robotsix_mill.agents.runners.pass_runner import (
+        _ROLLUP_SOURCES,
+        _SCANNER_SOURCES,
+    )
+    from robotsix_mill.core.models import SourceKind
+
+    # Epic parenting covers every scanner source...
+    assert SourceKind.AUDIT in _SCANNER_SOURCES
+    assert SourceKind.TRACE_HEALTH in _SCANNER_SOURCES
+    # ...while collapsing N findings into one ticket is opt-in and narrower.
+    assert _ROLLUP_SOURCES < _SCANNER_SOURCES
+    assert SourceKind.AUDIT not in _ROLLUP_SOURCES
+    assert SourceKind.DOCSTRING_COVERAGE in _ROLLUP_SOURCES
