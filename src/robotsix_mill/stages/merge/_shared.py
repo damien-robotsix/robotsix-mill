@@ -78,9 +78,57 @@ def _reconcile_with_remote_pr(
     return None
 
 
+def _merge_rejection_outcome(
+    ticket_id: str,
+    artifacts_dir: Path,
+    result: dict[str, Any],
+    *,
+    same_state: State,
+) -> Outcome:
+    """Translate a failed ``merge_pr`` result into the right outcome.
+
+    A rejection the forge marked ``retryable`` is not, on its own,
+    evidence that the merge will never succeed: GitHub answers 405 both
+    for "merge commits are not allowed here" and for "required status
+    check X is expected", the latter simply meaning a required gate has
+    not reported yet. Blocking on the second reading strands a ticket
+    whose PR goes green seconds later — which is exactly how seven
+    robotsix-llmio tickets died at the finish line on 2026-08-01/02,
+    each merge fired 24-68s before CodeQL and ``ci / tests`` reported.
+
+    So a retryable rejection returns *same_state*, leaving the ticket in
+    the merge poll to try again, up to ``_MERGE_MAX_RETRIES`` passes.
+    Past that — and for any rejection the forge did not mark retryable —
+    it still fails closed to ``BLOCKED``, now carrying the forge's own
+    message rather than a guess about branch protection.
+    """
+    reason = result.get("reason", "unknown")
+    if not result.get("retryable"):
+        return Outcome(State.BLOCKED, f"forge merge rejected: {reason}")
+
+    attempts = _read_counter(artifacts_dir / _MERGE_RETRY_COUNTER) + 1
+    _write_counter(artifacts_dir / _MERGE_RETRY_COUNTER, attempts)
+    if attempts >= _MERGE_MAX_RETRIES:
+        return Outcome(
+            State.BLOCKED,
+            f"forge merge rejected {attempts}x (still retryable, giving up): {reason}",
+        )
+    log.info(
+        "%s: merge rejected (retryable, attempt %d/%d): %s — re-polling",
+        ticket_id,
+        attempts,
+        _MERGE_MAX_RETRIES,
+        reason,
+    )
+    return Outcome(same_state, f"merge not ready yet (attempt {attempts}): {reason}")
+
+
 __all__ = [
     "_CI_POLL_REFRESH_SHA",
+    "_MERGE_MAX_RETRIES",
+    "_MERGE_RETRY_COUNTER",
     "_REBASE_DROPPED",
+    "_merge_rejection_outcome",
     "_read_counter",
     "_read_dropped_files",
     "_reconcile_with_remote_pr",
@@ -98,6 +146,12 @@ _REV_REV_COUNTER = "review_revision_attempts.txt"
 _AUTO_FIX_CYCLES = "auto_fix_cycles.txt"
 _LAST_AUTO_FIX_STAGE = "last_auto_fix_stage.txt"
 _PING_PONG_COUNT = "ping_pong_count.txt"
+# Bounded retries for a *retryable* forge merge rejection (see
+# ``_merge_rejection_outcome``). Small on purpose: the case it exists for
+# resolves within a minute or two, so anything that survives this many
+# poll passes is a real refusal that a human should look at.
+_MERGE_RETRY_COUNTER = "merge_retry_attempts.txt"
+_MERGE_MAX_RETRIES = 5
 # Head SHA produced by the last CI-refresh push. Bounds the refresh to one
 # per branch head so a ticket re-entering the merge poll cannot accumulate
 # empty commits. See _refresh_branch_for_ci.

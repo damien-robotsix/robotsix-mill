@@ -771,7 +771,7 @@ def test_merge_pr_mwps_set_awaiting_pipeline(tmp_path, monkeypatch):
 
 
 def test_merge_pr_405_not_allowed(tmp_path, monkeypatch):
-    """405 → branch protection reason."""
+    """405 → retryable, carrying the forge's own message."""
     project_json = {"id": 42}
     mr = {
         "iid": 7,
@@ -795,12 +795,13 @@ def test_merge_pr_405_not_allowed(tmp_path, monkeypatch):
     result = forge.merge_pr(source_branch="feature/x")
     assert result == {
         "merged": False,
-        "reason": "merge not allowed (branch protection?)",
+        "retryable": True,
+        "reason": "merge not allowed: not allowed",
     }
 
 
 def test_merge_pr_409_not_mergeable(tmp_path, monkeypatch):
-    """409 → MR not mergeable."""
+    """409 → retryable, carrying the forge's own message."""
     project_json = {"id": 42}
     mr = {
         "iid": 7,
@@ -822,7 +823,11 @@ def test_merge_pr_409_not_mergeable(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.merge_pr(source_branch="feature/x")
-    assert result == {"merged": False, "reason": "MR is not mergeable"}
+    assert result == {
+        "merged": False,
+        "retryable": True,
+        "reason": "MR is not mergeable: conflict",
+    }
 
 
 def test_merge_pr_network_error(tmp_path, monkeypatch):

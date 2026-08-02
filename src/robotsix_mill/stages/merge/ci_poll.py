@@ -28,6 +28,7 @@ from ._shared import (
     _duplicate_changelog_fragments,
     _is_pr_check_run,
     _latest_failing_workflows,
+    _merge_rejection_outcome,
     _read_counter,
     _refresh_branch_for_ci,
     _verify_merge_ancestor,
@@ -505,15 +506,23 @@ class CIPollMixin(_MergeStageBase):
                         State.IMPLEMENT_COMPLETE,
                         f"merge reported success but commit not confirmed on origin/{target}: {pr.get('url', '')}",
                     )
-                # Forge rejected the merge — fail-closed to BLOCKED.
-                reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
-                self._maybe_comment(ticket, ctx, reason_text)
-                log.warning(
-                    "%s: merge rejected: %s → BLOCKED",
+                # Forge rejected the merge — retry a bounded number of
+                # passes when it may just be a required check that has
+                # not reported yet, else fail closed to BLOCKED.
+                outcome = _merge_rejection_outcome(
                     ticket.id,
-                    result.get("reason", "unknown"),
+                    ctx.service.workspace(ticket).artifacts_dir,
+                    result,
+                    same_state=State.IMPLEMENT_COMPLETE,
                 )
-                return Outcome(State.BLOCKED, reason_text)
+                if outcome.next_state is State.BLOCKED:
+                    self._maybe_comment(ticket, ctx, outcome.note or "")
+                    log.warning(
+                        "%s: merge rejected: %s → BLOCKED",
+                        ticket.id,
+                        result.get("reason", "unknown"),
+                    )
+                return outcome
             else:
                 # Gates pass but not eligible for autonomous merge → ask human.
                 log.info(
@@ -759,15 +768,23 @@ class CIPollMixin(_MergeStageBase):
                         State.DONE,
                         f"auto-merged: {pr.get('url', '')}",
                     )
-                # Forge rejected the merge — fail-closed to BLOCKED.
-                reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
-                self._maybe_comment(ticket, ctx, reason_text)
-                log.warning(
-                    "%s: auto-merge failed: %s — transition to BLOCKED",
+                # Forge rejected the merge — retry a bounded number of
+                # passes when it may just be a required check that has
+                # not reported yet, else fail closed to BLOCKED.
+                outcome = _merge_rejection_outcome(
                     ticket.id,
-                    result.get("reason", "unknown"),
+                    ctx.service.workspace(ticket).artifacts_dir,
+                    result,
+                    same_state=State.IMPLEMENT_COMPLETE,
                 )
-                return Outcome(State.BLOCKED, reason_text)
+                if outcome.next_state is State.BLOCKED:
+                    self._maybe_comment(ticket, ctx, outcome.note or "")
+                    log.warning(
+                        "%s: auto-merge failed: %s — transition to BLOCKED",
+                        ticket.id,
+                        result.get("reason", "unknown"),
+                    )
+                return outcome
             else:
                 # CI green but not eligible → human approval needed.
                 self._maybe_comment(ticket, ctx, eligibility_reason)
@@ -998,15 +1015,23 @@ class CIPollMixin(_MergeStageBase):
                     State.IMPLEMENT_COMPLETE,
                     f"auto-merge reported success but merge not confirmed on origin/{target}: {pr.get('url', '')}",
                 )
-            # Forge rejected the merge — fail-closed to BLOCKED.
-            reason_text = f"forge merge rejected: {result.get('reason', 'unknown')}"
-            self._maybe_comment(ticket, ctx, reason_text)
-            log.warning(
-                "%s: auto-merge failed: %s — transition to BLOCKED",
+            # Forge rejected the merge — retry a bounded number of passes
+            # when it may just be a required check that has not reported
+            # yet, else fail closed to BLOCKED.
+            outcome = _merge_rejection_outcome(
                 ticket.id,
-                result.get("reason", "unknown"),
+                ctx.service.workspace(ticket).artifacts_dir,
+                result,
+                same_state=State.WAITING_AUTO_MERGE,
             )
-            return Outcome(State.BLOCKED, reason_text)
+            if outcome.next_state is State.BLOCKED:
+                self._maybe_comment(ticket, ctx, outcome.note or "")
+                log.warning(
+                    "%s: auto-merge failed: %s — transition to BLOCKED",
+                    ticket.id,
+                    result.get("reason", "unknown"),
+                )
+            return outcome
 
         if conclusion == "success" and pr.get("mergeable_state") == "behind":
             # Green CI on a stale head — try the server-side update-branch
