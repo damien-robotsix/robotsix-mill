@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 from .. import tracing
 from ..run_registry import RunRegistry
 
+from ...sandbox import sandbox_rank
 from ._gate import PriorityGate
 from .epic import _EPIC_CHILD_TERMINAL
 from .processing import (
@@ -99,6 +101,24 @@ def _count_inflight_prs(service: "TicketService") -> int:
                 continue
         n += 1
     return n
+
+
+@contextlib.contextmanager
+def _ticket_sandbox_rank(rank: tuple[int, int]) -> Iterator[None]:
+    """Publish *rank* to the sandbox slot gate for the duration of a stage run.
+
+    ``asyncio.to_thread`` copies the current context, so a value set here on
+    the consumer task reaches ``sandbox.run()`` inside ``stage.run`` without
+    threading a parameter through every stage signature. Reset on exit — the
+    consumer is a long-lived loop and must not leak one ticket's rank onto
+    the next. Periodic passes never enter this block, so they keep the
+    default (unflagged) rank.
+    """
+    token = sandbox_rank.set(rank)
+    try:
+        yield
+    finally:
+        sandbox_rank.reset(token)
 
 
 class Worker(PeriodicPassesMixin, PollLoopsMixin):
@@ -472,16 +492,18 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 # CURRENT (priority, stage) rather than reusing the popped
                 # entry's, which was captured at enqueue time and may be
                 # stale by now. The cap-deferral demotion doesn't apply here
-                # — a cap-deferred ticket never reaches this point.
-                if self._global_semaphore is not None:
-                    admission_rank = (
-                        (
-                            0 if getattr(before, "priority", False) else 1,
-                            self._stage_rank(before),
-                        )
-                        if before is not None
-                        else (popped_prio, popped_stage)
+                # — a cap-deferred ticket never reaches this point. The same
+                # rank is published to the sandbox slot gate below, so it is
+                # computed whether or not the global gate is configured.
+                admission_rank = (
+                    (
+                        0 if getattr(before, "priority", False) else 1,
+                        self._stage_rank(before),
                     )
+                    if before is not None
+                    else (popped_prio, popped_stage)
+                )
+                if self._global_semaphore is not None:
                     if self._global_semaphore.locked():
                         log.debug(
                             "global concurrency cap (%d) saturated, %d queued; "
@@ -492,13 +514,15 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                             admission_rank,
                         )
                     async with self._global_semaphore.slot(admission_rank):
+                        with _ticket_sandbox_rank(admission_rank):
+                            await process_ticket(
+                                ticket_id, per_ticket_ctx, active_map=self._active
+                            )
+                else:
+                    with _ticket_sandbox_rank(admission_rank):
                         await process_ticket(
                             ticket_id, per_ticket_ctx, active_map=self._active
                         )
-                else:
-                    await process_ticket(
-                        ticket_id, per_ticket_ctx, active_map=self._active
-                    )
                 after = board_service.get(ticket_id)
                 # _check_progress calls session_cost/session_traces, which
                 # hit Langfuse via a synchronous httpx.Client (20s timeout).

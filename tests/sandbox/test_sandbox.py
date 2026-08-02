@@ -1487,12 +1487,12 @@ def test_slot_released_when_spawn_fails(monkeypatch, tmp_path):
     # block until the slot timeout rather than reaching the fake at all.
     peak = _concurrency_probe(monkeypatch, tmp_path, cap=2, threads=6, run_impl=boom)
     assert peak > 0
-    # The semaphore is back to full capacity: acquiring `cap` slots succeeds.
-    sem = sandbox._slot_semaphore(2)
-    assert sem.acquire(timeout=1)
-    assert sem.acquire(timeout=1)
-    sem.release()
-    sem.release()
+    # The pool is back to full capacity: acquiring `cap` slots succeeds.
+    pool = sandbox._slot_semaphore(2)
+    assert pool.acquire(sandbox.DEFAULT_RANK, 1)
+    assert pool.acquire(sandbox.DEFAULT_RANK, 1)
+    pool.release()
+    pool.release()
 
 
 def test_no_slot_available_raises(monkeypatch, tmp_path):
@@ -1505,13 +1505,13 @@ def test_no_slot_available_raises(monkeypatch, tmp_path):
     )
     # Occupy the only slot, then confirm the next caller fails instead of
     # blocking indefinitely.
-    sem = sandbox._slot_semaphore(1)
-    assert sem.acquire(timeout=1)
+    pool = sandbox._slot_semaphore(1)
+    assert pool.acquire(sandbox.DEFAULT_RANK, 1)
     try:
         with pytest.raises(sandbox.SandboxError, match="no sandbox slot free"):
             sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
     finally:
-        sem.release()
+        pool.release()
 
 
 # --- Package cache lives on disk, not in the RAM-backed /tmp ---------------
