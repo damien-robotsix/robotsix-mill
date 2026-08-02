@@ -244,6 +244,7 @@
     "sandbox_memory": "2g",
     "sandbox_network": "mill-sandbox-net",
     "sandbox_pids_limit": 512,
+    "sandbox_cpus": 0.0,
     "sandbox_proxy_url": "http://sandbox-proxy:8888",
     "sandbox_readonly": true,
     "sandbox_reaper_interval_seconds": 3600,

@@ -2519,6 +2519,14 @@
           "title": "Run Health Window Hours",
           "type": "integer"
         },
+        "sandbox_cpus": {
+          "advanced": true,
+          "default": 0.0,
+          "description": "CPU quota per sandbox container, in cores (e.g. 0.7); 0 disables the limit.",
+          "minimum": 0,
+          "title": "Sandbox Cpus",
+          "type": "number"
+        },
         "sandbox_data_mount": {
           "anyOf": [
             {
