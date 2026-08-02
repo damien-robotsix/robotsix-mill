@@ -626,7 +626,7 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
-`completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `orphaned_pr_check`, `pin_bump`,
+`completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `mypy_baseline`, `orphaned_pr_check`, `pin_bump`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
@@ -770,6 +770,17 @@ these agent-specific settings are available:
 |---------|---------|-------------|
 | `MILL_META_PERIODIC` | `false` | Master switch for the weekly meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global weekly schedule. |
 | `MILL_META_INTERVAL_SECONDS` | `604800` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
+
+#### mypy_baseline
+
+The `mypy_baseline` periodic agent manages the mypy type-check
+baseline, tracking and ratcheting type errors over time.  It uses
+only the standard two periodic-agent fields:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_MYPY_BASELINE_PERIODIC` | `true` | Enable periodic mypy-baseline passes |
+| `MILL_MYPY_BASELINE_INTERVAL_SECONDS` | `604800` | Seconds between mypy-baseline passes |
 
 #### module_size
 
