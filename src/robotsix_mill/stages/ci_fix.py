@@ -37,10 +37,12 @@ from .ci_fix_codeql import (
     _try_codeql_fp_triage,
 )
 from .ci_fix_helpers import (
+    _CI_EMPTY_COMMIT_COUNTER,
     _CI_FAILURE_FINGERPRINT,
     _CODQL_CHECK_NAMES,
     _CI_IDENTICAL_FAILURE_COUNT,
     _CI_REFRESH_COUNTER,
+    _MAX_CI_EMPTY_COMMIT_REFRESHES,
     _FailingContext,
     _build_failing_summary,
     _ci_failure_fingerprint,
@@ -264,25 +266,57 @@ class CIFixStage(Stage):
         # un-sticks tickets whose original CI failure was a transient
         # flake that has since resolved (the old, failing check-runs
         # are pinned to the stale SHA and can never turn green).
+        #
+        # BOUNDED, and it must stay that way. Pushing the commit invalidates
+        # the very status the rest of this method reads: the run it triggers
+        # is still `queued` a couple of seconds later, so `check_status`
+        # below returns "pending" and the method returns IMPLEMENT_COMPLETE
+        # without ever reaching the fix path. Unbounded, that is a livelock —
+        # every FIXING_CI entry pushes another no-op commit, returns in <10s,
+        # and the failure is never diagnosed. Observed on robotsix-auto-mail
+        # ticket …-6a4e, which cycled for hours against a genuinely red CI
+        # while the fix agent was never invoked once.
+        #
+        # So: refresh at most _MAX_CI_EMPTY_COMMIT_REFRESHES times per
+        # failure. Once the budget is spent, fall through and read the real
+        # status — a failure that survives a fresh run is not a stale one,
+        # and belongs to the fix agent.
+        empty_commit_counter_path = (
+            ctx.service.workspace(ticket).artifacts_dir / _CI_EMPTY_COMMIT_COUNTER
+        )
         _local_sha = git_ops.head_sha(Path(repo_dir))
         _remote_sha = git_ops.ls_remote_sha(_remote_url, f"refs/heads/{branch}", _token)
         if _remote_sha is not None and _local_sha == _remote_sha:
-            try:
-                git_ops.empty_commit(
-                    Path(repo_dir),
-                    "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
-                )
-                git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+            _refreshes = _read_counter(empty_commit_counter_path)
+            if _refreshes >= _MAX_CI_EMPTY_COMMIT_REFRESHES:
                 log.info(
-                    "%s: pushed empty commit to force fresh CI run (branch was already current)",
+                    "%s: already refreshed CI %d time(s) for this failure — "
+                    "not pushing another empty commit; reading the real status",
                     ticket.id,
+                    _refreshes,
                 )
-            except Exception:
-                log.warning(
-                    "%s: empty-commit push failed — proceeding with existing HEAD",
-                    ticket.id,
-                    exc_info=True,
-                )
+            else:
+                try:
+                    git_ops.empty_commit(
+                        Path(repo_dir),
+                        "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
+                    )
+                    git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                    _write_counter(empty_commit_counter_path, _refreshes + 1)
+                    log.info(
+                        "%s: pushed empty commit to force fresh CI run (branch was already current)",
+                        ticket.id,
+                    )
+                    # The run we just triggered cannot have completed. Reading
+                    # check_status now would only ever return "pending", so
+                    # return directly and let the next poll see a real result.
+                    return Outcome(State.IMPLEMENT_COMPLETE)
+                except Exception:
+                    log.warning(
+                        "%s: empty-commit push failed — proceeding with existing HEAD",
+                        ticket.id,
+                        exc_info=True,
+                    )
 
         # Fetch check status from the forge.
         try:
@@ -311,12 +345,12 @@ class CIFixStage(Stage):
             # reset only on GENUINE forward progress — when merge advances the
             # ticket out of the CI gate to HUMAN_MR_APPROVAL (merge.py).
             #
-            # Do reset the refresh counter, though: CI going green is genuine
+            # Do reset the refresh counters, though: CI going green is genuine
             # forward progress, so a later, independent staleness can be
             # refreshed once more.
-            _write_counter(
-                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
-            )
+            _artifacts = ctx.service.workspace(ticket).artifacts_dir
+            _write_counter(_artifacts / _CI_REFRESH_COUNTER, 0)
+            _write_counter(_artifacts / _CI_EMPTY_COMMIT_COUNTER, 0)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):
@@ -1110,9 +1144,10 @@ class CIFixStage(Stage):
         # ticket in FIXING_CI indefinitely.
         ctx.service.set_depends_on(ticket.id, [])
 
-        # Reset the per-ticket refresh counter so a later re-entry (after
+        # Reset the per-ticket refresh counters so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.
         _write_counter(artifacts_dir / _CI_REFRESH_COUNTER, 0)
+        _write_counter(artifacts_dir / _CI_EMPTY_COMMIT_COUNTER, 0)
 
         return outcome
 
@@ -1149,9 +1184,11 @@ class CIFixStage(Stage):
 
         if check is git_ops.PostPushResult.PASS:
             # Genuine forward progress — allow a future staleness to refresh again.
-            _write_counter(
-                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
-            )
+            # The landed fix also means the next CI failure (if any) is a NEW
+            # one, so the empty-commit budget starts over with it.
+            _artifacts = ctx.service.workspace(ticket).artifacts_dir
+            _write_counter(_artifacts / _CI_REFRESH_COUNTER, 0)
+            _write_counter(_artifacts / _CI_EMPTY_COMMIT_COUNTER, 0)
             log.info("%s: ci fix reported DONE, push verified", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
