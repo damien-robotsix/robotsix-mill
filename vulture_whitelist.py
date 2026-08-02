@@ -159,6 +159,8 @@ docstring_coverage_periodic
 docstring_coverage_interval_seconds
 module_size_periodic
 module_size_interval_seconds
+mypy_baseline_periodic
+mypy_baseline_interval_seconds
 settings_customise_sources
 dotenv_settings
 ci_patterns_file

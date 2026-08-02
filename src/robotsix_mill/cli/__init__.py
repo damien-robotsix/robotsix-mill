@@ -173,6 +173,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Module-size pass",
         "format": "memory_drafts",
     },
+    "mypy-baseline": {
+        "module": "agents.runners.periodic_runner",
+        "function": "run_mypy_baseline_pass",
+        "label": "MyPy Baseline pass",
+        "format": "memory_drafts",
+    },
     "repo-description-sync": {
         "module": "agents.runners.repo_description_sync_runner",
         "function": "run_repo_description_sync_pass",
@@ -983,6 +989,16 @@ def build_parser() -> argparse.ArgumentParser:
     # --- module-size command ---
     p_module_size = sub.add_parser("module-size", help="run a module size audit pass")
     p_module_size.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- mypy-baseline command ---
+    p_mypy_baseline = sub.add_parser(
+        "mypy-baseline", help="run a mypy type-check baseline management pass"
+    )
+    p_mypy_baseline.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

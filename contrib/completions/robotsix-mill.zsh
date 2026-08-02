@@ -26,6 +26,7 @@ _shtab_robotsix_mill_commands() {
     "meta:"
     "module-curator:"
     "module-size:"
+    "mypy-baseline:"
     "pin-bump:"
     "repo-description-sync:"
     "repos:"
@@ -257,6 +258,14 @@ _shtab_robotsix_mill_module_size_options=(
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_module_size_defaults_added=0
 
+_shtab_robotsix_mill_mypy_baseline_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_mypy_baseline_defaults_added=0
+
 _shtab_robotsix_mill_pin_bump_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--json[output full JSON result (default\: summary)]"
@@ -463,6 +472,7 @@ _shtab_robotsix_mill() {
         meta) _arguments -C -s $_shtab_robotsix_mill_meta_options ;;
         module-curator) _arguments -C -s $_shtab_robotsix_mill_module_curator_options ;;
         module-size) _arguments -C -s $_shtab_robotsix_mill_module_size_options ;;
+        mypy-baseline) _arguments -C -s $_shtab_robotsix_mill_mypy_baseline_options ;;
         pin-bump) _arguments -C -s $_shtab_robotsix_mill_pin_bump_options ;;
         repo-description-sync) _arguments -C -s $_shtab_robotsix_mill_repo_description_sync_options ;;
         repos) _shtab_robotsix_mill_repos ;;
