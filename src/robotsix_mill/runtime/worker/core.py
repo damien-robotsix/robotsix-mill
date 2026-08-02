@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -103,7 +104,7 @@ def _count_inflight_prs(service: "TicketService") -> int:
 
 
 @contextlib.contextmanager
-def _ticket_sandbox_rank(rank: tuple[int, int]):
+def _ticket_sandbox_rank(rank: tuple[int, int]) -> Iterator[None]:
     """Publish *rank* to the sandbox slot gate for the duration of a stage run.
 
     ``asyncio.to_thread`` copies the current context, so a value set here on
