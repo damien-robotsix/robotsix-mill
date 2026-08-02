@@ -3653,3 +3653,50 @@ async def test_priority_ticket_wins_global_slot_over_earlier_other_board(
         f"another board's unflagged ticket queued for it first; got {invoked}"
     )
     assert invoked == [flagged.id, normal.id]
+
+
+# --- the consumer publishes its rank to the sandbox slot gate --------
+
+
+async def test_consumer_publishes_sandbox_rank_and_resets_it(ctx, service, monkeypatch):
+    """The sandbox slot pool is shared with the ~20 periodic passes, which
+    carry no rank at all. The consumer publishes the ticket's rank into the
+    context so ``sandbox.run()`` — reached through ``asyncio.to_thread``,
+    which copies the context — can admit flagged work first.
+
+    It must also reset afterwards: the consumer is a long-lived loop, so a
+    leaked rank would make the NEXT ticket inherit this one's priority.
+    """
+    from robotsix_mill.sandbox._slots import DEFAULT_RANK, current_rank
+
+    flagged = service.create("flagged")
+    service.set_priority(flagged.id, True)
+
+    monkeypatch.setattr(Worker, "_repo_config_for_ticket", lambda self, tid: None)
+    monkeypatch.setattr(Worker, "_check_progress", lambda self, *a, **k: None)
+
+    seen: list[tuple[int, int]] = []
+
+    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+        seen.append(current_rank())
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket", fake_process_ticket
+    )
+
+    w = Worker(ctx)
+    w.enqueue(flagged.id)
+    task = asyncio.create_task(w._run(service.board_id))
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert seen, "the ticket should have been processed"
+    assert seen[0][0] == 0, (
+        f"a flagged ticket must publish priority rank 0; got {seen[0]}"
+    )
+    assert current_rank() == DEFAULT_RANK, (
+        "the rank must be reset after the stage run, or the next ticket "
+        "inherits this one's priority"
+    )

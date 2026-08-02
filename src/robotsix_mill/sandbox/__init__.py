@@ -37,6 +37,12 @@ from pathlib import Path
 
 from ..config import Settings
 from ..config.repo_settings import load_extra_sandbox_packages
+from ._slots import (
+    DEFAULT_RANK as DEFAULT_RANK,  # re-exported: callers set/read the rank here
+    PrioritySlots,
+    current_rank,
+    sandbox_rank as sandbox_rank,
+)
 
 _OUT_CAP = 8000
 
@@ -72,50 +78,61 @@ class SandboxError(RuntimeError):
 # from worker threads — stage handlers offload to threads precisely because
 # the agent SDK is sync. Blocking here adds no new event-loop risk: the
 # ``subprocess.run`` below already blocks its caller for up to the op timeout.
+#
+# The pool is priority-aware rather than FIFO. Sharing one ceiling between
+# ticket stages and the ~20 periodic passes means a plain semaphore lets a
+# ``test_gap_workspace`` pass take the last slot ahead of a flagged ticket
+# that already won both its board queue and the global stage gate. See
+# ``_slots.PrioritySlots``; the rank comes from the ``sandbox_rank``
+# context variable, which the board consumer sets around each stage run.
 _slot_lock = threading.Lock()
-_slot_sem: threading.BoundedSemaphore | None = None
+_slot_pool: PrioritySlots | None = None
 _slot_cap = 0
 
 
-def _slot_semaphore(cap: int) -> threading.BoundedSemaphore:
-    """Return the process-wide sandbox-slot semaphore, sized to *cap*.
+def _slot_semaphore(cap: int) -> PrioritySlots:
+    """Return the process-wide sandbox-slot pool, sized to *cap*.
 
     Rebuilt when *cap* changes so a settings override (and tests) take
     effect; in-flight holders keep the object they acquired, so the
     swap can't over-release.
     """
-    global _slot_sem, _slot_cap
+    global _slot_pool, _slot_cap
     with _slot_lock:
-        if _slot_sem is None or _slot_cap != cap:
-            _slot_sem = threading.BoundedSemaphore(cap)
+        if _slot_pool is None or _slot_cap != cap:
+            _slot_pool = PrioritySlots(cap)
             _slot_cap = cap
-        return _slot_sem
+        return _slot_pool
 
 
 @contextmanager
 def _sandbox_slot(settings: Settings) -> Iterator[None]:
     """Hold one of ``max_global_concurrency`` sandbox slots for the block.
 
+    Waiters are admitted best-rank-first (see :data:`sandbox_rank`), FIFO
+    within a rank.
+
     Raises :class:`SandboxError` if no slot frees up within
     ``sandbox_slot_timeout`` — a bounded wait so a leaked slot surfaces
     as a stage error instead of hanging a worker thread forever.
     """
     cap = max(1, settings.max_global_concurrency)
-    sem = _slot_semaphore(cap)
+    pool = _slot_semaphore(cap)
     timeout = max(1, settings.sandbox_slot_timeout)
-    if not sem.acquire(blocking=False):
+    rank = current_rank()
+    if pool.in_use() >= cap:
         # Queueing is normal under load, but it is also the signal that the
         # cap is what's slowing the board down — worth a line in the log.
-        log.info("sandbox cap (%d) saturated; waiting for a slot", cap)
-        if not sem.acquire(timeout=timeout):
-            raise SandboxError(
-                f"no sandbox slot free after {timeout}s "
-                f"(cap={cap}); too many concurrent sandboxes"
-            )
+        log.info("sandbox cap (%d) saturated; waiting for a slot at rank %s", cap, rank)
+    if not pool.acquire(rank, timeout):
+        raise SandboxError(
+            f"no sandbox slot free after {timeout}s "
+            f"(cap={cap}); too many concurrent sandboxes"
+        )
     try:
         yield
     finally:
-        sem.release()
+        pool.release()
 
 
 # Deploy-mode (central-deploy) helpers --------------------------------------
