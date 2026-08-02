@@ -127,6 +127,18 @@ def _find_or_create_scanner_epic(
 # left bespoke + 3 others silently unmatched).
 _GAP_ID_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
 
+# Sources whose drafts are rolled up into a single ticket per run when
+# ``scanner_rollup`` is enabled.
+_SCANNER_SOURCES: frozenset[SourceKind] = frozenset(
+    {
+        SourceKind.DOCSTRING_COVERAGE,
+        SourceKind.MODULE_SIZE,
+        SourceKind.TEST_GAP,
+        SourceKind.HEALTH,
+        SourceKind.COMPLETENESS_CHECK,
+    }
+)
+
 
 def _verify_prior_proposals(
     service: TicketService,
@@ -763,6 +775,38 @@ def run_agent_pass(
     limit = min(len(res.draft_titles), len(res.draft_bodies))
     if max_drafts is not None:
         limit = min(limit, max_drafts)
+
+    # --- Scanner rollup ---
+    # When the source is a scanner and rollup is enabled and there are
+    # ≥ 2 drafts, collapse them into a single rollup ticket listing all
+    # findings, instead of filing N individual tickets.  This cuts ~80%
+    # of scanner ticket inflow.  The existing for-loop below then
+    # creates exactly one ticket.
+    if settings.scanner_rollup and source_label in _SCANNER_SOURCES and limit >= 2:
+        from datetime import date as _date
+
+        sections: list[str] = []
+        all_gap_ids: list[str] = []
+        for i in range(limit):
+            title = res.draft_titles[i]
+            body = res.draft_bodies[i]
+            sections.append(f"## {i + 1}. {title}\n\n{body}")
+            if i < len(gap_ids) and gap_ids[i]:
+                all_gap_ids.append(gap_ids[i])
+        rollup_title = (
+            f"{source_label} scan: {limit} findings ({_date.today().isoformat()})"
+        )
+        rollup_body = "\n\n".join(sections)
+        # Replace the multi-draft lists with a single rollup entry.
+        res.draft_titles = [rollup_title]
+        res.draft_bodies = [rollup_body]
+        gap_ids = ["_".join(all_gap_ids)] if all_gap_ids else []
+        limit = 1
+    elif source_label in _SCANNER_SOURCES and max_drafts is None:
+        # Apply per-source cap for scanner sources when rollup is off
+        # and no explicit max_drafts was set by the caller.
+        limit = min(limit, settings.scanner_max_drafts_per_run)
+
     for i in range(limit):
         title = res.draft_titles[i]
         body = res.draft_bodies[i]

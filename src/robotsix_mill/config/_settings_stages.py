@@ -907,6 +907,36 @@ class _StagesSettings(BaseModel):
         default=7,
         json_schema_extra={"advanced": True},
     )
+    # When True (default), scanner periodic passes (docstring_coverage,
+    # module_size, test_gap, health, completeness_check) that produce
+    # multiple findings per run are rolled up into a single rollup
+    # ticket listing all findings, instead of filing one ticket per
+    # finding.  Estimated ~80% inflow reduction for scanner sources.
+    # Set to False to restore the legacy one-ticket-per-finding
+    # behaviour.
+    scanner_rollup: bool = Field(
+        description="Roll up multi-finding scanner passes into a single ticket per run.",
+        default=True,
+    )
+    # Hard cap on the total number of drafts a single scanner pass may
+    # file.  When ``scanner_rollup`` is True this is effectively 1 (the
+    # rollup itself).  When rollup is disabled, this bounds the per-run
+    # ticket count so a scanner that suddenly flags 50+ gaps does not
+    # flood the board.
+    scanner_max_drafts_per_run: int = Field(
+        description="Hard cap on drafts a single scanner pass may file.",
+        default=5,
+        json_schema_extra={"advanced": True},
+    )
+    # Hard cap on the total number of drafts a single retrospect pass
+    # may file (systemic draft + concrete follow-up).  Default 2 matches
+    # the existing two-path ceiling; set lower when the board is
+    # overloaded.
+    retrospect_max_drafts_per_run: int = Field(
+        description="Hard cap on drafts a single retrospect pass may file.",
+        default=2,
+        json_schema_extra={"advanced": True},
+    )
     # Recency window (days) for the advisory pre-filing duplicate check in
     # epic decomposition (``dedup.find_child_overlaps``).  A proposed child
     # is flagged when a prior ticket created within this window matches its

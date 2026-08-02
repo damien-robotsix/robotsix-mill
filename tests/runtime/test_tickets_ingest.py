@@ -266,3 +266,111 @@ def test_ingest_accepts_auto_repo_when_flag_on(client, settings):
     r = client.post("/tickets/ingest", json=payload)
     assert r.status_code == 201
     assert r.json()["deduped"] is False
+
+
+# ---------------------------------------------------------------------------
+# Normalized-title fingerprint dedup
+# ---------------------------------------------------------------------------
+def test_normalize_title_strips_timestamps():
+    """_normalize_title strips ISO dates and timestamps from titles."""
+    from robotsix_mill.runtime.routes._tickets_ingest import _normalize_title
+
+    # Same symptom, different dates → same fingerprint.
+    fp1 = _normalize_title("mail-ingester unhealthy on 2026-07-31")
+    fp2 = _normalize_title("mail-ingester unhealthy on 2026-07-30")
+    assert fp1 == fp2 == "mail-ingester unhealthy on"
+
+    # Full ticket ID should be stripped.
+    fp3 = _normalize_title(
+        "no merge capability for repo reconcile 20260731T155119Z-slug-a3f2"
+    )
+    assert "20260731" not in fp3
+    assert "slug" not in fp3
+
+
+def test_normalize_title_strips_file_paths():
+    """_normalize_title strips file paths with optional line numbers."""
+    from robotsix_mill.runtime.routes._tickets_ingest import _normalize_title
+
+    fp = _normalize_title("add docstring to src/foo/bar.py:123")
+    assert "src/foo/bar.py" not in fp
+    assert ":123" not in fp
+    # Core symptom phrase should survive.
+    assert "add docstring to" in fp
+
+
+def test_normalize_title_case_folds():
+    """_normalize_title case-folds input."""
+    from robotsix_mill.runtime.routes._tickets_ingest import _normalize_title
+
+    assert _normalize_title("MAIL-INGESTER UNHEALTHY") == _normalize_title(
+        "mail-ingester unhealthy"
+    )
+
+
+def test_ingest_fingerprint_dedup_hit(client, service):
+    """When the normalized title matches an existing open ticket, the
+    endpoint returns 200 deduped=True without calling the LLM."""
+    existing = service.create(
+        "mail-ingester unhealthy on 2026-07-30",
+        "The ingester container is failing health checks.",
+        source=SourceKind.USER,
+        kind=TicketKind.TASK,
+        board_id="test-board",
+    )
+
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+    ) as mock_dedup:
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="mail-ingester unhealthy on 2026-07-31",
+                body="Still failing after restart.",
+                source_tag="monitor-2",
+            ),
+        )
+    # LLM dedup should NOT be called — fingerprint match is
+    # deterministic and cheaper.
+    assert mock_dedup.call_count == 0
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ticket_id"] == existing.id
+    assert body["deduped"] is True
+
+    # History note appended.
+    history = service.history(existing.id)
+    notes = [e.note for e in history if e.note and "fingerprint match" in e.note]
+    assert len(notes) == 1
+
+
+def test_ingest_fingerprint_no_false_match(client, service):
+    """Different symptoms with different normalized titles still reach the
+    LLM dedup step (no fingerprint false-positive)."""
+    _ = service.create(
+        "mail-ingester unhealthy on 2026-07-30",
+        "health check failure for the ingester service",
+        source=SourceKind.USER,
+        kind=TicketKind.TASK,
+        board_id="test-board",
+    )
+
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+        return_value={
+            "duplicate_of": None,
+            "already_done": None,
+            "reason": "different",
+        },
+    ) as mock_dedup:
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="database connection pool exhausted",
+                body="Postgres max_connections reached for ingester service.",
+            ),
+        )
+    # LLM dedup should be called since fingerprint didn't match AND
+    # there is some token overlap ("ingester", "service").
+    assert mock_dedup.call_count >= 1
+    assert r.status_code == 201

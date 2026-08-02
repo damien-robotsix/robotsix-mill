@@ -2,9 +2,10 @@
 
 ``POST /tickets/ingest`` is designed for machine callers
 (deployment/monitoring systems that re-report the same anomaly
-periodically).  It applies a cheap token-overlap prefilter followed
-by an LLM dedup check before creating the ticket, so repeated
-reports of the same incident do not create duplicate drafts.
+periodically).  It applies a normalized-title fingerprint check,
+a cheap token-overlap prefilter, and an LLM dedup check before
+creating the ticket, so repeated reports of the same incident
+do not create duplicate drafts.
 
 When the board's open-ticket count reaches the configured cap
 (``board_hygiene_max_open_tickets``), machine-ingest findings are
@@ -14,6 +15,7 @@ appended to a rollup epic instead of creating new standalone tickets.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,7 +28,7 @@ from ...agents.dedup import (
     run_dedup_check,
 )
 from ...config import RepoConfig, ReposRegistry, Settings
-from ...core.models import TicketKind
+from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
 from ..deps import (
@@ -39,7 +41,84 @@ from ..worker import Worker
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter(tags=["Tickets"])
+
+# Patterns stripped during title normalization for fingerprint dedup.
+# Order matters: longest patterns first so shorter ones don't
+# prematurely truncate (e.g. strip "20260731T155119Z-slug-a1b2" before
+# the generic timestamp pattern).  All patterns are case-insensitive
+# (titles are case-folded before matching).
+_NORMALIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Full ticket-id pattern: YYYYMMDDTHHMMSSZ-slug-hex4
+    (
+        re.compile(
+            r"\b\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{4}\b", re.IGNORECASE
+        ),
+        " ",
+    ),
+    # ISO-8601 date + optional time: 2026-07-31, 2026-07-31T15:26:00Z
+    (
+        re.compile(
+            r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?\b",
+            re.IGNORECASE,
+        ),
+        " ",
+    ),
+    # Compact timestamp: 20260731, 20260731T155119Z
+    (re.compile(r"\b\d{8}(?:T\d{6}Z)?\b", re.IGNORECASE), " "),
+    # File paths with optional line numbers: src/foo/bar.py:123
+    (
+        re.compile(
+            r"""(?:\S+/)+   # one or more path segments ending with /
+                     \S+\.\w+    # filename with extension
+                     (?::\d+)?   # optional :line_number
+                     """,
+            re.VERBOSE,
+        ),
+        " ",
+    ),
+    # Bare line-reference suffixes: :123, :45-67
+    (re.compile(r":\d+(?:-\d+)?"), " "),
+    # Hex suffixes often used as dedup counters: -a1b2, -deadbeef
+    (re.compile(r"\b[a-f0-9]{4,8}\b", re.IGNORECASE), " "),
+]
+
+
+def _normalize_title(title: str) -> str:
+    """Produce a fingerprint of *title* for duplicate detection.
+
+    Case-folds, strips timestamps, file paths, line references, and
+    hex suffixes, then collapses whitespace.  Two titles that describe
+    the same symptom (e.g. "mail-ingester unhealthy on 2026-07-31"
+    and "mail-ingester unhealthy on 2026-07-30") should produce the
+    same fingerprint.
+    """
+    normalized = title.casefold()
+    for pattern, replacement in _NORMALIZE_PATTERNS:
+        normalized = pattern.sub(replacement, normalized)
+    # Collapse runs of whitespace.
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    # Strip leading/trailing punctuation that survived.
+    normalized = normalized.strip(".,;:!?-–— \t")
+    return normalized
+
+
+def _fingerprint_match(
+    draft_title: str,
+    candidates: list[Ticket],
+) -> str | None:
+    """Return the first candidate ticket id whose normalized title
+    matches *draft_title*, or ``None``.
+    """
+    draft_fp = _normalize_title(draft_title)
+    if not draft_fp:
+        return None
+    for t in candidates:
+        candidate_fp = _normalize_title(t.title)
+        if candidate_fp and candidate_fp == draft_fp:
+            return str(t.id) if t.id is not None else None
+    return None
 
 
 def _check_repo_workable(
@@ -121,7 +200,24 @@ def ingest_ticket(
     if not candidates:
         return _create_ticket(body, board_id, board_svc, worker, settings)
 
-    # 3. Cheap prefilter — skip LLM when no token overlap.
+    # 3. Normalized-title fingerprint dedup — fast, deterministic,
+    #    catches same-symptom reports across runs (e.g. "mail-ingester
+    #    unhealthy on 2026-07-31" vs "mail-ingester unhealthy on
+    #    2026-07-30").
+    dup_id = _fingerprint_match(body.title, candidates)
+    if dup_id is not None:
+        board_svc.add_history_note(
+            dup_id,
+            f"re-reported by {body.source_tag} on {date.today().isoformat()} "
+            "(fingerprint match)",
+        )
+        logger.info("ingest fingerprint match found")
+        return JSONResponse(
+            status_code=200,
+            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
+        )
+
+    # 4. Cheap prefilter — skip LLM when no token overlap.
     candidate_texts: list[str] = []
     for t in candidates:
         try:
@@ -136,7 +232,35 @@ def ingest_ticket(
     ):
         return _create_ticket(body, board_id, board_svc, worker, settings)
 
-    # 4. LLM dedup.
+    # 5. LLM dedup.
+    dup_id = _run_llm_dedup(body, candidates, board_svc, worker, settings)
+    if dup_id is not None:
+        board_svc.add_history_note(
+            dup_id,
+            f"re-reported by {body.source_tag} on {date.today().isoformat()}",
+        )
+        return JSONResponse(
+            status_code=200,
+            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
+        )
+
+    # already_done is deliberately not acted on — fall through to create.
+    return _create_ticket(body, board_id, board_svc, worker, settings)
+
+
+def _run_llm_dedup(
+    body: TicketIngest,
+    candidates: list[Ticket],
+    board_svc: TicketService,
+    worker: Worker,
+    settings: Settings,
+) -> str | None:
+    """Run the LLM dedup check against the top-ranked candidates.
+
+    Returns a ``ticket_id`` when a duplicate is found, or ``None``
+    when no duplicate was detected (fail-open: LLM errors also return
+    ``None`` so the ticket is created).
+    """
     top = rank_candidates_by_similarity(
         draft_title=body.title,
         draft_body=body.body,
@@ -166,21 +290,9 @@ def ingest_ticket(
         )
     except Exception as exc:
         logger.warning("ingest dedup LLM failed, creating ticket (fail-open): %s", exc)
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return None
 
-    if verdict.get("duplicate_of"):
-        dup_id: str = verdict["duplicate_of"]
-        board_svc.add_history_note(
-            dup_id,
-            f"re-reported by {body.source_tag} on {date.today().isoformat()}",
-        )
-        return JSONResponse(
-            status_code=200,
-            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
-        )
-
-    # already_done is deliberately not acted on — fall through to create.
-    return _create_ticket(body, board_id, board_svc, worker, settings)
+    return verdict.get("duplicate_of")
 
 
 def _count_open_tickets(board_svc: TicketService, board_id: str) -> int:
