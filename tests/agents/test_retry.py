@@ -545,3 +545,52 @@ def test_run_agent_fallback_inside_running_loop():
         return run_agent(object(), make_run, fallback_fn=fallback, sleep=lambda _: None)
 
     assert asyncio.run(main()) == "fallback-ok"
+
+
+def test_is_transient_permanent_api_400_not_retried():
+    """An API 400 is request validation — every retry re-sends the identical
+    rejected payload, so it must never be transient."""
+    exc = Exception("API Error: 400 `task_budget.total` must be at least 20,000 tokens")
+    assert is_transient(exc) is False
+
+    wrapped = RuntimeError("agent run failed")
+    wrapped.__cause__ = exc
+    assert is_transient(wrapped) is False
+
+
+def test_permanent_api_400_beats_degenerate_success():
+    """The live refine outage: the CLI reports the 400 as assistant text and
+    the SDK collapses that frame into the degenerate-success message. Both
+    signatures are in the chain — the permanent one must win, or the error is
+    swallowed as an empty success and refine silently no-ops."""
+    from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
+
+    cause = Exception(
+        "API Error: 400 `task_budget.total` must be at least 20,000 tokens"
+    )
+    collapsed = Exception("Claude Code returned an error result: success")
+    collapsed.__cause__ = cause
+
+    assert _is_claude_sdk_degenerate_result(collapsed) is False
+    assert is_transient(collapsed) is False
+
+
+def test_degenerate_success_without_api_error_still_swallowed():
+    """A genuine degenerate frame (no real error behind it) keeps the existing
+    treat-as-empty-success behaviour."""
+    from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
+
+    assert (
+        _is_claude_sdk_degenerate_result(
+            Exception("Claude Code returned an error result: success")
+        )
+        is True
+    )
+
+
+def test_retryable_api_status_codes_stay_transient():
+    """Scoped to 400 — rate limits and server errors must keep retrying."""
+    from robotsix_mill.agents.retry import _is_permanent_api_error
+
+    assert _is_permanent_api_error(Exception("API Error: 429 rate limited")) is False
+    assert _is_permanent_api_error(Exception("API Error: 500 internal")) is False

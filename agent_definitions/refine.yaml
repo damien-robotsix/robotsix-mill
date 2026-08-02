@@ -71,11 +71,13 @@ list_epic_children: true
 output_type: RefineResult
 retries: 2
 
-# Cap the refine agent at 8192 output tokens. Refine produces specs,
-# not code reviews; 8192 is 4× the spec-truncation limit and matches
-# periodic/completeness_check.yaml. The review agent's 32768 cap is
-# appropriate for its verbose code-review output.
-max_tokens: 8192
+# Refine produces specs, not code reviews, so it wants a modest cap — but
+# 20000 is a FLOOR, not a preference. On the Claude SDK transport this value
+# becomes `task_budget.total`, which the API rejects below 20,000 tokens
+# ("must be at least 20,000 tokens for this model"), and refine routes there
+# whenever refine_subscription_tier_routing_enabled is on. The previous 8192
+# therefore failed every refine call outright. Do not lower this below 20000.
+max_tokens: 20000
 
 # Explicit module path (the loader imports output_type from here).
 # Convention: name "refine" → module "refining".
