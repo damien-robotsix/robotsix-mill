@@ -380,6 +380,7 @@ abandon_epic
 generate_children
 credit_status
 credit_status_clear
+credential_status
 health
 health_ready
 langfuse_status
