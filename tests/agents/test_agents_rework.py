@@ -802,6 +802,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
         "detect_duplication",
         "explore",
         "list_dir",
+        "list_recent_tickets",
         "parallel_commands",
         "parallel_explore",
         "read_file",
