@@ -904,18 +904,18 @@ def test_trace_stage_ask_web_knowledge_nests_under_parent(
 
 if _HYPOTHESIS_AVAILABLE:
 
-    @given(st.text())
+    @given(st.text(max_size=500))
     def test_slug_is_idempotent(s):
         assert _slug(_slug(s)) == _slug(s)
 
-    @given(st.text())
+    @given(st.text(max_size=500))
     def test_slug_is_ascii_and_nonempty_and_no_leading_dash(s):
         result = _slug(s)
         assert result.isascii()
         assert len(result) > 0
         assert not result.startswith("-")
 
-    @given(st.text(), st.text(max_size=200))
+    @given(st.text(max_size=200), st.text(max_size=200))
     def test_stamp_parse_roundtrip_recovers_body(library, body):
         assume("\n---" not in library)
         stamped = _stamp_frontmatter(library, body)

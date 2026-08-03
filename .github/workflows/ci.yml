@@ -30,6 +30,17 @@ jobs:
       pytest-args: -m "not docker" -n auto
       bandit-severity: "medium"
       mypy-advisory: true
+      # CVE ignores mirroring security-audit.yml:
+      #   PYSEC-2025-183 (pyjwt): disputed advisory — key strength is the
+      #     caller's responsibility; mill supplies ≥2048-bit GitHub App keys.
+      #   MAL-2026-4750 (fastapi): undocument "fastar" dep in fastapi[standard];
+      #     mill depends on fastapi without extras, so the malicious dep is
+      #     never installed.  Advisory since withdrawn (retained for docs).
+      #   GHSA-9xwg-3r6f-jcx2 (pymdown-extensions): XSS in Arithmatex,
+      #     fixed in 10.14; mill's lock pins 10.21.3 — above the fix version.
+      #     pymdown-extensions is a transitive docs-only dependency, never
+      #     shipped or served to users.
+      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2"
 
   mill-specific:
     runs-on: ubuntu-latest
