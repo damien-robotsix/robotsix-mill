@@ -45,5 +45,6 @@ run_module_size_agent = make_agent_runner(
     max_gaps=MAX_GAPS,
     include_forge_url=True,
     include_run_command=True,
+    include_parallel_commands=True,
     dynamic_kwargs_fn=_module_size_dynamic_kwargs,
 )

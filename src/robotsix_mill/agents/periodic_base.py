@@ -131,6 +131,7 @@ def _build_periodic_tools(
     include_jscpd: bool,
     include_workflow_caller_audit: bool,
     include_run_command: bool,
+    include_parallel_commands: bool = False,
     include_write_file: bool = False,
     extra_roots: list[Path] | None,
 ) -> list:
@@ -146,6 +147,8 @@ def _build_periodic_tools(
     fs_filter: set[str] = {"read_file", "list_dir"}
     if include_run_command:
         fs_filter.add("run_command")
+    if include_parallel_commands:
+        fs_filter.add("parallel_commands")
     if include_write_file:
         fs_filter.add("write_file")
 
@@ -192,6 +195,7 @@ def run_periodic_agent(
     include_jscpd: bool = False,
     include_workflow_caller_audit: bool = False,
     include_run_command: bool = False,
+    include_parallel_commands: bool = False,
     include_write_file: bool = False,
     extra_roots: list[Path] | None = None,
     usage_limits: Any = None,
@@ -298,6 +302,7 @@ def run_periodic_agent(
             include_jscpd=include_jscpd,
             include_workflow_caller_audit=include_workflow_caller_audit,
             include_run_command=include_run_command,
+            include_parallel_commands=include_parallel_commands,
             include_write_file=include_write_file,
             extra_roots=extra_roots,
         )
@@ -464,6 +469,7 @@ def make_agent_runner(
     include_jscpd: bool = False,
     include_workflow_caller_audit: bool = False,
     include_run_command: bool = False,
+    include_parallel_commands: bool = False,
     include_write_file: bool = False,
     dynamic_kwargs_fn: Callable[[Settings], dict[str, Any]] | None = None,
     extra_kwargs: dict[str, Any] | None = None,
@@ -519,6 +525,7 @@ def make_agent_runner(
                 include_jscpd=include_jscpd,
                 include_workflow_caller_audit=include_workflow_caller_audit,
                 include_run_command=include_run_command,
+                include_parallel_commands=include_parallel_commands,
                 include_write_file=include_write_file,
                 fallback_level=fallback_level,
                 **kwargs,

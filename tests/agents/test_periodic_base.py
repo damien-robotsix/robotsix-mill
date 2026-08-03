@@ -395,6 +395,60 @@ def test_no_run_command_when_false(settings, monkeypatch, tmp_path):
     assert "run_command" not in tool_names
 
 
+def test_include_parallel_commands_adds_to_fs_filter(settings, monkeypatch, tmp_path):
+    """When include_parallel_commands=True, parallel_commands is included."""
+    mocks = _setup_patches(
+        monkeypatch,
+        build_fs_tools=[
+            _make_fake_tool("read_file"),
+            _make_fake_tool("list_dir"),
+            _make_fake_tool("parallel_commands"),
+            _make_fake_tool("edit_file"),
+        ],
+    )
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_parallel_commands=True,
+    )
+    tools_arg = mocks["build_agent_from_definition"].call_args[1]["tools"]
+    tool_names = [t.__name__ for t in tools_arg]
+    assert "parallel_commands" in tool_names
+    assert "edit_file" not in tool_names  # not in filter
+
+
+def test_no_parallel_commands_when_false(settings, monkeypatch, tmp_path):
+    """When include_parallel_commands=False, parallel_commands is excluded."""
+    mocks = _setup_patches(
+        monkeypatch,
+        build_fs_tools=[
+            _make_fake_tool("read_file"),
+            _make_fake_tool("list_dir"),
+            _make_fake_tool("parallel_commands"),
+        ],
+    )
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        include_parallel_commands=False,
+    )
+    tools_arg = mocks["build_agent_from_definition"].call_args[1]["tools"]
+    tool_names = [t.__name__ for t in tools_arg]
+    assert "parallel_commands" not in tool_names
+
+
 # ---------------------------------------------------------------------------
 # usage_limits forwarding
 # ---------------------------------------------------------------------------
