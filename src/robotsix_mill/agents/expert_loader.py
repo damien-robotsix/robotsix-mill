@@ -2,7 +2,7 @@
 
 Parses ``expert_definitions/<domain>.yaml``, validates the result against
 the ``ExpertDefinition`` Pydantic model, and returns a structured object.
-Each definition declares a capability ``level`` (1/2/3) resolved by
+Each definition declares a capability ``level`` (1/2/3/4) resolved by
 ``build_agent`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,

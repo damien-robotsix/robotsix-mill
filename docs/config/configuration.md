@@ -72,7 +72,7 @@ chmod 600 config/config.json          # it now holds real credentials
 ### Change which model an agent uses
 
 Models are not configured per-agent in the JSON config file. Each agent definition
-(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3`,
+(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3|4`,
 which resolves to a `(transport, model)` via robotsix-llmio's tier
 defaults (see [§1 Capability levels](#1-capability-levels-model-selection)).
 To change an agent's model, change its `level` in the definition; to change
@@ -355,7 +355,7 @@ Every setting below shows:
 ### 1. Capability levels (model selection)
 
 Per-agent model selection is declared in each **agent definition's**
-`level: 1|2|3` field. `build_agent` resolves a level to a
+`level: 1|2|3|4` field. `build_agent` resolves a level to a
 `(transport, model)` pair via robotsix-llmio's baked tier defaults — there
 is no per-agent model config in the JSON config file and no global backend
 toggle. The level *is* the backend choice.

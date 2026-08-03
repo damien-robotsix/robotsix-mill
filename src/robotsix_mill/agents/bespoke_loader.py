@@ -50,8 +50,8 @@ class BespokeAgentDefinition(BaseModel):
     level: int = Field(
         default=1,
         ge=1,
-        le=3,
-        description="capability level 1/2/3 (default 1 = cheap); resolved to "
+        le=4,
+        description="capability level 1/2/3/4 (default 1 = cheap); resolved to "
         "a (transport, model) by build_agent via llmio tier defaults",
     )
     web_knowledge: bool = Field(

@@ -94,12 +94,12 @@ system_prompt: Do one thing well.
 
 
 def test_level_out_of_range_rejected(tmp_path):
-    """level must be 1, 2, or 3 — out-of-range values are rejected."""
+    """level must be 1–4 — out-of-range values are rejected."""
     p = _write_yaml(
         tmp_path,
         """\
 name: bad-level
-level: 4
+level: 5
 system_prompt: test
 """,
     )
@@ -855,12 +855,12 @@ def test_load_periodic_agent_definition_repo_override_wins(tmp_path):
 
 def test_every_real_yaml_declares_a_valid_level(monkeypatch):
     """Every agent_definitions/*.yaml declares a capability ``level`` in the
-    1..3 range (the env-var ``${MILL_*_MODEL}`` substitution path is gone)."""
+    1..4 range (the env-var ``${MILL_*_MODEL}`` substitution path is gone)."""
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
         monkeypatch.setenv(var, "mock/model")
 
     for yf, ad in _all_definitions():
-        assert ad.level in (1, 2, 3), f"{yf.name}: level {ad.level} out of range"
+        assert ad.level in (1, 2, 3, 4), f"{yf.name}: level {ad.level} out of range"
 
 
 # ── !include resolution ──────────────────────────────────────────────
