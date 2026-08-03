@@ -143,9 +143,6 @@ class Secrets:
     # ``check_config_sync.py`` does ``set(Secrets.model_fields)``.
     model_fields: dict[str, SimpleNamespace] = _SecretsModelFields()
 
-    # A set of field names — convenient for ``_is_secret_field`` and callers.
-    _secret_field_names: frozenset[str] = _SECRET_FIELD_NAMES
-
     @classmethod
     def model_json_schema(cls) -> dict[str, Any]:
         """Return a JSON Schema for the secrets block.
@@ -282,9 +279,7 @@ class Secrets:
         # Let special names through without logging.
         if name.startswith("_") or name in (
             "model_fields",
-            "model_dump",
             "model_json_schema",
-            "_secret_field_names",
         ):
             return object.__getattribute__(self, name)
 
@@ -305,14 +300,6 @@ class Secrets:
     def __repr__(self) -> str:
         parts = ", ".join(f"{name}='***'" for name in sorted(_SECRET_FIELD_NAMES))
         return f"Secrets({parts})"
-
-    # --- model_dump (backward-compat) ------------------------------------
-
-    def model_dump(self, *, redact: bool = True, **kwargs: Any) -> dict[str, Any]:
-        """Return a dict representation (redacted by default)."""
-        if redact:
-            return dict.fromkeys(sorted(_SECRET_FIELD_NAMES), "***")
-        return {name: getattr(self, name) for name in sorted(_SECRET_FIELD_NAMES)}
 
 
 # ---------------------------------------------------------------------------
