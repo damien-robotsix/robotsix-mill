@@ -1236,7 +1236,7 @@
           '<div style="margin:6px 0"><b>depends on:</b><ul style="margin:4px 0 0 18px;padding:0;list-style:none">' +
           t.dependencies.map(function(d) {
             var st = d.state || "?";
-            var terminal = { "closed": 1, "done": 1, "epic_closed": 1 };
+            var terminal = { "closed": 1, "done": 1, "epic_closed": 1, "answered": 1 };
             var blocked = { "blocked": 1, "errored": 1 };
             var awaiting = { "awaiting_user_reply": 1, "human_issue_approval": 1, "human_mr_approval": 1 };
             var icon = terminal[st] ? "✅" : blocked[st] ? "⛔" : awaiting[st] ? "⏸" : "⏳";
