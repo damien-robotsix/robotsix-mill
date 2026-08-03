@@ -1,9 +1,9 @@
 # Continuous deployment
 
 On every push to `main`, a GitHub Actions workflow
-(`.github/workflows/docker-publish.yml`) builds and publishes the
-Docker image to Docker Hub as **`robotsix/mill:latest`** (plus a
-short-SHA tag for pinning). A [Watchtower](https://containrrr.dev/watchtower/)
+(`.github/workflows/release.yml`) builds and publishes the
+Docker images to GHCR as **`ghcr.io/damien-robotsix/robotsix-mill:main`**
+(plus a short-SHA tag for pinning). A [Watchtower](https://containrrr.dev/watchtower/)
 sidecar in the compose stack polls for new images and auto-updates the
 running `mill` container — no manual rebuilds or restarts needed.
 
@@ -11,8 +11,6 @@ running `mill` container — no manual rebuilds or restarts needed.
 
 | Secret | Purpose |
 |---|---|
-| `DOCKERHUB_USERNAME` | Docker Hub username for pushing images |
-| `DOCKERHUB_TOKEN` | Docker Hub access token (or password) |
 | `DEPS_BUMP_TOKEN` | PAT used by `deps-bump.yml` to open the weekly `uv.lock` bump PR so its CI runs (a PR created with the default `GITHUB_TOKEN` triggers no workflows) |
 
 Set these in the repository **Settings → Secrets and variables →
