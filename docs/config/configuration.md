@@ -72,7 +72,7 @@ chmod 600 config/config.json          # it now holds real credentials
 ### Change which model an agent uses
 
 Models are not configured per-agent in the JSON config file. Each agent definition
-(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3`,
+(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3|4`,
 which resolves to a `(transport, model)` via robotsix-llmio's tier
 defaults (see [§1 Capability levels](#1-capability-levels-model-selection)).
 To change an agent's model, change its `level` in the definition; to change
@@ -355,7 +355,7 @@ Every setting below shows:
 ### 1. Capability levels (model selection)
 
 Per-agent model selection is declared in each **agent definition's**
-`level: 1|2|3` field. `build_agent` resolves a level to a
+`level: 1|2|3|4` field. `build_agent` resolves a level to a
 `(transport, model)` pair via robotsix-llmio's baked tier defaults — there
 is no per-agent model config in the JSON config file and no global backend
 toggle. The level *is* the backend choice.
@@ -364,7 +364,8 @@ toggle. The level *is* the backend choice.
 |-------|-----------|-------|--------|
 | 1 | `openrouter[deepseek]` | `deepseek/deepseek-v4-flash` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
 | 2 | `openrouter[deepseek]` | `deepseek/deepseek-v4-pro` | intermediate — implement, ci_fix, review, test, … |
-| 3 | `claude-sdk` | `opus` | high-level planning — refine, meta_triage, epic_breakdown |
+| 3 | `claude-sdk` | `opus` | high-level planning — refine, meta_triage |
+| 4 | `claude-sdk` | `fable-5` | intermediate planning — epic_breakdown |
 
 Level-3 agents run on the Claude Agent SDK (subscription auth; needs Node +
 the `claude` CLI in the container). These knobs govern that path:

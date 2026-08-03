@@ -2,7 +2,7 @@
 
 Parses ``agent_definitions/<name>.yaml``, validates the result against the
 ``AgentDefinition`` Pydantic model, and returns a structured object. Each
-definition declares a capability ``level`` (1/2/3) that ``build_agent``
+definition declares a capability ``level`` (1/2/3/4) that ``build_agent``
 resolves to a ``(transport, model)`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,
@@ -42,10 +42,10 @@ class AgentDefinition(BaseModel):
     name: str
     description: str | None = None
     category: str | None = None
-    # Capability level (1/2/3) → resolved to (transport, model) by build_agent
+    # Capability level (1/2/3/4) → resolved to (transport, model) by build_agent
     # via llmio's tier defaults: L1 DeepSeek flash, L2 DeepSeek pro, L3 Claude
-    # opus. Replaces the old provider-specific ``model`` field.
-    level: int = Field(ge=1, le=3)
+    # opus, L4 Claude fable-5. Replaces the old provider-specific ``model`` field.
+    level: int = Field(ge=1, le=4)
     system_prompt: str
     tools: list[str] = []
     # Single web/library knowledge gateway. When True the agent gets

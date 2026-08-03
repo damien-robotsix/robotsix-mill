@@ -14,15 +14,16 @@ from pydantic import BaseModel, Field, SecretStr
 
 class _CoreSettings(BaseModel):
     # Per-agent model selection is driven by each agent definition's
-    # ``level: 1|2|3`` field, resolved to a (transport, model) by
+    # ``level: 1|2|3|4`` field, resolved to a (transport, model) by
     # ``build_agent`` via llmio's tier defaults. Transient 429/5xx/timeouts
     # are absorbed by the bounded retry+backoff (see transient_* below).
     #
     # --- Capability levels (llmio tier defaults) -------------------------
     # Per-agent model selection lives entirely in the agent definitions'
-    # ``level: 1|2|3`` field (resolved to a (transport, model) by
+    # ``level: 1|2|3|4`` field (resolved to a (transport, model) by
     # ``build_agent`` via llmio's baked tier defaults — L1 DeepSeek flash,
-    # L2 DeepSeek pro, L3 Claude Opus). There is no global backend toggle.
+    # L2 DeepSeek pro, L3 Claude Opus, L4 Claude fable-5). There is no
+    # global backend toggle.
     #
     openrouter_api_key: SecretStr | None = Field(
         default=None,

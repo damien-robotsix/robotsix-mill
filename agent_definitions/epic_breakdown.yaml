@@ -10,10 +10,10 @@ category: pipeline
 
 # Decomposition emits a structured PromptedOutput whose exact field names
 # (child_titles / child_bodies) a cheap model (haiku under the Claude SDK
-# backend) fails to honor, silently yielding zero children. Use the capable
-# coordinator model (MILL_MODEL) — the call site passes settings.model, which
-# overrides this default; kept in sync for clarity.
-level: 3
+# backend) fails to honor, silently yielding zero children. fable-5 (level 4)
+# handles structured output reliably while costing far less than opus (level 3)
+# under the weekly Claude subscription cap.
+level: 4
 
 tools: []
 

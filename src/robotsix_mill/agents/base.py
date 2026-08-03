@@ -462,10 +462,11 @@ def build_agent(
     repo_dir: "Path | None" = None,
     web_knowledge_block_reason: str | None = None,
 ):
-    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3).
+    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4).
 
     The level resolves to ``(transport, model)`` via llmio's baked tier
-    defaults: L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus.
+    defaults: L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus,
+    L4 → Claude SDK fable-5.
     The transport is what selects the backend — there is no separate toggle.
 
     Set ``report_issue=False`` for agents that already emit draft

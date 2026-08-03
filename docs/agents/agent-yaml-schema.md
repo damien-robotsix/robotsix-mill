@@ -109,18 +109,19 @@ Which class of agent this is:
 |-----------|-------|
 | Type | `integer` |
 | Required | **yes** |
-| Constraints | `ge=1, le=3` |
+| Constraints | `ge=1, le=4` |
 | Example | `level: 2` |
 
 The agent's capability tier, used by `build_agent` to resolve a
-concrete `(transport, model)` pair via llmio's tier defaults. Three
+concrete `(transport, model)` pair via llmio's tier defaults. Four
 levels are defined:
 
-| Level | Label | Resolved model |
-|-------|-------|----------------|
-| 1 | flash | Cheapest, fastest model (DeepSeek flash or equivalent) |
-| 2 | pro   | Balanced cost/capability (DeepSeek pro or equivalent) |
-| 3 | opus  | Most capable model (Claude opus or equivalent) |
+| Level | Label   | Resolved model |
+|-------|---------|----------------|
+| 1 | flash   | Cheapest, fastest model (DeepSeek flash or equivalent) |
+| 2 | pro     | Balanced cost/capability (DeepSeek pro or equivalent) |
+| 3 | opus    | Most capable model (Claude opus or equivalent) |
+| 4 | fable-5 | Cost-effective Claude model for structured-output tasks |
 
 The mapping from `level` to concrete model is **not** defined in
 the YAML file — it lives in `Settings` and the tier-resolution
