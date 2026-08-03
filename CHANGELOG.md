@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `audit-ignore` to the CI workflow call with the same three CVE ignores as `security-audit.yml`, so the `uv audit --frozen --preview` step introduced by the python-ci.yml reusable workflow bump (e94a9aad) no longer fails the ci / Tests job before tests run.  The three CVEs are all false positives: PYSEC-2025-183 (pyjwt, disputed), MAL-2026-4750 (fastapi, withdrawn), and GHSA-9xwg-3r6f-jcx2 (pymdown-extensions, already fixed).
 - Add `audit-ignore` to `ci.yml` with the same CVE ignores as `security-audit.yml`, so `uv audit --frozen --preview` (introduced by the python-ci.yml reusable workflow bump to e94a9aad) does not fail the ci / Tests job before tests run.
 - Bound Hypothesis `st.text()` strategies with `max_size` limits in `test_web_knowledge.py` and `test_core_dedup.py` to prevent resource exhaustion in CI from unconstrained string generation.
 - Complete the config-standard cutover: remove all `MILL_CONFIG_FILE`, `MILL_SECRETS_FILE`, and `MILL_REPOS_FILE` env-var reads. `ROBOTSIX_CONFIG_FILE` is now the sole config-file locator. Delete `config/repos.example.yaml` (repos now live in the main config file). Update smoke test and docs accordingly. (mill: CI red on main: ci / Tests job failing (exit code 1) — fix the failing test(s) (20260802T103726Z-ci-red-on-main-ci-tests-job-failing-exit-07b1))

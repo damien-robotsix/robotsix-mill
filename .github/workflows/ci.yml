@@ -27,18 +27,20 @@ jobs:
       install-extras: "tracing"
       cov-package: "robotsix_mill"
       coverage-threshold: 80
-      # Audit ignores mirror security-audit.yml — same CVEs, same
-      # justifications.  Without these, uv audit --frozen --preview
-      # (added to python-ci.yml at e94a9aad) fails the ci / Tests job
-      # before Ruff, Mypy, Bandit, or pytest ever run.
-      # PYSEC-2025-183: pyjwt "weak encryption" — disputed, no fix version.
-      # MAL-2026-4750: fastapi 0.136.3 "fastar" dep — withdrawn advisory.
-      # GHSA-9xwg-3r6f-jcx2: pymdown-extensions XSS — fixed in 10.14,
-      #   lock pins 10.21.3 (well above fix); transitive docs-only dep.
-      audit-ignore: "PYSEC-2025-183 MAL-2026-4750 GHSA-9xwg-3r6f-jcx2"
       pytest-args: -m "not docker" -n auto
       bandit-severity: "medium"
       mypy-advisory: true
+      # CVE ignores mirroring security-audit.yml:
+      #   PYSEC-2025-183 (pyjwt): disputed advisory — key strength is the
+      #     caller's responsibility; mill supplies ≥2048-bit GitHub App keys.
+      #   MAL-2026-4750 (fastapi): undocument "fastar" dep in fastapi[standard];
+      #     mill depends on fastapi without extras, so the malicious dep is
+      #     never installed.  Advisory since withdrawn (retained for docs).
+      #   GHSA-9xwg-3r6f-jcx2 (pymdown-extensions): XSS in Arithmatex,
+      #     fixed in 10.14; mill's lock pins 10.21.3 — above the fix version.
+      #     pymdown-extensions is a transitive docs-only dependency, never
+      #     shipped or served to users.
+      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2"
 
   mill-specific:
     runs-on: ubuntu-latest
