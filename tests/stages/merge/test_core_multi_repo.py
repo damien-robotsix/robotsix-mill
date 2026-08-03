@@ -500,7 +500,7 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
 
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert captured["repo_dir"].endswith("repos/repo-b")
+    assert str(captured["repo_dir"]).endswith("repos/repo-b")
     assert captured["branch"] == branch
     assert pushed["branch"] == branch
     assert pushed["remote"] == remote_b
@@ -743,7 +743,7 @@ def test_multi_repo_failing_ci_with_clone_runs_ci_fix(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     # Stays in IMPLEMENT_COMPLETE to re-poll after the fix push.
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert captured["repo_dir"].endswith("repos/repo-b")
+    assert str(captured["repo_dir"]).endswith("repos/repo-b")
     assert pushed["remote"] == remote_b
     # Attempt counter reset on a productive push.
     counter = ctx.service.workspace(t).artifacts_dir / "ci_fix_repo-b.count"

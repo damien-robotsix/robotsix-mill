@@ -95,6 +95,12 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         "db_maintenance_interval_seconds",
         "ticket_state_cycle_limit",
         "deliver_max_identical_blocks",
+        # -- ci-fix agent timeout: default 1800 wraps the LLM agent call
+        #    inside the ci-fix stage.  Committing a JSON default would
+        #    be misleading because the live value SHOULD be smaller than
+        #    the worker's stage_timeout_seconds and the operator tunes
+        #    it per-deployment. --
+        "ci_fix_agent_timeout_seconds",
         # -- Periodic agent settings (presence-file driven; no JSON entry) --
         "repo_description_sync_periodic",
         "repo_description_sync_interval_seconds",
