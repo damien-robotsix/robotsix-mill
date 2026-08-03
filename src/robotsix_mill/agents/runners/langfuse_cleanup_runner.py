@@ -16,7 +16,7 @@ import base64
 import logging
 from dataclasses import dataclass
 
-from ...config import RepoConfig, Settings, get_secrets
+from ...config import RepoConfig, Settings
 
 log = logging.getLogger(__name__)
 
@@ -53,11 +53,14 @@ def run_langfuse_cleanup_pass(
         secret_key = repo_config.langfuse_secret_key
         label = repo_config.repo_id
     else:
-        host = (get_secrets().langfuse_base_url or "https://cloud.langfuse.com").rstrip(
-            "/"
-        )
-        public_key = get_secrets().langfuse_public_key
-        secret_key = get_secrets().langfuse_secret_key
+        lf = settings.langfuse
+        if lf is None or not lf.projects:
+            log.info("langfuse_cleanup: default — no langfuse block, skipping")
+            return CleanupResult(project="default", traces_before=0, traces_deleted=0)
+        _, proj = next(iter(lf.projects.items()))
+        host = (lf.host or "https://cloud.langfuse.com").rstrip("/")
+        public_key = proj.public_key
+        secret_key = proj.secret_key
         label = "default"
 
     if not (public_key and secret_key):

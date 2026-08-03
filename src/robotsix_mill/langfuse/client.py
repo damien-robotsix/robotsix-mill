@@ -17,7 +17,7 @@ from typing import Any
 
 from robotsix_llmio.core import LangfuseReadClient
 
-from ..config import RepoConfig, Settings, get_secrets
+from ..config import RepoConfig, Settings
 
 log = logging.getLogger("robotsix_mill.langfuse.client")
 
@@ -63,10 +63,13 @@ def _build_read_client(
     if repo_config is None:
         if not settings.tracing_enabled:
             return None
-        secrets = get_secrets()
-        public_key = secrets.langfuse_public_key
-        secret_key = secrets.langfuse_secret_key
-        base_url = secrets.langfuse_base_url
+        lf = settings.langfuse
+        if lf is None or not lf.projects:
+            return None
+        _, proj = next(iter(lf.projects.items()))
+        public_key = proj.public_key
+        secret_key = proj.secret_key
+        base_url = lf.host
     else:
         public_key = repo_config.langfuse_public_key
         secret_key = repo_config.langfuse_secret_key

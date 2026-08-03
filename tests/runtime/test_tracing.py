@@ -14,7 +14,7 @@ from datetime import datetime as _real_datetime, timezone as _real_timezone
 
 import pytest
 
-from robotsix_mill.config import RepoConfig, Secrets, _reset_secrets
+from robotsix_mill.config import RepoConfig, _reset_secrets
 from robotsix_mill.runtime import tracing
 
 
@@ -151,15 +151,18 @@ def test_ensure_tracing_delegates_to_llmio(monkeypatch):
     assert "pk-a" in tracing._registered_keys
 
 
-def test_ensure_tracing_falls_back_to_global_secrets(monkeypatch):
-    """With no repo_config, creds come from the global Secrets singleton
+def test_ensure_tracing_falls_back_to_global_langfuse(monkeypatch):
+    """With no repo_config, creds come from the canonical langfuse block
     and project_id is None."""
     monkeypatch.setattr(
-        "robotsix_mill.config._secrets",
-        Secrets(
-            langfuse_public_key="pk-g",
-            langfuse_secret_key="sk-g",
-            langfuse_base_url="https://global.example.com",
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://global.example.com",
+            "pk-g",
+            "sk-g",
+            "cuid-123",
+            "robotsix-mill",
         ),
     )
     captured = {}
@@ -267,8 +270,15 @@ def test_export_adapter_label_falls_back_to_public_key(monkeypatch):
         lambda **kw: (captured.update(kw), True)[1],
     )
     monkeypatch.setattr(
-        "robotsix_mill.config._secrets",
-        Secrets(langfuse_public_key="pk-only", langfuse_secret_key="sk-only"),
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-only",
+            "sk-only",
+            "",
+            "pk-only",
+        ),
     )
     tracing._ensure_tracing()
     captured["on_export_result"]("pk-only", False, "nope")
@@ -310,15 +320,22 @@ def test_start_ticket_root_span_enters_llmio_contexts(monkeypatch):
     assert ("project", "pk-a") in calls
 
 
-def test_start_ticket_root_span_pk_from_global_secrets(monkeypatch):
+def test_start_ticket_root_span_pk_from_global_langfuse(monkeypatch):
     """When no repo_config pk is given, the project pk comes from the
-    global Secrets singleton."""
+    canonical langfuse block."""
     calls = []
     monkeypatch.setattr(tracing, "_ensure_tracing", lambda repo_config=None: None)
     tracing._provider_ready = True
     monkeypatch.setattr(
-        "robotsix_mill.config._secrets",
-        Secrets(langfuse_public_key="pk-global", langfuse_secret_key="sk-global"),
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-global",
+            "sk-global",
+            "",
+            "pk-global",
+        ),
     )
     monkeypatch.setattr(
         _llmio(), "langfuse_session", lambda sid: _record_cm(calls, "session", sid)
@@ -394,19 +411,34 @@ def test_tracing_enabled_no_env():
 
 
 def test_tracing_enabled_with_vars(monkeypatch):
-    """_tracing_enabled returns True when both keys are set in Secrets."""
+    """_tracing_enabled returns True when both keys are set in the
+    canonical langfuse block."""
     monkeypatch.setattr(
-        "robotsix_mill.config._secrets",
-        Secrets(langfuse_public_key="pk-test", langfuse_secret_key="sk-test"),
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-test",
+            "sk-test",
+            "",
+            "test-project",
+        ),
     )
     assert tracing._tracing_enabled() is True
 
 
 def test_tracing_enabled_missing_secret(monkeypatch):
-    """_tracing_enabled returns False when only public key is set in Secrets."""
+    """_tracing_enabled returns False when only public key is set."""
     monkeypatch.setattr(
-        "robotsix_mill.config._secrets",
-        Secrets(langfuse_public_key="pk-test"),
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-test",
+            "",
+            "",
+            "test-project",
+        ),
     )
     assert tracing._tracing_enabled() is False
 
@@ -643,11 +675,18 @@ def test_langfuse_trace_url_empty_base_url_fallback(repo_config):
     assert url == ("https://cloud.langfuse.com/project/test-project/traces/trace-1")
 
 
-def test_langfuse_trace_url_secrets_fallback(secrets_set):
-    """langfuse_trace_url uses Secrets when no RepoConfig is given."""
-    secrets_set(
-        langfuse_base_url="https://cloud.langfuse.com",
-        langfuse_project_name="secrets-project",
+def test_langfuse_trace_url_global_fallback(monkeypatch):
+    """langfuse_trace_url uses the langfuse block when no RepoConfig is given."""
+    monkeypatch.setattr(
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-x",
+            "sk-x",
+            "",
+            "secrets-project",
+        ),
     )
     url = tracing.langfuse_trace_url("trace-456")
     assert url == (
@@ -655,22 +694,35 @@ def test_langfuse_trace_url_secrets_fallback(secrets_set):
     )
 
 
-def test_langfuse_trace_url_secrets_project_id_preferred(secrets_set):
-    """secrets fallback prefers langfuse_project_id over langfuse_project_name."""
-    secrets_set(
-        langfuse_base_url="https://cloud.langfuse.com",
-        langfuse_project_name="name-project",
-        langfuse_project_id="id-project",
+def test_langfuse_trace_url_global_project_id_preferred(monkeypatch):
+    """Global fallback prefers project_id over project_name."""
+    monkeypatch.setattr(
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-x",
+            "sk-x",
+            "id-project",
+            "name-project",
+        ),
     )
     url = tracing.langfuse_trace_url("trace-789")
     assert url == ("https://cloud.langfuse.com/project/id-project/traces/trace-789")
 
 
-def test_langfuse_trace_url_secrets_project_id_fallback(secrets_set):
-    """secrets fallback uses langfuse_project_id when langfuse_project_name is absent."""
-    secrets_set(
-        langfuse_base_url="https://cloud.langfuse.com",
-        langfuse_project_id="legacy-project-id",
+def test_langfuse_trace_url_global_project_id_fallback(monkeypatch):
+    """Global fallback uses project_id when project_name is absent."""
+    monkeypatch.setattr(
+        tracing,
+        "_resolve_mill_langfuse",
+        lambda: (
+            "https://cloud.langfuse.com",
+            "pk-x",
+            "sk-x",
+            "legacy-project-id",
+            "",
+        ),
     )
     url = tracing.langfuse_trace_url("trace-legacy")
     assert url == (
@@ -687,10 +739,8 @@ def test_langfuse_trace_url_none_when_base_missing():
     assert url is None
 
 
-def test_langfuse_trace_url_none_when_project_missing(secrets_set):
-    """langfuse_trace_url returns None when a base URL is set but
-    no project identifier is configured."""
-    secrets_set(langfuse_base_url="https://cloud.langfuse.com")
+def test_langfuse_trace_url_none_when_project_missing():
+    """langfuse_trace_url returns None when no langfuse block is configured."""
     url = tracing.langfuse_trace_url("trace-missing-project")
     assert url is None
 

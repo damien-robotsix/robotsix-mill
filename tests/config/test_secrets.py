@@ -25,8 +25,6 @@ def test_secrets_from_kwargs():
         sandbox_push_token="ghp_push_bridge",
         github_app_id="12345",
         github_app_private_key="-----BEGIN RSA PRIVATE KEY-----",
-        langfuse_public_key="pk-lf",
-        langfuse_secret_key="sk-lf",
         openrouter_management_key="mgmt-key",
         ntfy_url="https://ntfy.example.com",
         ntfy_token="tk-ntfy",
@@ -37,8 +35,6 @@ def test_secrets_from_kwargs():
     assert s.sandbox_push_token == "ghp_push_bridge"
     assert s.github_app_id == "12345"
     assert s.github_app_private_key == "-----BEGIN RSA PRIVATE KEY-----"
-    assert s.langfuse_public_key == "pk-lf"
-    assert s.langfuse_secret_key == "sk-lf"
     assert s.openrouter_management_key == "mgmt-key"
     assert s.ntfy_url == "https://ntfy.example.com"
     assert s.ntfy_token == "tk-ntfy"

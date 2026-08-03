@@ -33,6 +33,52 @@
       "title": "CrossRepoTarget",
       "type": "object"
     },
+    "LangfuseConfig": {
+      "description": "Canonical Langfuse configuration block (robotsix-standards#189).\n\nHolds the Langfuse host and exactly one project entry for the\ncomponent's own LLM function.  Per-repo credentials remain on\n``RepoConfig`` and are NOT registered here.",
+      "properties": {
+        "host": {
+          "default": "https://langfuse.robotsix.net",
+          "title": "Host",
+          "type": "string"
+        },
+        "projects": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LangfuseProjectCredentials"
+          },
+          "title": "Projects",
+          "type": "object"
+        }
+      },
+      "required": [
+        "projects"
+      ],
+      "title": "LangfuseConfig",
+      "type": "object"
+    },
+    "LangfuseProjectCredentials": {
+      "description": "Credentials for a single Langfuse project.\n\nThe canonical block shape per robotsix-standards#189.",
+      "properties": {
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "public_key": {
+          "title": "Public Key",
+          "type": "string"
+        },
+        "secret_key": {
+          "title": "Secret Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "public_key",
+        "secret_key",
+        "project_id"
+      ],
+      "title": "LangfuseProjectCredentials",
+      "type": "object"
+    },
     "RepoConfig": {
       "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
       "properties": {
@@ -241,6 +287,28 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "langfuse": {
+      "description": "Canonical Langfuse configuration block (robotsix-standards#189).\n\nHolds the Langfuse host and exactly one project entry for the\ncomponent's own LLM function.  Per-repo credentials remain on\n``RepoConfig`` and are NOT registered here.",
+      "properties": {
+        "host": {
+          "default": "https://langfuse.robotsix.net",
+          "title": "Host",
+          "type": "string"
+        },
+        "projects": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LangfuseProjectCredentials"
+          },
+          "title": "Projects",
+          "type": "object"
+        }
+      },
+      "required": [
+        "projects"
+      ],
+      "title": "LangfuseConfig",
+      "type": "object"
+    },
     "repos": {
       "description": "Repository registry: maps each repo ID to its per-repo\nconfiguration (board identity, forge remote, Langfuse credentials,\nCI monitor settings).",
       "properties": {
@@ -346,81 +414,6 @@
           "description": "",
           "format": "password",
           "title": "Github App Private Key Path",
-          "writeOnly": true
-        },
-        "langfuse_base_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Langfuse Base Url",
-          "writeOnly": true
-        },
-        "langfuse_project_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Langfuse Project Id",
-          "writeOnly": true
-        },
-        "langfuse_project_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Langfuse Project Name",
-          "writeOnly": true
-        },
-        "langfuse_public_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Langfuse Public Key",
-          "writeOnly": true
-        },
-        "langfuse_secret_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Langfuse Secret Key",
           "writeOnly": true
         },
         "ntfy_token": {
@@ -1592,20 +1585,17 @@
           "title": "Implement Stall Threshold",
           "type": "integer"
         },
-        "langfuse_base_url": {
+        "langfuse": {
           "anyOf": [
             {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
+              "$ref": "#/$defs/LangfuseConfig"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
-          "title": "Langfuse Base Url"
+          "description": "Langfuse configuration for mill's own LLM tracing (host + one project entry). Per-repo credentials live on RepoConfig and are NOT registered here."
         },
         "langfuse_cleanup_interval_seconds": {
           "advanced": true,
@@ -1626,66 +1616,6 @@
           "description": "When true, run periodic Langfuse trace cleanup (delete oldest traces).",
           "title": "Langfuse Cleanup Periodic",
           "type": "boolean"
-        },
-        "langfuse_project_id": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse project ID for trace attribution.",
-          "title": "Langfuse Project Id"
-        },
-        "langfuse_project_name": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse project name for trace attribution.",
-          "title": "Langfuse Project Name"
-        },
-        "langfuse_public_key": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
-          "title": "Langfuse Public Key"
-        },
-        "langfuse_secret_key": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Langfuse secret key for LLM observability tracing.",
-          "title": "Langfuse Secret Key"
         },
         "language_instructions_dir": {
           "description": "Directory of per-language instruction Markdown snippets.",

@@ -18,9 +18,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -39,6 +39,29 @@ if TYPE_CHECKING:
     from .repos import ReposRegistry
 
 log = logging.getLogger(__name__)
+
+
+class LangfuseProjectCredentials(BaseModel):
+    """Credentials for a single Langfuse project.
+
+    The canonical block shape per robotsix-standards#189.
+    """
+
+    public_key: str
+    secret_key: str
+    project_id: str
+
+
+class LangfuseConfig(BaseModel):
+    """Canonical Langfuse configuration block (robotsix-standards#189).
+
+    Holds the Langfuse host and exactly one project entry for the
+    component's own LLM function.  Per-repo credentials remain on
+    ``RepoConfig`` and are NOT registered here.
+    """
+
+    host: str = "https://langfuse.robotsix.net"
+    projects: dict[str, LangfuseProjectCredentials]
 
 
 class Settings(
@@ -67,25 +90,10 @@ class Settings(
         default=None,
         description="Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token — a broken push token then only blocks pushes, not PR creation or API calls.",
     )
-    langfuse_public_key: SecretStr | None = Field(
+    # --- Langfuse (canonical block, robotsix-standards#189) ---
+    langfuse: LangfuseConfig | None = Field(
         default=None,
-        description="Langfuse public key for LLM observability tracing (https://cloud.langfuse.com).",
-    )
-    langfuse_secret_key: SecretStr | None = Field(
-        default=None,
-        description="Langfuse secret key for LLM observability tracing.",
-    )
-    langfuse_base_url: SecretStr | None = Field(
-        default=None,
-        description="Langfuse instance base URL. Defaults to https://cloud.langfuse.com when unset.",
-    )
-    langfuse_project_id: SecretStr | None = Field(
-        default=None,
-        description="Langfuse project ID for trace attribution.",
-    )
-    langfuse_project_name: SecretStr | None = Field(
-        default=None,
-        description="Langfuse project name for trace attribution.",
+        description="Langfuse configuration for mill's own LLM tracing (host + one project entry). Per-repo credentials live on RepoConfig and are NOT registered here.",
     )
     openrouter_management_key: SecretStr | None = Field(
         default=None,
@@ -185,12 +193,8 @@ class Settings(
 
     @property
     def tracing_enabled(self) -> bool:
-        """True when all three Langfuse credentials are configured."""
-        return bool(
-            self.langfuse_base_url
-            and self.langfuse_public_key
-            and self.langfuse_secret_key
-        )
+        """True when the Langfuse config block is present and has at least one project."""
+        return self.langfuse is not None and bool(self.langfuse.projects)
 
     @property
     def ci_patterns_file(self) -> Path:
@@ -226,6 +230,38 @@ class Settings(
     # ------------------------------------------------------------------
     #  Validators
     # ------------------------------------------------------------------
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_removed_langfuse_secrets(cls, data: Any) -> Any:
+        """Strip removed ``secrets.langfuse_*`` keys from incoming config.
+
+        When a deployed config.json still carries the old flat
+        ``secrets.langfuse_*`` fields after the image upgrade, this
+        validator drops them so ``extra="forbid"`` does not reject the
+        config and crash-loop the process.  The values are discarded
+        (never read) — an unmigrated deployment starts, traces nothing,
+        and reports no projects to central-deploy, which is visible and
+        fixable without an outage.
+        """
+        if not isinstance(data, dict):
+            return data
+        removed = [
+            "langfuse_base_url",
+            "langfuse_project_id",
+            "langfuse_project_name",
+            "langfuse_public_key",
+            "langfuse_secret_key",
+        ]
+        stripped = {k: v for k, v in data.items() if k not in removed}
+        if len(stripped) != len(data):
+            log.warning(
+                "Dropped removed secrets.langfuse_* keys from config: %s. "
+                "The config must be migrated to the canonical langfuse block "
+                "(robotsix-standards#189).",
+                sorted(set(data) & set(removed)),
+            )
+        return stripped
 
     # -- interval minimums ---------------------------------------------
 
