@@ -15,6 +15,7 @@ closure has no access to write methods.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from ..config import Settings
 
@@ -171,7 +172,7 @@ def make_read_ticket_tool(settings: Settings):
     return read_ticket
 
 
-def make_list_recent_tickets_tool(settings: Settings):
+def make_list_recent_tickets_tool(settings: Settings) -> Callable[..., str]:
     """Return the ``list_recent_tickets`` closure bound to *settings*.
 
     Lazily constructs a ``TicketService`` per call.  Returns the same
@@ -224,7 +225,7 @@ def make_list_recent_tickets_tool(settings: Settings):
                 return "[STATE] id | title\n(no recent tickets)"
 
             lines = ["[STATE] id | title"]
-            for t in tickets:
+            for t in tickets:  # type: ignore[attr-defined]  # mypy can't resolve _QueryMixin return types through local import
                 state_val = t.state.value
                 lines.append(f"[{state_val}] {t.id} | {t.title}")
             return "\n".join(lines)
