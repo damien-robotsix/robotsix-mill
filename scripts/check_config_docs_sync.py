@@ -144,6 +144,11 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         #    documented in the "Repos registry" section, not the
         #    numbered settings tables.  Its default is an empty dict.
         "repos",
+        # -- langfuse is a structured block (LangfuseConfig) with nested
+        #    projects, documented in the "Secrets reference" section and
+        #    via the observability docs, not the numbered settings tables.
+        #    Its shape is too complex for a single settings-table row.
+        "langfuse",
     }
 )
 
