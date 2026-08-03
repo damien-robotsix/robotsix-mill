@@ -47,7 +47,7 @@ config/
   config.json              # gitignored: THE single config — all knobs + a "secrets" block
   config.example.json      # committed: template (safe defaults + "SECRET" sentinels)
   config.schema.json       # committed: JSON Schema for config.json
-  repos.example.yaml       # committed: example entries for the repos: key (see Repos registry below)
+  #  (example repo entries live under the "repos" key of config/config.example.json)
 ```
 
 ### Getting started
@@ -1055,7 +1055,7 @@ Langfuse configuration.
 ### Set up
 
 Add a `"repos"` block to `config/config.json` — one entry per repository
-(example entries in `config/repos.example.yaml`):
+(example entries under the `"repos"` key in `config/config.example.json`):
 
 ```yaml
 # config/repos.yaml (or the "repos" key of config/config.json)
@@ -1106,8 +1106,8 @@ robotsix-mill repos list
 ```
 
 Source: the `"repos"` key of `config/config.json` (located via
-`ROBOTSIX_CONFIG_FILE`). Example entries:
-`config/repos.example.yaml`.
+`ROBOTSIX_CONFIG_FILE`). Example entries live under the `"repos"` key
+in `config/config.example.json`.
 
 ### Field reference
 
@@ -1244,5 +1244,3 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 - [deployment.md](../dev-tooling/deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
 - [`config/config.example.json`](../../config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)
-fig/config.example.json) — committed single-file config template (defaults + `"secrets"` block)
-ets"` block)
