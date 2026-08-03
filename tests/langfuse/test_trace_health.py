@@ -52,29 +52,25 @@ def client(settings, repos_registry):
 
 def _settings(tmp_path, **overrides):
     """Create a Settings pointed at tmp_path, with tracing enabled
-    (Langfuse keys configured) so the runner doesn't short-circuit."""
+    (Langfuse keys configured via the canonical ``langfuse`` block)
+    so the runner doesn't short-circuit."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
-    # The config-standard cutover moved the Langfuse credentials onto
-    # Settings itself; `Settings.tracing_enabled` reads those fields, not
-    # `get_secrets()`. Populating only the Secrets singleton (as this helper
-    # used to) left tracing_enabled False, so every runner short-circuited
-    # and returned total_traces=0.
-    from robotsix_mill.config import Secrets, _reset_secrets
-    import robotsix_mill.config as _cfg
+    from robotsix_mill.config.settings import LangfuseProjectCredentials
 
     base_url = overrides.pop("LANGFUSE_BASE_URL", "https://lf.example.com")
     public_key = overrides.pop("LANGFUSE_PUBLIC_KEY", "pk-test")
     secret_key = overrides.pop("LANGFUSE_SECRET_KEY", "sk-test")
 
-    _reset_secrets()
-    _cfg._secrets = Secrets(
-        langfuse_base_url=base_url,
-        langfuse_public_key=public_key,
-        langfuse_secret_key=secret_key,
-    )
-    overrides.setdefault("langfuse_base_url", base_url)
-    overrides.setdefault("langfuse_public_key", public_key)
-    overrides.setdefault("langfuse_secret_key", secret_key)
+    overrides["langfuse"] = {
+        "host": base_url,
+        "projects": {
+            "robotsix-mill": LangfuseProjectCredentials(
+                public_key=public_key,
+                secret_key=secret_key,
+                project_id="",
+            )
+        },
+    }
     return __import__("robotsix_mill.config", fromlist=["Settings"]).Settings(
         **overrides
     )
@@ -87,25 +83,25 @@ def _init_db_for_test(settings):
 
 
 def _enable_tracing_secrets():
-    """Populate Secrets with Langfuse credentials and return the matching
-    ``Settings`` kwargs.
+    """Return ``Settings`` kwargs with a canonical ``langfuse`` block.
 
-    Both halves are needed: the config-standard cutover moved the Langfuse
-    credentials onto ``Settings`` itself, so a bare ``Settings()`` here has
-    none and the API helpers bail out early. Callers construct their
-    Settings as ``Settings(**_enable_tracing_secrets())``.
+    Callers construct their Settings as
+    ``Settings(**_enable_tracing_secrets())``.
     """
-    from robotsix_mill.config import Secrets, _reset_secrets
-    import robotsix_mill.config as _cfg
+    from robotsix_mill.config.settings import LangfuseProjectCredentials
 
-    creds = {
-        "langfuse_base_url": "https://lf.example.com",
-        "langfuse_public_key": "pk-test",
-        "langfuse_secret_key": "sk-test",
+    return {
+        "langfuse": {
+            "host": "https://lf.example.com",
+            "projects": {
+                "robotsix-mill": LangfuseProjectCredentials(
+                    public_key="pk-test",
+                    secret_key="sk-test",
+                    project_id="",
+                )
+            },
+        }
     }
-    _reset_secrets()
-    _cfg._secrets = Secrets(**creds)
-    return creds
 
 
 def _make_traces(n, with_session=True):
