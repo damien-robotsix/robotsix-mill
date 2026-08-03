@@ -88,10 +88,7 @@ def _extract_check_names(failing_summary: str) -> str:
             continue
         # Compact CodeQL alert block header (see ``_format_alert_summary_block``).
         # This appears at the very top when CodeQL is the only failing check.
-        if (
-            stripped.startswith("**CodeQL alerts")
-            and "**" in stripped[2:]
-        ):
+        if stripped.startswith("**CodeQL alerts") and "**" in stripped[2:]:
             names.append("CodeQL code-scanning")
     if not names:
         return "(unknown)"

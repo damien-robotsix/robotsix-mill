@@ -1507,9 +1507,7 @@ def test_extract_check_names_codeql_compact_block() -> None:
 def test_extract_check_names_collects_all_failing_headers() -> None:
     """All ❌ FAILED: headers are collected regardless of intermediate content."""
     summary = (
-        "## ❌ FAILED: lint\n\n"
-        "**Summary:**\nSome error\n\n"
-        "## ❌ FAILED: late_check\n\n"
+        "## ❌ FAILED: lint\n\n**Summary:**\nSome error\n\n## ❌ FAILED: late_check\n\n"
     )
     result = _extract_check_names(summary)
     assert result == "lint, late_check"
