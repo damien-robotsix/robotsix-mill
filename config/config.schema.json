@@ -904,6 +904,14 @@
           "title": "Ci Debt Recheck Periodic",
           "type": "boolean"
         },
+        "ci_fix_agent_timeout_seconds": {
+          "advanced": true,
+          "default": 1800,
+          "description": "Wall-clock timeout (seconds) for the ci-fix agent pass. 0 disables.",
+          "minimum": 0,
+          "title": "Ci Fix Agent Timeout Seconds",
+          "type": "integer"
+        },
         "ci_fix_max_attempts": {
           "advanced": true,
           "default": 2,

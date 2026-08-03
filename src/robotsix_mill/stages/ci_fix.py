@@ -12,7 +12,10 @@ Failure after max attempts escalates to BLOCKED (resumable).
 
 from __future__ import annotations
 
+import concurrent.futures
+import contextvars
 import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -54,6 +57,43 @@ from .ci_fix_helpers import (
 )
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
+
+
+def _extract_check_names(failing_summary: str) -> str:
+    """Extract a short, human-readable list of failing CI check names.
+
+    The dispatch summary is built by :func:`_build_failing_summary` and
+    uses ``## ❌ FAILED: <name>`` and ``## ✅ PASSED: <name>`` headers.
+    For CodeQL-only failures the summary may start with a compact bold
+    alert block (``**CodeQL alerts to fix**``).
+
+    Returns a comma-separated string (truncated to 200 chars) or
+    ``"(unknown)"`` when the summary is empty or no failing check can
+    be identified.
+    """
+    if not failing_summary:
+        return "(unknown)"
+    names: list[str] = []
+    for line in failing_summary.strip().splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # ``## ❌ FAILED: <name>`` — the primary check-name format.
+        if stripped.startswith("## ") and "❌ FAILED:" in stripped:
+            # Extract the name after the indicator.
+            _, _, name = stripped.partition("❌ FAILED:")
+            name = name.strip()
+            if name:
+                names.append(name)
+            continue
+        # Compact CodeQL alert block header (see ``_format_alert_summary_block``).
+        # This appears at the very top when CodeQL is the only failing check.
+        if stripped.startswith("**CodeQL alerts") and "**" in stripped[2:]:
+            names.append("CodeQL code-scanning")
+    if not names:
+        return "(unknown)"
+    result = ", ".join(names)
+    return result[:200]
 
 
 def _emit_ci_failure_event(
@@ -98,6 +138,11 @@ class CIFixStage(Stage):
     name = "ci_fix"
     input_state = State.FIXING_CI
     traced = False
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_agent_timed_out = False
+        self._last_agent_timeout_elapsed: float = 0.0
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits."""
@@ -721,6 +766,22 @@ class CIFixStage(Stage):
         # its iteration budget (or hit an unrecoverable error). Block so a
         # human can intervene; resume re-enters from human_mr_approval.
         #
+        # When the agent timed out (wall-clock), produce a diagnostic note
+        # with the failing check(s) and elapsed time so the operator can
+        # understand what CI check was being worked on, rather than a bare
+        # "timed out after 2400s" from the worker.
+        if result is None and self._last_agent_timed_out:
+            check_names = _extract_check_names(failing_summary)
+            timeout_note = (
+                f"ci-fix agent timed out after {self._last_agent_timeout_elapsed:.0f}s "
+                f"while working on: {check_names}. "
+                "The agent did not produce a result before its wall-clock budget "
+                "was exhausted — it may be stuck in an analysis loop or the CI "
+                "failure requires a more complex fix than the agent can apply "
+                "within the time budget. Resume-blocked to retry."
+            )
+            return Outcome(State.BLOCKED, timeout_note)
+
         # Before emitting the generic message, check whether CodeQL code-
         # scanning is the blocker and, when it is, produce a specific note
         # naming every gating alert and explaining why the auto-solver
@@ -820,8 +881,16 @@ class CIFixStage(Stage):
         Returns the full :class:`CiFixResult` so the caller can route on
         the agent's status (DONE / FAILED / OUT_OF_SCOPE), or ``None`` when
         the agent crashes (treated as a failure by the caller).
+
+        The agent call is wrapped with a wall-clock timeout
+        (``ci_fix_agent_timeout_seconds``) so it fails with a diagnostic
+        before the worker's generic ``stage_timeout_seconds`` kills the
+        entire stage silently.
         """
         s = ctx.settings
+        self._last_agent_timed_out = False
+        self._last_agent_timeout_elapsed = 0.0
+        timeout_s = s.ci_fix_agent_timeout_seconds
         try:
             # ci_fix is traced=False, so wrap the LLM agent in the
             # ticket's Langfuse session (session.id = ticket.id) — same
@@ -843,20 +912,49 @@ class CIFixStage(Stage):
                 token = github_push_token(s, repo_config=ctx.repo_config)
                 target = target_branch_for(s, ctx.repo_config)
 
-                result = run_ci_fix_agent(
-                    settings=s,
-                    repo_dir=repo_dir,
-                    branch=branch,
-                    failing_summary=failing_summary,
-                    memory=memory_text,
-                    ticket_id=ticket.id,
-                    board_id=ctx.repo_config.board_id if ctx.repo_config else "",
-                    target=target,
-                    remote_url=remote_url,
-                    token=token,
-                    ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
-                    ci_log_fetch_fn=self._make_ci_log_fetch_fn(ctx, branch),
-                )
+                def _run() -> CiFixResult:
+                    return run_ci_fix_agent(
+                        settings=s,
+                        repo_dir=repo_dir,
+                        branch=branch,
+                        failing_summary=failing_summary,
+                        memory=memory_text,
+                        ticket_id=ticket.id,
+                        board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                        target=target,
+                        remote_url=remote_url,
+                        token=token,
+                        ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
+                        ci_log_fetch_fn=self._make_ci_log_fetch_fn(ctx, branch),
+                    )
+
+                if timeout_s > 0:
+                    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                    ctx_vars = contextvars.copy_context()
+                    start = time.monotonic()
+                    try:
+                        future = executor.submit(ctx_vars.run, _run)
+                        try:
+                            result = future.result(timeout=timeout_s)
+                        except concurrent.futures.TimeoutError:
+                            future.cancel()
+                            elapsed = time.monotonic() - start
+                            self._last_agent_timed_out = True
+                            self._last_agent_timeout_elapsed = elapsed
+                            log.error(
+                                "%s: ci-fix agent timed out after %.0fs "
+                                "(timeout=%ds) — failing check(s): %s",
+                                ticket.id,
+                                elapsed,
+                                timeout_s,
+                                _extract_check_names(failing_summary),
+                            )
+                            return None
+                    finally:
+                        executor.shutdown(wait=False)
+                else:
+                    result = _run()
+
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
         except Exception as e:

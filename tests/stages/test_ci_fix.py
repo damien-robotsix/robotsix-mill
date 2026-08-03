@@ -12,7 +12,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.vcs import git_ops
 from robotsix_mill.stages import StageContext
-from robotsix_mill.stages.ci_fix import CIFixStage
+from robotsix_mill.stages.ci_fix import CIFixStage, _extract_check_names
 from robotsix_mill.stages.ci_fix_helpers import (
     _build_failing_summary,
     _ci_failure_fingerprint,
@@ -1448,6 +1448,94 @@ def test_ci_failure_fingerprint_passed_to_spawn_via_dedup_labels(
     assert len(labels) == 1
     assert labels[0].startswith("ci_fp:")
     assert len(labels[0]) == len("ci_fp:") + 16  # "ci_fp:" + 16 hex chars
+
+
+# ---------------------------------------------------------------------------
+# _extract_check_names — parse check names from the failing summary format
+# ---------------------------------------------------------------------------
+
+
+def test_extract_check_names_empty_or_none() -> None:
+    """Empty string or whitespace-only returns (unknown)."""
+    assert _extract_check_names("") == "(unknown)"
+    assert _extract_check_names("   \n  ") == "(unknown)"
+
+
+def test_extract_check_names_single_failing() -> None:
+    """A single ❌ FAILED: header returns the check name."""
+    summary = "## ❌ FAILED: ruff / lint\n\n**Summary:**\nFound 3 errors\n"
+    assert _extract_check_names(summary) == "ruff / lint"
+
+
+def test_extract_check_names_multiple_failing() -> None:
+    """Multiple ❌ FAILED: headers return a comma-separated list."""
+    summary = (
+        "## ❌ FAILED: ruff / lint\n\n"
+        "**Summary:**\nFound 3 errors\n\n"
+        "## ✅ PASSED: tests\n\n"
+        "## ❌ FAILED: typecheck (3.12)\n\n"
+        "**Details:**\n...\n"
+    )
+    result = _extract_check_names(summary)
+    # Order is discovery order (top-down).
+    assert "ruff / lint" in result
+    assert "typecheck (3.12)" in result
+    assert result == "ruff / lint, typecheck (3.12)"
+
+
+def test_extract_check_names_skips_passed() -> None:
+    """✅ PASSED: headers are not collected."""
+    summary = "## ✅ PASSED: tests\n\n## ✅ PASSED: lint\n"
+    assert _extract_check_names(summary) == "(unknown)"
+
+
+def test_extract_check_names_codeql_compact_block() -> None:
+    """A compact CodeQL alert block yields 'CodeQL code-scanning'."""
+    summary = (
+        "**CodeQL alerts to fix (extracted for fast reference — rule ID and location):**\n"
+        "- `py/clear-text-logging` @ src/foo.py:42\n\n"
+        "## ❌ FAILED: CodeQL\n\n"
+        "**Summary:**\n...\n"
+    )
+    result = _extract_check_names(summary)
+    # Both the compact block and the failing header are collected; the
+    # compact block comes first.
+    assert "CodeQL code-scanning" in result
+    assert "CodeQL" in result
+
+
+def test_extract_check_names_collects_all_failing_headers() -> None:
+    """All ❌ FAILED: headers are collected regardless of intermediate content."""
+    summary = (
+        "## ❌ FAILED: lint\n\n**Summary:**\nSome error\n\n## ❌ FAILED: late_check\n\n"
+    )
+    result = _extract_check_names(summary)
+    assert result == "lint, late_check"
+
+
+def test_extract_check_names_truncates() -> None:
+    """Result is truncated to 200 characters."""
+    # Build check names that together exceed 200 chars.
+    long_name = "very-long-check-name-" + ("x" * 180)
+    summary = f"## ❌ FAILED: {long_name}\n\n**Summary:**\n...\n"
+    result = _extract_check_names(summary)
+    assert len(result) <= 200
+    assert result.startswith("very-long-check-name")
+
+
+def test_extract_check_names_realistic_mixed_summary() -> None:
+    """Integration-style test with a realistic mixed pass/fail summary."""
+    summary = _build_failing_summary(
+        [
+            {"name": "ruff / lint", "conclusion": "failure", "summary": "3 errors"},
+            {"name": "tests (3.12)", "conclusion": "success", "summary": "42 passed"},
+            {"name": "typecheck", "conclusion": "failure", "summary": "1 error"},
+        ]
+    )
+    result = _extract_check_names(summary)
+    assert "ruff / lint" in result
+    assert "typecheck" in result
+    assert "tests (3.12)" not in result
 
 
 # ---
@@ -3041,3 +3129,138 @@ def test_remote_sha_unavailable_skips_empty_commit(tmp_path, monkeypatch):
     assert out.next_state is State.IMPLEMENT_COMPLETE
     # No empty commit — ls_remote_sha returned None.
     assert len(empty_commit_calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# Agent timeout (ci_fix_agent_timeout_seconds)
+# ---------------------------------------------------------------------------
+
+
+def test_agent_timeout_zero_runs_directly(tmp_path, monkeypatch):
+    """When ci_fix_agent_timeout_seconds=0, the executor is skipped and
+    the agent runs directly on the calling thread."""
+    ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="0")
+    _failing_check_status(monkeypatch)
+
+    agent_calls = []
+
+    def fake_agent(**k):
+        agent_calls.append(1)
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    out = stage.run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls == [1]
+    # No timeout flags should be set.
+    assert stage._last_agent_timed_out is False
+    assert stage._last_agent_timeout_elapsed == 0.0
+
+
+def test_agent_timeout_produces_diagnostic_note(tmp_path, monkeypatch):
+    """When the agent times out (result=None, _last_agent_timed_out=True),
+    _run_agent_and_finalize emits a diagnostic BLOCKED note that names the
+    failing check(s) and the elapsed time."""
+    ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="1800")
+    _failing_check_status(monkeypatch)
+
+    # Simulate a timeout: _invoke_agent returns None and sets the flags.
+    def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
+        self._last_agent_timed_out = True
+        self._last_agent_timeout_elapsed = 1850.0
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",
+        fake_invoke,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    out = stage.run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert out.note is not None
+    # The note must name the failing check.
+    assert "lint" in out.note
+    # The note must include the elapsed time.
+    assert "1850s" in out.note
+    # The note must be the diagnostic timeout note (not the generic budget one).
+    assert "timed out" in out.note
+    assert "wall-clock" in out.note
+
+
+def test_agent_timeout_unknown_check_fallback(tmp_path, monkeypatch):
+    """When the failing summary is empty (should not happen but guarded),
+    the timeout note falls back to '(unknown)' as the check name."""
+    ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="1800")
+    _failing_check_status(monkeypatch)
+
+    # Override check_status to return an empty failing summary.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [],  # empty — produces a nearly-empty summary
+        },
+    )
+
+    def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
+        self._last_agent_timed_out = True
+        self._last_agent_timeout_elapsed = 1200.0
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",
+        fake_invoke,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    out = stage.run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    # With no failing checks, _extract_check_names returns "(unknown)".
+    assert "(unknown)" in out.note
+
+
+def test_agent_crash_without_timeout_uses_generic_note(tmp_path, monkeypatch):
+    """When _invoke_agent returns None but _last_agent_timed_out is False
+    (agent crashed, not timed out), the generic budget-exhausted note is
+    used instead of the timeout diagnostic."""
+    ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="1800")
+    _failing_check_status(monkeypatch)
+
+    def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
+        # Crash — no timeout flags set.
+        return None
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",
+        fake_invoke,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    out = stage.run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    # The generic budget note, not the timeout diagnostic.
+    assert "iteration budget" in out.note
+    assert "timed out" not in out.note

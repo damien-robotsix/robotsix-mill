@@ -1070,6 +1070,21 @@ class _StagesSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Wall-clock timeout (seconds) for a single ci-fix agent pass.  This
+    # wraps the LLM agent call inside the stage and fires BEFORE the
+    # worker's generic stage_timeout_seconds (default 2400s).  When the
+    # agent exceeds this budget, the stage produces a diagnostic block
+    # note (failing check, last known state) instead of a bare timeout.
+    # Must be less than stage_timeout_seconds to leave headroom for
+    # clone, guard checks, and finalization.  Set to 0 to disable (agent
+    # runs until the worker timeout or request limit).
+    ci_fix_agent_timeout_seconds: int = Field(
+        description="Wall-clock timeout (seconds) for the ci-fix agent pass. 0 disables.",
+        default=1800,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # Multi-repo merge path only (MultiRepoCiFixMixin): that path still runs
     # the legacy one-shot-per-cycle agent with an external retry loop, so it
     # keeps its own attempt + cycle ceilings.  The single-repo CIFixStage no
