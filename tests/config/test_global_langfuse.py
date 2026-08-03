@@ -59,7 +59,7 @@ def test_meta_board_uses_global(tmp_path, secrets_set):
 
 
 def test_no_secrets_means_observability_off(tmp_path):
-    # No secrets injected → langfuse off (conftest sets MILL_SECRETS_FILE="").
+    # No secrets injected → langfuse off (conftest sets ROBOTSIX_CONFIG_FILE="").
     reg = load_repos_config(_write(tmp_path, "repos:\n  bare:\n    board_id: bare\n"))
     assert reg.repos["bare"].langfuse_public_key == ""
     assert reg.meta is None

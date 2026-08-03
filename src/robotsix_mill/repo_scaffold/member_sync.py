@@ -86,23 +86,18 @@ def sync_workspace_members(
         members: detected workspace members (see
             :func:`~robotsix_mill.config.workspace_members.detect_workspace_members`).
         repos_yaml_path: override for the auto-registration overlay path;
-            defaults to :func:`repo_scaffold._repos_yaml_path` (honours
-            ``MILL_REPOS_FILE``).
+            defaults to :func:`repo_scaffold._repos_yaml_path`.
         file_tickets: when True (default) file a build-out ticket on each
             newly registered member's board.
 
     Returns:
-        :class:`MemberSyncResult` describing what changed. A no-op
-        (``MILL_REPOS_FILE`` empty) returns an empty result.
+        :class:`MemberSyncResult` describing what changed.
     """
     members = list(members)
     path = (
         repos_yaml_path if repos_yaml_path is not None else _repos_yaml_path(settings)
     )
     result = MemberSyncResult()
-    if path is None:
-        log.info("MILL_REPOS_FILE is empty — skipping workspace member sync")
-        return result
 
     data = _load_repos_document(path)
     repos = data["repos"]

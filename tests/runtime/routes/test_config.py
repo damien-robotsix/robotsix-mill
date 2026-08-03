@@ -15,7 +15,7 @@ from robotsix_mill.runtime.api import create_app
 
 @pytest.fixture
 def tmp_config_file(tmp_path, monkeypatch):
-    """Create a temporary config.json and point MILL_CONFIG_FILE at it."""
+    """Create a temporary config.json and point ROBOTSIX_CONFIG_FILE at it."""
     config_path = tmp_path / "config.json"
     config_data = {
         "settings": {
@@ -31,7 +31,7 @@ def tmp_config_file(tmp_path, monkeypatch):
         "repos": {},
     }
     config_path.write_text(json.dumps(config_data, indent=2))
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(config_path))
     # Ensure data dir exists for version history
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     return config_path

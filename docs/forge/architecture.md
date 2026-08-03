@@ -469,7 +469,7 @@ abstraction): `stale_branch_cleanup_periodic`, `stale_branch_cleanup_interval_se
 ### 5.2 `Secrets` fields
 
 All fields are in `src/robotsix_mill/config.py`, class `Secrets`.
-Loaded from the `config/config.yaml` `secrets:` block (overridable via `MILL_SECRETS_FILE`).
+Loaded from the `config/config.yaml` `secrets:` block (overridable via `ROBOTSIX_CONFIG_FILE`).
 Singleton, accessed via `get_secrets()`.
 
 | Field | Type | Default | Purpose |

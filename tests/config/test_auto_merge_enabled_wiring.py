@@ -16,10 +16,9 @@ from robotsix_mill.config.repos import load_repos_config
 
 
 def _write_config(tmp_path, monkeypatch, repos: dict) -> None:
-    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)  # not the "" pin
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({"settings": {}, "repos": repos}))
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
 
 def test_auto_merge_enabled_defaults_true_for_machine_registered_repo(

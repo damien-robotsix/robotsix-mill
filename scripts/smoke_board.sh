@@ -26,22 +26,27 @@ export MILL_API_HOST="127.0.0.1"
 export MILL_API_PORT="8901"
 BASE_URL="http://${MILL_API_HOST}:${MILL_API_PORT}"
 
-# `robotsix-mill serve` needs a repos registry, but config/repos.yaml is a
+# `robotsix-mill serve` needs a repos registry, but config/config.json is a
 # host-mounted secret absent from the clone. Synthesize a minimal one in
-# the throwaway dir and point MILL_REPOS_FILE at it so the server boots
+# the throwaway dir and point ROBOTSIX_CONFIG_FILE at it so the server boots
 # self-contained (lifespan init_db's this board; no forge/langfuse calls
 # are made just to render the board + read tickets).
-REPOS_FILE="${TMP_DATA_DIR}/repos.yaml"
-cat >"${REPOS_FILE}" <<'YAML'
-repos:
-  smoke-repo:
-    board_id: "smoke-board"
-    langfuse:
-      project_name: "smoke"
-      public_key: "pk-smoke"
-      secret_key: "sk-smoke"
-YAML
-export MILL_REPOS_FILE="${REPOS_FILE}"
+REPOS_FILE="${TMP_DATA_DIR}/config.json"
+cat >"${REPOS_FILE}" <<'JSON'
+{
+  "repos": {
+    "smoke-repo": {
+      "board_id": "smoke-board",
+      "langfuse": {
+        "project_name": "smoke",
+        "public_key": "pk-smoke",
+        "secret_key": "sk-smoke"
+      }
+    }
+  }
+}
+JSON
+export ROBOTSIX_CONFIG_FILE="${REPOS_FILE}"
 
 SERVER_PID=""
 

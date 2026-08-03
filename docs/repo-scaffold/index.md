@@ -52,7 +52,7 @@ the raw ticket description.
 3. **Register in repos overlay** (`_append_repo_config`):
    - Derives a `repo_id` via `_sanitize_repo_id(name)`.
    - Appends a `RepoConfig` stanza to `<data_dir>/registered_repos.yaml`
-     (or honours `MILL_REPOS_FILE`).
+     (located via `ROBOTSIX_CONFIG_FILE`).
    - Hot-reloads the config singleton via `_reset_repos_config()`.
 
 4. **File build-out ticket** (`_file_implementation_followup`):

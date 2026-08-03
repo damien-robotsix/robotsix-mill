@@ -326,15 +326,12 @@ def test_get_secrets_reads_main_config_file(monkeypatch, tmp_path):
     assert get_secrets().openrouter_api_key == "sk-cached"
 
 
-def test_mill_secrets_file_env_overrides_main_config(monkeypatch, tmp_path):
-    """``MILL_SECRETS_FILE`` wins over the main config file, as pre-cutover."""
-    main = tmp_path / "config.json"
-    main.write_text('{"secrets": {"openrouter_api_key": "sk-main"}}')
-    override = tmp_path / "override.json"
-    override.write_text('{"secrets": {"openrouter_api_key": "sk-override"}}')
-    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(main))
-    monkeypatch.setenv("MILL_SECRETS_FILE", str(override))
-    assert Secrets().openrouter_api_key == "sk-override"
+def test_robotsix_config_file_points_to_secrets_source(monkeypatch, tmp_path):
+    """``ROBOTSIX_CONFIG_FILE`` is the single source for secrets."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"secrets": {"openrouter_api_key": "sk-from-cfg"}}')
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+    assert Secrets().openrouter_api_key == "sk-from-cfg"
 
 
 def test_explicit_secrets_file_beats_main_config(monkeypatch, tmp_path):

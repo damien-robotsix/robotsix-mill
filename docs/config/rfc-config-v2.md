@@ -7,6 +7,12 @@
 > with secrets under a top-level `secrets:` block. See
 > `docs/config/configuration.md` for the current model. Kept for historical
 > rationale only.
+>
+> **Env var rename note:** `MILL_CONFIG_FILE`, `MILL_SECRETS_FILE`, and
+> `MILL_REPOS_FILE` (referenced throughout this RFC as separate locators)
+> were later consolidated into a single `ROBOTSIX_CONFIG_FILE` env var
+> that points to the one config file containing all settings, secrets,
+> and the repos registry.
 
 > **Status:** Draft — peer review pending
 > **Date:** 2026-05-23
@@ -447,6 +453,9 @@ This means `docker-compose.yml` can still use `environment:` to override any
 value without touching the YAML files.
 
 ### 6.2 The MILL_CONFIG_FILE and MILL_SECRETS_FILE env vars
+
+> **Historical note:** These env vars were later consolidated into a single
+> `ROBOTSIX_CONFIG_FILE`. The content below reflects the original RFC proposal.
 
 Two new env vars control which override files are loaded:
 

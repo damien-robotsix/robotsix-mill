@@ -70,14 +70,13 @@ def test_split_flat_with_repo_named_repos_stays_flat():
 def _write_config(tmp_path, monkeypatch, repos_value):
     """Point the loader at a config.json whose top-level ``repos`` key is
     *repos_value*, exactly as the onboard writes it."""
-    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     conf = tmp_path / "config.json"
     conf.write_text(
         json.dumps({"settings": {"data_dir": str(data_dir)}, "repos": repos_value})
     )
-    monkeypatch.setenv("MILL_CONFIG_FILE", str(conf))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(conf))
     cfg._reset_repos_config()
 
 

@@ -133,13 +133,12 @@ class TestSanitizeRepoId:
 class TestAppendRepoConfig:
     def test_structure(self, tmp_path, monkeypatch):
         """Verify the written YAML stanza has the exact fields."""
-        repos_file = tmp_path / "repos.yaml"
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-
         settings = _make_settings(
             tmp_path,
             trace_review_target_repo_id="robotsix-mill",
         )
+        repos_file = Path(settings.data_dir) / "registered_repos.yaml"
+
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
@@ -179,10 +178,9 @@ class TestAppendRepoConfig:
     def test_new_repo_has_no_per_repo_langfuse_stanza(self, tmp_path, monkeypatch):
         """The scaffolded stanza carries NO langfuse block — observability is
         configured globally and the new repo inherits it."""
-        repos_file = tmp_path / "repos.yaml"
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-
         settings = _make_settings(tmp_path)
+        repos_file = Path(settings.data_dir) / "registered_repos.yaml"
+
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
@@ -205,7 +203,11 @@ class TestAppendRepoConfig:
 
     def test_appends_to_existing_file(self, tmp_path, monkeypatch):
         """Appending preserves existing entries in repos.yaml."""
-        repos_file = tmp_path / "repos.yaml"
+        settings = _make_settings(
+            tmp_path,
+            trace_review_target_repo_id="robotsix-mill",
+        )
+        repos_file = Path(settings.data_dir) / "registered_repos.yaml"
         existing = {
             "repos": {
                 "existing-repo": {
@@ -218,15 +220,10 @@ class TestAppendRepoConfig:
                 }
             }
         }
+        repos_file.parent.mkdir(parents=True, exist_ok=True)
         with open(repos_file, "w") as fh:
             yaml.dump(existing, fh)
 
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-
-        settings = _make_settings(
-            tmp_path,
-            trace_review_target_repo_id="robotsix-mill",
-        )
         db.reset_engine()
         db.init_db(settings, board_id="meta")
 
@@ -250,10 +247,11 @@ class TestAppendRepoConfig:
         _reset_repos_config()
 
     def test_mill_repos_file_empty_string_skips_write(self, tmp_path, monkeypatch):
-        """When MILL_REPOS_FILE='', no file is written (test-suite mode)."""
-        monkeypatch.setenv("MILL_REPOS_FILE", "")
-
+        """_append_repo_config always writes to <data_dir>/registered_repos.yaml
+        (the MILL_REPOS_FILE no-op path has been removed)."""
         settings = _make_settings(tmp_path)
+        repos_file = Path(settings.data_dir) / "registered_repos.yaml"
+
         repo_info = RepoInfo(
             id=1,
             name="x",
@@ -262,15 +260,20 @@ class TestAppendRepoConfig:
         )
         params = _make_params(name="x")
 
-        # Should not raise
         _append_repo_config(repo_info, params, settings)
+
+        # File is always written — no more empty-string no-op.
+        assert repos_file.exists()
+        with open(repos_file, "r") as fh:
+            data = yaml.safe_load(fh)
+        assert "x" in data["repos"]
+
+        _reset_repos_config()
 
 
 class TestAppendRepoConfigOverlay:
     def test_writes_to_data_dir_overlay(self, tmp_path, monkeypatch):
-        """When MILL_REPOS_FILE is unset, _append_repo_config writes to
-        <data_dir>/registered_repos.yaml."""
-        monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+        """_append_repo_config writes to <data_dir>/registered_repos.yaml."""
         settings = _make_settings(tmp_path)
         db.reset_engine()
         db.init_db(settings, board_id="meta")
@@ -297,7 +300,6 @@ class TestAppendRepoConfigOverlay:
     def test_data_dir_created_if_missing(self, tmp_path, monkeypatch):
         """When the data_dir subdirectory does not exist, _append_repo_config
         creates it before writing the overlay."""
-        monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
         data_dir = tmp_path / "nested" / "data"
         settings = _make_settings(tmp_path, data_dir=str(data_dir))
 
@@ -335,9 +337,8 @@ class TestRunRepoScaffold:
 
         # Register mill repo for langfuse key copy
 
-        # Set up repos.yaml path
-        repos_file = tmp_path / "repos.yaml"
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
+        # repos.yaml will be written to <data_dir>/registered_repos.yaml
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
 
         # Create a params dict directly (no marker parsing)
         params = _make_params(name="my-repo")
@@ -628,7 +629,6 @@ def test_non_python_scaffold_writes_no_workflows(tmp_path, monkeypatch):
     from robotsix_mill.forge.base import RepoInfo
 
     settings = _make_settings(tmp_path)
-    monkeypatch.setenv("MILL_REPOS_FILE", "")
 
     init_dest = {}
 
@@ -686,7 +686,6 @@ def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypa
     from robotsix_mill.forge.base import RepoInfo
     from robotsix_mill.repo_scaffold import _file_implementation_followup
 
-    monkeypatch.setenv("MILL_REPOS_FILE", "")
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="robotsix-modules")

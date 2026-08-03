@@ -26,7 +26,7 @@ Observability has two independent configuration surfaces.
 ### Langfuse (global `secrets:` block, applied uniformly)
 
 Langfuse credentials are configured in a **single global `secrets:` block**
-in `config/config.json` (`MILL_CONFIG_FILE` or `MILL_SECRETS_FILE`). The
+in `config/config.json` (located via `ROBOTSIX_CONFIG_FILE`). The
 `_apply_global_langfuse()` function in `repos.py` reads these credentials
 and populates every repo's langfuse fields uniformly — there is **no**
 per-repo `langfuse:` block. A per-repo `langfuse:` key in
@@ -67,7 +67,7 @@ present):
 The actual mechanism, not an idealized one:
 
 - **Langfuse keys live in the `secrets:` block of `config/config.json`**
-  (overridable via `MILL_SECRETS_FILE`), which is operator-managed and
+  (overridable via `ROBOTSIX_CONFIG_FILE`), which is operator-managed and
   **gitignored** — it is never committed. The `Secrets` fields
   (`langfuse_public_key`, `langfuse_secret_key`, `langfuse_base_url`,
   `langfuse_project_id`, `langfuse_project_name`) are read at startup by

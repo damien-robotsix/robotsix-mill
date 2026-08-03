@@ -3,8 +3,7 @@ GET /config/versions, POST /config/rollback.
 
 Implements the config-ownership standard (robotsix-standards) for
 mill's own component configuration surface.  Reads from and writes to
-the single ``config/config.json`` (located via ``MILL_CONFIG_FILE`` env
-var), maintains a version history in
+the single ``config/config.json``, maintains a version history in
 ``<data_dir>/config_versions.jsonl``, and masks secret values on read.
 
 Secret fields are identified from the :class:`~robotsix_mill.config.Secrets`
@@ -17,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -65,10 +63,12 @@ def _is_secret_key(key: str) -> bool:
 def _canonical_config_path() -> Path:
     """Return the path where config writes should land.
 
-    When ``MILL_CONFIG_FILE`` is explicitly set, use it; otherwise
-    always target ``config/config.json`` (never the example file).
+    When ``ROBOTSIX_CONFIG_FILE`` is set, use it; otherwise
+    target ``config/config.json`` (never the example file).
     """
-    explicit = os.environ.get("MILL_CONFIG_FILE")
+    import os
+
+    explicit = os.environ.get("ROBOTSIX_CONFIG_FILE")
     if explicit:
         return Path(explicit)
     return Path("config/config.json")
