@@ -3176,8 +3176,6 @@ def test_agent_timeout_produces_diagnostic_note(tmp_path, monkeypatch):
     _failing_check_status(monkeypatch)
 
     # Simulate a timeout: _invoke_agent returns None and sets the flags.
-    original_invoke = CIFixStage._invoke_agent
-
     def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
         self._last_agent_timed_out = True
         self._last_agent_timeout_elapsed = 1850.0
