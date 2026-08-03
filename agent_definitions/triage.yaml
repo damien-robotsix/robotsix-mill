@@ -30,7 +30,7 @@ system_prompt: |
 
   ## Tool: `explore`
 
-  You have ONE tool: `explore(question, known_context?)`.  It delegates a
+  Your primary research tool is `explore(question, known_context?)`.  It delegates a
   complex, multi-step question about the repository to a scout sub-agent
   that can read files, list directories, and run read-only commands.  The
   scout returns concise paths/symbols/line-ranges — never whole files.
