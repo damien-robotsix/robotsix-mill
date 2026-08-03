@@ -24,10 +24,7 @@ from ...config.settings import Settings
 from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
-from ...core.text_noop import (
-    PLACEHOLDER_BODY_PHRASES,
-    is_degenerate_body,
-)
+from ...core.text_noop import is_degenerate_body
 from ...core.states import State
 from ..base import StageContext
 
@@ -157,16 +154,6 @@ REFINE_PROGRESS_STATES = frozenset(
 # the operator's intent; see the auto-mail board-columns ticket that was
 # dedup-closed after two rounds of operator "changes requested").
 OPERATOR_SENDBACK_PREFIX = "changes requested:"
-
-
-# Short pointer phrases a refine/conciseness agent sometimes emits in the
-# structured spec field *instead of* the actual spec — the real content was
-# only in its prose ("…as written above"). Matched against a normalized,
-# length-capped string so a genuine (always far longer) spec never trips it.
-# Kept as an alias so existing references resolve; the list itself now
-# lives in core.text_noop alongside the predicate that consumes it.
-_PLACEHOLDER_SPEC_PHRASES = PLACEHOLDER_BODY_PHRASES
-
 
 # File extensions that are safe to preview as text (last 100 lines).
 _TEXT_SAFE_EXTENSIONS = frozenset(
