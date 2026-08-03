@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add `audit-ignore` to `ci.yml` with the same CVE ignores as `security-audit.yml`, so `uv audit --frozen --preview` (introduced by the python-ci.yml reusable workflow bump to e94a9aad) does not fail the ci / Tests job before tests run.
 - Bound Hypothesis `st.text()` strategies with `max_size` limits in `test_web_knowledge.py` and `test_core_dedup.py` to prevent resource exhaustion in CI from unconstrained string generation.
 - Complete the config-standard cutover: remove all `MILL_CONFIG_FILE`, `MILL_SECRETS_FILE`, and `MILL_REPOS_FILE` env-var reads. `ROBOTSIX_CONFIG_FILE` is now the sole config-file locator. Delete `config/repos.example.yaml` (repos now live in the main config file). Update smoke test and docs accordingly. (mill: CI red on main: ci / Tests job failing (exit code 1) — fix the failing test(s) (20260802T103726Z-ci-red-on-main-ci-tests-job-failing-exit-07b1))
 - Fix stale capability-levels table in `docs/config/configuration.md`: add missing level-4 row and move `epic_breakdown` from level 3 to level 4. Also correct the model-tier-rebalance CHANGELOG entry to reflect that `meta_triage` stayed at level 3 (not moved to level 2).

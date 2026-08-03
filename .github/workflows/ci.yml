@@ -27,6 +27,15 @@ jobs:
       install-extras: "tracing"
       cov-package: "robotsix_mill"
       coverage-threshold: 80
+      # Audit ignores mirror security-audit.yml — same CVEs, same
+      # justifications.  Without these, uv audit --frozen --preview
+      # (added to python-ci.yml at e94a9aad) fails the ci / Tests job
+      # before Ruff, Mypy, Bandit, or pytest ever run.
+      # PYSEC-2025-183: pyjwt "weak encryption" — disputed, no fix version.
+      # MAL-2026-4750: fastapi 0.136.3 "fastar" dep — withdrawn advisory.
+      # GHSA-9xwg-3r6f-jcx2: pymdown-extensions XSS — fixed in 10.14,
+      #   lock pins 10.21.3 (well above fix); transitive docs-only dep.
+      audit-ignore: "PYSEC-2025-183 MAL-2026-4750 GHSA-9xwg-3r6f-jcx2"
       pytest-args: -m "not docker" -n auto
       bandit-severity: "medium"
       mypy-advisory: true
