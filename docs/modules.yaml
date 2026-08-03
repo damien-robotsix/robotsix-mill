@@ -29,6 +29,7 @@ modules:
       - .robotsix-mill/config.yaml
       - .robotsix-mill/periodic/*.yaml
       - docs/config/**/*
+      - tests/config/test_ci_fix_stage_budget.py
       - tests/config/test_config.py
       - tests/config/test_repo_settings.py
       - tests/config/test_workspace_members.py

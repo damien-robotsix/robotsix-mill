@@ -243,6 +243,48 @@ class Settings(
             raise ValueError("trace_review_interval_seconds must be ≥ 3600")
         return v
 
+    # -- stage budgets --------------------------------------------------
+
+    @property
+    def ci_fix_agent_budget_seconds(self) -> int:
+        """Wall-clock the ci-fix agent is *configured* to be allowed.
+
+        The ci-fix agent owns the fix→push→verify loop: it may call
+        ``wait_for_ci`` up to ``ci_fix_max_iterations`` times, and each
+        call blocks for up to ``ci_fix_wait_timeout_s``. Add one
+        coordinator budget for the LLM/edit work between waits and that
+        is the most the stage can legitimately take.
+        """
+        waits = self.ci_fix_max_iterations * self.ci_fix_wait_timeout_s
+        return int(waits + self.coordinator_timeout_seconds)
+
+    def stage_timeout_for(self, stage_name: str) -> int:
+        """Resolve the wall-clock timeout for *stage_name*.
+
+        Normally the explicit override, else ``stage_timeout_seconds``.
+        The exception is ``ci_fix``, which is raised to at least
+        :attr:`ci_fix_agent_budget_seconds`.
+
+        Why the floor exists: ``ci_fix`` is the only stage that blocks on
+        *external* CI, so its agent's budget is a product of two other
+        settings and drifts independently of the stage wrapper. With the
+        shipped defaults the agent was allowed 5 waits x 1500 s while the
+        stage wrapper allowed 2400 s — the wrapper killed the agent at
+        ~32% of its sanctioned budget, mid-verify-loop, discarding fixes
+        it had already pushed. That produced 25 of the 31 stage timeouts
+        this mill has ever recorded. Deriving the floor means the two
+        numbers cannot silently disagree again.
+
+        A deliberate 0 (timeout disabled) is always respected.
+        """
+        explicit = self.stage_timeout_overrides.get(stage_name)
+        resolved = explicit if explicit is not None else int(self.stage_timeout_seconds)
+        if resolved == 0:
+            return 0  # explicitly disabled — respect it
+        if stage_name == "ci_fix":
+            return max(resolved, self.ci_fix_agent_budget_seconds)
+        return resolved
+
     # -- cross-field checks --------------------------------------------
 
     @model_validator(mode="after")

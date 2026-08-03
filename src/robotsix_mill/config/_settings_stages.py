@@ -1058,9 +1058,14 @@ class _StagesSettings(BaseModel):
     # re-check iterations) for one ticket before it must report FAILED and the
     # stage escalates to BLOCKED.  Set to 0 only to effectively disable the
     # agent's verify loop (it would never be allowed to wait).
+    # Sized against observed runs, not guesswork: sampled successful ci_fix
+    # stages completed in 300-900 s, all of them on a SINGLE verify iteration.
+    # 3 leaves two retries for the "fix reveals the next failure" case while
+    # keeping the derived stage ceiling (see Settings.stage_timeout_for) inside
+    # what a 3-slot worker pool can afford to hold.
     ci_fix_max_iterations: int = Field(
         description="Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-        default=5,
+        default=3,
         ge=0,
         json_schema_extra={"advanced": True},
     )
@@ -1120,9 +1125,17 @@ class _StagesSettings(BaseModel):
     # Maximum seconds a single wait_for_ci call blocks before returning a
     # still-pending signal (the agent may then call it again).  Generous by
     # default because a full CI run (build + tests) can take many minutes.
+    #
+    # 900 s, not 1500: a timeout here is NOT a failure — the tool returns
+    # still-pending and the agent may call it again, so a shorter per-call
+    # wait costs one extra tool round-trip and nothing else. Observed CI runs
+    # on the busiest board finish in ~6 min, so 15 min is ample. The value
+    # matters because it multiplies into the stage ceiling
+    # (Settings.stage_timeout_for): at 1500 s x 5 iterations the ci_fix stage
+    # would have to be allowed 155 min to avoid killing its own agent.
     ci_fix_wait_timeout_s: float = Field(
         description="Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
-        default=1500.0,
+        default=900.0,
         gt=0,
         json_schema_extra={"advanced": True},
     )

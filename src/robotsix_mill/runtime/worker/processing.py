@@ -506,9 +506,9 @@ async def _process_ticket_inner(
                         "stage": stage_name,
                         "started_at": datetime.now(timezone.utc).isoformat(),
                     }
-                _stage_timeout = ctx.settings.stage_timeout_overrides.get(
-                    stage_name, ctx.settings.stage_timeout_seconds
-                )
+                # Resolved via Settings so the ci_fix floor (its agent's own
+                # verify-loop budget) is applied — see stage_timeout_for.
+                _stage_timeout = ctx.settings.stage_timeout_for(stage_name)
                 coro = asyncio.to_thread(stage.run, ticket, ctx)
                 # --- progress heartbeat ---
                 # Emit periodic heartbeat logs so stalled stages are
@@ -572,11 +572,17 @@ async def _process_ticket_inner(
                 # NOTE: the progress-reset watchdog (implement_pass_timeout)
                 # lives inside run_coordinator and kills only the agent call,
                 # not the full stage.
-                if stage_name == "implement":
+                # ci_fix joins implement here: it blocks on *external* CI, so a
+                # deadline says "CI was slower than the budget", not "the spec
+                # is wrong". Blocking discarded fixes the agent had already
+                # pushed and needed a human resume-blocked to recover — 25 of
+                # the 31 stage timeouts this mill ever recorded were ci_fix.
+                if stage_name in ("implement", "ci_fix"):
                     log.error(
-                        "STALL: %s implement stage timed out after %ds — "
+                        "STALL: %s %s stage timed out after %ds — "
                         "no progress (heartbeat stopped); retrying as transient",
                         ticket_id,
+                        stage_name,
                         _stage_timeout,
                     )
                     if root_io is not None:
@@ -587,7 +593,7 @@ async def _process_ticket_inner(
                         root_io.set_output(
                             {
                                 "error": (
-                                    f"implement stage timed out after "
+                                    f"{stage_name} stage timed out after "
                                     f"{_stage_timeout}s (stall)"
                                 ),
                                 "next_state": ticket.state.value,
@@ -598,7 +604,7 @@ async def _process_ticket_inner(
                         ctx,
                         stage_name,
                         TimeoutError(
-                            f"implement stage timed out after {_stage_timeout}s"
+                            f"{stage_name} stage timed out after {_stage_timeout}s"
                         ),
                         trace_id,
                     )
