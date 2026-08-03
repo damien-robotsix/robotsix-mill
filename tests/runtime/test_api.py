@@ -1188,15 +1188,55 @@ def test_board_css_includes_origin_link_style(client):
     assert ".origin-link" in css
 
 
-def test_origin_session_url_computed_when_config_set(service, settings, secrets_set):
+def _set_langfuse_block(
+    monkeypatch,
+    tmp_path,
+    *,
+    host: str = "https://cloud.langfuse.com",
+    public_key: str = "",
+    secret_key: str = "",
+    project_id: str = "",
+    project_name: str = "robotsix-mill",
+) -> None:
+    """Write a config file with a ``langfuse`` block and point
+    ``ROBOTSIX_CONFIG_FILE`` at it so ``_resolve_mill_langfuse()``
+    picks up the test values."""
+    import json
+
+    cfg = {
+        "data_dir": str(tmp_path),
+        "langfuse": {
+            "host": host,
+            "projects": {
+                project_name: {
+                    "public_key": public_key,
+                    "secret_key": secret_key,
+                    "project_id": project_id,
+                }
+            },
+        },
+    }
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg_path))
+
+
+def test_origin_session_url_computed_when_config_set(
+    service, settings, monkeypatch, tmp_path
+):
     """enrich_ticket_read computes origin_session_url when all config
     ingredients are present."""
     from robotsix_mill.runtime.deps import enrich_ticket_read
 
     t = service.create("URL test", origin_session="sess-abc")
-    secrets_set(
-        langfuse_base_url="https://cloud.langfuse.com",
-        langfuse_project_name="proj-xyz",
+    _set_langfuse_block(
+        monkeypatch,
+        tmp_path,
+        host="https://cloud.langfuse.com",
+        public_key="pk-test",
+        secret_key="sk-test",
+        project_id="",
+        project_name="proj-xyz",
     )
 
     tr = enrich_ticket_read(t, settings, service)
@@ -1257,16 +1297,20 @@ def test_origin_session_url_empty_base_url_fallback(service, settings, repo_conf
 
 
 def test_origin_session_url_secrets_project_id_preferred(
-    service, settings, secrets_set
+    service, settings, monkeypatch, tmp_path
 ):
     """secrets fallback prefers langfuse_project_id over langfuse_project_name."""
     from robotsix_mill.runtime.deps import enrich_ticket_read
 
     t = service.create("ID preferred test", origin_session="sess-2")
-    secrets_set(
-        langfuse_base_url="https://custom.lf.example.com",
-        langfuse_project_name="my-project-name",
-        langfuse_project_id="proj-cuid-id",
+    _set_langfuse_block(
+        monkeypatch,
+        tmp_path,
+        host="https://custom.lf.example.com",
+        public_key="pk-test",
+        secret_key="sk-test",
+        project_id="proj-cuid-id",
+        project_name="my-project-name",
     )
     tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session_url == (
@@ -1274,14 +1318,21 @@ def test_origin_session_url_secrets_project_id_preferred(
     )
 
 
-def test_origin_session_url_secrets_project_id_fallback(service, settings, secrets_set):
+def test_origin_session_url_secrets_project_id_fallback(
+    service, settings, monkeypatch, tmp_path
+):
     """secrets fallback uses langfuse_project_id when langfuse_project_name is absent."""
     from robotsix_mill.runtime.deps import enrich_ticket_read
 
     t = service.create("ID fallback test", origin_session="sess-3")
-    secrets_set(
-        langfuse_base_url="https://cloud.langfuse.com",
-        langfuse_project_id="proj-legacy",
+    _set_langfuse_block(
+        monkeypatch,
+        tmp_path,
+        host="https://cloud.langfuse.com",
+        public_key="pk-test",
+        secret_key="sk-test",
+        project_id="proj-legacy",
+        project_name="robotsix-mill",
     )
     tr = enrich_ticket_read(t, settings, service)
     assert tr.origin_session_url == (
