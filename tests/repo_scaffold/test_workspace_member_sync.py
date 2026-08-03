@@ -88,9 +88,8 @@ class TestMemberRepoId:
 
 class TestRegistration:
     def test_new_member_entry_structure(self, tmp_path, monkeypatch):
-        repos_file = tmp_path / "repos.yaml"
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
         settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
         _register_master(monkeypatch, _master_cfg())
 
         crt = CrossRepoTarget(
@@ -129,9 +128,8 @@ class TestRegistration:
         _reset_repos_config()
 
     def test_member_without_version_or_policy_omits_keys(self, tmp_path, monkeypatch):
-        repos_file = tmp_path / "repos.yaml"
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
         settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
         _register_master(monkeypatch, _master_cfg())
 
         members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
@@ -143,15 +141,15 @@ class TestRegistration:
         _reset_repos_config()
 
     def test_preserves_existing_entries(self, tmp_path, monkeypatch):
-        repos_file = tmp_path / "repos.yaml"
+        settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
         existing = {
             "repos": {
                 "robotsix-mill": {"board_id": "robotsix-mill", "langfuse": {}},
             }
         }
+        repos_file.parent.mkdir(parents=True, exist_ok=True)
         repos_file.write_text(yaml.dump(existing), encoding="utf-8")
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-        settings = _make_settings(tmp_path)
         _register_master(monkeypatch, _master_cfg())
 
         members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
@@ -165,7 +163,8 @@ class TestRegistration:
     def test_upsert_refreshes_member_and_clears_pending_removal(
         self, tmp_path, monkeypatch
     ):
-        repos_file = tmp_path / "repos.yaml"
+        settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
         existing = {
             "repos": {
                 "src-alpha-pkg": {
@@ -177,9 +176,8 @@ class TestRegistration:
                 },
             }
         }
+        repos_file.parent.mkdir(parents=True, exist_ok=True)
         repos_file.write_text(yaml.dump(existing), encoding="utf-8")
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-        settings = _make_settings(tmp_path)
         _register_master(monkeypatch, _master_cfg())
 
         members = [
@@ -200,7 +198,8 @@ class TestRegistration:
         _reset_repos_config()
 
     def test_non_member_collision_is_skipped(self, tmp_path, monkeypatch):
-        repos_file = tmp_path / "repos.yaml"
+        settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
         existing = {
             "repos": {
                 "src-alpha-pkg": {
@@ -210,9 +209,8 @@ class TestRegistration:
                 },
             }
         }
+        repos_file.parent.mkdir(parents=True, exist_ok=True)
         repos_file.write_text(yaml.dump(existing), encoding="utf-8")
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-        settings = _make_settings(tmp_path)
         _register_master(monkeypatch, _master_cfg())
 
         members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
@@ -229,9 +227,8 @@ class TestRegistration:
         _reset_repos_config()
 
     def test_missing_master_falls_back_to_empty_langfuse(self, tmp_path, monkeypatch):
-        repos_file = tmp_path / "repos.yaml"
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
         settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
 
         members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
         sync_workspace_members(settings, "ros2-workspace", members, file_tickets=False)
@@ -251,7 +248,8 @@ class TestRegistration:
 
 class TestDisappearance:
     def test_vanished_member_flagged_not_deleted(self, tmp_path, monkeypatch):
-        repos_file = tmp_path / "repos.yaml"
+        settings = _make_settings(tmp_path)
+        repos_file = tmp_path / "data" / "registered_repos.yaml"
         existing = {
             "repos": {
                 "src-gone-pkg": {
@@ -266,9 +264,8 @@ class TestDisappearance:
                 },
             }
         }
+        repos_file.parent.mkdir(parents=True, exist_ok=True)
         repos_file.write_text(yaml.dump(existing), encoding="utf-8")
-        monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
-        settings = _make_settings(tmp_path)
         _register_master(monkeypatch, _master_cfg())
 
         # Manifest now only carries a different member.
@@ -292,8 +289,6 @@ class TestDisappearance:
 
 
 def test_files_buildout_ticket_on_member_board(tmp_path, monkeypatch):
-    repos_file = tmp_path / "repos.yaml"
-    monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
     settings = _make_settings(tmp_path)
     _register_master(monkeypatch, _master_cfg())
 
@@ -321,20 +316,20 @@ def test_files_buildout_ticket_on_member_board(tmp_path, monkeypatch):
 
 
 def test_mill_repos_file_empty_is_noop(tmp_path, monkeypatch):
-    monkeypatch.setenv("MILL_REPOS_FILE", "")
+    """sync_workspace_members always writes to <data_dir>/registered_repos.yaml
+    (the MILL_REPOS_FILE no-op path has been removed)."""
     settings = _make_settings(tmp_path)
     _register_master(monkeypatch, _master_cfg())
 
     members = [_member("src/alpha/pkg", "https://github.com/upstream/alpha.git")]
     result = sync_workspace_members(settings, "ros2-workspace", members)
-    assert result.added == []
-    assert result.filed_tickets == {}
+    assert result.added == ["src-alpha-pkg"]
+    assert (settings.data_dir / "registered_repos.yaml").exists()
+    _reset_repos_config()
 
 
 def test_writes_to_data_dir_overlay(tmp_path, monkeypatch):
-    """When MILL_REPOS_FILE is unset and no repos_yaml_path is passed,
-    sync_workspace_members writes to <data_dir>/registered_repos.yaml."""
-    monkeypatch.delenv("MILL_REPOS_FILE", raising=False)
+    """sync_workspace_members writes to <data_dir>/registered_repos.yaml."""
     settings = _make_settings(tmp_path)
     _register_master(monkeypatch, _master_cfg())
 

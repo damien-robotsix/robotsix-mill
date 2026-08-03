@@ -28,12 +28,12 @@ Settings are resolved from these layers (highest priority first):
 | 4 (lowest) | `Field(default=...)` | Static Python defaults in the Pydantic model |
 
 The non-secret part of the file feeds the `Settings` model; environment
-variables win over any JSON value. Point `MILL_CONFIG_FILE` at a
+variables win over any JSON value. Point `ROBOTSIX_CONFIG_FILE` at a
 specific file to override the default resolution (an empty string forces
 the committed example, the hermetic choice used by the test suite).
 
 **Secrets** are loaded from the `"secrets"` block of the same file
-(path overridable via `MILL_SECRETS_FILE`). They never participate in
+(located via `ROBOTSIX_CONFIG_FILE`). They never participate in
 the Settings merge; access them via `get_secrets()`. A secret whose
 value is the literal `"SECRET"` sentinel (as in `config.example.json`) is
 treated as unset.
@@ -47,7 +47,7 @@ config/
   config.json              # gitignored: THE single config — all knobs + a "secrets" block
   config.example.json      # committed: template (safe defaults + "SECRET" sentinels)
   config.schema.json       # committed: JSON Schema for config.json
-  repos.example.yaml       # committed: example entries for the repos: key (see Repos registry below)
+  #  (example repo entries live under the "repos" key of config/config.example.json)
 ```
 
 ### Getting started
@@ -106,7 +106,7 @@ what a level maps to, change the defaults in robotsix-llmio.
 ### Deploy to production with overrides
 
 Put deployment values directly in `config/config.json` (or point
-`MILL_CONFIG_FILE` at an alternative single file):
+`ROBOTSIX_CONFIG_FILE` at an alternative file):
 
 ```json
 // config/config.json
@@ -253,7 +253,7 @@ repo cannot break mill by committing a broken config file.
 Then run:
 
 ```sh
-docker compose up -d   # reads config/config.json (or set MILL_CONFIG_FILE)
+docker compose up -d   # reads config/config.json (or set ROBOTSIX_CONFIG_FILE)
 ```
 
 ### Deployed log folder (`deployed_log_folder`)
@@ -1021,7 +1021,7 @@ unset.
 | `sandbox_push_token` | — | Optional dedicated token for the sandbox git-push bridge. When set, `github_push_token()` prefers this over `forge_token` (PAT mode only). Falls back to `forge_token` if unset. |
 
 Secrets live in the `"secrets"` block of `config/config.json` (overridable
-via `MILL_SECRETS_FILE` env var). Template: the `"secrets"` block of
+(located via `ROBOTSIX_CONFIG_FILE`). Template: the `"secrets"` block of
 `config/config.example.json`.
 
 > ¹ The `langfuse_*` fields on `Secrets` are configured via the
@@ -1055,7 +1055,7 @@ Langfuse configuration.
 ### Set up
 
 Add a `"repos"` block to `config/config.json` — one entry per repository
-(example entries in `config/repos.example.yaml`):
+(example entries under the `"repos"` key in `config/config.example.json`):
 
 ```yaml
 # config/repos.yaml (or the "repos" key of config/config.json)
@@ -1105,10 +1105,9 @@ List the registered repos from the CLI:
 robotsix-mill repos list
 ```
 
-Source: the `"repos"` key of `config/config.json` (overridable via the
-`MILL_REPOS_FILE` env var, which reads the given file directly). Set
-`MILL_REPOS_FILE=""` to disable repos config entirely. Example entries:
-`config/repos.example.yaml`.
+Source: the `"repos"` key of `config/config.json` (located via
+`ROBOTSIX_CONFIG_FILE`). Example entries live under the `"repos"` key
+in `config/config.example.json`.
 
 ### Field reference
 

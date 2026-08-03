@@ -1,7 +1,7 @@
 """Thin accessor for secrets stored as SecretStr fields on Settings.
 
 Values come from the ``secrets:`` block of the main mill config file
-(``config/config.json``, or ``MILL_SECRETS_FILE`` when set), read via
+(``config/config.json``, located via ``ROBOTSIX_CONFIG_FILE``), read via
 ``loader.load_secrets_block``. :func:`get_secrets` returns a cached wrapper
 exposing each field as ``str | None``, so existing callers
 (``get_secrets().openrouter_api_key``, etc.) keep working.

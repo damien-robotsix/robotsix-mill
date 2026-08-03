@@ -99,8 +99,7 @@ def test_run_member_sync_pass_requires_repo_config(tmp_path, monkeypatch):
 
 
 def test_run_member_sync_pass_adds_members(tmp_path, monkeypatch):
-    repos_file = tmp_path / "repos.yaml"
-    monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
+    repos_file = tmp_path / "data" / "registered_repos.yaml"
     settings = _make_settings(tmp_path)
     _install_seams(monkeypatch, settings, _MANIFEST)
     # Member boards materialise on first ticket write.
@@ -126,7 +125,7 @@ def test_run_member_sync_pass_adds_members(tmp_path, monkeypatch):
 
 
 def test_run_member_sync_pass_flags_removed_member(tmp_path, monkeypatch):
-    repos_file = tmp_path / "repos.yaml"
+    repos_file = tmp_path / "data" / "registered_repos.yaml"
     # Pre-seed a member that the manifest no longer lists.
     existing = {
         "repos": {
@@ -138,8 +137,8 @@ def test_run_member_sync_pass_flags_removed_member(tmp_path, monkeypatch):
             },
         }
     }
+    repos_file.parent.mkdir(parents=True, exist_ok=True)
     repos_file.write_text(yaml.dump(existing), encoding="utf-8")
-    monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
     settings = _make_settings(tmp_path)
     _install_seams(monkeypatch, settings, _MANIFEST)
     db.reset_engine()
@@ -154,8 +153,7 @@ def test_run_member_sync_pass_flags_removed_member(tmp_path, monkeypatch):
 
 
 def test_run_member_sync_pass_no_manifest_is_noop(tmp_path, monkeypatch):
-    repos_file = tmp_path / "repos.yaml"
-    monkeypatch.setenv("MILL_REPOS_FILE", str(repos_file))
+    repos_file = tmp_path / "data" / "registered_repos.yaml"
     settings = _make_settings(tmp_path)
     # Clone populates the dir but commits NO repos.yaml manifest.
     _install_seams(monkeypatch, settings, None)

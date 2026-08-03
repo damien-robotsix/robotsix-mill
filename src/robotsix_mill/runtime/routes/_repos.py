@@ -193,8 +193,7 @@ async def register_repo(
             source="auto",
         )
     # Preserve operator-configured repos that load_repos_config may have
-    # missed (e.g. when MILL_REPOS_FILE="" blocks all config reading in
-    # the test suite).
+    # missed (e.g. when the test suite's config has no repos block).
     for rid, rc in repos.repos.items():
         if rid not in new_repos.repos:
             new_repos.repos[rid] = rc

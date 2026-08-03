@@ -17,7 +17,7 @@ class JsonSettingsSource(PydanticBaseSettingsSource):
     """Pydantic-settings source that reads the main JSON config file.
 
     Resolved at ``Settings()`` construction time rather than import time, so
-    a test's ``MILL_CONFIG_FILE`` / ``ROBOTSIX_CONFIG_FILE`` monkeypatch — and
+    a test's ``ROBOTSIX_CONFIG_FILE`` monkeypatch — and
     a config file rewritten at runtime by ``PUT /config`` — are both picked up.
 
     The config's ``settings`` block is flat and alias-keyed (e.g.

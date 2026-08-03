@@ -1,4 +1,4 @@
-"""Minimal config loader shim — all loading is now via robotsix_config."""
+"""Config loader — all loading is now via robotsix_config."""
 
 from __future__ import annotations
 
@@ -9,9 +9,6 @@ from typing import Any
 
 import yaml
 
-# Sentinel to distinguish "env var absent" from "env var empty".
-_MILL_REPOS_FILE_UNSET = object()
-
 
 class ConfigError(Exception):
     """Raised for config-loading failures."""
@@ -19,22 +16,15 @@ class ConfigError(Exception):
     pass
 
 
-def _mill_repos_file() -> str | None | object:
-    """Return the ``MILL_REPOS_FILE`` env var, or sentinel when absent."""
-    return os.environ.get("MILL_REPOS_FILE", _MILL_REPOS_FILE_UNSET)
-
-
 def _resolve_main_config_path() -> Path | None:
     """Resolve the main config file path.
 
-    Checks ``MILL_CONFIG_FILE`` (used by tests) first, then
-    ``ROBOTSIX_CONFIG_FILE`` (used by robotsix_config), then the default
-    ``config/config.json``.
+    Checks ``ROBOTSIX_CONFIG_FILE`` (used by robotsix_config and tests),
+    then the default ``config/config.json``.
     """
-    for env_var in ("MILL_CONFIG_FILE", "ROBOTSIX_CONFIG_FILE"):
-        env_path = os.environ.get(env_var)
-        if env_path:
-            return Path(env_path)
+    env_path = os.environ.get("ROBOTSIX_CONFIG_FILE")
+    if env_path:
+        return Path(env_path)
     default = Path("config/config.json")
     if default.exists():
         return default
@@ -99,12 +89,10 @@ def load_secrets_block() -> dict[str, Any]:
     private key, forge tokens, Langfuse keys, ntfy) read back as ``None``
     and mill could neither call an LLM nor authenticate to GitHub.
 
-    ``MILL_SECRETS_FILE`` still overrides the path, matching the
-    pre-cutover behaviour. Never raises: a missing or malformed file means
-    "all unset", matching :func:`load_settings_block`.
+    Never raises: a missing or malformed file means "all unset", matching
+    :func:`load_settings_block`.
     """
-    override = os.environ.get("MILL_SECRETS_FILE")
-    main_path = Path(override) if override else _resolve_main_config_path()
+    main_path = _resolve_main_config_path()
     if main_path is None:
         return {}
     block = _load_file(main_path).get("secrets")
@@ -129,9 +117,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
 
     Priority:
     1. If *file_path* is given, read that file (YAML or JSON).
-    2. If ``MILL_REPOS_FILE`` env var is set to a non-empty path, read that file.
-    3. If ``MILL_REPOS_FILE`` is explicitly empty, return ``{}`` (no-op mode).
-    4. Otherwise, read from the main ``config/config.json`` and merge in the
+    2. Otherwise, read from the main ``config/config.json`` and merge in the
        machine-owned overlay (``<data_dir>/registered_repos.yaml``).
 
     Returns the raw ``repos`` mapping (or ``{}`` on any error / missing file).
@@ -141,16 +127,7 @@ def load_repos_yaml(file_path: str | None = None) -> dict[str, object]:
         data = _load_file(Path(file_path))
         return data.get("repos", {}) if isinstance(data.get("repos"), dict) else {}
 
-    # 2. MILL_REPOS_FILE env var.
-    mill_repos = _mill_repos_file()
-    if mill_repos is not _MILL_REPOS_FILE_UNSET:
-        # Explicitly set — empty → no-op, else load the file.
-        if mill_repos == "" or mill_repos is None:
-            return {}
-        data = _load_file(Path(str(mill_repos)))
-        return data.get("repos", {}) if isinstance(data.get("repos"), dict) else {}
-
-    # 3. Default: load main config + overlay merge.
+    # 2. Default: load main config + overlay merge.
     main_path = _resolve_main_config_path()
     main_repos: dict[str, Any] = {}
     if main_path is not None:

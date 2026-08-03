@@ -300,7 +300,7 @@ def _split_registry_shape(
 
 def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     """Load repos configuration from ``config/config.json``'s ``repos:``
-    key (or the ``MILL_REPOS_FILE`` / *config_file* override).
+    key (or the *config_file* override).
 
     Reads YAML via :func:`~robotsix_mill.config.loader.load_repos_yaml`,
     normalises the nested-``ReposRegistry`` and legacy-flat shapes via

@@ -8,7 +8,6 @@ on the new repo's board.
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import tempfile
 import tomllib
@@ -405,18 +404,11 @@ def _sanitize_repo_id(name: str) -> str:
     return "".join(sanitized).strip("-") or name.lower()
 
 
-def _repos_yaml_path(settings: "Settings | None" = None) -> Path | None:
+def _repos_yaml_path(settings: "Settings | None" = None) -> Path:
     """Resolve the machine-owned overlay path for auto-registered repos.
 
-    Returns ``None`` when ``MILL_REPOS_FILE`` is explicitly empty
-    (disabled by test suite).
+    Always targets the writable data volume overlay.
     """
-    path_str = os.environ.get("MILL_REPOS_FILE")
-    if path_str is not None:
-        if path_str == "":
-            return None
-        return Path(path_str)
-    # Machine-owned overlay in the writable data volume.
     data_dir = settings.data_dir if settings is not None else Path(".data")
     return Path(data_dir) / "registered_repos.yaml"
 
@@ -436,9 +428,6 @@ def _append_repo_config(
     for the newly created repository.
     """
     path = _repos_yaml_path(settings)
-    if path is None:
-        log.info("MILL_REPOS_FILE is empty — skipping repos.yaml append")
-        return
 
     # Load existing YAML
     if path.exists():

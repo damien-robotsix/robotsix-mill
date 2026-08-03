@@ -131,9 +131,6 @@ def _no_dotenv(monkeypatch, tmp_path):
         "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_OAUTH_TOKEN",
         # Old env vars -- strip to prevent confusion
-        "MILL_CONFIG_FILE",
-        "MILL_SECRETS_FILE",
-        "MILL_REPOS_FILE",
     ):
         monkeypatch.delenv(var, raising=False)
 
