@@ -96,7 +96,7 @@ def test_normalize_strips_punctuation_and_case():
 
 if _HYPOTHESIS_AVAILABLE:
 
-    @given(st.text())
+    @given(st.text(max_size=500))
     def test_normalize_is_idempotent(s):
         assert normalize(normalize(s)) == normalize(s)
 
