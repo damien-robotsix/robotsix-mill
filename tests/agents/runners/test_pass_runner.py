@@ -1096,7 +1096,9 @@ class _FakeTicket:
 def test_format_recent_proposals_empty():
     """Empty list returns the '(no recent proposals)' placeholder."""
     result = _format_recent_proposals([])
-    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    assert result == (
+        "<recent_proposals>\n[STATE] id | title\n(no recent proposals)\n</recent_proposals>"
+    )
 
 
 def test_format_recent_proposals_single():
@@ -1110,8 +1112,9 @@ def test_format_recent_proposals_single():
     result = _format_recent_proposals([t])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
-    assert "[draft] abc123def456 | Fix bug in thing" in lines[1]
-    assert lines[2] == "</recent_proposals>"
+    assert lines[1] == "[STATE] id | title"
+    assert "[draft] abc123def456 | Fix bug in thing" in lines[2]
+    assert lines[3] == "</recent_proposals>"
 
 
 def test_format_recent_proposals_multiple():
@@ -1125,9 +1128,10 @@ def test_format_recent_proposals_multiple():
     result = _format_recent_proposals([t1, t2])
     lines = result.split("\n")
     assert lines[0] == "<recent_proposals>"
-    assert "[draft] 11111112222222 | First" in lines[1]
-    assert "[closed] 22222223333333 | Second" in lines[2]
-    assert lines[3] == "</recent_proposals>"
+    assert lines[1] == "[STATE] id | title"
+    assert "[draft] 11111112222222 | First" in lines[2]
+    assert "[closed] 22222223333333 | Second" in lines[3]
+    assert lines[4] == "</recent_proposals>"
 
 
 def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
@@ -1147,7 +1151,7 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
     result = _format_recent_proposals([t])
     assert canonical in result
     # The rendered id (between "[draft] " and " | ") must still match.
-    rendered_id = result.split("\n")[1].split("] ", 1)[1].split(" | ", 1)[0]
+    rendered_id = result.split("\n")[2].split("] ", 1)[1].split(" | ", 1)[0]
     assert rendered_id == canonical
     assert _TICKET_ID_RE.match(rendered_id) is not None
 
@@ -1180,7 +1184,9 @@ def test_format_recent_proposals_filters_old_tickets():
         created_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     result = _format_recent_proposals([old])
-    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    assert result == (
+        "<recent_proposals>\n[STATE] id | title\n(no recent proposals)\n</recent_proposals>"
+    )
 
 
 def test_format_recent_proposals_max_age_days_none():
@@ -1219,7 +1225,9 @@ def test_format_recent_proposals_none_created_at():
     """Ticket with created_at=None is excluded (safety guard)."""
     t = _FakeTicket("id1", State.DRAFT, "No date", created_at=None)
     result = _format_recent_proposals([t])
-    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    assert result == (
+        "<recent_proposals>\n[STATE] id | title\n(no recent proposals)\n</recent_proposals>"
+    )
 
 
 def test_format_recent_proposals_all_old():
@@ -1237,13 +1245,17 @@ def test_format_recent_proposals_all_old():
         created_at=datetime.now(timezone.utc) - timedelta(days=15),
     )
     result = _format_recent_proposals([old1, old2])
-    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    assert result == (
+        "<recent_proposals>\n[STATE] id | title\n(no recent proposals)\n</recent_proposals>"
+    )
 
 
 def test_format_recent_proposals_empty_list_with_filter():
     """Empty list still returns placeholder even with max_age_days set."""
     result = _format_recent_proposals([], max_age_days=7.0)
-    assert result == "<recent_proposals>\n(no recent proposals)\n</recent_proposals>"
+    assert result == (
+        "<recent_proposals>\n[STATE] id | title\n(no recent proposals)\n</recent_proposals>"
+    )
 
 
 # ------------------------------------------------------------------ _render_verified_summary direct tests
