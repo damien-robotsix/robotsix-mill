@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix ``_extract_check_names`` to parse the ``## ❌ FAILED: <name>`` format produced by ``_build_failing_summary``, so the ci-fix agent timeout diagnostic note correctly names the failing CI check(s) instead of returning ``(unknown)`` or ``**Summary:**``.
 - ci_fix: added ``ci_fix_agent_timeout_seconds`` (default 1800 s). The ci-fix agent call is now wrapped with its own wall-clock timeout that fires *before* the worker's generic ``stage_timeout_seconds``. When the agent exceeds its budget the stage produces a diagnostic BLOCKED note (failing check name, elapsed time) instead of a bare "timed out after 2400 s" — the operator can see *what* CI check was being worked on.
 - Add `audit-ignore` to the CI workflow call with the same three CVE ignores as `security-audit.yml`, so the `uv audit --frozen --preview` step introduced by the python-ci.yml reusable workflow bump (e94a9aad) no longer fails the ci / Tests job before tests run.  The three CVEs are all false positives: PYSEC-2025-183 (pyjwt, disputed), MAL-2026-4750 (fastapi, withdrawn), and GHSA-9xwg-3r6f-jcx2 (pymdown-extensions, already fixed).
 - Add `audit-ignore` to `ci.yml` with the same CVE ignores as `security-audit.yml`, so `uv audit --frozen --preview` (introduced by the python-ci.yml reusable workflow bump to e94a9aad) does not fail the ci / Tests job before tests run.

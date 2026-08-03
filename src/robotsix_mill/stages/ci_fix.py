@@ -62,46 +62,40 @@ log = logging.getLogger("robotsix_mill.stages.ci_fix")
 def _extract_check_names(failing_summary: str) -> str:
     """Extract a short, human-readable list of failing CI check names.
 
-    The dispatch summary sent to the ci-fix agent starts with the check
-    names in a format like ``ruff / lint (failure)`` or ``**CodeQL alerts
-    to fix**``.  Extract the first line(s) so the timeout block note
-    tells the operator WHICH check was being worked on.
+    The dispatch summary is built by :func:`_build_failing_summary` and
+    uses ``## ❌ FAILED: <name>`` and ``## ✅ PASSED: <name>`` headers.
+    For CodeQL-only failures the summary may start with a compact bold
+    alert block (``**CodeQL alerts to fix**``).
 
     Returns a comma-separated string (truncated to 200 chars) or
-    ``"(unknown)"`` when the summary is empty.
+    ``"(unknown)"`` when the summary is empty or no failing check can
+    be identified.
     """
     if not failing_summary:
         return "(unknown)"
-    # The failing summary typically starts with check names like:
-    #   "ruff / lint (failure)\n\n## Annotations\n..."
-    # or "**CodeQL alerts to fix**\n- py/clear-text-logging ..."
-    lines = failing_summary.strip().splitlines()
     names: list[str] = []
-    for line in lines[:6]:
+    for line in failing_summary.strip().splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        # Collect check-name lines before the detail sections start.
-        if stripped.startswith("##") or stripped.startswith("```"):
-            break
-        if stripped.startswith("**") and "**" in stripped[2:]:
-            # Bold header like "**CodeQL alerts to fix**"
-            names.append(stripped.strip("* "))
-        elif (
-            " (failure)" in stripped
-            or " (error)" in stripped
-            or " (startup_failure)" in stripped
-            or " (cancelled)" in stripped
+        # ``## ❌ FAILED: <name>`` — the primary check-name format.
+        if stripped.startswith("## ") and "❌ FAILED:" in stripped:
+            # Extract the name after the indicator.
+            _, _, name = stripped.partition("❌ FAILED:")
+            name = name.strip()
+            if name:
+                names.append(name)
+            continue
+        # Compact CodeQL alert block header (see ``_format_alert_summary_block``).
+        # This appears at the very top when CodeQL is the only failing check.
+        if (
+            stripped.startswith("**CodeQL alerts")
+            and "**" in stripped[2:]
         ):
-            names.append(stripped)
-    if not names and lines:
-        # Fall back to the first non-empty line.
-        for line in lines:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                names.append(stripped)
-                break
-    result = ", ".join(names) if names else "(unknown)"
+            names.append("CodeQL code-scanning")
+    if not names:
+        return "(unknown)"
+    result = ", ".join(names)
     return result[:200]
 
 
