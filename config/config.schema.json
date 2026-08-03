@@ -930,7 +930,7 @@
         },
         "ci_fix_max_iterations": {
           "advanced": true,
-          "default": 5,
+          "default": 3,
           "description": "Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
           "minimum": 0,
           "title": "Ci Fix Max Iterations",
@@ -968,7 +968,7 @@
         },
         "ci_fix_wait_timeout_s": {
           "advanced": true,
-          "default": 1500.0,
+          "default": 900.0,
           "description": "Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Timeout S",
