@@ -218,6 +218,259 @@ class CIPollMixin(_MergeStageBase):
         except Exception:
             return False
 
+    def _refresh_branch_for_ci_if_idle(
+        self, ticket: Ticket, ctx: StageContext, branch: str
+    ) -> None:
+        """Refresh branch to force a fresh CI run before evaluating.
+
+        Only refreshes when no CI run is currently in flight — a refresh
+        (rebase or empty commit) produces a new head SHA which would make
+        the forge abandon the in-progress run and start a fresh one,
+        causing an endless restart cycle for runs longer than the poll
+        interval.
+        """
+        s = ctx.settings
+        _repo_dir = _workspace_repo_dir(ctx, ticket)
+        _target = target_branch_for(s, ctx.repo_config)
+        try:
+            from ...forge.auth import _resolve_remote_url, github_push_token
+
+            _remote_url = _resolve_remote_url(s, ctx.repo_config)
+            _token = github_push_token(s, repo_config=ctx.repo_config)
+        except Exception:
+            _remote_url = ""
+            _token = None
+        # Never refresh while checks are still running. A refresh produces a
+        # new head SHA, which makes the forge abandon the in-progress run and
+        # start a fresh one; since the poll interval is far shorter than a CI
+        # run, every poll would restart the checks it is waiting on and no run
+        # could ever conclude.
+        if _remote_url and _repo_dir is not None:
+            try:
+                _pre_status = get_forge(s, repo_config=ctx.repo_config).check_status(
+                    source_branch=branch
+                )
+            except Exception:
+                _pre_status = None
+            if _pre_status is not None and _ci_run_in_flight(_pre_status):
+                log.info(
+                    "%s: CI still running — skipping branch refresh so the "
+                    "in-flight run can finish",
+                    ticket.id,
+                )
+            else:
+                _refresh_branch_for_ci(
+                    _repo_dir,
+                    branch,
+                    _target,
+                    _remote_url,
+                    _token,
+                    ticket.id,
+                    sentinel_path=(
+                        ctx.service.workspace(ticket).artifacts_dir
+                        / _CI_POLL_REFRESH_SHA
+                    ),
+                )
+
+    def _handle_ci_failure_route(
+        self, ticket: Ticket, ctx: StageContext, pr: dict[str, Any], branch: str
+    ) -> Outcome:
+        """Handle a failing CI conclusion: debt detection, guardrails, route to FIXING_CI.
+
+        Called only when ``conclusion == "failure"``.  Checks for pre-existing
+        main-branch debt, applies the cross-stage auto-fix cycle ceiling and the
+        ping-pong alternation detector, then returns ``FIXING_CI`` (or ``BLOCKED``
+        when a guardrail trips).
+        """
+        s = ctx.settings
+        # Pre-existing main-branch CI debt detection (gated). When EVERY
+        # workflow failing on the PR head is ALSO failing on the merge
+        # target, the failure was not introduced by this PR and cannot be
+        # fixed by it — rebasing onto a red main can't help, so block before
+        # the branch-behind-main rebase decision below.
+        # A ci_fix dependency ticket EXISTS to repair that debt, so
+        # blocking it on the debt is a deadlock: the repair for red main
+        # is refused because main is red, and only a human merging by
+        # hand breaks the cycle.
+        is_ci_fix = ticket.source == SourceKind.CI_FIX_DEPENDENCY
+        if s.auto_merge_main_debt_detection_enabled and not is_ci_fix:
+            debt = self._main_branch_ci_debt(
+                forge=get_forge(s, repo_config=ctx.repo_config),
+                pr=pr,
+                target_branch=target_branch_for(s, ctx.repo_config),
+            )
+            if debt:
+                names = ", ".join(sorted(debt))
+                log.warning(
+                    "%s: CI failure is pre-existing main debt (%s) → BLOCKED",
+                    ticket.id,
+                    names,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"CI blocked by pre-existing target-branch debt: workflow(s) "
+                    f"{names} are failing on the merge target too and were not "
+                    f"introduced by this PR. Operator must stabilise the target "
+                    f"branch's CI before this can merge.",
+                )
+
+        # --- Guardrail 1: cross-stage auto-fix cycle counter ---
+        # Count every dispatch to REBASING or FIXING_CI without CI turning
+        # green.  This is the universal backstop — it bounds the combined
+        # rebase+ci_fix loop regardless of the alternation pattern.
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        auto_fix_path = artifacts_dir / _AUTO_FIX_CYCLES
+        auto_fix_cycles = _read_counter(auto_fix_path)
+        if s.auto_fix_max_cycles > 0 and auto_fix_cycles >= s.auto_fix_max_cycles:
+            _write_counter(auto_fix_path, 0)  # reset for resume
+            log.warning(
+                "%s: auto-fix exhausted cross-stage ceiling of %d cycle(s) "
+                "without CI turning green — escalating to BLOCKED",
+                ticket.id,
+                s.auto_fix_max_cycles,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"auto-fix exhausted cross-stage ceiling of "
+                f"{s.auto_fix_max_cycles} cycle(s) without CI turning "
+                f"green — manual intervention required (ticket "
+                f"{ticket.id}, counter was {auto_fix_cycles}). "
+                f"Resume-blocked to retry from human_mr_approval.",
+            )
+        _write_counter(auto_fix_path, auto_fix_cycles + 1)
+
+        # Route to FIXING_CI. Branch-introduced failures (those green
+        # on current main) go straight to ci_fix — rebasing cannot fix
+        # a branch's own lint/type failure and just churns under a fast
+        # main. Pre-existing main-branch debt is already blocked above.
+        # The branch gets made current with main via the single
+        # rebase-and-merge at the end of the merge stage, not on every
+        # CI cycle.
+
+        # --- Guardrail 2: ping-pong alternation detector ---
+        ping_pong_result = self._check_ping_pong(
+            ticket, ctx, artifacts_dir, routing_to="ci_fix"
+        )
+        if ping_pong_result is not None:
+            return ping_pong_result
+
+        log.info("%s: CI failing → FIXING_CI", ticket.id)
+        return Outcome(State.FIXING_CI)
+
+    def _merge_or_promote_when_green(
+        self, ticket: Ticket, ctx: StageContext, pr: dict[str, Any], branch: str
+    ) -> Outcome:
+        """Handle a green CI: changelog gate, counter reset, auto-merge or promote.
+
+        Called only when ``_ci_truly_green(conclusion, pr)`` is True.
+        Runs the changelog duplicate-fragment gate, resets the ci_fix /
+        auto-fix / ping-pong counters, attempts auto-merge when eligible,
+        and falls back to ``HUMAN_MR_APPROVAL`` otherwise.
+        """
+        s = ctx.settings
+        # Both gates passed! Promote to human review. This is the only
+        # GENUINE "CI is fixed" signal (sustained green that advances the
+        # ticket), so reset the ci_fix hard cycle ceiling here — not on a
+        # transient green read inside ci_fix (which a flickering CI emits
+        # between failing cycles and which let a runaway loop survive).
+        # Also reset the cross-stage auto-fix cycle counter and ping-pong
+        # detector files — CI green is the ONLY genuine forward-progress
+        # signal.
+
+        # --- Changelog duplicate-fragment gate ---
+        repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
+        target = target_branch_for(s, ctx.repo_config)
+        dups = _duplicate_changelog_fragments(repo_dir, target)
+        if dups:
+            log.warning(
+                "%s: duplicate changelog fragments %s → BLOCKED",
+                ticket.id,
+                sorted(dups),
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"Duplicate changelog fragments detected for ticket(s): "
+                f"{', '.join(sorted(dups))}. Each ticket id must have exactly one "
+                f"changelog fragment — remove the extra fragment(s) and re-run. Resumable.",
+            )
+
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
+        _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
+        _write_counter(artifacts_dir / _PING_PONG_COUNT, 0)
+        last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
+        with contextlib.suppress(FileNotFoundError):
+            last_stage_path.unlink()
+
+        # Gates passed — attempt mill-native merge (not forge auto-merge).
+        feature_tip_sha = pr.get("sha", "")
+        eligible, eligibility_reason = self._auto_merge_eligible(
+            ticket,
+            ctx,
+            pr_head_sha=feature_tip_sha,
+            forge=get_forge(s, repo_config=ctx.repo_config),
+            pr=pr,
+        )
+        if eligible:
+            result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
+                source_branch=branch
+            )
+            if result.get("merged"):
+                repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
+                target = target_branch_for(s, ctx.repo_config)
+                if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id, target):
+                    ctx.service.workspace(ticket).artifacts_dir.joinpath(
+                        "merge.md"
+                    ).write_text(
+                        f"merged: {pr.get('url', '')}\n",
+                        encoding="utf-8",
+                    )
+                    self._cleanup_branch_on_done(ticket, ctx, branch)
+                    log.info("%s: merged → done", ticket.id)
+                    return Outcome(
+                        State.DONE,
+                        f"merged: {pr.get('url', '')}",
+                    )
+                log.warning(
+                    "%s: merge reported success but commit %s is not an "
+                    "ancestor of origin/%s — falling back to IMPLEMENT_COMPLETE",
+                    ticket.id,
+                    feature_tip_sha[:8] if feature_tip_sha else "(none)",
+                    target,
+                )
+                return Outcome(
+                    State.IMPLEMENT_COMPLETE,
+                    f"merge reported success but commit not confirmed on origin/{target}: {pr.get('url', '')}",
+                )
+            # Forge rejected the merge — retry a bounded number of
+            # passes when it may just be a required check that has
+            # not reported yet, else fail closed to BLOCKED.
+            outcome = _merge_rejection_outcome(
+                ticket.id,
+                ctx.service.workspace(ticket).artifacts_dir,
+                result,
+                same_state=State.IMPLEMENT_COMPLETE,
+            )
+            if outcome.next_state is State.BLOCKED:
+                self._maybe_comment(ticket, ctx, outcome.note or "")
+                log.warning(
+                    "%s: merge rejected: %s → BLOCKED",
+                    ticket.id,
+                    result.get("reason", "unknown"),
+                )
+            return outcome
+        else:
+            # Gates pass but not eligible for autonomous merge → ask human.
+            log.info(
+                "%s: gates passed but not eligible for autonomous merge → HUMAN_MR_APPROVAL",
+                ticket.id,
+            )
+            self._maybe_comment(ticket, ctx, eligibility_reason)
+            return Outcome(
+                State.HUMAN_MR_APPROVAL,
+                f"CI green and mergeable — {eligibility_reason}",
+            )
+
     def _poll_implement_complete(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status for a ticket in IMPLEMENT_COMPLETE.
 
@@ -273,62 +526,7 @@ class CIPollMixin(_MergeStageBase):
                 "CI gate skipped for this repo (skip_ci); PR mergeable — awaiting human merge approval",
             )
 
-        # --- Refresh branch to force a fresh CI run before evaluating ---
-        # When resuming from BLOCKED the branch HEAD may be identical to the
-        # remote — the same SHA whose CI run was already failing.  Rebase onto
-        # the target (or push an empty commit) to produce a new head SHA so the
-        # forge triggers a fresh pull_request run.  Without this, a transient
-        # flake that has since resolved keeps re-reading the same stale
-        # failing run and the ticket loops forever.
-        _repo_dir = _workspace_repo_dir(ctx, ticket)
-        _target = target_branch_for(s, ctx.repo_config)
-        try:
-            from ...forge.auth import _resolve_remote_url, github_push_token
-
-            _remote_url = _resolve_remote_url(s, ctx.repo_config)
-            _token = github_push_token(s, repo_config=ctx.repo_config)
-        except Exception:
-            _remote_url = ""
-            _token = None
-        # Never refresh while checks are still running. A refresh produces a
-        # new head SHA, which makes the forge abandon the in-progress run and
-        # start a fresh one; since the poll interval is far shorter than a CI
-        # run, every poll would restart the checks it is waiting on and no run
-        # could ever conclude. Observed 2026-08-01: 472 empty commits in one
-        # hour across 15 tickets — one looping for 20 hours, restarting 18
-        # checks every 2 minutes — with 22 tickets stacked in
-        # IMPLEMENT_COMPLETE because none of them could finish CI.
-        #
-        # This is a separate, cheap probe rather than a reordering: when the
-        # run HAS concluded, the refresh must still happen before the status
-        # the stage acts on is read, so a stale failing SHA is replaced by a
-        # fresh run instead of being re-diagnosed as a real failure.
-        if _remote_url and _repo_dir is not None:
-            try:
-                _pre_status = get_forge(s, repo_config=ctx.repo_config).check_status(
-                    source_branch=branch
-                )
-            except Exception:
-                _pre_status = None
-            if _pre_status is not None and _ci_run_in_flight(_pre_status):
-                log.info(
-                    "%s: CI still running — skipping branch refresh so the "
-                    "in-flight run can finish",
-                    ticket.id,
-                )
-            else:
-                _refresh_branch_for_ci(
-                    _repo_dir,
-                    branch,
-                    _target,
-                    _remote_url,
-                    _token,
-                    ticket.id,
-                    sentinel_path=(
-                        ctx.service.workspace(ticket).artifacts_dir
-                        / _CI_POLL_REFRESH_SHA
-                    ),
-                )
+        self._refresh_branch_for_ci_if_idle(ticket, ctx, branch)
 
         # Check remote CI.
         try:
@@ -344,207 +542,15 @@ class CIPollMixin(_MergeStageBase):
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         conclusion = ci_status.get("conclusion")
+
         if conclusion == "failure":
-            # Pre-existing main-branch CI debt detection (gated). When EVERY
-            # workflow failing on the PR head is ALSO failing on the merge
-            # target, the failure was not introduced by this PR and cannot be
-            # fixed by it — rebasing onto a red main can't help, so block before
-            # the branch-behind-main rebase decision below.
-            # A ci_fix dependency ticket EXISTS to repair that debt, so
-            # blocking it on the debt is a deadlock: the repair for red main
-            # is refused because main is red, and only a human merging by
-            # hand breaks the cycle. Observed live — one red Dockerfile check
-            # on robotsix-chat wedged 22 tickets plus all three ci_fix
-            # tickets spawned to clear it. Let these through to the auto-fix
-            # loop below, which is separately bounded by the cycle counter.
-            is_ci_fix = ticket.source == SourceKind.CI_FIX_DEPENDENCY
-            if s.auto_merge_main_debt_detection_enabled and not is_ci_fix:
-                debt = self._main_branch_ci_debt(
-                    forge=get_forge(s, repo_config=ctx.repo_config),
-                    pr=pr,
-                    target_branch=target_branch_for(s, ctx.repo_config),
-                )
-                if debt:
-                    names = ", ".join(sorted(debt))
-                    log.warning(
-                        "%s: CI failure is pre-existing main debt (%s) → BLOCKED",
-                        ticket.id,
-                        names,
-                    )
-                    return Outcome(
-                        State.BLOCKED,
-                        f"CI blocked by pre-existing target-branch debt: workflow(s) "
-                        f"{names} are failing on the merge target too and were not "
-                        f"introduced by this PR. Operator must stabilise the target "
-                        f"branch's CI before this can merge.",
-                    )
-
-            # --- Guardrail 1: cross-stage auto-fix cycle counter ---
-            # Count every dispatch to REBASING or FIXING_CI without CI turning
-            # green.  This is the universal backstop — it bounds the combined
-            # rebase+ci_fix loop regardless of the alternation pattern.
-            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
-            auto_fix_path = artifacts_dir / _AUTO_FIX_CYCLES
-            auto_fix_cycles = _read_counter(auto_fix_path)
-            if s.auto_fix_max_cycles > 0 and auto_fix_cycles >= s.auto_fix_max_cycles:
-                _write_counter(auto_fix_path, 0)  # reset for resume
-                log.warning(
-                    "%s: auto-fix exhausted cross-stage ceiling of %d cycle(s) "
-                    "without CI turning green — escalating to BLOCKED",
-                    ticket.id,
-                    s.auto_fix_max_cycles,
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    f"auto-fix exhausted cross-stage ceiling of "
-                    f"{s.auto_fix_max_cycles} cycle(s) without CI turning "
-                    f"green — manual intervention required (ticket "
-                    f"{ticket.id}, counter was {auto_fix_cycles}). "
-                    f"Resume-blocked to retry from human_mr_approval.",
-                )
-            _write_counter(auto_fix_path, auto_fix_cycles + 1)
-
-            # Route to FIXING_CI. Branch-introduced failures (those green
-            # on current main) go straight to ci_fix — rebasing cannot fix
-            # a branch's own lint/type failure and just churns under a fast
-            # main. Pre-existing main-branch debt is already blocked above.
-            # The branch gets made current with main via the single
-            # rebase-and-merge at the end of the merge stage, not on every
-            # CI cycle.
-
-            # --- Guardrail 2: ping-pong alternation detector ---
-            ping_pong_result = self._check_ping_pong(
-                ticket, ctx, artifacts_dir, routing_to="ci_fix"
-            )
-            if ping_pong_result is not None:
-                return ping_pong_result
-
-            log.info("%s: CI failing → FIXING_CI", ticket.id)
-            return Outcome(State.FIXING_CI)
+            return self._handle_ci_failure_route(ticket, ctx, pr, branch)
 
         if _ci_truly_green(conclusion, pr):
-            # Both gates passed! Promote to human review. This is the only
-            # GENUINE "CI is fixed" signal (sustained green that advances the
-            # ticket), so reset the ci_fix hard cycle ceiling here — not on a
-            # transient green read inside ci_fix (which a flickering CI emits
-            # between failing cycles and which let a runaway loop survive).
-            # Also reset the cross-stage auto-fix cycle counter and ping-pong
-            # detector files — CI green is the ONLY genuine forward-progress
-            # signal.
-            # NOTE: _ci_truly_green requires mergeable_state in
-            # (None, "clean", "unstable") on GitHub, so a premature green
-            # (fast checks done, slow gate not yet started → mergeable_state
-            # "blocked"/"behind"/"unknown") falls through to the re-poll
-            # below instead of promoting. "unstable" is accepted because it
-            # means mergeable with all required gates passed and only a
-            # non-required status non-green (e.g. a cancelled duplicate).
-
-            # --- Changelog duplicate-fragment gate ---
-            repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
-            target = target_branch_for(s, ctx.repo_config)
-            dups = _duplicate_changelog_fragments(repo_dir, target)
-            if dups:
-                log.warning(
-                    "%s: duplicate changelog fragments %s → BLOCKED",
-                    ticket.id,
-                    sorted(dups),
-                )
-                return Outcome(
-                    State.BLOCKED,
-                    f"Duplicate changelog fragments detected for ticket(s): "
-                    f"{', '.join(sorted(dups))}. Each ticket id must have exactly one "
-                    f"changelog fragment — remove the extra fragment(s) and re-run. Resumable.",
-                )
-
-            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
-            _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
-            _write_counter(artifacts_dir / _AUTO_FIX_CYCLES, 0)
-            _write_counter(artifacts_dir / _PING_PONG_COUNT, 0)
-            last_stage_path = artifacts_dir / _LAST_AUTO_FIX_STAGE
-            with contextlib.suppress(FileNotFoundError):
-                last_stage_path.unlink()
-
-            # Gates passed — attempt mill-native merge (not forge auto-merge).
-            feature_tip_sha = pr.get("sha", "")
-            eligible, eligibility_reason = self._auto_merge_eligible(
-                ticket,
-                ctx,
-                pr_head_sha=feature_tip_sha,
-                forge=get_forge(s, repo_config=ctx.repo_config),
-                pr=pr,
-            )
-            if eligible:
-                result = get_forge(s, repo_config=ctx.repo_config).merge_pr(
-                    source_branch=branch
-                )
-                if result.get("merged"):
-                    repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
-                    target = target_branch_for(s, ctx.repo_config)
-                    if _verify_merge_ancestor(
-                        repo_dir, feature_tip_sha, ticket.id, target
-                    ):
-                        ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                            "merge.md"
-                        ).write_text(
-                            f"merged: {pr.get('url', '')}\n",
-                            encoding="utf-8",
-                        )
-                        self._cleanup_branch_on_done(ticket, ctx, branch)
-                        log.info("%s: merged → done", ticket.id)
-                        return Outcome(
-                            State.DONE,
-                            f"merged: {pr.get('url', '')}",
-                        )
-                    log.warning(
-                        "%s: merge reported success but commit %s is not an "
-                        "ancestor of origin/%s — falling back to IMPLEMENT_COMPLETE",
-                        ticket.id,
-                        feature_tip_sha[:8] if feature_tip_sha else "(none)",
-                        target,
-                    )
-                    return Outcome(
-                        State.IMPLEMENT_COMPLETE,
-                        f"merge reported success but commit not confirmed on origin/{target}: {pr.get('url', '')}",
-                    )
-                # Forge rejected the merge — retry a bounded number of
-                # passes when it may just be a required check that has
-                # not reported yet, else fail closed to BLOCKED.
-                outcome = _merge_rejection_outcome(
-                    ticket.id,
-                    ctx.service.workspace(ticket).artifacts_dir,
-                    result,
-                    same_state=State.IMPLEMENT_COMPLETE,
-                )
-                if outcome.next_state is State.BLOCKED:
-                    self._maybe_comment(ticket, ctx, outcome.note or "")
-                    log.warning(
-                        "%s: merge rejected: %s → BLOCKED",
-                        ticket.id,
-                        result.get("reason", "unknown"),
-                    )
-                return outcome
-            else:
-                # Gates pass but not eligible for autonomous merge → ask human.
-                log.info(
-                    "%s: gates passed but not eligible for autonomous merge → HUMAN_MR_APPROVAL",
-                    ticket.id,
-                )
-                self._maybe_comment(ticket, ctx, eligibility_reason)
-                return Outcome(
-                    State.HUMAN_MR_APPROVAL,
-                    f"CI green and mergeable — {eligibility_reason}",
-                )
+            return self._merge_or_promote_when_green(ticket, ctx, pr, branch)
 
         ms = pr.get("mergeable_state")
         if conclusion == "success" and ms == "behind":
-            # Green CI on a stale head. Under a strict up-to-date branch
-            # policy GitHub reports mergeable_state "behind" and nothing —
-            # not CI, not the forge — will ever change it, so re-polling
-            # waits forever (live: six chat PRs stranded, each auto-merge
-            # pushing the survivors further behind). Route to REBASING so
-            # the rebase agent catches the branch up and surfaces any
-            # semantic conflict; CI reruns on the new head and the gates
-            # re-verify.
             log.info(
                 "%s: CI green but branch behind target → REBASING",
                 ticket.id,

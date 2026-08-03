@@ -1048,34 +1048,23 @@ class CIFixStage(Stage):
 
         return fetch_fn
 
-    def _handle_out_of_scope(
+    def _reject_in_scope_alerts(
         self,
         ticket: Ticket,
         ctx: StageContext,
-        branch: str,
-        result: CiFixResult,
-        failing_summary: str,
-        head_sha: str = "",
-    ) -> Outcome:
-        """Route an out-of-scope CI failure to a dedicated fix ticket.
+        in_scope_alerts: list[dict[str, Any]],
+    ) -> Outcome | None:
+        """Reject the out-of-scope classification when in-scope alerts exist.
 
-        Before spawning, detect a *stale* branch (one behind its base, where
-        the failure may already be fixed on main) and refresh it once via the
-        forge's server-side update-branch primitive instead of spawning a
-        dependency fix. Otherwise delegates the spawn-or-reuse + wire + park
-        logic to :func:`~.dependency_fix.spawn_dependency_fix`, which is shared
-        with the implement-stage baseline check (and, later, verify /
-        review / merge).
+        If any open code-scanning alert lives in this PR's own diff, the
+        OUT_OF_SCOPE verdict is wrong for at least those — suppress the spawn
+        and return IMPLEMENT_COMPLETE so the ci-fix agent re-runs against the
+        in-scope-labelled failing summary.
+
+        Returns:
+            ``Outcome(State.IMPLEMENT_COMPLETE)`` when in-scope alerts are
+            detected, or ``None`` when there are none (caller should proceed).
         """
-        s = ctx.settings
-
-        # Deterministic in-diff guard: the LLM's OUT_OF_SCOPE verdict must not
-        # be the only safety net. If ANY open code-scanning alert lives in this
-        # PR's own diff, the verdict is wrong for at least those — do NOT spawn
-        # a dependency fixer; route back to re-run the agent against the
-        # in-scope-labelled summary instead.
-        in_scope_alerts, out_of_scope_alerts = _partition_open_alerts(ctx, branch)
-
         if in_scope_alerts:
             # OUT_OF_SCOPE is wrong for these alerts — suppress the spawn and
             # re-poll so the ci-fix agent re-runs against the in-scope-labelled
@@ -1091,7 +1080,30 @@ class CIFixStage(Stage):
             except Exception:
                 log.warning("%s: failed to record in-scope-alert note", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
+        return None
 
+    def _refresh_stale_branch_once(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+    ) -> Outcome | None:
+        """Refresh the branch once if it has fallen behind its base.
+
+        When this branch is behind its base, the failure may already be fixed
+        on main (a fast-moving main races the ci-fix agent).  Refresh the
+        branch once via the forge's server-side update-branch and re-poll CI
+        instead of spawning a dependency fix.
+
+        Uses the forge's server-side "behind" signal (NOT the local-clone
+        ``branch_is_behind_main``, which never advances after a server-side
+        refresh and would loop forever).
+
+        Returns:
+            ``Outcome(State.IMPLEMENT_COMPLETE)`` when the branch was refreshed,
+            or ``None`` when no refresh is needed (caller should proceed).
+        """
+        s = ctx.settings
         artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
         refresh_path = artifacts_dir / _CI_REFRESH_COUNTER
 
@@ -1129,15 +1141,35 @@ class CIFixStage(Stage):
                     return Outcome(State.IMPLEMENT_COMPLETE)
                 # update_branch failed (PR not found / HTTP error) — fall
                 # through to the normal spawn path so we don't get stuck.
+        return None
 
-        # --- transient failure auto-retry ---
-        # Before spawning a blocking fix ticket, classify the failure as
-        # transient (infrastructure flake) vs deterministic (lint/test/type
-        # error).  Transient failures get automatic CI re-runs (up to
-        # ci_transient_max_retries) instead of spawning a fix ticket.
+    def _retry_transient_ci_failure(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        failing_summary: str,
+        head_sha: str,
+    ) -> Outcome | None:
+        """Retry CI when the failure is classified as a transient flake.
+
+        Before spawning a blocking fix ticket, classify the failure as
+        transient (infrastructure flake) vs deterministic (lint/test/type
+        error).  Transient failures get automatic CI re-runs (up to
+        ``ci_transient_max_retries``) instead of spawning a fix ticket.
+
+        Returns:
+            ``Outcome(State.IMPLEMENT_COMPLETE)`` when a transient re-run was
+            triggered, or ``None`` when the failure is not transient, retries
+            are disabled, or retries are exhausted (caller should proceed to
+            spawn a fix ticket).
+        """
         from .ci_transient import is_transient_ci_failure
 
         _CI_TRANSIENT_RETRY_COUNTER = "ci_transient_retry.txt"
+
+        s = ctx.settings
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
 
         if is_transient_ci_failure(failing_summary):
             transient_counter = _read_counter(
@@ -1147,7 +1179,10 @@ class CIFixStage(Stage):
                 rerun_count = 0
                 try:
                     forge = get_forge(s, repo_config=ctx.repo_config)
-                    runs = forge.list_workflow_runs(head_sha=head_sha)
+                    if head_sha:
+                        runs = forge.list_workflow_runs(head_sha=head_sha)
+                    else:
+                        runs = []
                     for run in runs:
                         if run.get("conclusion") == "failure":
                             result_rerun = forge.rerun_workflow(run_id=run["id"])
@@ -1190,6 +1225,33 @@ class CIFixStage(Stage):
                     "%s: failed to record transient-exhausted note",
                     ticket.id,
                 )
+
+        return None
+
+    def _spawn_or_reuse_fix(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        result: CiFixResult,
+        failing_summary: str,
+        head_sha: str,
+        out_of_scope_alerts: list[dict[str, Any]],
+    ) -> Outcome:
+        """Spawn or reuse a dependency-fix ticket for the out-of-scope failure.
+
+        Builds a deterministic title/description so the spawn is idempotent
+        across cycles, delegates to
+        :func:`~.dependency_fix.spawn_dependency_fix`, clears the
+        ``depends_on`` relationship on the original ticket, and resets the
+        per-ticket refresh counter.
+
+        Returns:
+            An ``Outcome`` from the spawn call (always returns a value —
+            unlike the other helpers that return ``None`` to signal "proceed").
+        """
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        refresh_path = artifacts_dir / _CI_REFRESH_COUNTER
 
         # Deterministic title so the spawn is idempotent across cycles.
         title = (
@@ -1238,9 +1300,53 @@ class CIFixStage(Stage):
 
         # Reset the per-ticket refresh counter so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.
-        _write_counter(artifacts_dir / _CI_REFRESH_COUNTER, 0)
+        _write_counter(refresh_path, 0)
 
         return outcome
+
+    def _handle_out_of_scope(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        result: CiFixResult,
+        failing_summary: str,
+        head_sha: str = "",
+    ) -> Outcome:
+        """Route an out-of-scope CI failure to a dedicated fix ticket.
+
+        Before spawning, detect a *stale* branch (one behind its base, where
+        the failure may already be fixed on main) and refresh it once via the
+        forge's server-side update-branch primitive instead of spawning a
+        dependency fix. Otherwise delegates the spawn-or-reuse + wire + park
+        logic to :func:`~.dependency_fix.spawn_dependency_fix`, which is shared
+        with the implement-stage baseline check (and, later, verify /
+        review / merge).
+        """
+        # Deterministic in-diff guard: the LLM's OUT_OF_SCOPE verdict must not
+        # be the only safety net. If ANY open code-scanning alert lives in this
+        # PR's own diff, the verdict is wrong for at least those — do NOT spawn
+        # a dependency fixer; route back to re-run the agent against the
+        # in-scope-labelled summary instead.
+        in_scope_alerts, out_of_scope_alerts = _partition_open_alerts(ctx, branch)
+
+        alert_outcome = self._reject_in_scope_alerts(ticket, ctx, in_scope_alerts)
+        if alert_outcome is not None:
+            return alert_outcome
+
+        refresh_outcome = self._refresh_stale_branch_once(ticket, ctx, branch)
+        if refresh_outcome is not None:
+            return refresh_outcome
+
+        transient_outcome = self._retry_transient_ci_failure(
+            ticket, ctx, branch, failing_summary, head_sha
+        )
+        if transient_outcome is not None:
+            return transient_outcome
+
+        return self._spawn_or_reuse_fix(
+            ticket, ctx, branch, result, failing_summary, head_sha, out_of_scope_alerts
+        )
 
     def _finalize_success(
         self,
