@@ -1179,7 +1179,10 @@ class CIFixStage(Stage):
                 rerun_count = 0
                 try:
                     forge = get_forge(s, repo_config=ctx.repo_config)
-                    runs = forge.list_workflow_runs(head_sha=head_sha)
+                    if head_sha:
+                        runs = forge.list_workflow_runs(head_sha=head_sha)
+                    else:
+                        runs = []
                     for run in runs:
                         if run.get("conclusion") == "failure":
                             result_rerun = forge.rerun_workflow(run_id=run["id"])
