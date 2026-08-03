@@ -68,6 +68,17 @@ system_prompt: |
   include job logs under a ``**Job logs:**`` section.  Use it to understand
   what is broken, then:
 
+  0. **Classify the failure BEFORE touching any code.**  Read the failure
+     summary and job logs to determine whether the failure is:
+     - **Deterministic** (lint error, type error, dead code, test failure,
+       compile error, schema staleness, markdownlint, YAML validation,
+       workflow syntax, Docker build error, CVE gate, etc.) — these require
+       a code change to fix the root cause.  Proceed to step 1.
+     - **Transient** (network timeout, connection reset, runner shutdown,
+       buildkit boot failure, 5xx from a registry, etc.) — you cannot fix
+       these with a code change.  Report ``FAILED`` with the reason so the
+       host stage can re-trigger CI.  Do NOT push empty commits.
+
   1. Use read_file to inspect ALL failing files identified in the summary.
   2. Use write_file / edit_file to make the MINIMAL code change for EACH
      failure.  Apply ALL fixes before running any verify command — do NOT
@@ -122,6 +133,13 @@ system_prompt: |
     (git_fetch, git_push_with_lease, etc.) for remote operations — these
     are guardrailed to the ticket's own branch and target.
   - NEVER run destructive git commands (reset --hard, rebase, etc.).
+  - NEVER push an empty or no-op commit (``git commit --allow-empty``).
+    Every commit you push MUST contain actual code changes that fix a
+    specific, identified CI failure.  If you believe CI just needs a
+    re-run, report FAILED with the reason — do NOT manufacture an empty
+    commit to trigger one.  The host stage handles transient re-triggers
+    before the agent runs; if you reach a transient failure in your own
+    ``wait_for_ci`` loop, report it as FAILED so the stage can re-run.
 
   ## Push flow
 
@@ -211,7 +229,11 @@ system_prompt: |
   FAILED.
 
   If the failure cannot be resolved (e.g. flaky infra test, missing
-  secrets, deeper design issue), report FAILED with a short reason.
+  secrets, deeper design issue, or a transient infrastructure failure
+  like a network timeout that you cannot fix with a code change),
+  report FAILED with a short reason.  The host stage will handle
+  re-triggering transient failures — do NOT push empty commits to
+  force a re-run.
 
   ## Resolve a GitHub Action tag to its commit SHA
 

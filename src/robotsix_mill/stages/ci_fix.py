@@ -37,12 +37,10 @@ from .ci_fix_codeql import (
     _try_codeql_fp_triage,
 )
 from .ci_fix_helpers import (
-    _CI_EMPTY_COMMIT_COUNTER,
     _CI_FAILURE_FINGERPRINT,
     _CODQL_CHECK_NAMES,
     _CI_IDENTICAL_FAILURE_COUNT,
     _CI_REFRESH_COUNTER,
-    _MAX_CI_EMPTY_COMMIT_REFRESHES,
     _FailingContext,
     _build_failing_summary,
     _ci_failure_fingerprint,
@@ -258,66 +256,6 @@ class CIFixStage(Stage):
                 exc_info=True,
             )
 
-        # --- Force a fresh CI run when the rebase didn't change HEAD ---
-        # If the rebase was a no-op (branch already current) or failed,
-        # the remote branch SHA still matches the local HEAD and no new
-        # CI run was triggered.  Push an empty commit to produce a fresh
-        # head SHA so the forge triggers a new pull_request run — this
-        # un-sticks tickets whose original CI failure was a transient
-        # flake that has since resolved (the old, failing check-runs
-        # are pinned to the stale SHA and can never turn green).
-        #
-        # BOUNDED, and it must stay that way. Pushing the commit invalidates
-        # the very status the rest of this method reads: the run it triggers
-        # is still `queued` a couple of seconds later, so `check_status`
-        # below returns "pending" and the method returns IMPLEMENT_COMPLETE
-        # without ever reaching the fix path. Unbounded, that is a livelock —
-        # every FIXING_CI entry pushes another no-op commit, returns in <10s,
-        # and the failure is never diagnosed. Observed on robotsix-auto-mail
-        # ticket …-6a4e, which cycled for hours against a genuinely red CI
-        # while the fix agent was never invoked once.
-        #
-        # So: refresh at most _MAX_CI_EMPTY_COMMIT_REFRESHES times per
-        # failure. Once the budget is spent, fall through and read the real
-        # status — a failure that survives a fresh run is not a stale one,
-        # and belongs to the fix agent.
-        empty_commit_counter_path = (
-            ctx.service.workspace(ticket).artifacts_dir / _CI_EMPTY_COMMIT_COUNTER
-        )
-        _local_sha = git_ops.head_sha(Path(repo_dir))
-        _remote_sha = git_ops.ls_remote_sha(_remote_url, f"refs/heads/{branch}", _token)
-        if _remote_sha is not None and _local_sha == _remote_sha:
-            _refreshes = _read_counter(empty_commit_counter_path)
-            if _refreshes >= _MAX_CI_EMPTY_COMMIT_REFRESHES:
-                log.info(
-                    "%s: already refreshed CI %d time(s) for this failure — "
-                    "not pushing another empty commit; reading the real status",
-                    ticket.id,
-                    _refreshes,
-                )
-            else:
-                try:
-                    git_ops.empty_commit(
-                        Path(repo_dir),
-                        "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
-                    )
-                    git_ops.push(Path(repo_dir), branch, _remote_url, _token)
-                    _write_counter(empty_commit_counter_path, _refreshes + 1)
-                    log.info(
-                        "%s: pushed empty commit to force fresh CI run (branch was already current)",
-                        ticket.id,
-                    )
-                    # The run we just triggered cannot have completed. Reading
-                    # check_status now would only ever return "pending", so
-                    # return directly and let the next poll see a real result.
-                    return Outcome(State.IMPLEMENT_COMPLETE)
-                except Exception:
-                    log.warning(
-                        "%s: empty-commit push failed — proceeding with existing HEAD",
-                        ticket.id,
-                        exc_info=True,
-                    )
-
         # Fetch check status from the forge.
         try:
             status = get_forge(s, repo_config=ctx.repo_config).check_status(
@@ -345,12 +283,12 @@ class CIFixStage(Stage):
             # reset only on GENUINE forward progress — when merge advances the
             # ticket out of the CI gate to HUMAN_MR_APPROVAL (merge.py).
             #
-            # Do reset the refresh counters, though: CI going green is genuine
+            # Do reset the refresh counter, though: CI going green is genuine
             # forward progress, so a later, independent staleness can be
             # refreshed once more.
-            _artifacts = ctx.service.workspace(ticket).artifacts_dir
-            _write_counter(_artifacts / _CI_REFRESH_COUNTER, 0)
-            _write_counter(_artifacts / _CI_EMPTY_COMMIT_COUNTER, 0)
+            _write_counter(
+                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
+            )
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if conclusion in ("pending", None):
@@ -373,6 +311,62 @@ class CIFixStage(Stage):
         ) = self._build_failure_detail(ticket, ctx, branch, failing)
         # Persist the failure detail for observability.
         self._write_failing_summary_artifact(ctx, ticket, failing_summary, failing)
+
+        # --- Transient failure re-trigger ---
+        # Before dispatching to the ci-fix agent, classify the failure.
+        # Transient infrastructure flakes get automatic workflow re-runs
+        # (up to ci_transient_max_retries); deterministic failures (lint,
+        # tests, dead-code, type errors, etc.) proceed directly to the
+        # agent for root-cause fixing.  The identical-failure gate in
+        # run() bounds repeated transient re-triggers.
+        from .ci_transient import is_transient_ci_failure
+
+        _CI_TRANSIENT_RETRY_COUNTER = "ci_transient_retry.txt"
+
+        if s.ci_transient_max_retries > 0 and is_transient_ci_failure(failing_summary):
+            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+            transient_counter = _read_counter(
+                artifacts_dir / _CI_TRANSIENT_RETRY_COUNTER
+            )
+            if transient_counter < s.ci_transient_max_retries:
+                if failing_run_ids:
+                    try:
+                        forge = get_forge(s, repo_config=ctx.repo_config)
+                        for run_id in failing_run_ids:
+                            try:
+                                forge.rerun_workflow(run_id=run_id)
+                            except Exception:
+                                log.warning(
+                                    "%s: rerun_workflow failed for run %s",
+                                    ticket.id,
+                                    run_id,
+                                    exc_info=True,
+                                )
+                        log.info(
+                            "%s: transient CI failure — re-ran %d "
+                            "workflow(s) (attempt %d/%d)",
+                            ticket.id,
+                            len(failing_run_ids),
+                            transient_counter + 1,
+                            s.ci_transient_max_retries,
+                        )
+                    except Exception:
+                        log.warning(
+                            "%s: transient re-run failed",
+                            ticket.id,
+                            exc_info=True,
+                        )
+                else:
+                    log.info(
+                        "%s: transient CI failure but no run IDs — re-polling",
+                        ticket.id,
+                    )
+                _write_counter(
+                    artifacts_dir / _CI_TRANSIENT_RETRY_COUNTER,
+                    transient_counter + 1,
+                )
+                return Outcome(State.IMPLEMENT_COMPLETE)
+
         return _FailingContext(
             repo_dir,
             branch,
@@ -1144,10 +1138,9 @@ class CIFixStage(Stage):
         # ticket in FIXING_CI indefinitely.
         ctx.service.set_depends_on(ticket.id, [])
 
-        # Reset the per-ticket refresh counters so a later re-entry (after
+        # Reset the per-ticket refresh counter so a later re-entry (after
         # auto-unblock + a fresh pipeline pass) starts clean.
         _write_counter(artifacts_dir / _CI_REFRESH_COUNTER, 0)
-        _write_counter(artifacts_dir / _CI_EMPTY_COMMIT_COUNTER, 0)
 
         return outcome
 
@@ -1184,11 +1177,9 @@ class CIFixStage(Stage):
 
         if check is git_ops.PostPushResult.PASS:
             # Genuine forward progress — allow a future staleness to refresh again.
-            # The landed fix also means the next CI failure (if any) is a NEW
-            # one, so the empty-commit budget starts over with it.
-            _artifacts = ctx.service.workspace(ticket).artifacts_dir
-            _write_counter(_artifacts / _CI_REFRESH_COUNTER, 0)
-            _write_counter(_artifacts / _CI_EMPTY_COMMIT_COUNTER, 0)
+            _write_counter(
+                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
+            )
             log.info("%s: ci fix reported DONE, push verified", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
