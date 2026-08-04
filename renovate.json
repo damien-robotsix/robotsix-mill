@@ -43,6 +43,16 @@
       "matchManagers": ["pre-commit"],
       "groupName": "pre-commit hooks",
       "addLabels": ["pre-commit"]
+    },
+    {
+      "description": "Auto-merge patch/minor/digest dependency updates once CI passes (squash).",
+      "matchManagers": ["pep621", "dockerfile", "docker-compose", "github-actions", "pre-commit"],
+      "matchUpdateTypes": ["patch", "minor", "digest"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeStrategy": "squash",
+      "requiredStatusChecks": null,
+      "ignoreTests": false
     }
   ]
 }
