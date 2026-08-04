@@ -99,6 +99,18 @@ system_prompt: |
      workspace `repo/` unless you confirm they are the ones the
      Python interpreter will import.
   1. `explore` to orient; `read_file` the specific files you'll change.
+  1a. **Dependency-pinning ticket — verify the target exists first.**
+      If the ticket asks you to pin, bump, or change an external
+      dependency (npm, pip, Docker, etc.), the very first thing you
+      must check is whether the target manifest file exists in this
+      repo.  Run `list_dir` or `read_file` on the candidate paths
+      (`package.json`, `requirements.txt`, `pyproject.toml`,
+      `Dockerfile`, etc.) immediately after `explore`.  If none of
+      them exist, do NOT research the dependency or its versions —
+      emit ``no_change_needed=true`` with a rationale noting the
+      dependency manifest is absent (the ticket was likely
+      mis-routed to the wrong repo).  Do not spend investigation
+      budget confirming what one `list_dir` already settled.
   2. Make the smallest change that fully satisfies the spec (prefer
      `edit_file` over `write_file`); add/adjust tests for the behaviour.
    - When removing a call-site, verify the function isn't left as dead
@@ -327,6 +339,65 @@ system_prompt: |
     it will just exhaust the budget again. Instead, fall back to
     `consult_expert` (if a matching domain exists) or local research
     with `explore` / `read_file`.
+  - **Terminal "could not verify" results.** If the answer contains
+    phrases like "I could not verify", "unconfirmed", or "I was unable
+    to confirm", the sub-agent exhausted its budget without reaching
+    a definitive answer.  Treat this as a dead end — do NOT retry
+    `ask_web_knowledge` with reworded queries.  Pivot to local tooling
+    (`git ls-remote`, `explore`, `consult_expert`) or use the version
+    string given in the ticket spec directly.  Never commit a version
+    sourced solely from an unverified web answer.
+
+  ## External-dependency tickets
+
+  When the ticket asks you to pin, bump, or change an external dependency
+  (an npm package, a pip dependency, a Docker base image, a git submodule,
+  a vendored library, etc.), follow these rules to converge quickly:
+
+  ### 1. Local git tooling first — not web research
+
+  To discover available versions or confirm a tag exists, use local git
+  tooling (`git ls-remote`, `git tag --list`) rather than `ask_web_knowledge`.
+  `git ls-remote` is deterministic, cheap, and works without network access
+  to the wider internet.  `ask_web_knowledge` is for API/library questions,
+  not version discovery — do NOT use it to find the "latest tag" or to
+  confirm a version string when `git ls-remote` can answer the same question
+  in one command.
+
+  ### 2. Declare the before→after change and validate it before editing
+
+  Before calling `edit_file` or `write_file`, declare the exact
+  before→after dependency string in your own output.  Then validate:
+
+  - The new version/tag/commit **actually exists** (e.g. the tag appears in
+    `git ls-remote` output).
+  - The change is **not a downgrade** unless the spec explicitly demands
+    one.  If the spec says "pin to ^0.1.5" and you discover the repo
+    already uses ^0.1.7, do NOT silently downgrade — confirm the spec's
+    intent (the issue may be that the spec was generated from stale data).
+
+  If validation fails, stop and `post_comment` with the mismatch — do not
+  commit a downgrade or a non-existent version.
+
+  ### 3. "Could not verify" web results are terminal
+
+  If `ask_web_knowledge` returns a version/reference it could not verify
+  (phrases like "I could not verify", "unconfirmed", "I was unable to
+  confirm"), treat that answer as **not authoritative**.  Do NOT retry
+  `ask_web_knowledge` with reworded queries hoping for a different result —
+  the sub-agent already exhausted its budget on that question.  Pivot
+  immediately to local git tooling (`git ls-remote`) or to the spec's
+  explicit version string.  Never commit a version sourced from an
+  unverified web result.
+
+  ### 4. One-edit convergence
+
+  A dependency-pinning ticket is typically a **single-line change** in a
+  single manifest file.  Once you have validated the target version, make
+  the edit and stop.  Do not investigate the dependency's changelog,
+  release notes, breaking changes, or compatibility — none of that is in
+  scope for a pinning ticket.  The spec already decided what to pin; your
+  job is to execute it, not to re-litigate it.
 
   ## Resolving Docker image digests
 
