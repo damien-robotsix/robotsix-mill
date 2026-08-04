@@ -1892,6 +1892,86 @@ def test_fetch_workflow_job_logs_trace_fetch_failure_is_placeholder(
 
 
 # ---------------------------------------------------------------------------
+# rerun_workflow
+# ---------------------------------------------------------------------------
+
+
+def test_rerun_workflow_201_returns_rerun_true(tmp_path, monkeypatch):
+    """POST /projects/:id/pipelines/:run_id/retry → 201 → {"rerun": True}."""
+    project_json = {"id": 42}
+    get_map = {"projects/ns%2Fproject": _make_response(200, project_json)}
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, {"id": 100}),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.rerun_workflow(run_id=100)
+    assert result == {"rerun": True}
+    assert "/projects/42/pipelines/100/retry" in captured["post_url"]
+
+
+def test_rerun_workflow_non_201_returns_rerun_false(tmp_path, monkeypatch):
+    """A non-201 response → {"rerun": False, "reason": ...}."""
+    project_json = {"id": 42}
+    get_map = {"projects/ns%2Fproject": _make_response(200, project_json)}
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(403, {"message": "forbidden"}),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.rerun_workflow(run_id=100)
+    assert result["rerun"] is False
+    assert "HTTP 403" in result["reason"]
+
+
+def test_rerun_workflow_resolve_project_failure_returns_rerun_false(
+    tmp_path, monkeypatch
+):
+    """When project resolution fails, the public method catches it."""
+    # No get_map entry for the project → 404 → RuntimeError from _resolve_project_id.
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path)
+    result = forge.rerun_workflow(run_id=100)
+    assert result["rerun"] is False
+    assert result["reason"]  # non-empty reason
+
+
+def test_rerun_workflow_post_exception_returns_rerun_false(tmp_path, monkeypatch):
+    """When the POST raises (e.g. network error), return failure dict."""
+    project_json = {"id": 42}
+    get_map = {"projects/ns%2Fproject": _make_response(200, project_json)}
+
+    class FailingPostResponse:
+        status_code = 500
+
+        def raise_for_status(self):
+            raise real_httpx.HTTPStatusError(
+                "server error",
+                request=real_httpx.Request("POST", "http://x"),
+                response=self,
+            )
+
+        def json(self):
+            return {}
+
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=FailingPostResponse(),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.rerun_workflow(run_id=100)
+    assert result["rerun"] is False
+    assert result["reason"]
+
+
+# ---------------------------------------------------------------------------
 # create_repo
 # ---------------------------------------------------------------------------
 
