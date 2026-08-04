@@ -156,6 +156,7 @@ _MERGE_MAX_RETRIES = 5
 # per branch head so a ticket re-entering the merge poll cannot accumulate
 # empty commits. See _refresh_branch_for_ci.
 _CI_POLL_REFRESH_SHA = "ci_poll_refresh_sha.txt"
+_CI_FIX_MIXIN_REFRESH_SHA = "ci_fix_mixin_refresh_sha.txt"
 
 
 def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:

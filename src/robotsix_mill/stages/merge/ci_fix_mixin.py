@@ -24,6 +24,7 @@ from ..ci_fix_codeql import (
 from ..ci_fix_helpers import _only_codeql_failing, _pr_changed_paths
 from ._base import _MergeStageBase
 from ._shared import (
+    _CI_FIX_MIXIN_REFRESH_SHA,
     _build_failing_summary,
     _read_counter,
     _reconcile_with_remote_pr,
@@ -80,7 +81,13 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             _token = _facade.github_push_token(s, repo_config=rc)
             _target = target_branch_for(s, rc)
             _refresh_branch_for_ci(
-                str(repo_dir), branch, _target, _remote_url, _token, ticket.id
+                str(repo_dir),
+                branch,
+                _target,
+                _remote_url,
+                _token,
+                ticket.id,
+                sentinel_path=(ws.artifacts_dir / _CI_FIX_MIXIN_REFRESH_SHA),
             )
         except Exception:
             log.warning(
