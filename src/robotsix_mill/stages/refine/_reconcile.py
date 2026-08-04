@@ -299,7 +299,18 @@ def apply_agent_side_effects(
         memory_board_id = (
             ctx.repo_config.board_id if ctx.repo_config else ticket.board_id
         )
-        _orch._persist_refine_memory(s, memory_board_id, result.updated_memory)
+        try:
+            _orch._persist_refine_memory(s, memory_board_id, result.updated_memory)
+        except Exception:
+            # Memory persistence is best-effort — a full disk or DB
+            # error must not fail the refine stage.  The memory ledger
+            # will be re-derived from ticket history on the next pass.
+            log.warning(
+                "%s: failed to persist refine memory — "
+                "continuing without updated memory ledger",
+                ticket.id,
+                exc_info=True,
+            )
 
     if result.title and result.title.strip():
         ctx.service.set_title(ticket.id, result.title.strip())
