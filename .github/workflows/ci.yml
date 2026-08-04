@@ -105,6 +105,12 @@ jobs:
               if mode != '160000' and path:
                   tracked.append(path)
 
+          # Skip files that no longer exist on disk — when an agent deletes
+          # a file but git-rm hasn't run yet, the file is still tracked by
+          # git but should not be flagged as unclassified.  This is the
+          # equivalent of a hypothetical --allow-missing-example flag.
+          tracked = [p for p in tracked if Path(p).exists()]
+
           findings = check_registration(taxonomy, Path('.'),
                                         tracked_files=tracked)
           if findings:
