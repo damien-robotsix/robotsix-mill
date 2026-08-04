@@ -1,5 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- The fixing_ci/implement cycle ceiling no longer counts transient CI
+  failures (runner crashes, network resets, Docker flakes, auth outages)
+  against the auto-fix budget.  A green PR on a fast-moving base branch
+  can no longer be hard-blocked by infrastructure churn masquerading as
+  CI failures.
 - Add `rerun_workflow` to `GitLabForgeCIMixin`, backed by GitLab's `POST /projects/:id/pipelines/:pipeline_id/retry` endpoint. Previously, CI-fix agents on GitLab repos could not automatically retry failed pipelines.
 - Add `board-read` skill to `agent_definitions/implement.yaml` (`skills: [board-report, board-read, ask_user_guardrails]`). The implement agent has `read_ticket: true` but was the only agent with that flag missing the `board-read` skill, which provides guidance on using the `read_ticket` tool in sandbox environments.
 - Extract `_maybe_collapse_scanner_rollup` and `_create_one_draft` helpers from `run_agent_pass` (~160-line loop body), leaving a shallow coordinator that sequences phases and persists memory. No behavior change.

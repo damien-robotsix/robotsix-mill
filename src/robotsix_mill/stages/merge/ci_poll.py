@@ -17,6 +17,8 @@ from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import Forge, get_forge
 from ..base import Outcome, StageContext
+from ...stages.ci_transient import is_transient_ci_failure
+
 from ._base import _MergeStageBase
 from ._shared import (
     _CI_POLL_REFRESH_SHA,
@@ -37,6 +39,31 @@ from ._shared import (
     log,
 )
 import contextlib
+
+
+def _build_failing_summary(ci_status: dict[str, Any]) -> str:
+    """Build a summary string from failing checks suitable for transient classification.
+
+    Concatenates check names, output summaries, output text, and annotation
+    messages from the ``failing`` list in *ci_status*.
+    """
+    failing: list[dict[str, Any]] = ci_status.get("failing", []) or []
+    parts: list[str] = []
+    for check in failing:
+        name = (check.get("name") or "").strip()
+        if name:
+            parts.append(name)
+        summary = (check.get("summary") or "").strip()
+        if summary:
+            parts.append(summary)
+        text = (check.get("text") or "").strip()
+        if text:
+            parts.append(text)
+        for ann in check.get("annotations", []) or []:
+            msg = (ann.get("message") or "").strip()
+            if msg:
+                parts.append(msg)
+    return "\n".join(parts)
 
 
 def _ci_run_in_flight(ci_status: dict[str, Any]) -> bool:
@@ -273,7 +300,7 @@ class CIPollMixin(_MergeStageBase):
                 )
 
     def _handle_ci_failure_route(
-        self, ticket: Ticket, ctx: StageContext, pr: dict[str, Any], branch: str
+        self, ticket: Ticket, ctx: StageContext, pr: dict[str, Any], branch: str, ci_status: dict[str, Any]
     ) -> Outcome:
         """Handle a failing CI conclusion: debt detection, guardrails, route to FIXING_CI.
 
@@ -314,6 +341,26 @@ class CIPollMixin(_MergeStageBase):
                     f"branch's CI before this can merge.",
                 )
 
+
+        # --- Transient infra failure: don't count against the cycle ceiling ---
+        # A transient failure (runner crash, network reset, Docker flake,
+        # auth outage) is not fixable by a code change — counting it against
+        # the auto-fix ceiling punishes the PR for infrastructure churn.
+        # When every failing check is transient, route to REBASING for a
+        # fresh CI run instead of burning a cycle on FIXING_CI.
+        failing_summary = _build_failing_summary(ci_status)
+        all_transient = bool(failing_summary) and is_transient_ci_failure(failing_summary)
+        if all_transient:
+            log.info(
+                "%s: CI failure is transient infra (%d failing check(s)) — "
+                "skipping cycle counter, routing to REBASING for a fresh run",
+                ticket.id,
+                len(ci_status.get("failing", []) or []),
+            )
+            return Outcome(
+                State.REBASING,
+                "Transient CI failure detected — rebasing for a fresh run",
+            )
         # --- Guardrail 1: cross-stage auto-fix cycle counter ---
         # Count every dispatch to REBASING or FIXING_CI without CI turning
         # green.  This is the universal backstop — it bounds the combined
@@ -322,6 +369,23 @@ class CIPollMixin(_MergeStageBase):
         auto_fix_path = artifacts_dir / _AUTO_FIX_CYCLES
         auto_fix_cycles = _read_counter(auto_fix_path)
         if s.auto_fix_max_cycles > 0 and auto_fix_cycles >= s.auto_fix_max_cycles:
+            # Before hard-blocking: if the CURRENT failure is transient,
+            # don't block — the ceiling was reached on infrastructure churn,
+            # not a real code defect. Route to REBASING for a fresh run.
+            failing_summary = _build_failing_summary(ci_status)
+            if failing_summary and is_transient_ci_failure(failing_summary):
+                log.warning(
+                    "%s: auto-fix ceiling reached (%d cycles) but current "
+                    "failure is transient infra — routing to REBASING "
+                    "instead of blocking",
+                    ticket.id,
+                    auto_fix_cycles,
+                )
+                return Outcome(
+                    State.REBASING,
+                    "Auto-fix ceiling reached but current CI failure is "
+                    "transient — rebasing for a fresh run",
+                )
             _write_counter(auto_fix_path, 0)  # reset for resume
             log.warning(
                 "%s: auto-fix exhausted cross-stage ceiling of %d cycle(s) "
@@ -544,7 +608,7 @@ class CIPollMixin(_MergeStageBase):
         conclusion = ci_status.get("conclusion")
 
         if conclusion == "failure":
-            return self._handle_ci_failure_route(ticket, ctx, pr, branch)
+            return self._handle_ci_failure_route(ticket, ctx, pr, branch, ci_status)
 
         if _ci_truly_green(conclusion, pr):
             return self._merge_or_promote_when_green(ticket, ctx, pr, branch)
