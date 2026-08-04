@@ -372,7 +372,11 @@ class CIPollMixin(_MergeStageBase):
             # Before hard-blocking: if the CURRENT failure is transient,
             # don't block — the ceiling was reached on infrastructure churn,
             # not a real code defect. Route to REBASING for a fresh run.
-            failing_summary = _build_failing_summary(ci_status)
+            #
+            # failing_summary was already computed above for the early
+            # transient gate; when we reach this point all_transient was
+            # False (otherwise we'd have returned early), so this check
+            # is a finer-grained "transient but not all-transient" catch.
             if failing_summary and is_transient_ci_failure(failing_summary):
                 log.warning(
                     "%s: auto-fix ceiling reached (%d cycles) but current "
