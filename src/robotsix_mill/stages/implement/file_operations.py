@@ -347,10 +347,12 @@ class FileOperationsMixin(_ImplementStageBase):
             if repo_dir.exists():
                 shutil.rmtree(repo_dir)
             try:
+                token_error: str | None = None
                 try:
                     token = github_token(settings, repo_config=ctx.repo_config)
-                except RuntimeError:
+                except RuntimeError as exc:
                     token = None
+                    token_error = str(exc)
                 git_ops.clone(
                     remote_url,
                     repo_dir,
@@ -359,6 +361,19 @@ class FileOperationsMixin(_ImplementStageBase):
                     repo_id=ctx.repo_config.repo_id,
                 )
             except subprocess.CalledProcessError as e:
+                # When no auth token is available the clone will always
+                # fail with an auth error — skip the transient-retry
+                # loop and BLOCK immediately with the real root cause.
+                if token is None and token_error:
+                    stderr_str = _decode_stderr(e.stderr)
+                    return Outcome(
+                        State.BLOCKED,
+                        "clone failed: no auth token available — "
+                        + token_error
+                        + " (git: "
+                        + git_ops.redact_credentials(stderr_str)[:200]
+                        + ")",
+                    )
                 from ...runtime.transient_errors import reraise_if_transient
 
                 reraise_if_transient(e)
@@ -406,10 +421,12 @@ class FileOperationsMixin(_ImplementStageBase):
             if repo_dir.exists():
                 shutil.rmtree(repo_dir, ignore_errors=True)
             try:
+                token_error2: str | None = None
                 try:
                     token = github_token(settings, repo_config=ctx.repo_config)
-                except RuntimeError:
+                except RuntimeError as exc:
                     token = None
+                    token_error2 = str(exc)
                 git_ops.clone(
                     remote_url,
                     repo_dir,
@@ -419,6 +436,16 @@ class FileOperationsMixin(_ImplementStageBase):
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:
+                if token is None and token_error2:
+                    stderr_str = _decode_stderr(e.stderr)
+                    return Outcome(
+                        State.BLOCKED,
+                        "repo clone missing and re-clone failed: no auth token available — "
+                        + token_error2
+                        + " (git: "
+                        + git_ops.redact_credentials(stderr_str)[:200]
+                        + ")",
+                    )
                 from ...runtime.transient_errors import reraise_if_transient
 
                 reraise_if_transient(e)
