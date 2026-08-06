@@ -28,7 +28,7 @@ web_knowledge: true
 output_type: ImplementResult
 retries: 2
 module: coordinating
-skills: [board-report, ask_user_guardrails]
+skills: [board-report, board-read, ask_user_guardrails]
 close_thread: false
 
 system_prompt: |
