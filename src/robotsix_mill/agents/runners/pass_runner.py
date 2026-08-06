@@ -678,6 +678,234 @@ def _verify_prior_on_board(
     return _verify_prior_proposals(target_service, settings, source_label)
 
 
+def _maybe_collapse_scanner_rollup(
+    res: Any,
+    source_label: SourceKind,
+    gap_ids: list[str],
+    limit: int,
+    settings: Settings,
+    max_drafts: int | None = None,
+) -> tuple[list[str], int]:
+    """Collapse scanner findings into a single rollup ticket when enabled.
+
+    When *settings.scanner_rollup* is enabled, the source is in
+    *_ROLLUP_SOURCES*, and there are ≥ 2 drafts, all findings are
+    collapsed into a single rollup ticket.  Also applies the per-source
+    cap when rollup is off and no explicit *max_drafts* was set.
+
+    Returns possibly-modified (*gap_ids*, *limit*).
+    """
+    if settings.scanner_rollup and source_label in _ROLLUP_SOURCES and limit >= 2:
+        from datetime import date as _date
+
+        sections: list[str] = []
+        all_gap_ids: list[str] = []
+        for i in range(limit):
+            title = res.draft_titles[i]
+            body = res.draft_bodies[i]
+            sections.append(f"## {i + 1}. {title}\n\n{body}")
+            if i < len(gap_ids) and gap_ids[i]:
+                all_gap_ids.append(gap_ids[i])
+        rollup_title = (
+            f"{source_label} scan: {limit} findings ({_date.today().isoformat()})"
+        )
+        rollup_body = "\n\n".join(sections)
+        # Replace the multi-draft lists with a single rollup entry.
+        res.draft_titles = [rollup_title]
+        res.draft_bodies = [rollup_body]
+        gap_ids = ["_".join(all_gap_ids)] if all_gap_ids else []
+        limit = 1
+    elif source_label in _ROLLUP_SOURCES and max_drafts is None:
+        # Apply per-source cap for scanner sources when rollup is off
+        # and no explicit max_drafts was set by the caller.
+        limit = min(limit, settings.scanner_max_drafts_per_run)
+
+    return gap_ids, limit
+
+
+def _create_one_draft(
+    i: int,
+    res: Any,
+    gap_ids: list[str],
+    draft_target_repo_ids: list[str],
+    source_label: SourceKind,
+    service: TicketService,
+    settings: Settings,
+    origin_session: str | None,
+    repo_dir: Path | None,
+) -> tuple[dict[str, str] | None, str]:
+    """Create a single draft ticket from the agent's output at index *i*.
+
+    Handles target-board resolution, cross-board dedup, live-filesystem
+    guards (test-file-exists, source-module-exists), module-curator
+    premise checks, scanner rollup epic resolution, and the final
+    ``TicketService.create`` call.
+
+    Returns ``(ticket_info, verified_gap_id)`` where *ticket_info* is
+    ``{"id": …, "title": …}`` on success and ``None`` when the draft is
+    skipped (suppressed, deduped, or creation fails).  *verified_gap_id*
+    is the ``gap_id`` that was actually filed (empty string when none).
+    """
+    title = res.draft_titles[i]
+    body = res.draft_bodies[i]
+    if not title or not body:
+        return None, ""
+
+    gap_id = gap_ids[i] if i < len(gap_ids) and gap_ids[i] else ""
+
+    # --- Resolve the target board for this draft. ---
+    target_repo_id = (
+        draft_target_repo_ids[i]
+        if i < len(draft_target_repo_ids) and draft_target_repo_ids[i]
+        else ""
+    )
+    if target_repo_id:
+        try:
+            target_board_id = _resolve_board_id(settings, target_repo_id)
+        except ValueError as exc:
+            log.warning(
+                "%s draft %d skipped — cannot resolve target repo %r: %s",
+                source_label,
+                i,
+                target_repo_id,
+                exc,
+            )
+            return None, ""
+        target_service = TicketService(settings, board_id=target_board_id)
+        # Cross-board dedup: check the target board for prior proposals
+        # with the same gap_id before filing — prevents re-proposing the
+        # same fleet-wide convention from every repo the survey visits.
+        target_verified = _verify_prior_on_board(
+            settings, target_board_id, source_label
+        )
+        if gap_id and gap_id in target_verified:
+            log.info(
+                "%s draft %d skipped — gap_id %r already exists on target board %s "
+                "(ticket %s, state %s)",
+                source_label,
+                i,
+                gap_id,
+                target_board_id,
+                target_verified[gap_id]["ticket_id"],
+                target_verified[gap_id]["state"],
+            )
+            return None, ""
+    else:
+        target_board_id = service.board_id
+        target_service = service
+
+    # Live-filesystem guard: skip drafts whose expected test
+    # file(s) already exist on disk.
+    if (
+        source_label in (SourceKind.TEST_GAP, SourceKind.HEALTH)
+        and repo_dir is not None
+    ) and _test_file_exists_for_gap(repo_dir, title):
+        log.warning(
+            "%s draft skipped — test file(s) already exist on disk: %s",
+            source_label,
+            title,
+        )
+        return None, ""
+    # Source-module-existence guard: skip a TEST_GAP draft whose source
+    # module is absent from the audited tree (inverse of the test-file
+    # check above — a cross-repo misrouting guard). HEALTH drafts target a
+    # tests/<dir>/ subdirectory, not a single source module, so they are
+    # deliberately excluded.
+    if source_label == SourceKind.TEST_GAP and repo_dir is not None:
+        if not _source_module_exists_for_gap(repo_dir, title):
+            log.warning(
+                "%s draft suppressed — source module absent from audited tree: %s",
+                source_label,
+                title,
+            )
+            return None, ""
+    # Module-curator premise guard: verify the draft's factual claim
+    # against the cloned tree before filing. An unambiguous file-exists
+    # falsification suppresses the draft; every other stale/overlap
+    # signal annotates (never silently drops).
+    if source_label == SourceKind.MODULE_CURATOR and repo_dir is not None:
+        verdict = _module_curator_premise_check(repo_dir, title, body)
+        if verdict is not None:
+            disposition, note = verdict
+            if disposition == "suppress":
+                log.warning(
+                    "%s draft suppressed — false premise (%s): %s",
+                    source_label,
+                    note,
+                    title,
+                )
+                return None, ""
+            # advisory: annotate, never drop
+            body = annotate_child_body(
+                body,
+                note,
+                source_desc="module_curator pre-filing premise check",
+            )
+        # In-flight sibling cross-reference (advisory, best-effort).
+        try:
+            overlap = find_inflight_overlap(
+                service,
+                "",
+                title,
+                body,
+                settings,
+                datetime.now(timezone.utc),
+            )
+            if overlap is not None:
+                body = annotate_child_body(
+                    body,
+                    overlap,
+                    source_desc="module_curator pre-filing dedup",
+                )
+        except Exception:
+            log.exception(
+                "%s: in-flight sibling cross-reference failed: %s",
+                source_label,
+                title,
+            )
+    # Append gap-id marker if available.
+    if gap_id:
+        body += f"\n\n<!-- {source_label}-gap-id: {gap_id} -->"
+
+    # Resolve parent epic for scanner sources — group findings
+    # under one rollup epic per (source, board) so the board shows
+    # one card per category instead of dozens of micro-tickets.
+    parent_id: str | None = None
+    if source_label in _SCANNER_SOURCES:
+        try:
+            parent_id = _find_or_create_scanner_epic(
+                target_service, target_board_id, source_label, settings
+            )
+        except Exception:
+            log.exception(
+                "%s: failed to find/create scanner rollup epic for board %s",
+                source_label,
+                target_board_id,
+            )
+            # Best-effort: proceed without parent grouping.
+
+    try:
+        ticket = target_service.create(
+            title,
+            body,
+            source=source_label,
+            origin_session=origin_session,
+            board_id=target_board_id,
+            parent_id=parent_id,
+        )
+        log.info(
+            "%s spawned draft %s on board %s: %s",
+            source_label,
+            ticket.id,
+            target_board_id,
+            title,
+        )
+        return {"id": ticket.id, "title": ticket.title}, gap_id
+    except Exception:
+        log.exception("failed to create draft ticket: %s", title)
+        return None, ""
+
+
 def run_agent_pass(
     agent_fn: Callable[..., Any],
     *,
@@ -781,198 +1009,26 @@ def run_agent_pass(
     if max_drafts is not None:
         limit = min(limit, max_drafts)
 
-    # --- Scanner rollup ---
-    # When the source is a scanner and rollup is enabled and there are
-    # ≥ 2 drafts, collapse them into a single rollup ticket listing all
-    # findings, instead of filing N individual tickets.  This cuts ~80%
-    # of scanner ticket inflow.  The existing for-loop below then
-    # creates exactly one ticket.
-    if settings.scanner_rollup and source_label in _ROLLUP_SOURCES and limit >= 2:
-        from datetime import date as _date
-
-        sections: list[str] = []
-        all_gap_ids: list[str] = []
-        for i in range(limit):
-            title = res.draft_titles[i]
-            body = res.draft_bodies[i]
-            sections.append(f"## {i + 1}. {title}\n\n{body}")
-            if i < len(gap_ids) and gap_ids[i]:
-                all_gap_ids.append(gap_ids[i])
-        rollup_title = (
-            f"{source_label} scan: {limit} findings ({_date.today().isoformat()})"
-        )
-        rollup_body = "\n\n".join(sections)
-        # Replace the multi-draft lists with a single rollup entry.
-        res.draft_titles = [rollup_title]
-        res.draft_bodies = [rollup_body]
-        gap_ids = ["_".join(all_gap_ids)] if all_gap_ids else []
-        limit = 1
-    elif source_label in _ROLLUP_SOURCES and max_drafts is None:
-        # Apply per-source cap for scanner sources when rollup is off
-        # and no explicit max_drafts was set by the caller.
-        limit = min(limit, settings.scanner_max_drafts_per_run)
+    gap_ids, limit = _maybe_collapse_scanner_rollup(
+        res, source_label, gap_ids, limit, settings, max_drafts
+    )
 
     for i in range(limit):
-        title = res.draft_titles[i]
-        body = res.draft_bodies[i]
-        if not title or not body:
-            continue
-
-        # --- Resolve the target board for this draft. ---
-        target_repo_id = (
-            draft_target_repo_ids[i]
-            if i < len(draft_target_repo_ids) and draft_target_repo_ids[i]
-            else ""
+        ticket_info, verified_gap_id = _create_one_draft(
+            i,
+            res,
+            gap_ids,
+            draft_target_repo_ids,
+            source_label,
+            service,
+            settings,
+            origin_session,
+            repo_dir,
         )
-        if target_repo_id:
-            try:
-                target_board_id = _resolve_board_id(settings, target_repo_id)
-            except ValueError as exc:
-                log.warning(
-                    "%s draft %d skipped — cannot resolve target repo %r: %s",
-                    source_label,
-                    i,
-                    target_repo_id,
-                    exc,
-                )
-                continue
-            target_service = TicketService(settings, board_id=target_board_id)
-            # Cross-board dedup: check the target board for prior proposals
-            # with the same gap_id before filing — prevents re-proposing the
-            # same fleet-wide convention from every repo the survey visits.
-            target_verified = _verify_prior_on_board(
-                settings, target_board_id, source_label
-            )
-            gap_id = gap_ids[i] if i < len(gap_ids) and gap_ids[i] else ""
-            if gap_id and gap_id in target_verified:
-                log.info(
-                    "%s draft %d skipped — gap_id %r already exists on target board %s "
-                    "(ticket %s, state %s)",
-                    source_label,
-                    i,
-                    gap_id,
-                    target_board_id,
-                    target_verified[gap_id]["ticket_id"],
-                    target_verified[gap_id]["state"],
-                )
-                continue
-        else:
-            target_board_id = service.board_id
-            target_service = service
-
-        # Live-filesystem guard: skip drafts whose expected test
-        # file(s) already exist on disk.
-        if (
-            source_label in (SourceKind.TEST_GAP, SourceKind.HEALTH)
-            and repo_dir is not None
-        ) and _test_file_exists_for_gap(repo_dir, title):
-            log.warning(
-                "%s draft skipped — test file(s) already exist on disk: %s",
-                source_label,
-                title,
-            )
-            continue
-        # Source-module-existence guard: skip a TEST_GAP draft whose source
-        # module is absent from the audited tree (inverse of the test-file
-        # check above — a cross-repo misrouting guard). HEALTH drafts target a
-        # tests/<dir>/ subdirectory, not a single source module, so they are
-        # deliberately excluded.
-        if source_label == SourceKind.TEST_GAP and repo_dir is not None:
-            if not _source_module_exists_for_gap(repo_dir, title):
-                log.warning(
-                    "%s draft suppressed — source module absent from audited tree: %s",
-                    source_label,
-                    title,
-                )
-                continue
-        # Module-curator premise guard: verify the draft's factual claim
-        # against the cloned tree before filing. An unambiguous file-exists
-        # falsification suppresses the draft; every other stale/overlap
-        # signal annotates (never silently drops).
-        if source_label == SourceKind.MODULE_CURATOR and repo_dir is not None:
-            verdict = _module_curator_premise_check(repo_dir, title, body)
-            if verdict is not None:
-                disposition, note = verdict
-                if disposition == "suppress":
-                    log.warning(
-                        "%s draft suppressed — false premise (%s): %s",
-                        source_label,
-                        note,
-                        title,
-                    )
-                    continue
-                # advisory: annotate, never drop
-                body = annotate_child_body(
-                    body,
-                    note,
-                    source_desc="module_curator pre-filing premise check",
-                )
-            # In-flight sibling cross-reference (advisory, best-effort).
-            try:
-                overlap = find_inflight_overlap(
-                    service,
-                    "",
-                    title,
-                    body,
-                    settings,
-                    datetime.now(timezone.utc),
-                )
-                if overlap is not None:
-                    body = annotate_child_body(
-                        body,
-                        overlap,
-                        source_desc="module_curator pre-filing dedup",
-                    )
-            except Exception:
-                log.exception(
-                    "%s: in-flight sibling cross-reference failed: %s",
-                    source_label,
-                    title,
-                )
-        # Append gap-id marker if available.
-        if i < len(gap_ids) and gap_ids[i]:
-            body += f"\n\n<!-- {source_label}-gap-id: {gap_ids[i]} -->"
-
-        # Resolve parent epic for scanner sources — group findings
-        # under one rollup epic per (source, board) so the board shows
-        # one card per category instead of dozens of micro-tickets.
-        parent_id: str | None = None
-        if source_label in _SCANNER_SOURCES:
-            try:
-                parent_id = _find_or_create_scanner_epic(
-                    target_service, target_board_id, source_label, settings
-                )
-            except Exception:
-                log.exception(
-                    "%s: failed to find/create scanner rollup epic for board %s",
-                    source_label,
-                    target_board_id,
-                )
-                # Best-effort: proceed without parent grouping.
-
-        try:
-            ticket = target_service.create(
-                title,
-                body,
-                source=source_label,
-                origin_session=origin_session,
-                board_id=target_board_id,
-                parent_id=parent_id,
-            )
-            created.append({"id": ticket.id, "title": ticket.title})
-            # Track which gap_ids were actually filed — used to
-            # validate the agent's memory ledger before persisting.
-            if i < len(gap_ids) and gap_ids[i]:
-                verified_gap_ids.append(gap_ids[i])
-            log.info(
-                "%s spawned draft %s on board %s: %s",
-                source_label,
-                ticket.id,
-                target_board_id,
-                title,
-            )
-        except Exception:
-            log.exception("failed to create draft ticket: %s", title)
+        if ticket_info is not None:
+            created.append(ticket_info)
+        if verified_gap_id:
+            verified_gap_ids.append(verified_gap_id)
 
     # 6. Persist the agent's updated memory, stripping any "Filed"
     #    annotations for gap IDs that weren't actually filed this run.

@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Extract `_maybe_collapse_scanner_rollup` and `_create_one_draft` helpers from `run_agent_pass` (~160-line loop body), leaving a shallow coordinator that sequences phases and persists memory. No behavior change.
 - Decomposed `_poll_implement_complete` (334 lines, 7-level nesting) in `ci_poll.py` into a shallow state-machine coordinator plus three focused helpers: `_refresh_branch_for_ci_if_idle`, `_handle_ci_failure_route`, and `_merge_or_promote_when_green`.
   Decomposed `_handle_out_of_scope` (194 lines, 8-level nesting) in `ci_fix.py` into a thin coordinator plus four helpers: `_reject_in_scope_alerts`, `_refresh_stale_branch_once`, `_retry_transient_ci_failure`, and `_spawn_or_reuse_fix`.
   Pure extraction — no behavior change.
