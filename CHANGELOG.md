@@ -1,9 +1,10 @@
 ## 0.0.0 (unreleased)
 
+- Strengthen `run_command` tool docstring to explicitly forbid prefixing commands with ``cd`` to any absolute path (the sandbox already sets the working directory), preventing agents from hallucinating workspace-root ``cd`` prefixes that waste ~160 s on doomed calls.
 - Implement stage: when `github_token()` fails permanently (e.g. missing
   credentials, App not installed), clone failures now skip the transient-retry
   loop and BLOCK immediately with a clear root-cause message ("no auth token
-  available"), instead of burning through retry attempts on an unfixable error.
+  available"), instead of burning through retry attempts on an unfixable error. (mill: tool_error — Multiple run_command observations (612ef4f942217042, 23d7e1f705253e2d and their parallel s (20260806T001800Z-tool-error-multiple-run-command-observat-e242))
 - Refine stage memory persistence now degrades gracefully on disk-full errors instead of failing the ticket. The `persist_memory_db` retry loop now covers SELECT operations (not just commit/flush), and `_emergency_vacuum` runs a WAL checkpoint before VACUUM to improve recovery odds when `/tmp` is nearly full.
 - Fix unbounded no-op CI refresh commits in `ci_fix_mixin`: pass a sentinel path to `_refresh_branch_for_ci` so that a ticket bouncing BLOCKED→resume pushes at most one empty commit per branch head, mirroring the bound already in `ci_poll`. Remove the dead `_CI_EMPTY_COMMIT_COUNTER` / `_MAX_CI_EMPTY_COMMIT_REFRESHES` constants.
 - The fixing_ci/implement cycle ceiling no longer counts transient CI
