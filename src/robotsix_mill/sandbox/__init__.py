@@ -469,9 +469,17 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # equivalent and cannot resolve git-sourced dependencies declared there.
     # `--frozen` reads the existing lockfile (no git resolution needed) so
     # the sandbox's lack of GitHub credentials is NOT a problem.
+    # Stale build artifacts from a prior failed build (e.g. setuptools
+    # `[Errno 17] File exists: build/bdist.linux-x86_64/wheel/...`)
+    # cause every subsequent pip/uv install to fail until cleaned.
+    # Remove them before the install so a single transient build failure
+    # doesn't poison the entire sandbox run.
+    cleanup = "rm -rf build src/*.egg-info 2>/dev/null; "
+
     if _has_uv_sources(repo_dir) and (repo_dir / "uv.lock").exists():
         uv = "uv sync --frozen --no-dev --quiet 2>&1"
         return (
+            f"{cleanup}"
             f"(command -v uv >/dev/null 2>&1 && ({uv}) || "
             f"(echo 'WARNING: uv not found, falling back to pip' >&2; "
             f"({pip} '.[dev]' || {pip} .))) && " + command
@@ -485,7 +493,7 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # robotsix repos); fall back to a plain install for any repo that has
     # no `dev` extra (pip would otherwise error), so this never regresses
     # a previously-runnable gate.
-    return f"({pip} '.[dev]' || {pip} .) && " + command
+    return f"{cleanup}({pip} '.[dev]' || {pip} .) && " + command
 
 
 def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
