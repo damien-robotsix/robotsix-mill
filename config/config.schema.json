@@ -1170,6 +1170,20 @@
           "title": "Data Dir Gc Prune Orphans Age Seconds",
           "type": "integer"
         },
+        "data_dir_gc_prune_parked_venvs": {
+          "default": true,
+          "description": "When true, prune .venv directories inside workspaces of parked (blocked/awaiting-human) tickets.",
+          "title": "Data Dir Gc Prune Parked Venvs",
+          "type": "boolean"
+        },
+        "data_dir_gc_prune_parked_venvs_age_seconds": {
+          "advanced": true,
+          "default": 3600,
+          "description": "Minimum age (seconds) a ticket must have been parked before its .venv is pruned.",
+          "minimum": 0,
+          "title": "Data Dir Gc Prune Parked Venvs Age Seconds",
+          "type": "integer"
+        },
         "data_dir_gc_prune_terminal_clones": {
           "default": true,
           "description": "When true, prune git clones inside workspaces of terminal-state tickets.",

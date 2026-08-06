@@ -374,6 +374,35 @@ class _PeriodicSettings(BaseModel):
         description="Minimum age (seconds) before terminal-ticket clones are pruned.",
         json_schema_extra={"advanced": True},
     )
+    # Default-on GC: prune the ``.venv`` inside workspaces of PARKED
+    # tickets — BLOCKED and the human-approval waits. These are not
+    # terminal, so neither prune_closed nor prune_terminal_clones can
+    # touch them, and a parked ticket can sit for weeks. Measured
+    # 2026-08-06 on the deploy box: 157 parked workspaces holding 45 GB
+    # of .venv, 34 GB of it under BLOCKED — on a volume whose exhaustion
+    # had itself blocked 146 of those tickets. That is a closed loop:
+    # ENOSPC blocks a ticket, and the block then pins the disk the next
+    # ticket needs.
+    #
+    # Only ``.venv`` is removed, never the clone: uncommitted work and
+    # git history stay inspectable for the human the ticket is parked
+    # for, while ``uv sync`` reproduces the venv on resume.
+    # Override with MILL_DATA_DIR_GC_PRUNE_PARKED_VENVS=false.
+    data_dir_gc_prune_parked_venvs: bool = Field(
+        default=True,
+        description="When true, prune .venv directories inside workspaces of parked (blocked/awaiting-human) tickets.",
+    )
+    # Minimum age (seconds since the ticket entered its parked state)
+    # before its .venv is pruned. Short, because the venv is pure cache
+    # and a ticket resumed within the hour still re-syncs cheaply from
+    # the shared package cache. Default 1 hour.
+    # Override with MILL_DATA_DIR_GC_PRUNE_PARKED_VENVS_AGE_SECONDS.
+    data_dir_gc_prune_parked_venvs_age_seconds: int = Field(
+        default=3_600,
+        ge=0,
+        description="Minimum age (seconds) a ticket must have been parked before its .venv is pruned.",
+        json_schema_extra={"advanced": True},
+    )
     # Default-on DB row GC: purge oldest terminal-ticket rows (and their
     # associated events, comments, and proposed actions) when the count
     # of terminal tickets exceeds max_archived_tickets. This is a
