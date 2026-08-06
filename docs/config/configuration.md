@@ -433,6 +433,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.board_list_cache_ttl_seconds` | `MILL_BOARD_LIST_CACHE_TTL_SECONDS` | `3.0` | Short-TTL cache for board-poll GET /tickets endpoint (seconds). Repeated polls within this window return a cached snapshot to avoid stalling the event loop under load. 0.0 disables the cache. |
 | `core.limits.network_probe_host` | `MILL_NETWORK_PROBE_HOST` | `"github.com"` | Host probed to detect global network outage; when unreachable, stage failures don't consume retry attempts |
 | `core.limits.network_outage_retry_seconds` | `MILL_NETWORK_OUTAGE_RETRY_SECONDS` | `120` | Seconds between re-polls during a detected network outage |
+| `core.limits.disk_min_free_mb` | `MILL_DISK_MIN_FREE_MB` | `5120` | Free-space floor on the data volume. Below it a stage is parked BEFORE dispatch rather than dying partway through and leaving a half-written workspace consuming the space it ran out of. 0 disables the check. |
+| `core.limits.disk_full_retry_seconds` | `MILL_DISK_FULL_RETRY_SECONDS` | `600` | Seconds between re-polls while the data volume is full. Like the network-outage park, an ENOSPC failure re-polls without consuming a retry attempt. |
 | `core.limits.refine_dynamic_limit_multiplier` | `MILL_REFINE_DYNAMIC_LIMIT_MULTIPLIER` | `1.5` | Dynamic request_limit multiplier applied when draft exceeds `refine_dynamic_limit_spec_chars` chars; must be > 1.0 |
 | `core.limits.refine_dynamic_limit_min` | `MILL_REFINE_DYNAMIC_LIMIT_MIN` | `12` | Floor for dynamic request_limit (never lower than this even if base × multiplier is lower) |
 | `core.limits.refine_dynamic_limit_spec_chars` | `MILL_REFINE_DYNAMIC_LIMIT_SPEC_CHARS` | `3000` | Draft character threshold above which the dynamic limit fires |
@@ -708,7 +710,7 @@ variable and its dotted YAML path.
 
 #### data_dir_gc
 
-The `data_dir_gc` periodic agent reclaims disk space through deterministic GC steps (terminal clone pruning, orphan workspace pruning, closed workspace pruning, DB row purging, and memory ledger truncation). No size scanning or ticket filing — those concerns live in robotsix-central-deploy.
+The `data_dir_gc` periodic agent reclaims disk space through deterministic GC steps (terminal clone pruning, parked-ticket venv pruning, orphan workspace pruning, closed workspace pruning, DB row purging, and memory ledger truncation). No size scanning or ticket filing — those concerns live in robotsix-central-deploy.
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
@@ -718,6 +720,8 @@ The `data_dir_gc` periodic agent reclaims disk space through deterministic GC st
 | `periodic.data_dir_gc.prune_closed_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS` | `604800` | Minimum age (seconds since the ticket entered its terminal state) before its workspace becomes eligible for prune_closed GC. Recent closures are kept for post-mortems. Default 7 days. |
 | `periodic.data_dir_gc.prune_terminal_clones` | `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES` | `true` | Default-on GC: prune the reproducible git clones (`repo/` and `repos/`) inside workspaces of terminal-state tickets at the start of each data-dir GC pass. |
 | `periodic.data_dir_gc.prune_terminal_clones_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES_AGE_SECONDS` | `86400` | Minimum age (seconds since the ticket entered its terminal state) before its clones are pruned. Clones are cheap to recreate, so the guard is short. Default 1 day. |
+| `periodic.data_dir_gc.prune_parked_venvs` | `MILL_DATA_DIR_GC_PRUNE_PARKED_VENVS` | `true` | Default-on GC: prune the `.venv` inside workspaces of PARKED tickets (`BLOCKED`, `HUMAN_MR_APPROVAL`, `HUMAN_ISSUE_APPROVAL`). These are not terminal, so no other GC step can reach them, and a parked ticket can sit for weeks. Only `.venv` is removed — the clone, its git history and any uncommitted work stay inspectable for the human the ticket is parked for. |
+| `periodic.data_dir_gc.prune_parked_venvs_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_PARKED_VENVS_AGE_SECONDS` | `3600` | Minimum age (seconds since the ticket entered its parked state) before its `.venv` is pruned. Short, because the venv is pure cache and a ticket resumed within the hour still re-syncs cheaply from the shared package cache. Default 1 hour. |
 | `periodic.data_dir_gc.prune_db_rows` | `MILL_DATA_DIR_GC_PRUNE_DB_ROWS` | `true` | Default-on DB row GC: purge oldest terminal-ticket rows (and their associated events, comments, and proposed actions) when the count of terminal tickets exceeds `max_archived_tickets`. |
 | `periodic.data_dir_gc.prune_memory_ledgers` | `MILL_DATA_DIR_GC_PRUNE_MEMORY_LEDGERS` | `true` | Default-on GC: truncate over-cap `*_memory.md` files on disk, using the same tail_keep primitive the agent already uses at read/write time. |
 | `periodic.data_dir_gc.prune_orphans` | `MILL_DATA_DIR_GC_PRUNE_ORPHANS` | `true` | Default-on GC: prune orphan workspace directories (ticket absent from the board DB) older than the configured age at the start of each data-dir GC pass. |
