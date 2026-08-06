@@ -24,6 +24,7 @@ from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
 from .. import tracing
 from ..tracing import langfuse_trace_url
+from ..transient_errors import disk_space_available
 from ...sandbox import reap_orphan_sandboxes
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
 
@@ -134,6 +135,7 @@ async def _handle_stage_error(
     log.exception("%s: %s failed", stage_name, ticket_id)
     from ..transient_errors import (
         classify_stage_error,
+        is_disk_full_error,
         is_network_down_error,
         network_available,
     )
@@ -217,6 +219,43 @@ async def _handle_stage_error(
                 ticket_id,
                 ctx.settings.network_probe_host,
                 outage_delay,
+            )
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+            return
+        # Data volume full: same shape as the network outage above, and
+        # for the same reason. Every board fails identically until space
+        # is freed, and the bounded retry envelope expires long before an
+        # operator (or the data-dir GC) can act — so park WITHOUT
+        # consuming a retry attempt rather than blocking the ticket and
+        # requiring a manual resume per ticket.
+        if is_disk_full_error(error) and not disk_space_available(
+            ctx.settings.data_dir, ctx.settings.disk_min_free_mb
+        ):
+            disk_delay = ctx.settings.disk_full_retry_seconds
+            next_at_dt = datetime.fromtimestamp(
+                datetime.now(timezone.utc).timestamp() + disk_delay,
+                tz=timezone.utc,
+            )
+            ctx.service.set_retry_state(
+                ticket_id,
+                retry_attempt=max(ticket.retry_attempt, 1),
+                last_transient_error=(
+                    "data volume full (parked, retry budget untouched): " + repr(error)
+                )[:200],
+                next_retry_at=next_at_dt,
+            )
+            tracing.set_current_span_attribute("retry.disk_full", True)
+            tracing.set_current_span_attribute(
+                "retry.attempt", max(ticket.retry_attempt, 1)
+            )
+            log.warning(
+                "%s: %s data volume full (%s below %d MB free) — "
+                "parked, re-checking in %ds",
+                stage_name,
+                ticket_id,
+                ctx.settings.data_dir,
+                ctx.settings.disk_min_free_mb,
+                disk_delay,
             )
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
@@ -398,6 +437,39 @@ async def _process_ticket_inner(
             log.debug(
                 "%s: waiting on unmet dependencies — skipping (no trace)",
                 ticket_id,
+            )
+            return
+        # --- disk admission gate ---
+        # Refuse to start a stage on a data volume that is already too
+        # full to finish one. Without this the ticket runs, clones or
+        # syncs partway, dies on ENOSPC, and leaves a half-written
+        # workspace that consumes the very space it just ran out of.
+        # Parking here costs nothing and is self-clearing: the ticket
+        # re-polls until the GC or an operator frees space.
+        if not disk_space_available(
+            ctx.settings.data_dir, ctx.settings.disk_min_free_mb
+        ):
+            next_at_dt = datetime.fromtimestamp(
+                datetime.now(timezone.utc).timestamp()
+                + ctx.settings.disk_full_retry_seconds,
+                tz=timezone.utc,
+            )
+            ctx.service.set_retry_state(
+                ticket_id,
+                retry_attempt=max(ticket.retry_attempt, 1),
+                last_transient_error=(
+                    f"data volume below {ctx.settings.disk_min_free_mb} MB free "
+                    "(parked before dispatch, retry budget untouched)"
+                )[:200],
+                next_retry_at=next_at_dt,
+            )
+            log.warning(
+                "%s: %s parked — %s below %d MB free; re-checking in %ds",
+                stage_name,
+                ticket_id,
+                ctx.settings.data_dir,
+                ctx.settings.disk_min_free_mb,
+                ctx.settings.disk_full_retry_seconds,
             )
             return
         stage = get_stage(stage_name)

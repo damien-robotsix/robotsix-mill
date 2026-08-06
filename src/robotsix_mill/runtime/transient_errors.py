@@ -6,10 +6,13 @@ retries. This module classifies errors at the stage-runner level.
 
 from __future__ import annotations
 
+import errno
+import os
 import re
 import socket
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -48,6 +51,22 @@ _GIT_FATAL_TRANSIENT_RE = re.compile(
 _GIT_WORKSPACE_GONE_RE = re.compile(
     r"(fatal: not a git repository"
     r"|fatal: cannot change to .*No such file or directory)"
+)
+
+# Disk-exhaustion signatures. Matched against git/subprocess stderr and
+# exception text anywhere in the cause chain, for the cases where ENOSPC
+# reaches us as text rather than as an OSError errno: a ``git clone``
+# that died with "No space left on device" surfaces as a
+# CalledProcessError, whose "Fatal: CalledProcessError" block note gives
+# no hint that the disk — not the repo — was the problem.
+_DISK_FULL_RE = re.compile(
+    r"(No space left on device"
+    r"|Disk quota exceeded"
+    r"|ENOSPC"
+    r"|not enough space"
+    r"|cannot write.*database or disk is full"
+    r"|database or disk is full)",
+    re.IGNORECASE,
 )
 
 # Host-resolution failure signatures: the network (or its DNS) is gone,
@@ -130,6 +149,67 @@ def _matches_network_down(exc: BaseException) -> bool:
         if stderr and _NETWORK_DOWN_RE.search(stderr):
             return True
     return bool(_NETWORK_DOWN_RE.search(str(exc)))
+
+
+def _matches_disk_full(exc: BaseException) -> bool:
+    if isinstance(exc, OSError) and exc.errno in (errno.ENOSPC, errno.EDQUOT):
+        return True
+    if isinstance(exc, subprocess.CalledProcessError):
+        stderr = exc.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        if stderr and _DISK_FULL_RE.search(stderr):
+            return True
+    return bool(_DISK_FULL_RE.search(str(exc)))
+
+
+def is_disk_full_error(exc: BaseException) -> bool:
+    """Return True when *exc* looks like the data volume running out.
+
+    The disk analogue of :func:`is_network_down_error`, and paired with
+    :func:`disk_space_available` the same way. A full volume is not a
+    property of the ticket that happened to hit it: every board fails
+    identically until space is freed, so the worker parks rather than
+    spending the retry budget and then blocking FATALLY. Walks the cause
+    chain like :func:`classify_stage_error`.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    for _ in range(_MAX_CHAIN_WALK):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        if _matches_disk_full(current):
+            return True
+        if current.__cause__ is not None and id(current.__cause__) not in seen:
+            current = current.__cause__
+        elif current.__context__ is not None and id(current.__context__) not in seen:
+            current = current.__context__
+        else:
+            break
+    return False
+
+
+def disk_space_available(path: str | Path, min_free_mb: int) -> bool:
+    """True when *path*'s filesystem has at least *min_free_mb* free.
+
+    Uncached, unlike :func:`network_available`: ``statvfs`` is a single
+    cheap syscall against the local filesystem, and staleness here has
+    teeth in both directions — a cached "full" would keep parking
+    tickets after the GC freed space, and a cached "fine" would wave
+    them into a volume that just filled.
+
+    A floor of 0 disables the check. Returns True when the path cannot
+    be stat'ed, so an unreadable mount degrades to the pre-existing
+    behaviour rather than parking the whole fleet.
+    """
+    if min_free_mb <= 0:
+        return True
+    try:
+        st = os.statvfs(str(path))
+    except OSError:
+        return True
+    return st.f_bavail * st.f_frsize >= min_free_mb * 1024 * 1024
 
 
 def is_network_down_error(exc: BaseException) -> bool:
@@ -335,6 +415,14 @@ def _check_one_transient(exc: BaseException) -> bool:
     if isinstance(exc, TimeoutError):
         return True
     if isinstance(exc, SandboxError):
+        return True
+    # A full disk is infrastructure, not a defect in the ticket: nothing
+    # about the work changed, and the same stage succeeds once space is
+    # freed. Classifying it fatal is what turned one full volume into 146
+    # hand-resumable blocks on 2026-08-06. Reaching "transient" here is
+    # also what lets the disk-full PARK in the worker fire at all — that
+    # branch lives inside the transient path.
+    if _matches_disk_full(exc):
         return True
     return bool(_is_transient_message(exc))
 

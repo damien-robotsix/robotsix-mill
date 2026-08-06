@@ -1365,6 +1365,21 @@
           "title": "Diagnostic Target Repo Id",
           "type": "string"
         },
+        "disk_full_retry_seconds": {
+          "advanced": true,
+          "default": 600,
+          "description": "Seconds between re-poll attempts while the data volume is full.",
+          "minimum": 1,
+          "title": "Disk Full Retry Seconds",
+          "type": "integer"
+        },
+        "disk_min_free_mb": {
+          "default": 5120,
+          "description": "Minimum free MB on the data volume before a stage is allowed to start.",
+          "minimum": 0,
+          "title": "Disk Min Free Mb",
+          "type": "integer"
+        },
         "doc_classifier_diff_max_chars": {
           "advanced": true,
           "default": 6000,
