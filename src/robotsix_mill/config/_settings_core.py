@@ -339,6 +339,32 @@ class _CoreSettings(BaseModel):
         description="Seconds between re-poll attempts during a detected network outage.",
         json_schema_extra={"advanced": True},
     )
+    # Disk-exhaustion parking — the ENOSPC analogue of the network-outage
+    # parking above, and for the same reason. A full data volume fails
+    # every clone and every write on every board identically; bounded
+    # retries just burn the budget in seconds and then block the ticket
+    # FATALLY, converting one infrastructure fault into one manual resume
+    # per ticket. On 2026-08-06 that arithmetic produced 146 blocked
+    # tickets from a single full volume — tickets which then pinned 34 GB
+    # of .venv that only they could release. Park instead: the ticket
+    # re-polls every disk_full_retry_seconds, retry budget untouched,
+    # and resumes by itself once the GC or an operator frees space.
+    disk_full_retry_seconds: int = Field(
+        default=600,
+        ge=1,
+        description="Seconds between re-poll attempts while the data volume is full.",
+        json_schema_extra={"advanced": True},
+    )
+    # Free-space floor for the pre-stage admission check. Below this,
+    # a ticket parks BEFORE running rather than failing partway through
+    # and leaving a half-written workspace behind. Sized well above a
+    # single clone+sync so the check fires before the volume is actually
+    # at zero. Set to 0 to disable the preflight entirely.
+    disk_min_free_mb: int = Field(
+        default=5_120,
+        ge=0,
+        description="Minimum free MB on the data volume before a stage is allowed to start.",
+    )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the

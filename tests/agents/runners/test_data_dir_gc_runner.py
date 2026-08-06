@@ -495,3 +495,199 @@ def test_prune_terminal_clones_knob_off_is_noop(tmp_path, monkeypatch):
     assert result.clones_pruned == 0
     assert (ws_dir / "repo").exists()
     db.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# Parked-ticket venv GC — reclaim .venv from blocked / awaiting-human tickets
+# ---------------------------------------------------------------------------
+
+
+def _insert_parked_ticket(
+    settings: Settings,
+    board_id: str,
+    ticket_id: str,
+    *,
+    parked_at,
+    state: State = State.BLOCKED,
+) -> None:
+    """Insert a parked Ticket plus a backdated parked ``TicketEvent`` so
+    the prune age guard has an entry time to measure against."""
+    db.init_db(settings, board_id)
+    with db.session(settings, board_id) as s:
+        s.add(
+            Ticket(
+                id=ticket_id,
+                title="t",
+                state=state,
+                workspace_path=str(settings.workspaces_dir_for(board_id) / ticket_id),
+                board_id=board_id,
+            )
+        )
+        s.add(TicketEvent(ticket_id=ticket_id, state=state, at=parked_at))
+        s.commit()
+
+
+def _make_workspace_with_venvs(settings: Settings, board_id: str, ticket_id: str):
+    """Workspace with clones that each carry a ``.venv``."""
+    ws_dir = _make_workspace_with_clones(settings, board_id, ticket_id)
+    _write_bytes(ws_dir / "repo" / ".venv" / "lib" / "torch.so", 1_000)
+    _write_bytes(ws_dir / "repos" / "other-repo" / ".venv" / "lib" / "torch.so", 1_000)
+    return ws_dir
+
+
+def _no_live_sandboxes(monkeypatch) -> None:
+    """Stub the Docker probe so tests never shell out."""
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.data_dir_gc.orphans."
+        "_live_sandbox_workspace_paths",
+        lambda: set(),
+    )
+
+
+def test_prune_parked_venvs_removes_venvs_keeps_clone(tmp_path, monkeypatch):
+    """A long-blocked ticket loses its .venv but keeps git history,
+    uncommitted work and artifacts — the evidence a human needs."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    _no_live_sandboxes(monkeypatch)
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-blocked-aaaa"
+    ws_dir = _make_workspace_with_venvs(s, board_id, ticket_id)
+    _insert_parked_ticket(s, board_id, ticket_id, parked_at=_now() - timedelta(days=3))
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 2
+    assert not (ws_dir / "repo" / ".venv").exists()
+    assert not (ws_dir / "repos" / "other-repo" / ".venv").exists()
+    assert (ws_dir / "repo" / ".git" / "objects.bin").exists()
+    assert (ws_dir / "artifacts" / "retrospect.md").exists()
+    assert "parked_venvs=2" in result.summary
+    db.reset_engine()
+
+
+def test_prune_parked_venvs_covers_human_approval_waits(tmp_path, monkeypatch):
+    """HUMAN_MR_APPROVAL and HUMAN_ISSUE_APPROVAL park on a human just as
+    BLOCKED does, so their venvs are reclaimed too."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    _no_live_sandboxes(monkeypatch)
+    board_id = "test-board"
+    mr = "20260101T000000Z-awaiting-merge-bbbb"
+    issue = "20260101T000000Z-awaiting-spec-cccc"
+    ws_mr = _make_workspace_with_venvs(s, board_id, mr)
+    ws_issue = _make_workspace_with_venvs(s, board_id, issue)
+    _insert_parked_ticket(
+        s,
+        board_id,
+        mr,
+        parked_at=_now() - timedelta(days=3),
+        state=State.HUMAN_MR_APPROVAL,
+    )
+    _insert_parked_ticket(
+        s,
+        board_id,
+        issue,
+        parked_at=_now() - timedelta(days=3),
+        state=State.HUMAN_ISSUE_APPROVAL,
+    )
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 4
+    assert not (ws_mr / "repo" / ".venv").exists()
+    assert not (ws_issue / "repo" / ".venv").exists()
+    db.reset_engine()
+
+
+def test_prune_parked_venvs_age_guard_keeps_recent_park(tmp_path, monkeypatch):
+    """A ticket parked minutes ago keeps its venv — it may be resumed
+    immediately, and the rebuild is not free."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    _no_live_sandboxes(monkeypatch)
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-just-blocked-dddd"
+    ws_dir = _make_workspace_with_venvs(s, board_id, ticket_id)
+    _insert_parked_ticket(s, board_id, ticket_id, parked_at=_now())
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 0
+    assert (ws_dir / "repo" / ".venv").exists()
+    db.reset_engine()
+
+
+def test_prune_parked_venvs_leaves_active_tickets(tmp_path, monkeypatch):
+    """An active (non-parked) ticket is untouched: its stage may be
+    running right now."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    _no_live_sandboxes(monkeypatch)
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-active-eeee"
+    ws_dir = _make_workspace_with_venvs(s, board_id, ticket_id)
+    _insert_ticket_with_state(s, board_id, ticket_id, State.READY)
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 0
+    assert (ws_dir / "repo" / ".venv").exists()
+    db.reset_engine()
+
+
+def test_prune_parked_venvs_skips_live_sandbox_workspace(tmp_path, monkeypatch):
+    """A ticket un-parked between the DB read and the rmtree still has a
+    live sandbox; pruning under a running uv sync would fail its gate."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-resumed-ffff"
+    ws_dir = _make_workspace_with_venvs(s, board_id, ticket_id)
+    _insert_parked_ticket(s, board_id, ticket_id, parked_at=_now() - timedelta(days=3))
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.data_dir_gc.orphans."
+        "_live_sandbox_workspace_paths",
+        lambda: {ws_dir},
+    )
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 0
+    assert (ws_dir / "repo" / ".venv").exists()
+    db.reset_engine()
+
+
+def test_prune_parked_venvs_knob_off_is_noop(tmp_path, monkeypatch):
+    """With the knob disabled, no venvs are touched."""
+    s = _make_settings(tmp_path, data_dir_gc_prune_parked_venvs=False)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    _no_live_sandboxes(monkeypatch)
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-blocked-1111"
+    ws_dir = _make_workspace_with_venvs(s, board_id, ticket_id)
+    _insert_parked_ticket(s, board_id, ticket_id, parked_at=_now() - timedelta(days=3))
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 0
+    assert (ws_dir / "repo" / ".venv").exists()
+    db.reset_engine()
+
+
+def test_prune_parked_venvs_no_park_event_is_skipped(tmp_path, monkeypatch):
+    """A parked ticket with no parked event has no measurable park time,
+    so the age guard cannot be satisfied and the venv is kept."""
+    s = _make_settings(tmp_path)
+    monkeypatch.setattr("robotsix_mill.agents.runners.data_dir_gc.Settings", lambda: s)
+    _no_live_sandboxes(monkeypatch)
+    board_id = "test-board"
+    ticket_id = "20260101T000000Z-no-event-2222"
+    ws_dir = _make_workspace_with_venvs(s, board_id, ticket_id)
+    _insert_ticket_with_state(s, board_id, ticket_id, State.BLOCKED)
+
+    result = run_data_dir_gc_pass()
+
+    assert result.parked_venvs_pruned == 0
+    assert (ws_dir / "repo" / ".venv").exists()
+    db.reset_engine()

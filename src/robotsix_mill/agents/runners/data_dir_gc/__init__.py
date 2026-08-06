@@ -1,6 +1,6 @@
 """Data-dir GC — deterministic periodic disk reclamation.
 
-Runs exactly 5 GC steps in order, then returns a short summary.
+Runs exactly 6 GC steps in order, then returns a short summary.
 No size scanning, growth deltas, or ticket filing — those concerns
 live in robotsix-central-deploy.
 """
@@ -17,6 +17,7 @@ from .orphans import (
     _prune_closed_workspaces,
     _prune_orphan_workspaces,
     _prune_oversized_memory_ledgers,
+    _prune_parked_venvs,
     _prune_terminal_clones,
 )
 
@@ -29,6 +30,7 @@ class DataDirGcPassResult:
 
     closed_pruned: int = 0
     clones_pruned: int = 0
+    parked_venvs_pruned: int = 0
     db_rows_purged: int = 0
     orphans_pruned: int = 0
     memory_ledgers_truncated: int = 0
@@ -40,7 +42,7 @@ def run_data_dir_gc_pass(
     repo_config: RepoConfig | None = None,
     settings: Settings | None = None,
 ) -> DataDirGcPassResult:
-    """Execute one data-dir GC pass — 5 reclaim steps, no audit.
+    """Execute one data-dir GC pass — 6 reclaim steps, no audit.
 
     Args:
         session_id: Langfuse session id from the poll loop (unused —
@@ -66,17 +68,22 @@ def run_data_dir_gc_pass(
     if settings.data_dir_gc_prune_closed:
         closed_pruned = _prune_closed_workspaces(settings)
 
-    # 3. Default-on: purge oldest terminal-ticket DB rows
+    # 3. Default-on: prune .venv inside parked-ticket workspaces
+    parked_venvs_pruned = 0
+    if settings.data_dir_gc_prune_parked_venvs:
+        parked_venvs_pruned = _prune_parked_venvs(settings)
+
+    # 4. Default-on: purge oldest terminal-ticket DB rows
     db_rows_purged = 0
     if settings.data_dir_gc_prune_db_rows:
         db_rows_purged = _prune_archived_db_rows(settings)
 
-    # 4. Default-on: prune orphan workspace dirs
+    # 5. Default-on: prune orphan workspace dirs
     orphans_pruned = 0
     if settings.data_dir_gc_prune_orphans:
         orphans_pruned = _prune_orphan_workspaces(settings)
 
-    # 5. Default-on: truncate over-cap *_memory.md files
+    # 6. Default-on: truncate over-cap *_memory.md files
     memory_ledgers_truncated = 0
     if settings.data_dir_gc_prune_memory_ledgers:
         memory_ledgers_truncated = _prune_oversized_memory_ledgers(settings)
@@ -87,6 +94,8 @@ def run_data_dir_gc_pass(
         parts.append(f"clones={clones_pruned}")
     if closed_pruned:
         parts.append(f"closed={closed_pruned}")
+    if parked_venvs_pruned:
+        parts.append(f"parked_venvs={parked_venvs_pruned}")
     if db_rows_purged:
         parts.append(f"db_rows={db_rows_purged}")
     if orphans_pruned:
@@ -100,6 +109,7 @@ def run_data_dir_gc_pass(
     return DataDirGcPassResult(
         closed_pruned=closed_pruned,
         clones_pruned=clones_pruned,
+        parked_venvs_pruned=parked_venvs_pruned,
         db_rows_purged=db_rows_purged,
         orphans_pruned=orphans_pruned,
         memory_ledgers_truncated=memory_ledgers_truncated,

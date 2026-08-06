@@ -3700,3 +3700,115 @@ async def test_consumer_publishes_sandbox_rank_and_resets_it(ctx, service, monke
         "the rank must be reset after the stage run, or the next ticket "
         "inherits this one's priority"
     )
+
+
+async def test_disk_full_parks_without_consuming_retry(ctx, service, monkeypatch):
+    """A stage failing with ENOSPC while the volume is genuinely below
+    the floor is PARKED: retry budget untouched, no BLOCKED transition.
+    A full volume outlasts the bounded retry envelope by hours, and
+    blocking each ticket converts one infrastructure fault into one
+    manual resume per ticket."""
+    import errno
+
+    class DiskBoom(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _ticket, _ctx):
+            raise OSError(errno.ENOSPC, "No space left on device", "/data/x/repo")
+
+    monkeypatch.setitem(registry.STAGES, "refine", DiskBoom())
+
+    # The volume fills DURING the stage: the admission gate (first call
+    # each pass) sees room, the post-failure check does not. This is the
+    # only ordering that can reach the park branch once the gate exists.
+    calls: list[int] = []
+
+    def fills_during_stage(path, min_free_mb):
+        calls.append(1)
+        return len(calls) % 2 == 1
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing.disk_space_available",
+        fills_during_stage,
+    )
+    t = service.create("x")
+    for _ in range(ctx.settings.stage_retry_max_attempts + 2):
+        await process_ticket(t.id, ctx)
+        r = service.get(t.id)
+        assert r.state is State.DRAFT, "a full disk must never block the ticket"
+        assert r.retry_attempt == 1, "retry budget must not be consumed"
+        assert r.next_retry_at is not None
+        assert "data volume full" in (r.last_transient_error or "")
+        service.set_retry_state(
+            t.id,
+            retry_attempt=r.retry_attempt,
+            last_transient_error=r.last_transient_error,
+            next_retry_at=None,
+        )
+
+
+async def test_enospc_with_space_available_uses_bounded_retries(
+    ctx, service, monkeypatch
+):
+    """The same ENOSPC WITHOUT a confirmed shortage (the volume has room
+    — e.g. a per-container tmpfs filled, not the data volume) goes
+    through the normal bounded transient retry and blocks once
+    exhausted, so a real defect is not parked forever."""
+    import errno
+
+    class DiskBoom(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _ticket, _ctx):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setitem(registry.STAGES, "refine", DiskBoom())
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing.disk_space_available",
+        lambda path, min_free_mb: True,
+    )
+    t = service.create("x")
+    for _ in range(ctx.settings.stage_retry_max_attempts + 1):
+        await process_ticket(t.id, ctx)
+        r = service.get(t.id)
+        if r.state is State.BLOCKED:
+            break
+        service.set_retry_state(
+            t.id,
+            retry_attempt=r.retry_attempt,
+            last_transient_error=r.last_transient_error,
+            next_retry_at=None,
+        )
+    assert service.get(t.id).state is State.BLOCKED
+
+
+async def test_disk_admission_gate_parks_before_dispatch(ctx, service, monkeypatch):
+    """Below the floor the stage never runs at all: a stage that dies
+    partway through leaves a half-written workspace consuming the very
+    space it ran out of."""
+    ran: list[str] = []
+
+    class Marker(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _ticket, _ctx):
+            ran.append("yes")
+            return Outcome(next_state=State.READY, note="done")
+
+    monkeypatch.setitem(registry.STAGES, "refine", Marker())
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.processing.disk_space_available",
+        lambda path, min_free_mb: False,
+    )
+    t = service.create("x")
+    await process_ticket(t.id, ctx)
+
+    r = service.get(t.id)
+    assert ran == [], "stage must not run below the free-space floor"
+    assert r.state is State.DRAFT
+    assert r.retry_attempt == 1, "retry budget must not be consumed"
+    assert r.next_retry_at is not None
+    assert "below" in (r.last_transient_error or "")

@@ -578,3 +578,110 @@ def test_sandbox_error_transient_in_cause_chain():
     outer = RuntimeError("agent run failed")
     outer.__cause__ = inner
     assert classify_stage_error(outer) == "transient"
+
+
+# ---------------------------------------------------------------------------
+# Disk-exhaustion detection (is_disk_full_error / disk_space_available)
+# ---------------------------------------------------------------------------
+
+
+def test_is_disk_full_error_enospc_oserror():
+    """A bare ENOSPC OSError — the shape mill's own writes produce."""
+    import errno
+
+    from robotsix_mill.runtime.transient_errors import is_disk_full_error
+
+    e = OSError(errno.ENOSPC, "No space left on device", "/data/board/ws")
+    assert is_disk_full_error(e)
+
+
+def test_is_disk_full_error_git_clone_stderr():
+    """A clone that died on a full volume reaches us as a
+    CalledProcessError; without the stderr match its block note reads
+    'Fatal: CalledProcessError' and names git, not the disk."""
+    import subprocess
+
+    from robotsix_mill.runtime.transient_errors import is_disk_full_error
+
+    e = subprocess.CalledProcessError(
+        128,
+        ["git", "clone", "--quiet", "https://github.com/x/y", "/data/b/ws/repo"],
+        stderr="fatal: could not create work tree dir: No space left on device",
+    )
+    assert is_disk_full_error(e)
+
+
+def test_is_disk_full_error_in_cause_chain():
+    """ENOSPC wrapped by a higher-level error is still found."""
+    import errno
+
+    from robotsix_mill.runtime.transient_errors import is_disk_full_error
+
+    inner = OSError(errno.ENOSPC, "No space left on device")
+    outer = RuntimeError("workspace setup failed")
+    outer.__cause__ = inner
+    assert is_disk_full_error(outer)
+
+
+def test_is_disk_full_error_rejects_unrelated_failures():
+    """Ordinary failures must not be mistaken for disk exhaustion —
+    parking a genuine defect would hide it forever."""
+    import errno
+    import subprocess
+
+    from robotsix_mill.runtime.transient_errors import is_disk_full_error
+
+    assert not is_disk_full_error(RuntimeError("assertion failed"))
+    assert not is_disk_full_error(OSError(errno.EACCES, "Permission denied"))
+    assert not is_disk_full_error(
+        subprocess.CalledProcessError(1, "git", stderr="fatal: not a git repository")
+    )
+
+
+def test_disk_full_error_classifies_transient():
+    """ENOSPC must reach the transient path — the disk-full park lives
+    inside it, and 'fatal' is what made each one a manual resume."""
+    import errno
+
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+
+    e = OSError(errno.ENOSPC, "No space left on device")
+    assert classify_stage_error(e) == "transient"
+
+
+def test_disk_space_available_reads_statvfs(monkeypatch, tmp_path):
+    """The floor is compared against real available blocks."""
+    import os
+
+    from robotsix_mill.runtime.transient_errors import disk_space_available
+
+    class FakeStat:
+        f_frsize = 4096
+
+        def __init__(self, avail):
+            self.f_bavail = avail
+
+    # 100 MB free against a 50 MB floor -> fine; against 500 MB -> not.
+    monkeypatch.setattr(os, "statvfs", lambda p: FakeStat(100 * 1024 * 1024 // 4096))
+    assert disk_space_available(tmp_path, 50)
+    assert not disk_space_available(tmp_path, 500)
+
+
+def test_disk_space_available_floor_zero_disables(tmp_path):
+    """A 0 floor turns the check off entirely."""
+    from robotsix_mill.runtime.transient_errors import disk_space_available
+
+    assert disk_space_available(tmp_path, 0)
+
+
+def test_disk_space_available_unreadable_path_is_permissive(monkeypatch, tmp_path):
+    """An unstattable mount must not park the whole fleet."""
+    import os
+
+    from robotsix_mill.runtime.transient_errors import disk_space_available
+
+    def boom(_p):
+        raise OSError("nope")
+
+    monkeypatch.setattr(os, "statvfs", boom)
+    assert disk_space_available(tmp_path, 5_000)

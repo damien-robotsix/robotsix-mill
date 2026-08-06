@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +35,18 @@ _BATCH_SIZE = 500
 
 # Terminal ticket states: those with empty outgoing transition sets.
 _TERMINAL_STATES = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
+
+# Parked ticket states: NOT terminal (the ticket will move again), but
+# waiting on a human rather than on the pipeline, so nothing will touch
+# the workspace until someone acts. The terminal-state GC above cannot
+# reach these, which is how 45 GB of ``.venv`` accumulated under parked
+# tickets on the deploy box (2026-08-06) — see
+# ``data_dir_gc_prune_parked_venvs`` for the full account.
+_PARKED_STATES = {
+    State.BLOCKED,
+    State.HUMAN_MR_APPROVAL,
+    State.HUMAN_ISSUE_APPROVAL,
+}
 
 
 @dataclass
@@ -407,6 +419,197 @@ def _prune_terminal_clones(settings: Settings) -> int:
         except Exception:
             log.warning(
                 "data_dir_gc: board=%r — terminal-clone prune failed",
+                board_id,
+                exc_info=True,
+            )
+            continue
+    return total_removed
+
+
+# ---------------------------------------------------------------------------
+# Default-on GC: prune .venv inside PARKED-ticket workspaces
+# ---------------------------------------------------------------------------
+
+# The virtualenv ``uv sync`` builds inside a workspace clone. Pure cache:
+# reproducible from the lockfile, and the shared sandbox package cache
+# makes the rebuild cheap. Everything else in the clone (git history,
+# uncommitted edits) is evidence for the human the ticket is parked for
+# and is never touched here.
+_VENV_DIRNAME = ".venv"
+
+
+def _live_sandbox_workspace_paths() -> set[Path]:
+    """Workspace dirs currently mounted into a running sandbox.
+
+    Thin seam over :func:`robotsix_mill.sandbox.live_sandbox_workspace_paths`
+    so tests can stub the Docker probe. Imported lazily: the GC runner is
+    imported at worker startup, well before any sandbox machinery is
+    needed.
+    """
+    from ....sandbox import live_sandbox_workspace_paths
+
+    return live_sandbox_workspace_paths()
+
+
+def _parked_entry_times(
+    settings: Settings,
+    board_id: str,
+    candidate_ids: list[str],
+) -> tuple[set[str], dict[str, datetime]]:
+    """Cross-reference *candidate_ids* against *board_id*'s DB in batched
+    ``IN`` selects.
+
+    Mirrors :func:`_terminal_close_times` but for :data:`_PARKED_STATES`.
+    Returns ``(parked_ids, parked_times)`` where ``parked_times`` maps
+    each parked ID to the max ``at`` of its parked ``TicketEvent`` rows —
+    i.e. when it most recently entered a parked state.
+    """
+    parked_ids: set[str] = set()
+    parked_times: dict[str, datetime] = {}
+    with db.session(settings, board_id) as s:
+        for start in range(0, len(candidate_ids), _BATCH_SIZE):
+            chunk = candidate_ids[start : start + _BATCH_SIZE]
+            chunk_parked = set(
+                s.exec(
+                    select(Ticket.id).where(
+                        Ticket.id.in_(chunk),  # type: ignore[attr-defined]
+                        Ticket.state.in_(_PARKED_STATES),  # type: ignore[attr-defined]
+                    )
+                ).all()
+            )
+            if not chunk_parked:
+                continue
+            parked_ids.update(chunk_parked)
+            rows = s.exec(
+                select(TicketEvent.ticket_id, TicketEvent.at).where(
+                    TicketEvent.ticket_id.in_(chunk_parked),  # type: ignore[attr-defined]
+                    TicketEvent.state.in_(_PARKED_STATES),  # type: ignore[attr-defined]
+                )
+            ).all()
+            for ticket_id, at in rows:
+                prior = parked_times.get(ticket_id)
+                if prior is None or at > prior:
+                    parked_times[ticket_id] = at
+    return parked_ids, parked_times
+
+
+def _iter_parked_candidates(
+    settings: Settings,
+    board_id: str,
+    now: datetime,
+    age_threshold_seconds: int,
+) -> Iterator[tuple[str, Path, datetime]]:
+    """Yield ``(name, path, parked_at)`` for each workspace dir whose
+    ticket is parked AND has been parked past the age threshold.
+    """
+    workspaces_dir = settings.workspaces_dir_for(board_id)
+    if not workspaces_dir.exists():
+        return
+
+    candidates = _workspace_candidates(workspaces_dir)
+    if not candidates:
+        return
+
+    candidate_ids = [name for name, _ in candidates]
+    parked_ids, parked_times = _parked_entry_times(settings, board_id, candidate_ids)
+
+    for name, path in candidates:
+        if name not in parked_ids:
+            continue
+        # Unlike terminal tickets there is no ID-derived fallback: a
+        # ticket's *creation* time says nothing about when it parked, and
+        # guessing would prune venvs of tickets parked seconds ago.
+        parked_at = parked_times.get(name)
+        if parked_at is None:
+            continue
+        if (now - parked_at).total_seconds() < age_threshold_seconds:
+            continue
+        yield name, path, parked_at
+
+
+def _remove_workspace_venvs(board_id: str, ticket_id: str, ws_path: Path) -> int:
+    """Delete the ``.venv`` dirs of one workspace; return dirs removed.
+
+    Covers the single-repo layout (``repo/.venv``) and the meta layout
+    (``repos/<name>/.venv``).
+    """
+    removed = 0
+    venvs = [ws_path / "repo" / _VENV_DIRNAME]
+    repos_dir = ws_path / "repos"
+    if repos_dir.is_dir():
+        venvs += [child / _VENV_DIRNAME for child in repos_dir.iterdir()]
+    for venv in venvs:
+        if not venv.is_dir():
+            continue
+        shutil.rmtree(venv, ignore_errors=True)
+        if not venv.exists():
+            removed += 1
+            log.info(
+                "data_dir_gc: pruned parked-ticket venv board=%r ticket=%s path=%s",
+                board_id,
+                ticket_id,
+                venv,
+            )
+    return removed
+
+
+def _prune_board_parked_venvs(
+    settings: Settings,
+    board_id: str,
+    now: datetime,
+    age_threshold_seconds: int,
+    live_workspaces: Callable[[], set[Path]],
+) -> int:
+    """Remove ``.venv`` dirs inside parked-ticket workspaces for one board.
+
+    *live_workspaces* is called lazily — only once a board actually has a
+    candidate — so a GC pass with nothing to reclaim never shells out to
+    Docker.
+    """
+    removed = 0
+    for name, path, _ in _iter_parked_candidates(
+        settings, board_id, now, age_threshold_seconds
+    ):
+        if path in live_workspaces():
+            log.info(
+                "data_dir_gc: board=%r ticket=%s has a live sandbox; "
+                "skipping parked-venv prune",
+                board_id,
+                name,
+            )
+            continue
+        removed += _remove_workspace_venvs(board_id, name, path)
+    if removed:
+        log.info(
+            "data_dir_gc: board=%r pruned %d parked-ticket venv(s)",
+            board_id,
+            removed,
+        )
+    return removed
+
+
+def _prune_parked_venvs(settings: Settings) -> int:
+    """Remove ``.venv`` dirs from parked-ticket workspaces across all
+    boards. Returns the number of venv dirs removed.
+    """
+    now = _now()
+    age_threshold_seconds = settings.data_dir_gc_prune_parked_venvs_age_seconds
+    cached: list[set[Path]] = []
+
+    def live_workspaces() -> set[Path]:
+        if not cached:
+            cached.append(_live_sandbox_workspace_paths())
+        return cached[0]
+
+    total_removed = 0
+    for board_id in _boards_from_disk(settings):
+        try:
+            total_removed += _prune_board_parked_venvs(
+                settings, board_id, now, age_threshold_seconds, live_workspaces
+            )
+        except Exception:
+            log.warning(
+                "data_dir_gc: board=%r — parked-venv prune failed",
                 board_id,
                 exc_info=True,
             )

@@ -909,6 +909,68 @@ def _list_sandbox_containers() -> list[tuple[str, str]]:
     return out
 
 
+def live_sandbox_workspace_paths() -> set[Path]:
+    """Workspace dirs currently mounted into a RUNNING sandbox.
+
+    Mill mounts each workspace by volume-subpath, so a sandbox's mount
+    *destination* is the ``/data/<board>/workspaces/<ticket>/repo`` (or
+    ``…/repos/<name>``) path; this maps those back to workspace roots.
+
+    Consumed by the data-dir GC, which reclaims ``.venv`` from parked
+    tickets: a parked ticket normally has no sandbox at all, so this set
+    is usually disjoint from the prune candidates. It exists to close the
+    resume race — a ticket un-parked between the GC's DB read and its
+    ``rmtree`` would otherwise have the venv deleted out from under a
+    live ``uv sync``, failing that ticket's gate for no reason.
+
+    Only RUNNING containers count, unlike :func:`_list_sandbox_containers`
+    (which lists all states so the reaper can sweep ``Created`` husks): a
+    container that is not running holds nothing open.
+
+    Best-effort — an empty set on any Docker CLI failure, degrading to an
+    unguarded prune rather than skipping reclamation entirely.
+    """
+    try:
+        listing = subprocess.run(
+            ["docker", "ps", "--no-trunc", "--format", "{{.ID}}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if listing.returncode != 0:
+            return set()
+        ids = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+        if not ids:
+            return set()
+        inspected = subprocess.run(
+            ["docker", "inspect", "--format", "{{json .Mounts}}", *ids],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if inspected.returncode != 0:
+            return set()
+    except OSError, subprocess.SubprocessError:
+        return set()
+
+    paths: set[Path] = set()
+    for line in inspected.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            mounts = json.loads(line)
+        except ValueError:
+            continue
+        for mount in mounts or ():
+            dest = Path(str(mount.get("Destination", "")))
+            if dest.name == "repo":
+                paths.add(dest.parent)
+            elif dest.parent.name == "repos":
+                paths.add(dest.parent.parent)
+    return paths
+
+
 def _container_age_exceeds(cid: str, max_age_seconds: int) -> bool:
     """True when container ``cid``'s uptime exceeds ``max_age_seconds``.
 
