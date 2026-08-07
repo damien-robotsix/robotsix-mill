@@ -222,6 +222,42 @@ def run_claimed_edited_paths(new_messages: bytes | str | None) -> list[str]:
     return found
 
 
+def claimed_edits_already_on_branch(
+    *,
+    new_messages: bytes | str | None,
+    branch_changed_files: list[str],
+) -> bool:
+    """True when every file the run claimed to edit is already changed on the
+    branch — i.e. the edits were an idempotent re-application, not lost work.
+
+    This disambiguates the one case where an edit-claim contradiction is a
+    false alarm. On a *resuming* run whose branch is already ahead of target,
+    prior passes have committed the implementation. A fresh pass re-reads the
+    spec, finds the change present, and writes the same bytes back; git sees
+    no diff, and the plain "edit tools ran but nothing changed" test reads that
+    as work that failed to persist. It did persist — one pass earlier.
+
+    Requiring *every* claimed path to already be part of the branch's diff
+    keeps the guard's teeth. An agent that edited a file the branch never
+    touched really did lose work, and still trips the contradiction.
+
+    Matching is by basename, the same deterministic anchor
+    :func:`run_claimed_edited_paths` uses, so absolute Claude SDK paths and
+    repo-relative mill paths compare alike.
+
+    Fails **closed**: no claimed paths, or no branch changes, returns ``False``
+    so the caller keeps its existing blocking behaviour. This function may only
+    ever excuse a contradiction on positive evidence.
+    """
+    claimed = run_claimed_edited_paths(new_messages)
+    if not claimed:
+        return False
+    on_branch = {os.path.basename(p) for p in branch_changed_files if p}
+    if not on_branch:
+        return False
+    return all(name in on_branch for name in claimed)
+
+
 def detect_missing_claimed_files(
     *,
     changed_files: list[str],
