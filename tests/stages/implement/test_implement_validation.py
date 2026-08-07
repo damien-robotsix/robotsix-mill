@@ -219,7 +219,13 @@ def _scope_ctx():
 
 
 def _scope_settings(**over):
-    base = {"scope_triage_enabled": False, "scope_triage_max_files": 0}
+    base = {
+        "scope_triage_enabled": False,
+        "scope_triage_max_files": 0,
+        # 0 = ceiling disabled, so existing cases exercise only the
+        # newly-added count unless they opt in explicitly.
+        "scope_triage_hard_max_files": 0,
+    }
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -316,6 +322,109 @@ def test_scope_guardrail_flood_guard_blocks_without_llm(monkeypatch):
     assert res.action == "return"
     assert res.outcome.next_state is State.BLOCKED
     assert "flood guard" in res.outcome.note
+
+
+def _flood_case(monkeypatch, *, changed, pre_existing, **settings_kw):
+    """Drive the guardrail with a given diff and a given origin/<target> tree."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+    monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: changed)
+    monkeypatch.setattr(
+        validation_mod.git_ops, "tracked_paths_at", lambda *a: set(pre_existing)
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: None),
+        raising=False,
+    )
+    triage_calls: list[int] = []
+    from robotsix_mill.agents import scope_triage as st
+
+    monkeypatch.setattr(
+        st,
+        "run_scope_triage_agent",
+        lambda *a, **kw: (triage_calls.append(1), _TriageStub())[1],
+    )
+    kw = {"scope_triage_enabled": True, "scope_triage_max_files": 2}
+    kw.update(settings_kw)
+    res = _call_guardrail(_scope_ctx(), _scope_settings(**kw), file_map={"in_scope.py"})
+    return res, triage_calls
+
+
+def _TriageStub():
+    """The real verdict type, so the routing that follows behaves normally.
+
+    ESCALATE is the neutral outcome — it neither expands scope nor reverts
+    files, which keeps these tests focused on whether triage ran at all.
+    """
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    return ScopeTriageVerdict(action="ESCALATE", justification="stub")
+
+
+def test_flood_guard_ignores_edits_to_pre_existing_files(monkeypatch):
+    """A wide refactor is not an artifact flood.
+
+    Removing a cross-cutting setting touches its schema, docs, CLI and every
+    call site — 79 files on the ticket that exposed this. Every one already
+    existed on origin/main, so none of them is flood evidence.
+    """
+    changed = [f"src/mod_{i}.py" for i in range(40)]
+    res, triage_calls = _flood_case(monkeypatch, changed=changed, pre_existing=changed)
+    assert "flood guard" not in (res.outcome.note or "" if res.outcome else "")
+    assert triage_calls, "triage must run for a legitimate wide refactor"
+
+
+def test_flood_guard_still_fires_on_newly_added_files(monkeypatch):
+    """A real flood is new paths the branch introduced."""
+    changed = [f"node_modules/pkg/file_{i}.js" for i in range(40)]
+    res, _ = _flood_case(monkeypatch, changed=changed, pre_existing=["src/app.py"])
+    assert res.action == "return"
+    assert res.outcome.next_state is State.BLOCKED
+    assert "NEWLY ADDED" in res.outcome.note
+
+
+def test_flood_guard_message_reports_both_counts(monkeypatch):
+    """The note must say how many were new vs how many were out of scope at
+    all — otherwise the operator cannot tell which case they are looking at."""
+    changed = [f"gen/new_{i}.py" for i in range(10)] + [
+        f"src/old_{i}.py" for i in range(10)
+    ]
+    res, _ = _flood_case(
+        monkeypatch,
+        changed=changed,
+        pre_existing=[f"src/old_{i}.py" for i in range(10)],
+    )
+    assert "10 NEWLY ADDED" in res.outcome.note
+    assert "20 out-of-scope files total" in res.outcome.note
+
+
+def test_flood_guard_hard_ceiling_fires_on_pre_existing_files(monkeypatch):
+    """The prompt-overflow protection survives: a refactor big enough to
+    swamp the triage prompt still stops, just at a far higher threshold."""
+    changed = [f"src/mod_{i}.py" for i in range(30)]
+    res, _ = _flood_case(
+        monkeypatch,
+        changed=changed,
+        pre_existing=changed,
+        scope_triage_hard_max_files=10,
+    )
+    assert res.action == "return"
+    assert res.outcome.next_state is State.BLOCKED
+    assert "hard ceiling" in res.outcome.note
+
+
+def test_flood_guard_counts_everything_when_ls_tree_fails(monkeypatch):
+    """An empty tracked set means 'unknown', not 'nothing is tracked'.
+
+    Treating a git failure as 'no files pre-existed' would be fine here, but
+    treating it as 'everything pre-existed' would silently disarm the guard.
+    """
+    changed = [f"src/mod_{i}.py" for i in range(40)]
+    res, _ = _flood_case(monkeypatch, changed=changed, pre_existing=[])
+    assert res.action == "return"
+    assert res.outcome.next_state is State.BLOCKED
 
 
 # ---------------------------------------------------------------------------
@@ -869,7 +978,11 @@ def test_scope_guardrail_vendored_dep_flood_skips_guard(monkeypatch):
         "summary",
         None,
         {"in_scope.py"},
-        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=2),
+        SimpleNamespace(
+            scope_triage_enabled=True,
+            scope_triage_max_files=2,
+            scope_triage_hard_max_files=0,
+        ),
         "spec",
         None,
     )
@@ -917,7 +1030,11 @@ def test_scope_guardrail_genuine_flood_still_blocks(monkeypatch):
         "summary",
         None,
         {"in_scope.py"},
-        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=10),
+        SimpleNamespace(
+            scope_triage_enabled=True,
+            scope_triage_max_files=10,
+            scope_triage_hard_max_files=0,
+        ),
         "spec",
         None,
     )
@@ -961,7 +1078,11 @@ def test_scope_guardrail_vendored_dirs_logged(monkeypatch, caplog):
         "summary",
         None,
         {"in_scope.py"},
-        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=0),
+        SimpleNamespace(
+            scope_triage_enabled=True,
+            scope_triage_max_files=0,
+            scope_triage_hard_max_files=0,
+        ),
         "spec",
         None,
     )
@@ -1047,12 +1168,19 @@ def test_scope_guardrail_standard_config_auto_reverted(monkeypatch):
         "summary",
         None,
         {"in_scope.py"},
-        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=10),
+        SimpleNamespace(
+            scope_triage_enabled=True,
+            scope_triage_max_files=10,
+            scope_triage_hard_max_files=0,
+        ),
         "spec",
         None,
     )
 
     # Verify git checkout was called for both standard config files.
+    # The recorder sees every git invocation, so filter to checkouts — the
+    # guard also runs an ls-tree to tell new files from pre-existing ones.
+    checkout_calls = [a for a in checkout_calls if "checkout" in a]
     assert len(checkout_calls) == 2
     # args: ["git", "-C", "/repo", "checkout", "origin/main", "--", "<path>"]
     checked_out = {args[6] for args in checkout_calls}
@@ -1100,7 +1228,11 @@ def test_scope_guardrail_standard_config_all_reverted_skips_guard(monkeypatch):
         "summary",
         None,
         {"in_scope.py"},
-        SimpleNamespace(scope_triage_enabled=True, scope_triage_max_files=10),
+        SimpleNamespace(
+            scope_triage_enabled=True,
+            scope_triage_max_files=10,
+            scope_triage_hard_max_files=0,
+        ),
         "spec",
         None,
     )

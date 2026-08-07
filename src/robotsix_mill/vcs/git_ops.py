@@ -1111,6 +1111,24 @@ def changed_source_files(
     return [line for line in out.split("\n") if line] if out else []
 
 
+def tracked_paths_at(repo: Path, ref: str) -> set[str]:
+    """Every path tracked at *ref*, as repo-relative strings.
+
+    One ``ls-tree`` for the whole tree rather than a probe per path: callers
+    ask about hundreds or thousands of files at once, and a subprocess each
+    would cost more than the question is worth.
+
+    Returns an empty set on any git failure. Callers must treat "empty" as
+    "unknown", never as "nothing is tracked" — the latter would invert every
+    membership test built on it.
+    """
+    try:
+        out = _git(repo, "ls-tree", "-r", "--name-only", ref)
+    except subprocess.CalledProcessError:
+        return set()
+    return {line for line in out.split("\n") if line} if out else set()
+
+
 def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str]:
     """Map each of *paths* to its blob object id at *ref*.
 

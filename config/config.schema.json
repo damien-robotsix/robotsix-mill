@@ -2704,6 +2704,14 @@
           "title": "Scanner Rollup",
           "type": "boolean"
         },
+        "scope_triage_hard_max_files": {
+          "advanced": true,
+          "default": 500,
+          "description": "Absolute cap on out-of-scope text files before the scope-triage LLM is skipped, regardless of whether they are newly added.",
+          "minimum": 0,
+          "title": "Scope Triage Hard Max Files",
+          "type": "integer"
+        },
         "shutdown_grace_seconds": {
           "advanced": true,
           "default": 1800,

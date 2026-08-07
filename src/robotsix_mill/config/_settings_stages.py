@@ -588,6 +588,22 @@ class _StagesSettings(BaseModel):
     # artifact flood: skip the scope-triage LLM entirely (its prompt would
     # balloon to thousands of diff summaries) and block deterministically for
     # human review. Default 50 leaves normal PRs untouched. 0 disables.
+    # Absolute ceiling on out-of-scope text files, counted WITHOUT the
+    # newly-added filter that ``scope_triage_max_files`` applies. That filter
+    # exists so a wide refactor is not mistaken for an artifact flood, but the
+    # original cap also protected the scope-triage prompt from overflowing,
+    # and that protection still has to live somewhere. Set well above any
+    # plausible hand-written change: a refactor touching 500+ files is worth
+    # stopping on its own merits. 0 disables the ceiling.
+    scope_triage_hard_max_files: int = Field(
+        default=500,
+        ge=0,
+        description=(
+            "Absolute cap on out-of-scope text files before the scope-triage "
+            "LLM is skipped, regardless of whether they are newly added."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     scope_triage_max_files: int = Field(
         description="Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
         default=50,

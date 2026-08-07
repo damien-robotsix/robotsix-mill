@@ -387,7 +387,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `16` | Per-call request cap for the web-research sub-agent |
 | `core.limits.dedup_requests` | `MILL_DEDUP_REQUEST_LIMIT` | `12` | Per-call request cap for the dedup check |
 | `core.limits.obsolescence_requests` | `MILL_OBSOLESCENCE_REQUEST_LIMIT` | `6` | Per-call request cap for the obsolescence gate |
-| `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max out-of-scope text files before the scope-triage flood guard blocks (0 disables) |
+| `core.limits.scope_triage_max_files` | `MILL_SCOPE_TRIAGE_MAX_FILES` | `50` | Max NEWLY ADDED out-of-scope text files before the scope-triage flood guard blocks. Edits to files that already exist on the target branch are not counted — a wide refactor is not an artifact flood (0 disables) |
+| `core.limits.scope_triage_hard_max_files` | `MILL_SCOPE_TRIAGE_HARD_MAX_FILES` | `500` | Absolute cap on out-of-scope text files, counted regardless of whether they are newly added. Protects the scope-triage prompt from overflowing (0 disables) |
 | `core.limits.refine_requests` | `MILL_REFINE_REQUEST_LIMIT` | `80` | Per-call request cap for the refine agent |
 | `core.limits.refine_requests_simple` | `MILL_REFINE_REQUEST_LIMIT_SIMPLE` | `40` | Per-call request cap for simple/sonnet refine runs (lower because explore tools are gated off) |
 | `core.limits.refine_max_tool_calls` | `MILL_REFINE_MAX_TOOL_CALLS` | `120` | (config-file-only) Hard cap on total tool calls per refine trace (runaway-loop backstop) |

@@ -208,22 +208,58 @@ class ValidationMixin(_ImplementStageBase):
         # the disabled path (which also joins the whole list) can't flood.
         # Non-destructive — files are left for human inspection (matches
         # the ESCALATE path).
+        # Count only files this branch INTRODUCED. A build-artifact flood is
+        # thousands of new paths (node_modules/, dist/, generated sources); a
+        # wide refactor is edits to files that already existed. Counting both
+        # alike made the guard reject exactly the changes that are most
+        # tedious to do by hand — live on 2026-08-07 it blocked a
+        # default-account removal touching 79 files (config schema, docs, CLI,
+        # every call site) and a mypy-gate promotion touching 71, both
+        # correctly scoped and neither containing a single artifact.
+        #
+        # The prompt-size concern that motivated the cap is kept as a separate,
+        # much higher ceiling below: a refactor big enough to overflow the
+        # triage prompt is still worth stopping, just not at 50 files.
+        pre_existing = git_ops.tracked_paths_at(repo_dir, f"origin/{target}")
+        # An empty set means ls-tree failed, not that the tree is empty —
+        # fall back to counting everything rather than silently disarming.
+        introduced = (
+            [f for f in out_of_scope if f not in pre_existing]
+            if pre_existing
+            else list(out_of_scope)
+        )
+        flood_count = len(introduced)
+        hard_ceiling = settings.scope_triage_hard_max_files
+        over_ceiling = bool(hard_ceiling) and len(out_of_scope) > hard_ceiling
         if (
             settings.scope_triage_max_files
-            and len(out_of_scope) > settings.scope_triage_max_files
-        ):
-            ordered = sorted(out_of_scope)
+            and flood_count > settings.scope_triage_max_files
+        ) or over_ceiling:
+            counted = out_of_scope if over_ceiling else introduced
+            ordered = sorted(counted)
             sample = ordered[:_FLOOD_SAMPLE_SIZE]
             sample_str = ", ".join(f"`{f}`" for f in sample)
             remaining = len(ordered) - len(sample)
             if remaining > 0:
                 sample_str += f", … (+{remaining} more)"
-            message = (
-                f"scope-triage flood guard: {len(out_of_scope)} out-of-scope "
-                f"text file(s) exceed cap of {settings.scope_triage_max_files} "
-                f"— likely a build-artifact flood. Skipped the scope-triage "
-                f"LLM and BLOCKED for human review. Sample: {sample_str}"
-            )
+            if over_ceiling:
+                message = (
+                    f"scope-triage flood guard: {len(out_of_scope)} out-of-scope "
+                    f"text file(s) exceed the hard ceiling of {hard_ceiling} — "
+                    "too many to summarise for the scope-triage LLM without "
+                    "overflowing its context. Skipped the LLM and BLOCKED for "
+                    f"human review. Sample: {sample_str}"
+                )
+            else:
+                message = (
+                    f"scope-triage flood guard: {flood_count} NEWLY ADDED "
+                    f"out-of-scope text file(s) exceed cap of "
+                    f"{settings.scope_triage_max_files} — likely a "
+                    f"build-artifact flood. ({len(out_of_scope)} out-of-scope "
+                    f"files total; the rest already existed on "
+                    f"origin/{target}.) Skipped the scope-triage LLM and "
+                    f"BLOCKED for human review. Sample: {sample_str}"
+                )
             log.warning("%s: %s", ticket.id, message)
             ctx.service.add_step_event(ticket.id, message)
             cls._finalize(
