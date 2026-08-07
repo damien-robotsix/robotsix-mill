@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Settings
 from robotsix_mill.langfuse.client import (
     _cost_cache,
     _langfuse_api_get,
@@ -23,46 +23,40 @@ from robotsix_mill.langfuse.client import (
 
 
 def _langfuse_settings(**overrides):
-    """Return a Settings with tracing enabled via Secrets.
+    """Return a Settings with tracing enabled via the canonical ``langfuse`` block.
 
-    Constructs a Settings and sets the Secrets singleton so that
-    tracing_enabled and the Langfuse API helpers find the credentials.
+    Constructs a Settings whose ``langfuse`` block is populated with a
+    single project so ``tracing_enabled`` is ``True`` and the Langfuse
+    API helpers find credentials.
 
     *overrides* keys may include ``langfuse_base_url``,
     ``langfuse_public_key``, and ``langfuse_secret_key`` to customize
-    the Langfuse credentials (the old ``LANGFUSE_*`` env-var-style
-    keys are mapped automatically).
+    the Langfuse credentials, plus the old ``LANGFUSE_*`` env-var-style
+    keys which are mapped automatically.
     """
+    from robotsix_mill.config.settings import LangfuseProjectCredentials
 
-    # Map old LANGFUSE_* keys to Secrets field names.
-    secrets_kwargs: dict = {}
-    for env_key, field_name in [
-        ("LANGFUSE_BASE_URL", "langfuse_base_url"),
-        ("LANGFUSE_PUBLIC_KEY", "langfuse_public_key"),
-        ("LANGFUSE_SECRET_KEY", "langfuse_secret_key"),
-    ]:
-        if env_key in overrides:
-            secrets_kwargs[field_name] = overrides.pop(env_key)
-
-    # Populate Secrets so get_secrets() returns matching values.
-    import robotsix_mill.config as _cfg
-
-    base_url = secrets_kwargs.get("langfuse_base_url", "https://lf.example.com")
-    public_key = secrets_kwargs.get("langfuse_public_key", "pk-test")
-    secret_key = secrets_kwargs.get("langfuse_secret_key", "sk-test")
-
-    _reset_secrets()
-    _cfg._secrets = Secrets(
-        langfuse_base_url=base_url,
-        langfuse_public_key=public_key,
-        langfuse_secret_key=secret_key,
+    # Map old LANGFUSE_* keys to the canonical names.
+    base_url = overrides.pop("langfuse_base_url", None) or overrides.pop(
+        "LANGFUSE_BASE_URL", "https://lf.example.com"
     )
-    # The config-standard cutover moved these onto Settings itself; the API
-    # helpers read the Settings fields, so populating only the Secrets
-    # singleton left them unset and every call bailed out returning None.
-    overrides.setdefault("langfuse_base_url", base_url)
-    overrides.setdefault("langfuse_public_key", public_key)
-    overrides.setdefault("langfuse_secret_key", secret_key)
+    public_key = overrides.pop("langfuse_public_key", None) or overrides.pop(
+        "LANGFUSE_PUBLIC_KEY", "pk-test"
+    )
+    secret_key = overrides.pop("langfuse_secret_key", None) or overrides.pop(
+        "LANGFUSE_SECRET_KEY", "sk-test"
+    )
+
+    overrides["langfuse"] = {
+        "host": base_url,
+        "projects": {
+            "robotsix-mill": LangfuseProjectCredentials(
+                public_key=public_key,
+                secret_key=secret_key,
+                project_id="",
+            )
+        },
+    }
     return Settings(**overrides)
 
 

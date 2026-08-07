@@ -76,7 +76,7 @@ def _compute_diff(
 def build_schema() -> dict:
     from robotsix_mill.config.repos import ReposRegistry
     from robotsix_mill.config.secrets import Secrets
-    from robotsix_mill.config.settings import Settings
+    from robotsix_mill.config.settings import LangfuseConfig, Settings
 
     root_defs: dict = {}
 
@@ -97,12 +97,16 @@ def build_schema() -> dict:
         prop["format"] = "password"
         prop["writeOnly"] = True
 
+    langfuse_schema = LangfuseConfig.model_json_schema()
+    _hoist_defs(langfuse_schema, root_defs)
+
     result: dict = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Mill Configuration",
         "type": "object",
         "properties": {
             "settings": settings_schema,
+            "langfuse": langfuse_schema,
             "secrets": secrets_schema,
             "repos": repos_schema,
         },

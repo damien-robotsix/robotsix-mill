@@ -23,9 +23,35 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from datetime import datetime, timezone
 from typing import Any, Iterator
 
-from ..config import RepoConfig, get_secrets
+from ..config import RepoConfig
 
 log = logging.getLogger(__name__)
+
+
+def _resolve_mill_langfuse() -> tuple[str, str, str, str, str] | None:
+    """Return ``(host, public_key, secret_key, project_id, project_name)``
+    from the canonical ``langfuse`` config block, or ``None`` when
+    Langfuse is not configured for mill's own project.
+    """
+    from ..config.loader import _resolve_main_config_path, _load_file
+    from ..config.settings import LangfuseConfig
+
+    main_path = _resolve_main_config_path()
+    if main_path is None:
+        return None
+    data = _load_file(main_path)
+    langfuse_raw = data.get("langfuse")
+    if not isinstance(langfuse_raw, dict):
+        return None
+    try:
+        lf = LangfuseConfig.model_validate(langfuse_raw)
+    except Exception:
+        return None
+    if not lf.projects:
+        return None
+    name, proj = next(iter(lf.projects.items()))
+    return (lf.host, proj.public_key, proj.secret_key, proj.project_id, name)
+
 
 # Readiness flag, derived from llmio's ``setup_langfuse_tracing`` return.
 # Flipped to True once tracing has been configured for at least one
@@ -168,9 +194,12 @@ def _build_langfuse_url(
             repo_config.langfuse_project_id or repo_config.langfuse_project_name
         )
     else:
-        secrets = get_secrets()
-        base = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip("/")
-        project_id = secrets.langfuse_project_id or secrets.langfuse_project_name
+        creds = _resolve_mill_langfuse()
+        if creds is None:
+            return None
+        host, _pk, _sk, project_id_from_block, project_name = creds
+        base = (host or "https://cloud.langfuse.com").rstrip("/")
+        project_id = project_id_from_block or project_name
     if entity_id and base and project_id:
         return f"{base}/project/{project_id}/{entity_type}/{entity_id}"
     return None
@@ -198,7 +227,11 @@ def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
     """
     if repo_config is not None:
         return bool(repo_config.langfuse_public_key and repo_config.langfuse_secret_key)
-    return bool(get_secrets().langfuse_public_key and get_secrets().langfuse_secret_key)
+    creds = _resolve_mill_langfuse()
+    if creds is None:
+        return False
+    _host, pk, sk, _pid, _name = creds
+    return bool(pk and sk)
 
 
 def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
@@ -229,12 +262,11 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
         secret_key = repo_config.langfuse_secret_key
         project_name = repo_config.langfuse_project_name
     else:
-        secrets = get_secrets()
-        base_url = (secrets.langfuse_base_url or "https://cloud.langfuse.com").rstrip(
-            "/"
-        )
-        public_key = secrets.langfuse_public_key
-        secret_key = secrets.langfuse_secret_key
+        creds = _resolve_mill_langfuse()
+        if creds is None:
+            return
+        host, public_key, secret_key, _pid, _pname = creds
+        base_url = (host or "https://cloud.langfuse.com").rstrip("/")
         project_name = None
 
     # Already configured for this Langfuse project? Nothing to do.
@@ -509,7 +541,8 @@ def start_ticket_root_span(
     if repo_config is not None and repo_config.langfuse_public_key:
         pk = repo_config.langfuse_public_key
     else:
-        pk = get_secrets().langfuse_public_key or ""
+        creds = _resolve_mill_langfuse()
+        pk = creds[1] if creds else ""
 
     # Repo-qualified Langfuse session id so a single shared project's
     # session list reads clearly (e.g. ``robotsix-llmio · <ticket-id>``).

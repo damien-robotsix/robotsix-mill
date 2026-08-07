@@ -74,15 +74,13 @@ _MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         "github_app_id",
         "github_app_private_key",
         "github_app_private_key_path",
-        "langfuse_base_url",
-        "langfuse_public_key",
-        "langfuse_secret_key",
-        "langfuse_project_id",
-        "langfuse_project_name",
         "openrouter_management_key",
         "ntfy_url",
         "ntfy_token",
         "sandbox_push_token",
+        # -- Langfuse config — canonical block at top-level ``langfuse:``,
+        #    not a flat SecretStr field --
+        "langfuse",
         # -- Repos registry — not a flat setting field --
         "repos",
         # -- Fields with no JSON entry (yet) — listed here so the

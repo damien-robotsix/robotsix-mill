@@ -34,11 +34,6 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "github_app_id",
         "github_app_private_key",
         "github_app_private_key_path",
-        "langfuse_public_key",
-        "langfuse_secret_key",
-        "langfuse_base_url",
-        "langfuse_project_id",
-        "langfuse_project_name",
         "openrouter_management_key",
         "ntfy_url",
         "ntfy_token",
@@ -232,31 +227,6 @@ class Secrets:
     def github_app_private_key_path(self) -> str | None:
         """Return the GitHub App private key path."""
         return self._github_app_private_key_path  # type: ignore[no-any-return]
-
-    @property
-    def langfuse_public_key(self) -> str | None:
-        """Return the Langfuse public key."""
-        return self._langfuse_public_key  # type: ignore[no-any-return]
-
-    @property
-    def langfuse_secret_key(self) -> str | None:
-        """Return the Langfuse secret key."""
-        return self._langfuse_secret_key  # type: ignore[no-any-return]
-
-    @property
-    def langfuse_base_url(self) -> str | None:
-        """Return the Langfuse base URL."""
-        return self._langfuse_base_url  # type: ignore[no-any-return]
-
-    @property
-    def langfuse_project_id(self) -> str | None:
-        """Return the Langfuse project ID."""
-        return self._langfuse_project_id  # type: ignore[no-any-return]
-
-    @property
-    def langfuse_project_name(self) -> str | None:
-        """Return the Langfuse project name."""
-        return self._langfuse_project_name  # type: ignore[no-any-return]
 
     @property
     def openrouter_management_key(self) -> str | None:

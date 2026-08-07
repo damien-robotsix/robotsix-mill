@@ -72,9 +72,20 @@ def load_settings_block() -> dict[str, Any]:
     data = _load_file(main_path)
     block = data.get("settings")
     if isinstance(block, dict):
-        return dict(block)
-    # Flat file: everything except the sibling blocks is a setting.
-    return {k: v for k, v in data.items() if k not in ("secrets", "repos", "core")}
+        block = dict(block)
+    else:
+        # Flat file: everything except the sibling blocks is a setting.
+        block = {
+            k: v
+            for k, v in data.items()
+            if k not in ("secrets", "repos", "core", "langfuse")
+        }
+    # Lift the top-level langfuse block into settings so
+    # Settings.langfuse is populated from the canonical top-level key
+    # (robotsix-standards#189).
+    if "langfuse" in data and isinstance(data["langfuse"], dict):
+        block["langfuse"] = data["langfuse"]
+    return block
 
 
 def load_secrets_block() -> dict[str, Any]:

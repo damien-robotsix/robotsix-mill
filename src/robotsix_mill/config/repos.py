@@ -406,23 +406,36 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
 
 
 def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
-    """Populate every repo and the meta board from the global Langfuse
-    credentials in the config.yaml ``secrets:`` block (``Secrets.langfuse_*``) — the one place
-    Langfuse is configured.
+    """Populate every repo and the meta board from the canonical ``langfuse``
+    config block (top-level ``langfuse:`` key, robotsix-standards#189).
 
     Returns the meta-board ``RepoConfig`` (or ``None`` when the credentials
     are absent / incomplete, i.e. observability is off). There is no per-repo
     Langfuse configuration.
     """
-    from .secrets import get_secrets
+    from .loader import _resolve_main_config_path, _load_file
+    from .settings import LangfuseConfig
 
-    s = get_secrets()
-    pk, sk = s.langfuse_public_key, s.langfuse_secret_key
+    main_path = _resolve_main_config_path()
+    if main_path is None:
+        return None
+    data = _load_file(main_path)
+    langfuse_raw = data.get("langfuse")
+    if not isinstance(langfuse_raw, dict):
+        return None
+    try:
+        lf = LangfuseConfig.model_validate(langfuse_raw)
+    except Exception:
+        return None
+    if not lf.projects:
+        return None
+    name, proj = next(iter(lf.projects.items()))
+    pk, sk = proj.public_key, proj.secret_key
     if not (pk and sk):
         return None
-    project_name = s.langfuse_project_name or s.langfuse_project_id or ""
-    project_id = s.langfuse_project_id or ""
-    base_url = s.langfuse_base_url or "https://cloud.langfuse.com"
+    project_name = name
+    project_id = proj.project_id
+    base_url = lf.host or "https://cloud.langfuse.com"
     lf_fields = {
         "langfuse_project_name": project_name,
         "langfuse_project_id": project_id,
