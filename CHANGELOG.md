@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Fix unbounded no-op CI refresh commits in `ci_fix_mixin`: pass a sentinel path to `_refresh_branch_for_ci` so that a ticket bouncing BLOCKED→resume pushes at most one empty commit per branch head, mirroring the bound already in `ci_poll`. Remove the dead `_CI_EMPTY_COMMIT_COUNTER` / `_MAX_CI_EMPTY_COMMIT_REFRESHES` constants.
 - The fixing_ci/implement cycle ceiling no longer counts transient CI
   failures (runner crashes, network resets, Docker flakes, auth outages)
   against the auto-fix budget.  A green PR on a fast-moving base branch
