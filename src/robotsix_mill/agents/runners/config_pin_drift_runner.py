@@ -63,11 +63,6 @@ class PinDriftResult:
     drifted: list[PinDrift] = field(default_factory=list)
     baselined: int = 0
 
-    @property
-    def new_drift(self) -> list[PinDrift]:
-        """Drift not covered by the baseline — the reportable part."""
-        return self.drifted
-
 
 def _settings_pins() -> dict[str, Any]:
     """Return the ``settings`` block of the operator's config file.
