@@ -313,7 +313,7 @@ def run_coordinator(
     from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
-    from .changelog_tool import make_insert_changelog_entry_tool
+    from .changelog_tool import make_add_changelog_fragment_tool
     from .verify_diff_tool import make_verify_diff_tool
 
     definition = load_agent_definition(agent_definitions_dir() / "implement.yaml")
@@ -411,7 +411,7 @@ def run_coordinator(
         make_consult_expert_tool(settings, repo_dir, board_id=board_id),
         make_spawn_subtask_tool(settings, repo_dir),
         make_post_comment_tool(settings, agent_name="implement"),
-        make_insert_changelog_entry_tool(repo_dir),
+        make_add_changelog_fragment_tool(repo_dir, current_ticket_id),
         make_verify_diff_tool(repo_dir),
         *fs_tools,
     ]

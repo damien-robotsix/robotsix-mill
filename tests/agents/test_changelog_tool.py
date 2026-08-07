@@ -145,3 +145,92 @@ def test_preserves_all_prior_entries(tmp_path: Path):
     # Every prior entry survives intact
     for entry_text in prior_entries:
         assert entry_text in content, f"Missing prior entry: {entry_text!r}"
+
+
+# ===========================================================================
+# add_changelog_fragment — the standard-conforming replacement
+# ===========================================================================
+
+
+class TestAddChangelogFragment:
+    """One file per ticket, so parallel PRs never touch a shared region.
+
+    ``insert_changelog_entry`` wrote every ticket's entry to the same spot in
+    CHANGELOG.md, which made any two open PRs conflict pairwise.
+    """
+
+    def _pyproject(self, tmp_path, directory="changelog.d", types=("bugfix", "misc")):
+        blocks = "\n".join(
+            f'  [[tool.towncrier.type]]\n  directory = "{t}"\n' for t in types
+        )
+        (tmp_path / "pyproject.toml").write_text(
+            f'[tool.towncrier]\ndirectory = "{directory}"\n\n{blocks}',
+            encoding="utf-8",
+        )
+
+    def test_writes_a_file_named_for_the_ticket(self, tmp_path):
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path)
+        result = _add_changelog_fragment(
+            tmp_path, "20260807T120000Z-x-1a2b", "bugfix", "Fixed a thing."
+        )
+        written = tmp_path / "changelog.d" / "20260807T120000Z-x-1a2b.bugfix.md"
+        assert written.read_text(encoding="utf-8") == "Fixed a thing.\n"
+        assert "20260807T120000Z-x-1a2b.bugfix.md" in result
+
+    def test_two_tickets_never_collide(self, tmp_path):
+        """The whole point: distinct tickets produce distinct files."""
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path)
+        _add_changelog_fragment(tmp_path, "ticket-a", "bugfix", "A.")
+        _add_changelog_fragment(tmp_path, "ticket-b", "bugfix", "B.")
+        names = sorted(p.name for p in (tmp_path / "changelog.d").iterdir())
+        assert names == ["ticket-a.bugfix.md", "ticket-b.bugfix.md"]
+
+    def test_honours_a_repo_specific_directory(self, tmp_path):
+        """auto-mail uses `changelog/`, not `changelog.d/`."""
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path, directory="changelog")
+        _add_changelog_fragment(tmp_path, "t", "misc", "Entry.")
+        assert (tmp_path / "changelog" / "t.misc.md").exists()
+
+    def test_rejects_a_kind_the_repo_does_not_configure(self, tmp_path):
+        """A wrong extension is silently skipped by towncrier build, so the
+        entry would vanish with no error — fail loudly instead."""
+        import pytest
+
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path, types=("feat", "fix"))  # llmio's naming
+        with pytest.raises(ValueError, match="not configured"):
+            _add_changelog_fragment(tmp_path, "t", "bugfix", "Entry.")
+
+    def test_rejects_an_empty_summary(self, tmp_path):
+        import pytest
+
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path)
+        with pytest.raises(ValueError, match="must not be empty"):
+            _add_changelog_fragment(tmp_path, "t", "misc", "   ")
+
+    def test_falls_back_when_pyproject_is_missing(self, tmp_path):
+        """Best-effort beats recording nothing."""
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        _add_changelog_fragment(tmp_path, "t", "misc", "Entry.")
+        assert (tmp_path / "changelog.d" / "t.misc.md").exists()
+
+    def test_does_not_touch_changelog_md(self, tmp_path):
+        """The regression guard: CHANGELOG.md must be left alone entirely."""
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path)
+        changelog = tmp_path / "CHANGELOG.md"
+        changelog.write_text("## 0.0.0 (unreleased)\n\n- existing\n", encoding="utf-8")
+        before = changelog.read_text(encoding="utf-8")
+        _add_changelog_fragment(tmp_path, "t", "misc", "Entry.")
+        assert changelog.read_text(encoding="utf-8") == before
