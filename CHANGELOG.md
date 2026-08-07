@@ -1,5 +1,12 @@
 ## 0.0.0 (unreleased)
 
+- Tighten the implement agent's prompt around external-dependency tickets:
+  add a pre-flight existence check for the target manifest file (emit
+  `no_change_needed` early when the file is absent), require the agent
+  to declare and validate the before→after version against local git
+  tags before editing, treat unverified web results as terminal, and
+  enforce one-edit convergence so investigation can't consume the full
+  run budget on a single-line change.
 - Strengthen `run_command` tool docstring to explicitly forbid prefixing commands with ``cd`` to any absolute path (the sandbox already sets the working directory), preventing agents from hallucinating workspace-root ``cd`` prefixes that waste ~160 s on doomed calls.
 - Implement stage: when `github_token()` fails permanently (e.g. missing
   credentials, App not installed), clone failures now skip the transient-retry
