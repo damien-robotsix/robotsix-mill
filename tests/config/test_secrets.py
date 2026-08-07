@@ -79,33 +79,6 @@ def test_repr_redacts_all_fields():
 
 
 # ===========================================================================
-#  model_dump redaction
-# ===========================================================================
-
-
-def test_model_dump_redacted():
-    """model_dump(redact=True) returns '***' for every field."""
-    s = Secrets(openrouter_api_key="sk-abc", forge_token="ghp-xyz")
-    d = s.model_dump(redact=True)
-    assert d == dict.fromkeys(Secrets.model_fields, "***")
-
-
-def test_model_dump_raw():
-    """model_dump(redact=False) returns the real values."""
-    s = Secrets(openrouter_api_key="sk-raw")
-    d = s.model_dump(redact=False)
-    assert d["openrouter_api_key"] == "sk-raw"
-    assert d["forge_token"] is None
-
-
-def test_model_dump_default_is_redacted():
-    """model_dump() without args redacts (default redact=True)."""
-    s = Secrets(openrouter_api_key="sk-default")
-    d = s.model_dump()
-    assert d["openrouter_api_key"] == "***"
-
-
-# ===========================================================================
 #  __getattribute__ debug logging
 # ===========================================================================
 
@@ -139,14 +112,6 @@ def test_getattribute_no_log_for_model_fields(caplog):
             warnings.simplefilter("ignore")
             _ = s.model_fields
     assert "Secrets.model_fields accessed by" not in caplog.text
-
-
-def test_getattribute_no_log_for_model_dump(caplog):
-    """Accessing model_dump (a special name) is NOT logged."""
-    s = Secrets()
-    with caplog.at_level(logging.DEBUG, logger="robotsix_mill.config.secrets"):
-        _ = s.model_dump
-    assert "Secrets.model_dump accessed by" not in caplog.text
 
 
 def test_getattribute_no_log_for_private_attr(caplog):

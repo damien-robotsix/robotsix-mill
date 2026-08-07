@@ -391,7 +391,7 @@ class Secrets(BaseModel):
   custom `__getattribute__` or Pydantic validator, providing an audit trail
   of which module accessed which secret.
 - Secrets are never serialized in logs, traces, or error messages.  The
-  `Secrets` model's `__repr__` and `model_dump` redact all values.
+  `Secrets` model's `__repr__` redacts all values.
 
 ### 5.3 Migration from secrets.env
 
