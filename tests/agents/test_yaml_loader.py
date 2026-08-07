@@ -422,9 +422,7 @@ def test_no_agent_definition_sets_max_tokens():
     if not definitions:
         pytest.skip("agent_definitions/ not found")
 
-    offenders = [
-        p.name for p in definitions if "\nmax_tokens:" in "\n" + p.read_text()
-    ]
+    offenders = [p.name for p in definitions if "\nmax_tokens:" in "\n" + p.read_text()]
     assert offenders == [], (
         f"agent definitions set max_tokens: {offenders}. It cannot be enforced "
         "on the Claude SDK transport and becomes a self-defeating advisory "
