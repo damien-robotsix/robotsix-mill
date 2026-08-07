@@ -489,12 +489,15 @@ def build_agent(
             )
         )
     if read_ticket:
-        # Read-only tool so periodic agents can fetch full context of a
+        # Read-only tools so periodic agents can fetch full context of a
         # past proposal when the one-line summary in <recent_proposals>
-        # isn't enough. Only injected when explicitly requested.
-        from .read_ticket import make_read_ticket_tool
+        # isn't enough, and can enumerate recent tickets when the
+        # injected block is empty/stale. Only injected when explicitly
+        # requested.
+        from .read_ticket import make_list_recent_tickets_tool, make_read_ticket_tool
 
         all_tools.append(make_read_ticket_tool(settings))
+        all_tools.append(make_list_recent_tickets_tool(settings))
     if list_epic_children and current_ticket_id:
         # Read-only tool so an agent can enumerate its sibling epic
         # children (children of its parent epic) when it needs the

@@ -15,6 +15,7 @@ closure has no access to write methods.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from ..config import Settings
 
@@ -169,3 +170,78 @@ def make_read_ticket_tool(settings: Settings):
     )
 
     return read_ticket
+
+
+def make_list_recent_tickets_tool(settings: Settings) -> Callable[..., str]:
+    """Return the ``list_recent_tickets`` closure bound to *settings*.
+
+    Lazily constructs a ``TicketService`` per call.  Returns the same
+    ``[STATE] id | title`` format as the prompt-injected
+    ``<recent_proposals>`` block so agents have a programmatic
+    enumeration path when that block is empty or stale.
+
+    Args:
+        settings: The application settings instance.
+    """
+
+    def list_recent_tickets(source: str = "", limit: int = 100) -> str:
+        """List recent tickets, optionally filtered by source kind.
+
+        Read-only — cannot modify tickets in any way.
+        source: The ticket source kind to filter by (e.g. 'triage_boilerplate',
+                'audit', 'retrospect').  Pass an empty string to list tickets
+                across ALL sources.
+        limit: Maximum number of tickets to return (default 100).
+        Returns ``[STATE] id | title`` lines, one per ticket, or a clear
+        status message when no tickets match.
+        """
+        source = (source or "").strip()
+
+        try:
+            from ..core.models import SourceKind
+            from ..core.service import TicketService
+
+            service = TicketService(settings)
+
+            if source:
+                # Match case-insensitively against SourceKind members.
+                source_lower = source.lower()
+                matched = None
+                for member in SourceKind:
+                    if member.value.lower() == source_lower:
+                        matched = member
+                        break
+                if matched is None:
+                    valid = ", ".join(sorted(m.value for m in SourceKind))
+                    return (
+                        f"list_recent_tickets: unknown source '{source}'. "
+                        f"Valid sources: {valid}"
+                    )
+                tickets = service.recent_proposals_for(matched, limit=limit)
+            else:
+                tickets = service.recent_tickets(limit=limit)
+
+            if not tickets:
+                return "[STATE] id | title\n(no recent tickets)"
+
+            lines = ["[STATE] id | title"]
+            for t in tickets:  # type: ignore[attr-defined]  # mypy can't resolve _QueryMixin return types through local import
+                state_val = t.state.value
+                lines.append(f"[{state_val}] {t.id} | {t.title}")
+            return "\n".join(lines)
+
+        except Exception as e:
+            return f"list_recent_tickets: error listing tickets ({e!r})"
+
+    from .tool_registry import ToolInfo, ToolRegistry
+
+    ToolRegistry.register(
+        ToolInfo(
+            name="list_recent_tickets",
+            description="List recent tickets, optionally filtered by source kind. Returns [STATE] id | title lines.",
+            category="reporting",
+            parameters={"source": "str", "limit": "int"},
+        )
+    )
+
+    return list_recent_tickets
