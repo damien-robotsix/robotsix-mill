@@ -69,13 +69,13 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["model"] == "deepseek/deepseek-v4-pro"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
+        "add_changelog_fragment",
         "ask_user",
         "ask_web_knowledge",
         "consult_expert",
         "delete_file",
         "edit_file",
         "explore",
-        "insert_changelog_entry",
         "list_dir",
         "list_recent_tickets",
         "list_threads",

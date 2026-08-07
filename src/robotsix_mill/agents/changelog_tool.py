@@ -1,8 +1,13 @@
-"""A ``insert_changelog_entry`` tool that inserts a new bullet entry
-under ``## 0.0.0 (unreleased)`` in CHANGELOG.md without severing
-continuation lines from the existing top entry.
+"""Changelog helpers for the implement agent.
 
-The tool handles:
+The agent-facing tool is ``add_changelog_fragment`` (below), which writes a
+towncrier fragment — one file per ticket, so parallel PRs never conflict.
+
+``_insert_changelog_entry`` remains as an internal helper for the
+``changelog_autofill`` runner, which repairs CHANGELOG.md on the default
+branch rather than on PR branches and so generates no conflicts. It inserts a
+bullet under ``## 0.0.0 (unreleased)`` without severing continuation lines
+from the existing top entry, handling:
 - Non-existent CHANGELOG.md → creates it with header + entry.
 - Empty section (no bullets yet) → appends entry after header.
 - Single-line top entry → inserts new entry above it.
@@ -78,44 +83,142 @@ def _insert_changelog_entry(repo_dir: Path, entry_text: str) -> str:
     return "changelog_insert: inserted entry before existing top entry"
 
 
-def make_insert_changelog_entry_tool(repo_dir: Path) -> Callable[[str], str]:
-    """Return the ``insert_changelog_entry`` closure bound to *repo_dir*.
+# ---------------------------------------------------------------------------
+# Fragment writer — the fleet standard's actual mechanism
+# ---------------------------------------------------------------------------
+#
+# ``insert_changelog_entry`` above edits CHANGELOG.md in place, under a single
+# ``## 0.0.0 (unreleased)`` header. Every ticket therefore inserts at the SAME
+# line, so any two open PRs conflict pairwise — a combinatorial problem that
+# grows with how many PRs are in flight, and one ``gh pr update-branch`` cannot
+# resolve because both sides changed the same region.
+#
+# The robotsix stack standard (docs/changelog-driven-releases.md, rule 3) says
+# CHANGELOG.md is written only by the release workflow, from per-PR fragments
+# under the towncrier directory — precisely so parallel PRs never touch a
+# shared file. It allows one exception for a programmatic tool fixing a bug in
+# CHANGELOG.md itself, with the explicit caveat that such a tool "must not
+# become a general-purpose changelog writer". That is what happened here.
+#
+# This tool is the standard-conforming replacement: one new file per ticket,
+# named for the ticket, so two tickets can never collide.
 
-    The returned function is synchronous (file I/O only) so it works
-    with both sync and async pydantic-ai tool dispatch.
+_DEFAULT_FRAGMENT_DIR = "changelog.d"
+_DEFAULT_TYPES = ("feature", "bugfix", "doc", "removal", "misc")
+
+
+def _towncrier_config(repo_dir: Path) -> tuple[str, tuple[str, ...]]:
+    """Return ``(fragment_dir, valid_types)`` from the repo's own pyproject.
+
+    Read per-repo rather than hardcoded because the fleet is not uniform:
+    auto-mail keeps fragments in ``changelog/`` while everything else uses
+    ``changelog.d/``, and llmio names its types ``feat``/``fix`` where the
+    others use ``feature``/``bugfix``. Writing a fragment with the wrong
+    extension is silently ignored by ``towncrier build``, so guessing here
+    would drop the entry with no error.
+
+    Falls back to the common defaults when pyproject is missing or
+    unparseable — a best-effort fragment beats refusing to record anything.
     """
+    import tomllib
 
-    def insert_changelog_entry(entry_text: str) -> str:
-        """Insert a new bullet entry at the top of the ``## 0.0.0
-        (unreleased)`` section in CHANGELOG.md.
+    pyproject = repo_dir / "pyproject.toml"
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except OSError, tomllib.TOMLDecodeError:
+        return _DEFAULT_FRAGMENT_DIR, _DEFAULT_TYPES
 
-        Handles multi-line continuation correctly — continuation lines
-        (indented with 2 spaces) stay attached to their parent bullet.
+    section = data.get("tool", {}).get("towncrier", {})
+    if not isinstance(section, dict):
+        return _DEFAULT_FRAGMENT_DIR, _DEFAULT_TYPES
+
+    directory = section.get("directory")
+    fragment_dir = (
+        directory if isinstance(directory, str) and directory else _DEFAULT_FRAGMENT_DIR
+    )
+
+    types_raw = section.get("type")
+    types: list[str] = []
+    if isinstance(types_raw, list):
+        for entry in types_raw:
+            if isinstance(entry, dict):
+                name = entry.get("directory")
+                if isinstance(name, str) and name:
+                    types.append(name)
+    return fragment_dir, tuple(types) if types else _DEFAULT_TYPES
+
+
+def _slugify_ticket(ticket_id: str) -> str:
+    """Filesystem-safe stem for a fragment file."""
+    safe = "".join(c if (c.isalnum() or c in "-_") else "-" for c in ticket_id)
+    return safe.strip("-") or "entry"
+
+
+def _add_changelog_fragment(
+    repo_dir: Path, ticket_id: str, kind: str, summary: str
+) -> str:
+    """Write ``<fragment_dir>/<ticket_id>.<kind>.md`` containing *summary*."""
+    summary = summary.strip()
+    if not summary:
+        raise ValueError("changelog_fragment: summary must not be empty")
+
+    fragment_dir, valid_types = _towncrier_config(repo_dir)
+    if kind not in valid_types:
+        raise ValueError(
+            f"changelog_fragment: kind {kind!r} is not configured for this repo. "
+            f"Valid kinds: {', '.join(valid_types)}. "
+            "A fragment with an unconfigured extension is silently skipped by "
+            "towncrier build, so the entry would be lost."
+        )
+
+    target_dir = repo_dir / fragment_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / f"{_slugify_ticket(ticket_id)}.{kind}.md"
+    path.write_text(summary.rstrip() + "\n", encoding="utf-8")
+    return f"changelog_fragment: wrote {fragment_dir}/{path.name}"
+
+
+def make_add_changelog_fragment_tool(
+    repo_dir: Path, ticket_id: str
+) -> Callable[[str, str], str]:
+    """Return the ``add_changelog_fragment`` closure for *repo_dir*/*ticket_id*."""
+
+    def add_changelog_fragment(summary: str, kind: str = "misc") -> str:
+        """Record this ticket's changelog entry as a towncrier fragment.
+
+        Writes one file named after the ticket, so parallel tickets never
+        touch the same file. Do NOT edit CHANGELOG.md directly — the release
+        workflow regenerates it from these fragments, and a hand-written entry
+        there is dropped at the next release.
 
         Args:
-            entry_text: The full entry text including the leading ``-
-                `` bullet.  Can span multiple lines (continuation lines
-                indented with 2 spaces).
+            summary: The user-visible description of the change, in prose.
+            kind: Fragment type. Must be one configured in the repo's
+                ``[tool.towncrier]`` — commonly ``feature``, ``bugfix``,
+                ``doc``, ``removal`` or ``misc``.
 
         Returns:
-            A short status string.
+            A short status string naming the file written.
         """
-        return _insert_changelog_entry(repo_dir, entry_text)
+        return _add_changelog_fragment(repo_dir, ticket_id, kind, summary)
 
     from .tool_registry import ToolInfo, ToolRegistry
 
     ToolRegistry.register(
         ToolInfo(
-            name="insert_changelog_entry",
+            name="add_changelog_fragment",
             description=(
-                "Insert a new bullet entry at the top of the "
-                "``## 0.0.0 (unreleased)`` section in CHANGELOG.md. "
-                "Correctly handles multi-line continuation — "
-                "continuation lines stay attached to their parent bullet."
+                "Record this ticket's changelog entry as a towncrier "
+                "fragment file. One file per ticket, so parallel PRs never "
+                "conflict. Never edit CHANGELOG.md directly — the release "
+                "workflow regenerates it from these fragments."
             ),
             category="fs",
-            parameters={"entry_text": "str (bullet + optional continuation lines)"},
+            parameters={
+                "summary": "str (user-visible description)",
+                "kind": "str (towncrier type, default 'misc')",
+            },
         )
     )
 
-    return insert_changelog_entry
+    return add_changelog_fragment
