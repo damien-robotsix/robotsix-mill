@@ -843,8 +843,29 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             edit_tools_rs = short_circuit_verify.detect_edit_claim_contradiction(
                 has_changes=False, new_messages=new_msgs
             )
-            if edit_tools_rs and (
-                cls._edits_formatter_reverted(repo_dir, new_msgs) is not True
+            # ...unless every file it touched is ALREADY changed on the branch.
+            # Then the edits were an idempotent re-application of work a prior
+            # pass committed, which is the normal shape of a resume, not a
+            # loss. Blocking those stranded 7 tickets across five boards
+            # (observed 2026-08-02..08-07), five of them on this exact path.
+            _target = target_branch_for(ctx.settings, ctx.repo_config)
+            _already_landed = short_circuit_verify.claimed_edits_already_on_branch(
+                new_messages=new_msgs,
+                branch_changed_files=git_ops.changed_source_files(repo_dir, _target),
+            )
+            if _already_landed and edit_tools_rs:
+                log.info(
+                    "%s: edit-claim contradiction suppressed — every claimed "
+                    "edit (%s) is already present in the branch's diff vs %s "
+                    "(idempotent re-application on resume)",
+                    ticket.id,
+                    ", ".join(edit_tools_rs),
+                    _target,
+                )
+            if (
+                edit_tools_rs
+                and not _already_landed
+                and (cls._edits_formatter_reverted(repo_dir, new_msgs) is not True)
             ):
                 tool_list = ", ".join(edit_tools_rs)
                 diag = (

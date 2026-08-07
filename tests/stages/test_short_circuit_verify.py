@@ -546,3 +546,90 @@ def test_analyze_pass_progress_malformed_json_fails_open():
     result = scv.analyze_pass_progress(b"{not json")
     assert result["total"] == 0
     assert result["stuck_same_tool"] is None
+
+
+# --- claimed_edits_already_on_branch ---------------------------------------
+
+
+def _msgs_paths(*paths: str) -> bytes:
+    """A ``new_messages_json()`` payload editing each of *paths*."""
+    parts: list[dict] = []
+    for p in paths:
+        parts.append(
+            {
+                "part_kind": "tool-call",
+                "tool_name": "edit_file",
+                "args": {"path": p},
+                "tool_call_id": f"call_{p}",
+            }
+        )
+    return json.dumps([{"parts": parts}]).encode()
+
+
+def test_all_claimed_edits_already_on_branch_is_idempotent_replay():
+    # The resume shape: a prior pass committed src/mod.py; this pass rewrote
+    # the same bytes, so git reports no diff. That is not lost work.
+    assert (
+        scv.claimed_edits_already_on_branch(
+            new_messages=_msgs_paths("src/mod.py"),
+            branch_changed_files=["src/mod.py", "tests/test_mod.py"],
+        )
+        is True
+    )
+
+
+def test_absolute_sdk_path_matches_repo_relative_branch_path():
+    # Claude SDK editors report absolute paths; the branch diff is
+    # repo-relative. Basename matching is what bridges the two.
+    assert (
+        scv.claimed_edits_already_on_branch(
+            new_messages=_msgs_paths("/work/repo/src/mod.py"),
+            branch_changed_files=["src/mod.py"],
+        )
+        is True
+    )
+
+
+def test_one_unlanded_edit_still_counts_as_lost_work():
+    # The guard keeps its teeth: editing a file the branch never touched is
+    # real lost work even when the other edits did land.
+    assert (
+        scv.claimed_edits_already_on_branch(
+            new_messages=_msgs_paths("src/mod.py", "src/never_landed.py"),
+            branch_changed_files=["src/mod.py"],
+        )
+        is False
+    )
+
+
+def test_no_claimed_paths_fails_closed():
+    # No positive evidence -> must not excuse the contradiction.
+    assert (
+        scv.claimed_edits_already_on_branch(
+            new_messages=_msgs_paths(),
+            branch_changed_files=["src/mod.py"],
+        )
+        is False
+    )
+
+
+def test_empty_branch_diff_fails_closed():
+    # Nothing on the branch means nothing landed, so an edit claim here is
+    # exactly the contradiction the guard exists to catch.
+    assert (
+        scv.claimed_edits_already_on_branch(
+            new_messages=_msgs_paths("src/mod.py"),
+            branch_changed_files=[],
+        )
+        is False
+    )
+
+
+def test_malformed_payload_fails_closed():
+    assert (
+        scv.claimed_edits_already_on_branch(
+            new_messages=b"not json",
+            branch_changed_files=["src/mod.py"],
+        )
+        is False
+    )
