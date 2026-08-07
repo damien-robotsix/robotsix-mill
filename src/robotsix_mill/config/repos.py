@@ -413,13 +413,21 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
     are absent / incomplete, i.e. observability is off). There is no per-repo
     Langfuse configuration.
     """
-    from robotsix_config import load_config
+    from .loader import _resolve_main_config_path, _load_file
+    from .settings import LangfuseConfig
 
-    from .settings import Settings
-
-    settings = load_config(Settings)
-    lf = settings.langfuse
-    if lf is None or not lf.projects:
+    main_path = _resolve_main_config_path()
+    if main_path is None:
+        return None
+    data = _load_file(main_path)
+    langfuse_raw = data.get("langfuse")
+    if not isinstance(langfuse_raw, dict):
+        return None
+    try:
+        lf = LangfuseConfig.model_validate(langfuse_raw)
+    except Exception:
+        return None
+    if not lf.projects:
         return None
     name, proj = next(iter(lf.projects.items()))
     pk, sk = proj.public_key, proj.secret_key
