@@ -300,7 +300,12 @@ class CIPollMixin(_MergeStageBase):
                 )
 
     def _handle_ci_failure_route(
-        self, ticket: Ticket, ctx: StageContext, pr: dict[str, Any], branch: str, ci_status: dict[str, Any]
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        pr: dict[str, Any],
+        branch: str,
+        ci_status: dict[str, Any],
     ) -> Outcome:
         """Handle a failing CI conclusion: debt detection, guardrails, route to FIXING_CI.
 
@@ -341,7 +346,6 @@ class CIPollMixin(_MergeStageBase):
                     f"branch's CI before this can merge.",
                 )
 
-
         # --- Transient infra failure: don't count against the cycle ceiling ---
         # A transient failure (runner crash, network reset, Docker flake,
         # auth outage) is not fixable by a code change — counting it against
@@ -349,7 +353,9 @@ class CIPollMixin(_MergeStageBase):
         # When every failing check is transient, route to REBASING for a
         # fresh CI run instead of burning a cycle on FIXING_CI.
         failing_summary = _build_failing_summary(ci_status)
-        all_transient = bool(failing_summary) and is_transient_ci_failure(failing_summary)
+        all_transient = bool(failing_summary) and is_transient_ci_failure(
+            failing_summary
+        )
         if all_transient:
             log.info(
                 "%s: CI failure is transient infra (%d failing check(s)) — "

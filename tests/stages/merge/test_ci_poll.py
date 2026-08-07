@@ -1750,7 +1750,8 @@ def test_successful_rebase_does_not_also_push_an_empty_commit(tmp_path, monkeypa
 
 
 def test_transient_ci_failure_does_not_increment_auto_fix_counter(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """When CI fails but the failure is transient (infra flake), the
     auto_fix_cycles counter is NOT incremented and the ticket routes
@@ -1798,7 +1799,8 @@ def test_transient_ci_failure_does_not_increment_auto_fix_counter(
 
 
 def test_transient_ci_failure_at_ceiling_does_not_block(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """When the auto-fix ceiling is reached but the current failure is
     transient, the ticket routes to REBASING instead of BLOCKED."""
@@ -1844,7 +1846,8 @@ def test_transient_ci_failure_at_ceiling_does_not_block(
 
 
 def test_deterministic_ci_failure_still_increments_counter(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """A deterministic CI failure (lint error) still increments the
     auto-fix counter and routes to FIXING_CI."""
@@ -1873,7 +1876,12 @@ def test_deterministic_ci_failure_still_increments_counter(
                     "summary": None,
                     "text": "F841 local variable `foo` is assigned to but never used",
                     "annotations": [
-                        {"path": "src/mod.py", "start_line": 10, "message": "F841", "level": "failure"}
+                        {
+                            "path": "src/mod.py",
+                            "start_line": 10,
+                            "message": "F841",
+                            "level": "failure",
+                        }
                     ],
                 }
             ],
@@ -1897,7 +1905,8 @@ def test_deterministic_ci_failure_still_increments_counter(
 
 
 def test_green_pr_behind_many_times_never_hits_cycle_ceiling(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ):
     """A PR that is green but behind does NOT accumulate auto-fix cycles
     even after many rebase cycles — the cycle counter only increments
