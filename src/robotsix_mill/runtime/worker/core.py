@@ -231,7 +231,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._data_dir_gc_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
-        self._config_pin_drift_task: asyncio.Task | None = None
+        self._config_pin_drift_task: asyncio.Task[None] | None = None
         self._meta_task: asyncio.Task | None = None
         self._run_health_task: asyncio.Task | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
