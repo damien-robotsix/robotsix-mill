@@ -410,4 +410,8 @@ when `format=sarif` (unless `limit-severities-for-sarif=true`).
 Combining them into one step would silently scan **all** severities and
 fail on HIGH/MEDIUM, defeating the CRITICAL-only gate.
 
-Dependabot (weekly) keeps pip and Docker dependencies current.
+Renovate (weekly, `renovate.json`) keeps pip, Docker, GitHub Actions, and
+pre-commit dependencies current as PRs, auto-merging patch/minor/digest
+updates via GitHub's platform auto-merge once CI is green. Dependabot
+(`.github/dependabot.yml`) only submits the dependency graph
+(`open-pull-requests-limit: 0`; it opens no version-update PRs).
