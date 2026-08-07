@@ -1744,3 +1744,219 @@ def test_successful_rebase_does_not_also_push_an_empty_commit(tmp_path, monkeypa
         "the rebase push already triggered a fresh run; the empty commit "
         "would abandon it"
     )
+
+
+# === Transient CI failure does not consume cycle ceiling ===================
+
+
+def test_transient_ci_failure_does_not_increment_auto_fix_counter(
+    tmp_path,
+    monkeypatch,
+):
+    """When CI fails but the failure is transient (infra flake), the
+    auto_fix_cycles counter is NOT incremented and the ticket routes
+    to REBASING instead of FIXING_CI."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=6)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "test",
+                    "summary": None,
+                    "text": "ECONNRESET: connection reset by peer",
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 0)
+
+    out = MergeStage().run(t, ctx)
+    # Should route to REBASING (not FIXING_CI), and counter should NOT increment.
+    assert out.next_state is State.REBASING
+    assert "transient" in out.note.lower()
+    assert _read_counter(counter_path) == 0
+
+
+def test_transient_ci_failure_at_ceiling_does_not_block(
+    tmp_path,
+    monkeypatch,
+):
+    """When the auto-fix ceiling is reached but the current failure is
+    transient, the ticket routes to REBASING instead of BLOCKED."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=3)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "test",
+                    "summary": None,
+                    "text": "The runner has received a shutdown signal",
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 3)  # at ceiling
+
+    out = MergeStage().run(t, ctx)
+    # Should route to REBASING, not BLOCKED.
+    assert out.next_state is State.REBASING
+    assert "transient" in out.note.lower()
+
+
+def test_deterministic_ci_failure_still_increments_counter(
+    tmp_path,
+    monkeypatch,
+):
+    """A deterministic CI failure (lint error) still increments the
+    auto-fix counter and routes to FIXING_CI."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=6)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": None,
+                    "text": "F841 local variable `foo` is assigned to but never used",
+                    "annotations": [
+                        {
+                            "path": "src/mod.py",
+                            "start_line": 10,
+                            "message": "F841",
+                            "level": "failure",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+    monkeypatch.setattr(
+        merge_mod.git_ops,
+        "branch_is_behind_main",
+        lambda repo, target_branch="main": False,
+    )
+
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 0)
+
+    out = MergeStage().run(t, ctx)
+    # Should route to FIXING_CI and counter should increment.
+    assert out.next_state is State.FIXING_CI
+    assert _read_counter(counter_path) == 1
+
+
+def test_green_pr_behind_many_times_never_hits_cycle_ceiling(
+    tmp_path,
+    monkeypatch,
+):
+    """A PR that is green but behind does NOT accumulate auto-fix cycles
+    even after many rebase cycles — the cycle counter only increments
+    on CI failure, not on clean rebases.
+
+    Regression: a perfectly green PR on a fast-moving main could be
+    hard-blocked because transient CI failures (not the PR's fault)
+    consumed the cycle ceiling.  This test pins the invariant that
+    a sustained-green PR cycling through REBASING never trips the
+    ceiling guard.
+    """
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, auto_fix_max_cycles=6)
+    # CI is green but the PR is behind the target.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "behind",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {
+            "conclusion": "success",
+            "failing": [],
+        },
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    # Simulate 10 polls of a green-but-behind PR.  Each poll should
+    # route to REBASING and never touch the auto-fix counter.
+    t = _implement_complete(ctx)
+    counter_path = ctx.service.workspace(t).artifacts_dir / _AUTO_FIX_CYCLES
+    _write_counter(counter_path, 0)
+
+    for i in range(10):
+        out = MergeStage().run(t, ctx)
+        assert out.next_state is State.REBASING, (
+            f"Iteration {i}: expected REBASING, got {out.next_state}"
+        )
+        assert _read_counter(counter_path) == 0, (
+            f"Iteration {i}: counter should stay at 0, got {_read_counter(counter_path)}"
+        )
+
+    # After 10 cycles the ticket is still not blocked.
+    assert out.next_state is not State.BLOCKED
