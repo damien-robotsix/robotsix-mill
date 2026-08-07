@@ -427,6 +427,7 @@ _config_sync_task
 _data_dir_gc_task
 _langfuse_cleanup_task
 _timeout_escalation_task
+_config_pin_drift_task
 _meta_task
 _run_health_task
 _diagnostic_task

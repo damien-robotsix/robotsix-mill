@@ -736,6 +736,35 @@ class _PeriodicSettings(BaseModel):
     # Repos the daily diagnostic agent monitors each pass. Empty (default)
     # falls back to the single `diagnostic_target_repo_id` for backward
     # compatibility. Add/remove repos here — no code change required.
+    # --- config pin-drift check -------------------------------------------
+    # config/config.json pins ~288 settings explicitly, and a pin always beats
+    # the model default — so changing a Field(default=...) is a NO-OP in
+    # production until someone edits the pin too. That silently reverted a
+    # move to weekly periodics (twelve generators ran daily for weeks, ~7x the
+    # intended ticket volume) and a change disabling the per-ticket spend caps.
+    # Both were found by hand, long after. This pass makes the class visible.
+    config_pin_drift_periodic: bool = Field(
+        default=True,
+        description="Enable the periodic config pin-drift check.",
+    )
+    config_pin_drift_interval_seconds: int = Field(
+        default=86_400,
+        ge=60,
+        description="Seconds between config pin-drift passes.",
+    )
+    # Keys whose pin is KNOWN to differ from the default on purpose. Drift is
+    # reported against this baseline — the same ratchet the mypy baseline uses
+    # — so a deliberate operator choice is recorded once and only genuinely new
+    # divergence surfaces.
+    config_pin_drift_baseline: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Settings keys whose pinned value deliberately differs from the "
+            "code default; excluded from pin-drift reporting."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+
     diagnostic_monitored_repo_ids: list[str] = Field(
         default_factory=list,
         description="Repos the daily diagnostic agent monitors each pass.",
