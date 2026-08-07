@@ -249,6 +249,38 @@ class _StagesSettings(BaseModel):
         ],
         description="Glob patterns for files that always block auto-merge when touched.",
     )
+    # Paths the post-rebase drop guard must not treat as evidence that the
+    # rebase agent discarded the PR's work.  Matched as exact paths or as
+    # directory prefixes against the repo-relative path.
+    #
+    # These are registry and boilerplate files: mechanical bookkeeping that
+    # every ticket touches at the same spot, and that CI re-derives on merge
+    # (auto-fix commits for changelog and module registration are routine).
+    # Their content is a function of the whole repo rather than of one branch,
+    # so a rebase legitimately reconciles them to something that is neither
+    # the branch's version nor the target's previous one.  The blob-equality
+    # excuse below cannot clear that case — it only excuses a target that
+    # already carries byte-for-byte what the branch was delivering — so
+    # without this list a healthy reconciliation is reported as a silent drop
+    # and the ticket dead-ends.  Observed live on 2026-08-07: six auto-mail
+    # tickets blocked in twelve minutes, all on ``docs/modules.yaml``.
+    #
+    # Keep genuine implement-stage paths OUT of this list. Anything here is
+    # invisible to the guard, which is precisely what makes it safe only for
+    # files whose loss another gate would catch.
+    rebase_drop_exempt_paths: list[str] = Field(
+        default_factory=lambda: [
+            "CHANGELOG.md",
+            "changelog.d/",
+            "changelog/",
+            "docs/modules.yaml",
+            "site/modules.yaml",
+        ],
+        description=(
+            "Repo-relative paths/prefixes the post-rebase drop guard ignores "
+            "(registry and boilerplate files CI re-derives)."
+        ),
+    )
     # Repo IDs permanently excluded from auto-merge (cannot be opted in).
     # Default includes the infra repo; an operator can add more.
     auto_merge_infra_denylist: list[str] = Field(

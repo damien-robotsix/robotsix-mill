@@ -1020,12 +1020,21 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
         "robotsix_mill.stages.merge.git_ops.changed_source_files",
         lambda repo, target_branch="main", ref="HEAD": pre_files,
     )
+    seen_exempt: list[object] = []
+
+    def fake_integrity(
+        repo,
+        target_branch,
+        pre_rebase_files,
+        pre_rebase_blobs=None,
+        exempt_paths=None,
+    ):
+        seen_exempt.append(exempt_paths)
+        return (False, ["src/dropped.py"])
+
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
-        lambda repo, target_branch, pre_rebase_files, pre_rebase_blobs=None: (
-            False,
-            ["src/dropped.py"],
-        ),
+        fake_integrity,
     )
 
     t = _in_rebasing(ctx)
@@ -1036,6 +1045,10 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "src/dropped.py" in (out.note or "")
+    # The configured exemption list must actually reach the guard — a
+    # default-only path would silently ignore an operator's override.
+    assert seen_exempt == [ctx.settings.rebase_drop_exempt_paths]
+    assert "docs/modules.yaml" in ctx.settings.rebase_drop_exempt_paths
 
 
 def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
