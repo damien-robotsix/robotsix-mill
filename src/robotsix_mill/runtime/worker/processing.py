@@ -24,7 +24,7 @@ from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...notify import send_notification, _TRIGGER_STATES
 from .. import tracing
 from ..tracing import langfuse_trace_url
-from ..transient_errors import disk_space_available
+from ..transient_errors import first_full_path
 from ...sandbox import reap_orphan_sandboxes
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
 
@@ -228,8 +228,12 @@ async def _handle_stage_error(
         # operator (or the data-dir GC) can act — so park WITHOUT
         # consuming a retry attempt rather than blocking the ticket and
         # requiring a manual resume per ticket.
-        if is_disk_full_error(error) and not disk_space_available(
-            ctx.settings.data_dir, ctx.settings.disk_min_free_mb
+        if is_disk_full_error(error) and (
+            first_full_path(
+                [ctx.settings.data_dir, *ctx.settings.disk_check_extra_paths],
+                ctx.settings.disk_min_free_mb,
+            )
+            is not None
         ):
             disk_delay = ctx.settings.disk_full_retry_seconds
             next_at_dt = datetime.fromtimestamp(
@@ -446,9 +450,11 @@ async def _process_ticket_inner(
         # workspace that consumes the very space it just ran out of.
         # Parking here costs nothing and is self-clearing: the ticket
         # re-polls until the GC or an operator frees space.
-        if not disk_space_available(
-            ctx.settings.data_dir, ctx.settings.disk_min_free_mb
-        ):
+        full_path = first_full_path(
+            [ctx.settings.data_dir, *ctx.settings.disk_check_extra_paths],
+            ctx.settings.disk_min_free_mb,
+        )
+        if full_path is not None:
             next_at_dt = datetime.fromtimestamp(
                 datetime.now(timezone.utc).timestamp()
                 + ctx.settings.disk_full_retry_seconds,
@@ -458,7 +464,7 @@ async def _process_ticket_inner(
                 ticket_id,
                 retry_attempt=max(ticket.retry_attempt, 1),
                 last_transient_error=(
-                    f"data volume below {ctx.settings.disk_min_free_mb} MB free "
+                    f"{full_path} below {ctx.settings.disk_min_free_mb} MB free "
                     "(parked before dispatch, retry budget untouched)"
                 )[:200],
                 next_retry_at=next_at_dt,
@@ -467,7 +473,7 @@ async def _process_ticket_inner(
                 "%s: %s parked — %s below %d MB free; re-checking in %ds",
                 stage_name,
                 ticket_id,
-                ctx.settings.data_dir,
+                full_path,
                 ctx.settings.disk_min_free_mb,
                 ctx.settings.disk_full_retry_seconds,
             )

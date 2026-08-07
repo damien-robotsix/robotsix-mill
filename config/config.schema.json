@@ -1365,6 +1365,14 @@
           "title": "Diagnostic Target Repo Id",
           "type": "string"
         },
+        "disk_check_extra_paths": {
+          "description": "Additional filesystems the disk gate checks alongside data_dir (the container root backs the sandbox overlay).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Disk Check Extra Paths",
+          "type": "array"
+        },
         "disk_full_retry_seconds": {
           "advanced": true,
           "default": 600,
