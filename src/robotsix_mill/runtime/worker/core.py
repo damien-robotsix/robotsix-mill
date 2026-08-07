@@ -231,6 +231,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._data_dir_gc_task: asyncio.Task | None = None
         self._langfuse_cleanup_task: asyncio.Task | None = None
         self._timeout_escalation_task: asyncio.Task | None = None
+        self._config_pin_drift_task: asyncio.Task | None = None
         self._meta_task: asyncio.Task | None = None
         self._run_health_task: asyncio.Task | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
@@ -887,6 +888,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ),
         )
         self._start_poll_loop_pass(
+            "config-pin-drift",
+            self._config_pin_drift_poll_loop,
+            "_config_pin_drift_task",
+            log_msg="Periodic config pin-drift check enabled: interval %ds",
+            log_args=(self.ctx.settings.config_pin_drift_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
             "meta",
             self._meta_pass_loop,
             "_meta_task",
@@ -1082,6 +1090,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_data_dir_gc_task",
             "_langfuse_cleanup_task",
             "_timeout_escalation_task",
+            "_config_pin_drift_task",
             "_meta_task",
             "_run_health_task",
             "_diagnostic_task",

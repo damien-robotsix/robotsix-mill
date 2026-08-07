@@ -1052,6 +1052,28 @@
           "title": "Completeness Check Request Limit",
           "type": "integer"
         },
+        "config_pin_drift_baseline": {
+          "advanced": true,
+          "description": "Settings keys whose pinned value deliberately differs from the code default; excluded from pin-drift reporting.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Config Pin Drift Baseline",
+          "type": "array"
+        },
+        "config_pin_drift_interval_seconds": {
+          "default": 86400,
+          "description": "Seconds between config pin-drift passes.",
+          "minimum": 60,
+          "title": "Config Pin Drift Interval Seconds",
+          "type": "integer"
+        },
+        "config_pin_drift_periodic": {
+          "default": true,
+          "description": "Enable the periodic config pin-drift check.",
+          "title": "Config Pin Drift Periodic",
+          "type": "boolean"
+        },
         "config_sync_interval_seconds": {
           "advanced": true,
           "default": 86400,

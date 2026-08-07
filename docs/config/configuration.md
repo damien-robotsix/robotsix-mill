@@ -666,6 +666,9 @@ Additional fields:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `periodic.bespoke_periodic` | `MILL_BESPOKE_PERIODIC` | `true` | Master toggle for the per-repo bespoke periodic agent supervisor (default `true` — enabled) |
+| `periodic.config_pin_drift_periodic` | `MILL_CONFIG_PIN_DRIFT_PERIODIC` | `true` | Master toggle for the config pin-drift check — reports pinned settings whose value shadows a changed code default. A pin always beats a `Field(default=…)`, so without this a code-side default change is a silent no-op in production. |
+| `periodic.config_pin_drift_interval_seconds` | `MILL_CONFIG_PIN_DRIFT_INTERVAL_SECONDS` | `86400` | Seconds between config pin-drift passes. |
+| `periodic.config_pin_drift_baseline` | `MILL_CONFIG_PIN_DRIFT_BASELINE` | `[]` | Settings keys whose pinned value deliberately differs from the code default; excluded from pin-drift reporting (ratchet baseline, same idea as the mypy baseline). |
 | `periodic.bespoke_discovery_interval_seconds` | `MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS` | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |

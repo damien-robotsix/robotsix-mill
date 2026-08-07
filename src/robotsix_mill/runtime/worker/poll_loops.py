@@ -490,6 +490,37 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("timeout-escalation poll failed")
             await asyncio.sleep(interval)
 
+    async def _config_pin_drift_poll_loop(self) -> None:
+        """Periodic config pin-drift check: reports pinned settings that
+        shadow a changed code default.
+
+        Pure file read + model introspection — no AI agent, no tracing, and
+        log-only by design. The board is already over-full; a generator that
+        filed a ticket per drifting key would worsen the very problem this
+        pass exists to surface.
+        """
+        settings = self.ctx.settings
+        if not settings.config_pin_drift_periodic:
+            return
+        interval = max(60, settings.config_pin_drift_interval_seconds)
+        initial = self._initial_delay("config-pin-drift", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...agents.runners.config_pin_drift_runner import (
+                    run_config_pin_drift,
+                )
+
+                result = await asyncio.to_thread(run_config_pin_drift, settings)
+                log.info(
+                    "config-pin-drift: pass complete — checked=%d drifted=%d",
+                    result.get("checked", 0),
+                    result.get("drifted", 0),
+                )
+            except Exception:
+                log.exception("config-pin-drift poll failed")
+            await asyncio.sleep(interval)
+
     def _ticket_last_activity(
         self, service: "TicketService", ticket: Ticket
     ) -> datetime:
