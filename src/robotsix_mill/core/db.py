@@ -110,10 +110,16 @@ def _emergency_vacuum(settings: Settings, board_id: str) -> None:
 
     Opens a fresh, short-lived session — the affected session may have
     an in-flight transaction that cannot VACUUM itself.
+
+    Runs ``PRAGMA wal_checkpoint(TRUNCATE)`` before VACUUM so the WAL
+    file is truncated first (frees up to 2 MiB).  When the disk is nearly
+    full this small reclaim can make VACUUM succeed where it would
+    otherwise fail for lack of temp space.
     """
     from sqlmodel import text
 
     with session(settings, board_id) as s:
+        s.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
         s.execute(text("VACUUM"))
         s.commit()
 
@@ -512,48 +518,59 @@ def persist_memory_db(
     if max_chars is not None and len(text) > max_chars:
         text = tail_keep(text, max_chars, label=f"memory ({name})")
 
-    with retry_on_db_full(settings, board_id) as s:
-        row = s.exec(
-            select(Memory).where(Memory.board_id == board_id, Memory.name == name)
-        ).first()
-        now = datetime.now(timezone.utc)
-        if row is None:
-            # First write — attempt one-time migration from legacy file.
-            legacy_path = settings.memory_file_for(name, board_id)
-            migrated_content = text  # default: use what we were given
-            if legacy_path.exists():
-                try:
-                    file_content = legacy_path.read_text(encoding="utf-8")
-                    if file_content.strip() and not text.strip():
-                        # No new text — carry over legacy content verbatim.
-                        migrated_content = file_content
-                        # else: keep migrated_content = text (new text provided)
-                    legacy_path.rename(str(legacy_path) + ".migrated")
-                    log.info(
-                        "memory DB %s/%s: migrated %d chars from legacy file %s",
-                        board_id,
-                        name,
-                        len(file_content),
-                        legacy_path,
-                    )
-                except OSError:
-                    log.warning(
-                        "memory DB %s/%s: could not migrate legacy file %s",
-                        board_id,
-                        name,
-                        legacy_path,
-                        exc_info=True,
-                    )
-            row = Memory(
-                board_id=board_id,
-                name=name,
-                content=migrated_content,
-                created_at=now,
-                updated_at=now,
-            )
-            s.add(row)
-        else:
-            row.content = text
-            row.updated_at = now
-            s.add(row)
-        s.commit()
+    # Resolve legacy path once (outside the retry closure — it's filesystem,
+    # not sqlite, and should not be retried).
+    legacy_path: Path | None = None
+    try:
+        candidate = settings.memory_file_for(name, board_id)
+        if candidate.exists():
+            legacy_path = candidate
+    except Exception:
+        legacy_path = None
+
+    def _do_persist() -> None:
+        with retry_on_db_full(settings, board_id) as s:
+            row = s.exec(
+                select(Memory).where(Memory.board_id == board_id, Memory.name == name)
+            ).first()
+            now = datetime.now(timezone.utc)
+            if row is None:
+                # First write — attempt one-time migration from legacy file.
+                migrated_content = text  # default: use what we were given
+                if legacy_path is not None:
+                    try:
+                        file_content = legacy_path.read_text(encoding="utf-8")
+                        if file_content.strip() and not text.strip():
+                            # No new text — carry over legacy content verbatim.
+                            migrated_content = file_content
+                        legacy_path.rename(str(legacy_path) + ".migrated")
+                        log.info(
+                            "memory DB %s/%s: migrated %d chars from legacy file %s",
+                            board_id,
+                            name,
+                            len(file_content),
+                            legacy_path,
+                        )
+                    except OSError:
+                        log.warning(
+                            "memory DB %s/%s: could not migrate legacy file %s",
+                            board_id,
+                            name,
+                            legacy_path,
+                            exc_info=True,
+                        )
+                row = Memory(
+                    board_id=board_id,
+                    name=name,
+                    content=migrated_content,
+                    created_at=now,
+                    updated_at=now,
+                )
+                s.add(row)
+            else:
+                row.content = text
+                row.updated_at = now
+                s.add(row)
+            s.commit()
+
+    _retry_op(settings, board_id, _do_persist, "persist_memory")

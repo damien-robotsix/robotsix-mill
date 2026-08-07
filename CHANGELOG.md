@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Refine stage memory persistence now degrades gracefully on disk-full errors instead of failing the ticket. The `persist_memory_db` retry loop now covers SELECT operations (not just commit/flush), and `_emergency_vacuum` runs a WAL checkpoint before VACUUM to improve recovery odds when `/tmp` is nearly full.
 - Fix unbounded no-op CI refresh commits in `ci_fix_mixin`: pass a sentinel path to `_refresh_branch_for_ci` so that a ticket bouncing BLOCKED→resume pushes at most one empty commit per branch head, mirroring the bound already in `ci_poll`. Remove the dead `_CI_EMPTY_COMMIT_COUNTER` / `_MAX_CI_EMPTY_COMMIT_REFRESHES` constants.
 - The fixing_ci/implement cycle ceiling no longer counts transient CI
   failures (runner crashes, network resets, Docker flakes, auth outages)
@@ -9,7 +10,7 @@
 - Add `rerun_workflow` to `GitLabForgeCIMixin`, backed by GitLab's `POST /projects/:id/pipelines/:pipeline_id/retry` endpoint. Previously, CI-fix agents on GitLab repos could not automatically retry failed pipelines.
 - ci_fix: include run URLs in `wait_for_ci` failure summaries so the agent can pass them to `fetch_ci_logs`; hardened `fetch_ci_logs` to reject placeholder ids with actionable guidance; added prompt instruction to never guess a run id.
 - Add `board-read` skill to `agent_definitions/implement.yaml` (`skills: [board-report, board-read, ask_user_guardrails]`). The implement agent has `read_ticket: true` but was the only agent with that flag missing the `board-read` skill, which provides guidance on using the `read_ticket` tool in sandbox environments.
-- Extract `_maybe_collapse_scanner_rollup` and `_create_one_draft` helpers from `run_agent_pass` (~160-line loop body), leaving a shallow coordinator that sequences phases and persists memory. No behavior change.
+- Extract `_maybe_collapse_scanner_rollup` and `_create_one_draft` helpers from `run_agent_pass` (~160-line loop body), leaving a shallow coordinator that sequences phases and persists memory. No behavior change. (mill: Investigate refine-stage sqlite 'database or disk is full' persistence errors blocking observation writes (20260804T171734Z-investigate-refine-stage-sqlite-database-caa5))
 - Decomposed `_poll_implement_complete` (334 lines, 7-level nesting) in `ci_poll.py` into a shallow state-machine coordinator plus three focused helpers: `_refresh_branch_for_ci_if_idle`, `_handle_ci_failure_route`, and `_merge_or_promote_when_green`.
   Decomposed `_handle_out_of_scope` (194 lines, 8-level nesting) in `ci_fix.py` into a thin coordinator plus four helpers: `_reject_in_scope_alerts`, `_refresh_stale_branch_once`, `_retry_transient_ci_failure`, and `_spawn_or_reuse_fix`.
   Pure extraction — no behavior change.
