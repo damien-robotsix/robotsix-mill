@@ -160,6 +160,7 @@ class CIFixStage(Stage):
             alerts_unreadable,
             head_sha,
             _failing_run_ids,
+            _failing_run_urls,
         ) = resolved
 
         # --- Emit CI_FAILURE diagnostic event ---
@@ -353,6 +354,7 @@ class CIFixStage(Stage):
             alerts_unreadable,
             head_sha,
             failing_run_ids,
+            failing_run_urls,
         ) = self._build_failure_detail(ticket, ctx, branch, failing)
         # Persist the failure detail for observability.
         self._write_failing_summary_artifact(ctx, ticket, failing_summary, failing)
@@ -422,6 +424,7 @@ class CIFixStage(Stage):
             alerts_unreadable,
             head_sha,
             failing_run_ids,
+            failing_run_urls,
         )
 
     def _build_failure_detail(
@@ -430,14 +433,15 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
-    ) -> tuple[str, list[dict[str, Any]], set[str], bool, str, list[int]]:
+    ) -> tuple[str, list[dict[str, Any]], set[str], bool, str, list[int], list[str]]:
         """Enrich the failing-check list with job logs + code-scanning alerts.
 
         Returns ``(failing_summary, alerts, changed_paths, alerts_unreadable,
-        head_sha, failing_run_ids)`` so callers can inspect the raw alert data
-        (e.g. for FP triage gating), detect when alerts were unreadable due
-        to a 403 permission gap, include the branch HEAD SHA in the failure
-        fingerprint, and pass a run_id to ``fetch_ci_logs``.
+        head_sha, failing_run_ids, failing_run_urls)`` so callers can inspect
+        the raw alert data (e.g. for FP triage gating), detect when alerts
+        were unreadable due to a 403 permission gap, include the branch HEAD
+        SHA in the failure fingerprint, and pass a run_id or run_url to
+        ``fetch_ci_logs``.
         """
         s = ctx.settings
 
@@ -449,6 +453,7 @@ class CIFixStage(Stage):
         alerts_unreadable = False
         head_sha = ""
         failing_run_ids: list[int] = []
+        failing_run_urls: list[str] = []
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
             alerts = forge.list_code_scanning_alerts(source_branch=branch)
@@ -460,11 +465,15 @@ class CIFixStage(Stage):
                 for run in runs:
                     if run.get("conclusion") == "failure":
                         failing_run_ids.append(run["id"])
+                        run_url = run.get("html_url", "")
+                        if run_url:
+                            failing_run_urls.append(run_url)
                         logs = forge.fetch_workflow_job_logs(run_id=run["id"])
                         if logs:
+                            url_note = f", url: {run_url}" if run_url else ""
                             log_text += (
                                 f"\n--- {run.get('name', 'workflow')} "
-                                f"(run {run['id']}) ---\n{logs}"
+                                f"(run {run['id']}{url_note}) ---\n{logs}"
                             )
         except CodeScanningAlertsUnavailable:
             log.warning(
@@ -485,11 +494,15 @@ class CIFixStage(Stage):
                     for run in runs:
                         if run.get("conclusion") == "failure":
                             failing_run_ids.append(run["id"])
+                            run_url = run.get("html_url", "")
+                            if run_url:
+                                failing_run_urls.append(run_url)
                             logs = forge.fetch_workflow_job_logs(run_id=run["id"])
                             if logs:
+                                url_note = f", url: {run_url}" if run_url else ""
                                 log_text += (
                                     f"\n--- {run.get('name', 'workflow')} "
-                                    f"(run {run['id']}) ---\n{logs}"
+                                    f"(run {run['id']}{url_note}) ---\n{logs}"
                                 )
             except Exception:
                 log.warning("%s: failed to fetch job logs", ticket.id)
@@ -503,6 +516,7 @@ class CIFixStage(Stage):
             alerts_unreadable,
             head_sha,
             failing_run_ids,
+            failing_run_urls,
         )
 
     def _write_failing_summary_artifact(
@@ -1019,11 +1033,24 @@ class CIFixStage(Stage):
 
             if conclusion == "failure":
                 failing = status.get("failing", [])
-                summary, _alerts, _changed, _unreadable, _head, failing_run_ids = (
-                    self._build_failure_detail(ticket, ctx, branch, failing)
-                )
+                (
+                    summary,
+                    _alerts,
+                    _changed,
+                    _unreadable,
+                    _head,
+                    failing_run_ids,
+                    failing_run_urls,
+                ) = self._build_failure_detail(ticket, ctx, branch, failing)
                 if sha:
-                    run_info = f", run: {failing_run_ids[0]}" if failing_run_ids else ""
+                    run_info_parts: list[str] = []
+                    if failing_run_ids:
+                        run_info_parts.append(f"run: {failing_run_ids[0]}")
+                    if failing_run_urls:
+                        run_info_parts.append(f"url: {failing_run_urls[0]}")
+                    run_info = (
+                        ", " + ", ".join(run_info_parts) if run_info_parts else ""
+                    )
                     summary = f"[sha: {sha[:7]}{run_info}]\n{summary}"
                 return ("failure", summary)
             # pending / None / unknown — not terminal yet.

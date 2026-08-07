@@ -340,3 +340,4 @@ class _FailingContext(NamedTuple):
     alerts_unreadable: bool = False
     head_sha: str = ""
     failing_run_ids: list[int] = []
+    failing_run_urls: list[str] = []

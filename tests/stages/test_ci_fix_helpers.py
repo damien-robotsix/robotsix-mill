@@ -321,3 +321,6 @@ def test_failing_context_is_namedtuple():
     assert "alerts" in ctx._fields
     assert "changed_paths" in ctx._fields
     assert "alerts_unreadable" in ctx._fields
+    assert "head_sha" in ctx._fields
+    assert "failing_run_ids" in ctx._fields
+    assert "failing_run_urls" in ctx._fields

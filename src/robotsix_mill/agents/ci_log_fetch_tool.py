@@ -93,7 +93,11 @@ def build_ci_log_fetch_tool(
             if resolved is None:
                 return (
                     "error: fetch_ci_logs requires either a run_id (int) or a "
-                    "run_url (str) containing a /runs/<id> path segment."
+                    "run_url (str) containing a /runs/<id> path segment. "
+                    "No run id or run URL was provided — re-run wait_for_ci "
+                    "first to obtain the run id/URL from its CI_FAILING summary, "
+                    "then pass it here. Never pass a placeholder numeric id "
+                    "(e.g. 0) — it will be rejected."
                 )
 
             if resolved <= 0:
