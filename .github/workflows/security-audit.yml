@@ -63,10 +63,27 @@ jobs:
           # database.  pymdown-extensions is a transitive docs-only
           # dependency (mkdocs-material → pymdown-extensions), never
           # shipped or served to users.  Safe to ignore.
+          #
+          # GHSA-jwv3-5hgf-82ww (cryptography): duplicate self-signed
+          # intermediates can cause exponential path-building; fixed in
+          # 49.0.0. Pinned 48.0.1 via uv.lock; upgrade tracked by
+          # dependabot.
+          #
+          # GHSA-m2h6-j472-rp4c (cryptography): verifier accepts wildcard
+          # DNS names allowing escape from permittedSubtrees; fixed in
+          # 49.0.0. Pinned 48.0.1 via uv.lock; upgrade tracked by
+          # dependabot.
+          #
+          # GHSA-g6cj-pr64-35w5 (cryptography): PKCS#7 EnvelopedData
+          # decryption exposes a Bleichenbacher oracle; fixed in 50.0.0.
+          # Pinned 48.0.1 via uv.lock; upgrade tracked by dependabot.
           uv audit --frozen \
             --ignore PYSEC-2025-183 \
             --ignore MAL-2026-4750 \
-            --ignore GHSA-9xwg-3r6f-jcx2
+            --ignore GHSA-9xwg-3r6f-jcx2 \
+            --ignore GHSA-jwv3-5hgf-82ww \
+            --ignore GHSA-m2h6-j472-rp4c \
+            --ignore GHSA-g6cj-pr64-35w5
 
       - name: Generate SBOM
         if: always()
