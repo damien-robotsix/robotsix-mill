@@ -1059,8 +1059,10 @@ def build_fs_tools(
         sandbox — no internet, nothing outside the repo is reachable.
 
         Commands automatically execute in the repository root
-        directory — do not prefix with an absolute cd to a repo
-        root. Use ``cd <subdir> && …`` to work in a subdirectory.
+        directory — the sandbox sets the working directory for you;
+        never prefix commands with ``cd`` to an absolute path.
+        Use ``cd <subdir> && …`` ONLY to target a specific
+        subdirectory relative to the repo root.
 
         Note: the ``pytest --timeout`` flag is not available in this
         environment — use plain ``python -m pytest`` without it.
