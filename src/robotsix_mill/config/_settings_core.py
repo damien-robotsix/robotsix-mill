@@ -365,6 +365,24 @@ class _CoreSettings(BaseModel):
         ge=0,
         description="Minimum free MB on the data volume before a stage is allowed to start.",
     )
+    # Filesystems the disk gate must check BESIDES ``data_dir``.
+    #
+    # ``/`` is the container root, which is the Docker overlay — the same
+    # storage the sandbox containers write their package installs to, and a
+    # different device from the workspace volume. Checking only ``data_dir``
+    # made the gate blind to the failure it exists to prevent: on 2026-08-07 a
+    # rebase failed three times with ENOSPC on every ``run_command`` while the
+    # data volume reported 146 GB free, because root was at 80%.
+    #
+    # Paths that cannot be stat'ed are skipped, so listing one that does not
+    # exist in a given deployment is harmless.
+    disk_check_extra_paths: list[str] = Field(
+        default_factory=lambda: ["/"],
+        description=(
+            "Additional filesystems the disk gate checks alongside data_dir "
+            "(the container root backs the sandbox overlay)."
+        ),
+    )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the

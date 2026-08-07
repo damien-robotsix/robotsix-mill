@@ -132,6 +132,9 @@
     "diagnostic_monitored_repo_ids": [],
     "diagnostic_periodic": false,
     "diagnostic_target_repo_id": "robotsix-mill",
+    "disk_check_extra_paths": [
+      "/"
+    ],
     "disk_full_retry_seconds": 600,
     "disk_min_free_mb": 5120,
     "doc_classifier_diff_max_chars": 6000,

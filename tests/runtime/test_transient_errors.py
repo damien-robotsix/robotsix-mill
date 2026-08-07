@@ -685,3 +685,80 @@ def test_disk_space_available_unreadable_path_is_permissive(monkeypatch, tmp_pat
 
     monkeypatch.setattr(os, "statvfs", boom)
     assert disk_space_available(tmp_path, 5_000)
+
+
+def test_first_full_path_catches_a_second_filesystem(monkeypatch):
+    """The regression: the data volume has room but the overlay does not.
+
+    Observed live 2026-08-07 — a rebase failed three times with ENOSPC on
+    every ``run_command`` while the data volume reported 146 GB free,
+    because the container root (the sandbox's Docker overlay) was at 80%.
+    Checking only the data volume waved the ticket into the wall.
+    """
+    import os
+
+    from robotsix_mill.runtime.transient_errors import first_full_path
+
+    class FakeStat:
+        f_frsize = 4096
+
+        def __init__(self, avail_mb):
+            self.f_bavail = avail_mb * 1024 * 1024 // 4096
+
+    free = {"/data": 146_000, "/": 100}
+    monkeypatch.setattr(os, "statvfs", lambda p: FakeStat(free[str(p)]))
+
+    # The data volume alone looks fine — this is exactly the blind spot.
+    assert first_full_path(["/data"], 5_120) is None
+    # Including the container root catches it, and names the culprit.
+    assert first_full_path(["/data", "/"], 5_120) == "/"
+
+
+def test_first_full_path_returns_none_when_all_have_room(monkeypatch):
+    import os
+
+    from robotsix_mill.runtime.transient_errors import first_full_path
+
+    class FakeStat:
+        f_frsize = 4096
+        f_bavail = 50_000 * 1024 * 1024 // 4096
+
+    monkeypatch.setattr(os, "statvfs", lambda p: FakeStat())
+    assert first_full_path(["/data", "/", "/tmp"], 5_120) is None
+
+
+def test_first_full_path_reports_the_first_offender(monkeypatch):
+    """Order matters: the caller names this path in the park note."""
+    import os
+
+    from robotsix_mill.runtime.transient_errors import first_full_path
+
+    class FakeStat:
+        f_frsize = 4096
+
+        def __init__(self, avail_mb):
+            self.f_bavail = avail_mb * 1024 * 1024 // 4096
+
+    monkeypatch.setattr(os, "statvfs", lambda p: FakeStat(10))
+    assert first_full_path(["/data", "/"], 5_120) == "/data"
+
+
+def test_first_full_path_skips_unstattable_paths(monkeypatch):
+    """A path that cannot be stat'ed degrades to 'has room' rather than
+    parking the fleet — same fail-open contract as disk_space_available,
+    so listing a path absent from some deployment is harmless."""
+    import os
+
+    from robotsix_mill.runtime.transient_errors import first_full_path
+
+    def boom(p):
+        raise OSError("no such mount")
+
+    monkeypatch.setattr(os, "statvfs", boom)
+    assert first_full_path(["/nope", "/also-nope"], 5_120) is None
+
+
+def test_first_full_path_empty_list_is_no_constraint():
+    from robotsix_mill.runtime.transient_errors import first_full_path
+
+    assert first_full_path([], 5_120) is None

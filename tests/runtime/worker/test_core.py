@@ -3729,12 +3729,12 @@ async def test_disk_full_parks_without_consuming_retry(ctx, service, monkeypatch
     # only ordering that can reach the park branch once the gate exists.
     calls: list[int] = []
 
-    def fills_during_stage(path, min_free_mb):
+    def fills_during_stage(paths, min_free_mb):
         calls.append(1)
-        return len(calls) % 2 == 1
+        return None if len(calls) % 2 == 1 else "/data"
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.processing.disk_space_available",
+        "robotsix_mill.runtime.worker.processing.first_full_path",
         fills_during_stage,
     )
     t = service.create("x")
@@ -3756,10 +3756,11 @@ async def test_disk_full_parks_without_consuming_retry(ctx, service, monkeypatch
 async def test_enospc_with_space_available_uses_bounded_retries(
     ctx, service, monkeypatch
 ):
-    """The same ENOSPC WITHOUT a confirmed shortage (the volume has room
-    — e.g. a per-container tmpfs filled, not the data volume) goes
-    through the normal bounded transient retry and blocks once
-    exhausted, so a real defect is not parked forever."""
+    """The same ENOSPC WITHOUT a confirmed shortage on any checked
+    filesystem — e.g. a quota or a small dedicated mount neither the data
+    volume nor the container root covers — goes through the normal bounded
+    transient retry and blocks once exhausted, so a real defect is not
+    parked forever."""
     import errno
 
     class DiskBoom(Stage):
@@ -3771,8 +3772,8 @@ async def test_enospc_with_space_available_uses_bounded_retries(
 
     monkeypatch.setitem(registry.STAGES, "refine", DiskBoom())
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.processing.disk_space_available",
-        lambda path, min_free_mb: True,
+        "robotsix_mill.runtime.worker.processing.first_full_path",
+        lambda paths, min_free_mb: None,
     )
     t = service.create("x")
     for _ in range(ctx.settings.stage_retry_max_attempts + 1):
@@ -3805,8 +3806,8 @@ async def test_disk_admission_gate_parks_before_dispatch(ctx, service, monkeypat
 
     monkeypatch.setitem(registry.STAGES, "refine", Marker())
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.processing.disk_space_available",
-        lambda path, min_free_mb: False,
+        "robotsix_mill.runtime.worker.processing.first_full_path",
+        lambda paths, min_free_mb: "/data",
     )
     t = service.create("x")
     await process_ticket(t.id, ctx)

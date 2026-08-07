@@ -12,6 +12,7 @@ import re
 import socket
 import subprocess
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -210,6 +211,28 @@ def disk_space_available(path: str | Path, min_free_mb: int) -> bool:
     except OSError:
         return True
     return st.f_bavail * st.f_frsize >= min_free_mb * 1024 * 1024
+
+
+def first_full_path(paths: Sequence[str | Path], min_free_mb: int) -> str | None:
+    """The first of *paths* below *min_free_mb* free, or ``None`` if all are OK.
+
+    A stage needs room on more than one filesystem, and checking only the data
+    volume misses the one that actually fills. Sandbox containers write their
+    package installs to the Docker overlay, which lives on the host root
+    filesystem — a different device from the workspace volume. On 2026-08-07 a
+    rebase failed three times with "No space left on device" on *every*
+    ``run_command`` (even ``echo hello``) while the data volume reported 146 GB
+    free: root was at 80%, and the gate, looking only at the data volume, waved
+    the ticket straight into the wall it had just hit.
+
+    Returns the offending path so the caller can name it in the park note —
+    "which disk" is the first thing an operator needs and the hardest thing to
+    reconstruct after the fact.
+    """
+    for p in paths:
+        if not disk_space_available(p, min_free_mb):
+            return str(p)
+    return None
 
 
 def is_network_down_error(exc: BaseException) -> bool:
