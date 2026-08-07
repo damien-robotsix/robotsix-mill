@@ -316,7 +316,11 @@ class RebaseMixin(_MergeStageBase):
             # snapshot taken before the agent ran.
             if pre_rebase_files:
                 ok, dropped = _facade.git_ops.check_rebase_diff_integrity(
-                    Path(repo_dir), target, pre_rebase_files, pre_rebase_blobs
+                    Path(repo_dir),
+                    target,
+                    pre_rebase_files,
+                    pre_rebase_blobs,
+                    exempt_paths=s.rebase_drop_exempt_paths,
                 )
                 if not ok:
                     shown = ", ".join(f"`{p}`" for p in dropped[:10])

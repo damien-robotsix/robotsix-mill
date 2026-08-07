@@ -217,6 +217,13 @@
     "prerequisite_gate_enabled": true,
     "prune_clone_on_close": true,
     "read_file_max_chars": 50000,
+    "rebase_drop_exempt_paths": [
+      "CHANGELOG.md",
+      "changelog.d/",
+      "changelog/",
+      "docs/modules.yaml",
+      "site/modules.yaml"
+    ],
     "rebase_max_attempts": 3,
     "rebase_memory_path": null,
     "refine_advisory_dedup_enabled": true,

@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
 import contextlib
@@ -1128,18 +1129,36 @@ def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str
     return blobs
 
 
+#: Fallback for :func:`check_rebase_diff_integrity` when no caller supplies a
+#: list. Production passes ``settings.rebase_drop_exempt_paths``; this keeps
+#: direct callers and tests working without threading settings through.
+DEFAULT_REBASE_DROP_EXEMPT_PATHS = (
+    "CHANGELOG.md",
+    "changelog.d/",
+    "changelog/",
+    "docs/modules.yaml",
+    "site/modules.yaml",
+)
+
+
 def check_rebase_diff_integrity(
     repo: Path,
     target_branch: str,
     pre_rebase_files: list[str],
     pre_rebase_blobs: dict[str, str] | None = None,
+    exempt_paths: Sequence[str] | None = None,
 ) -> tuple[bool, list[str]]:
     """Check that every source file from the pre-rebase diff survived the rebase.
 
-    Returns ``(ok, dropped_files)``. Excludes ``CHANGELOG.md`` and
-    ``changelog.d/`` entries — changelog fragments are expected to
-    change / be removed during rebase cycles and are not implement-stage
-    content whose loss signals a silent drop.
+    Returns ``(ok, dropped_files)``. Paths in *exempt_paths* (exact match or
+    directory prefix; defaults to
+    :data:`DEFAULT_REBASE_DROP_EXEMPT_PATHS`) are ignored — registry and
+    boilerplate files such as changelog fragments and ``docs/modules.yaml``
+    are expected to change or be removed during rebase cycles, are re-derived
+    by CI, and are not implement-stage content whose loss signals a silent
+    drop. Their content is a function of the whole repo rather than of one
+    branch, so a rebase can legitimately land a version matching neither side
+    — which the blob-equality excuse below cannot clear.
 
     A file can also leave the post-rebase diff for an entirely healthy
     reason: another PR landed the *same* change first, so the rebase
@@ -1159,7 +1178,11 @@ def check_rebase_diff_integrity(
     if not pre_rebase_files:
         return (True, [])
 
-    excluded_prefixes = ("CHANGELOG.md", "changelog.d/")
+    excluded_prefixes = (
+        tuple(exempt_paths)
+        if exempt_paths is not None
+        else DEFAULT_REBASE_DROP_EXEMPT_PATHS
+    )
     pre_set = {
         f
         for f in pre_rebase_files

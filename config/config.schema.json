@@ -2108,6 +2108,14 @@
           "title": "Read File Max Chars",
           "type": "integer"
         },
+        "rebase_drop_exempt_paths": {
+          "description": "Repo-relative paths/prefixes the post-rebase drop guard ignores (registry and boilerplate files CI re-derives).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Rebase Drop Exempt Paths",
+          "type": "array"
+        },
         "rebase_max_attempts": {
           "advanced": true,
           "default": 3,

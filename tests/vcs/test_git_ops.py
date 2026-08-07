@@ -999,6 +999,86 @@ class TestCheckRebaseDiffIntegrity:
         assert ok is True
         assert dropped == []
 
+    def test_modules_yaml_registry_excluded(self, tmp_path):
+        """``docs/modules.yaml`` is a registry CI re-derives, not
+        implement-stage content.
+
+        Its content is a function of the whole repo, so a rebase settles it on
+        a version matching neither the branch nor the target's previous one —
+        which the blob-equality excuse cannot clear. Live on 2026-08-07 that
+        blocked six auto-mail tickets in twelve minutes.
+        """
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "src").mkdir(parents=True, exist_ok=True)
+        (dest / "src" / "mod.py").write_text("real work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", ["src/mod.py", "docs/modules.yaml"]
+        )
+        assert ok is True
+        assert dropped == []
+
+    def test_exempt_paths_override_replaces_defaults(self, tmp_path):
+        """An explicit *exempt_paths* replaces the default list rather than
+        extending it — so a caller can narrow the guard's blind spot."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "src").mkdir(parents=True, exist_ok=True)
+        (dest / "src" / "mod.py").write_text("real work")
+        git_ops.commit_all(dest, "implement")
+
+        # Only docs/ is exempt now, so CHANGELOG.md is back in scope.
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest,
+            "main",
+            ["src/mod.py", "CHANGELOG.md", "docs/modules.yaml"],
+            exempt_paths=["docs/"],
+        )
+        assert ok is False
+        assert dropped == ["CHANGELOG.md"]
+
+    def test_empty_exempt_paths_disables_exemptions(self, tmp_path):
+        """An empty list is honoured as "exempt nothing", not treated as
+        unset — otherwise an operator could not turn the exemptions off."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "src").mkdir(parents=True, exist_ok=True)
+        (dest / "src" / "mod.py").write_text("real work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest, "main", ["src/mod.py", "CHANGELOG.md"], exempt_paths=[]
+        )
+        assert ok is False
+        assert dropped == ["CHANGELOG.md"]
+
+    def test_exempt_paths_do_not_mask_real_source_drops(self, tmp_path):
+        """The exemption must not swallow a genuine implement-stage drop that
+        happens to sit alongside exempt registry files."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "src").mkdir(parents=True, exist_ok=True)
+        (dest / "src" / "kept.py").write_text("real work")
+        git_ops.commit_all(dest, "implement")
+
+        ok, dropped = git_ops.check_rebase_diff_integrity(
+            dest,
+            "main",
+            ["src/kept.py", "src/discarded.py", "docs/modules.yaml", "CHANGELOG.md"],
+        )
+        assert ok is False
+        assert dropped == ["src/discarded.py"]
+
     def test_empty_pre_list_returns_ok(self, tmp_path):
         remote = make_bare_repo(tmp_path)
         dest = tmp_path / "repo"
