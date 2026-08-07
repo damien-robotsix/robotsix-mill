@@ -110,6 +110,20 @@ class GitLabForgeCIMixin:
             project_path=project_path, run_id=run_id, full_log=full_log
         )
 
+    def rerun_workflow(self, *, run_id: int) -> dict[str, Any]:
+        """Re-run a GitLab pipeline by id.
+
+        Returns ``{"rerun": True}`` on success, ``{"rerun": False,
+        "reason": ...}`` on any failure.  Must NEVER raise.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._rerun_workflow(project_path=project_path, run_id=run_id)
+        except Exception as e:
+            return {"rerun": False, "reason": str(e)}
+
     # -- HTTP seams (monkeypatched in tests) -------------------------------
 
     def _get_latest_pipeline(self, project_path: str, mr_iid: int) -> dict | None:
@@ -280,3 +294,19 @@ class GitLabForgeCIMixin:
                 parts.append("\n")
 
         return "\n".join(parts)
+
+    def _rerun_workflow(self, *, project_path: str, run_id: int) -> dict[str, Any]:
+        """POST /projects/:id/pipelines/:pipeline_id/retry."""
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        try:
+            r = self._http.post(  # type: ignore[attr-defined]
+                f"/projects/{pid}/pipelines/{run_id}/retry",
+            )
+            if r.status_code == 201:
+                return {"rerun": True}
+            return {
+                "rerun": False,
+                "reason": f"retry endpoint returned HTTP {r.status_code}",
+            }
+        except Exception as e:
+            return {"rerun": False, "reason": str(e)}
