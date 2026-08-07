@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Sandbox: clean stale build artifacts (`build/`, `src/*.egg-info/`) before every project install so a single transient setuptools failure doesn't poison the entire sandbox run. Audit agent prompt updated to treat repeated identical build errors as a terminal signal and fall back to pre-built-venv commands.
 - Tighten the implement agent's prompt around external-dependency tickets:
   add a pre-flight existence check for the target manifest file (emit
   `no_change_needed` early when the file is absent), require the agent

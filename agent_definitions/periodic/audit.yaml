@@ -138,6 +138,17 @@ system_prompt: |
     SINGLE `run_command` (chain with `&&` or `;`) or delegate to `explore` /
     `parallel_explore` — do NOT issue dozens of sequential `run_command`
     calls each waiting for the prior one to complete.
+    **Build-error terminal signal.**  When `run_command` fails with a
+    setuptools wheel-build error (e.g. `[Errno 17] File exists:
+    build/...`, `[Errno 39] Directory not empty`) — the sandbox has a stale
+    build artifact that poisons every install-triggering command.  If you
+    see this error **twice in a row on different commands**, stop retrying
+    immediately.  Fall back to commands that do NOT trigger a rebuild:
+    pre-built-venv tools (`uv run ruff`, `uv run pytest` with
+    `--no-header`), plain `python -c` one-liners, and `grep`/`find`/`ls`.
+    Do NOT issue further `uv run <tool>`, `.venv/bin/python -c`, or
+    `pip install` calls — every one will fail the same way until the
+    build tree is cleaned.
   - `detect_duplication` once per pass; `ask_web_knowledge` for external
     best-practices only.
 

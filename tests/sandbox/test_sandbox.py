@@ -382,7 +382,8 @@ def test_install_project_prefixes_pip_when_pyproject_and_proxy(tmp_path, monkeyp
 
     cmd = seen["argv"][-1]
     pip = "pip install --user --quiet --disable-pip-version-check"
-    assert cmd == (PATH_EXPORT + f"({pip} '.[dev]' || {pip} .) && pytest -q")
+    cleanup = "rm -rf build src/*.egg-info 2>/dev/null; "
+    assert cmd == (PATH_EXPORT + f"{cleanup}({pip} '.[dev]' || {pip} .) && pytest -q")
 
 
 def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
@@ -887,6 +888,7 @@ def test_maybe_install_prefix_uv_path(tmp_path):
     assert "uv sync --frozen --no-dev --quiet" in prefix
     assert "command -v uv" in prefix
     assert "WARNING: uv not found, falling back to pip" in prefix
+    assert "rm -rf build src/*.egg-info" in prefix
     assert prefix.endswith(" && pytest -q")
 
 
@@ -914,6 +916,7 @@ def test_maybe_install_prefix_pep508_git_dep(tmp_path):
     assert "uv sync --frozen --no-dev --quiet" in prefix
     assert "command -v uv" in prefix
     assert "WARNING: uv not found, falling back to pip" in prefix
+    assert "rm -rf build src/*.egg-info" in prefix
     assert prefix.endswith(" && pytest -q")
 
 
@@ -933,6 +936,7 @@ def test_maybe_install_prefix_no_uv_sources_unchanged(tmp_path):
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     pip = "pip install --user --quiet --disable-pip-version-check"
     assert f"({pip} '.[dev]' || {pip} .) && pytest -q" in prefix
+    assert "rm -rf build src/*.egg-info" in prefix
     assert "uv sync" not in prefix
 
 
@@ -957,6 +961,7 @@ def test_maybe_install_prefix_uv_lock_missing(tmp_path):
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     pip = "pip install --user --quiet --disable-pip-version-check"
     assert f"({pip} '.[dev]' || {pip} .) && pytest -q" in prefix
+    assert "rm -rf build src/*.egg-info" in prefix
     assert "uv sync" not in prefix
 
 
