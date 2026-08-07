@@ -389,101 +389,45 @@ def test_real_review_yaml_has_conciseness_directive():
             _os.environ.pop("MILL_REVIEW_MODEL", None)
 
 
-def test_real_review_yaml_has_max_tokens_cap():
-    """The real review.yaml must declare a max_tokens output cap.
+def test_no_agent_definition_sets_max_tokens():
+    """No agent definition may set ``max_tokens``.
 
-    Guards a trace-review cost fix: source trace
-    a2df28bd0ec58c341c679a1530e439dc / generation 61e63af1a47121e3 showed
-    the review agent emitting 16,789 output tokens from only 298 input
-    tokens ($0.32, 3.0x the median) — inline self-talk and diff
-    re-summarization instead of a structured ReviewVerdict. The
-    conciseness directive alone (guarded by
-    test_real_review_yaml_has_conciseness_directive) proved insufficient,
-    so a deterministic max_tokens cap backstops runaway generations. If a
-    future edit removes or unsets the cap, this test FAILS.
+    ``max_tokens`` cannot be honoured on the Claude SDK transport:
+    ``ClaudeAgentOptions`` has no per-response cap, so llmio could only
+    forward the value as a ``task_budget`` — an *advisory* whole-loop
+    allowance the model is shown as a countdown, not a ceiling anything
+    enforces. That produced two failures on 2026-08-06: a hard ``400`` on
+    models that reject the parameter (which took refine down across five
+    boards), and, on models that accept it, agents pacing themselves into
+    abandoning work before starting it.
+
+    Two guards were previously expressed through this field and are now
+    carried elsewhere:
+
+    * **review runaway cost** (source trace a2df28bd / generation 61e63af1:
+      16,789 output tokens from 298 input, $0.32, 3.0x the median). The
+      deterministic cap is gone; the conciseness directive remains and is
+      guarded by ``test_real_review_yaml_has_conciseness_directive``, with
+      fleet-wide cost monitoring as the outer net. A per-agent token cap was
+      never the right unit for this — a model that generates erratically does
+      so regardless of which agent it is serving.
+    * **retrospect PATH-3 re-emit** needed the cap to be *large enough* to fit
+      a full ~34K-char ledger. With no cap at all that concern disappears
+      entirely: there is nothing left to under-size.
+
+    If a future edit reintroduces ``max_tokens`` on an agent, this test FAILS —
+    reintroduce it only alongside a transport that can actually enforce it.
     """
-    p = Path("agent_definitions/review.yaml")
-    if not p.exists():
-        pytest.skip("agent_definitions/review.yaml not found")
+    definitions = sorted(Path("agent_definitions").glob("*.yaml"))
+    if not definitions:
+        pytest.skip("agent_definitions/ not found")
 
-    # Mock the env var so resolution succeeds.
-    import os as _os
-
-    had_model = "MILL_REVIEW_MODEL" in _os.environ
-    _os.environ.setdefault("MILL_REVIEW_MODEL", "test/model")
-
-    try:
-        ad = load_agent_definition(p)
-        assert ad.name == "review"
-        assert ad.max_tokens is not None
-        assert ad.max_tokens == 32768
-        # Sanity: present and within a tunable-but-bounded range that
-        # stays above legitimate verdicts (including reasoning overhead)
-        # and below the observed runaway.
-        assert 16384 <= ad.max_tokens <= 65536
-    finally:
-        # Don't leak the env var if it wasn't set before.
-        if not had_model:
-            _os.environ.pop("MILL_REVIEW_MODEL", None)
-
-
-# Representative worst-case size of the retrospect runtime memory ledger.
-# This tracks the observed ~34K-char per-board ledger surfaced to the agent
-# at runtime — NOT the checked-in seed docs/retrospect-memory.md (~946 bytes),
-# which is far too small to be representative. A full PATH-3 re-emit returns
-# this entire document in `updated_memory`, so the configured max_tokens must
-# be large enough to fit it plus the other structured fields.
-REPRESENTATIVE_LEDGER_CHARS = 34_000
-
-
-def test_real_retrospect_yaml_max_tokens_fits_full_ledger_reemit():
-    """The real retrospect.yaml's max_tokens must comfortably fit a full
-    PATH-3 re-emit of the worst-case runtime memory ledger.
-
-    Offline regression guard: a PATH-3 run returns the entire ~34K-char
-    ledger in `updated_memory` plus `findings`/`conclusion`/draft fields and
-    the JSON envelope. If max_tokens is lowered below that worst case, the
-    model raises "Model token limit (N) exceeded before any response was
-    generated" and the post-merge retrospect hard-fails. This test would FAIL
-    if max_tokens were reduced back toward 8192 or below the estimate.
-    """
-    p = Path("agent_definitions/retrospect.yaml")
-    if not p.exists():
-        pytest.skip("agent_definitions/retrospect.yaml not found")
-
-    # Mock the env var so resolution succeeds.
-    import os as _os
-
-    _os.environ.setdefault("MILL_RETROSPECT_MODEL", "test/model")
-
-    try:
-        ad = load_agent_definition(p)
-        assert ad.max_tokens is not None
-
-        # Conservative chars-per-token heuristic. There is no token-counting
-        # helper in the repo (no tiktoken), so this is an intentional,
-        # documented approximation: dense Markdown with snake_case
-        # identifiers, file paths, and code packs ~3 chars/token.
-        CHARS_PER_TOKEN = 3
-        # Fixed margin for the structured findings/conclusion/draft fields
-        # plus the JSON envelope wrapping the RetrospectResult.
-        STRUCTURED_FIELDS_MARGIN = 2_000
-        estimated = (
-            REPRESENTATIVE_LEDGER_CHARS // CHARS_PER_TOKEN + STRUCTURED_FIELDS_MARGIN
-        )
-
-        assert ad.max_tokens >= estimated, (
-            f"retrospect max_tokens={ad.max_tokens} is below the conservative "
-            f"estimate {estimated} for a full PATH-3 re-emit of the "
-            f"~{REPRESENTATIVE_LEDGER_CHARS}-char worst-case runtime ledger "
-            f"plus structured fields. The cap can no longer fit a full "
-            f"re-emit and must be raised — or file a follow-up for dynamic "
-            f"per-run sizing / `## Historical`-compaction of the prompt."
-        )
-    finally:
-        # Don't leak the env var if it wasn't set before.
-        if "MILL_RETROSPECT_MODEL" not in _os.environ:
-            _os.environ.pop("MILL_RETROSPECT_MODEL", None)
+    offenders = [p.name for p in definitions if "\nmax_tokens:" in "\n" + p.read_text()]
+    assert offenders == [], (
+        f"agent definitions set max_tokens: {offenders}. It cannot be enforced "
+        "on the Claude SDK transport and becomes a self-defeating advisory "
+        "task_budget — see this test's docstring."
+    )
 
 
 # ── AgentDefinition pydantic model ────────────────────────────────────

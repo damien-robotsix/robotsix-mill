@@ -1763,8 +1763,8 @@
           "type": "integer"
         },
         "max_openrouter_marginal_usd_per_ticket": {
-          "default": 3.0,
-          "description": "Maximum OpenRouter marginal cost per ticket. 0.0 disables.",
+          "default": 0.0,
+          "description": "Maximum OpenRouter marginal cost per ticket. 0.0 (default) disables.",
           "minimum": 0.0,
           "title": "Max Openrouter Marginal Usd Per Ticket",
           "type": "number"
@@ -1802,8 +1802,8 @@
           "type": "integer"
         },
         "max_spend_usd_per_ticket": {
-          "default": 20.0,
-          "description": "Dollar-cap safety net: cumulative LLM spend per ticket before blocking. 0.0 disables.",
+          "default": 0.0,
+          "description": "Dollar-cap safety net: cumulative LLM spend per ticket before blocking. 0.0 (default) disables.",
           "title": "Max Spend Usd Per Ticket",
           "type": "number"
         },
@@ -1817,8 +1817,8 @@
         },
         "max_traces_per_ticket": {
           "advanced": true,
-          "default": 15,
-          "description": "Maximum Langfuse traces per ticket. 0 disables.",
+          "default": 0,
+          "description": "Maximum Langfuse traces per ticket. 0 (default) disables.",
           "minimum": 0,
           "title": "Max Traces Per Ticket",
           "type": "integer"

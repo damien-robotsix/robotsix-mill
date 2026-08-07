@@ -209,7 +209,12 @@ def test_dollar_cap_excludes_pre_redraft_baseline(ctx, service, monkeypatch):
     from robotsix_mill.core import db as _db
     from robotsix_mill.core.models import Ticket as _Ticket
 
-    cap = ctx.settings.max_spend_usd_per_ticket
+    # The cap is disabled by default (a per-ticket budget is the wrong unit for
+    # guarding erratic model consumption — see the settings comment), so arm it
+    # explicitly here: this test is about the baseline-exclusion arithmetic that
+    # applies WHEN the cap is on, not about whether it ships on.
+    cap = 20.0
+    monkeypatch.setattr(ctx.settings, "max_spend_usd_per_ticket", cap)
     # Live session total well above the cap (pre-redraft cost included).
     monkeypatch.setattr(
         "robotsix_mill.runtime.worker.core.session_cost", lambda *a, **k: cap + 100.0

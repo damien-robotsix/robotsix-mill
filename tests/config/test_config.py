@@ -170,22 +170,26 @@ def test_default_review_requests():
     assert s.review_request_limit == 80
 
 
-def test_default_max_spend_usd():
-    """max_spend_usd_per_ticket defaults to 20.0 (not 0.0)."""
+def test_per_ticket_budget_caps_default_to_disabled():
+    """The three per-ticket runaway budgets are OFF by default.
+
+    They guard against a model that consumes erratically, but a per-TICKET
+    budget is the wrong unit for that: erratic consumption is a property of the
+    model, not of whichever ticket happened to be running, so the cap punishes
+    the unlucky ticket while the real problem continues on the next one.
+    Measured against real fleet behaviour they fired on ordinary long work
+    rather than on runaways — on 2026-08-06 the trace cap alone had 20 tickets
+    BLOCKED at $0.00 of recorded OpenRouter spend.
+
+    The mechanism is retained, not deleted: a non-zero value re-arms any of
+    them if a future model does start behaving unpredictably. Runaway work is
+    still bounded by ``max_turns`` and the per-stage wall-clock timeout, and
+    cost is watched fleet-wide rather than per ticket.
+    """
     s = Settings()
-    assert s.max_spend_usd_per_ticket == 20.0
-
-
-def test_default_max_traces_per_ticket():
-    """max_traces_per_ticket defaults to 15 (trace-count circuit breaker)."""
-    s = Settings()
-    assert s.max_traces_per_ticket == 15
-
-
-def test_default_max_openrouter_marginal_usd():
-    """max_openrouter_marginal_usd_per_ticket defaults to 3.0."""
-    s = Settings()
-    assert s.max_openrouter_marginal_usd_per_ticket == 3.0
+    assert s.max_spend_usd_per_ticket == 0.0
+    assert s.max_traces_per_ticket == 0
+    assert s.max_openrouter_marginal_usd_per_ticket == 0.0
 
 
 def test_default_doc_classifier_requests():
