@@ -797,30 +797,44 @@ class _CoreSettings(BaseModel):
         description="Maximum re-entries to the same stage without progress before escalating to BLOCKED.",
         json_schema_extra={"advanced": True},
     )
-    # Dollar-cap safety net: if a ticket's cumulative Langfuse-traced
-    # LLM spend exceeds this value (across all stages), the worker
-    # escalates it to BLOCKED. 0.0 disables the cap entirely.
+    # --- per-ticket runaway budgets: OFF by default -------------------------
     #
-    # ON BY DEFAULT ($20) — this is the universal backstop against runaway
-    # loops (e.g. a ci_fix or refine loop that oscillates between two states,
-    # which the state-change-based no-progress net cannot see). A normal
-    # ticket costs ~$1–4, so $20 gives ample headroom while killing a runaway
-    # before it burns a fortune. The block is RESUMABLE — a genuinely
-    # expensive ticket can be resumed with resume-blocked to continue.
+    # These three cap a single ticket's spend, trace count, and marginal
+    # OpenRouter cost, blocking it when it goes over. All default to disabled.
+    #
+    # They were on by default as a hedge against a model that burns tokens
+    # unpredictably. Measured against real fleet behaviour that hedge cost far
+    # more than it saved: the models actually in use consume predictably, so
+    # the caps almost never fired on a genuine runaway — they fired on ordinary
+    # long work. On 2026-08-06 the trace cap alone had 20 tickets BLOCKED at
+    # **$0.00** of recorded OpenRouter spend, because a full pipeline pass with
+    # retries legitimately exceeds a per-ticket trace count.
+    #
+    # A per-TICKET budget is also the wrong unit for the thing being guarded
+    # against. A model that starts consuming erratically is a property of the
+    # model, not of whichever ticket happened to be running — so a per-ticket
+    # cap punishes the unlucky ticket while the real problem continues on the
+    # next one. Cost is better watched fleet-wide (robotsix-cost-monitor), where
+    # a drift shows up as a trend rather than as an arbitrary per-ticket cliff.
+    #
+    # The mechanism is kept, not deleted: if a future model does start using
+    # tokens erratically, set a non-zero value here and the cap is live again.
+    # `max_turns` and the per-stage wall-clock timeout remain on as the real
+    # runaway backstops — both bound work without pretending to price it.
     max_spend_usd_per_ticket: float = Field(
-        default=20.0,
-        description="Dollar-cap safety net: cumulative LLM spend per ticket before blocking. 0.0 disables.",
+        default=0.0,
+        description="Dollar-cap safety net: cumulative LLM spend per ticket before blocking. 0.0 (default) disables.",
     )
     max_traces_per_ticket: int = Field(
-        default=15,
+        default=0,
         ge=0,
-        description="Maximum Langfuse traces per ticket. 0 disables.",
+        description="Maximum Langfuse traces per ticket. 0 (default) disables.",
         json_schema_extra={"advanced": True},
     )
     max_openrouter_marginal_usd_per_ticket: float = Field(
-        default=3.0,
+        default=0.0,
         ge=0.0,
-        description="Maximum OpenRouter marginal cost per ticket. 0.0 disables.",
+        description="Maximum OpenRouter marginal cost per ticket. 0.0 (default) disables.",
     )
     # Per-stage wall-clock timeout (seconds).  A stage that exceeds this
     # limit is escalated to BLOCKED, freeing the worker slot.  ≤ 0

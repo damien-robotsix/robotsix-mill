@@ -40,7 +40,6 @@ retries: 2
 # grows well beyond ~40K chars such that even 16384 is insufficient for
 # that fallback, pursue dynamic per-run sizing or `## Historical`-
 # compaction of the prompt as a follow-up.
-max_tokens: 16384
 module: retrospecting
 skills: [board-read]
 

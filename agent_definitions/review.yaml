@@ -34,7 +34,6 @@ ask_user: false
 # (~2-8K tokens observed) yet still well below genuine runaways (~16K+).
 # The retry ladder in reviewing.py can push further via
 # ``review_output_token_budget`` when output exhaustion is detected.
-max_tokens: 32768
 module: reviewing
 skills: []
 

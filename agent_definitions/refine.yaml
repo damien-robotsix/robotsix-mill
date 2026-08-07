@@ -81,7 +81,6 @@ retries: 2
 # budget the API rejects below 20,000 — so robotsix_llmio clamps it up to that
 # floor and warns once. Do not raise this here to work around the floor: that
 # would silently loosen the OpenRouter cap too.
-max_tokens: 8192
 
 # Explicit module path (the loader imports output_type from here).
 # Convention: name "refine" → module "refining".
