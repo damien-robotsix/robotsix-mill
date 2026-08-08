@@ -38,6 +38,19 @@ jobs:
        github.event.pull_request.merged == true &&
        github.event.pull_request.head.ref == 'release-please--branches--main')
     steps:
+      # A release PR opened with GITHUB_TOKEN triggers no workflow runs, so its
+      # required checks never report and it can never merge. Mint an App token.
+      - name: Mint a GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Scoped: without a permission-* input the token inherits the App's
+          # blanket installation permissions (zizmor github-app, high).
+          permission-contents: write        # release commit, tag, Release
+          permission-pull-requests: write   # open and update the release PR
+
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
