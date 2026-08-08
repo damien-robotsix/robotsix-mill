@@ -2794,6 +2794,29 @@
           "title": "State Sync Periodic",
           "type": "boolean"
         },
+        "subscriber_shared_secret": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional shared secret for the X-Mill-Event-Secret header on outbound events.",
+          "title": "Subscriber Shared Secret"
+        },
+        "subscriber_urls": {
+          "description": "List of subscriber endpoint URLs that receive ticket state-change events via HTTP POST.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Subscriber Urls",
+          "type": "array"
+        },
         "subtask_request_limit": {
           "advanced": true,
           "default": 30,

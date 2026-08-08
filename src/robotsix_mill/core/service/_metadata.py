@@ -90,13 +90,14 @@ class _MetadataMixin(_ServiceBase):
             ticket = _get_ticket(s, ticket_id)
             new_value = bool(priority)
             if ticket.priority != new_value:
+                old_state = ticket.state.value
                 ticket.priority = new_value
                 ticket.updated_at = datetime.now(timezone.utc)
                 s.add(ticket)
                 changed.append(ticket.id)
                 s.commit()
                 if self._on_transition is not None:
-                    self._on_transition(ticket)
+                    self._on_transition(ticket, old_state)
             else:
                 s.commit()
         # Propagate to every descendant. _all_descendants walks the
@@ -106,13 +107,14 @@ class _MetadataMixin(_ServiceBase):
                 d = s.get(Ticket, descendant.id)
                 if d is None or d.priority == bool(priority):
                     continue
+                old_state = d.state.value
                 d.priority = bool(priority)
                 d.updated_at = datetime.now(timezone.utc)
                 s.add(d)
                 s.commit()
                 changed.append(d.id)
                 if self._on_transition is not None:
-                    self._on_transition(d)
+                    self._on_transition(d, old_state)
         return changed
 
     def set_branch(self, ticket_id: str, branch: str) -> None:

@@ -1968,7 +1968,7 @@ def test_set_priority_broadcasts_each_changed_ticket(service):
     seen: list[str] = []
     recorded: list[Ticket] = []
 
-    def recorder(ticket: Ticket) -> None:
+    def recorder(ticket: Ticket, old_state: str) -> None:
         seen.append(ticket.id)
         recorded.append(ticket)
 
@@ -1988,7 +1988,7 @@ def test_set_priority_no_broadcast_when_nothing_flips(service):
     t = service.create("a task")
 
     seen: list[str] = []
-    service._on_transition = lambda ticket: seen.append(ticket.id)
+    service._on_transition = lambda ticket, old_state: seen.append(ticket.id)
     changed = service.set_priority(t.id, False)  # already False
 
     assert changed == []

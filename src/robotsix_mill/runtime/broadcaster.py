@@ -26,7 +26,7 @@ class BoardBroadcaster:
     def __init__(self) -> None:
         self._queues: list[Queue] = []
 
-    def broadcast_sync(self, ticket: Ticket) -> None:
+    def broadcast_sync(self, ticket: Ticket, old_state: str = "") -> None:
         """Schedule a broadcast of *ticket* to all connected clients.
 
         Thread-safe: may be called from the worker threadpool as well

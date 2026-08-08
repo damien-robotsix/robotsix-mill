@@ -37,7 +37,7 @@ async def test_broadcast_sync_inside_loop_pushes_to_queues() -> None:
     q = await bc.subscribe([])
     q.get_nowait()  # discard the initial ticket_list message
 
-    bc.broadcast_sync(_make_ticket())
+    bc.broadcast_sync(_make_ticket(), "draft")
     # call_soon_threadsafe schedules the push; yield so it runs.
     await asyncio.sleep(0)
 
