@@ -8,7 +8,6 @@ No real network calls — all HTTP is mocked via ``unittest.mock``.
 
 from __future__ import annotations
 
-import json
 from unittest import mock
 
 import httpx
