@@ -168,6 +168,18 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             return cls._DEFAULT_STAGE_RANK
         return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
 
+    @staticmethod
+    def _peek(
+        queue: "asyncio.PriorityQueue[tuple[int, int, int, str]]",
+    ) -> "tuple[int, int, int, str]":
+        """Return the smallest item from *queue* without dequeuing it.
+
+        ``asyncio.PriorityQueue`` stores its heap in a bare list at
+        ``_queue`` — CPython-specific but stable in practice.  This
+        helper isolates the private-access wart in one place.
+        """
+        return queue._queue[0]  # type: ignore[attr-defined,no-any-return]
+
     def __init__(
         self,
         ctx: StageContext,
@@ -439,6 +451,65 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     service=board_service,
                     repo_config=ticket_repo_config,
                 )
+
+                # Drain: the boot drip delivers tickets in batches, so a
+                # better-ranked ticket may have landed on our queue
+                # between the initial pop and now.  Swap until we hold
+                # the board's current best before entering the cap
+                # check or global gate — prevents head-of-line blocking
+                # where a consumer parks at the gate with a stale ticket
+                # while a priority/near-terminal ticket sits unseen in
+                # the queue.
+                while True:
+                    if queue.empty():
+                        break
+                    head_prio, head_stage, _head_seq, head_tid = self._peek(queue)
+                    if head_tid in self._cap_deferred:
+                        break  # cap-deferred head sits at demoted rank; don't loop
+                    # When the current ticket was cap-deferred, its queue
+                    # entry carries a demoted priority rank.  Use that
+                    # demoted rank for the comparison + re-enqueue so the
+                    # ticket stays behind non-priority work it was supposed
+                    # to sit behind, rather than hopping back to its real
+                    # priority rank and causing queue churn.
+                    if ticket_id in self._cap_deferred:
+                        cur_rank = (popped_prio, popped_stage)
+                    elif before is not None:
+                        cur_rank = (
+                            0 if getattr(before, "priority", False) else 1,
+                            self._stage_rank(before),
+                        )
+                    else:
+                        cur_rank = (popped_prio, popped_stage)
+                    if (head_prio, head_stage) >= cur_rank:
+                        break
+                    log.debug(
+                        "%s: draining better-ranked %s from queue head",
+                        ticket_id,
+                        head_tid,
+                    )
+                    self._pending.discard(ticket_id)
+                    # Balance the queue's _unfinished_tasks counter: the
+                    # outer ``await queue.get()`` (or a prior drain-loop
+                    # get) incremented it, and we're abandoning this
+                    # ticket — mark it done before putting it back so the
+                    # net effect is zero for the swap.  The ``finally``
+                    # block's ``task_done()`` covers the final ticket.
+                    queue.task_done()
+                    self._enqueue_seq += 1
+                    queue.put_nowait(
+                        (cur_rank[0], cur_rank[1], self._enqueue_seq, ticket_id)
+                    )
+                    self._pending.add(ticket_id)
+                    popped_prio, popped_stage, _seq, ticket_id = await queue.get()
+                    before = board_service.get(ticket_id)
+                    before_state = before.state if before else None
+                    ticket_repo_config = self._repo_config_for_ticket(ticket_id)
+                    per_ticket_ctx = StageContext(
+                        settings=self.ctx.settings,
+                        service=board_service,
+                        repo_config=ticket_repo_config,
+                    )
 
                 # --- In-flight PR cap ---
                 if (
@@ -1147,26 +1218,35 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
 
         # Collect all matching ticket ids first (the enumeration is
         # blocking svc.list() — see epic children 1-2 for moving this
-        # off the event loop).
-        to_enqueue: list[str] = []
+        # off the event loop).  Capture (prio_rank, stage_rank, id)
+        # so we can sort before the drip — without this a board's
+        # consumer may pop a low-ranked ticket from an early batch
+        # before its priority tickets arrive in a later batch, causing
+        # head-of-line blocking at the global gate (max_concurrency=1
+        # per board ties up the consumer with a stale ticket).
+        to_enqueue: list[tuple[int, int, str]] = []
         for board_id in boards:
             svc = TicketService(self.ctx.settings, board_id=board_id)
             try:
                 for ticket in svc.list():
                     if ticket.state in STAGE_FOR_STATE:
-                        to_enqueue.append(ticket.id)
+                        prio_rank = 0 if getattr(ticket, "priority", False) else 1
+                        stage_rank = self._stage_rank(ticket)
+                        to_enqueue.append((prio_rank, stage_rank, ticket.id))
             except Exception:
                 log.exception(
                     "requeue_unfinished: failed to enumerate board %r",
                     board_id or "<default>",
                 )
 
+        to_enqueue.sort()
+
         # Drip-feed enqueues in batches with a pause between each batch.
         batch_size = max(1, self.ctx.settings.requeue_batch_size)
         pause = self.ctx.settings.requeue_batch_pause_seconds
         for i in range(0, len(to_enqueue), batch_size):
             batch = to_enqueue[i : i + batch_size]
-            for tid in batch:
+            for _prio, _stage, tid in batch:
                 self.enqueue(tid)
             # Pause between batches (skip after the last batch).
             if i + batch_size < len(to_enqueue):
