@@ -168,6 +168,16 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             return cls._DEFAULT_STAGE_RANK
         return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
 
+    @staticmethod
+    def _peek(queue: "asyncio.PriorityQueue[tuple]") -> "tuple":
+        """Return the smallest item from *queue* without dequeuing it.
+
+        ``asyncio.PriorityQueue`` stores its heap in a bare list at
+        ``_queue`` — CPython-specific but stable in practice.  This
+        helper isolates the private-access wart in one place.
+        """
+        return queue._queue[0]  # type: ignore[attr-defined,no-any-return]
+
     def __init__(
         self,
         ctx: StageContext,
@@ -451,17 +461,24 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 while True:
                     if queue.empty():
                         break
-                    head_prio, head_stage, _head_seq, head_tid = queue._queue[0]  # type: ignore[attr-defined]
+                    head_prio, head_stage, _head_seq, head_tid = self._peek(queue)
                     if head_tid in self._cap_deferred:
                         break  # cap-deferred head sits at demoted rank; don't loop
-                    cur_rank = (
-                        (
+                    # When the current ticket was cap-deferred, its queue
+                    # entry carries a demoted priority rank.  Use that
+                    # demoted rank for the comparison + re-enqueue so the
+                    # ticket stays behind non-priority work it was supposed
+                    # to sit behind, rather than hopping back to its real
+                    # priority rank and causing queue churn.
+                    if ticket_id in self._cap_deferred:
+                        cur_rank = (popped_prio, popped_stage)
+                    elif before is not None:
+                        cur_rank = (
                             0 if getattr(before, "priority", False) else 1,
                             self._stage_rank(before),
                         )
-                        if before is not None
-                        else (popped_prio, popped_stage)
-                    )
+                    else:
+                        cur_rank = (popped_prio, popped_stage)
                     if (head_prio, head_stage) >= cur_rank:
                         break
                     log.debug(
@@ -470,6 +487,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         head_tid,
                     )
                     self._pending.discard(ticket_id)
+                    # Balance the queue's _unfinished_tasks counter: the
+                    # outer ``await queue.get()`` (or a prior drain-loop
+                    # get) incremented it, and we're abandoning this
+                    # ticket — mark it done before putting it back so the
+                    # net effect is zero for the swap.  The ``finally``
+                    # block's ``task_done()`` covers the final ticket.
+                    queue.task_done()
                     self._enqueue_seq += 1
                     queue.put_nowait(
                         (cur_rank[0], cur_rank[1], self._enqueue_seq, ticket_id)
