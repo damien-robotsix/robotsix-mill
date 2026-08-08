@@ -3264,3 +3264,104 @@ def test_agent_crash_without_timeout_uses_generic_note(tmp_path, monkeypatch):
     # The generic budget note, not the timeout diagnostic.
     assert "iteration budget" in out.note
     assert "timed out" not in out.note
+
+
+# ---------------------------------------------------------------------------
+# CI_FAILURE diagnostic event emission
+# ---------------------------------------------------------------------------
+
+
+def test_ci_failure_diagnostic_event_emitted_on_failure(tmp_path, monkeypatch):
+    """A CI_FAILURE diagnostic event is emitted every time the ci_fix
+    stage confirms CI is genuinely failing.
+
+    Regression test: ensures the recurring-category → auto-fix-proposal
+    pipeline receives input and doesn't starve.
+    """
+    from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
+
+    ctx = _gh(tmp_path)
+    _failing_check_status(monkeypatch)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    stage.run(t, ctx)
+
+    events = list_diagnostic_events(ctx.settings, "test-board", category="CI_FAILURE")
+    assert len(events) == 1, f"expected 1 CI_FAILURE event, got {len(events)}"
+    ev = events[0]
+    assert ev.ticket_id == t.id
+    assert ev.category == "CI_FAILURE"
+    assert ev.normalized_key  # non-empty
+    assert "lint" in ev.reason
+
+
+def test_ci_failure_diagnostic_event_uses_ticket_board_id_fallback(
+    tmp_path,
+    monkeypatch,
+):
+    """When ctx.repo_config is None, the emitter falls back to
+    ticket.board_id instead of silently skipping the event."""
+    from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
+
+    ctx = _gh(tmp_path)
+    _failing_check_status(monkeypatch)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Simulate _repo_config_for_ticket returning None: wipe repo_config
+    # but keep everything else working.
+    ctx.repo_config = None
+
+    stage = CIFixStage()
+    stage.run(t, ctx)
+
+    # The event should still be emitted because ticket.board_id is
+    # available as a fallback.
+    events = list_diagnostic_events(ctx.settings, "test-board", category="CI_FAILURE")
+    assert len(events) == 1, f"expected 1 CI_FAILURE event, got {len(events)}"
+    ev = events[0]
+    assert ev.ticket_id == t.id
+
+
+def test_ci_failure_diagnostic_event_not_emitted_on_check_status_pending(
+    tmp_path,
+    monkeypatch,
+):
+    """When check_status returns 'pending' (CI not yet complete), no
+    CI_FAILURE event is emitted — the stage returns IMPLEMENT_COMPLETE
+    before reaching the emitter."""
+    from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "pending",
+            "failing": [],
+        },
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    events = list_diagnostic_events(ctx.settings, "test-board", category="CI_FAILURE")
+    assert len(events) == 0, "pending CI should not emit CI_FAILURE event"
