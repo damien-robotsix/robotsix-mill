@@ -130,17 +130,24 @@ def list_children(
     if parent is None:
         raise HTTPException(404, "ticket not found")
     repo_config = _repo_config_for_ticket(parent, request.app.state.repos)
-    return [
-        enrich_ticket_read(
-            t,
-            settings,
-            svc,
-            blocking_cost=False,
-            fetch_pr_url=False,
-            repo_config=repo_config,
-        )
-        for t in svc.list_children(ticket_id)
-    ]
+    enriched: list[TicketRead] = []
+    for t in svc.list_children(ticket_id):
+        try:
+            enriched.append(
+                enrich_ticket_read(
+                    t,
+                    settings,
+                    svc,
+                    blocking_cost=False,
+                    fetch_pr_url=False,
+                    repo_config=repo_config,
+                )
+            )
+        except Exception:
+            log.exception(
+                "list_children: skipping ticket %s due to enrichment error", t.id
+            )
+    return enriched
 
 
 @router.post("/tickets/{ticket_id}/generate-children", status_code=202)
