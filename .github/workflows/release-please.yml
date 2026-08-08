@@ -1,0 +1,43 @@
+name: release-please
+
+# Fleet-wide release automation per robotsix-standards release-please.md.
+# Opens/updates a release PR on every push to main; creates the tag and
+# GitHub Release when that release PR is merged.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+  workflow_dispatch:
+
+# Serialise releases per branch. Deliberately NOT cancel-in-progress: a cancel
+# between pushing the release commit and creating the tag would leave the repo
+# half-released.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# Job-scoped below, not here.
+permissions: {}
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # create the release commit, tag and GitHub Release
+      pull-requests: write  # open and update the release PR
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.head.ref == 'release-please--branches--main')
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

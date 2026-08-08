@@ -1,1 +1,0 @@
-Fix queue.task_done() counter mismatch in the drain-at-gate-entry loop that would cause queue.join() to hang forever after N swaps. Also fix cap-deferred rank undoing (demoted tickets were re-enqueued at their real priority rank during drain swaps) and extract _peek() helper for PriorityQueue private-attribute access.

@@ -1,1 +1,0 @@
-Add outbound event mechanism that fires HTTP POSTs to configured subscriber URLs on every ticket state transition. Events carry ``{ticket_id, board_id, old_state, new_state, timestamp}``. Delivery is best-effort and asynchronous — subscriber downtime does not block or slow down ticket transitions. Configured via ``subscriber_urls`` and ``subscriber_shared_secret`` settings.
