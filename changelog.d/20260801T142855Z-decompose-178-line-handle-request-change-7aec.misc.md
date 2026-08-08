@@ -1,0 +1,1 @@
+Decompose `_handle_request_changes` in review stage: extract `_detect_convergence` (fingerprint/convergence) and `_verify_already_addressed_asks` (claim-verification loop) as module-level helpers, reducing the method from 178 to 132 lines.
