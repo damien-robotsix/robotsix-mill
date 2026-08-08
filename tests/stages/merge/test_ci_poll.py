@@ -883,6 +883,11 @@ def test_skip_ci_human_mr_approval_conflict_still_falls_back(tmp_path, monkeypat
             "mergeable_state": "dirty",
         },
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
     monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
 
     monkeypatch.setattr(
