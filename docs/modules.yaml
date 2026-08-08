@@ -85,6 +85,7 @@ modules:
       - tests/core/test_tool_wrappers.py
       - tests/core/test_delta_context.py
       - tests/core/test_event_notifier.py
+      - changelog.d/*.md
     dependencies: [config]
 
   - id: deps

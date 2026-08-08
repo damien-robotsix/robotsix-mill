@@ -7,6 +7,7 @@ agent, force-pushes, and bounds retries with a per-ticket attempt counter.
 from __future__ import annotations
 
 import contextlib
+import datetime
 from pathlib import Path
 
 from ...config import target_branch_for
@@ -22,6 +23,7 @@ from ._base import _MergeStageBase
 from ._shared import (
     _REBASE_COUNTER,
     _REBASE_DROPPED,
+    _REBASE_LAST_TS,
     _read_counter,
     _read_dropped_files,
     _reconcile_with_remote_pr,
@@ -306,6 +308,13 @@ class RebaseMixin(_MergeStageBase):
         if check is _facade.git_ops.PostPushResult.PASS:
             # Push landed, no foreign commits — genuine success.
             log.info("%s: rebase succeeded, push verified", ticket.id)
+
+            # Record successful rebase time for parked-PR cooldown.
+            _ts_path = ctx.service.workspace(ticket).artifacts_dir / _REBASE_LAST_TS
+            _ts_path.write_text(
+                datetime.datetime.now(datetime.UTC).isoformat(),
+                encoding="utf-8",
+            )
 
             # Verify that the rebase did not silently drop any
             # implement-stage source files.  This catches the case

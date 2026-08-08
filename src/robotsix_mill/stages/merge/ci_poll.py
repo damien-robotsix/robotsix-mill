@@ -8,6 +8,7 @@ routes to FIXING_CI / REBASING / WAITING_AUTO_MERGE as appropriate.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import fnmatch
 import re
 from pathlib import Path
@@ -26,6 +27,7 @@ from ._shared import (
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
+    _REBASE_LAST_TS,
     _ci_truly_green,
     _duplicate_changelog_fragments,
     _is_pr_check_run,
@@ -92,6 +94,27 @@ def _extract_tracked_pr_url(description: str) -> str | None:
     """
     m = re.search(r"- URL: (https://[^\s]+)", description)
     return m.group(1) if m else None
+
+
+def _within_rebase_cooldown(artifacts_dir: Path, cooldown_hours: int) -> bool:
+    """Return True when the last successful rebase is still within the cooldown window.
+
+    Used by ``_handle_human_mr_approval`` to avoid continuously re-rebasing
+    PRs parked for human approval.  When *cooldown_hours* is 0 the feature
+    is disabled and this always returns False.  Missing or unparseable
+    timestamps are treated as "no throttle" (the timestamp may not exist
+    yet, e.g. before the first rebase).
+    """
+    if cooldown_hours <= 0:
+        return False
+    ts_path = artifacts_dir / _REBASE_LAST_TS
+    try:
+        ts_text = ts_path.read_text(encoding="utf-8").strip()
+        last = datetime.datetime.fromisoformat(ts_text)
+        age = datetime.datetime.now(datetime.UTC) - last
+        return age.total_seconds() < cooldown_hours * 3600
+    except OSError, ValueError:
+        return False
 
 
 class CIPollMixin(_MergeStageBase):
@@ -770,6 +793,15 @@ class CIPollMixin(_MergeStageBase):
                 "%s: PR conflicting — falling back to IMPLEMENT_COMPLETE",
                 ticket.id,
             )
+            if _within_rebase_cooldown(
+                ctx.service.workspace(ticket).artifacts_dir,
+                s.parked_rebase_cooldown_hours,
+            ):
+                log.info(
+                    "%s: parked PR re-conflict within cooldown window — staying in HUMAN_MR_APPROVAL",
+                    ticket.id,
+                )
+                return Outcome(State.HUMAN_MR_APPROVAL)
             return Outcome(
                 State.IMPLEMENT_COMPLETE,
                 "PR is now conflicting; gates no longer pass",
@@ -891,6 +923,15 @@ class CIPollMixin(_MergeStageBase):
                     "Waiting for CI to re-run before retrying auto-merge.",
                 )
                 return Outcome(State.WAITING_AUTO_MERGE)
+            if _within_rebase_cooldown(
+                ctx.service.workspace(ticket).artifacts_dir,
+                s.parked_rebase_cooldown_hours,
+            ):
+                log.info(
+                    "%s: parked PR behind-target within cooldown — staying in HUMAN_MR_APPROVAL",
+                    ticket.id,
+                )
+                return Outcome(State.HUMAN_MR_APPROVAL)
             return Outcome(
                 State.IMPLEMENT_COMPLETE,
                 f"branch behind target; update-branch failed: "

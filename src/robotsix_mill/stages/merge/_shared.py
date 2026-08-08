@@ -130,6 +130,7 @@ __all__ = [
     "_MERGE_MAX_RETRIES",
     "_MERGE_RETRY_COUNTER",
     "_REBASE_DROPPED",
+    "_REBASE_LAST_TS",
     "_merge_rejection_outcome",
     "_read_counter",
     "_read_dropped_files",
@@ -159,6 +160,7 @@ _MERGE_MAX_RETRIES = 5
 # empty commits. See _refresh_branch_for_ci.
 _CI_POLL_REFRESH_SHA = "ci_poll_refresh_sha.txt"
 _CI_FIX_MIXIN_REFRESH_SHA = "ci_fix_mixin_refresh_sha.txt"
+_REBASE_LAST_TS = "last_rebase_at.txt"
 
 
 def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:

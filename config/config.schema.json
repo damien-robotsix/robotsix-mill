@@ -2040,6 +2040,14 @@
           "title": "Orphaned Pr Track Foreign Prs",
           "type": "boolean"
         },
+        "parked_rebase_cooldown_hours": {
+          "advanced": true,
+          "default": 4,
+          "description": "Hours to wait before re-rebasing a PR parked in human_mr_approval. Set to 0 to disable.",
+          "minimum": 0,
+          "title": "Parked Rebase Cooldown Hours",
+          "type": "integer"
+        },
         "pin_bump_interval_seconds": {
           "advanced": true,
           "default": 86400,

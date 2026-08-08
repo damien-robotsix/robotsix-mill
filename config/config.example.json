@@ -226,6 +226,7 @@
       "site/modules.yaml"
     ],
     "rebase_max_attempts": 3,
+    "parked_rebase_cooldown_hours": 4,
     "rebase_memory_path": null,
     "refine_advisory_dedup_enabled": true,
     "refine_delta_reuse_enabled": true,
