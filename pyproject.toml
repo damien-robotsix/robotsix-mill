@@ -96,9 +96,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config", "--doctest-modules"]
 xfail_strict = true
-markers = [
-    "docker: tests that require a running Docker daemon and network access",
-]
+markers = []
 filterwarnings = [
     "error",
     # Python 3.14 upstream: inspect.getfile() can trigger ResourceWarning

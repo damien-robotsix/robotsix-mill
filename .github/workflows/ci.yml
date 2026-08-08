@@ -27,7 +27,7 @@ jobs:
       install-extras: "tracing"
       cov-package: "robotsix_mill"
       coverage-threshold: 80
-      pytest-args: -m "not docker" -n auto
+      pytest-args: -n auto
       bandit-severity: "medium"
       mypy-advisory: true
       # CVE ignores mirroring security-audit.yml:
