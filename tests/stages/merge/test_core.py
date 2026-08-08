@@ -676,7 +676,7 @@ def test_rebasing_does_not_skip_when_not_clean(tmp_path, monkeypatch, mstate):
 def test_human_mr_approval_conflicting_falls_back_to_implement_complete(
     tmp_path, monkeypatch
 ):
-    """HUMAN_MR_APPROVAL + mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
+    """HUMAN_MR_APPROVAL + mergeable=False + update_branch fails → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge,
@@ -688,10 +688,43 @@ def test_human_mr_approval_conflicting_falls_back_to_implement_complete(
             "mergeable": False,
         },
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
     t = _human_mr_approval(ctx)
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert "gates no longer pass" in out.note
+
+
+def test_human_mr_approval_conflicting_update_branch_succeeds_stays_in_human_mr_approval(
+    tmp_path, monkeypatch
+):
+    """HUMAN_MR_APPROVAL + mergeable=False + update_branch succeeds → HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {
+            "updated": True,
+            "reason": "update-branch accepted",
+        },
+    )
+    t = _human_mr_approval(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
 
 
 def test_human_mr_approval_ci_failing_falls_back_to_implement_complete(
@@ -2109,7 +2142,7 @@ def test_check_status_exception_is_noop(tmp_path, monkeypatch):
 
 
 def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
-    """Conflicting PR → silent fallback to IMPLEMENT_COMPLETE; check_status never called."""
+    """Conflicting PR → update_branch attempted, then IMPLEMENT_COMPLETE; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2120,6 +2153,11 @@ def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
             "url": "u",
             "mergeable": False,
         },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
     )
     check_calls = []
 
@@ -2632,7 +2670,7 @@ def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
 
 
 def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
-    """mergeable=False → IMPLEMENT_COMPLETE (silent fallback)."""
+    """mergeable=False + update_branch fails → IMPLEMENT_COMPLETE (merge_pr never called)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2643,6 +2681,11 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
             "url": "u",
             "mergeable": False,
         },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
     )
 
     merge_called = []
@@ -3219,7 +3262,7 @@ def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
 def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     tmp_path, monkeypatch
 ):
-    """WAITING_AUTO_MERGE + mergeable=False → IMPLEMENT_COMPLETE."""
+    """WAITING_AUTO_MERGE + mergeable=False + update_branch fails → IMPLEMENT_COMPLETE."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -3231,6 +3274,11 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
             "mergeable": False,
         },
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
 
     t = _human_mr_approval(ctx)
     _write_review_artifact(ctx, t)
@@ -3240,6 +3288,39 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert "gates no longer pass" in out.note
+
+
+def test_waiting_auto_merge_conflicting_update_branch_succeeds_stays_in_waiting_auto_merge(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + mergeable=False + update_branch succeeds → WAITING_AUTO_MERGE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {
+            "updated": True,
+            "reason": "update-branch accepted",
+        },
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.WAITING_AUTO_MERGE
 
 
 def _green_behind_forge(monkeypatch, *, update_branch_result=None):

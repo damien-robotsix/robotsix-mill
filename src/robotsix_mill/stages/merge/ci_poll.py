@@ -757,9 +757,15 @@ class CIPollMixin(_MergeStageBase):
         # PR is open.  Check mergeability.
         mergeable = pr.get("mergeable")
         if mergeable is False:
-            # PR is open and conflicting → silent fallback to
-            # IMPLEMENT_COMPLETE so the robot can auto-fix (via
-            # REBASING) without notifying the human.
+            # PR is open and conflicting — try the server-side
+            # update-branch API first (merges base into head) before
+            # falling back to the heavy rebase agent.  A base-branch
+            # move from a sibling PR landing often resolves cleanly;
+            # only genuine content conflicts need the rebase agent.
+            if self._try_update_branch_for_conflict(ticket, ctx, branch):
+                return Outcome(State.HUMAN_MR_APPROVAL)
+            # update-branch failed — genuine content conflict.
+            # Fall through to IMPLEMENT_COMPLETE for the rebase agent.
             log.info(
                 "%s: PR conflicting — falling back to IMPLEMENT_COMPLETE",
                 ticket.id,
@@ -902,6 +908,49 @@ class CIPollMixin(_MergeStageBase):
         self._maybe_comment(ticket, ctx, eligibility_reason)
         return Outcome(State.HUMAN_MR_APPROVAL)
 
+    def _try_update_branch_for_conflict(
+        self, ticket: Ticket, ctx: StageContext, branch: str
+    ) -> bool:
+        """Try the server-side update-branch API to resolve a conflict.
+
+        Called when ``mergeable is False`` — i.e. the PR's base branch
+        has moved and the PR head no longer merges cleanly.  The
+        update-branch API (GitHub's ``PUT /repos/.../pulls/.../update-branch``)
+        merges the updated base INTO the PR head server-side.  When
+        there is no true content overlap this resolves instantly and
+        cheaply, avoiding the heavy rebase agent.
+
+        Returns ``True`` when ``update_branch`` succeeded (the branch
+        is now current — the caller should stay in its current state
+        so CI re-runs).  Returns ``False`` when it failed (genuine
+        content conflict — the caller should fall through to the
+        existing IMPLEMENT_COMPLETE → REBASING path).
+        """
+        s = ctx.settings
+        forge = get_forge(s, repo_config=ctx.repo_config)
+        update_result = forge.update_branch(source_branch=branch)
+        if update_result.get("updated"):
+            log.info(
+                "%s: PR conflicting — update-branch succeeded, "
+                "branch is now current; re-polling",
+                ticket.id,
+            )
+            self._maybe_comment(
+                ticket,
+                ctx,
+                "PR was conflicting due to base-branch changes; "
+                "auto-updated via update-branch API. "
+                "Waiting for CI to re-run.",
+            )
+            return True
+        log.info(
+            "%s: PR conflicting — update-branch failed (%s); "
+            "falling through to full rebase path",
+            ticket.id,
+            update_result.get("reason", "unknown"),
+        )
+        return False
+
     def _auto_merge_eligible(
         self,
         ticket: Ticket,
@@ -1018,6 +1067,11 @@ class CIPollMixin(_MergeStageBase):
 
         mergeable = pr.get("mergeable")
         if mergeable is False:
+            # PR became conflicting while waiting — try the server-side
+            # update-branch API first (merges base into head) before
+            # falling back to the heavy rebase agent.
+            if self._try_update_branch_for_conflict(ticket, ctx, branch):
+                return Outcome(State.WAITING_AUTO_MERGE)
             log.info(
                 "%s: PR became conflicting while waiting for CI → IMPLEMENT_COMPLETE",
                 ticket.id,
