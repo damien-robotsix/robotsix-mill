@@ -1186,11 +1186,12 @@ def check_rebase_diff_integrity(
     pre_rebase_files: list[str],
     pre_rebase_blobs: dict[str, str] | None = None,
     exempt_paths: Sequence[str] | None = None,
-) -> tuple[bool, list[str]]:
+    target_pre_blobs: dict[str, str] | None = None,
+) -> tuple[bool, list[str], list[str]]:
     """Check that every source file from the pre-rebase diff survived the rebase.
 
-    Returns ``(ok, dropped_files)``. Paths in *exempt_paths* (exact match or
-    directory prefix; defaults to
+    Returns ``(ok, dropped_files, sibling_likely)``. Paths in *exempt_paths*
+    (exact match or directory prefix; defaults to
     :data:`DEFAULT_REBASE_DROP_EXEMPT_PATHS`) are ignored — registry and
     boilerplate files such as changelog fragments and ``docs/modules.yaml``
     are expected to change or be removed during rebase cycles, are re-derived
@@ -1212,10 +1213,18 @@ def check_rebase_diff_integrity(
     the target now carries exactly the blob the branch had, the work is
     upstream and the file is excused. Without it the check keeps its
     original conservative behaviour and reports every missing file.
+
+    A sibling PR that changed the same file on the target *during* the
+    rebase window produces a third case: the file disappears from the
+    post-rebase diff, but it was not dropped — it was superseded. Pass
+    *target_pre_blobs* (the target branch's content for each file
+    *before* the agent ran) to distinguish that scenario from a genuine
+    drop. Files whose target content changed during the rebase window
+    are reported in *sibling_likely* rather than *dropped*.
     """
     post_files = changed_source_files(repo, target_branch)
     if not pre_rebase_files:
-        return (True, [])
+        return (True, [], [])
 
     excluded_prefixes = (
         tuple(exempt_paths)
@@ -1230,18 +1239,34 @@ def check_rebase_diff_integrity(
     post_set = set(post_files)
     candidates = sorted(pre_set - post_set)
     if not pre_rebase_blobs:
-        return (len(candidates) == 0, candidates)
+        return (len(candidates) == 0, candidates, [])
 
     target_blobs = file_blobs(repo, candidates, ref=f"origin/{target_branch}")
-    dropped = [
-        f
-        for f in candidates
+    dropped: list[str] = []
+    sibling_likely: list[str] = []
+    for f in candidates:
         # Excused only when the target's content for this path is byte-for-byte
         # what the branch was trying to deliver. A discarded change leaves the
         # target on its ORIGINAL content, which never matches.
-        if not (f in pre_rebase_blobs and target_blobs.get(f) == pre_rebase_blobs[f])
-    ]
-    return (len(dropped) == 0, dropped)
+        if f in pre_rebase_blobs and target_blobs.get(f) == pre_rebase_blobs[f]:
+            continue
+
+        # Sibling-modified: the target's content for this file changed during
+        # the rebase window (a sibling PR landed between our pre-rebase
+        # snapshot and now). The agent correctly took the sibling's version;
+        # our specific delta is superseded — but we do NOT auto-excuse because
+        # semantic equivalence can only be judged by a human.
+        if (
+            target_pre_blobs
+            and f in target_pre_blobs
+            and target_pre_blobs[f] != target_blobs.get(f)
+        ):
+            sibling_likely.append(f)
+            continue
+
+        dropped.append(f)
+
+    return (len(dropped) == 0 and len(sibling_likely) == 0, dropped, sibling_likely)
 
 
 def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:

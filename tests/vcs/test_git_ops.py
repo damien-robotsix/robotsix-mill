@@ -1030,7 +1030,7 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "b.txt").write_text("more work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", ["a.txt", "b.txt"]
         )
         assert ok is True
@@ -1045,7 +1045,7 @@ class TestCheckRebaseDiffIntegrity:
         git_ops.commit_all(dest, "implement")
 
         # Pre-rebase files include b.txt, but b.txt is not in the diff
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", ["a.txt", "b.txt"]
         )
         assert ok is False
@@ -1062,7 +1062,7 @@ class TestCheckRebaseDiffIntegrity:
 
         # CHANGELOG.md in pre-rebase list but not in post-rebase diff
         # should NOT trigger a drop.
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", ["src/mod.py", "CHANGELOG.md"]
         )
         assert ok is True
@@ -1077,7 +1077,7 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "src" / "mod.py").write_text("real work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", ["src/mod.py", "changelog.d/20250601.misc.md"]
         )
         assert ok is True
@@ -1100,7 +1100,7 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "src" / "mod.py").write_text("real work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", ["src/mod.py", "docs/modules.yaml"]
         )
         assert ok is True
@@ -1118,7 +1118,7 @@ class TestCheckRebaseDiffIntegrity:
         git_ops.commit_all(dest, "implement")
 
         # Only docs/ is exempt now, so CHANGELOG.md is back in scope.
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest,
             "main",
             ["src/mod.py", "CHANGELOG.md", "docs/modules.yaml"],
@@ -1138,7 +1138,7 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "src" / "mod.py").write_text("real work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", ["src/mod.py", "CHANGELOG.md"], exempt_paths=[]
         )
         assert ok is False
@@ -1155,7 +1155,7 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "src" / "kept.py").write_text("real work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest,
             "main",
             ["src/kept.py", "src/discarded.py", "docs/modules.yaml", "CHANGELOG.md"],
@@ -1171,7 +1171,7 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "a.txt").write_text("work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(dest, "main", [])
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(dest, "main", [])
         assert ok is True
         assert dropped == []
 
@@ -1199,7 +1199,9 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "mod.py").write_text("work")
         git_ops.commit_all(dest, "implement")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(dest, "develop", ["mod.py"])
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
+            dest, "develop", ["mod.py"]
+        )
         assert ok is True
         assert dropped == []
 
@@ -1224,11 +1226,87 @@ class TestCheckRebaseDiffIntegrity:
         (dest / "mod.py").unlink()
         git_ops.commit_all(dest, "rebase: incorrectly dropped mod.py")
 
-        ok, dropped = git_ops.check_rebase_diff_integrity(
+        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
             dest, "main", pre_files, pre_blobs
         )
         assert ok is False, "integrity check must flag the dropped file"
         assert "mod.py" in dropped
+
+    def test_sibling_modified_target_produces_sibling_likely_not_dropped(
+        self, tmp_path
+    ):
+        """When the target branch changed a file during the rebase window
+        (a sibling PR landed), the file must appear in *sibling_likely*,
+        not *dropped*."""
+        repo, run = _init_repo_with_target(tmp_path)
+        # Branch modifies Dockerfile to its own version.
+        (repo / "Dockerfile").write_text("FROM base:1.2.3\n")
+        run("add", "-A")
+        run("commit", "-qm", "pin base image")
+        pre_files = git_ops.changed_source_files(repo, "main")
+        pre_blobs = git_ops.file_blobs(repo, pre_files)
+
+        # Snapshot target's pre-rebase content (the original Dockerfile).
+        target_pre_blobs = git_ops.file_blobs(repo, pre_files, ref="origin/main")
+
+        # Simulate: a sibling PR landed on main, changing Dockerfile
+        # DIFFERENTLY during our rebase window.  The agent correctly
+        # took the sibling's version — our delta is superseded.
+        run("branch", "feature")
+        run("checkout", "main")
+        (repo / "Dockerfile").write_text("FROM base:2.0\n")
+        run("add", "-A")
+        run("commit", "-qm", "sibling PR: bump to 2.0")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        # Return to feature and rebase onto the sibling's main.
+        run("checkout", "feature")
+        run("reset", "--hard", "origin/main")
+        (repo / "keep.py").write_text("x = 1\n")
+        run("add", "-A")
+        run("commit", "-qm", "branch work after rebase")
+
+        ok, dropped, sibling = git_ops.check_rebase_diff_integrity(
+            repo,
+            "main",
+            pre_files,
+            pre_blobs,
+            target_pre_blobs=target_pre_blobs,
+        )
+        assert ok is False, "sibling-likely files must cause not-ok"
+        assert dropped == [], "sibling-modified file must not be in dropped"
+        assert "Dockerfile" in sibling
+
+    def test_genuine_drop_target_unchanged(self, tmp_path):
+        """When the target branch did NOT change a file during the rebase
+        window, the file must appear in *dropped*, not *sibling_likely*."""
+        repo, run = _init_repo_with_target(tmp_path)
+        (repo / "Dockerfile").write_text("FROM base:1.2.3\n")
+        run("add", "-A")
+        run("commit", "-qm", "pin base image")
+        pre_files = git_ops.changed_source_files(repo, "main")
+        pre_blobs = git_ops.file_blobs(repo, pre_files)
+
+        # Target's pre-rebase and post-rebase content match (no sibling).
+        # Both capture the same origin/main blob — Dockerfile unchanged.
+        target_pre_blobs = git_ops.file_blobs(repo, pre_files, ref="origin/main")
+        target_post_blobs = git_ops.file_blobs(repo, pre_files, ref="origin/main")
+        assert target_pre_blobs == target_post_blobs
+
+        # Simulate rebase that erroneously dropped Dockerfile.
+        (repo / "Dockerfile").unlink()
+        run("add", "-A")
+        run("commit", "-qm", "rebase: incorrectly dropped Dockerfile")
+
+        ok, dropped, sibling = git_ops.check_rebase_diff_integrity(
+            repo,
+            "main",
+            pre_files,
+            pre_blobs,
+            target_pre_blobs=target_pre_blobs,
+        )
+        assert ok is False, "dropped files must cause not-ok"
+        assert "Dockerfile" in dropped
+        assert "Dockerfile" not in sibling
 
 
 # ===========================================================================
@@ -2742,7 +2820,7 @@ def test_change_already_landed_upstream_is_not_a_drop(tmp_path):
     run("add", "-A")
     run("commit", "-qm", "the branch's real work")
 
-    ok, dropped = git_ops.check_rebase_diff_integrity(
+    ok, dropped, _s = git_ops.check_rebase_diff_integrity(
         repo, "main", pre_files, pre_blobs
     )
 
@@ -2773,7 +2851,7 @@ def test_discarded_change_is_still_reported_as_a_drop(tmp_path):
     run("add", "-A")
     run("commit", "-qm", "only the other file survived")
 
-    ok, dropped = git_ops.check_rebase_diff_integrity(
+    ok, dropped, _s = git_ops.check_rebase_diff_integrity(
         repo, "main", pre_files, pre_blobs
     )
 
@@ -2788,7 +2866,7 @@ def test_without_blob_snapshot_behaviour_is_unchanged(tmp_path):
     run("add", "-A")
     run("commit", "-qm", "other")
 
-    ok, dropped = git_ops.check_rebase_diff_integrity(repo, "main", ["Dockerfile"])
+    ok, dropped, _s = git_ops.check_rebase_diff_integrity(repo, "main", ["Dockerfile"])
 
     assert ok is False
     assert dropped == ["Dockerfile"]
