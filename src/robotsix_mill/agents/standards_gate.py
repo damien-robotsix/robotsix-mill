@@ -111,7 +111,9 @@ def run_standards_gate_check(
             "reason": output.reason,
         }
     except Exception:
-        log.warning("standards gate check failed, proceeding with refine", exc_info=True)
+        log.warning(
+            "standards gate check failed, proceeding with refine", exc_info=True
+        )
         return {
             "violates": False,
             "standard": "",

@@ -23,7 +23,9 @@ def test_default_none_non_fleet_prefix_not_detected():
 
 
 def test_explicit_true_overrides_non_fleet_id():
-    assert _repo("hexarchy", follows_standards=True).follows_robotsix_standards() is True
+    assert (
+        _repo("hexarchy", follows_standards=True).follows_robotsix_standards() is True
+    )
 
 
 def test_explicit_false_overrides_fleet_id():
