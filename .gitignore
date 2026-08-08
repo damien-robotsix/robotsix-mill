@@ -41,3 +41,7 @@ actionlint
 .work/
 # lychee link-checker cache
 .lychee-cache/
+# Vendored @robotsix/ui config panel build output — built during Docker
+# image creation, never committed.
+src/robotsix_mill/runtime/static/robotsix-ui-vanilla.js
+src/robotsix_mill/runtime/static/robotsix-ui.css

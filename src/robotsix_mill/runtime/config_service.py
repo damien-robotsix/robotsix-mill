@@ -7,9 +7,9 @@ the single ``config/config.json``, maintains a version history in
 ``<data_dir>/config_versions.jsonl``, and masks secret values on read.
 
 Secret fields are identified from the :class:`~robotsix_mill.config.Secrets`
-model — they are env-injected by the deploy plane per the ticket spec,
-never stored in the component config file, and never accepted via
-``PUT /config``.
+field names.  They follow merge-on-write per the config-ownership
+standard: a blank or masked submission keeps the stored value, and an
+explicitly typed value overwrites it.
 """
 
 from __future__ import annotations
@@ -227,7 +227,7 @@ def _generate_config_schema() -> dict[str, Any]:
         schema["properties"][name] = {
             "type": "string",
             "writeOnly": True,
-            "description": "Secret — env-injected by the deploy plane. Not stored in config.json.",
+            "description": "Secret — stored in config.json.  Merge-on-write: blank keeps the current value.",
         }
 
     return schema
@@ -288,13 +288,19 @@ def _validate_updates(updates: dict[str, Any]) -> None:
     """Validate each field in *updates* against the Settings model.
 
     Raises ``ConfigValidationError`` on the first failure.
+    Secret keys are not validated against ``Settings`` — they are
+    validated by merge-on-write logic in ``update_config``.
     """
     for key, value in updates.items():
         if _is_secret_key(key):
-            raise ConfigValidationError(
-                f"'{key}' is a secret — secrets are env-injected by the "
-                "deploy plane and cannot be updated via PUT /config"
-            )
+            # Secrets are handled by merge-on-write in update_config.
+            # Validate that the value is a string (or None/blank for
+            # keep-existing semantics).
+            if value is not None and not isinstance(value, str):
+                raise ConfigValidationError(
+                    f"'{key}' is a secret — value must be a string or null"
+                )
+            continue
         # Resolve alias → field name
         field_name: str | None = None
         for fn, fi in Settings.model_fields.items():
@@ -339,24 +345,51 @@ def update_config(
 ) -> dict[str, Any]:
     """Apply a partial config update.  Returns the new effective config.
 
-    Rejects any key that identifies a secret.  Validates each updated
-    field against the Settings model before writing.
+    Non-secret keys are written to the ``settings`` block.  Secret keys
+    follow **merge-on-write**: a blank, null, or masked
+    (``"**********"``) submission keeps the stored value; an explicitly
+    typed value overwrites it.  Secret values land in the ``secrets``
+    block.
     """
     _validate_updates(updates)
 
     config_path = _canonical_config_path()
     current = _read_json_config(config_path)
 
-    # Merge into the ``settings`` block
-    current_settings = current.get("settings", {})
-    if not isinstance(current_settings, dict):
-        current_settings = {}
+    # Split updates into settings and secrets.
+    settings_updates: dict[str, Any] = {}
+    secrets_updates: dict[str, Any] = {}
+    for key, value in updates.items():
+        if _is_secret_key(key):
+            secrets_updates[key] = value
+        else:
+            settings_updates[key] = value
 
-    changed_keys = list(updates.keys())
-    merged = {**current_settings, **updates}
-    new_config = {**current, "settings": merged}
+    changed_keys: list[str] = []
 
-    _write_json_config(config_path, new_config)
+    # --- Secrets: merge-on-write ---
+    if secrets_updates:
+        current_secrets = current.get("secrets", {})
+        if not isinstance(current_secrets, dict):
+            current_secrets = {}
+        for key, value in secrets_updates.items():
+            if value is None or value == "" or value == "**********":
+                # Keep existing value — omit from the update.
+                continue
+            current_secrets[key] = value
+            changed_keys.append(key)
+        current["secrets"] = current_secrets
+
+    # --- Settings: direct merge ---
+    if settings_updates:
+        current_settings = current.get("settings", {})
+        if not isinstance(current_settings, dict):
+            current_settings = {}
+        changed_keys.extend(settings_updates.keys())
+        merged = {**current_settings, **settings_updates}
+        current["settings"] = merged
+
+    _write_json_config(config_path, current)
 
     # Record version (store the full effective snapshot)
     if data_dir is None:
@@ -411,10 +444,10 @@ def rollback_config(
         )
 
     # Validate by constructing a minimal update
-    # Strip secret-masked values before writing
-    clean_snapshot = {
-        k: v for k, v in snapshot.items() if v != "**********" and not _is_secret_key(k)
-    }
+    # Strip secret-masked values before writing — "**********" is not
+    # a real value, it's the read-time mask.  Keep the existing stored
+    # secret (merge-on-write semantics).
+    clean_snapshot = {k: v for k, v in snapshot.items() if v != "**********"}
 
     config_path = _canonical_config_path()
     if config_path.exists():

@@ -1,4 +1,13 @@
 # =============================================================================
+# Stage 0: ui — vendored @robotsix/ui config panel build output.
+# The package is distributed from git; alpine has no git so install it.
+# =============================================================================
+FROM node:22-alpine AS ui
+ARG ROBOTSIX_UI_VERSION=v0.1.6
+RUN apk add --no-cache git && \
+    npm install --no-save "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}"
+
+# =============================================================================
 # Stage 1: builder — temporary stage for build-time tooling and artifact
 # production.  Nothing from this stage (except copied artifacts) lands in
 # the final image.
@@ -147,6 +156,14 @@ RUN apt-get update \
 
 # Copy only the artifacts built in the builder stage — no source tree.
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+
+# Vendored @robotsix/ui config panel (vanilla JS + CSS).  Lands in the
+# same static directory served at /static/mill/ so board_html.py can link
+# them with a plain <script type="module">.
+COPY --from=ui /node_modules/@robotsix/ui/dist/vanilla.js \
+     /usr/local/lib/python3.14/site-packages/robotsix_mill/runtime/static/robotsix-ui-vanilla.js
+COPY --from=ui /node_modules/@robotsix/ui/dist/style.css \
+     /usr/local/lib/python3.14/site-packages/robotsix_mill/runtime/static/robotsix-ui.css
 COPY --from=builder /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=builder /usr/local/bin/robotsix-mill /usr/local/bin/robotsix-mill
 # uv must be ON $PATH and world-executable here in `base` for the SAME reason
@@ -210,6 +227,13 @@ USER root
 
 # Copy the full source tree for sandbox test runs.
 COPY . /app
+
+# Vendored @robotsix/ui config panel — also land in the source-tree static
+# directory so the editable-install StaticFiles mount finds them.
+COPY --from=ui /node_modules/@robotsix/ui/dist/vanilla.js \
+     /app/src/robotsix_mill/runtime/static/robotsix-ui-vanilla.js
+COPY --from=ui /node_modules/@robotsix/ui/dist/style.css \
+     /app/src/robotsix_mill/runtime/static/robotsix-ui.css
 
 # Layer dev tooling (pytest, mypy, ruff, bandit, robotsix-modules) on top of
 # the site-packages inherited from base.
