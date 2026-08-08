@@ -172,9 +172,15 @@ def ingest_ticket(
     # 1. Repo validation — 404 for unknown repo_id.
     repo_config = repos.repos.get(body.repo_id)
     if repo_config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
-        )
+        # The synthetic meta board lives in repos.meta (not repos.repos)
+        # because it has no forge remote / per-repo config — but tickets
+        # must still flow to it through the ingest path.
+        if body.repo_id == "meta" and repos.meta is not None:
+            repo_config = repos.meta
+        else:
+            raise HTTPException(
+                status_code=404, detail=f"Unknown repo_id: {body.repo_id!r}"
+            )
 
     # 2. Reject auto-registered repos when the flag is off.
     _check_repo_workable(repo_config, body.repo_id, settings)

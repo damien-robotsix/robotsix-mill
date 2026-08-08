@@ -269,6 +269,42 @@ def test_ingest_accepts_auto_repo_when_flag_on(client, settings):
 
 
 # ---------------------------------------------------------------------------
+# Synthetic meta board
+# ---------------------------------------------------------------------------
+def test_ingest_accepts_synthetic_meta_board(client):
+    """POST /tickets/ingest with repo_id='meta' → 201 when the meta
+    board is registered in repos.meta (not repos.repos)."""
+    meta_config = RepoConfig(
+        repo_id="meta",
+        board_id="meta",
+        langfuse_project_name="meta-project",
+        langfuse_public_key="pk-meta",
+        langfuse_secret_key="sk-meta",
+    )
+    client.app.state.repos.meta = meta_config
+
+    payload = _ingest_payload(repo_id="meta")
+    r = client.post("/tickets/ingest", json=payload)
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+    assert body["ticket_id"]
+
+    # Ticket is on the meta board.
+    meta_svc = TicketService(client.app.state.settings, board_id="meta")
+    ticket = meta_svc.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.board_id == "meta"
+    assert ticket.title == "Test anomaly"
+
+
+def test_ingest_meta_board_unknown_repo_id_still_rejected(client):
+    """Unknown repo_ids that are NOT 'meta' still get 404."""
+    r = client.post("/tickets/ingest", json=_ingest_payload(repo_id="not-meta"))
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Normalized-title fingerprint dedup
 # ---------------------------------------------------------------------------
 def test_normalize_title_strips_timestamps():
