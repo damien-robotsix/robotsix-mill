@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...config import Settings
 from ...core.models import Ticket
@@ -25,6 +25,9 @@ from ..deps import (
     enrich_ticket_read,
     get_service,
     get_settings,
+    get_worker,
+    maybe_enqueue,
+    resolve_ticket_id,
 )
 
 # Terminal states excluded from default board listings — matches the
