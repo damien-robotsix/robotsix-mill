@@ -18,6 +18,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from robotsix_mill.agents import changelog_tool
 from robotsix_mill.agents.changelog_tool import _insert_changelog_entry, _HEADER
 
 
@@ -197,16 +200,27 @@ class TestAddChangelogFragment:
         _add_changelog_fragment(tmp_path, "t", "misc", "Entry.")
         assert (tmp_path / "changelog" / "t.misc.md").exists()
 
-    def test_rejects_a_kind_the_repo_does_not_configure(self, tmp_path):
+    def test_maps_a_kind_to_the_repo_own_spelling(self, tmp_path):
+        """llmio names its types feat/fix; the rest of the fleet uses
+        feature/bugfix. An agent picking the majority spelling must not be
+        rejected — that blocked llmio ticket
+        20260805T173849Z-expose-robotsix-llmio-version-via-a-file-a8d7."""
+        from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
+
+        self._pyproject(tmp_path, types=("feat", "fix"))  # llmio's naming
+        _add_changelog_fragment(tmp_path, "t", "bugfix", "Entry.")
+        assert (tmp_path / "changelog.d" / "t.fix.md").exists()
+
+    def test_rejects_a_kind_with_no_configured_equivalent(self, tmp_path):
         """A wrong extension is silently skipped by towncrier build, so the
         entry would vanish with no error — fail loudly instead."""
         import pytest
 
         from robotsix_mill.agents.changelog_tool import _add_changelog_fragment
 
-        self._pyproject(tmp_path, types=("feat", "fix"))  # llmio's naming
-        with pytest.raises(ValueError, match="not configured"):
-            _add_changelog_fragment(tmp_path, "t", "bugfix", "Entry.")
+        self._pyproject(tmp_path, types=("feat", "fix"))
+        with pytest.raises(ValueError, match="no configured equivalent"):
+            _add_changelog_fragment(tmp_path, "t", "nonsense", "Entry.")
 
     def test_rejects_an_empty_summary(self, tmp_path):
         import pytest
@@ -234,3 +248,63 @@ class TestAddChangelogFragment:
         before = changelog.read_text(encoding="utf-8")
         _add_changelog_fragment(tmp_path, "t", "misc", "Entry.")
         assert changelog.read_text(encoding="utf-8") == before
+
+
+# ---------------------------------------------------------------------------
+# Kind resolution across the fleet's inconsistent towncrier type names
+# ---------------------------------------------------------------------------
+
+
+def _repo_with_types(tmp_path: Path, types: list[str], directory: str = "changelog.d"):
+    """Write a minimal pyproject declaring *types* as towncrier kinds."""
+    blocks = "\n".join(
+        f'[[tool.towncrier.type]]\ndirectory = "{t}"\nname = "{t}"\nshowcontent = true\n'
+        for t in types
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        f'[tool.towncrier]\ndirectory = "{directory}"\n\n{blocks}', encoding="utf-8"
+    )
+    return tmp_path
+
+
+class TestKindResolution:
+    """robotsix-llmio names its types feat/fix; every other repo uses
+    feature/bugfix. An agent that picks the majority spelling was getting a
+    hard error, which blocked the ticket — llmio
+    20260805T173849Z-expose-robotsix-llmio-version-via-a-file-a8d7 blocked
+    exactly this way."""
+
+    def test_exact_match_is_used_unchanged(self, tmp_path: Path) -> None:
+        repo = _repo_with_types(tmp_path, ["feature", "bugfix", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-1", "feature", "x")
+        assert out.endswith(".feature.md")
+
+    def test_feature_falls_back_to_feat(self, tmp_path: Path) -> None:
+        """The llmio case."""
+        repo = _repo_with_types(tmp_path, ["feat", "fix", "doc", "removal", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-2", "feature", "x")
+        assert out.endswith(".feat.md")
+        assert (repo / "changelog.d" / "t-2.feat.md").read_text().strip() == "x"
+
+    def test_bugfix_falls_back_to_fix(self, tmp_path: Path) -> None:
+        repo = _repo_with_types(tmp_path, ["feat", "fix", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-3", "bugfix", "x")
+        assert out.endswith(".fix.md")
+
+    def test_fix_falls_back_to_bugfix(self, tmp_path: Path) -> None:
+        """The reverse direction matters too — most repos use bugfix."""
+        repo = _repo_with_types(tmp_path, ["feature", "bugfix", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-4", "fix", "x")
+        assert out.endswith(".bugfix.md")
+
+    def test_unmappable_kind_still_raises(self, tmp_path: Path) -> None:
+        """Silently writing an unconfigured extension would lose the entry —
+        towncrier build skips it without complaint."""
+        repo = _repo_with_types(tmp_path, ["feature", "bugfix"])
+        with pytest.raises(ValueError, match="no configured equivalent"):
+            changelog_tool._add_changelog_fragment(repo, "t-5", "nonsense", "x")
+
+    def test_error_lists_the_repo_actual_kinds(self, tmp_path: Path) -> None:
+        repo = _repo_with_types(tmp_path, ["feat", "fix"])
+        with pytest.raises(ValueError, match="feat, fix"):
+            changelog_tool._add_changelog_fragment(repo, "t-6", "nonsense", "x")
