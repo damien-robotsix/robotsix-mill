@@ -3380,9 +3380,7 @@ def test_list_tickets_survives_corrupted_row(client, service, settings):
     # The list endpoint must return 200, including the healthy tickets
     # but skipping the corrupted one.
     r = client.get("/tickets")
-    assert r.status_code == 200, (
-        "list endpoint must not 500 when one row has bad data"
-    )
+    assert r.status_code == 200, "list endpoint must not 500 when one row has bad data"
     ids = [t["id"] for t in r.json()]
     assert good.id in ids, "healthy ticket must still appear"
     assert "00000000T000000Z-corrupted-0000" not in ids, (
@@ -3448,9 +3446,17 @@ def test_list_tickets_all_states_and_filters(client, service):
     r = client.get("/tickets?sort_by=updated_at")
     assert r.status_code == 200
 
-    # created_after filter.
-    r = client.get("/tickets?created_after=2020-01-01T00:00:00")
+    # created_after filter — a past date must include all non-terminal tickets.
+    r = client.get("/tickets?created_after=2020-01-01T00:00:00Z")
     assert r.status_code == 200
+    assert len(r.json()) >= expected_min, (
+        "created_after in the distant past must include all non-terminal tickets"
+    )
+
+    # created_after filter — a far-future date must return nothing.
+    r = client.get("/tickets?created_after=2099-01-01T00:00:00Z")
+    assert r.status_code == 200
+    assert len(r.json()) == 0, "created_after in the far future must return no tickets"
 
     # Bad created_after → 400.
     r = client.get("/tickets?created_after=not-a-date")

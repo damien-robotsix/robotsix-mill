@@ -278,6 +278,9 @@ def _list_tickets_compute(
             exclude = None
 
     # Parse created_after from ISO-8601 string to UTC datetime.
+    # Accept both naive and timezone-aware strings; treat naive as UTC
+    # so the TZDateTime column type (which rejects naive datetimes)
+    # can bind the value correctly.
     created_after_dt: datetime | None = None
     if created_after:
         try:
@@ -288,6 +291,8 @@ def _list_tickets_compute(
                 detail=f"created_after must be an ISO-8601 datetime string, "
                 f"got {created_after!r}",
             ) from None
+        if created_after_dt.tzinfo is None:
+            created_after_dt = created_after_dt.replace(tzinfo=timezone.utc)
 
     # With per-repo DBs the default svc only sees its own board's
     # tickets. Build a list of services to query: one per repo when
