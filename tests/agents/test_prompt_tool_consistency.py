@@ -20,7 +20,7 @@ from robotsix_mill.agents.prompt_tool_consistency import (
     call_directive_tools,
     unregistered_call_directives,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _settings(tmp_path, **env):

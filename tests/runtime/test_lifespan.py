@@ -1,8 +1,7 @@
 import logging
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi import FastAPI
 
 from robotsix_mill.runtime.lifespan import (
@@ -10,7 +9,6 @@ from robotsix_mill.runtime.lifespan import (
     create_lifespan,
     setup_logging,
 )
-
 
 # ---------------------------------------------------------------------------
 # setup_logging

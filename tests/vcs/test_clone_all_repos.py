@@ -7,7 +7,6 @@ import subprocess
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.vcs import clone_all_repos
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

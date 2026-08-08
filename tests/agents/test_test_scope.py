@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from robotsix_mill.agents.test_scope import TestScopeVerdict as _TestScopeVerdict
 from robotsix_mill.agents.test_scope import run_test_scope_agent
 
-
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
@@ -53,9 +52,10 @@ def _install_mocks(monkeypatch):
     """Install shared mocks for load_agent_definition, run_agent, and
     _safe_close.  Returns the base module for further patching."""
     from unittest.mock import MagicMock
-    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
-    import robotsix_mill.agents.retry as retry_mod
+
     import robotsix_mill.agents.base as base_mod
+    import robotsix_mill.agents.retry as retry_mod
+    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
 
     monkeypatch.setattr(
         yaml_loader_mod,

@@ -2,11 +2,10 @@
 
 import json
 
-
 from robotsix_mill.agents import completeness_check as cc_agent
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_completeness_check_pass,
     PeriodicPassResult,
+    run_completeness_check_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db

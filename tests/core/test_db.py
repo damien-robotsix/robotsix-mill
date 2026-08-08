@@ -13,7 +13,6 @@ from sqlalchemy import inspect
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 
-
 # ── _db_path ──────────────────────────────────────────────────────────────
 
 
@@ -116,7 +115,9 @@ def test_init_db_migration_preserves_existing_data(tmp_path: Path):
     seeded data survived the round-trip through SQLModel.
     """
     import sqlite3
+
     from sqlmodel import Session, select
+
     from robotsix_mill.core.models import Ticket, TicketEvent
     from robotsix_mill.core.states import State
 

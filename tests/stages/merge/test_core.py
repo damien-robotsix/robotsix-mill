@@ -24,8 +24,8 @@ def _ctx(tmp_path, **env):
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
     if ft is not None:
-        from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+        from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
@@ -437,6 +437,7 @@ def _seed_workspace_clone(ctx, t, *, net_diff: bool) -> None:
     is identical to origin/main (empty-after-rebase); when True it carries
     a real change."""
     import subprocess as _sp
+
     from robotsix_mill.vcs import git_ops
 
     tmp = ctx.service.workspace(t).dir
@@ -2189,7 +2190,6 @@ def test_merged_pr_skips_check_status(tmp_path, monkeypatch):
 
     def fake_check_status(self, *, source_branch):
         check_calls.append(1)
-        return None
 
     monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
     out = MergeStage().run(_human_mr_approval(ctx), ctx)
@@ -2213,7 +2213,6 @@ def test_closed_pr_skips_check_status(tmp_path, monkeypatch):
 
     def fake_check_status(self, *, source_branch):
         check_calls.append(1)
-        return None
 
     monkeypatch.setattr(github.GitHubForge, "check_status", fake_check_status)
     out = MergeStage().run(_human_mr_approval(ctx), ctx)

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from ..core.service import TicketService
 
 
-def _resolve_service(settings: Settings) -> tuple["TicketService", str] | None:
+def _resolve_service(settings: Settings) -> tuple[TicketService, str] | None:
     """Resolve the ticket service and current ticket id.
 
     Returns ``(svc, ticket_id)`` or ``None`` when no active session.

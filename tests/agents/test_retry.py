@@ -9,8 +9,8 @@ from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
 
 from robotsix_mill.agents.retry import (
     call_with_retry,
-    is_transient,
     is_rate_limited,
+    is_transient,
     run_agent,
 )
 from robotsix_mill.config import Settings
@@ -570,6 +570,7 @@ def test_permanent_api_400_beats_degenerate_success():
     Both signatures are in the chain — the permanent one must win, or the error
     is swallowed as an empty success and refine silently no-ops."""
     from robotsix_llmio.claude_sdk._errors import ClaudeSDKPermanentAPIError
+
     from robotsix_mill.agents.retry import _is_claude_sdk_degenerate_result
 
     collapsed = Exception("Claude Code returned an error result: success")

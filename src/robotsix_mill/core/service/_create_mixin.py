@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from secrets import token_hex
 
 from sqlmodel import Session, select
@@ -72,7 +72,7 @@ class _CreateMixin(_ServiceBase):
         own ID (self-dependency), is provided for an inquiry or epic, or
         if *parent_id* references a nonexistent ticket.
         """
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         ticket_id = f"{stamp}-{_slug(title)}-{token_hex(2)}"
 
         if kind in (TicketKind.INQUIRY, TicketKind.EPIC) and depends_on:
@@ -215,7 +215,7 @@ class _CreateMixin(_ServiceBase):
                     note=note,
                 )
             )
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -246,7 +246,7 @@ class _CreateMixin(_ServiceBase):
         """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             open_threads = self._has_open_ask_user_threads(ticket_id, s)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for c in open_threads:
                 c.closed_at = now
                 s.add(c)

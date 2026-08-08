@@ -19,8 +19,9 @@ References:
 
 from logging.config import fileConfig
 
-from alembic import context
 from sqlmodel import SQLModel
+
+from alembic import context
 
 # Import all models so SQLModel.metadata is populated before Alembic
 # inspects it.  The ``noqa: F401`` comment silences the "unused import" lint.

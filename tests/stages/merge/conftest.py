@@ -6,6 +6,7 @@ pytest fixtures execute before the test body.
 """
 
 import pytest
+
 from robotsix_mill.forge import github
 
 

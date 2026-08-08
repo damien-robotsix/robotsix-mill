@@ -22,13 +22,12 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement import validation as validation_mod
-from robotsix_mill.stages.implement.validation import (
-    ValidationMixin,
-)
 from robotsix_mill.stages.implement._shared import (
     _ScopeGuardrailResult,
 )
-
+from robotsix_mill.stages.implement.validation import (
+    ValidationMixin,
+)
 
 # ---------------------------------------------------------------------------
 # _baseline_fix_title — deterministic, pure

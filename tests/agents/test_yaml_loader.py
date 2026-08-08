@@ -6,16 +6,14 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from pydantic import ValidationError
 
 from robotsix_mill.agents.yaml_loader import (
     AgentDefinition,
+    _resolve_includes,
     load_agent_definition,
     load_periodic_agent_definition,
-    _resolve_includes,
 )
-
 
 # ── helpers ──────────────────────────────────────────────────────────
 

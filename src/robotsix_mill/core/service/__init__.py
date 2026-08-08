@@ -90,7 +90,7 @@ class TicketService(
         """
         self.settings = settings
         self.board_id = board_id
-        self._on_transition: "Callable[[Ticket, str], None] | None" = None
+        self._on_transition: Callable[[Ticket, str], None] | None = None
 
     def workspace(self, ticket: Ticket) -> Workspace:
         """Return the :class:`Workspace` for *ticket*.

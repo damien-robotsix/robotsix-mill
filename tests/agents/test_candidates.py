@@ -13,7 +13,6 @@ from robotsix_mill.agents.candidates import (
     update_status,
 )
 
-
 _BLOCK1 = """\
 ### Proposed addition to ## Project layout
 

@@ -9,12 +9,12 @@ from pathlib import Path
 from ...agents import coding
 from ...agents.coding import AgentBudgetError, AgentRunError
 from ...agents.coordinating import ValidationResult
+from ...agents.runners.pass_runner import persist_memory
 from ...agents.testing import smoke_paths_match
 from ...config import Settings, target_branch_for
+from ...config.repo_settings import load_repo_smoke_command
 from ...core.models import Ticket
 from ...core.states import State
-from ...config.repo_settings import load_repo_smoke_command
-from ...agents.runners.pass_runner import persist_memory
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
@@ -26,12 +26,12 @@ from ._base import _ImplementStageBase
 from ._shared import (
     _AgentRunOutcome,
     _ImplementContext,
-    _SinglePassResult,
     _is_config_only_change,
     _is_rename_only_change,
     _is_spec_exact_edits,
     _is_trivial_config_only_change,
     _should_skip_test_gate,
+    _SinglePassResult,
     log,
 )
 from .implementation_editing import _ImplementationEditingMixin

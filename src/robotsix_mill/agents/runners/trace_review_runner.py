@@ -34,7 +34,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -45,10 +45,10 @@ if TYPE_CHECKING:
 
 from ...config import RepoConfig, Settings
 from ...core.db import session as db_session
+from ...core.dedup import find_prior_matching_ticket, normalize
 from ...core.models import SourceKind, Ticket
 from ...core.service import TicketService
 from ...core.states import State
-from ...core.dedup import find_prior_matching_ticket, normalize
 from ...runtime.lifespan import _process_started_at
 
 log = logging.getLogger("robotsix_mill.trace_review")
@@ -174,9 +174,9 @@ def _extract_trace_end_time(
     if not raw:
         return None
     try:
-        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(raw)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except ValueError, TypeError:
         return None
@@ -393,7 +393,7 @@ def _load_watermark(settings: Settings, board_id: str) -> datetime | None:
         ts = data.get("last_run_at")
         if not ts:
             return None
-        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return datetime.fromisoformat(ts)
     except Exception:
         log.warning("trace_review_state.json unreadable at %s — ignoring", p)
         return None
@@ -585,10 +585,10 @@ def run_trace_review_pass(
     # checkout is resolvable — every path check then degrades to a
     # no-op.
     repo_dir = _resolve_target_repo_dir(settings, target_repo_id)
-    from ...langfuse.client import list_all_traces_since, fetch_trace_detail
     from ...agents.trace_inspector import run_trace_inspector
+    from ...langfuse.client import fetch_trace_detail, list_all_traces_since
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Watermark is per SOURCE board — each repo's Langfuse traces have
     # their own scan window. Dedup uses the TARGET board where the
     # tickets actually live.

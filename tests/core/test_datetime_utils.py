@@ -1,12 +1,11 @@
 """Tests for ``robotsix_mill.core.datetime_utils`` — TZDateTime type
 decorator and ``_as_utc`` helper."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from robotsix_mill.core.datetime_utils import TZDateTime, _as_utc
-
 
 # ---------------------------------------------------------------------------
 # TZDateTime.process_bind_param
@@ -24,7 +23,7 @@ def test_bind_param_raises_on_naive():
 def test_bind_param_converts_aware_to_naive_utc():
     """Aware UTC input → naive UTC output (tzinfo stripped)."""
     tz_dt = TZDateTime()
-    aware_utc = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    aware_utc = datetime(2025, 1, 1, tzinfo=UTC)
     result = tz_dt.process_bind_param(aware_utc, dialect=None)
     assert result.tzinfo is None
     assert result == datetime(2025, 1, 1)  # naive, same wall time
@@ -53,7 +52,7 @@ def test_result_value_reattaches_utc():
     tz_dt = TZDateTime()
     naive = datetime(2025, 1, 1)
     result = tz_dt.process_result_value(naive, dialect=None)
-    assert result.tzinfo == timezone.utc
+    assert result.tzinfo == UTC
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +74,7 @@ def test_none_passthrough():
 
 def test_as_utc_identity_and_coercion():
     """_as_utc: aware passes through unchanged (identity); naive gets UTC."""
-    aware = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    aware = datetime(2025, 1, 1, tzinfo=UTC)
     naive = datetime(2025, 1, 1)
 
     # Aware: identity (same object)
@@ -83,5 +82,5 @@ def test_as_utc_identity_and_coercion():
 
     # Naive: coerced to UTC
     coerced = _as_utc(naive)
-    assert coerced.tzinfo == timezone.utc
-    assert coerced == datetime(2025, 1, 1, tzinfo=timezone.utc)
+    assert coerced.tzinfo == UTC
+    assert coerced == datetime(2025, 1, 1, tzinfo=UTC)

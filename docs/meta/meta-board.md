@@ -34,6 +34,7 @@ The meta board is available automatically:
 
 ```python
 from robotsix_mill.ticket_service import TicketService
+
 svc = TicketService(board_id="meta")
 ```
 

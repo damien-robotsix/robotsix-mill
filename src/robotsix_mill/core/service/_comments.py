@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlmodel import select
 
@@ -75,7 +75,7 @@ class _CommentMixin(_ServiceBase):
                     and parent.body.startswith(ASK_USER_MARKER)
                     and parent.closed_at is None
                 ):
-                    parent.closed_at = datetime.now(timezone.utc)
+                    parent.closed_at = datetime.now(UTC)
                     s.add(parent)
                     auto_close_parent = True
             comment = Comment(
@@ -173,7 +173,7 @@ class _CommentMixin(_ServiceBase):
                 raise ValueError("only top-level threads can be closed")
             if comment.closed_at is not None:
                 raise ValueError("thread already closed")
-            comment.closed_at = datetime.now(timezone.utc)
+            comment.closed_at = datetime.now(UTC)
             s.add(comment)
             ticket_id = comment.ticket_id
             s.commit()
@@ -252,7 +252,7 @@ class _CommentMixin(_ServiceBase):
             s.refresh(reply)
 
             # Close the thread.
-            ask_thread.closed_at = datetime.now(timezone.utc)
+            ask_thread.closed_at = datetime.now(UTC)
             s.add(ask_thread)
             s.commit()
             s.refresh(ask_thread)
@@ -350,7 +350,7 @@ class _CommentMixin(_ServiceBase):
             ticket.paused_from = None
             old_state = ticket.state.value
             ticket.state = dst
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(

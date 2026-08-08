@@ -26,7 +26,6 @@ from robotsix_mill.agents.testing import (
     smoke_paths_match,
 )
 
-
 # ---------------------------------------------------------------------------
 # _detect_missing_binary
 # ---------------------------------------------------------------------------
@@ -712,7 +711,7 @@ def test_distill_failure_no_api_key_tail_truncated(tmp_path):
 
 def test_distill_failure_with_api_key_exception(monkeypatch, tmp_path):
     """API key set, but distill agent errors → degrade gracefully."""
-    from robotsix_mill.config import Settings, Secrets
+    from robotsix_mill.config import Secrets, Settings
     from robotsix_mill.core import db
 
     # Minimal Settings object so settings.test_model doesn't fail
@@ -955,9 +954,11 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
         ("httpx.ConnectError: [Errno 111] Connection refused", True),
         # requests ConnectionError
         (
-            "requests.exceptions.ConnectionError: "
-            "HTTPConnectionPool(host='api.openai.com', port=443): "
-            "Max retries exceeded",
+            (
+                "requests.exceptions.ConnectionError: "
+                "HTTPConnectionPool(host='api.openai.com', port=443): "
+                "Max retries exceeded"
+            ),
             True,
         ),
         # ConnectionRefusedError
@@ -976,8 +977,10 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
         ("Failed to resolve 'api.openai.com'", True),
         # Combine: connection + JSONDecodeError
         (
-            "httpx.ConnectError\njson.decoder.JSONDecodeError: "
-            "Expecting value: line 1 column 1 (char 0)",
+            (
+                "httpx.ConnectError\njson.decoder.JSONDecodeError: "
+                "Expecting value: line 1 column 1 (char 0)"
+            ),
             True,
         ),
         # --- False cases: genuine test failures ---
@@ -987,8 +990,10 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
         ("E       assert 1 == 2", False),
         # JSONDecodeError on NON-empty data (fixture with stray brace)
         (
-            "json.decoder.JSONDecodeError: Expecting ',' delimiter: "
-            "line 42 column 15 (char 981)",
+            (
+                "json.decoder.JSONDecodeError: Expecting ',' delimiter: "
+                "line 42 column 15 (char 981)"
+            ),
             False,
         ),
         # Normal test failure output

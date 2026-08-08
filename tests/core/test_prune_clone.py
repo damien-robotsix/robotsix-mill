@@ -5,7 +5,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-
 from robotsix_mill.agents import retrospecting
 from robotsix_mill.agents.retrospecting import RetrospectResult
 from robotsix_mill.config import Settings
@@ -30,8 +29,8 @@ def _ctx(tmp_path: Path, **env_overrides):
     env.update(env_overrides)
     s = Settings(**env)
     db.init_db(s, board_id="test-board")
-    from robotsix_mill.core.service import TicketService
     from robotsix_mill.config import RepoConfig
+    from robotsix_mill.core.service import TicketService
 
     return StageContext(
         settings=s,

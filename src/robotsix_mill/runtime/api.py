@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from ..config import ReposRegistry, Settings
 from ..core.service import AmbiguousTicketId, TransitionError
 from ..forge.base import NotConfiguredError
+from . import routes
 from .exception_handlers import (
     ambiguous_ticket_id_handler,
     catchall_handler,
@@ -26,7 +27,6 @@ from .exception_handlers import (
 )
 from .lifespan import create_lifespan, setup_logging
 from .middleware import RequestIDMiddleware
-from . import routes
 
 
 def create_app(

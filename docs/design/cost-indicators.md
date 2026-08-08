@@ -209,7 +209,7 @@ it is direct session cost.  This conflates two distinct numbers.
 ```python
 class TicketRead(SQLModel):
     ...
-    cost_usd: float              # always direct session cost (unchanged for non-epics)
+    cost_usd: float  # always direct session cost (unchanged for non-epics)
     cumulative_cost: float | None = None  # present when descendants exist and > direct
 ```
 

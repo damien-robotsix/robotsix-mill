@@ -12,13 +12,12 @@ import html as _html
 import re
 
 from robotsix_mill.runtime.board_html import (
-    BOARD_HTML,
     _PROCESS_START_TOKEN,
+    BOARD_HTML,
     asset_version,
     build_board_skeleton,
     render_board_html,
 )
-
 
 # ---------------------------------------------------------------------------
 # asset_version

@@ -8,7 +8,7 @@ helper, and ``review_spec_conciseness`` used by single/multi paths.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,16 +20,15 @@ from ...core.text_noop import degenerate_body_reason
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from .helpers import (
-    UNMERGED_BRANCH_PREFIX,
     _COMMIT_SHA_RE,
     _TICKET_ID_RE,
+    UNMERGED_BRANCH_PREFIX,
     _rationale_claims_external_fix,
     _resolve_next_state,
     _spec_is_degenerate,
     _verify_cited_fix_at_head,
     log,
 )
-
 
 # -- shared outcome / thread / artifact helpers -------------------------
 
@@ -343,7 +342,7 @@ def promote_to_epic_path(
             child_titles,
             child_bodies,
             s,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
         created_children: list[tuple[str, str, str]] = []
         for child_title, child_body, dup_note in zip(

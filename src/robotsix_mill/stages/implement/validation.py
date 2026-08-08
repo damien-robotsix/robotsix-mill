@@ -17,17 +17,16 @@ from .. import dependency_fix
 from ..base import Outcome, StageContext
 from ._base import _ImplementStageBase
 from ._shared import (
-    MODULES_YAML,
     _BACKTICK_RE,
     _FLOOD_SAMPLE_SIZE,
-    _ScopeGuardrailResult,
+    MODULES_YAML,
     _is_binary_artifact,
     _modules_yaml_added_paths,
+    _ScopeGuardrailResult,
     _should_skip_test_gate,
     _vendored_dep_roots,
     log,
 )
-
 
 # Standard repo scaffolding files that the agent may regenerate
 # inadvertently (driven by AGENT.md conventions or system-prompt rules

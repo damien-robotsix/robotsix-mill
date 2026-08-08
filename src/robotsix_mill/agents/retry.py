@@ -20,19 +20,24 @@ import concurrent.futures
 import logging
 import random
 import time
-from typing import Any, Awaitable, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
 from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_permanent_api_error as _is_permanent_api_error,
+)
+from robotsix_llmio.claude_sdk.transient import (
     is_claude_sdk_transient as _is_claude_sdk_transient,
 )
 from robotsix_llmio.core import (
     acall_with_retry_and_fallback,
-    call_with_retry as _lib_call_with_retry,
     call_with_retry_and_fallback,
+    is_rate_limited,
+)
+from robotsix_llmio.core import (
+    call_with_retry as _lib_call_with_retry,
 )
 from robotsix_llmio.core import constants as _constants
-from robotsix_llmio.core import is_rate_limited
 from robotsix_llmio.openrouter.transient import (
     is_openrouter_transient as _is_openrouter_transient,
 )
@@ -188,7 +193,7 @@ __all__ = [
 ]
 
 
-def call_with_retry(
+def call_with_retry[T](
     fn: Callable[[], T],
     *,
     what: str = "model call",
@@ -227,7 +232,7 @@ def call_with_retry(
         return fut.result()
 
 
-async def acall_with_retry(
+async def acall_with_retry[T](
     fn: Callable[[], Awaitable[T]],
     *,
     what: str = "model call",
@@ -312,7 +317,7 @@ async def acall_with_retry(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-def run_agent(
+def run_agent[T](
     agent: Any,
     make_run: Callable[[Any], T],
     *,

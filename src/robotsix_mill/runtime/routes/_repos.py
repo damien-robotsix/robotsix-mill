@@ -141,7 +141,7 @@ async def register_repo(
         )
     _safe_path = Path(_safe_path_str)
     if os.path.exists(_safe_path):
-        with open(_safe_path, "r", encoding="utf-8") as fh:
+        with open(_safe_path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     else:
         data = {}

@@ -660,7 +660,7 @@ def _is_spec_exact_edits(spec: str, repo_dir: Path) -> bool:
 def _should_skip_test_gate(
     repo_dir: Path,
     target_branch: str,
-    settings: "Settings",
+    settings: Settings,
     ticket_summary: str,
 ) -> tuple[bool, str]:
     """Decide whether the full test gate can be skipped.

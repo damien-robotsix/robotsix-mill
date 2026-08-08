@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from robotsix_mill.runtime.api import create_app
 
-
 _BLOCK = """\
 ### Proposed addition to ## Project layout
 

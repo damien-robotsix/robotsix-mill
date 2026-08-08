@@ -1,32 +1,32 @@
 """Tests for the shared agent-pass runner."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from robotsix_mill.agents.runners.pass_runner import (
-    run_agent_pass,
-    _verify_prior_proposals,
     _GAP_ID_RE,
+    _format_recent_proposals,
+    _module_curator_premise_check,
+    _render_verified_summary,
+    _source_module_exists_for_gap,
+    _strip_unverified_filed_annotations,
+    _test_file_exists_for_gap,
+    _verify_prior_proposals,
     load_memory,
     persist_memory,
-    _format_recent_proposals,
-    _render_verified_summary,
-    _test_file_exists_for_gap,
-    _source_module_exists_for_gap,
-    _module_curator_premise_check,
+    run_agent_pass,
     strip_ephemeral_sections,
-    _strip_unverified_filed_annotations,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
-from robotsix_mill.core.service import TicketService
-from robotsix_mill.core.states import State
-from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.core.models import (
     SourceKind,
     TicketEvent,
     TicketKind,
 )
+from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
+from robotsix_mill.core.workspace import Workspace
 
 
 class _FakeAgentResult:
@@ -1107,7 +1107,7 @@ def test_format_recent_proposals_single():
         "abc123def456",
         State.DRAFT,
         "Fix bug in thing",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     result = _format_recent_proposals([t])
     lines = result.split("\n")
@@ -1120,10 +1120,10 @@ def test_format_recent_proposals_single():
 def test_format_recent_proposals_multiple():
     """Multiple tickets render multiple lines, order preserved, full ids."""
     t1 = _FakeTicket(
-        "11111112222222", State.DRAFT, "First", created_at=datetime.now(timezone.utc)
+        "11111112222222", State.DRAFT, "First", created_at=datetime.now(UTC)
     )
     t2 = _FakeTicket(
-        "22222223333333", State.CLOSED, "Second", created_at=datetime.now(timezone.utc)
+        "22222223333333", State.CLOSED, "Second", created_at=datetime.now(UTC)
     )
     result = _format_recent_proposals([t1, t2])
     lines = result.split("\n")
@@ -1146,7 +1146,7 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
         canonical,
         State.DRAFT,
         "Add billing endpoint",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     result = _format_recent_proposals([t])
     assert canonical in result
@@ -1158,15 +1158,9 @@ def test_format_recent_proposals_full_id_roundtrips_read_ticket_regex():
 
 def test_format_recent_proposals_states_roundtrip():
     """All common states render their .value correctly."""
-    t_draft = _FakeTicket(
-        "aaa", State.DRAFT, "draft", created_at=datetime.now(timezone.utc)
-    )
-    t_closed = _FakeTicket(
-        "bbb", State.CLOSED, "closed", created_at=datetime.now(timezone.utc)
-    )
-    t_done = _FakeTicket(
-        "ccc", State.DONE, "done", created_at=datetime.now(timezone.utc)
-    )
+    t_draft = _FakeTicket("aaa", State.DRAFT, "draft", created_at=datetime.now(UTC))
+    t_closed = _FakeTicket("bbb", State.CLOSED, "closed", created_at=datetime.now(UTC))
+    t_done = _FakeTicket("ccc", State.DONE, "done", created_at=datetime.now(UTC))
     result_draft = _format_recent_proposals([t_draft])
     result_closed = _format_recent_proposals([t_closed])
     result_done = _format_recent_proposals([t_done])
@@ -1181,7 +1175,7 @@ def test_format_recent_proposals_filters_old_tickets():
         "old1",
         State.DRAFT,
         "Old draft",
-        created_at=datetime.now(timezone.utc) - timedelta(days=10),
+        created_at=datetime.now(UTC) - timedelta(days=10),
     )
     result = _format_recent_proposals([old])
     assert result == (
@@ -1195,7 +1189,7 @@ def test_format_recent_proposals_max_age_days_none():
         "old1",
         State.DRAFT,
         "Old draft",
-        created_at=datetime.now(timezone.utc) - timedelta(days=10),
+        created_at=datetime.now(UTC) - timedelta(days=10),
     )
     result = _format_recent_proposals([old], max_age_days=None)
     assert "[draft] old1" in result
@@ -1207,13 +1201,13 @@ def test_format_recent_proposals_mixed_ages():
         "recent1",
         State.DRAFT,
         "Recent",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     old = _FakeTicket(
         "old1",
         State.CLOSED,
         "Old",
-        created_at=datetime.now(timezone.utc) - timedelta(days=10),
+        created_at=datetime.now(UTC) - timedelta(days=10),
     )
     result = _format_recent_proposals([recent, old])
     assert "[draft] recent1" in result
@@ -1236,13 +1230,13 @@ def test_format_recent_proposals_all_old():
         "old1",
         State.DRAFT,
         "Old 1",
-        created_at=datetime.now(timezone.utc) - timedelta(days=8),
+        created_at=datetime.now(UTC) - timedelta(days=8),
     )
     old2 = _FakeTicket(
         "old2",
         State.CLOSED,
         "Old 2",
-        created_at=datetime.now(timezone.utc) - timedelta(days=15),
+        created_at=datetime.now(UTC) - timedelta(days=15),
     )
     result = _format_recent_proposals([old1, old2])
     assert result == (
@@ -1967,8 +1961,8 @@ def _multirepo_settings(tmp_path):
     "robotsix-mill") plus a fresh DB on both boards, mirroring the
     multi-repo deployment topology that run_agent_pass must route
     against."""
-    from robotsix_mill.config import RepoConfig, ReposRegistry
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
 
     _cfg._repos_config = ReposRegistry(
         repos={
@@ -2015,8 +2009,10 @@ def test_repo_specific_draft_stays_on_audited_board(tmp_path):
         updated_memory="mem",
         draft_titles=["Fix user authentication in src/auth/login.py"],
         draft_bodies=[
-            "The login flow in src/auth/login.py drops the session "
-            "cookie when the user logs out — patch the cookie clear-out."
+            (
+                "The login flow in src/auth/login.py drops the session "
+                "cookie when the user logs out — patch the cookie clear-out."
+            )
         ],
     )
 

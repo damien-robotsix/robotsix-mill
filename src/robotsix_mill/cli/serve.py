@@ -25,9 +25,8 @@ def _serve(args: argparse.Namespace, settings: Settings) -> int:
 
     import uvicorn
 
+    from ..config import ConfigError, get_repos_config
     from ..runtime.api import create_app
-    from ..config import get_repos_config
-    from ..config import ConfigError
 
     if args.repo_id:
         # Single-repo override for tests/dev.
@@ -62,8 +61,7 @@ def _serve(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _repos_list(args: argparse.Namespace, settings: Settings) -> int:
-    from ..config import get_repos_config
-    from ..config import ConfigError
+    from ..config import ConfigError, get_repos_config
 
     try:
         repos = get_repos_config()

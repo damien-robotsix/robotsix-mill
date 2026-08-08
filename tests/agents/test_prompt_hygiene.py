@@ -8,13 +8,12 @@ from pathlib import Path
 import pytest
 
 from robotsix_mill.agents import (
-    refining,
-    health,
-    auditing,
     agent_check,
+    auditing,
+    health,
+    refining,
 )
 from robotsix_mill.agents.yaml_loader import load_agent_definition
-
 
 # --- Tool-signature patterns that must NOT appear in prompts ---
 

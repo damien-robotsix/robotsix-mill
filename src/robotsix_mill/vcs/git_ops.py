@@ -7,6 +7,7 @@ the container only needs the git binary (already in the image).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -14,16 +15,15 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-import contextlib
 
 log = logging.getLogger("robotsix_mill.vcs.git_ops")
 
 _CREDENTIAL_IN_URL = re.compile(r"://[^@/\s']+@")
 
 
-class ReconcileResult(str, Enum):
+class ReconcileResult(StrEnum):
     """Outcome of :func:`reconcile_with_remote_pr`.
 
     ``SYNCED`` — the workspace already matches the remote PR branch, was
@@ -895,7 +895,7 @@ def push_with_lease(
         )
 
 
-class PostPushResult(str, Enum):
+class PostPushResult(StrEnum):
     """Outcome of :func:`post_push_check`.
 
     ``PASS`` — the push landed, no foreign commits clobbered, and the

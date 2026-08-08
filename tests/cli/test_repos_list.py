@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from robotsix_mill.cli.serve import _repos_list
-from robotsix_mill.config import ReposRegistry, RepoConfig
+from robotsix_mill.config import RepoConfig, ReposRegistry
 
 
 def _make_repo_config(repo_id: str, board_id: str, source: str) -> RepoConfig:

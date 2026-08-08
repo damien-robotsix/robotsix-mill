@@ -25,12 +25,13 @@ from __future__ import annotations
 import logging
 import re
 import shutil
-import threading
-from contextlib import contextmanager, suppress
-from pathlib import Path
-from typing import Any, Generator, cast
-
 import sqlite3
+import threading
+from collections.abc import Generator
+from contextlib import contextmanager, suppress
+from datetime import UTC
+from pathlib import Path
+from typing import Any, cast
 
 from sqlalchemy import Engine, event
 from sqlmodel import Session, SQLModel, create_engine
@@ -187,9 +188,7 @@ class _RetrySession:
 
 
 @contextmanager
-def retry_on_db_full(
-    settings: Settings, board_id: str
-) -> Generator[Session, None, None]:
+def retry_on_db_full(settings: Settings, board_id: str) -> Generator[Session]:
     """Context manager yielding a session whose ``commit()`` and ``flush()``
     are wrapped with disk-full retry + emergency VACUUM.
 
@@ -280,8 +279,9 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
     before deploying.
     """
     try:
-        from alembic import command
         from alembic.config import Config
+
+        from alembic import command
     except ImportError:
         # Alembic not installed (production) — fall back to legacy
         # additive migrations so init_db still works.
@@ -510,13 +510,13 @@ def persist_memory_db(
     Strips ephemeral sections, applies *max_chars* truncation (same
     as the file-based ``persist_memory``), and updates ``updated_at``.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from sqlmodel import select
 
-    from .text_utils import tail_keep
     from ..agents.runners.pass_runner import strip_ephemeral_sections
     from .models import Memory
+    from .text_utils import tail_keep
 
     text = strip_ephemeral_sections(text)
     if max_chars is not None and len(text) > max_chars:
@@ -537,7 +537,7 @@ def persist_memory_db(
             row = s.exec(
                 select(Memory).where(Memory.board_id == board_id, Memory.name == name)
             ).first()
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if row is None:
                 # First write — attempt one-time migration from legacy file.
                 migrated_content = text  # default: use what we were given

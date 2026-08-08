@@ -7,6 +7,7 @@ routes to FIXING_CI / REBASING / WAITING_AUTO_MERGE as appropriate.
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import re
 from pathlib import Path
@@ -16,13 +17,12 @@ from ...config import target_branch_for
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import Forge, get_forge
-from ..base import Outcome, StageContext
 from ...stages.ci_transient import is_transient_ci_failure
-
+from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
-    _CI_POLL_REFRESH_SHA,
     _AUTO_FIX_CYCLES,
+    _CI_POLL_REFRESH_SHA,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
@@ -38,7 +38,6 @@ from ._shared import (
     _write_counter,
     log,
 )
-import contextlib
 
 
 def _build_failing_summary(ci_status: dict[str, Any]) -> str:
@@ -229,8 +228,9 @@ class CIPollMixin(_MergeStageBase):
         vs ``origin/<target>`` returns True, so a PR that was closed while
         still carrying real changes is never silently marked DONE.
         """
-        from ...vcs import git_ops
         from robotsix_mill.stages import merge as _facade
+
+        from ...vcs import git_ops
 
         repo_dir = _facade._workspace_repo_dir(ctx, ticket)
         if repo_dir is None:
@@ -839,8 +839,7 @@ class CIPollMixin(_MergeStageBase):
                         )
                         return Outcome(
                             State.HUMAN_MR_APPROVAL,
-                            "auto-merge reported success but merge not confirmed on origin/%s"
-                            % target,
+                            f"auto-merge reported success but merge not confirmed on origin/{target}",
                         )
                     ctx.service.workspace(ticket).artifacts_dir.joinpath(
                         "merge.md"

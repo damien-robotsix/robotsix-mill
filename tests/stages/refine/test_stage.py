@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from datetime import UTC
 
 import pytest
 
-from robotsix_mill.agents import dedup
-from robotsix_mill.agents import refining
+from robotsix_mill.agents import dedup, refining
 from robotsix_mill.agents.refining import (
     AutoApproveResult,
     ChildSpec,
@@ -33,7 +33,6 @@ from robotsix_mill.stages import StageContext
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import RefineStage
 from robotsix_mill.vcs import git_ops
-
 
 # ---------------------------------------------------------------------------
 # fixtures
@@ -1289,8 +1288,10 @@ def test_spec_is_degenerate_true(spec):
         "Add a docstring to utils.py describing the return value.",
         # Starts with a pointer phrase but is a real, long spec — the
         # length cap must keep it.
-        "see the spec above and then implement the new caching layer with "
-        "an LRU eviction policy and a configurable max size honoring env.",
+        (
+            "see the spec above and then implement the new caching layer with "
+            "an LRU eviction policy and a configurable max size honoring env."
+        ),
         # "above" not used as a pointer.
         "above all, the function must validate its inputs before use",
     ],
@@ -1309,9 +1310,11 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
     parent = ctx.service.create("Epic parent", "Split me", kind=TicketKind.EPIC)
 
     # Directly set parent to CLOSED with a "split into" history event.
-    from robotsix_mill.core.models import TicketEvent, Ticket as TicketModel
+    from datetime import datetime
+
     from robotsix_mill.core.db import session as db_session
-    from datetime import datetime, timezone
+    from robotsix_mill.core.models import Ticket as TicketModel
+    from robotsix_mill.core.models import TicketEvent
 
     with db_session(ctx.settings, "test-board") as sess:
         tm = sess.get(TicketModel, parent.id)
@@ -1320,7 +1323,7 @@ def test_split_child_shortcut_detected_and_resolved(ctx_factory, monkeypatch):
             ticket_id=parent.id,
             state=State.CLOSED.value,
             note="split into child-aaa, child-bbb",
-            at=datetime.now(timezone.utc),
+            at=datetime.now(UTC),
         )
         sess.add(evt)
         sess.commit()
@@ -1352,9 +1355,11 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
     parent = ctx.service.create("Epic parent", "Split me", kind=TicketKind.EPIC)
 
     # Directly set parent to CLOSED with a "split into" history event.
-    from robotsix_mill.core.models import TicketEvent, Ticket as TicketModel
+    from datetime import datetime
+
     from robotsix_mill.core.db import session as db_session
-    from datetime import datetime, timezone
+    from robotsix_mill.core.models import Ticket as TicketModel
+    from robotsix_mill.core.models import TicketEvent
 
     with db_session(ctx.settings, "test-board") as sess:
         tm = sess.get(TicketModel, parent.id)
@@ -1363,7 +1368,7 @@ def test_split_child_empty_description_blocks(ctx_factory, monkeypatch):
             ticket_id=parent.id,
             state=State.CLOSED.value,
             note="split into child-aaa, child-bbb",
-            at=datetime.now(timezone.utc),
+            at=datetime.now(UTC),
         )
         sess.add(evt)
         sess.commit()
@@ -1389,7 +1394,8 @@ def test_split_child_with_reviewer_comments_runs_full_refine(ctx_factory, monkey
     rather than the fast-path that would ignore the feedback."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from robotsix_mill.core.db import session as db_session
     from robotsix_mill.core.models import TicketEvent
 
@@ -1402,7 +1408,7 @@ def test_split_child_with_reviewer_comments_runs_full_refine(ctx_factory, monkey
             ticket_id=child.id,
             state=State.READY.value,
             note="split from parent-ticket-xyz",
-            at=datetime.now(timezone.utc),
+            at=datetime.now(UTC),
         )
         sess.add(evt)
         sess.commit()
@@ -2900,7 +2906,6 @@ def test_prepare_hook_failure_blocks_before_freshness_gate(
 
     def _spy_freshness(*args, **kwargs):
         freshness_called.append(1)
-        return None
 
     monkeypatch.setattr(
         refine_module.RefineStage,
@@ -3103,12 +3108,11 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
     current board_id and clones the destination board's repo — not the
     creation-time board's repo (which ctx.repo_config still references).
     """
-    from robotsix_mill.config import RepoConfig, ReposRegistry
-    from robotsix_mill.stages.refine.core import RefineStage
-    from robotsix_mill.stages.base import StageContext
-    from robotsix_mill.core.service import TicketService
-    from robotsix_mill.config import Settings
+    from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
     from robotsix_mill.core import db as _db
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.refine.core import RefineStage
 
     board_a_repo = RepoConfig(
         repo_id="board-a-repo",

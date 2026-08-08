@@ -20,16 +20,16 @@ from pathlib import Path
 from typing import Any
 
 import yaml as _yaml
-
 from pydantic import BaseModel, Field, model_validator
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import RepoConfig, Settings
-from .prompt_blocks import section
 
 # Backward-compat re-exports — symbols moved to refine_triage module.
 # New code should import these from ``refine_triage`` directly.
 from . import refine_triage as _refine_triage
+from .prompt_blocks import section
 
 AutoApproveResult = _refine_triage.AutoApproveResult
 ReviewerAgreementResult = _refine_triage.ReviewerAgreementResult
@@ -479,7 +479,7 @@ def is_internal_toolchain_failure(draft: str) -> bool:
     return any(m in draft for m in _INTERNAL_FAILURE_MARKERS_CASE_SENSITIVE)
 
 
-def _coerce_refine_output(output: object) -> "RefineResult":
+def _coerce_refine_output(output: object) -> RefineResult:
     """Return *output* as a ``RefineResult``.
 
     When the model's final message doesn't parse as ``RefineResult`` JSON,
@@ -584,14 +584,14 @@ def run_refine_agent(
     """
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_agent_definition
     from .base import (
-        build_agent_from_definition,
         _safe_close,
-        level_uses_claude,
+        build_agent_from_definition,
         claude_sdk_supports_inline_image,
+        level_uses_claude,
     )
     from .retry import _is_claude_sdk_degenerate_result, run_agent
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "refine.yaml")
 
@@ -660,7 +660,7 @@ def run_refine_agent(
     # Langfuse trace-inspect sub-agent — only when repo_dir is provided,
     # since its value is grounding findings in the actual source code.
     if repo_dir is not None:
-        from .langfuse_tools import make_langfuse_inspect_tool, make_cost_inspect_tool
+        from .langfuse_tools import make_cost_inspect_tool, make_langfuse_inspect_tool
 
         tools.append(
             make_langfuse_inspect_tool(settings, repo_dir, repo_config=repo_config)
@@ -685,8 +685,8 @@ def run_refine_agent(
     # observed specimen). Reset the process-global trace budgets once per
     # run (mirroring survey_runner) and wrap the tools with the shared
     # error counter (mirroring trace_inspector / periodic_base).
-    from ..agents.web_tools import reset_trace_web_fetch_budget
     from ..agents.web_knowledge import reset_trace_web_search_budget
+    from ..agents.web_tools import reset_trace_web_fetch_budget
 
     reset_trace_web_fetch_budget(
         settings.refine_web_fetch_max_calls,

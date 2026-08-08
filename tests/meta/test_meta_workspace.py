@@ -7,8 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from robotsix_mill.meta import workspace as meta_workspace
 from robotsix_mill.config import RepoConfig, ReposRegistry
+from robotsix_mill.meta import workspace as meta_workspace
 
 
 def _reg(*pairs):
@@ -93,8 +93,8 @@ def test_triaged_blocks_when_required_repo_missing(tmp_path, monkeypatch):
     If one is missing (e.g. a private repo without creds), the ticket
     BLOCKs with an actionable note rather than handing the implement agent
     a partial workspace that triggers a spurious clarifying question."""
-    from robotsix_mill.core.states import State
     import robotsix_mill.meta.triage as mt
+    from robotsix_mill.core.states import State
 
     ws = SimpleNamespace(dir=tmp_path, artifacts_dir=tmp_path)
     only_mill = tmp_path / "repos" / "mill"

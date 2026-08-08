@@ -13,8 +13,6 @@ import yaml
 class ConfigError(Exception):
     """Raised for config-loading failures."""
 
-    pass
-
 
 def _resolve_main_config_path() -> Path | None:
     """Resolve the main config file path.

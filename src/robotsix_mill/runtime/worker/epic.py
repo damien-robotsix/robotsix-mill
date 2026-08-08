@@ -12,11 +12,11 @@ re-evaluation entry point for periodic passes and the
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from ...core.states import State
 from ...core.models import TicketKind
+from ...core.states import State
 
 if TYPE_CHECKING:
     from ...forge.base import BranchInfo
@@ -493,13 +493,13 @@ def _run_epic_reprocess(
     5. Chains new children linearly, appended after the last existing
        child.
     """
-    from ...core.service import TicketService
     from ...agents.epic_breakdown import (
         plan_child_dependencies,
         run_epic_breakdown_agent,
     )
     from ...config import get_repos_config
     from ...config.repos import resolve_child_board_id
+    from ...core.service import TicketService
 
     # Discover the epic's board via fanout, then bind the service to
     # it so subsequent writes go to the right per-repo DB.
@@ -608,7 +608,7 @@ def _run_epic_reprocess(
             new_titles,
             new_bodies,
             settings,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
 
         # Cache TicketService per board to avoid rebuilding.
@@ -686,12 +686,12 @@ def _run_epic_reprocess(
 
 
 def _branch_is_stale(
-    b: "BranchInfo",
+    b: BranchInfo,
     *,
-    now: "datetime",
+    now: datetime,
     max_age_days: int,
     target_branch: str,
-    open_pr: "set[str]",
+    open_pr: set[str],
     prefix_only: bool,
     branch_prefix: str,
 ) -> bool:

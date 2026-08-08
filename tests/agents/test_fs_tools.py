@@ -12,14 +12,13 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 
+from robotsix_mill import sandbox
 from robotsix_mill.agents.fs_tools import (
     _PRUNED_PLACEHOLDER,
     _safe,
     build_fs_tools,
     build_preseed_history,
 )
-from robotsix_mill import sandbox
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2332,9 +2331,9 @@ def _make_text_pdf(path: str, text: str) -> None:
     """
     from pypdf import PdfWriter
     from pypdf.generic import (
-        NameObject,
-        DictionaryObject,
         ContentStream,
+        DictionaryObject,
+        NameObject,
         StreamObject,
     )
 
@@ -2373,9 +2372,9 @@ def _make_multipage_text_pdf(path: str, texts: list[str]) -> None:
     """Create a multi-page PDF where each page draws one text string."""
     from pypdf import PdfWriter
     from pypdf.generic import (
-        NameObject,
-        DictionaryObject,
         ContentStream,
+        DictionaryObject,
+        NameObject,
         StreamObject,
     )
 

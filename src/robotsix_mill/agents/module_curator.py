@@ -15,8 +15,8 @@ to work with; draft lists are clipped to ``MAX_DRAFTS`` (20).
 
 from __future__ import annotations
 
-
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 from .prompt_blocks import section
@@ -64,7 +64,7 @@ def run_module_curator_agent(
         clipped to ``MAX_DRAFTS`` (20) entries, plus the updated memory
         ledger.
     """
-    from .base import build_agent_from_definition, _safe_close
+    from .base import _safe_close, build_agent_from_definition
 
     if definition_override is not None:
         definition = definition_override

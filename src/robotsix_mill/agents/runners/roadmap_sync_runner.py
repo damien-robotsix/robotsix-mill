@@ -29,7 +29,7 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ...config import RepoConfig, Settings, target_branch_for
@@ -258,7 +258,7 @@ def _commit_and_open_pr(
         log.warning("roadmap-sync: forge auth missing (%s) — markers left local", e)
         return None
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     branch = f"{settings.branch_prefix}roadmap-sync-{stamp}"
 
     titles = ", ".join(f"`{e['title']}`" for e in created[:5])

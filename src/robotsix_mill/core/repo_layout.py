@@ -39,8 +39,7 @@ def src_path_candidates(token: str) -> list[str]:
     """
     # Normalise leading ./ if present.
     normalised = token
-    if normalised.startswith("./"):
-        normalised = normalised[2:]
+    normalised = normalised.removeprefix("./")
 
     candidates: list[str] = [normalised]
 

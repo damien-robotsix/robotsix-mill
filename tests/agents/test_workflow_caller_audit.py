@@ -5,8 +5,8 @@ from __future__ import annotations
 import contextlib
 from pathlib import Path
 
-from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.agents import workflow_caller_audit
+from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.agents.workflow_caller_audit import (
     CANONICAL_ORG,
     MISSING_PERMISSION,

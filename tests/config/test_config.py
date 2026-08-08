@@ -13,14 +13,13 @@ from pydantic import ValidationError
 from robotsix_mill.config import Settings
 from robotsix_mill.config._settings_core import _CoreSettings
 
-
 # ===========================================================================
 #  Fixtures
 # ===========================================================================
 
 
 @pytest.fixture(autouse=True)
-def _clean_env() -> Generator[None, None, None]:
+def _clean_env() -> Generator[None]:
     """Remove any ``MILL_*`` vars before each test so we get clean defaults.
 
     The conftest-level _no_dotenv fixture handles ``.env`` / YAML file
@@ -82,12 +81,12 @@ def test_default_coordinator_request_limit():
     # Also verify the hard upper bound is enforced at the model level.
     # 5001 exceeds le=5000 — must pass via alias (field has alias set)
     try:
-        _CoreSettings(**{"MILL_PER_PASS_REQUEST_BUDGET": 5001})
+        _CoreSettings(MILL_PER_PASS_REQUEST_BUDGET=5001)
         raise AssertionError("expected ValidationError")
     except ValidationError:
         pass
     # boundary: 5000 is ok
-    cs = _CoreSettings(**{"MILL_PER_PASS_REQUEST_BUDGET": 5000})
+    cs = _CoreSettings(MILL_PER_PASS_REQUEST_BUDGET=5000)
     assert cs.coordinator_request_limit == 5000
 
 
@@ -785,6 +784,8 @@ def test_effective_skills_dir_missing_falls_back_to_packaged(
 ) -> None:
     from robotsix_mill._resources import (
         effective_skills_dir,
+    )
+    from robotsix_mill._resources import (
         skills_dir as packaged_skills_dir,
     )
 
@@ -797,6 +798,8 @@ def test_effective_skills_dir_missing_falls_back_to_packaged(
 def test_effective_language_instructions_dir_missing_falls_back() -> None:
     from robotsix_mill._resources import (
         effective_language_instructions_dir,
+    )
+    from robotsix_mill._resources import (
         language_instructions_dir as packaged_lang_dir,
     )
 
@@ -820,6 +823,8 @@ def test_effective_skills_dir_honors_dir_created_after_first_call(
     """Use-time resolution: a configured dir that appears later wins again."""
     from robotsix_mill._resources import (
         effective_skills_dir,
+    )
+    from robotsix_mill._resources import (
         skills_dir as packaged_skills_dir,
     )
 

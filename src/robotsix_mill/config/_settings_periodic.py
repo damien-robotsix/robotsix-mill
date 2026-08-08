@@ -8,6 +8,7 @@ model to keep ``settings.py`` under 800 lines. Assembled into the final
 from __future__ import annotations
 
 from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 

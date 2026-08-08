@@ -9,7 +9,6 @@ agents on the same repo.
 
 from __future__ import annotations
 
-
 from robotsix_mill.agents import bespoke as _bespoke
 from robotsix_mill.agents.bespoke import BespokeResult
 from robotsix_mill.agents.bespoke_loader import BespokeAgentDefinition

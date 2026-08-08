@@ -20,6 +20,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import robotsix_config
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
@@ -27,13 +28,11 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-import robotsix_config
-
 from ._settings_core import _CoreSettings
-from .json_source import JsonSettingsSource
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
 from ._settings_stages import _StagesSettings
+from .json_source import JsonSettingsSource
 
 if TYPE_CHECKING:
     from .repos import ReposRegistry
@@ -324,7 +323,7 @@ class Settings(
     # -- cross-field checks --------------------------------------------
 
     @model_validator(mode="after")
-    def _validate_cross_field(self) -> "Settings":
+    def _validate_cross_field(self) -> Settings:
         # forge_auth=app is GitHub-only — reject for GitLab early so
         # the error message is specific, not a misleading GitHub App
         # credential complaint.

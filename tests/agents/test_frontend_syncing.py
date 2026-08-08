@@ -2,7 +2,6 @@
 
 from robotsix_mill.agents import frontend_syncing
 
-
 # --- Agent tests ---
 
 

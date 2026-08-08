@@ -14,7 +14,7 @@ is a follow-up that must first extend the data layer.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ...core.models import SourceKind, TicketKind
@@ -72,8 +72,8 @@ class ErroredRunsCheck:
         settings = ctx.settings
         board_id = ctx.board_id
 
-        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        since = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         errors = query_run_errors(board_id, since=since, settings=settings)
 

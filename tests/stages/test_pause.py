@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, call, patch
 
-
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.stages.pause import (
     _SENTINEL,

@@ -27,7 +27,6 @@ from robotsix_mill.stages.refine import _reconcile
 from robotsix_mill.stages.refine import orchestration as orch_module
 from robotsix_mill.vcs import git_ops
 
-
 # ---------------------------------------------------------------------------
 # fixtures
 # ---------------------------------------------------------------------------

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from pydantic import ValidationError
 
 from robotsix_mill.agents.expert_loader import (
@@ -14,7 +13,6 @@ from robotsix_mill.agents.expert_loader import (
     ExpertMemoryConfig,
     load_expert_definition,
 )
-
 
 # ── helpers ──────────────────────────────────────────────────────────
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from robotsix_mill.config import RepoConfig, ReposRegistry
 from robotsix_mill.meta import triage as meta_triage
 from robotsix_mill.meta.triage import RequiredReposResult
-from robotsix_mill.config import RepoConfig, ReposRegistry
 
 
 def _reg(*repo_ids_with_url):

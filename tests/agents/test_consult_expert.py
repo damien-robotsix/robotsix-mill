@@ -9,7 +9,7 @@ from robotsix_mill.agents.consult_expert import (
 from robotsix_mill.agents.consult_expert import (
     run_consult_expert as _arun_consult_expert,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def run_consult_expert(**kwargs):
@@ -81,8 +81,8 @@ def test_missing_expert_definition_degrades_not_raises(tmp_path, monkeypatch):
     run_consult_expert returns a failure string without raising."""
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig,
         ExpertDefinition,
+        ExpertMemoryConfig,
     )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="valid-key")
@@ -123,8 +123,8 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     run_command, delete_file."""
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig,
         ExpertDefinition,
+        ExpertMemoryConfig,
     )
 
     s = _settings(
@@ -164,6 +164,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
         fake_load_defs,
     )
     import pydantic_ai
+
     from robotsix_mill.agents import base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
@@ -193,6 +194,7 @@ def test_expert_agent_read_only_tools(tmp_path, monkeypatch):
     # Output is structured so the expert can return both an answer and
     # an updated memory ledger; the wrapper unwraps .answer to a string.
     from pydantic_ai import PromptedOutput
+
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
 
     assert isinstance(cap["output_type"], PromptedOutput)
@@ -210,8 +212,8 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig,
         ExpertDefinition,
+        ExpertMemoryConfig,
     )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
@@ -245,8 +247,9 @@ def test_expert_persists_updated_memory(tmp_path, monkeypatch):
         expert_manager.ExpertManager, "load_definitions", fake_load_defs
     )
     import pydantic_ai
-    from robotsix_mill.agents import fs_tools as ft
+
     from robotsix_mill.agents import base as bmod
+    from robotsix_mill.agents import fs_tools as ft
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
@@ -277,8 +280,8 @@ def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig,
         ExpertDefinition,
+        ExpertMemoryConfig,
     )
     from robotsix_mill.agents.runners import pass_runner
 
@@ -313,7 +316,9 @@ def test_expert_persist_memory_receives_max_chars_kwarg(tmp_path, monkeypatch):
         expert_manager.ExpertManager, "load_definitions", fake_load_defs
     )
     import pydantic_ai
-    from robotsix_mill.agents import fs_tools as ft, base as bmod
+
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.agents import fs_tools as ft
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
@@ -350,8 +355,8 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
     from robotsix_mill.agents import expert_manager
     from robotsix_mill.agents.consult_expert import ExpertConsultResult
     from robotsix_mill.agents.expert_loader import (
-        ExpertMemoryConfig,
         ExpertDefinition,
+        ExpertMemoryConfig,
     )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
@@ -381,7 +386,9 @@ def test_expert_skips_persist_when_updated_memory_empty(tmp_path, monkeypatch):
         },
     )
     import pydantic_ai
-    from robotsix_mill.agents import fs_tools as ft, base as bmod
+
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.agents import fs_tools as ft
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(

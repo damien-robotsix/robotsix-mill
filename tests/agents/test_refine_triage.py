@@ -776,78 +776,102 @@ def test_auto_approve_yaml_criteria_permissive_tie_breaker():
 _ROUTINE_SPEC_CASES = [
     (
         "new_internal_module",
-        "## Problem\nAdd ExportManager to handle CSV exports.\n"
-        "## Scope\n- src/export/manager.py: new ExportManager class\n"
-        "## Acceptance criteria\n- [ ] ExportManager.export() returns bytes\n",
+        (
+            "## Problem\nAdd ExportManager to handle CSV exports.\n"
+            "## Scope\n- src/export/manager.py: new ExportManager class\n"
+            "## Acceptance criteria\n- [ ] ExportManager.export() returns bytes\n"
+        ),
     ),
     (
         "new_pydantic_schema",
-        "## Problem\nAdd ExportConfig schema.\n"
-        "## Scope\n- src/schemas/export.py: new Pydantic model\n"
-        "## Acceptance criteria\n- [ ] ExportConfig validates required fields\n",
+        (
+            "## Problem\nAdd ExportConfig schema.\n"
+            "## Scope\n- src/schemas/export.py: new Pydantic model\n"
+            "## Acceptance criteria\n- [ ] ExportConfig validates required fields\n"
+        ),
     ),
     (
         "ui_change",
-        "## Problem\nUpdate button styling on the dashboard.\n"
-        "## Scope\n- src/templates/dashboard.html: change CSS class\n"
-        "## Acceptance criteria\n- [ ] Button shows correct colour\n",
+        (
+            "## Problem\nUpdate button styling on the dashboard.\n"
+            "## Scope\n- src/templates/dashboard.html: change CSS class\n"
+            "## Acceptance criteria\n- [ ] Button shows correct colour\n"
+        ),
     ),
     (
         "tests_only",
-        "## Problem\nAdd missing tests for ExportManager.\n"
-        "## Scope\n- tests/test_export_manager.py: five unit tests\n"
-        "## Acceptance criteria\n- [ ] All five tests pass\n",
+        (
+            "## Problem\nAdd missing tests for ExportManager.\n"
+            "## Scope\n- tests/test_export_manager.py: five unit tests\n"
+            "## Acceptance criteria\n- [ ] All five tests pass\n"
+        ),
     ),
     (
         "docs_only",
-        "## Problem\nDocument the new export endpoints.\n"
-        "## Scope\n- docs/export.md: add usage section\n"
-        "## Acceptance criteria\n- [ ] Section present and accurate\n",
+        (
+            "## Problem\nDocument the new export endpoints.\n"
+            "## Scope\n- docs/export.md: add usage section\n"
+            "## Acceptance criteria\n- [ ] Section present and accurate\n"
+        ),
     ),
     (
         "internal_endpoint",
-        "## Problem\nAdd GET /internal/health endpoint.\n"
-        "## Scope\n- src/routes/internal.py: register route\n"
-        "## Acceptance criteria\n- [ ] 200 on GET /internal/health\n",
+        (
+            "## Problem\nAdd GET /internal/health endpoint.\n"
+            "## Scope\n- src/routes/internal.py: register route\n"
+            "## Acceptance criteria\n- [ ] 200 on GET /internal/health\n"
+        ),
     ),
     (
         "refactor",
-        "## Problem\nExtract _parse_csv helper from CsvImporter.\n"
-        "## Scope\n- src/importers/csv.py: extract helper function\n"
-        "## Acceptance criteria\n- [ ] All existing tests pass\n",
+        (
+            "## Problem\nExtract _parse_csv helper from CsvImporter.\n"
+            "## Scope\n- src/importers/csv.py: extract helper function\n"
+            "## Acceptance criteria\n- [ ] All existing tests pass\n"
+        ),
     ),
 ]
 
 _HIGH_RISK_SPEC_CASES = [
     (
         "auth_secrets",
-        "## Problem\nRotate JWT signing secret.\n"
-        "## Scope\n- src/auth/jwt.py: update secret key handling\n"
-        "## Acceptance criteria\n- [ ] New secret applied on startup\n",
+        (
+            "## Problem\nRotate JWT signing secret.\n"
+            "## Scope\n- src/auth/jwt.py: update secret key handling\n"
+            "## Acceptance criteria\n- [ ] New secret applied on startup\n"
+        ),
     ),
     (
         "destructive_migration",
-        "## Problem\nRemove legacy columns from users table.\n"
-        "## Scope\n- migrations/0042_drop_columns.py: DROP COLUMN legacy_flag, legacy_data\n"
-        "## Acceptance criteria\n- [ ] Columns removed; migration irreversible\n",
+        (
+            "## Problem\nRemove legacy columns from users table.\n"
+            "## Scope\n- migrations/0042_drop_columns.py: DROP COLUMN legacy_flag, legacy_data\n"
+            "## Acceptance criteria\n- [ ] Columns removed; migration irreversible\n"
+        ),
     ),
     (
         "cross_repo_ci",
-        "## Problem\nUpdate shared CI deploy workflow.\n"
-        "## Scope\n- .github/workflows/deploy.yml: change shared deploy step\n"
-        "## Acceptance criteria\n- [ ] CI pipeline updated across all repos\n",
+        (
+            "## Problem\nUpdate shared CI deploy workflow.\n"
+            "## Scope\n- .github/workflows/deploy.yml: change shared deploy step\n"
+            "## Acceptance criteria\n- [ ] CI pipeline updated across all repos\n"
+        ),
     ),
     (
         "breaking_public_api",
-        "## Problem\nRemove deprecated public endpoint GET /api/v1/users.\n"
-        "## Scope\n- src/api/v1/users.py: remove route; external callers must migrate\n"
-        "## Acceptance criteria\n- [ ] Endpoint removed from public API\n",
+        (
+            "## Problem\nRemove deprecated public endpoint GET /api/v1/users.\n"
+            "## Scope\n- src/api/v1/users.py: remove route; external callers must migrate\n"
+            "## Acceptance criteria\n- [ ] Endpoint removed from public API\n"
+        ),
     ),
     (
         "new_external_runtime_dep",
-        "## Problem\nAdd cryptography package for FIPS-compliant hashing.\n"
-        "## Scope\n- pyproject.toml: add cryptography>=41 to runtime dependencies\n"
-        "## Acceptance criteria\n- [ ] cryptography importable at runtime\n",
+        (
+            "## Problem\nAdd cryptography package for FIPS-compliant hashing.\n"
+            "## Scope\n- pyproject.toml: add cryptography>=41 to runtime dependencies\n"
+            "## Acceptance criteria\n- [ ] cryptography importable at runtime\n"
+        ),
     ),
 ]
 

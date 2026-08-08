@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 
-from . import _client, _read_body_from_args
 from ..config import Settings
 from ..core.models import TicketKind
+from . import _client, _read_body_from_args
 
 
 def _inquire(args: argparse.Namespace, settings: Settings) -> int:

@@ -15,14 +15,13 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.retrospect import (
-    RetrospectStage,
     _WORD_TO_NUM,
+    RetrospectStage,
     _apply_memory_edits,
     _check_memory_count_consistency,
     _extract_ticket_ids,
     _parse_numeric_count,
 )
-
 
 # ------------------------------------------------------------------
 # Helpers
@@ -108,8 +107,8 @@ def ctx_factory(tmp_path, fake_sandbox):
 def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypatch):
     """Happy path: agent returns normal findings → CLOSED with
     retrospect.md artifact written, langfuse: yes."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -164,8 +163,8 @@ def test_happy_path_normal_retrospect_closed_with_findings(ctx_factory, monkeypa
 def test_langfuse_none_workflow_only_still_succeeds(ctx_factory, monkeypatch):
     """When fetch_session_summary returns None, the stage still
     transitions to CLOSED and the artifact notes 'workflow-only'."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -211,8 +210,8 @@ def test_agent_raises_blocked_resumable(ctx_factory, monkeypatch):
     """When run_retrospect_agent raises a non-transient exception, the
     stage degrades to CLOSED (not BLOCKED) with a failure note and a
     minimal retrospect.md artifact recording the failure."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -259,8 +258,8 @@ def test_agent_raises_non_transient_closes_with_failure_artifact(
     reraise_if_transient is a no-op (simulating a fatal error), the
     stage returns CLOSED with a failure note and a minimal
     retrospect.md artifact recording the failure."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -320,8 +319,8 @@ def test_agent_raises_non_transient_closes_with_failure_artifact(
 def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
     """When retrospect_spawn_drafts=false, a proposed draft is
     noted but NOT created."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(retrospect_spawn_drafts="false")
 
@@ -378,8 +377,8 @@ def test_spawn_drafts_disabled_no_draft_created(ctx_factory, monkeypatch):
 def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch):
     """When spawning is enabled (default) and the agent proposes
     a draft, a new ticket is created with parent_id set."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -439,8 +438,8 @@ def test_spawn_draft_enabled_creates_draft_with_parent(ctx_factory, monkeypatch)
 def test_noop_draft_title_skips_spawn(ctx_factory, monkeypatch):
     """A draft titled 'No notable issues - clean run' is filtered
     and no ticket is created."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -495,8 +494,8 @@ def test_placeholder_draft_body_skips_spawn(ctx_factory, monkeypatch):
     "..." — then blocked in refine, which could not build a spec from it,
     with nothing anyone could act on.
     """
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -549,8 +548,8 @@ def test_placeholder_draft_body_skips_spawn(ctx_factory, monkeypatch):
 def test_follow_up_ticket_created(ctx_factory, monkeypatch):
     """When agent returns follow_up_title + follow_up_body,
     a concrete follow-up ticket is created with parent_id."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -607,8 +606,8 @@ def test_follow_up_ticket_created(ctx_factory, monkeypatch):
 def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
     """A follow-up is created even when a CLOSED ticket with the
     same title exists (CLOSED is in _DONE_WITH)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -671,8 +670,8 @@ def test_follow_up_dedup_closed_allowed(ctx_factory, monkeypatch):
 def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
     """A follow-up is NOT created when a DRAFT ticket with the same
     case-insensitive title already exists (DRAFT not in _DONE_WITH)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -732,8 +731,8 @@ def test_follow_up_dedup_draft_blocked(ctx_factory, monkeypatch):
 
 def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
     """Agent's updated_memory is written to the retrospect_memory_file."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -778,8 +777,8 @@ def test_updated_memory_written_to_file(ctx_factory, monkeypatch):
 def _memory_seams(monkeypatch):
     """Install the common seams for the memory-delta persistence tests
     (everything except run_retrospect_agent, which each test supplies)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(
         langfuse_client,
@@ -1152,8 +1151,8 @@ def test_memory_edits_loses_to_updated_memory(ctx_factory, monkeypatch):
 def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
     """When the memory ledger has count drift (claims 5 tickets but
     evidence lists 2), the stage still transitions to CLOSED."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -1199,8 +1198,8 @@ def test_memory_count_drift_non_blocking(ctx_factory, monkeypatch):
 
 def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
     """When prune_clone_on_close is True (default), prune_clone is called."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -1247,8 +1246,8 @@ def test_prune_clone_on_close_true_prunes(ctx_factory, monkeypatch):
 
 def test_prune_clone_on_close_false_no_prune(ctx_factory, monkeypatch):
     """When prune_clone_on_close=false, prune_clone is NOT called."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(prune_clone_on_close="false")
 
@@ -1390,9 +1389,9 @@ def test_agented_proposals_file_tickets_not_candidates_file(ctx_factory, monkeyp
     """When agent returns agented_md_proposals, draft tickets are filed
     on the originating board — but AGENT_CANDIDATES.md is NOT written by
     the stage (the candidates file is no longer a stage sink)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
     from robotsix_mill.core.models import SourceKind
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -1458,8 +1457,8 @@ def test_agented_proposals_file_tickets_not_candidates_file(ctx_factory, monkeyp
 def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
     """When agented_md_proposals is None, AGENT_CANDIDATES.md is NOT created
     (or left unchanged if it existed)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -1504,8 +1503,8 @@ def test_agented_proposals_none_no_file_created(ctx_factory, monkeypatch):
 
 def test_agented_proposals_empty_list_no_file_created(ctx_factory, monkeypatch):
     """An empty list is treated the same as None — no file created."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -1552,9 +1551,9 @@ def test_agented_proposals_second_run_files_distinct_ticket(ctx_factory, monkeyp
     """When a prior run already filed a proposal ticket, a second run
     with a DISTINCT proposal files a new ticket (no candidates file
     written by the stage)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
     from robotsix_mill.core.models import SourceKind
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -1625,8 +1624,8 @@ def test_agented_proposals_second_run_files_distinct_ticket(ctx_factory, monkeyp
 def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
     """When MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS=false, proposals
     are not written even if present."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS="false")
 
@@ -1688,8 +1687,8 @@ def _agented_seams(monkeypatch):
     """Install the common seams used by the AGENT.md-proposal-ticket
     tests (everything except run_retrospect_agent, which each test
     supplies)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     monkeypatch.setattr(
         langfuse_client,
@@ -1987,8 +1986,8 @@ def test_agented_proposal_distinct_not_suppressed(ctx_factory, monkeypatch):
 def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
     """Populate the global ``_repos_config`` for multi-repo retrospect
     tests."""
-    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
 
     _reset_repos_config()
     _cfg._repos_config = ReposRegistry(
@@ -2027,8 +2026,8 @@ def _multirepo_forge_env() -> dict:
 
 
 def _set_forge_secrets() -> None:
-    from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import Secrets, _reset_secrets
 
     _reset_secrets()
     _cfg._secrets = Secrets(forge_token="t")
@@ -2048,8 +2047,8 @@ def test_multi_repo_retrospect_blocks_when_any_pr_not_merged(ctx_factory, monkey
     retrospect agent is NOT invoked, no ``retrospect.md`` is written,
     and the ticket does not transition to CLOSED."""
     from robotsix_mill.agents.runners import pass_runner
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.forge import github
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(**_multirepo_forge_env())
     _set_forge_secrets()
@@ -2134,8 +2133,8 @@ def test_multi_repo_retrospect_closes_when_all_prs_merged(ctx_factory, monkeypat
     """All PRs merged → retrospect runs normally and the ticket
     transitions to CLOSED."""
     from robotsix_mill.agents.runners import pass_runner
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.forge import github
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(**_multirepo_forge_env())
     _set_forge_secrets()
@@ -2217,8 +2216,8 @@ def test_single_repo_retrospect_unchanged_when_no_pr_urls_json(
     """When ``pr_urls.json`` is absent, retrospect makes no forge calls
     for verification — the single-repo path runs unchanged."""
     from robotsix_mill.agents.runners import pass_runner
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.forge import github
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory()
 
@@ -2255,7 +2254,6 @@ def test_single_repo_retrospect_unchanged_when_no_pr_urls_json(
 
     def fail_if_called(self, *, source_branch):
         pr_status_calls.append(source_branch)
-        return None
 
     monkeypatch.setattr(github.GitHubForge, "pr_status", fail_if_called)
 
@@ -2306,8 +2304,8 @@ def test_inputs_capped_keep_recent_content(ctx_factory, monkeypatch):
     agent are each capped to their configured limit, keeping the
     most-recent content (omission note present, newest entry kept,
     oldest dropped)."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(max_memory_chars="300", retrospect_log_max_chars="300")
 
@@ -2377,8 +2375,8 @@ def test_inputs_capped_keep_recent_content(ctx_factory, monkeypatch):
 
 def test_retrospect_log_cap_zero_disables(ctx_factory, monkeypatch):
     """A retrospect_log_max_chars of 0 leaves history/comments uncapped."""
-    from robotsix_mill.langfuse import client as langfuse_client
     from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
 
     ctx = ctx_factory(retrospect_log_max_chars="0")
 

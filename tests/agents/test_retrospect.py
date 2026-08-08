@@ -2,11 +2,11 @@ from robotsix_mill.agents import retrospecting
 from robotsix_mill.agents.retrospecting import RetrospectResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
-from robotsix_mill.core.text_utils import truncate_at_boundary
-from robotsix_mill.langfuse import client as langfuse_client
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import SourceKind, TicketKind
+from robotsix_mill.core.text_utils import truncate_at_boundary
+from robotsix_mill.langfuse import client as langfuse_client
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.retrospect import RetrospectStage
 

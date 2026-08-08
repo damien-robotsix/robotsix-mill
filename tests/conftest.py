@@ -7,8 +7,8 @@ try:
 except ImportError:
     _HYPOTHESIS_AVAILABLE = False
 
-from robotsix_mill.core import db
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
+from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 
 
@@ -193,8 +193,8 @@ def secrets_set():
     that calls ``get_secrets()`` (even those that imported it at
     module level) sees the test values.
     """
-    from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import Secrets, _reset_secrets
 
     def _set(**overrides):
         _reset_secrets()

@@ -4,7 +4,6 @@ import contextlib
 
 from robotsix_mill.agents.ci_log_fetch_tool import build_ci_log_fetch_tool
 
-
 # --- trace_stage child-span test ----------------------------------------
 
 

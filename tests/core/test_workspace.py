@@ -10,7 +10,6 @@ import pytest
 
 from robotsix_mill.core.workspace import Workspace
 
-
 # ---- constructor ---------------------------------------------------------
 
 

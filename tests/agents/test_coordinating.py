@@ -25,7 +25,7 @@ from robotsix_mill.agents.coordinating import (
     ImplementResult,
     run_coordinator,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _settings(tmp_path, **env):
@@ -1008,6 +1008,7 @@ class TestCallWithTimeout:
         the worker thread — ThreadPoolExecutor drops them by default,
         so _call_with_timeout must propagate via contextvars.copy_context()."""
         import contextvars
+
         from robotsix_mill.agents.coordinating import _call_with_timeout
 
         test_var: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -1090,6 +1091,7 @@ class TestProgressWatchdog:
         long-running function to survive past the initial timeout."""
         import threading
         import time
+
         from robotsix_mill.agents.coordinating import (
             _call_with_progress_watchdog,
         )
@@ -1121,6 +1123,7 @@ class TestProgressWatchdog:
         TimeoutError after timeout_seconds elapse."""
         import threading
         import time
+
         from robotsix_mill.agents.coordinating import (
             _call_with_progress_watchdog,
         )
@@ -1145,6 +1148,7 @@ class TestProgressWatchdog:
         so _call_with_progress_watchdog must propagate them."""
         import contextvars
         import threading
+
         from robotsix_mill.agents.coordinating import (
             _call_with_progress_watchdog,
         )
@@ -1174,6 +1178,7 @@ class TestProgressWatchdog:
         """_call_with_progress_watchdog always calls shutdown(wait=False)."""
         import concurrent.futures
         import threading
+
         from robotsix_mill.agents.coordinating import (
             _call_with_progress_watchdog,
         )
@@ -1219,6 +1224,7 @@ class TestProgressWatchdog:
         """_wrap_tools_with_progress wraps callables so they set the
         progress_event on every invocation."""
         import threading
+
         from robotsix_mill.agents.coordinating import (
             _wrap_tools_with_progress,
         )
@@ -1243,6 +1249,7 @@ class TestProgressWatchdog:
         awaited result is the tool's return value, not a bare coroutine."""
         import inspect
         import threading
+
         from robotsix_mill.agents.coordinating import (
             _wrap_tools_with_progress,
         )
@@ -1268,6 +1275,7 @@ class TestProgressWatchdog:
         """Non-callable entries pass through _wrap_tools_with_progress
         unchanged."""
         import threading
+
         from robotsix_mill.agents.coordinating import (
             _wrap_tools_with_progress,
         )

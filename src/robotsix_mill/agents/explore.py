@@ -706,7 +706,7 @@ def make_parallel_explore_tool(
     """
 
     async def parallel_explore(questions: list[str]) -> str:
-        """Batch SEVERAL independent questions into a single scout call.
+        f"""Batch SEVERAL independent questions into a single scout call.
 
         Use this (instead of many serial ``explore`` calls) for long,
         splittable work: e.g. partition a big task into independent slices
@@ -716,8 +716,8 @@ def make_parallel_explore_tool(
         its question.  Keep each question self-contained; the scout answers
         them sequentially within the same call.
 
-        At most {cap} questions per call — split larger batches across
-        multiple calls.""".format(cap=_PARALLEL_EXPLORE_BATCH_CAP)
+        At most {_PARALLEL_EXPLORE_BATCH_CAP} questions per call — split larger batches across
+        multiple calls."""
         if not questions:
             return "parallel_explore: no questions provided"
 

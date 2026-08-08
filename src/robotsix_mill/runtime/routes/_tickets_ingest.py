@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -122,9 +122,9 @@ def _fingerprint_match(
 
 
 def _check_repo_workable(
-    repo_config: "RepoConfig",
+    repo_config: RepoConfig,
     repo_id: str,
-    settings: "Settings",
+    settings: Settings,
 ) -> None:
     """Reject tickets for auto-registered repos when runtime
     registration is disabled (the repo was registered via
@@ -191,7 +191,7 @@ def ingest_ticket(
     board_svc = TicketService(settings, board_id=board_id)
     all_tickets = board_svc.list()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     lookback_cutoff = now - timedelta(days=settings.dedup_lookback_days)
     candidates = [
         t

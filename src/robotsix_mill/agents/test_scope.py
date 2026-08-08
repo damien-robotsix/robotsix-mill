@@ -37,7 +37,7 @@ class TestScopeVerdict(BaseModel):
 
 def run_test_scope_agent(
     *,
-    settings: "Settings",
+    settings: Settings,
     changed_files: list[str],
     diff_stat: str,
     ticket_summary: str,
@@ -64,7 +64,6 @@ def run_test_scope_agent(
         final backstop.
     """
     from ..config import get_secrets
-
     from .yaml_loader import load_and_run_agent
 
     changed_body = "\n".join(f"- {f}" for f in changed_files)

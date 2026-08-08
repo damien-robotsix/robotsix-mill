@@ -18,8 +18,8 @@ from pathlib import Path
 from ..agents.documenting import DocClassifierResult, DocResult
 from ..config import target_branch_for
 from ..core.models import Ticket
-from ..notify import send_notification
 from ..core.states import State
+from ..notify import send_notification
 from ..vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext

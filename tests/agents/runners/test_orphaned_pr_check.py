@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 
+from robotsix_mill.agents.runners.orphaned_pr_check import (
+    ClassifiedOrphanPr,
+    OrphanClassification,
+    _build_close_comment,
+    _determine_classification,
+    _pr_has_conflicts,
+    _pr_has_empty_diff,
+    classify_orphaned_prs,
+    run_orphaned_pr_check_pass,
+)
 from robotsix_mill.config import RepoConfig, Settings
 from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.states import State
-from robotsix_mill.agents.runners.orphaned_pr_check import (
-    OrphanClassification,
-    ClassifiedOrphanPr,
-    classify_orphaned_prs,
-    _pr_has_empty_diff,
-    _pr_has_conflicts,
-    _determine_classification,
-    _build_close_comment,
-    run_orphaned_pr_check_pass,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,7 +51,7 @@ def _repo():
 
 def _ticket(ticket_id: str = "20250101T000000Z-test-ticket-a1b2", **kw):
     kw.setdefault("state", State.READY)
-    kw.setdefault("created_at", datetime(2025, 1, 10, tzinfo=timezone.utc))
+    kw.setdefault("created_at", datetime(2025, 1, 10, tzinfo=UTC))
     kw.setdefault("id", ticket_id)
     return Ticket(**kw)
 
@@ -539,7 +538,7 @@ class TestAgeGuardSkipsYoungTicket:
             orphaned_pr_min_age_hours=4,
         )
         repo = _repo()
-        recent = datetime.now(timezone.utc) - timedelta(hours=1)
+        recent = datetime.now(UTC) - timedelta(hours=1)
         ticket = _ticket(
             "20250101T000000Z-test-ticket-a1b2",
             state=State.DONE,

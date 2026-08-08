@@ -14,6 +14,7 @@ then drive the supervisor's discovery cycle directly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,6 @@ from robotsix_mill.runtime.worker.periodic_passes import (
     _save_repos_yaml_hash,
 )
 from robotsix_mill.stages import StageContext
-import contextlib
 
 
 @pytest.fixture
@@ -67,8 +67,9 @@ def _make_clone(tmp_path) -> Path:
 
 
 def _stub_clone_helpers(monkeypatch):
-    from robotsix_mill.vcs import git_ops
     import subprocess as _sp
+
+    from robotsix_mill.vcs import git_ops
 
     monkeypatch.setattr(git_ops, "clone", lambda *a, **k: None)
     monkeypatch.setattr(git_ops, "fetch", lambda *a, **k: None)

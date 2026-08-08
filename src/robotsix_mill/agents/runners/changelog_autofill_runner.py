@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
-
 from typing import Any
 
 from robotsix_mill.agents.changelog_tool import _insert_changelog_entry

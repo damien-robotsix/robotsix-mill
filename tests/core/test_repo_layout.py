@@ -2,7 +2,6 @@
 
 from robotsix_mill.core.repo_layout import resolve_under_src, src_path_candidates
 
-
 # ---------------------------------------------------------------------------
 # src_path_candidates
 # ---------------------------------------------------------------------------

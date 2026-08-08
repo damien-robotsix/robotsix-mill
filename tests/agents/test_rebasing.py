@@ -8,7 +8,7 @@ import pydantic_ai.providers.openrouter as orp
 import pytest
 
 from robotsix_mill.agents.rebasing import RebaseResult, run_rebase_agent
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _s(tmp_path, **kw):

@@ -18,6 +18,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 from ..core.models import Ticket
 from .prompt_blocks import section
@@ -137,11 +138,11 @@ def run_dedup_check(
     Degrades gracefully: on any exception, returns nulls with a failure
     reason — the guard is best-effort and never blocks the pipeline.
     """
-    from .base import build_agent_from_definition, _safe_close
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_agent_definition
+    from .base import _safe_close, build_agent_from_definition
     from .retry import run_agent
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "dedup.yaml")
 

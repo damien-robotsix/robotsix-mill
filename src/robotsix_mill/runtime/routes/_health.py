@@ -6,8 +6,8 @@ import asyncio
 import logging
 import time
 from collections.abc import Coroutine
-from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -16,14 +16,13 @@ from sqlmodel import text
 if TYPE_CHECKING:
     from ..worker import Worker
 
-from ...config import Settings
+from ...config import RepoConfig, Settings
 from ...core import db
 from ...core.states import State
+from ...langfuse.client import _build_read_client, _langfuse_api_get
 from ..board_adapter import MillBoardAdapter
 from ..board_html import build_board_skeleton, render_board_html
-from ...config import RepoConfig
 from ..deps import enrich_ticket_read, get_repos_registry, get_settings, get_worker
-from ...langfuse.client import _build_read_client, _langfuse_api_get
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ def _uptime_payload(request: Request) -> dict[str, Any]:
     """
     started_at: datetime | None = getattr(request.app.state, "started_at", None)
     if started_at is not None:
-        uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
+        uptime = (datetime.now(UTC) - started_at).total_seconds()
         return {
             "started_at": started_at.isoformat(),
             "uptime_seconds": int(uptime),
@@ -211,7 +210,7 @@ async def health_ready(
     ) -> dict[str, Any] | None:
         try:
             return await asyncio.wait_for(coro, timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None  # caller must replace with a timeout result
 
     async def _db_check() -> dict[str, Any]:
@@ -311,7 +310,7 @@ def credit_status_clear() -> None:
 
 
 @router.get("/worker-status")
-def worker_status(worker: "Worker" = Depends(get_worker)) -> dict[str, object]:
+def worker_status(worker: Worker = Depends(get_worker)) -> dict[str, object]:
     """Live worker introspection for diagnosing stuck tickets.
 
     Reports per-board queue depth, the in-flight ``_pending`` set, and
@@ -376,7 +375,7 @@ def list_repos(
     (``--repo-id`` passed) only that repo is returned.
     """
 
-    def _entry(rc: "RepoConfig") -> dict[str, str | None]:
+    def _entry(rc: RepoConfig) -> dict[str, str | None]:
         return {
             "repo_id": rc.repo_id,
             "board_id": rc.board_id,

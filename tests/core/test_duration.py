@@ -4,14 +4,14 @@ parsing/formatting."""
 import pytest
 
 try:
-    from hypothesis import given, strategies as st
+    from hypothesis import given
+    from hypothesis import strategies as st
 
     _HYPOTHESIS_AVAILABLE = True
 except ImportError:
     _HYPOTHESIS_AVAILABLE = False
 
 from robotsix_mill.core.duration import format_duration, parse_duration
-
 
 # ---------------------------------------------------------------------------
 # parse_duration — valid inputs

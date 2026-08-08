@@ -9,7 +9,6 @@ from unittest.mock import Mock
 
 import httpx
 import openai
-
 import pytest
 
 from robotsix_mill.runtime.transient_errors import (
@@ -19,7 +18,6 @@ from robotsix_mill.runtime.transient_errors import (
     classify_stage_error,
     reraise_if_transient,
 )
-
 
 # ---------------------------------------------------------------------------
 # _is_transient_httpx

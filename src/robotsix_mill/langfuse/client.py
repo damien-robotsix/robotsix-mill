@@ -350,8 +350,10 @@ def fetch_session_summary(
     total_cost = sum(num(t.get("totalCost")) for t in traces)
     total_lat = sum(num(t.get("latency")) for t in traces)
     lines = [
-        f"traces={len(traces)}  total_cost=${total_cost:.4f}  "
-        f"total_latency={total_lat:.1f}s",
+        (
+            f"traces={len(traces)}  total_cost=${total_cost:.4f}  "
+            f"total_latency={total_lat:.1f}s"
+        ),
     ]
 
     # --- group by stage name -------------------------------------------

@@ -7,13 +7,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...config import Settings
 from ..deps import (
     get_run_registry,
     get_settings,
     get_worker,
 )
-
-from ...config import Settings
 
 log = logging.getLogger(__name__)
 

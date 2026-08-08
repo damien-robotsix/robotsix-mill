@@ -10,7 +10,6 @@ from pathlib import Path
 
 from robotsix_mill.agents.freshness import extract_cited_paths, run_freshness_check
 
-
 # --- extract_cited_paths ---
 
 

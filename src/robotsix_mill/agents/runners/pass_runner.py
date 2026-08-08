@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePath
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
 from ...config import Settings
+from ...core.dedup import _extract_paths, annotate_child_body, find_inflight_overlap
 from ...core.models import (
     SourceKind,
     Ticket,
@@ -27,7 +29,6 @@ from ...core.service import TicketService
 from ...core.states import State
 from ...core.text_utils import tail_keep
 from ...core.workspace import Workspace
-from ...core.dedup import _extract_paths, annotate_child_body, find_inflight_overlap
 
 log = logging.getLogger("robotsix_mill.pass_runner")
 
@@ -358,7 +359,7 @@ def _format_recent_proposals(tickets: list[Ticket], max_age_days: float = 7.0) -
     straight to ``read_ticket`` (which rejects truncated IDs).
     """
     if max_age_days is not None and max_age_days > 0 and tickets:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
         tickets = [t for t in tickets if t.created_at and t.created_at >= cutoff]
     lines = ["<recent_proposals>", "[STATE] id | title"]
     if not tickets:
@@ -466,8 +467,7 @@ def _test_file_exists_for_gap(repo_dir: Path, title: str) -> bool:
         # prompt example uses the short form, but guard against the LLM
         # emitting the full path).
         prefix = "src/robotsix_mill/"
-        if module_path.startswith(prefix):
-            module_path = module_path[len(prefix) :]
+        module_path = module_path.removeprefix(prefix)
 
         # Must end with .py to derive a test file.
         if not module_path.endswith(".py"):
@@ -634,8 +634,10 @@ def _module_curator_premise_check(
                             if PurePath(path).match(glob) or path in glob:
                                 return (
                                     "advisory",
-                                    f"{path} is already classified under module "
-                                    f"{mod_id} in docs/modules.yaml",
+                                    (
+                                        f"{path} is already classified under module "
+                                        f"{mod_id} in docs/modules.yaml"
+                                    ),
                                 )
         except Exception:
             return None
@@ -850,7 +852,7 @@ def _create_one_draft(
                 title,
                 body,
                 settings,
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
             )
             if overlap is not None:
                 body = annotate_child_body(

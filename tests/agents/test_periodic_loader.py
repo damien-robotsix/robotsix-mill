@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from robotsix_mill.agents import periodic_loader as pl
 from robotsix_mill.agents.periodic_loader import (
     kind_for,
     validate_periodic_file_content,
 )
-from robotsix_mill.agents import periodic_loader as pl
 
 
 def _write(repo: Path, name: str, body: str) -> Path:

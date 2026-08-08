@@ -10,13 +10,12 @@ Covers all acceptance criteria from the ticket spec:
 - AC 9: Never raises on failure
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from robotsix_mill.agents.read_ticket import make_read_ticket_tool
 from robotsix_mill.core.models import TicketEvent, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-
 
 # ---------------------------------------------------------------------------
 # AC 1 — Tool is callable
@@ -253,7 +252,7 @@ def test_truncation_many_history_events(settings, service, monkeypatch):
     t = service.create("Many-events ticket")
 
     # Build 35 synthetic events (more than the old 30 limit)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events = []
     for i in range(35):
         events.append(
@@ -310,7 +309,7 @@ def test_overall_output_truncation(settings, service, monkeypatch):
     t = service.create("Overall truncation test", "x")
 
     # Build enough history events to push output past 6000 chars
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events = []
     for i in range(60):
         events.append(

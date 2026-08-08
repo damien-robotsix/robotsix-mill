@@ -30,9 +30,8 @@ def run_answer_agent(
     forwarded to the Langfuse tools so the agent queries the repo's
     own Langfuse project instead of the global one.
     """
-    from .yaml_loader import load_and_run_agent
-
     from ._repo_tools import _build_repo_tools
+    from .yaml_loader import load_and_run_agent
 
     tools = _build_repo_tools(repo_dir, settings, include_parallel_explore=True)
 

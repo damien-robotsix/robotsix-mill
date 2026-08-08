@@ -185,8 +185,10 @@ def _make_trace_detail_tool(settings: Settings, repo_config=None):
             f"timestamp: {detail.get('timestamp')}",
             f"cost: ${float(detail.get('totalCost') or 0):.4f}",
             f"latency: {float(detail.get('latency') or 0):.1f}s",
-            f"observations: {len(obs)} "
-            f"({', '.join(f'{k}={v}' for k, v in sorted(obs_summary.items()))})",
+            (
+                f"observations: {len(obs)} "
+                f"({', '.join(f'{k}={v}' for k, v in sorted(obs_summary.items()))})"
+            ),
         ]
         return "\n".join(lines)
 

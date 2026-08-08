@@ -10,10 +10,9 @@ functions **in the ``diagnostic_data`` module namespace** plus
 
 from __future__ import annotations
 
-from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.agents.runners import diagnostic_data
+from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.runtime.run_registry import RunRegistry
-
 
 # ---------------------------------------------------------------------------
 # helpers

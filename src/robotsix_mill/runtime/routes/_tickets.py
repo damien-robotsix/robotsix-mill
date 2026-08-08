@@ -7,7 +7,7 @@ import logging
 import mimetypes
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import (
     APIRouter,
@@ -21,8 +21,9 @@ from fastapi import (
     UploadFile,
 )
 
-
+from ...config import RepoConfig, ReposRegistry, Settings
 from ...core.models import (
+    Ticket,
     TicketCreate,
     TicketDescriptionUpdate,
     TicketEvent,
@@ -31,12 +32,8 @@ from ...core.models import (
     TicketRead,
     TicketTransition,
 )
-from ...config import RepoConfig, ReposRegistry, Settings
-
-from ...core.models import Ticket
 from ...core.service import TicketService
 from ...core.states import State
-from ..worker import Worker
 from ..deps import (
     enrich_ticket_read,
     get_service,
@@ -45,6 +42,7 @@ from ..deps import (
     maybe_enqueue,
     resolve_ticket_id,
 )
+from ..worker import Worker
 from ._repo_helpers import _resolve_board_id
 
 # Terminal states that are excluded from default listings (CLOSED,
@@ -292,7 +290,7 @@ def _list_tickets_compute(
                 f"got {created_after!r}",
             ) from None
         if created_after_dt.tzinfo is None:
-            created_after_dt = created_after_dt.replace(tzinfo=timezone.utc)
+            created_after_dt = created_after_dt.replace(tzinfo=UTC)
 
     # With per-repo DBs the default svc only sees its own board's
     # tickets. Build a list of services to query: one per repo when
@@ -595,7 +593,7 @@ def list_artifacts(
                     "size": stat.st_size,
                     "mtime": datetime.fromtimestamp(
                         stat.st_mtime,
-                        tz=timezone.utc,
+                        tz=UTC,
                     )
                     .isoformat()
                     .replace("+00:00", "Z"),

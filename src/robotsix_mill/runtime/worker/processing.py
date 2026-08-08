@@ -14,18 +14,18 @@ import contextlib
 import logging
 import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from ...stages import Outcome, StageContext, get_stage
-from ...core.states import STAGE_FOR_STATE, State
 from ...core.models import Ticket, TicketKind
 from ...core.service._helpers import TransitionError
 from ...core.service._transition_mixin import _TERMINAL_STATES
-from ...notify import send_notification, _TRIGGER_STATES
+from ...core.states import STAGE_FOR_STATE, State
+from ...notify import _TRIGGER_STATES, send_notification
+from ...sandbox import reap_orphan_sandboxes
+from ...stages import Outcome, StageContext, get_stage
 from .. import tracing
 from ..tracing import langfuse_trace_url
 from ..transient_errors import first_full_path
-from ...sandbox import reap_orphan_sandboxes
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
 
 log = logging.getLogger("robotsix_mill.worker")
@@ -132,14 +132,14 @@ async def _handle_stage_error(
     a retry (transient, attempts remaining) or escalates to BLOCKED via
     :func:`_block_ticket_and_notify` (transient-exhausted or fatal).
     """
-    log.exception("%s: %s failed", stage_name, ticket_id)
+    log.error("%s: %s failed", stage_name, ticket_id)
+    from ..stage_retry import compute_retry_delay
     from ..transient_errors import (
         classify_stage_error,
         is_disk_full_error,
         is_network_down_error,
         network_available,
     )
-    from ..stage_retry import compute_retry_delay
 
     classification = classify_stage_error(error)
     tracing.set_current_span_attribute("error.classification", classification)
@@ -196,8 +196,8 @@ async def _handle_stage_error(
         ):
             outage_delay = ctx.settings.network_outage_retry_seconds
             next_at_dt = datetime.fromtimestamp(
-                datetime.now(timezone.utc).timestamp() + outage_delay,
-                tz=timezone.utc,
+                datetime.now(UTC).timestamp() + outage_delay,
+                tz=UTC,
             )
             ctx.service.set_retry_state(
                 ticket_id,
@@ -237,8 +237,8 @@ async def _handle_stage_error(
         ):
             disk_delay = ctx.settings.disk_full_retry_seconds
             next_at_dt = datetime.fromtimestamp(
-                datetime.now(timezone.utc).timestamp() + disk_delay,
-                tz=timezone.utc,
+                datetime.now(UTC).timestamp() + disk_delay,
+                tz=UTC,
             )
             ctx.service.set_retry_state(
                 ticket_id,
@@ -271,8 +271,8 @@ async def _handle_stage_error(
                 base=ctx.settings.stage_retry_base_delay,
                 cap=ctx.settings.stage_retry_max_delay,
             )
-            next_at = datetime.now(timezone.utc).timestamp() + delay
-            next_at_dt = datetime.fromtimestamp(next_at, tz=timezone.utc)
+            next_at = datetime.now(UTC).timestamp() + delay
+            next_at_dt = datetime.fromtimestamp(next_at, tz=UTC)
             ctx.service.set_retry_state(
                 ticket_id,
                 retry_attempt=attempt,
@@ -423,8 +423,8 @@ async def _process_ticket_inner(
         # Retrying ticket still in backoff — don't open a trace or
         # run any stage; the poll loop re-enqueues later.
         if ticket.next_retry_at is not None and ticket.next_retry_at.replace(
-            tzinfo=timezone.utc
-        ) > datetime.now(timezone.utc):
+            tzinfo=UTC
+        ) > datetime.now(UTC):
             return
         stage_name = STAGE_FOR_STATE.get(ticket.state)
         if stage_name is None:
@@ -456,9 +456,8 @@ async def _process_ticket_inner(
         )
         if full_path is not None:
             next_at_dt = datetime.fromtimestamp(
-                datetime.now(timezone.utc).timestamp()
-                + ctx.settings.disk_full_retry_seconds,
-                tz=timezone.utc,
+                datetime.now(UTC).timestamp() + ctx.settings.disk_full_retry_seconds,
+                tz=UTC,
             )
             ctx.service.set_retry_state(
                 ticket_id,
@@ -582,7 +581,7 @@ async def _process_ticket_inner(
                 if active_map is not None:
                     active_map[ticket_id] = {
                         "stage": stage_name,
-                        "started_at": datetime.now(timezone.utc).isoformat(),
+                        "started_at": datetime.now(UTC).isoformat(),
                     }
                 # Resolved via Settings so the ci_fix floor (its agent's own
                 # verify-loop budget) is applied — see stage_timeout_for.

@@ -5,8 +5,8 @@ sub-agent (no implement sub-agent, no deep layer)."""
 import pydantic_ai
 import pytest
 
-from robotsix_mill.agents import coordinating, testing
 from robotsix_mill.agents import base as bmod
+from robotsix_mill.agents import coordinating, testing
 from robotsix_mill.agents.coordinating import ImplementResult, ValidationResult
 from robotsix_mill.config import Settings
 
@@ -15,8 +15,8 @@ def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
     # Populate Secrets so get_secrets() returns matching values
-    from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import Secrets, _reset_secrets
 
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key=env.get("OPENROUTER_API_KEY", "k"))
@@ -685,7 +685,6 @@ def test_build_agent_does_not_inject_tool_prose_into_prompt(tmp_path, monkeypatc
 
     def dummy_tool():
         """A dummy tool."""
-        pass
 
     cap = {}
 

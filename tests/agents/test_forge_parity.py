@@ -24,7 +24,6 @@ from robotsix_mill.agents.forge_parity import (
 )
 from robotsix_mill.config import Settings
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

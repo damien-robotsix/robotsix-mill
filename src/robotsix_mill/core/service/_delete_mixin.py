@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete
 from sqlmodel import Session, select
@@ -207,7 +207,7 @@ class _DeleteMixin(_ServiceBase):
             note = f"redrafted: {body}" if body else "redrafted"
             old_state = ticket.state.value
             ticket.state = State.DRAFT
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.flush()
             s.add(_make_event(s, ticket_id=ticket_id, state=State.DRAFT, note=note))

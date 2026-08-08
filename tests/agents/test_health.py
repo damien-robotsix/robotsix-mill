@@ -2,14 +2,14 @@
 
 import json
 import threading
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 from robotsix_mill.agents import health as health_agent
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_health_pass,
     PeriodicPassResult,
+    run_health_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db

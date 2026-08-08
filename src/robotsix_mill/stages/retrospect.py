@@ -13,18 +13,18 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC
 
-from ..langfuse import client as langfuse_client
 from ..agents import retrospecting
 from ..agents.retrospecting import MemoryEdit, RetrospectResult
-from ..config import Settings, get_repo_config
-from ..config import ConfigError
+from ..config import ConfigError, Settings, get_repo_config
 from ..core.models import SourceKind, Ticket
 from ..core.states import DONE_OR_CLOSED, State
 from ..core.text_noop import is_degenerate_body, is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
 from ..forge import get_forge
+from ..langfuse import client as langfuse_client
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
 
@@ -463,11 +463,11 @@ class RetrospectStage(Stage):
         if not proposals:
             return
 
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from ..core.dedup import find_agent_md_proposal_overlap
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         kept: list[dict] = []
         for prop in proposals:
             section = prop.get("section", "")
@@ -705,9 +705,9 @@ class RetrospectStage(Stage):
 
         # Verify prior proposals and prepend verified-state table.
         from ..agents.runners.pass_runner import (
-            _verify_prior_proposals,
-            _render_verified_summary,
             _format_recent_proposals,
+            _render_verified_summary,
+            _verify_prior_proposals,
         )
 
         # Render a one-line verified-state summary as an EPHEMERAL kwarg

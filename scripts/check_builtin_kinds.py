@@ -304,9 +304,9 @@ def collect_drift() -> list[str]:
     """Load the live on-disk surfaces and run every invariant."""
 
     from robotsix_mill.agents.workflow_portability import _BUILTIN_KINDS
+    from robotsix_mill.cli import _RUNNERS
     from robotsix_mill.runtime.routes._passes import _PASS_REGISTRY
     from robotsix_mill.runtime.worker.poll_loops import PollLoopsMixin
-    from robotsix_mill.cli import _RUNNERS
 
     presence_stems = _yaml_stems(_REPO_ROOT / ".robotsix-mill" / "periodic")
     agent_def_stems = _yaml_stems(_REPO_ROOT / "agent_definitions" / "periodic")

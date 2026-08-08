@@ -13,8 +13,9 @@ import yaml as _yaml
 from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import agent_definitions_dir
-from ..config import Settings, get_repos_config
+
 from ..agents.prompt_blocks import section
+from ..config import Settings, get_repos_config
 
 log = logging.getLogger("robotsix_mill.meta.triage")
 

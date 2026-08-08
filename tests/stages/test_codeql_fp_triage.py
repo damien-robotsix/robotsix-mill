@@ -2,6 +2,10 @@
 
 import json
 
+from robotsix_mill.agents.codeql_fp_triage import (
+    AlertVerdict,
+    CodeQLFpTriageResult,
+)
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -16,10 +20,6 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _write_counter,
 )
 from robotsix_mill.vcs import git_ops
-from robotsix_mill.agents.codeql_fp_triage import (
-    AlertVerdict,
-    CodeQLFpTriageResult,
-)
 
 
 def _ctx(tmp_path, **env):
@@ -28,8 +28,8 @@ def _ctx(tmp_path, **env):
     s = Settings(**env)
     ft = env.get("FORGE_TOKEN")
     if ft is not None:
-        from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+        from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
@@ -815,16 +815,17 @@ def test_flag_disabled_skips_triage(tmp_path, monkeypatch):
 def test_codeql_fp_triage_agent_wiring_smoke(monkeypatch):
     """Verify that run_codeql_fp_triage_agent calls load_and_run_agent with
     the correct definition_name so kwarg drift can't ship silently."""
-    from robotsix_mill.agents.codeql_fp_triage import run_codeql_fp_triage_agent
     from pathlib import Path
+
+    from robotsix_mill.agents.codeql_fp_triage import run_codeql_fp_triage_agent
     from robotsix_mill.config import Settings
 
     s = Settings(
         data_dir="/tmp/test_triage",
     )
     # Wire Secrets so get_secrets().openrouter_api_key is not None.
-    from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import Secrets, _reset_secrets
 
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="sk-test")
@@ -883,8 +884,8 @@ def test_codeql_fp_triage_agent_wiring_smoke(monkeypatch):
 def test_dismiss_code_scanning_alert_patch(monkeypatch):
     """Verify that GitHubForge.dismiss_code_scanning_alert sends the
     correct PATCH request to the dismiss endpoint."""
+    from robotsix_mill.config import RepoConfig, Settings
     from robotsix_mill.forge.github import GitHubForge
-    from robotsix_mill.config import Settings, RepoConfig
 
     s = Settings(
         data_dir="/tmp/test_dismiss",

@@ -1,6 +1,7 @@
 """Dedicated tests for the list_threads tool-maker module."""
 
 import pytest
+
 from robotsix_mill.agents.list_threads import make_list_threads_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 

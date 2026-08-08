@@ -1,7 +1,7 @@
 """Tests for the answering agent — langfuse tools and run_answer_agent."""
 
 from robotsix_mill.agents.answering import _build_langfuse_tools, run_answer_agent
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _settings(tmp_path, **env):
@@ -196,9 +196,10 @@ def _install_mocks(monkeypatch):
     """Install shared mocks for load_agent_definition, run_agent, and
     _safe_close.  Returns (base_mod, retry_mod) for further patching."""
     from unittest.mock import MagicMock
-    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
-    import robotsix_mill.agents.retry as retry_mod
+
     import robotsix_mill.agents.base as base_mod
+    import robotsix_mill.agents.retry as retry_mod
+    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
 
     monkeypatch.setattr(
         yaml_loader_mod,

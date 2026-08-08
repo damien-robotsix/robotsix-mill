@@ -9,7 +9,6 @@ crash mill by committing a broken file.
 from __future__ import annotations
 
 import logging
-
 from types import SimpleNamespace
 
 from robotsix_mill.config.repo_settings import (

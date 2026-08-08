@@ -4,7 +4,7 @@ The effective target branch is ``repo_config.working_branch`` when set,
 else ``settings.forge_target_branch`` — zero change for existing boards.
 """
 
-from robotsix_mill.config import Settings, RepoConfig, target_branch_for
+from robotsix_mill.config import RepoConfig, Settings, target_branch_for
 
 
 def _repo_config(working_branch):

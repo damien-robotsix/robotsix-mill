@@ -36,12 +36,11 @@ from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import RefineStage
 from robotsix_mill.stages.refine import orchestration as orch_module
 from robotsix_mill.stages.refine.helpers import (
-    UNMERGED_BRANCH_PREFIX,
     _AUTO_APPROVE_SOURCES,
+    UNMERGED_BRANCH_PREFIX,
     _summarize_spec_for_auto_approve,
 )
 from robotsix_mill.vcs import git_ops
-
 
 # A genuine (> 120 char) spec body so ``_spec_is_degenerate`` never trips.
 _REAL_SPEC = (
@@ -414,7 +413,7 @@ def test_promote_to_epic(ctx_factory, monkeypatch, tmp_path):
         ),
     )
 
-    import robotsix_mill.agents.epic_breakdown as epic_breakdown
+    from robotsix_mill.agents import epic_breakdown
 
     class _Breakdown:
         child_titles: list[str] = []
@@ -1709,6 +1708,7 @@ def test_trivial_scope_true_persisted_to_artifact(ctx_factory, monkeypatch, tmp_
     _run_agent(ctx, t, tmp_path)
 
     import json
+
     from robotsix_mill.stages.refine.orchestration import _read_triage_trivial
 
     ws = ctx.service.workspace(t)
@@ -2201,7 +2201,7 @@ def _install_migrate_spy(monkeypatch, ctx):
 def _mock_repos_config(monkeypatch, extra_repos=None):
     """Patch ``get_repos_config`` with a registry that includes the default
     ``test-board`` / ``test-repo`` plus any *extra_repos*."""
-    from robotsix_mill.config import ReposRegistry, RepoConfig
+    from robotsix_mill.config import RepoConfig, ReposRegistry
 
     repos = {
         "test-repo": RepoConfig(

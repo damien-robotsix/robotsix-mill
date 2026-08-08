@@ -14,7 +14,7 @@ from .._http import _ApiClient
 T = TypeVar("T")
 
 
-def _paginated_get(
+def _paginated_get[T](
     http: _ApiClient,
     url_suffix: str,
     *,

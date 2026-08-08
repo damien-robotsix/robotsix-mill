@@ -17,6 +17,7 @@ from typing import Any, cast
 from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 from ..core.states import State
 
@@ -354,7 +355,7 @@ def run_periodic_agent(
     # ------------------------------------------------------------------
     # Step 4 — build the agent
     # ------------------------------------------------------------------
-    from .base import build_agent_from_definition, _safe_close
+    from .base import _safe_close, build_agent_from_definition
 
     agent = build_agent_from_definition(
         settings,

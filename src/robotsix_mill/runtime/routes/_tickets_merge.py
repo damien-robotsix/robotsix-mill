@@ -13,8 +13,8 @@ from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
 from ...stages.merge import (
-    _verify_merge_ancestor,
     _changelog_warnings_for_ticket,
+    _verify_merge_ancestor,
 )
 from ..deps import (
     enrich_ticket_read,

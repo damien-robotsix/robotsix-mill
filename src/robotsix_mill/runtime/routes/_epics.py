@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import UTC
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -196,12 +197,12 @@ def generate_children(
 
     def _run() -> None:
         try:
-            from .. import tracing
             from ...agents.epic_breakdown import (
                 plan_child_dependencies,
                 run_epic_breakdown_agent,
             )
             from ...config.repos import resolve_child_board_id
+            from .. import tracing
 
             session_id = ticket_id
             with tracing.start_ticket_root_span(
@@ -237,7 +238,7 @@ def generate_children(
                 # whose scope overlaps a recent ticket or an earlier
                 # sibling in this batch. Best-effort — a failure must not
                 # block filing.
-                from datetime import datetime, timezone
+                from datetime import datetime
 
                 from ...core.dedup import annotate_child_body, find_child_overlaps
 
@@ -259,7 +260,7 @@ def generate_children(
                     child_titles,
                     child_bodies,
                     settings,
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                 )
 
                 # Cache TicketService per board to avoid rebuilding.

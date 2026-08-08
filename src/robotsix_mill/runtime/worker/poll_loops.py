@@ -15,7 +15,7 @@ import logging
 import random
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -58,7 +58,7 @@ class PollLoopsMixin(_WorkerBase):
     stagger/jitter so passes don't fire simultaneously after a restart.
     """
 
-    def _registry_for(self, repo_config) -> "RunRegistry | None":
+    def _registry_for(self, repo_config) -> RunRegistry | None:
         """The RunRegistry a periodic pass should read/write for *repo_config*.
 
         Per-repo registry (``run_registries[board_id]``) when available so the
@@ -109,7 +109,7 @@ class PollLoopsMixin(_WorkerBase):
             else:
                 try:
                     last_ts = datetime.fromisoformat(entry["started_at"])
-                    elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
+                    elapsed = (datetime.now(UTC) - last_ts).total_seconds()
                 except Exception:
                     base = 1.0
                 else:
@@ -521,15 +521,13 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("config-pin-drift poll failed")
             await asyncio.sleep(interval)
 
-    def _ticket_last_activity(
-        self, service: "TicketService", ticket: Ticket
-    ) -> datetime:
+    def _ticket_last_activity(self, service: TicketService, ticket: Ticket) -> datetime:
         """Return ``max(ticket.created_at, max(c.created_at for c in comments))``,
         normalising naïve datetimes to UTC.
         """
         last_activity = ticket.created_at
         if last_activity.tzinfo is None:
-            last_activity = last_activity.replace(tzinfo=timezone.utc)
+            last_activity = last_activity.replace(tzinfo=UTC)
         comments: list[Comment] = []
         try:
             comments = service.list_comments(ticket.id)
@@ -538,15 +536,14 @@ class PollLoopsMixin(_WorkerBase):
         for c in comments:
             c_at = c.created_at
             if c_at.tzinfo is None:
-                c_at = c_at.replace(tzinfo=timezone.utc)
-            if c_at > last_activity:
-                last_activity = c_at
+                c_at = c_at.replace(tzinfo=UTC)
+            last_activity = max(last_activity, c_at)
         return last_activity
 
     def _find_canonical_ci_ticket(
         self,
         existing: list[Ticket],
-        service: "TicketService",
+        service: TicketService,
         wf_name: str,
         target: str,
     ) -> tuple[Ticket | None, datetime | None]:
@@ -636,7 +633,7 @@ class PollLoopsMixin(_WorkerBase):
             del deferred[key]
 
     @staticmethod
-    async def _latest_runs_by_workflow(forge: "Forge", target: str) -> dict[str, Any]:
+    async def _latest_runs_by_workflow(forge: Forge, target: str) -> dict[str, Any]:
         """List completed workflow runs on *target* and return only
         the latest run per ``workflow_id``.
 
@@ -656,7 +653,7 @@ class PollLoopsMixin(_WorkerBase):
 
     async def _fetch_run_logs_with_deferral(
         self,
-        forge: "Forge",
+        forge: Forge,
         run_id_val: Any,
         key: str,
         deferred: dict[str, Any],
@@ -870,7 +867,7 @@ class PollLoopsMixin(_WorkerBase):
                 target_files=[wf_path] if wf_path else [],
                 fingerprint_text=body,
                 settings=settings,
-                now=datetime.now(tz=timezone.utc),
+                now=datetime.now(tz=UTC),
                 sources=[SourceKind.CI],
                 lookback_days=settings.dedup_lookback_days,
                 dedup_labels=[f"ci_fp:{fingerprint}"],

@@ -13,8 +13,7 @@ from robotsix_mill.agents.reviewing import (
     ReviewVerdict,
     run_review_agent,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
-
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ------------------------------------------------------------------
 # Field description — semantic anchors
@@ -204,7 +203,7 @@ def test_request_limit_from_settings_not_hardcoded(tmp_path, monkeypatch):
 # --- Board screenshot attachment (Tier 3) -----------------------------------
 
 
-def _write_png(tmp_path) -> "object":
+def _write_png(tmp_path) -> object:
     from pathlib import Path
 
     p = Path(tmp_path) / "board.png"

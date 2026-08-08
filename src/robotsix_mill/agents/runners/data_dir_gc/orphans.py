@@ -12,7 +12,7 @@ import re
 import shutil
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import delete, text
@@ -191,9 +191,7 @@ def _close_time_from_ticket_id(name: str) -> datetime | None:
     fallback used only when no terminal ``TicketEvent`` exists.
     """
     try:
-        return datetime.strptime(name[:16], "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=timezone.utc
-        )
+        return datetime.strptime(name[:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
     except ValueError:
         return None
 

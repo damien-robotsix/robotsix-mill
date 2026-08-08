@@ -57,8 +57,7 @@ from pathlib import Path
 
 from ..agents.base import build_agent
 from ..agents.retry import run_agent
-from ..config import get_repo_config, target_branch_for
-from ..config import ConfigError
+from ..config import ConfigError, get_repo_config, target_branch_for
 from ..core.models import Ticket
 from ..core.states import State
 from ..core.workspace import read_counter, write_counter
@@ -102,7 +101,7 @@ Generate the structured PR body."""
 def generate_pr_description(
     diff: str,
     spec: str,
-    settings: "Settings",
+    settings: Settings,
 ) -> str:
     """Generate a structured PR body from the implementation diff.
 

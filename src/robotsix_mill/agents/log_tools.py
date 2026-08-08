@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..core.constants import BINARY_EXTENSIONS
@@ -72,7 +72,7 @@ def make_log_query_tool(log_dir: Path):
                 return f"Deployed log folder '{log_dir}' is missing or not a directory."
 
             try:
-                cutoff = datetime.now(tz=timezone.utc).timestamp() - since_hours * 3600
+                cutoff = datetime.now(tz=UTC).timestamp() - since_hours * 3600
             except OverflowError, ValueError:
                 cutoff = 0.0
 
@@ -112,7 +112,7 @@ def make_log_query_tool(log_dir: Path):
             for _mtime, entry in candidates:
                 rel = entry.relative_to(log_dir)
                 try:
-                    with open(entry, "r", encoding="utf-8", errors="replace") as f:
+                    with open(entry, encoding="utf-8", errors="replace") as f:
                         file_lines = deque(f, maxlen=_MAX_LINES_PER_FILE)
                 except OSError:
                     continue

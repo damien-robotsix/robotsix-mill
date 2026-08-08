@@ -19,8 +19,8 @@ The same API backs a future web frontend.
 from __future__ import annotations
 
 import argparse
-import json
 import importlib
+import json
 import sys
 
 import httpx
@@ -565,8 +565,8 @@ def _resolve_repo_config(
     Returns ``(repo_config, session_id)`` on success, or an ``int``
     exit code on failure (caller should ``return`` it).
     """
-    from ..runtime.tracing import make_session_id
     from ..config import get_repos_config
+    from ..runtime.tracing import make_session_id
 
     session_id = make_session_id(cmd)
     repo_id = _resolve_repo_id(args)
@@ -598,8 +598,8 @@ def _resolve_repo_id(
         repo_id: str = args.repo_id
         return repo_id
 
-    from ..config import get_repos_config
     from ..config import ConfigError as _ConfigError
+    from ..config import get_repos_config
 
     try:
         repos = get_repos_config()
@@ -624,16 +624,16 @@ def _resolve_repo_id(
 
 # Subcommand implementations live in sibling modules of this package.
 # These imports must appear after the helpers above to avoid circular imports.
-from .serve import _serve, _repos_list
-from .ticket import (
-    _ticket_new,
-    _ticket_list,
-    _ticket_show,
-    _ticket_approve,
-    _ticket_resume_blocked,
-)
 from .epic import _epic_new
 from .inquire import _inquire
+from .serve import _repos_list, _serve
+from .ticket import (
+    _ticket_approve,
+    _ticket_list,
+    _ticket_new,
+    _ticket_resume_blocked,
+    _ticket_show,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:

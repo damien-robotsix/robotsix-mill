@@ -32,8 +32,7 @@ def test_run_clips_parallel_lists(monkeypatch):
         updated_memory="mem",
     )
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", lambda *a, **k: object())
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -56,8 +55,7 @@ def test_run_raises_on_null_output(monkeypatch):
     """When run_agent returns an object whose .output is None,
     run_run_health_agent raises a clear RuntimeError mentioning the null
     output — not a cryptic AttributeError on .output."""
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", lambda *a, **k: object())
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)

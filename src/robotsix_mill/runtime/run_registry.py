@@ -6,7 +6,7 @@ import json
 import threading
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -129,7 +129,7 @@ class RunRegistry:
         # died with the process. Mark them errored so they don't
         # hang as "running" in the board forever. Persist so we
         # only do this once per restart.
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         reconciled = False
         for e in self._entries:
             if e.status == "running":
@@ -155,7 +155,7 @@ class RunRegistry:
             entry = RunEntry(
                 id=uuid.uuid4().hex,
                 kind=kind,  # type: ignore[arg-type]  # validated by callers
-                started_at=datetime.now(timezone.utc).isoformat(),
+                started_at=datetime.now(UTC).isoformat(),
                 status="running",
                 repo_id=repo_id,
             )
@@ -165,7 +165,7 @@ class RunRegistry:
 
     def finish_ok(self, run_id: str, summary: str) -> None:
         """Mark *run_id* as ``"ok"`` with a human-readable *summary*."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with self._lock:
             for e in self._entries:
                 if e.id == run_id:
@@ -177,7 +177,7 @@ class RunRegistry:
 
     def finish_error(self, run_id: str, error: str) -> None:
         """Mark *run_id* as ``"error"`` with an error string."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with self._lock:
             for e in self._entries:
                 if e.id == run_id:

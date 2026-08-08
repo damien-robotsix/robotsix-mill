@@ -215,9 +215,8 @@ def run_config_sync_agent(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
-
     from ._repo_tools import _build_repo_tools
+    from .base import _safe_close, build_agent
 
     tools = _build_repo_tools(repo_dir, settings, tool_names=("read_file", "list_dir"))
 

@@ -24,7 +24,6 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.implement import ImplementStage
 
-
 # --- fixtures / helpers (copied from tests/stages/implement/test_implement.py) ---
 
 
@@ -957,20 +956,20 @@ def test_preflight_blocks_when_workspace_absent(ctx_factory, tmp_path, monkeypat
     )
     t = _ticket(ctx, title="No workspace", body="Implement feature X")
 
-    import robotsix_mill.core.workspace as wmod
-
     # Delete the workspace directory that _ticket (via create) made.
     # Then monkeypatch Workspace so preflight's own workspace() call
     # doesn't recreate it, and stub read_description so the
     # spec-empty gate passes.
     import shutil
 
+    import robotsix_mill.core.workspace as wmod
+
     ws_for_deletion = ctx.service.workspace(t)
     shutil.rmtree(ws_for_deletion.dir)
 
     def _no_mkdir(self, root, ticket_id):
-        from pathlib import Path
         import os
+        from pathlib import Path
 
         if ticket_id != Path(ticket_id).name or ticket_id in (".", ".."):
             raise ValueError(f"Unsafe ticket_id: {ticket_id!r}")

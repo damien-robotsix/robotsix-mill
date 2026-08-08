@@ -293,7 +293,7 @@ def collect_drift() -> list[str]:
     """Load the real on-disk surfaces and run every invariant."""
     from robotsix_mill.config import Secrets, Settings
 
-    with open(_CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as fh:
+    with open(_CONFIG_EXAMPLE_JSON, encoding="utf-8") as fh:
         config_example = json.load(fh)
     if not isinstance(config_example, dict):
         return ["config.example.json is not a JSON object"]

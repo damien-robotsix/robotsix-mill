@@ -1,7 +1,7 @@
 """Tests for the timeout-escalation runner and worker wiring."""
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -27,7 +27,7 @@ def _make_ticket(
         if state == State.AWAITING_USER_REPLY:
             row.paused_from = State.READY.value
         if updated_at_delta is not None:
-            row.updated_at = datetime.now(timezone.utc) - updated_at_delta
+            row.updated_at = datetime.now(UTC) - updated_at_delta
         s.add(row)
         s.commit()
     return service.get(t.id)
@@ -47,7 +47,7 @@ def _add_ask_user_thread(
     if closed:
         with db.session(service.settings, service.board_id) as s:
             row = s.get(Comment, c.id)
-            row.closed_at = datetime.now(timezone.utc)
+            row.closed_at = datetime.now(UTC)
             s.add(row)
             s.commit()
     return c
@@ -286,9 +286,9 @@ async def test_worker_timeout_escalation_task_created_when_periodic(
     tmp_path, monkeypatch, repo_config
 ):
     """Worker._timeout_escalation_task is created when timeout_escalation_periodic=true."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.core.service import TicketService
+    from robotsix_mill.runtime.worker import Worker
+    from robotsix_mill.stages import StageContext
 
     s = Settings(
         data_dir=str(tmp_path / "data"),
@@ -321,9 +321,9 @@ async def test_worker_timeout_escalation_task_not_created_when_periodic_false(
     tmp_path, monkeypatch, repo_config
 ):
     """Worker._timeout_escalation_task is NOT created when timeout_escalation_periodic=false."""
-    from robotsix_mill.stages import StageContext
-    from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.core.service import TicketService
+    from robotsix_mill.runtime.worker import Worker
+    from robotsix_mill.stages import StageContext
 
     s = Settings(
         data_dir=str(tmp_path / "data"),

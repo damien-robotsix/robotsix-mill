@@ -7,18 +7,11 @@ and the inspector seam so no LLM / network is involved.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from robotsix_mill.agents.trace_inspector import (
-    TraceFinding,
-    TraceInspectResult,
-)
-from robotsix_mill.config import Settings, _reset_secrets
-from robotsix_mill.core.models import SourceKind, TicketKind
-from robotsix_mill.core.service import TicketService
 from robotsix_mill.agents.runners.trace_review_runner import (
     _Baselines,
     _classify_trace,
@@ -28,6 +21,13 @@ from robotsix_mill.agents.runners.trace_review_runner import (
     _save_watermark,
     run_trace_review_pass,
 )
+from robotsix_mill.agents.trace_inspector import (
+    TraceFinding,
+    TraceInspectResult,
+)
+from robotsix_mill.config import Settings, _reset_secrets
+from robotsix_mill.core.models import SourceKind, TicketKind
+from robotsix_mill.core.service import TicketService
 
 
 def _test_repo_config():
@@ -46,8 +46,8 @@ def _test_repo_config():
 def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     _reset_secrets()
-    from robotsix_mill.core import db
     from robotsix_mill.config import _reset_repos_config
+    from robotsix_mill.core import db
 
     db.reset_engine()
     _reset_repos_config()
@@ -564,8 +564,8 @@ class TestClassifier:
 
     def test_restart_correlated_within_window(self, settings):
         """Trace ends within the correlation window → restart_correlated."""
-        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
-        trace_end = datetime(2026, 5, 30, 12, 0, 30, tzinfo=timezone.utc)
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=UTC)
+        trace_end = datetime(2026, 5, 30, 12, 0, 30, tzinfo=UTC)
         trace = _trace(
             output=None,
             endTime=trace_end.isoformat(),
@@ -581,8 +581,8 @@ class TestClassifier:
 
     def test_restart_correlated_outside_window(self, settings):
         """Trace ends outside the correlation window → no restart_correlated."""
-        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
-        trace_end = datetime(2026, 5, 30, 12, 5, 0, tzinfo=timezone.utc)
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=UTC)
+        trace_end = datetime(2026, 5, 30, 12, 5, 0, tzinfo=UTC)
         trace = _trace(
             output=None,
             endTime=trace_end.isoformat(),
@@ -604,8 +604,8 @@ class TestClassifier:
         restart correlation (via the unfiltered ``_extract_trace_end_time``)
         but does not itself drive ``incomplete_trace``.
         """
-        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
-        obs_end = datetime(2026, 5, 30, 12, 0, 45, tzinfo=timezone.utc)
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=UTC)
+        obs_end = datetime(2026, 5, 30, 12, 0, 45, tzinfo=UTC)
         obs = [
             _obs("chat deepseek-v4", endTime="2026-05-30T12:00:10+00:00"),
             _obs(
@@ -627,8 +627,8 @@ class TestClassifier:
     def test_restart_correlated_not_fired_without_incomplete_trace(self, settings):
         """restart_correlated should not fire on its own — it's a sub-flag
         of incomplete_trace only."""
-        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
-        trace_end = datetime(2026, 5, 30, 12, 0, 30, tzinfo=timezone.utc)
+        started = datetime(2026, 5, 30, 12, 0, 0, tzinfo=UTC)
+        trace_end = datetime(2026, 5, 30, 12, 0, 30, tzinfo=UTC)
         # Last obs is a chat → no incomplete_trace → no restart_correlated.
         obs = [
             _obs("chat deepseek-v4", endTime=trace_end.isoformat()),
@@ -653,14 +653,14 @@ class TestWatermark:
         assert _load_watermark(settings, "") is None
 
     def test_save_and_load_roundtrip(self, settings):
-        when = datetime(2026, 5, 28, 12, 0, 0, tzinfo=timezone.utc)
+        when = datetime(2026, 5, 28, 12, 0, 0, tzinfo=UTC)
         _save_watermark(settings, "", when)
         loaded = _load_watermark(settings, "")
         assert loaded == when
 
     def test_per_board_isolation(self, settings):
-        a = datetime(2026, 5, 28, 12, 0, 0, tzinfo=timezone.utc)
-        b = datetime(2026, 5, 28, 13, 0, 0, tzinfo=timezone.utc)
+        a = datetime(2026, 5, 28, 12, 0, 0, tzinfo=UTC)
+        b = datetime(2026, 5, 28, 13, 0, 0, tzinfo=UTC)
         _save_watermark(settings, "board-a", a)
         _save_watermark(settings, "board-b", b)
         assert _load_watermark(settings, "board-a") == a
@@ -1291,14 +1291,14 @@ class TestTargetRepoRouting:
         # (where the draft should land).
         monkeypatch.setenv("OPENROUTER_API_KEY", "")
         _reset_secrets()
-        from robotsix_mill.core import db
+        import robotsix_mill.config as _cfg
         from robotsix_mill.config import (
-            _reset_repos_config,
-            get_repos_config,
             RepoConfig,
             ReposRegistry,
+            _reset_repos_config,
+            get_repos_config,
         )
-        import robotsix_mill.config as _cfg
+        from robotsix_mill.core import db
 
         db.reset_engine()
         _reset_repos_config()
@@ -1530,11 +1530,12 @@ class TestPreFilingDedup:
 
         # Backdate the ticket's created_at to 30 days ago — well outside
         # the default 7-day window.
-        from robotsix_mill.core.db import session as db_session
-        from robotsix_mill.core.models import Ticket as _Ticket
         from sqlmodel import select as _select
 
-        old = datetime.now(timezone.utc) - timedelta(days=30)
+        from robotsix_mill.core.db import session as db_session
+        from robotsix_mill.core.models import Ticket as _Ticket
+
+        old = datetime.now(UTC) - timedelta(days=30)
         with db_session(settings, "test-board") as s:
             row = s.exec(_select(_Ticket).where(_Ticket.id == ticket.id)).first()
             assert row is not None
@@ -1728,7 +1729,7 @@ class TestTraceReviewMemoryCap:
             _detail,
         )
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         run_trace_review_pass(session_id="sess-cap", repo_config=rc)
 
         # Only the NEWEST 3 traces had their detail loaded — the older backlog

@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from robotsix_mill.meta.agent import DraftProposal, MetaAgentResult
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.workspace import Workspace
-from robotsix_mill.meta.runner import run_meta_pass, MetaPassResult
-
+from robotsix_mill.meta.agent import DraftProposal, MetaAgentResult
+from robotsix_mill.meta.runner import MetaPassResult, run_meta_pass
 
 # ---------------------------------------------------------------------------
 # Helpers

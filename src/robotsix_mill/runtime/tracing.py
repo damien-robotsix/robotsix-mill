@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
-from datetime import datetime, timezone
-from typing import Any, Iterator
+from datetime import UTC, datetime
+from typing import Any
 
 from ..config import RepoConfig
 
@@ -33,7 +34,7 @@ def _resolve_mill_langfuse() -> tuple[str, str, str, str, str] | None:
     from the canonical ``langfuse`` config block, or ``None`` when
     Langfuse is not configured for mill's own project.
     """
-    from ..config.loader import _resolve_main_config_path, _load_file
+    from ..config.loader import _load_file, _resolve_main_config_path
     from ..config.settings import LangfuseConfig
 
     main_path = _resolve_main_config_path()
@@ -83,10 +84,10 @@ def record_export_failure(
     """Append a Langfuse export-failure entry; capped at the most
     recent ``_EXPORT_FAILURE_CAP`` items.
     """
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
 
     entry = {
-        "at": _dt.now(_tz.utc).isoformat(),
+        "at": _dt.now(UTC).isoformat(),
         "project": project,
         "error": (error or "")[:500],
         "status": status,
@@ -128,7 +129,7 @@ def clear_export_failures() -> None:
 SESSION_SEP = " · "
 
 
-def qualify_session(base_id: str, repo_config: "RepoConfig | None") -> str:
+def qualify_session(base_id: str, repo_config: RepoConfig | None) -> str:
     """Prefix *base_id* (a ticket id or ``make_session_id`` value) with the
     repo so a single shared Langfuse project's session list is legible —
     e.g. ``robotsix-llmio · 20260615T…-ffea``.
@@ -143,7 +144,7 @@ def qualify_session(base_id: str, repo_config: "RepoConfig | None") -> str:
     return f"{repo_config.repo_id}{SESSION_SEP}{base_id}"
 
 
-def make_session_id(kind: str, repo_config: "RepoConfig | None" = None) -> str:
+def make_session_id(kind: str, repo_config: RepoConfig | None = None) -> str:
     """Build a Langfuse session id: ``<kind>-<UTC-ts>-<uuid8>``, optionally
     repo-qualified (``<repo> · <kind>-…``) when *repo_config* is given.
 
@@ -152,7 +153,7 @@ def make_session_id(kind: str, repo_config: "RepoConfig | None" = None) -> str:
     directly to ``start_ticket_root_span`` — the ticket id is already a
     self-unique ``<ts>-<slug>-<hash>`` and serves as its own session id.
     """
-    base = f"{kind}-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+    base = f"{kind}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
     return qualify_session(base, repo_config)
 
 
@@ -499,7 +500,7 @@ def start_ticket_root_span(
     stage_name: str,
     extra_attributes: dict[str, str] | None = None,
     repo_config: RepoConfig | None = None,
-) -> Iterator["_RootIO | _NoopRootIO"]:
+) -> Iterator[_RootIO | _NoopRootIO]:
     """Open a root OTel span for one stage of a ticket, named after the
     stage (e.g. ``"refine"``, ``"implement"``) with ``session.id``
     attribute set to the ticket id.

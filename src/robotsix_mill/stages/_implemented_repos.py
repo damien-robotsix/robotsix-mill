@@ -104,8 +104,7 @@ def combined_diff(
     ``# ===== repo: <id> =====`` header so the reviewer / doc agent can
     attribute hunks to the right repository.
     """
-    from ..config import get_repo_config
-    from ..config import ConfigError
+    from ..config import ConfigError, get_repo_config
 
     multi = len(repos) > 1
     parts: list[str] = []

@@ -2,13 +2,12 @@
 
 import json
 import threading
-
 from pathlib import Path
 
 from robotsix_mill.agents import docstring_coverage as dc_agent
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_docstring_coverage_pass,
     PeriodicPassResult,
+    run_docstring_coverage_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db

@@ -12,14 +12,15 @@ import json
 import logging
 import re
 from pathlib import Path
-from pydantic import BaseModel, Field
 from typing import Any, Literal
-
-from robotsix_mill._resources import agent_definitions_dir
-from ..config import Settings
 
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
+from pydantic import BaseModel, Field
+
+from robotsix_mill._resources import agent_definitions_dir
+
+from ..config import Settings
 
 log = logging.getLogger(__name__)
 
@@ -167,10 +168,10 @@ def _review_attempt(
     agent's (possibly re-prompted) output. Raises on token-limit
     overflow so the caller can decide whether to degrade.
     """
-    from .prompt_blocks import section
-    from .structured_output_guard import reprompt_if_unstructured
-    from .retry import run_agent
     from .base import level_uses_claude
+    from .prompt_blocks import section
+    from .retry import run_agent
+    from .structured_output_guard import reprompt_if_unstructured
 
     user_prompt = ""
     if note:
@@ -315,12 +316,12 @@ def run_review_agent(
 
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_agent_definition
     from .base import (
-        build_agent_from_definition,
         _safe_close,
+        build_agent_from_definition,
         claude_sdk_supports_inline_image,
     )
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "review.yaml")
 
@@ -698,9 +699,11 @@ def _maybe_attach_screenshot(
         # Pre-seed active: the text prompt is in message_history; give the
         # run a short instruction plus the image as the final user turn.
         return [
-            "A full-page screenshot of the rendered kanban board is "
-            "attached. Assess its visual appearance (columns, seeded "
-            "tickets, layout) alongside the diff.",
+            (
+                "A full-page screenshot of the rendered kanban board is "
+                "attached. Assess its visual appearance (columns, seeded "
+                "tickets, layout) alongside the diff."
+            ),
             image,
         ]
     return [run_user_prompt, image]

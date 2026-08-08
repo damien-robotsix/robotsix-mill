@@ -2,19 +2,18 @@
 
 import json
 import threading
-
 from pathlib import Path
 
 from robotsix_mill.agents import test_gap as test_gap_agent
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_test_gap_pass,
     PeriodicPassResult,
+    run_test_gap_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import TicketKind
 
 
 def _test_repo_config():

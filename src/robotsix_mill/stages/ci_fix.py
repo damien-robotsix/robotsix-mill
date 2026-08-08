@@ -21,14 +21,14 @@ from pathlib import Path
 from typing import Any
 
 from ..agents.ci_fixing import CiFixResult, run_ci_fix_agent
+from ..agents.runners.diagnostic_events import emit_diagnostic_event
+from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
-from ..agents.runners.diagnostic_events import emit_diagnostic_event
-from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
@@ -41,19 +41,19 @@ from .ci_fix_codeql import (
 )
 from .ci_fix_helpers import (
     _CI_FAILURE_FINGERPRINT,
-    _CODQL_CHECK_NAMES,
     _CI_IDENTICAL_FAILURE_COUNT,
     _CI_REFRESH_COUNTER,
-    _FailingContext,
+    _CODQL_CHECK_NAMES,
     _build_failing_summary,
     _ci_failure_fingerprint,
+    _FailingContext,
     _format_alert_refs,
     _normalize_ci_failure_reason,
     _pr_changed_paths,
     _read_counter,
+    _workspace_repo_dir,
     _write_counter,
     _write_text,
-    _workspace_repo_dir,
 )
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
@@ -1007,7 +1007,7 @@ class CIFixStage(Stage):
 
     def _make_ci_status_fn(
         self, ticket: Ticket, ctx: StageContext, branch: str
-    ) -> "Callable[[], tuple[str, str]]":
+    ) -> Callable[[], tuple[str, str]]:
         """Build the host-side forge probe the agent's wait_for_ci tool calls.
 
         Returns a closure that fetches the branch's CI conclusion and returns
@@ -1089,7 +1089,7 @@ class CIFixStage(Stage):
 
     def _make_ci_log_fetch_fn(
         self, ctx: StageContext, branch: str
-    ) -> "Callable[[int, bool], str]":
+    ) -> Callable[[int, bool], str]:
         """Build the host-side forge probe the agent's ``fetch_ci_logs`` tool calls.
 
         Returns a closure that calls ``forge.fetch_workflow_job_logs()`` for

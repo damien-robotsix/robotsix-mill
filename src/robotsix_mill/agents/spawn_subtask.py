@@ -67,7 +67,7 @@ async def run_spawn_subtask(
     from pydantic_ai.exceptions import UsageLimitExceeded
     from pydantic_ai.usage import UsageLimits
 
-    from .base import build_agent, _safe_close
+    from .base import _safe_close, build_agent
     from .explore import make_explore_tool
     from .fs_tools import build_fs_tools
 

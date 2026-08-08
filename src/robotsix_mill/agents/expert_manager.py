@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from robotsix_mill._resources import expert_definitions_dir
+
 from ..config import Settings
 from .expert_loader import ExpertDefinition
 
@@ -39,7 +40,7 @@ class ExpertManager:
     def __init__(self, settings: Settings, repo_dir: Path) -> None:
         self._settings = settings
         self._repo_dir = Path(repo_dir)
-        self._cache: dict[str, "AgentHandle"] = {}
+        self._cache: dict[str, AgentHandle] = {}
 
     # -- definition loading ------------------------------------------------
 
@@ -85,7 +86,7 @@ class ExpertManager:
         *,
         output_type: Any = None,
         memory_text: str = "",
-    ) -> "AgentHandle":
+    ) -> AgentHandle:
         """Build (or retrieve a cached) pydantic-ai agent for *definition*.
 
         On first call per domain the agent is constructed via
@@ -218,7 +219,7 @@ class ExpertManager:
                 return True
         return False
 
-    def get_expert(self, domain: str) -> "AgentHandle | None":
+    def get_expert(self, domain: str) -> AgentHandle | None:
         """Return the cached agent for *domain*, or ``None``.
 
         Never triggers creation — use ``create_expert`` for that.

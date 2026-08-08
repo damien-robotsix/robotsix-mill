@@ -34,7 +34,7 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -42,8 +42,8 @@ if TYPE_CHECKING:
     from ..config import Settings
 
 from ..config import _reset_repos_config
-from . import _repos_yaml_path
 from ..config.workspace_members import DetectedMember
+from . import _repos_yaml_path
 
 log = logging.getLogger("robotsix_mill.workspace_member_sync")
 
@@ -239,7 +239,7 @@ def _member_entry(
 def _load_repos_document(path: Path) -> dict[str, Any]:
     """Load the repos overlay file into a normalised ``{"repos": {...}}`` dict."""
     if path.exists():
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     else:
         data = {}

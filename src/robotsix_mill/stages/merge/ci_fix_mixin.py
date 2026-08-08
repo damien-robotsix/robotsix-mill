@@ -486,8 +486,10 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             note_lines = [
                 "## codeql_fp_triage: auto-dismissed CodeQL false positive(s)",
                 "",
-                f"Repo: {repo_id} — dismissed {dismissed_count} alert(s) "
-                f"out of {len(eligible)} eligible:",
+                (
+                    f"Repo: {repo_id} — dismissed {dismissed_count} alert(s) "
+                    f"out of {len(eligible)} eligible:"
+                ),
                 "",
             ]
             note_lines.extend(dismissal_notes)

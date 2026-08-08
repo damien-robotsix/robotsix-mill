@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+from datetime import UTC
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,7 +25,6 @@ from fastapi.testclient import TestClient
 from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
-
 
 # -- fixtures -----------------------------------------------------------
 
@@ -341,9 +341,9 @@ def test_active_empty(client):
 
 def test_active_with_items(client):
     """GET /active returns currently-processing tickets from the worker."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     class FakeWorker:
         _active = {
@@ -783,7 +783,7 @@ def _wait_for_thread(thread: threading.Thread, timeout: float = 5.0) -> None:
     assert not thread.is_alive(), "background thread did not finish"
 
 
-def _wait_for_pass(registry: "_FakeRegistry", timeout: float = 5.0) -> None:
+def _wait_for_pass(registry: _FakeRegistry, timeout: float = 5.0) -> None:
     """Block until the background pass records a terminal result (ok or
     error) in *registry*.
 
@@ -806,6 +806,7 @@ def test_factory_default_tracing_handler(monkeypatch):
     """A factory handler with default settings launches a daemon thread
     that calls the runner with session_id and records ok/error."""
     import sys
+
     from robotsix_mill.runtime.routes._passes import _make_background_pass
 
     # -- inject a fake runner module ----------------------------------------
@@ -861,6 +862,7 @@ def test_factory_default_tracing_handler(monkeypatch):
 def test_factory_no_tracing_handler():
     """uses_tracing=False skips session_id and tracing helpers."""
     import sys
+
     from robotsix_mill.runtime.routes._passes import _make_background_pass
 
     class _FakeResult:
@@ -896,6 +898,7 @@ def test_factory_no_tracing_handler():
 def test_factory_custom_summary_builder():
     """Custom summary_builder replaces _default_summary."""
     import sys
+
     from robotsix_mill.runtime.routes._passes import _make_background_pass
 
     class _FakeResult:
@@ -931,6 +934,7 @@ def test_factory_custom_summary_builder():
 def test_factory_extra_runner_kwargs():
     """extra_runner_kwargs forwards extra kwargs to the runner."""
     import sys
+
     from robotsix_mill.runtime.routes._passes import _make_background_pass
 
     received_kwargs: dict = {}
@@ -967,6 +971,7 @@ def test_factory_extra_runner_kwargs():
 def test_factory_error_path():
     """When the runner raises, registry.finish_error is called."""
     import sys
+
     from robotsix_mill.runtime.routes._passes import _make_background_pass
 
     def _failing_runner(repo_config=None):
@@ -999,6 +1004,7 @@ def test_factory_thread_is_daemon():
     """Generated handler MUST spawn a daemon thread so the process can
     exit without waiting for it."""
     import sys
+
     from robotsix_mill.runtime.routes._passes import _make_background_pass
 
     hold = threading.Event()

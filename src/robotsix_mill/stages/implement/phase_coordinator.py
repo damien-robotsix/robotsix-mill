@@ -6,13 +6,13 @@ import json
 import subprocess
 from pathlib import Path
 
+from ...agents.runners.pass_runner import load_memory
 from ...agents.testing import ENV_ERROR_PREFIX
 from ...config import effective_target_branch
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import get_forge
 from ...forge.auth import _resolve_remote_url, github_token
-from ...agents.runners.pass_runner import load_memory
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext

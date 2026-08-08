@@ -8,13 +8,12 @@ formatting.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from robotsix_mill.core.models import TicketKind, TicketRead
-from robotsix_mill.runtime.board_adapter import MillBoardAdapter, _COLUMNS, _ticket
-
+from robotsix_mill.runtime.board_adapter import _COLUMNS, MillBoardAdapter, _ticket
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -28,8 +27,8 @@ def _make_ticket(**overrides) -> TicketRead:
     only override what they care about.
     """
     data = {
-        "created_at": datetime(2025, 3, 1, 12, 0, 0, tzinfo=timezone.utc),
-        "updated_at": datetime(2025, 3, 2, 14, 30, 0, tzinfo=timezone.utc),
+        "created_at": datetime(2025, 3, 1, 12, 0, 0, tzinfo=UTC),
+        "updated_at": datetime(2025, 3, 2, 14, 30, 0, tzinfo=UTC),
     }
     data.update(overrides)
     return TicketRead(
@@ -249,8 +248,8 @@ def test_card_badges_non_blocked_with_unmet_deps():
 def test_card_timestamps_formats_yyyymmdd_hhmm():
     adapter = MillBoardAdapter()
     ticket = _make_ticket(
-        created_at=datetime(2025, 6, 12, 9, 5, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2025, 6, 12, 17, 42, 0, tzinfo=timezone.utc),
+        created_at=datetime(2025, 6, 12, 9, 5, 0, tzinfo=UTC),
+        updated_at=datetime(2025, 6, 12, 17, 42, 0, tzinfo=UTC),
     )
     ts = adapter.card_timestamps(ticket)
     assert ts == {"created": "2025-06-12 09:05", "updated": "2025-06-12 17:42"}
@@ -259,8 +258,8 @@ def test_card_timestamps_formats_yyyymmdd_hhmm():
 def test_card_timestamps_midnight():
     adapter = MillBoardAdapter()
     ticket = _make_ticket(
-        created_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2025, 12, 31, 23, 59, 0, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC),
+        updated_at=datetime(2025, 12, 31, 23, 59, 0, tzinfo=UTC),
     )
     ts = adapter.card_timestamps(ticket)
     assert ts == {"created": "2025-01-01 00:00", "updated": "2025-12-31 23:59"}

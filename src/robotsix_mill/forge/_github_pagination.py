@@ -17,7 +17,7 @@ R = TypeVar("R")
 
 
 @overload
-def _paginated_get(
+def _paginated_get[T, R](
     http: _ApiClient,
     url_suffix: str,
     *,
@@ -29,7 +29,7 @@ def _paginated_get(
 
 
 @overload
-def _paginated_get(
+def _paginated_get[T](
     http: _ApiClient,
     url_suffix: str,
     *,
@@ -39,7 +39,7 @@ def _paginated_get(
     pass
 
 
-def _paginated_get(
+def _paginated_get[T](
     http: _ApiClient,
     url_suffix: str,
     *,

@@ -6,7 +6,7 @@ import pytest
 
 from robotsix_mill.agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from robotsix_mill.agents.ci_patterns import CiPatternEntry
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _s(tmp_path):
@@ -129,7 +129,7 @@ def test_out_of_scope_skips_pattern_persistence(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    from robotsix_mill.agents import fs_tools, ci_patterns
+    from robotsix_mill.agents import ci_patterns, fs_tools
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
 
@@ -276,7 +276,7 @@ def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    from robotsix_mill.agents import fs_tools, ci_patterns
+    from robotsix_mill.agents import ci_patterns, fs_tools
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
     monkeypatch.setattr(
@@ -336,7 +336,7 @@ def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    from robotsix_mill.agents import fs_tools, ci_patterns
+    from robotsix_mill.agents import ci_patterns, fs_tools
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
     monkeypatch.setattr(ci_patterns, "load_patterns", lambda path: [])
@@ -390,7 +390,7 @@ def test_pattern_saved_after_fix(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    from robotsix_mill.agents import fs_tools, ci_patterns
+    from robotsix_mill.agents import ci_patterns, fs_tools
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
 
@@ -452,7 +452,7 @@ def test_no_pattern_saved_when_signature_empty(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    from robotsix_mill.agents import fs_tools, ci_patterns
+    from robotsix_mill.agents import ci_patterns, fs_tools
 
     monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
 

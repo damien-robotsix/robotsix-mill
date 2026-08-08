@@ -141,8 +141,8 @@ agent = build_agent(
     settings,
     system_prompt="You are a ...",
     output_type=str,
-    tools=[...],           # optional role-specific tools
-    web=False,             # set True to add the web_research sub-agent tool
+    tools=[...],  # optional role-specific tools
+    web=False,  # set True to add the web_research sub-agent tool
     model_name=settings.audit_model,  # per-agent model override
 )
 ```

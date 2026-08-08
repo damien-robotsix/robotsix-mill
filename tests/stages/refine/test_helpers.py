@@ -33,7 +33,6 @@ from robotsix_mill.stages.refine.helpers import (
     verify_claim,
 )
 
-
 # ---------------------------------------------------------------------------
 # _spec_is_degenerate
 # ---------------------------------------------------------------------------
@@ -1104,6 +1103,7 @@ def test_no_change_route_does_not_forward_triage_note():
     ticket silently starts parking for human approval again.
     """
     import inspect
+
     from robotsix_mill.stages.refine import _triage
 
     src = inspect.getsource(_triage)
@@ -1134,6 +1134,7 @@ def test_prior_skip_replay_strips_the_appended_routing_verdict():
     by a gate that no longer exists.
     """
     import inspect
+
     from robotsix_mill.stages.refine import _triage
 
     src = inspect.getsource(_triage)

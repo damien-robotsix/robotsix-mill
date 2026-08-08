@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import tomllib
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -404,7 +404,7 @@ def _sanitize_repo_id(name: str) -> str:
     return "".join(sanitized).strip("-") or name.lower()
 
 
-def _repos_yaml_path(settings: "Settings | None" = None) -> Path:
+def _repos_yaml_path(settings: Settings | None = None) -> Path:
     """Resolve the machine-owned overlay path for auto-registered repos.
 
     Always targets the writable data volume overlay.
@@ -431,7 +431,7 @@ def _append_repo_config(
 
     # Load existing YAML
     if path.exists():
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     else:
         data = {}

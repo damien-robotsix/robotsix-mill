@@ -1,5 +1,6 @@
 import pytest
-from robotsix_mill.cli import main, build_parser
+
+from robotsix_mill.cli import build_parser, main
 from robotsix_mill.core.states import State
 
 
@@ -62,6 +63,7 @@ def test_approve_success(settings, service, repos_registry):
     # client — we need the server running. For a pure unit test, let's
     # run the server via TestClient and set api_url accordingly.
     from fastapi.testclient import TestClient
+
     from robotsix_mill.runtime.api import create_app
 
     with TestClient(create_app(repos_registry, settings, single_repo_id="test-repo")):
@@ -126,6 +128,7 @@ def test_approve_success(settings, service, repos_registry):
 def test_approve_failure(settings, service):
     """CLI `ticket approve <id>` exits non-zero on failure (e.g. 409)."""
     import httpx
+
     import robotsix_mill.cli as cli_mod
 
     class FakeResponse:

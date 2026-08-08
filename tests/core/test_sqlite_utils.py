@@ -7,11 +7,10 @@ import pytest
 import sqlalchemy as sa
 
 from robotsix_mill.core.sqlite_utils import (
+    _exec,
     add_column_if_missing,
     run_additive_migrations,
-    _exec,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

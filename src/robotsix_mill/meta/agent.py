@@ -13,18 +13,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
-from robotsix_mill._resources import agent_definitions_dir
-from ..config import Settings
-
 # ---------------------------------------------------------------------------
 # Load the static system prompt from the YAML definition
 # ---------------------------------------------------------------------------
-
 import yaml as _yaml
+from pydantic import BaseModel, Field
+
+from robotsix_mill._resources import agent_definitions_dir
 
 from ..agents.periodic_base import load_periodic_system_prompt
+from ..config import Settings
 
 SYSTEM_PROMPT: str = load_periodic_system_prompt("meta")
 
@@ -356,7 +354,7 @@ def run_meta_agent(
     # ------------------------------------------------------------------
     from pydantic_ai import PromptedOutput
 
-    from ..agents.base import build_agent, _safe_close
+    from ..agents.base import _safe_close, build_agent
 
     agent = build_agent(
         settings,

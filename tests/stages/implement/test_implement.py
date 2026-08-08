@@ -1,3 +1,4 @@
+import contextlib
 import json
 import subprocess
 from pathlib import Path
@@ -13,7 +14,6 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.implement import ImplementStage
 from robotsix_mill.vcs import git_ops
-import contextlib
 
 
 def _git(cwd, *args):
@@ -658,8 +658,8 @@ def test_env_error_short_circuits_within_two_cycles(ctx_factory, tmp_path, monke
     """An ENV-ERROR diagnosis (missing binary) repeated identically caps
     the fix loop at ≤2 cycles — instead of burning max_fix_iterations —
     and BLOCKS with a note naming the missing binary."""
-    from robotsix_mill.stages import implement as impl_mod
     from robotsix_mill.agents.testing import ENV_ERROR_PREFIX
+    from robotsix_mill.stages import implement as impl_mod
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
@@ -1803,16 +1803,20 @@ def test_no_change_needed_with_rationale_transitions_to_done(
         # Touch nothing; the codebase is already correct.
         del repo_dir
         return (
-            "Inspected — the `hasattr` guard was already removed by "
-            "20260528T070000Z-cleanup-hasattr-guards-1234.",
+            (
+                "Inspected — the `hasattr` guard was already removed by "
+                "20260528T070000Z-cleanup-hasattr-guards-1234."
+            ),
             [],
             "",
             None,
             None,
             True,
-            "The `hasattr` guard at routes.py:127 referenced in the "
-            "spec was already removed by ticket 1234 on 2026-05-28. "
-            "Current repo state matches the spec's desired end state.",
+            (
+                "The `hasattr` guard at routes.py:127 referenced in the "
+                "spec was already removed by ticket 1234 on 2026-05-28. "
+                "Current repo state matches the spec's desired end state."
+            ),
         )
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
@@ -1885,9 +1889,11 @@ def test_no_change_needed_ignored_when_branch_ahead_of_main(
             None,
             None,
             True,
-            "(False positive: ignoring this rationale because the "
-            "branch has commits ahead of origin/main that haven't "
-            "been delivered yet.)",
+            (
+                "(False positive: ignoring this rationale because the "
+                "branch has commits ahead of origin/main that haven't "
+                "been delivered yet.)"
+            ),
         )
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
@@ -1920,9 +1926,11 @@ def test_no_change_needed_on_resume_still_routes_to_done(
             None,
             None,
             True,
-            "The hasattr guard the spec asks us to remove was deleted "
-            "by ticket 5678. Verified by reading pass_runner.py — the "
-            "symbol is no longer present.",
+            (
+                "The hasattr guard the spec asks us to remove was deleted "
+                "by ticket 5678. Verified by reading pass_runner.py — the "
+                "symbol is no longer present."
+            ),
         )
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
@@ -1991,8 +1999,10 @@ def test_resume_with_ahead_branch_and_clean_tree_proceeds_to_review(
     def _run_resume(*, repo_dir, **_kwargs):
         del repo_dir
         return (
-            "The spec is already implemented — feature.txt was modified "
-            "in a prior pass and no further changes are needed.",
+            (
+                "The spec is already implemented — feature.txt was modified "
+                "in a prior pass and no further changes are needed."
+            ),
             [],
             "",
             None,
@@ -3500,8 +3510,8 @@ def test_baseline_gate_spawns_when_dependency_fix_for_different_sha(
 
 def _clone_repo_to(ctx, remote_url, repo_dir):
     """Clone to *repo_dir* without the full stage machinery."""
-    from robotsix_mill.vcs import git_ops
     from robotsix_mill.forge.auth import github_token
+    from robotsix_mill.vcs import git_ops
 
     if repo_dir.exists():
         import shutil
@@ -4324,7 +4334,6 @@ def test_prepare_hook_failure_blocks_before_prerequisite_gate(
 
     def _spy_prereq(*args, **kwargs):
         prereq_called.append(1)
-        return None
 
     monkeypatch.setattr(
         prerequisite,

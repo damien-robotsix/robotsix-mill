@@ -16,7 +16,6 @@ import pytest
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.merge.review_revision import ReviewRevisionMixin
 
-
 # ------------------------------------------------------------------ fixtures
 
 

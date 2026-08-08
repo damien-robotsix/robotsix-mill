@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.forge import auth
 
 

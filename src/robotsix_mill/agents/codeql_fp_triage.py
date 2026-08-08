@@ -52,8 +52,8 @@ def run_codeql_fp_triage_agent(
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    from .yaml_loader import load_and_run_agent
     from .fs_tools import build_fs_tools
+    from .yaml_loader import load_and_run_agent
 
     tools = build_fs_tools(repo_dir, settings)
 

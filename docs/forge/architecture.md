@@ -30,10 +30,11 @@ class RepoInfo:
     clone_url: str
     html_url: str
 
+
 @dataclass
 class BranchInfo:
     name: str
-    last_commit_at: datetime   # timezone-aware (UTC)
+    last_commit_at: datetime  # timezone-aware (UTC)
     is_protected: bool
 ```
 
@@ -646,6 +647,7 @@ To add a third forge provider (e.g. Bitbucket, Gitea):
    ```python
    if kind == "bitbucket":
        from .bitbucket import BitbucketForge
+
        return BitbucketForge(settings, repo_config=repo_config)
    ```
 

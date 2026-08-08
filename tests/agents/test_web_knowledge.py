@@ -21,12 +21,13 @@ file). Three concerns are exercised here:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 try:
-    from hypothesis import assume, given, strategies as st
+    from hypothesis import assume, given
+    from hypothesis import strategies as st
 
     _HYPOTHESIS_AVAILABLE = True
 except ImportError:
@@ -45,7 +46,6 @@ from robotsix_mill.agents.web_knowledge import (
     run_web_knowledge,
 )
 from robotsix_mill.config import Settings
-
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -120,9 +120,7 @@ class TestHelpers:
     def test_parse_frontmatter_valid_isoformat(self):
         text = _stamped("imaplib", "body content here", "2026-01-15T12:30:00+00:00")
         meta = _parse_frontmatter(text)
-        assert meta.last_updated == datetime(
-            2026, 1, 15, 12, 30, 0, tzinfo=timezone.utc
-        )
+        assert meta.last_updated == datetime(2026, 1, 15, 12, 30, 0, tzinfo=UTC)
         assert meta.body == "body content here"
         assert meta.source_url is None
         assert meta.verified_at is None
@@ -140,9 +138,7 @@ class TestHelpers:
         meta = _parse_frontmatter(text)
         assert meta.last_updated is not None
         assert meta.last_updated.tzinfo is not None
-        assert meta.last_updated == datetime(
-            2026, 1, 15, 12, 30, 0, tzinfo=timezone.utc
-        )
+        assert meta.last_updated == datetime(2026, 1, 15, 12, 30, 0, tzinfo=UTC)
         assert meta.body == "body"
 
     def test_parse_frontmatter_malformed_timestamp_returns_none(self):
@@ -200,7 +196,7 @@ class TestHelpers:
         assert meta.source_url == "https://example.com"
         assert meta.verified_at is not None
         # verified_at should be within the last second
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         assert (now - meta.verified_at).total_seconds() < 5
 
     def test_stamp_frontmatter_without_source_url_no_verified_at(self):
@@ -219,7 +215,7 @@ class TestHelpers:
 
     def test_stamp_frontmatter_with_explicit_verified_at(self):
         """Passing ``verified_at`` overrides the auto-now."""
-        explicit = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        explicit = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
         out = _stamp_frontmatter(
             "lib", "body", source_url="https://x.com", verified_at=explicit
         )
@@ -245,9 +241,7 @@ class TestHelpers:
         )
         meta = _parse_frontmatter(text)
         assert meta.source_url == "https://docs.example.com/api"
-        assert meta.verified_at == datetime(
-            2026, 6, 30, 21, 34, 15, tzinfo=timezone.utc
-        )
+        assert meta.verified_at == datetime(2026, 6, 30, 21, 34, 15, tzinfo=UTC)
 
     def test_parse_frontmatter_verification_fields_absent_on_old_files(self):
         """Old knowledge files without source_url/verified_at parse cleanly."""
@@ -277,7 +271,7 @@ class TestHelpers:
         text = "---\nlibrary: x\nlast_updated: 2026-01-01T00:00:00+00:00\nverified_at: 2026-06-01T12:00:00\n---\nbody"
         meta = _parse_frontmatter(text)
         assert meta.verified_at is not None
-        assert meta.verified_at.tzinfo == timezone.utc
+        assert meta.verified_at.tzinfo == UTC
 
     # ----- _build_index --------------------------------------------------
 
@@ -386,14 +380,14 @@ class TestHelpers:
     def test_is_stale_missing_last_verified(self):
         """``last_verified is None`` → always stale (never touched)."""
         meta = _KnowledgeMeta(
-            last_updated=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_updated=datetime(2026, 1, 1, tzinfo=UTC),
             last_verified=None,
         )
         assert _is_stale(meta, ttl_hours=72) is True
 
     def test_is_stale_recent_last_verified(self):
         """``last_verified`` within the TTL → not stale."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         meta = _KnowledgeMeta(
             last_updated=now,
             last_verified=now,
@@ -402,7 +396,7 @@ class TestHelpers:
 
     def test_is_stale_old_last_verified(self):
         """``last_verified`` older than TTL → stale."""
-        old = datetime.now(timezone.utc).replace(year=2020)
+        old = datetime.now(UTC).replace(year=2020)
         meta = _KnowledgeMeta(
             last_updated=old,
             last_verified=old,
@@ -419,7 +413,7 @@ class TestHelpers:
             last_verified="2026-06-01T12:00:00+00:00",
         )
         meta = _parse_frontmatter(text)
-        assert meta.last_verified == datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        assert meta.last_verified == datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
 
     def test_parse_frontmatter_with_stale_true(self):
         text = (
@@ -449,7 +443,7 @@ class TestHelpers:
         )
         meta = _parse_frontmatter(text)
         assert meta.last_verified is not None
-        assert meta.last_verified.tzinfo == timezone.utc
+        assert meta.last_verified.tzinfo == UTC
 
     def test_parse_frontmatter_malformed_last_verified(self):
         """Unparseable last_verified → None, not an exception."""
@@ -543,6 +537,7 @@ def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
     """Replace the lazy Agent import + the level-1 model seam with stubs
     so ``run_web_knowledge`` builds nothing real."""
     import pydantic_ai
+
     from robotsix_mill.agents import base as bmod
 
     instances: list[_FakeAgent] = []
@@ -809,8 +804,8 @@ class TestTraceWebSearchBudget:
         import asyncio
 
         from robotsix_mill.agents.web_knowledge import (
-            reset_trace_web_search_budget,
             _make_tools,
+            reset_trace_web_search_budget,
         )
 
         s = _settings(tmp_path)
@@ -846,8 +841,8 @@ class TestTraceWebSearchBudget:
         import asyncio
 
         from robotsix_mill.agents.web_knowledge import (
-            reset_trace_web_search_budget,
             _make_tools,
+            reset_trace_web_search_budget,
         )
 
         s = _settings(tmp_path)

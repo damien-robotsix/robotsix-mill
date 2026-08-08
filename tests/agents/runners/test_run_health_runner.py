@@ -3,12 +3,12 @@ recurring-failure grouping, read-only registry access, draft dedup, and
 agent-failure resilience."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+from robotsix_mill.agents.runners import run_health_runner as rhr
 from robotsix_mill.config import Settings
 from robotsix_mill.core.models import SourceKind
-from robotsix_mill.agents.runners import run_health_runner as rhr
 
 
 def _settings(tmp_path, **kw):
@@ -38,7 +38,7 @@ def _one_repo(monkeypatch, board_id="robotsix-mill"):
 
 def test_digest_flags_failures_and_excludes_healthy(tmp_path, monkeypatch):
     s = _settings(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     recent = (now - timedelta(hours=1)).isoformat()
     old = (now - timedelta(hours=200)).isoformat()
     entries = [
@@ -101,7 +101,7 @@ def test_recurring_failures_collapse_into_one_group(tmp_path, monkeypatch):
     """Two occurrences sharing (kind, normalized signature) collapse into ONE
     candidate group with count >= 2 — transient path/id specifics differ."""
     s = _settings(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     t1 = (now - timedelta(hours=1)).isoformat()
     t2 = (now - timedelta(hours=2)).isoformat()
     entries = [
@@ -134,7 +134,7 @@ def test_reading_registries_is_read_only(tmp_path, monkeypatch):
     'running' entry is not reconciled to 'error' (which a second RunRegistry
     would do)."""
     s = _settings(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     recent = (now - timedelta(hours=1)).isoformat()
     entries = [
         {

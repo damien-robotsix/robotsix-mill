@@ -32,15 +32,19 @@ import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Settings
 from ..config.repo_settings import load_extra_sandbox_packages
 from ._slots import (
     DEFAULT_RANK as DEFAULT_RANK,  # re-exported: callers set/read the rank here
+)
+from ._slots import (
     PrioritySlots,
     current_rank,
+)
+from ._slots import (
     sandbox_rank as sandbox_rank,
 )
 
@@ -326,8 +330,10 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
         )
     return [
         "--mount",
-        f"type=volume,src={settings.data_volume},dst={target},"
-        f"volume-subpath={rel.as_posix()}",
+        (
+            f"type=volume,src={settings.data_volume},dst={target},"
+            f"volume-subpath={rel.as_posix()}"
+        ),
     ]
 
 
@@ -378,8 +384,10 @@ def _cache_mount(settings: Settings) -> list[str]:
         return ["-v", f"{host_src}:{_CACHE_TARGET}"]
     return [
         "--mount",
-        f"type=volume,src={settings.data_volume},dst={_CACHE_TARGET},"
-        f"volume-subpath={_CACHE_SUBDIR}",
+        (
+            f"type=volume,src={settings.data_volume},dst={_CACHE_TARGET},"
+            f"volume-subpath={_CACHE_SUBDIR}"
+        ),
     ]
 
 
@@ -791,7 +799,7 @@ def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
     injection), size/time capped. Residual risk: an agent can encode
     data into the URL it asks to fetch. http(s) only.
     """
-    if not (url.startswith("http://") or url.startswith("https://")):
+    if not (url.startswith(("http://", "https://"))):
         return 1, f"refused: only http(s) URLs allowed: {url!r}"
 
     name = f"mill-fetch-{uuid.uuid4().hex[:12]}"
@@ -1000,7 +1008,7 @@ def _container_age_exceeds(cid: str, max_age_seconds: int) -> bool:
     started = _parse_docker_started_at(ins.stdout)
     if started is None:
         return False
-    return (datetime.now(timezone.utc) - started).total_seconds() > max_age_seconds
+    return (datetime.now(UTC) - started).total_seconds() > max_age_seconds
 
 
 def reap_orphan_sandboxes(*, max_age_seconds: int | None = None) -> int:

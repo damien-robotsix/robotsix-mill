@@ -5,14 +5,14 @@ from pathlib import Path
 
 from robotsix_mill.agents import agent_check
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_agent_check_pass,
     PeriodicPassResult,
+    run_agent_check_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import TicketKind
 
 
 def _test_repo_config():
@@ -535,7 +535,7 @@ def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
     """When both repo_dir and memory_dir are provided,
     build_fs_tools is called with extra_roots=[memory_dir]."""
-    from robotsix_mill.agents import fs_tools, explore, base, retry
+    from robotsix_mill.agents import base, explore, fs_tools, retry
 
     captured_extra_roots = None
     settings = Settings()

@@ -1,14 +1,14 @@
 import asyncio
+from datetime import UTC
 from types import SimpleNamespace
 
 import pytest
 
-from robotsix_mill.stages import Outcome, StageContext
-from robotsix_mill.stages import registry
-from robotsix_mill.stages.base import Stage
-from robotsix_mill.core.states import State
 from robotsix_mill.core.models import SourceKind
+from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker, process_ticket
+from robotsix_mill.stages import Outcome, StageContext, registry
+from robotsix_mill.stages.base import Stage
 
 
 @pytest.fixture
@@ -623,8 +623,8 @@ def test_enqueue_orders_late_stage_before_draft(ctx, service):
     late = service.create("late done")
     # Transition them to varied states via direct setter — bypass the
     # state machine because we just want different queue ranks.
-    from robotsix_mill.core.states import State as _S
     from robotsix_mill.core import db as _db
+    from robotsix_mill.core.states import State as _S
 
     with _db.session(ctx.settings, service.board_id) as s:
         t_mid = s.get(
@@ -927,13 +927,13 @@ def test_initial_delay_fires_soon_when_overdue(ctx, tmp_path):
     almost immediately (~1s base + per-kind stagger), not after a full
     interval."""
     import json
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from robotsix_mill.runtime.run_registry import RunRegistry
     from robotsix_mill.runtime.worker import Worker
 
     db_path = tmp_path / "runs.json"
-    old = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+    old = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
     db_path.write_text(
         json.dumps(
             [
@@ -961,13 +961,13 @@ def test_initial_delay_waits_when_recent(ctx, tmp_path):
     interval (close to the full interval) plus per-kind stagger, so the
     loop does NOT re-fire now."""
     import json
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from robotsix_mill.runtime.run_registry import RunRegistry
     from robotsix_mill.runtime.worker import Worker
 
     db_path = tmp_path / "runs.json"
-    recent = datetime.now(timezone.utc).isoformat()
+    recent = datetime.now(UTC).isoformat()
     db_path.write_text(
         json.dumps(
             [
@@ -998,13 +998,13 @@ def test_initial_delay_is_per_repo_scoped(ctx, tmp_path):
     With repo scoping, a repo that has never run the agent fires ~immediately.
     """
     import json
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from robotsix_mill.runtime.run_registry import RunRegistry
     from robotsix_mill.runtime.worker import Worker
 
     db_path = tmp_path / "runs.json"
-    recent = datetime.now(timezone.utc).isoformat()
+    recent = datetime.now(UTC).isoformat()
     db_path.write_text(
         json.dumps(
             [
@@ -1713,6 +1713,7 @@ class _FakeEpicService:
 
 def test_build_child_summaries_truncates_and_shapes():
     from types import SimpleNamespace
+
     from robotsix_mill.runtime.worker import _build_child_summaries
 
     children = [
@@ -1749,6 +1750,7 @@ def test_build_child_summaries_truncates_and_shapes():
 
 def test_build_child_summaries_populates_distinct_delivery_labels():
     from types import SimpleNamespace
+
     from robotsix_mill.runtime.worker import _build_child_summaries
 
     children = [
@@ -1791,6 +1793,7 @@ def test_build_child_summaries_populates_distinct_delivery_labels():
 
 def test_handle_epic_decision_close():
     from types import SimpleNamespace
+
     from robotsix_mill.agents.epic_status import EpicStatusResult
     from robotsix_mill.runtime.worker import _handle_epic_decision
 
@@ -1809,6 +1812,7 @@ def test_handle_epic_decision_close():
 
 def test_handle_epic_decision_keep_open_is_noop():
     from types import SimpleNamespace
+
     from robotsix_mill.agents.epic_status import EpicStatusResult
     from robotsix_mill.runtime.worker import _handle_epic_decision
 
@@ -1822,6 +1826,7 @@ def test_handle_epic_decision_keep_open_is_noop():
 
 def test_handle_epic_decision_update_description():
     from types import SimpleNamespace
+
     from robotsix_mill.agents.epic_status import EpicStatusResult
     from robotsix_mill.runtime.worker import _handle_epic_decision
 
@@ -1836,6 +1841,7 @@ def test_handle_epic_decision_update_description():
 
 def test_handle_epic_decision_update_deps_with_dep_updates():
     from types import SimpleNamespace
+
     from robotsix_mill.agents.epic_status import EpicStatusResult
     from robotsix_mill.runtime.worker import _handle_epic_decision
 
@@ -1856,6 +1862,7 @@ def test_handle_epic_decision_update_deps_with_dep_updates():
 
 def test_handle_epic_decision_close_with_new_children_downgrades():
     from types import SimpleNamespace
+
     from robotsix_mill.agents.epic_status import EpicStatusResult
     from robotsix_mill.runtime.worker import _handle_epic_decision
 
@@ -1876,8 +1883,9 @@ def test_handle_epic_decision_close_with_new_children_downgrades():
 def test_validate_epic_state_skips_blocked(monkeypatch):
     """_validate_epic_state returns None for a BLOCKED epic."""
     from types import SimpleNamespace
-    from robotsix_mill.runtime.worker import _validate_epic_state
+
     from robotsix_mill.core.states import State as S
+    from robotsix_mill.runtime.worker import _validate_epic_state
 
     class _Settings:
         pass

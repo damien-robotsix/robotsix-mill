@@ -5,12 +5,12 @@ clients so the board UI can update in real time without polling.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from asyncio import Queue
 
 from ..core.models import Ticket
-import contextlib
 
 log = logging.getLogger(__name__)
 
