@@ -276,7 +276,7 @@ class ReposRegistry(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_keys_match_repo_ids(self) -> "ReposRegistry":
+    def _validate_keys_match_repo_ids(self) -> ReposRegistry:
         for key, config in self.repos.items():
             if config.repo_id != key:
                 raise ValueError(
@@ -429,7 +429,7 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
     return ReposRegistry(repos=repos, meta=meta_config)
 
 
-def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
+def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> RepoConfig | None:
     """Populate every repo and the meta board from the canonical ``langfuse``
     config block (top-level ``langfuse:`` key, robotsix-standards#189).
 
@@ -437,7 +437,7 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> "RepoConfig | None":
     are absent / incomplete, i.e. observability is off). There is no per-repo
     Langfuse configuration.
     """
-    from .loader import _resolve_main_config_path, _load_file
+    from .loader import _load_file, _resolve_main_config_path
     from .settings import LangfuseConfig
 
     main_path = _resolve_main_config_path()
@@ -543,7 +543,7 @@ def resolve_child_board_id(
     repo_id: str,
     epic_board_id: str,
     epic_id: str,
-    repos: "ReposRegistry | None" = None,
+    repos: ReposRegistry | None = None,
 ) -> str:
     """Resolve a child's ``repo_id`` to a ``board_id`` for child creation.
 

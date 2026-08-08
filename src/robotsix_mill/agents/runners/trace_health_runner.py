@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlmodel import select
 
@@ -42,8 +42,10 @@ class TraceHealthResult:
     def summary(self) -> str:
         """One-line summary of the trace-health check result."""
         parts: list[str] = [
-            f"Unsessoned: {self.unsessioned_count}, "
-            f"unnamed: {self.name_missing_count} / {self.total_traces}"
+            (
+                f"Unsessoned: {self.unsessioned_count}, "
+                f"unnamed: {self.name_missing_count} / {self.total_traces}"
+            )
         ]
         if self.draft_created:
             parts.append(", draft created")
@@ -69,7 +71,7 @@ def run_trace_health_check(repo_config: RepoConfig | None = None) -> TraceHealth
             "configure at least one repo in config/repos.yaml."
         )
     service = TicketService(settings, board_id=repo_config.board_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     window_start = now - timedelta(hours=24)
     window_end = now
     from_ts = window_start.isoformat()

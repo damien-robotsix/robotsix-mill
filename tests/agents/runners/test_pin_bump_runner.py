@@ -13,7 +13,6 @@ from robotsix_mill.deps.internal_graph import (
     CyclicDependencyError,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -139,8 +138,8 @@ class TestRunPinBumpPass:
         computes and logs the topological order and current pins."""
         import logging
 
-        from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.agents.runners.pin_bump_runner import run_pin_bump_pass
+        from robotsix_mill.config.repos import load_repos_config
 
         repos_yaml_path = tmp_path / "repos.yaml"
         repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
@@ -192,8 +191,8 @@ class TestRunPinBumpPass:
         is a no-op (no forge calls, no PRs created)."""
         import logging
 
-        from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.agents.runners.pin_bump_runner import run_pin_bump_pass
+        from robotsix_mill.config.repos import load_repos_config
 
         repos_yaml_path = tmp_path / "repos.yaml"
         repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
@@ -234,8 +233,8 @@ class TestRunPinBumpPass:
         """CyclicDependencyError → logged as warning, not raised."""
         import logging
 
-        from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.agents.runners.pin_bump_runner import run_pin_bump_pass
+        from robotsix_mill.config.repos import load_repos_config
 
         repos_yaml_path = tmp_path / "repos.yaml"
         repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
@@ -280,8 +279,8 @@ class TestRunPinBumpPass:
         processed."""
         import logging
 
-        from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.agents.runners.pin_bump_runner import run_pin_bump_pass
+        from robotsix_mill.config.repos import load_repos_config
 
         repos_yaml_path = tmp_path / "repos.yaml"
         repos_yaml_path.write_text(_repos_yaml_str("a", "b", "c"))
@@ -328,9 +327,8 @@ class TestRunPinBumpPass:
         returns immediately without doing any work."""
         import logging
 
-        from robotsix_mill.agents.runners.pin_bump_runner import run_pin_bump_pass
-
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+        from robotsix_mill.agents.runners.pin_bump_runner import run_pin_bump_pass
 
         mock_settings = MagicMock()
         mock_settings.pin_bump_periodic = False
@@ -395,10 +393,10 @@ class TestActuator:
         """When called standalone with no pins, the actuator is a no-op."""
         import logging
 
-        from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.agents.runners.pin_bump_runner import (
             run_pin_bump_pr_actuator,
         )
+        from robotsix_mill.config.repos import load_repos_config
 
         repos_yaml_path = tmp_path / "repos.yaml"
         repos_yaml_path.write_text(_repos_yaml_str("x"))
@@ -437,13 +435,13 @@ class TestActuator:
         """A stale pin triggers clone, edit, uv lock, push, and PR."""
         import logging
 
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
         from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.deps.internal_graph import (
             GitPin,
             InternalDepGraph,
-        )
-        from robotsix_mill.agents.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
         )
 
         repos_yaml_path = tmp_path / "repos.yaml"
@@ -520,13 +518,13 @@ class TestActuator:
         """A pin already at latest SHA is skipped — no clone, no PR."""
         import logging
 
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
         from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.deps.internal_graph import (
             GitPin,
             InternalDepGraph,
-        )
-        from robotsix_mill.agents.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
         )
 
         repos_yaml_path = tmp_path / "repos.yaml"
@@ -577,13 +575,13 @@ class TestActuator:
         """When an open PR already exists for the bump branch, skip."""
         import logging
 
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
         from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.deps.internal_graph import (
             GitPin,
             InternalDepGraph,
-        )
-        from robotsix_mill.agents.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
         )
 
         repos_yaml_path = tmp_path / "repos.yaml"
@@ -640,13 +638,13 @@ class TestActuator:
         """When in-flight pin-bump PRs reach max_inflight_prs, skip."""
         import logging
 
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
         from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.deps.internal_graph import (
             GitPin,
             InternalDepGraph,
-        )
-        from robotsix_mill.agents.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
         )
 
         repos_yaml_path = tmp_path / "repos.yaml"
@@ -706,13 +704,13 @@ class TestActuator:
         skipped with a WARNING and no PR."""
         import logging
 
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
         from robotsix_mill.config.repos import load_repos_config
         from robotsix_mill.deps.internal_graph import (
             GitPin,
             InternalDepGraph,
-        )
-        from robotsix_mill.agents.runners.pin_bump_runner import (
-            run_pin_bump_pr_actuator,
         )
 
         repos_yaml_path = tmp_path / "repos.yaml"

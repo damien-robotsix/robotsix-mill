@@ -13,7 +13,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -95,7 +95,7 @@ def _build_payload(ticket: Ticket, old_state: str) -> dict[str, object]:
         "board_id": ticket.board_id,
         "old_state": old_state,
         "new_state": ticket.state.value,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 

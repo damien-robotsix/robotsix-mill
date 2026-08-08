@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import logging
 
+from robotsix_mill.agents.runners import diagnostic_check_errors as dce
+from robotsix_mill.agents.runners import diagnostic_checks as dc
+from robotsix_mill.agents.runners.diagnostic_checks import DiagnosticCheckContext
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
-from robotsix_mill.agents.runners import diagnostic_check_errors as dce
-from robotsix_mill.agents.runners import diagnostic_checks as dc
-from robotsix_mill.agents.runners.diagnostic_checks import DiagnosticCheckContext
 
 _BOARD = "robotsix-mill"
 

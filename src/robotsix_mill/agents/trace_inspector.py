@@ -14,7 +14,7 @@ it to inject synthetic results without a real LLM or Langfuse.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -538,12 +538,11 @@ def run_trace_inspector(
     from pydantic_ai import Agent, PromptedOutput
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _close_async_client, build_openrouter_model
-
     # Wire read-only fs tools + explore when repo_dir is provided.
     # NEVER include write_file/edit_file/delete_file: the inspector
     # is analysis-only, no side effects.
     from ._repo_tools import _build_repo_tools
+    from .base import _close_async_client, build_openrouter_model
 
     # Decide whether to enable code-access tools.  When a trace
     # exceeds the observation threshold, deep per-file code
@@ -627,7 +626,7 @@ def run_trace_inspector(
         + section(
             "process_info",
             f"Process started at: {started_at.isoformat() if started_at else 'unknown'}\n"
-            f"Current time: {datetime.now(timezone.utc).isoformat()}",
+            f"Current time: {datetime.now(UTC).isoformat()}",
         )
         + "\n\n"
         + flags_section

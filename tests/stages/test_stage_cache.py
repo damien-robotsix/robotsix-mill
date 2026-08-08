@@ -2,6 +2,7 @@
 
 import json
 
+from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.stages._stage_cache import (
     _cache_path,
@@ -13,8 +14,6 @@ from robotsix_mill.stages._stage_cache import (
     review_input_hash,
 )
 from robotsix_mill.stages.base import Outcome
-from robotsix_mill.core.states import State
-
 
 # ---------------------------------------------------------------------------
 # _cache_path

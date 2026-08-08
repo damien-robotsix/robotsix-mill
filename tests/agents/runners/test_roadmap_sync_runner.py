@@ -11,16 +11,15 @@ from __future__ import annotations
 
 import pytest
 
-from robotsix_mill.config import Settings, _reset_secrets
-from robotsix_mill.core.models import State, SourceKind, TicketKind
-from robotsix_mill.core.service import TicketService
 from robotsix_mill.agents.runners.roadmap_sync_runner import (
     EpicSection,
+    _create_or_update_epics,
     insert_markers,
     parse_roadmap,
-    _create_or_update_epics,
 )
-
+from robotsix_mill.config import Settings, _reset_secrets
+from robotsix_mill.core.models import SourceKind, State, TicketKind
+from robotsix_mill.core.service import TicketService
 
 # ---------------------------------------------------------------------------
 # Parser
@@ -151,8 +150,8 @@ def settings(tmp_path, monkeypatch):
     # Reset cached DB engines + repos registry so each test sees a
     # fresh data_dir without leaking SQLAlchemy engines from a prior
     # test's tmp_path.
-    from robotsix_mill.core import db
     from robotsix_mill.config import _reset_repos_config
+    from robotsix_mill.core import db
 
     db.reset_engine()
     _reset_repos_config()

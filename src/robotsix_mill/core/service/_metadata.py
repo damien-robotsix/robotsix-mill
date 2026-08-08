@@ -13,16 +13,16 @@ exactly as before via the mixin MRO.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..db import retry_on_db_full
 from ..models import Ticket, TicketEvent, TicketKind
 from ..states import State
 from ._base import _ServiceBase
-from ._helpers import _get_ticket, TransitionError
-import contextlib
+from ._helpers import TransitionError, _get_ticket
 
 # States that are considered terminal — the spec cannot be updated
 # once a ticket reaches one of these.
@@ -47,7 +47,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.unblocks = json.dumps(cleaned) if cleaned else None
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
             s.refresh(ticket)
@@ -64,7 +64,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.labels = json.dumps(cleaned) if cleaned else None
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
             s.refresh(ticket)
@@ -92,7 +92,7 @@ class _MetadataMixin(_ServiceBase):
             if ticket.priority != new_value:
                 old_state = ticket.state.value
                 ticket.priority = new_value
-                ticket.updated_at = datetime.now(timezone.utc)
+                ticket.updated_at = datetime.now(UTC)
                 s.add(ticket)
                 changed.append(ticket.id)
                 s.commit()
@@ -109,7 +109,7 @@ class _MetadataMixin(_ServiceBase):
                     continue
                 old_state = d.state.value
                 d.priority = bool(priority)
-                d.updated_at = datetime.now(timezone.utc)
+                d.updated_at = datetime.now(UTC)
                 s.add(d)
                 s.commit()
                 changed.append(d.id)
@@ -125,7 +125,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.branch = branch
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -136,7 +136,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.parent_id = parent_id
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -147,7 +147,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.title = title
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -158,7 +158,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.content_hash = content_hash
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -178,7 +178,7 @@ class _MetadataMixin(_ServiceBase):
             if ticket.kind == TicketKind.EPIC:
                 return
             ticket.kind = TicketKind.EPIC
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -187,7 +187,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.review_rounds = value
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -201,7 +201,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.implement_cycles = value
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -216,7 +216,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.refine_passes = value
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -228,7 +228,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.refine_output_hash = output_hash
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -243,7 +243,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.pre_redraft_trace_count = value
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -258,7 +258,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
             ticket.depends_on = raw
-            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
             s.commit()
 
@@ -324,7 +324,7 @@ class _MetadataMixin(_ServiceBase):
         with retry_on_db_full(self.settings, board) as s:
             t = _get_ticket(s, ticket_id)
             t.content_hash = ticket.content_hash
-            t.updated_at = datetime.now(timezone.utc)
+            t.updated_at = datetime.now(UTC)
             s.add(t)
             s.commit()
         # Optionally clear the stale implement guard.

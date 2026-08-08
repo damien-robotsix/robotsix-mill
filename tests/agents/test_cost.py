@@ -7,13 +7,12 @@ real-time path has been REMOVED — it leaked across concurrent tickets.
 """
 
 import pytest
-
 from robotsix_llmio.openrouter.model import (
     _inject_usage_include,
     record_openrouter_cost,
 )
-from robotsix_mill.langfuse.client import session_total_cost
 
+from robotsix_mill.langfuse.client import session_total_cost
 
 # --- _inject_usage_include (pure dict logic, no deps) -------------------
 
@@ -254,7 +253,7 @@ def test_session_total_cost_handles_empty_traces(settings, monkeypatch):
 
 def test_session_cost_returns_zero_when_unconfigured(settings):
     """No Langfuse → 0.0 (never None — callers don't special-case)."""
-    from robotsix_mill.langfuse.client import session_cost, _cost_cache
+    from robotsix_mill.langfuse.client import _cost_cache, session_cost
 
     _cost_cache.clear()
     assert session_cost(settings, "sid-a") == 0.0

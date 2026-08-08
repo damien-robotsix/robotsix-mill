@@ -5,7 +5,8 @@ from __future__ import annotations
 import importlib
 import logging
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 

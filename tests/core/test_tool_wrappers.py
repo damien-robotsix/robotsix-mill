@@ -9,7 +9,6 @@ from robotsix_mill.core.tool_wrappers import (
     wrap_read_tools_with_consecutive_error_guard,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

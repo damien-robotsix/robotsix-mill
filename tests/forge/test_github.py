@@ -4,10 +4,12 @@ No stage-level monkeypatching — tests call _create_pr, _get_pr, _check_status,
 _parse_owner_repo, and _build_headers directly with a mocked transport.
 """
 
+from datetime import UTC
+
 import httpx as real_httpx
 import pytest
 
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.forge.github import (
     GitHubForge,
@@ -21,7 +23,6 @@ from robotsix_mill.forge.github_ci import (
     _statuses_to_check_runs,
 )
 from robotsix_mill.forge.github_pr import _parse_iso_utc, _parse_pr_detail
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -3759,19 +3760,19 @@ def test_parse_iso_utc_naive():
 
 def test_parse_iso_utc_none():
     """None / empty → Unix epoch (UTC)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     for val in (None, ""):
         result = _parse_iso_utc(val)
-        assert result == datetime.fromtimestamp(0, tz=timezone.utc)
+        assert result == datetime.fromtimestamp(0, tz=UTC)
 
 
 def test_parse_iso_utc_invalid():
     """Unparseable string → Unix epoch (UTC)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     result = _parse_iso_utc("not-a-date")
-    assert result == datetime.fromtimestamp(0, tz=timezone.utc)
+    assert result == datetime.fromtimestamp(0, tz=UTC)
 
 
 # ---------------------------------------------------------------------------

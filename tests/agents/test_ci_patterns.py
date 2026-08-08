@@ -2,14 +2,12 @@
 
 import json
 
-
 from robotsix_mill.agents.ci_patterns import (
     CiPatternEntry,
     find_relevant_patterns,
     load_patterns,
     save_patterns,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers

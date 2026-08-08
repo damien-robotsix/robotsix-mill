@@ -10,9 +10,8 @@ on restart.
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-
 
 _state: dict[str, Any] = {}
 _lock = threading.Lock()
@@ -28,7 +27,7 @@ _KEY_LAST_402_DETAIL = "last_402_detail"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def record_low_credit(

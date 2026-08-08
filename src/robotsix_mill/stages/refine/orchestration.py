@@ -33,16 +33,15 @@ from ...core.workspace import Workspace
 from ...runtime.tracing import set_current_span_attribute
 from ..base import Outcome, StageContext
 from ..pause import (
+    _collect_ask_user_replies,
     acknowledge_unanswered_threads,
     build_compact_resume_message_history,
     check_for_pause,
     clear_conversation_state,
     load_conversation_state,
     save_conversation_state,
-    _collect_ask_user_replies,
 )
-from . import _checkpoint
-from . import _triage
+from . import _checkpoint, _triage
 from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     _build_deployed_log_summary,

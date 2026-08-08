@@ -7,12 +7,11 @@ from pathlib import Path
 import pytest
 
 from robotsix_mill.agents.runners.repo_description_sync_runner import (
+    RepoDescriptionSyncPassResult,
     _extract_h1_and_first_paragraph,
     _find_readme,
     _parse_owner_repo,
-    RepoDescriptionSyncPassResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # _find_readme

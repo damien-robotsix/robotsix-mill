@@ -22,7 +22,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def _stable_id(rule: str, proposed_at: str) -> str:
     """8-char content hash. Stable across re-orderings; collision-safe
     enough for a per-board file with at most dozens of entries.
     """
-    h = hashlib.sha256(f"{rule}\x00{proposed_at}".encode("utf-8")).hexdigest()
+    h = hashlib.sha256(f"{rule}\x00{proposed_at}".encode()).hexdigest()
     return h[:8]
 
 
@@ -329,7 +329,7 @@ def to_ticket_payload(c: Candidate) -> tuple[str, str]:
         f"exists). Match the tone and formatting of surrounding rules.\n\n"
         f"## Provenance\n\n"
         f"Validated by the operator on "
-        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} "
+        f"{datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')} "
         f"from AGENT_CANDIDATES.md (candidate `{c.candidate_id}`). "
         f"Originally proposed by retrospect on {c.proposed_at} while "
         f"reviewing ticket `{c.source_ticket}`."

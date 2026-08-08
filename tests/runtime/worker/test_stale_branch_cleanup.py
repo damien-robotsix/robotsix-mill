@@ -1,20 +1,19 @@
 """Tests for the periodic stale-branch cleanup pass."""
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+import contextlib
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from robotsix_mill.forge.base import BranchInfo
 from robotsix_mill.runtime.worker import _branch_is_stale
-import contextlib
-
 
 # ---------------------------------------------------------------------------
 # _branch_is_stale unit tests — every guard
 # ---------------------------------------------------------------------------
 
-FIXED_NOW = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+FIXED_NOW = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
 OLD_DATE = FIXED_NOW - timedelta(days=60)  # well past 30-day cutoff
 RECENT_DATE = FIXED_NOW - timedelta(days=5)  # inside 30-day window
 
@@ -173,7 +172,7 @@ async def test_per_repo_cleanup_deletes_only_eligible(
     settings.branch_prefix = "mill/"
     settings.forge_target_branch = "main"
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     old = now - timedelta(days=60)
     recent = now - timedelta(days=5)
 

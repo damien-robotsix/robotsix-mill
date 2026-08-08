@@ -14,6 +14,7 @@ unit-testable without a key or pydantic_ai.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,6 @@ from ..config import Settings, get_secrets
 from .prompt_tool_consistency import unregistered_call_directives
 from .report_issue import make_report_issue_tool
 from .tool_registry import ToolRegistry
-import contextlib
 
 # Defensive char cap on the inlined ``## Module Map`` block so the static
 # prompt can't grow unbounded as ``docs/modules.yaml`` grows. A hardcoded
@@ -30,7 +30,7 @@ import contextlib
 MODULE_MAP_MAX_CHARS = 12000
 
 
-def _close_async_client(client: "httpx.AsyncClient") -> None:
+def _close_async_client(client: httpx.AsyncClient) -> None:
     """Close an httpx.AsyncClient from outside its original event loop.
 
     Creates a temporary event loop to run aclose(), catching any errors
@@ -44,7 +44,7 @@ def _close_async_client(client: "httpx.AsyncClient") -> None:
         pass
 
 
-async def _aclose_async_client(client: "httpx.AsyncClient") -> None:
+async def _aclose_async_client(client: httpx.AsyncClient) -> None:
     """Close an httpx.AsyncClient from inside the loop it lives on.
 
     Sub-agent tools run on the parent coordinator's event loop (under the
@@ -148,7 +148,7 @@ class AgentHandle:
 
 def build_agent_from_definition(
     settings: Settings,
-    definition: "AgentDefinition",
+    definition: AgentDefinition,
     *,
     tools: list[Any] | None = None,
     repo_dir: Path | None = None,
@@ -459,7 +459,7 @@ def build_agent(
     modules: bool = False,
     workflows: bool = False,
     board_id: str = "",
-    repo_dir: "Path | None" = None,
+    repo_dir: Path | None = None,
     web_knowledge_block_reason: str | None = None,
 ):
     """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4).

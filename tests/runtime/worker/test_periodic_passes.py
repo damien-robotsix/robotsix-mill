@@ -12,7 +12,6 @@ from robotsix_mill.core.states import State
 # The function under test.
 from robotsix_mill.runtime.worker.periodic_passes import _ci_debt_recheck_pass
 
-
 CI_DEBT_NOTE = (
     "CI blocked by pre-existing target-branch debt: workflow(s) "
     "lint, test are failing on the merge target too and were not "

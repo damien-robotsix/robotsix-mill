@@ -12,10 +12,11 @@ of a ~120-line file copy.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ...config import RepoConfig, Settings, get_secrets, target_branch_for
 from ...core.models import SourceKind
@@ -547,8 +548,8 @@ def run_periodic_pass_entry(
 
     # Survey pass resets web-fetch / web-search budgets before running.
     if key == "survey":
-        from ...agents.web_tools import reset_trace_web_fetch_budget
         from ...agents.web_knowledge import reset_trace_web_search_budget
+        from ...agents.web_tools import reset_trace_web_fetch_budget
 
         reset_trace_web_fetch_budget(
             settings.survey_web_fetch_max_calls,

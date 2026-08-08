@@ -36,6 +36,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..core.duration import parse_duration
 from .overlays import apply_overlay
 from .workflow_portability import (
@@ -66,25 +67,31 @@ def validate_periodic_file_content(
     kind = kind_for(name)
     if kind == "global_only":
         return [
-            f"'{name}' is a global/cross-repo periodic and cannot be "
-            "per-repo presence-managed. Remove this file."
+            (
+                f"'{name}' is a global/cross-repo periodic and cannot be "
+                "per-repo presence-managed. Remove this file."
+            )
         ]
     if kind == "mill_only":
         return [
-            f"'{name}' is a mill-internal periodic agent (its prompt is "
-            "hardcoded to robotsix-mill's own source paths) and cannot "
-            "be enabled on managed repos via a presence file. Remove this "
-            "file — it will not be loaded."
+            (
+                f"'{name}' is a mill-internal periodic agent (its prompt is "
+                "hardcoded to robotsix-mill's own source paths) and cannot "
+                "be enabled on managed repos via a presence file. Remove this "
+                "file — it will not be loaded."
+            )
         ]
     if kind == "bespoke" and (system_prompt is None or not system_prompt.strip()):
         valid_builtins = sorted(
             k for k, v in _BUILTIN_KINDS.items() if v != "global_only"
         )
         return [
-            f"'{name}' is not a recognised built-in periodic name. "
-            "Either use one of the valid built-in names "
-            f"({', '.join(valid_builtins)}) or include a non-empty "
-            "`system_prompt` field to define a new bespoke agent."
+            (
+                f"'{name}' is not a recognised built-in periodic name. "
+                "Either use one of the valid built-in names "
+                f"({', '.join(valid_builtins)}) or include a non-empty "
+                "`system_prompt` field to define a new bespoke agent."
+            )
         ]
     return []
 
@@ -136,7 +143,7 @@ class PeriodicWorkflowFile(BaseModel):
     enabled: bool | None = None
 
     @model_validator(mode="after")
-    def _interval_xor(self) -> "PeriodicWorkflowFile":
+    def _interval_xor(self) -> PeriodicWorkflowFile:
         if self.interval is not None and self.interval_seconds is not None:
             raise ValueError(
                 "set at most one of 'interval' (human-readable, e.g. '2d') "
@@ -153,7 +160,7 @@ class PeriodicWorkflowFile(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _prompt_xor(self) -> "PeriodicWorkflowFile":
+    def _prompt_xor(self) -> PeriodicWorkflowFile:
         if self.prompt_overlay is not None and self.system_prompt is not None:
             raise ValueError(
                 "set at most one of 'prompt_overlay' (append) or "
@@ -162,7 +169,7 @@ class PeriodicWorkflowFile(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _name_slug(self) -> "PeriodicWorkflowFile":
+    def _name_slug(self) -> PeriodicWorkflowFile:
         if not _NAME_RE.match(self.name):
             raise ValueError(
                 f"name {self.name!r} must match {_NAME_RE.pattern} "

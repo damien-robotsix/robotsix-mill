@@ -11,7 +11,6 @@ import logging
 from dataclasses import dataclass
 
 from ....config import RepoConfig, Settings
-
 from .orphans import (
     _prune_archived_db_rows,
     _prune_closed_workspaces,

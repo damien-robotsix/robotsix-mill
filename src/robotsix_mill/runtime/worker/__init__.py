@@ -32,11 +32,11 @@ from .epic import (
     _validate_epic_state,
 )
 from .processing import (
-    log,
-    process_ticket,
     _maybe_reevaluate_epic,
     _process_ticket_inner,
     _spawn_epic_reeval,
+    log,
+    process_ticket,
 )
 
 __all__ = [

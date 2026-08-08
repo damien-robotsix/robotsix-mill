@@ -9,7 +9,6 @@ from pathlib import Path
 
 from ..config import get_repos_config, target_branch_for
 from ..forge.auth import github_token
-
 from . import git_ops
 
 log = logging.getLogger("robotsix_mill.vcs")

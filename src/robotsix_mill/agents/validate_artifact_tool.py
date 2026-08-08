@@ -11,8 +11,8 @@ resolve outside it.
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 from ..runtime.tracing import trace_stage
 

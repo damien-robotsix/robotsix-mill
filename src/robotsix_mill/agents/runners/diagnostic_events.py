@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ...config import Settings
@@ -90,7 +90,7 @@ def emit_diagnostic_event(
             repo_id=board_id,
             reason=reason,
             normalized_key=normalized_key,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
         line = json.dumps(
             {

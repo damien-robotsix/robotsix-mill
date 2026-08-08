@@ -749,7 +749,7 @@ class ReviewStage(Stage):
         repos: list[ImplementedRepo],
         target_branch: str | None,
         ticket: Ticket,
-    ) -> "_DiffMeta | Outcome":
+    ) -> _DiffMeta | Outcome:
         """Compute the combined diff, extract metadata, and handle early
         returns (empty diff, stage-outcome cache hit).
 
@@ -959,8 +959,8 @@ class ReviewStage(Stage):
         action_refs: list[tuple[str, str, str, str]],
         reusable_workflow_refs: list[tuple[str, str, str, str]],
         gh_token: str | None,
-        verdict: "ReviewVerdict",
-    ) -> "ReviewVerdict":
+        verdict: ReviewVerdict,
+    ) -> ReviewVerdict:
         """Validate 40-char hex SHA refs in *action_refs* and
         *reusable_workflow_refs* via ``git ls-remote``, injecting any
         missing-SHA violations as synthetic REQUEST_CHANGES.
@@ -1049,7 +1049,7 @@ class ReviewStage(Stage):
 
     def _handle_review_verdict(
         self,
-        verdict: "ReviewVerdict",
+        verdict: ReviewVerdict,
         ticket: Ticket,
         ctx: StageContext,
         ws: Workspace,
@@ -1088,7 +1088,7 @@ class ReviewStage(Stage):
 
     def _handle_request_changes(
         self,
-        verdict: "ReviewVerdict",
+        verdict: ReviewVerdict,
         ticket: Ticket,
         ctx: StageContext,
         ws: Workspace,
@@ -1192,9 +1192,11 @@ class ReviewStage(Stage):
 
         if already_addressed:
             lines = [
-                f"Review found {len(already_addressed)} gap(s) that appear "
-                "already addressed in the implementer's commits — "
-                "no follow-up needed:",
+                (
+                    f"Review found {len(already_addressed)} gap(s) that appear "
+                    "already addressed in the implementer's commits — "
+                    "no follow-up needed:"
+                ),
                 "",
             ]
             for a in already_addressed:
@@ -1207,9 +1209,11 @@ class ReviewStage(Stage):
             for nid in new_ids:
                 ctx.service.set_depends_on(nid, [ticket.id])
             lines = [
-                f"Review found {len(still_out_of_scope)} out-of-scope "
-                "ask(s) — spawned as follow-up ticket(s) that depend on "
-                "this one (they run after it merges):",
+                (
+                    f"Review found {len(still_out_of_scope)} out-of-scope "
+                    "ask(s) — spawned as follow-up ticket(s) that depend on "
+                    "this one (they run after it merges):"
+                ),
                 "",
             ]
             for nid, ask in zip(new_ids, still_out_of_scope, strict=True):

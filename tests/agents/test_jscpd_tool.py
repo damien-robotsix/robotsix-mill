@@ -10,7 +10,6 @@ import pytest
 from robotsix_mill.agents import jscpd_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 
-
 # ── helpers ────────────────────────────────────────────────────────────
 
 

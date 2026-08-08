@@ -11,29 +11,28 @@ pure helpers from :mod:`.helpers` and the agent modules from
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ...agents import dedup, freshness, obsolescence
 from ...config import Settings
 from ...core.datetime_utils import _as_utc
+from ...core.dedup import _extract_paths, _scope_paths
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
-from ...core.dedup import _extract_paths, _scope_paths
-
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
     DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OBSOLESCENCE_GAP_PREFIX,
-    STANDARDS_GATE_PREFIX,
-    WORKFLOW_PORTABILITY_GATE_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
+    STANDARDS_GATE_PREFIX,
+    WORKFLOW_PORTABILITY_GATE_PREFIX,
     _advisory_candidate_id,
     _build_candidates_block,
     _rationale_claims_external_fix,
@@ -89,9 +88,9 @@ class RefineGatesMixin:
 
         # Gather candidate tickets: all non-terminal + recently closed.
         all_tickets = ctx.service.list()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         lookback_cutoff = datetime.fromtimestamp(
-            now.timestamp() - s.dedup_lookback_days * 86400, tz=timezone.utc
+            now.timestamp() - s.dedup_lookback_days * 86400, tz=UTC
         )
         non_terminal = {State.CLOSED, State.ERRORED}
         candidates = [
@@ -544,7 +543,7 @@ class RefineGatesMixin:
             ticket.title,
             draft,
             s,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
             dedup_labels=dedup_labels,
         )
         if not note:
@@ -997,8 +996,8 @@ class RefineGatesMixin:
         if not s.auto_approve_enabled:
             return None
 
-        from .helpers import _is_doc_only_change
         from . import _reconcile
+        from .helpers import _is_doc_only_change
 
         if not _is_doc_only_change(draft, title):
             return None

@@ -73,9 +73,7 @@ async def catchall_handler(request: Request, exc: Exception) -> JSONResponse:
     import logging
 
     logger = logging.getLogger(__name__)
-    logger.exception(
-        "Unhandled exception in request %s %s", request.method, request.url
-    )
+    logger.error("Unhandled exception in request %s %s", request.method, request.url)
     return JSONResponse(
         status_code=500,
         content=ProblemDetail(

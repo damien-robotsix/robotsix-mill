@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 from .prompt_blocks import section
 
@@ -265,8 +266,8 @@ def run_retrospect_agent(
             ),
         )
 
+    from .base import _safe_close, build_agent_from_definition
     from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
 
     definition = load_agent_definition(agent_definitions_dir() / "retrospect.yaml")
 
@@ -278,8 +279,8 @@ def run_retrospect_agent(
     # saturation that previously BLOCKED already-delivered tickets.
     tools: list = []
     if repo_dir is not None and repo_dir.exists():
-        from .fs_tools import build_fs_tools
         from .explore import make_explore_tool, make_parallel_explore_tool
+        from .fs_tools import build_fs_tools
 
         tools = [
             make_explore_tool(settings, repo_dir),
@@ -356,8 +357,9 @@ def run_retrospect_agent(
             "to this directory only — paths above it will fail. The memory ledger "
             "is already provided inline in this prompt; do not read_file it separately.\n"
         )
-    from .retry import run_agent
     from pydantic_ai.usage import UsageLimits
+
+    from .retry import run_agent
 
     limits = UsageLimits(request_limit=100)
 

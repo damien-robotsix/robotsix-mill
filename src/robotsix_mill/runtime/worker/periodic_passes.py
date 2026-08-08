@@ -14,13 +14,13 @@ import hashlib
 import logging
 import random
 import re
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from ...config import RepoConfig, Settings, get_repos_config, target_branch_for
 from .. import tracing
-
 from ._base import _WorkerBase
 from .epic import _branch_is_stale
 
@@ -94,12 +94,13 @@ def _ci_debt_recheck_pass(
     note, check their latest run conclusion on the target branch, and
     transition back to IMPLEMENT_COMPLETE when all are now green.
     """
+    from sqlmodel import col, select
+
     from ...core import db as core_db
     from ...core.models import TicketEvent
     from ...core.service import TicketService
     from ...core.states import State
     from ...forge import get_forge
-    from sqlmodel import col, select
 
     svc = TicketService(settings, board_id=repo_config.board_id)
     target = target_branch_for(settings, repo_config)
@@ -226,7 +227,7 @@ class PeriodicPassesMixin(_WorkerBase):
         # them as soon as the cadence sleep elapses (matching the
         # legacy ``_initial_delay``'s "fire ASAP when no prior run"
         # semantic). Boards with a registry entry are seeded from it.
-        default_seed = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        default_seed = datetime(1970, 1, 1, tzinfo=UTC)
 
         # Seed last-run timestamps from the run registry so a restart
         # doesn't re-fire every repo's pass immediately.
@@ -294,10 +295,10 @@ class PeriodicPassesMixin(_WorkerBase):
                     if not enabled:
                         continue
 
-                    now = datetime.now(timezone.utc)
+                    now = datetime.now(UTC)
                     last = last_run_by_board.get(board_id, default_seed)
                     if last.tzinfo is None:
-                        last = last.replace(tzinfo=timezone.utc)
+                        last = last.replace(tzinfo=UTC)
                     if (now - last).total_seconds() < interval:
                         continue
 
@@ -306,7 +307,7 @@ class PeriodicPassesMixin(_WorkerBase):
                         runner_fn,
                         repo_config,
                     )
-                    last_run_by_board[board_id] = datetime.now(timezone.utc)
+                    last_run_by_board[board_id] = datetime.now(UTC)
             except Exception:
                 log.exception("%s scheduler tick failed", label)
 
@@ -599,7 +600,7 @@ class PeriodicPassesMixin(_WorkerBase):
         and open-PR branches, then deletes old unprotected branches that
         have no open PR and match the prefix/age guards.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from ...forge import get_forge
 
@@ -618,7 +619,7 @@ class PeriodicPassesMixin(_WorkerBase):
                     forge = get_forge(settings, repo_config)
                     branches = forge.list_branches()
                     open_pr = forge.list_open_pr_branches()
-                    now = datetime.now(timezone.utc)
+                    now = datetime.now(UTC)
                     deleted = 0
                     for b in branches:
                         if _branch_is_stale(
@@ -883,8 +884,8 @@ class PeriodicPassesMixin(_WorkerBase):
         """
         from ...agents.bespoke_loader import load_bespoke_definitions
         from ...agents.periodic_loader import discover_periodic_workflows
-        from ...agents.runners.periodic_runner import _clone_token
         from ...agents.runners.member_sync_runner import run_member_sync_pass
+        from ...agents.runners.periodic_runner import _clone_token
         from ...vcs import git_ops
 
         settings = self.ctx.settings

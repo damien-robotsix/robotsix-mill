@@ -68,9 +68,9 @@ def run_standards_gate_check(
     or the agent call fails, returns ``violates=False`` with a failure
     reason — the gate is best-effort and never blocks the pipeline.
     """
-    from .yaml_loader import load_and_run_agent
-
     from pydantic_ai.usage import UsageLimits
+
+    from .yaml_loader import load_and_run_agent
 
     standards_ctx = fetch_standards_context(settings)
     if not standards_ctx:

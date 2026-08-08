@@ -9,21 +9,23 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from . import _health
-from . import _comments
-from . import _tickets
-from . import _tickets_merge
-from . import _tickets_transitions
-from . import _epics
-from . import _passes
-from . import _traces
-from . import _candidates
-from . import _agents
-from . import _board
-from . import _chat_skill
-from . import _repos
-from . import _tickets_ingest
-from . import _config
+from . import (
+    _agents,
+    _board,
+    _candidates,
+    _chat_skill,
+    _comments,
+    _config,
+    _epics,
+    _health,
+    _passes,
+    _repos,
+    _tickets,
+    _tickets_ingest,
+    _tickets_merge,
+    _tickets_transitions,
+    _traces,
+)
 
 router = APIRouter()
 

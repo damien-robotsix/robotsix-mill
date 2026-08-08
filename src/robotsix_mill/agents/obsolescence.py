@@ -62,9 +62,9 @@ def run_obsolescence_check(
     with a failure reason — the gate is best-effort and never blocks
     the pipeline.
     """
-    from .yaml_loader import load_and_run_agent
-
     from pydantic_ai.usage import UsageLimits
+
+    from .yaml_loader import load_and_run_agent
 
     # Build filesystem tools when a repo_dir is available; the
     # obsolescence agent is read-only — only read_file and list_dir are

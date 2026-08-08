@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from robotsix_mill.core.states import (
     STAGE_FOR_STATE,
     TRANSITIONS,

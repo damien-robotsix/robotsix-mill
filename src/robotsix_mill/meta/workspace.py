@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("robotsix_mill.meta.workspace")
 
 
-def _write_meta_triage(ws: "Workspace", repo_ids: list[str], fallback: bool) -> None:
+def _write_meta_triage(ws: Workspace, repo_ids: list[str], fallback: bool) -> None:
     """Persist the repo-triage decision to ``artifacts/meta_triage.json``.
 
     Schema::
@@ -53,7 +53,7 @@ def _write_meta_triage(ws: "Workspace", repo_ids: list[str], fallback: bool) -> 
 
 
 def build_meta_workspace(
-    settings: Settings, ws: "Workspace", repo_ids: list[str]
+    settings: Settings, ws: Workspace, repo_ids: list[str]
 ) -> tuple[Path | None, list[Path]]:
     """Clone each repo in *repo_ids* fresh under ``ws.dir / "repos"``.
 
@@ -137,13 +137,13 @@ def build_meta_workspace(
 
 
 def build_triaged_meta_workspace(
-    ctx: "StageContext",
-    ticket: "Ticket",
-    ws: "Workspace",
+    ctx: StageContext,
+    ticket: Ticket,
+    ws: Workspace,
     spec: str,
     *,
     author: str,
-) -> tuple[Path | None, list[Path] | None, "Outcome | None"]:
+) -> tuple[Path | None, list[Path] | None, Outcome | None]:
     """Build the multi-repo workspace for a meta-board ticket.
 
     Runs the repo-triage agent over *spec* to pick the required
@@ -155,9 +155,9 @@ def build_triaged_meta_workspace(
     BLOCKED comments (e.g. ``"refine"`` or ``"implement"``) so the
     operator can see which stage hit the failure.
     """
-    from .triage import required_repos_for
     from ..core.states import State
     from ..stages.base import Outcome
+    from .triage import required_repos_for
 
     try:
         repo_ids = required_repos_for(settings=ctx.settings, spec=spec)

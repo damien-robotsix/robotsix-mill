@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 from typing import Any, TypeVar
 
-
 log = logging.getLogger(__name__)
 
 
@@ -81,7 +80,7 @@ def _zero_tool_call_reprompt_needed(
 # ── main guard ────────────────────────────────────────────────────────────
 
 
-def reprompt_if_unstructured(
+def reprompt_if_unstructured[T](
     *,
     result: Any,
     agent: Any,

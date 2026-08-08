@@ -15,9 +15,9 @@ import pytest
 
 from robotsix_mill.agents.coordinating import ImplementResult
 from robotsix_mill.agents.structured_output_guard import (
-    reprompt_if_unstructured,
     _has_tool_calls,
     _zero_tool_call_reprompt_needed,
+    reprompt_if_unstructured,
 )
 
 

@@ -10,9 +10,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, AsyncContextManager, Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, AsyncContextManager
 
 from fastapi import FastAPI
 from robotsix_llmio.logging import setup_logging as llmio_setup_logging
@@ -151,7 +152,7 @@ def create_lifespan(
         # correlation in trace-review (incomplete traces ending near
         # this time are likely restart kills, not agent-loop bugs).
         global _process_started_at
-        _process_started_at = datetime.now(timezone.utc)
+        _process_started_at = datetime.now(UTC)
         app.state.started_at = _process_started_at
 
         # In single-repo mode use the specified repo; in multi-repo mode

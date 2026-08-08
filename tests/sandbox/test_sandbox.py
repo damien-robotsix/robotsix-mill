@@ -1,13 +1,14 @@
+import itertools
 import subprocess
+import threading
+import time
+from datetime import UTC
 from pathlib import Path
 
 import pytest
 
 from robotsix_mill import sandbox
 from robotsix_mill.config import Settings
-import itertools
-import threading
-import time
 
 
 def _settings(tmp_path, **env):
@@ -1072,9 +1073,9 @@ def test_reap_orphan_sandboxes_startup_removes_all(monkeypatch):
 
 def test_reap_orphan_sandboxes_age_gated(monkeypatch):
     """A positive threshold removes only containers older than it."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     starts = {
         "old1": (now - timedelta(hours=10)).isoformat().replace("+00:00", "Z"),
         "young1": (now - timedelta(seconds=30)).isoformat().replace("+00:00", "Z"),
@@ -1600,7 +1601,7 @@ def test_prune_skips_while_sandboxes_live(tmp_path, monkeypatch):
     assert (cache / "big").exists()
 
     # ...and prunes once the box is idle
-    monkeypatch.setattr(sandbox, "_list_sandbox_containers", lambda: [])
+    monkeypatch.setattr(sandbox, "_list_sandbox_containers", list)
     assert sandbox.prune_package_cache(s2) > 0
     assert not (cache / "big").exists()
     assert cache.is_dir()

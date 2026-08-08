@@ -7,7 +7,6 @@ import pytest
 
 from robotsix_mill.agents.yaml_loader import AgentDefinition, load_agent_definition
 
-
 # ── helpers ──────────────────────────────────────────────────────────
 
 
@@ -271,8 +270,8 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     ask_web_knowledge and report_issue tools to be injected."""
     from pathlib import Path
 
-    from robotsix_mill.agents.yaml_loader import load_agent_definition
     from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.agents.yaml_loader import load_agent_definition
     from robotsix_mill.config import Settings
 
     p = Path("agent_definitions/refine.yaml")
@@ -283,8 +282,8 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
 
     # Provide a fake API key so build_agent can construct the model
     # (model construction is local — no network call).
-    from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import Secrets, _reset_secrets
 
     _reset_secrets()
     _cfg._secrets = Secrets(openrouter_api_key="sk-fake")

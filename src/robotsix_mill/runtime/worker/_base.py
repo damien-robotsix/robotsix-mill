@@ -11,7 +11,8 @@ methods on the assembled ``Worker`` override these declarations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, ParamSpec, TypeVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 if TYPE_CHECKING:
     import asyncio

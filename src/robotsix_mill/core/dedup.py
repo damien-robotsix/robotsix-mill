@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from collections.abc import Collection, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from ..config import Settings
@@ -113,7 +113,7 @@ def _is_eligible_candidate(
         return False
     # Normalize to UTC-aware before comparing.
     if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
     if created_at < cutoff:
         return False
 
@@ -428,12 +428,14 @@ def paths_excluding_out_of_scope(text: str) -> list[str]:
 
             if is_heading:
                 title = stripped.lstrip("#*- ").strip().casefold()
-                if (
-                    title.startswith("out of scope")
-                    or title.startswith("explicitly out of scope")
-                    or title.startswith("reference")
-                    or title.startswith("see also")
-                    or title.startswith("related work")
+                if title.startswith(
+                    (
+                        "out of scope",
+                        "explicitly out of scope",
+                        "reference",
+                        "see also",
+                        "related work",
+                    )
                 ):
                     excluding = True
                     exclusion_mode = "heading"
@@ -455,9 +457,7 @@ def paths_excluding_out_of_scope(text: str) -> list[str]:
 
             # Not excluding — check for an inline exclusion marker.
             cleaned = stripped.lstrip("#*- ").strip().casefold()
-            if cleaned.startswith("out of scope") or cleaned.startswith(
-                "explicitly out of scope"
-            ):
+            if cleaned.startswith(("out of scope", "explicitly out of scope")):
                 excluding = True
                 exclusion_mode = "inline"
                 continue
@@ -511,12 +511,7 @@ def _scope_paths(text: str) -> set[str]:
                 title = stripped.lstrip("#").strip().casefold()
                 if title.startswith("out of scope"):
                     capturing = False
-                elif (
-                    title.startswith("scope")
-                    or title.startswith("acceptance")
-                    or title.startswith("file map")
-                    or title.startswith("file_map")
-                ):
+                elif title.startswith(("scope", "acceptance", "file map", "file_map")):
                     capturing = True
                 else:
                     capturing = False
@@ -808,7 +803,7 @@ def find_child_overlaps(
                         note = (
                             f"Possible duplicate of sibling #{j} "
                             f"in this batch — shared file path "
-                            f"`{sorted(shared)[0]}`"
+                            f"`{min(shared)}`"
                         )
                         break
                     if (

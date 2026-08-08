@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from robotsix_mill.config import get_repos_config, load_settings
@@ -32,7 +32,7 @@ from robotsix_mill.langfuse.client import _langfuse_api_get
 
 def _fetch_traces(settings, hours: float, repo_config=None) -> list[dict[str, Any]]:
     """Pull retrospect traces from Langfuse over the last `hours`."""
-    from_ts = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    from_ts = (datetime.now(UTC) - timedelta(hours=hours)).isoformat()
     all_traces: list[dict[str, Any]] = []
     page = 1
     while True:

@@ -20,11 +20,10 @@ The tool contract this module guards:
 
 from __future__ import annotations
 
-
 import pytest
 
 from robotsix_mill.agents import post_comment as _pc
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 

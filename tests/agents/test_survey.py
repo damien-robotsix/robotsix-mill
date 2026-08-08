@@ -4,14 +4,16 @@ import json
 from pathlib import Path
 
 from robotsix_mill.agents import surveying as survey_agent
+from robotsix_mill.agents.runners.periodic_runner import (
+    PeriodicPassResult,
+    run_survey_pass,
+)
 from robotsix_mill.agents.yaml_loader import load_agent_definition
-from robotsix_mill.agents.runners.periodic_runner import run_survey_pass
-from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import TicketKind
 
 
 def _test_repo_config():
@@ -535,9 +537,9 @@ class TestSurveyRunnerTraceBudgetWiring:
             search_reset_calls.append(max_calls)
 
         # Monkeypatch the modules where periodic_runner imports from.
-        import robotsix_mill.agents.web_tools as wt
-        import robotsix_mill.agents.web_knowledge as wk
         import robotsix_mill.agents.runners.periodic_runner as sr
+        import robotsix_mill.agents.web_knowledge as wk
+        import robotsix_mill.agents.web_tools as wt
 
         monkeypatch.setattr(wt, "reset_trace_web_fetch_budget", fake_fetch_reset)
         monkeypatch.setattr(wk, "reset_trace_web_search_budget", fake_search_reset)
@@ -586,9 +588,9 @@ class TestSurveyRunnerTraceBudgetWiring:
         def fake_search_reset(max_calls):
             search_reset_calls.append(max_calls)
 
-        import robotsix_mill.agents.web_tools as wt
-        import robotsix_mill.agents.web_knowledge as wk
         import robotsix_mill.agents.runners.periodic_runner as sr
+        import robotsix_mill.agents.web_knowledge as wk
+        import robotsix_mill.agents.web_tools as wt
 
         monkeypatch.setattr(wt, "reset_trace_web_fetch_budget", fake_fetch_reset)
         monkeypatch.setattr(wk, "reset_trace_web_search_budget", fake_search_reset)
@@ -618,8 +620,8 @@ class TestStandardsRepoClone:
     def test_inject_standards_root_clones_repo(self, tmp_path, monkeypatch):
         """First call clones the standards repo into the cache dir."""
         from robotsix_mill.agents.surveying import (
-            _ensure_standards_repo,
             _STANDARDS_CACHE_SUBDIR,
+            _ensure_standards_repo,
         )
 
         settings = _make_settings(tmp_path)
@@ -648,8 +650,8 @@ class TestStandardsRepoClone:
     def test_inject_standards_root_idempotent(self, tmp_path, monkeypatch):
         """Second call pulls (does not re-clone) when .git already exists."""
         from robotsix_mill.agents.surveying import (
-            _ensure_standards_repo,
             _STANDARDS_CACHE_SUBDIR,
+            _ensure_standards_repo,
         )
 
         settings = _make_settings(tmp_path)
@@ -695,8 +697,8 @@ class TestSurveyDynamicKwargsExtraRoots:
     def test_survey_dynamic_kwargs_includes_extra_roots(self, tmp_path, monkeypatch):
         """When the standards repo is cloned, extra_roots points to it."""
         from robotsix_mill.agents.surveying import (
-            _survey_dynamic_kwargs,
             _STANDARDS_CACHE_SUBDIR,
+            _survey_dynamic_kwargs,
         )
 
         settings = _make_settings(tmp_path)

@@ -19,11 +19,10 @@ import enum
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
-from ...config import Settings
-from ...config import RepoConfig
+from ...config import RepoConfig, Settings
 from ...core.models import SourceKind, Ticket
 from ...core.service import TicketService
 from ...core.states import State
@@ -431,7 +430,7 @@ def _classify_branches(
         ticket_id = branch.removeprefix(settings.branch_prefix)
         ticket: Ticket | None = service.get(ticket_id)
         if ticket is not None:
-            age = datetime.now(timezone.utc) - ticket.created_at
+            age = datetime.now(UTC) - ticket.created_at
             if age < timedelta(hours=settings.orphaned_pr_min_age_hours):
                 log.debug(
                     "orphaned-pr-check: %s/%s too young (%s) — skipping",

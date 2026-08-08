@@ -30,7 +30,6 @@ from pydantic_ai import BinaryContent
 from robotsix_mill.agents import base, refining
 from robotsix_mill.agents.refining import RefineResult
 
-
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
 
 

@@ -8,15 +8,15 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from robotsix_mill.agents.runners.trace_health_runner import (
+    TraceHealthResult,
+    run_trace_health_check,
+)
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.runtime.api import create_app
-from robotsix_mill.agents.runners.trace_health_runner import (
-    run_trace_health_check,
-    TraceHealthResult,
-)
 from robotsix_mill.langfuse.client import list_all_traces_since
+from robotsix_mill.runtime.api import create_app
 
 
 def _test_repo_config():

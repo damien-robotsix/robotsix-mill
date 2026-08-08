@@ -40,7 +40,6 @@ from robotsix_mill.stages.refine.helpers import (
     OBSOLESCENCE_GAP_PREFIX,
 )
 
-
 # ---------------------------------------------------------------------------
 # fixtures / helpers (minimal copies of the test_refine_stage.py versions)
 # ---------------------------------------------------------------------------
@@ -837,7 +836,6 @@ def test_inflight_advisory_ci_passes_dedup_labels(ctx_factory, monkeypatch):
 
     def _spy(*a, dedup_labels=None, **k):
         captured.append(dedup_labels)
-        return None
 
     monkeypatch.setattr(dedup_top, "find_inflight_overlap", _spy)
 
@@ -859,7 +857,6 @@ def test_inflight_advisory_non_ci_does_not_store_labels(ctx_factory, monkeypatch
 
     def _spy(*a, dedup_labels=None, **k):
         captured.append(dedup_labels)
-        return None
 
     monkeypatch.setattr(dedup_top, "find_inflight_overlap", _spy)
 
@@ -952,7 +949,6 @@ def test_inflight_advisory_ci_different_fingerprint_no_overlap(
 
     def _capture_overlap(*a, **k):
         saved.append(k)
-        return None
 
     monkeypatch.setattr(dedup_top, "find_inflight_overlap", _capture_overlap)
     RefineStage._run_inflight_advisory(ctx, t1, _CI_DRAFT_BODY, ws1, ctx.settings)
@@ -1239,13 +1235,13 @@ def test_advisory_dedup_draft_without_leading_blank_line_after_block(
 
     # No blank line between blockquote and body.
     draft_no_blank = (
-        "> [!warning] Possible duplicate of {cand_id} "
+        f"> [!warning] Possible duplicate of {cand.id} "
         "('Some ticket title') — matched on file path `src/foo.py`\n"
         ">\n"
         "> _Advisory flag from draft-intake pre-refine dedup; "
         "verify and close as duplicate during refine if confirmed._\n"
         "## Problem\n\nThe real draft body.\n"
-    ).format(cand_id=cand.id)
+    )
 
     monkeypatch.setattr(
         agents_dedup,

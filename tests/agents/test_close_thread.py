@@ -1,6 +1,7 @@
 """Dedicated tests for the close_thread tool-maker module."""
 
 import pytest
+
 from robotsix_mill.agents.close_thread import make_close_thread_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 

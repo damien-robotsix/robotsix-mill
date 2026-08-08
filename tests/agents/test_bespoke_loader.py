@@ -26,7 +26,6 @@ from robotsix_mill.agents.bespoke_loader import (
     load_bespoke_definitions,
 )
 
-
 # ---------------------------------------------------------------------------
 #  Schema validation
 # ---------------------------------------------------------------------------

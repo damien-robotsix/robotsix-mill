@@ -9,14 +9,12 @@ workspace (``description.md``); the row keeps only ``workspace_path`` and
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-from sqlalchemy import Column
-from sqlalchemy import String as SAString
-from sqlalchemy import TypeDecorator
-from sqlmodel import Field, SQLModel
-
+from datetime import UTC, datetime
 from enum import StrEnum
+
+from sqlalchemy import Column, TypeDecorator
+from sqlalchemy import String as SAString
+from sqlmodel import Field, SQLModel
 
 from .datetime_utils import TZDateTime
 from .states import State
@@ -138,7 +136,7 @@ class CaseTolerantEnum(TypeDecorator[str]):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Ticket(SQLModel, table=True):
@@ -388,5 +386,5 @@ class Memory(SQLModel, table=True):
     board_id: str = Field(index=True)
     name: str = Field(index=True)
     content: str = Field(default="")
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

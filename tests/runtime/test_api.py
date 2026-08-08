@@ -1,10 +1,11 @@
 import json
+from datetime import UTC
 
 import pytest
 from fastapi.testclient import TestClient
 
-from robotsix_mill.core.states import State
 from robotsix_mill.core.models import SourceKind, TicketKind
+from robotsix_mill.core.states import State
 from robotsix_mill.runtime.api import create_app
 
 
@@ -43,9 +44,9 @@ def test_health(client):
 def test_health_reports_uptime_when_started_at_set(client):
     """The started_at branch: with app.state.started_at set, /health
     returns the started_at isoformat and a non-negative int uptime."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    started = datetime.now(timezone.utc) - timedelta(seconds=5)
+    started = datetime.now(UTC) - timedelta(seconds=5)
     saved = getattr(client.app.state, "started_at", None)
     client.app.state.started_at = started
     try:
@@ -226,7 +227,7 @@ def test_board_cards_closed_sorted_newest_first(client, service, settings):
     """Closed and epic_closed cards are returned most-recent-first
     (updated_at descending), while non-closed cards remain
     created_at ascending (oldest first)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from robotsix_mill.core.db import session as db_session
     from robotsix_mill.core.models import Ticket
@@ -251,19 +252,19 @@ def test_board_cards_closed_sorted_newest_first(client, service, settings):
     with db_session(settings, board_id) as s:
         # Draft: created_at ascending → draft-oldest before draft-newest.
         d1 = s.get(Ticket, t_draft.id)
-        d1.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        d1.created_at = datetime(2025, 1, 1, tzinfo=UTC)
         d2 = s.get(Ticket, t_draft2.id)
-        d2.created_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
+        d2.created_at = datetime(2025, 1, 2, tzinfo=UTC)
 
         # Closed: updated_at descending → newest-first.
         c_old = s.get(Ticket, t_closed_old.id)
-        c_old.updated_at = datetime(2025, 1, 10, tzinfo=timezone.utc)
+        c_old.updated_at = datetime(2025, 1, 10, tzinfo=UTC)
         c_new = s.get(Ticket, t_closed_new.id)
-        c_new.updated_at = datetime(2025, 1, 20, tzinfo=timezone.utc)
+        c_new.updated_at = datetime(2025, 1, 20, tzinfo=UTC)
 
         # Epic closed.
         e = s.get(Ticket, t_epic_closed.id)
-        e.updated_at = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        e.updated_at = datetime(2025, 1, 15, tzinfo=UTC)
 
         for obj in (d1, d2, c_old, c_new, e):
             s.add(obj)
@@ -3337,6 +3338,7 @@ def test_list_tickets_survives_corrupted_row(client, service, settings):
     # Include all non-nullable columns; leave created_at=NULL to trigger
     # the serialisation failure.
     from sqlalchemy import text as sa_text
+
     from robotsix_mill.core import db as _db
 
     with _db.session(settings, "test-board") as s:

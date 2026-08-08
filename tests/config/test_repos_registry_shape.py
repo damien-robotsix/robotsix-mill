@@ -20,7 +20,6 @@ import robotsix_mill.config as cfg
 from robotsix_mill.config import load_repos_config
 from robotsix_mill.config.repos import _split_registry_shape
 
-
 # ---------------------------------------------------------------------------
 #  _split_registry_shape — pure normalisation unit tests
 # ---------------------------------------------------------------------------

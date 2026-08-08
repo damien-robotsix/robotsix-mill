@@ -10,8 +10,7 @@ from robotsix_mill.agents.trace_inspector import (
     TraceInspectResult,
     _wrap_tools_with_error_limit,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
-
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ---------------------------------------------------------------------------
 # helpers

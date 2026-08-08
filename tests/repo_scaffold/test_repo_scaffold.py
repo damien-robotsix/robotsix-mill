@@ -29,7 +29,6 @@ from robotsix_mill.repo_scaffold import (
 )
 from robotsix_mill.stages.base import StageContext
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -153,7 +152,7 @@ class TestAppendRepoConfig:
         _append_repo_config(repo_info, params, settings)
 
         # Read back and verify
-        with open(repos_file, "r") as fh:
+        with open(repos_file) as fh:
             data = yaml.safe_load(fh)
 
         repos = data["repos"]
@@ -194,7 +193,7 @@ class TestAppendRepoConfig:
 
         _append_repo_config(repo_info, params, settings)
 
-        with open(repos_file, "r") as fh:
+        with open(repos_file) as fh:
             data = yaml.safe_load(fh)
 
         assert "langfuse" not in data["repos"]["new-repo"]
@@ -237,7 +236,7 @@ class TestAppendRepoConfig:
 
         _append_repo_config(repo_info, params, settings)
 
-        with open(repos_file, "r") as fh:
+        with open(repos_file) as fh:
             data = yaml.safe_load(fh)
 
         assert "existing-repo" in data["repos"]
@@ -264,7 +263,7 @@ class TestAppendRepoConfig:
 
         # File is always written — no more empty-string no-op.
         assert repos_file.exists()
-        with open(repos_file, "r") as fh:
+        with open(repos_file) as fh:
             data = yaml.safe_load(fh)
         assert "x" in data["repos"]
 
@@ -290,7 +289,7 @@ class TestAppendRepoConfigOverlay:
 
         overlay = tmp_path / "data" / "registered_repos.yaml"
         assert overlay.exists()
-        with open(overlay, "r") as fh:
+        with open(overlay) as fh:
             data = yaml.safe_load(fh)
         assert "my-new-repo" in data["repos"]
         assert data["repos"]["my-new-repo"]["board_id"] == "my-new-repo"
@@ -445,7 +444,7 @@ class TestRunRepoScaffold:
 
         # Verify repos.yaml was written
         assert repos_file.exists()
-        with open(repos_file, "r") as fh:
+        with open(repos_file) as fh:
             data = yaml.safe_load(fh)
         assert "my-repo" in data["repos"]
 

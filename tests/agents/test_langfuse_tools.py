@@ -4,10 +4,10 @@ import asyncio
 
 from robotsix_mill.agents.langfuse_tools import (
     _build_langfuse_tools,
-    make_langfuse_inspect_tool,
     make_cost_inspect_tool,
+    make_langfuse_inspect_tool,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _settings(tmp_path, **env):

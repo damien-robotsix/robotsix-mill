@@ -6,14 +6,13 @@ _alert_loc, _write_text, and _FailingContext.
 """
 
 from robotsix_mill.stages.ci_fix_helpers import (
-    _FailingContext,
     _alert_loc,
+    _FailingContext,
     _format_alert_refs,
     _format_code_scanning_alerts,
     _format_labelled_alerts,
     _write_text,
 )
-
 
 # ---------------------------------------------------------------------------
 # _alert_loc

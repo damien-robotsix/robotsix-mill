@@ -52,7 +52,7 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "pytest-randomly>=4.1.0", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.15.15", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13", "hypothesis>=6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "pytest-randomly>=4.1.0", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.16.0", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13", "hypothesis>=6"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>=11.0.0"]
 
 [tool.uv]
@@ -142,6 +142,10 @@ targets = ["src/"]
 exclude_dirs = ["tests/"]
 skips = ["B101"]
 
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
 [tool.ruff.lint]
 extend-select = [
     "S",
@@ -157,6 +161,9 @@ extend-select = [
     "PGH",
     "RUF",
     "PT",
+    "ASYNC",
+    "I",
+    "UP",
 ]
 ignore = ["D105", "D107", "D205", "D415"]
 
@@ -192,10 +199,12 @@ convention = "google"
     "RUF003",
     "B018",
     "B017",
+    "BLE",
+    "PLW",
 ]
-"alembic/**" = ["D"]
-"dev/**" = ["S", "D", "SIM103"]
-"scripts/**" = ["S", "D", "RUF001", "RUF002", "RUF003", "ERA001", "SIM"]
+"alembic/**" = ["D", "BLE"]
+"dev/**" = ["S", "D", "SIM103", "BLE"]
+"scripts/**" = ["S", "D", "RUF001", "RUF002", "RUF003", "ERA001", "SIM", "BLE", "EXE"]
 # Ambiguous-unicode characters (en/em dashes, multiplication sign,
 # narrow no-break space, etc.) are intentional in docstrings, comments,
 # and string literals — they're used for formatting CLI help, log
@@ -203,7 +212,7 @@ convention = "google"
 # src/ is often intentionally preserved for reference (e.g.
 # alternative implementations, debugging snippets).  Blanket-suppress
 # both families for the whole src tree.
-"src/**" = ["RUF001", "RUF002", "RUF003", "ERA001"]
+"src/**" = ["RUF001", "RUF002", "RUF003", "ERA001", "BLE", "ASYNC", "PLW"]
 # gen_completions.py inserts src/ into sys.path before importing
 # robotsix_mill.cli and shtab — E402 is expected.
 "scripts/gen_completions.py" = ["S", "E402"]
@@ -249,7 +258,7 @@ convention = "google"
 "src/robotsix_mill/core/dedup.py" = ["C901", "SIM103"]
 "src/robotsix_mill/langfuse/client.py" = ["C901", "DTZ003", "E731"]
 "src/robotsix_mill/runtime/routes.py" = ["F821", "C901"]
-"src/robotsix_mill/runtime/lifespan.py" = ["C901"]
+"src/robotsix_mill/runtime/lifespan.py" = ["C901", "UP035"]
 "src/robotsix_mill/runtime/routes/_tickets.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/routes/_tickets_merge.py" = ["C901", "S110", "SIM105"]
 "src/robotsix_mill/runtime/routes/_traces.py" = ["C901"]
@@ -266,7 +275,7 @@ convention = "google"
 "src/robotsix_mill/forge/github_ci.py" = ["C901", "S110"]
 "src/robotsix_mill/forge/github_code_scanning.py" = ["C901", "S110"]
 "src/robotsix_mill/core/service/*.py" = ["F821", "C901", "S110", "S603", "S607", "RUF012", "SIM102", "SIM105", "E711"]
-"src/robotsix_mill/agents/runners/pass_runner.py" = ["C901", "SIM102"]
+"src/robotsix_mill/agents/runners/pass_runner.py" = ["C901", "SIM102", "DTZ011"]
 "src/robotsix_mill/agents/coding.py" = ["C901"]
 "src/robotsix_mill/agents/bespoke.py" = ["C901"]
 "src/robotsix_mill/agents/runners/timeout_escalation_runner.py" = ["C901", "S110"]
@@ -297,9 +306,9 @@ convention = "google"
 "src/robotsix_mill/runtime/routes/_health.py" = ["S110"]
 "src/robotsix_mill/runtime/routes/_misc.py" = ["S110"]
 "src/robotsix_mill/runtime/stage_retry.py" = ["S311"]
-"src/robotsix_mill/sandbox/__init__.py" = ["S108", "S603", "S607", "C901"]
+"src/robotsix_mill/sandbox/__init__.py" = ["S108", "S603", "S607", "C901", "PERF402"]
 "src/robotsix_mill/vcs/git_ops.py" = ["S603", "S607", "S105"]
-"src/robotsix_mill/dev_tooling/autoupdate/__init__.py" = ["S108", "S602", "S603", "S607", "C901"]
+"src/robotsix_mill/dev_tooling/autoupdate/__init__.py" = ["S108", "S602", "S603", "S607", "C901", "DTZ005"]
 # Meta's deterministic ground-truth blocks shell out to read-only
 # ``git grep`` over the repo clones (fixed argv, no shell, no untrusted
 # input) — same safe git-subprocess pattern as git_ops above.
@@ -343,7 +352,7 @@ convention = "google"
 # that were suppressing active bandit (S) violations.  Grandfather those
 # files with per-file-ignores so the gate stays green without restoring
 # the deleted noqa comments.
-"src/robotsix_mill/agents/explore.py" = ["S311", "C901", "S603", "S607"]
+"src/robotsix_mill/agents/explore.py" = ["S311", "C901", "S603", "S607", "B021"]
 "src/robotsix_mill/agents/surveying.py" = ["S603", "S607"]
 "src/robotsix_mill/agents/verify_diff_tool.py" = ["S603", "S607"]
 "src/robotsix_mill/deps/coherent_resolver.py" = ["S603", "S607"]
@@ -354,7 +363,7 @@ convention = "google"
 "src/robotsix_mill/config/loader.py" = ["S105", "C901"]
 "src/robotsix_mill/config/_settings_core.py" = ["S104"]
 "src/robotsix_mill/stages/hooks.py" = ["S603", "S607"]
-"src/robotsix_mill/agents/ci_log_fetch_tool.py" = ["E402"]
+"src/robotsix_mill/agents/ci_log_fetch_tool.py" = ["E402", "B021"]
 "src/robotsix_mill/agents/ci_wait_tool.py" = ["E402"]
 "src/robotsix_mill/agents/testing.py" = ["S108"]
 "_check_advanced.py" = ["S101"]
@@ -375,9 +384,35 @@ convention = "google"
 "src/robotsix_mill/agents/runners/data_dir_gc/__init__.py" = ["C901"]
 "src/robotsix_mill/runtime/routes/_epics.py" = ["C901"]
 "src/robotsix_mill/runtime/routes/_repos.py" = ["C901"]
-"src/robotsix_mill/stages/ci_fix.py" = ["C901", "S110"]
+"src/robotsix_mill/stages/ci_fix.py" = ["C901", "S110", "TRY002", "TRY401"]
 "src/robotsix_mill/stages/ci_fix_codeql.py" = ["C901"]
 "src/robotsix_mill/stages/short_circuit_verify.py" = ["C901"]
+
+# --- ruff 0.16.0: new enabled-by-default rule suppressions -----------------
+# DTZ011 (no-tz-date) — pre-existing date.today() patterns.
+"src/robotsix_mill/runtime/routes/_tickets_ingest.py" = ["DTZ011"]
+# TRY004 (prefer-type-error) — ValueError is semantically correct for
+# invalid duration values; TypeError would be misleading.
+"src/robotsix_mill/core/duration.py" = ["TRY004"]
+"src/robotsix_mill/forge/gitlab/core.py" = ["TRY004", "PERF402"]
+# TRY401 (redundant-log-exc-obj) — pre-existing logging.exception with
+# redundant exception argument.
+"src/robotsix_mill/agents/runners/langfuse_cleanup_runner.py" = ["TRY401"]
+# TRY203 (useless-try-except) — pre-existing pattern in test cancellation.
+"tests/runtime/worker/test_bespoke_supervisor.py" = ["TRY203"]
+# TRY002 (raise-vanilla-class) — pre-existing pattern.
+"src/robotsix_mill/runtime/worker/core.py" = ["TRY002", "PERF402"]
+# PERF402 (manual-list-copy) and PLC0206 (dict-index-missing-items)
+# — pre-existing patterns.
+"src/robotsix_mill/stages/merge/_shared.py" = ["PERF402", "PLC0206", "TRY004"]
+# B021 (f-string-docstring) in test helper.
+"tests/agents/test_cost.py" = ["B021", "PLC0206"]
+"tests/agents/test_testing.py" = ["TRY401", "TRY002"]
+# DTZ005 (no-tz) — pre-existing naive-datetime test fixtures.
+"tests/core/test_core_dedup.py" = ["DTZ005"]
+# EXE001 — _gen_schema.py at repo root has a shebang but is run via
+# `python _gen_schema.py`, not executed directly.
+"_gen_schema.py" = ["EXE001"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's Depends/Body/File/Query default-argument pattern is deliberate;

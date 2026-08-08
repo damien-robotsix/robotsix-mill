@@ -18,7 +18,6 @@ from robotsix_mill.agents.coding import (
 )
 from robotsix_mill.agents.coordinating import ImplementResult
 
-
 # ------------------------------------------------------------------
 # Helper: install fake pydantic-ai exception classes into the coding
 # module's namespace AND into ``pydantic_ai.exceptions`` so the local

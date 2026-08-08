@@ -41,7 +41,7 @@ def test_run_module_size_agent_wires_runner(monkeypatch):
         captured["kwargs"] = kwargs
         return module_size.ModuleSizeResult()
 
-    import robotsix_mill.agents.periodic_base as periodic_base
+    from robotsix_mill.agents import periodic_base
 
     monkeypatch.setattr(periodic_base, "run_periodic_agent", fake_run_periodic)
 

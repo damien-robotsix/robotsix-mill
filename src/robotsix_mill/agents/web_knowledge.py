@@ -46,7 +46,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Settings, get_secrets
@@ -169,7 +169,7 @@ def _parse_frontmatter_datetime(head: str, regex: re.Pattern[str]) -> datetime |
     try:
         ts = datetime.fromisoformat(m.group(1))
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         return ts
     except ValueError:
         return None
@@ -227,7 +227,7 @@ def _stamp_frontmatter(
     time an agent touched this library.  ``stale`` is always set to
     ``false``.
     """
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    now = datetime.now(UTC).replace(microsecond=0)
     if source_url:
         verified_at = verified_at or now
     front_lines = [
@@ -255,7 +255,7 @@ def _is_stale(meta: _KnowledgeMeta, ttl_hours: int) -> bool:
     """
     if meta.last_verified is None:
         return True
-    age = datetime.now(timezone.utc) - meta.last_verified
+    age = datetime.now(UTC) - meta.last_verified
     return age.total_seconds() > (ttl_hours * 3600)
 
 
@@ -551,7 +551,7 @@ def _make_tools(settings: Settings) -> list:
         path = _general_path(settings)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+            now = datetime.now(UTC).replace(microsecond=0).isoformat()
             entry = f"\n## {now}\n\n{note.strip()}\n"
             with path.open("a", encoding="utf-8") as f:
                 f.write(entry)

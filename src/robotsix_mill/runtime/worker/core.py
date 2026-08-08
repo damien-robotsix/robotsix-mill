@@ -12,31 +12,31 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from ...config import RepoConfig, get_repos_config
-from ...langfuse.client import effective_cost, session_cost, session_traces
-from ...stages import StageContext, get_stage
-from ...core.states import STAGE_FOR_STATE, State
 from ...core.models import TicketKind
+from ...core.states import STAGE_FOR_STATE, State
+from ...langfuse.client import effective_cost, session_cost, session_traces
 from ...notify import send_notification
+from ...stages import StageContext, get_stage
 
 if TYPE_CHECKING:
     from ...core.service import TicketService
-from .. import tracing
-from ..run_registry import RunRegistry
+import contextlib
 
 from ...sandbox import sandbox_rank
+from .. import tracing
+from ..run_registry import RunRegistry
 from ._gate import PriorityGate
 from .epic import _EPIC_CHILD_TERMINAL
-from .processing import (
-    process_ticket,
-    _spawn_epic_reeval,
-)
 from .periodic_passes import PeriodicPassesMixin
 from .poll_loops import PollLoopsMixin
-import contextlib
+from .processing import (
+    _spawn_epic_reeval,
+    process_ticket,
+)
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -73,7 +73,7 @@ _CAP_GATED_STATES: frozenset[State] = frozenset({State.READY, State.DRAFT})
 _INFLIGHT_PR_STALE_SECONDS = 3 * 60 * 60
 
 
-def _count_inflight_prs(service: "TicketService") -> int:
+def _count_inflight_prs(service: TicketService) -> int:
     """Count tickets ACTIVELY holding an in-flight PR slot on this board.
 
     A ticket counts only if it is in an :data:`_IN_FLIGHT_PR_STATES` state
@@ -87,7 +87,7 @@ def _count_inflight_prs(service: "TicketService") -> int:
     unreadable is COUNTED, so a parsing edge case can never silently
     disable the cap.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     n = 0
     for t in service.list():
         if t.state not in _IN_FLIGHT_PR_STATES:
@@ -95,7 +95,7 @@ def _count_inflight_prs(service: "TicketService") -> int:
         updated = getattr(t, "updated_at", None)
         if updated is not None:
             if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
+                updated = updated.replace(tzinfo=UTC)
             if (now - updated).total_seconds() > _INFLIGHT_PR_STALE_SECONDS:
                 # stuck/stale → not an active slot; skip (don't gate fresh work)
                 continue
@@ -170,8 +170,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
 
     @staticmethod
     def _peek(
-        queue: "asyncio.PriorityQueue[tuple[int, int, int, str]]",
-    ) -> "tuple[int, int, int, str]":
+        queue: asyncio.PriorityQueue[tuple[int, int, int, str]],
+    ) -> tuple[int, int, int, str]:
         """Return the smallest item from *queue* without dequeuing it.
 
         ``asyncio.PriorityQueue`` stores its heap in a bare list at
@@ -183,8 +183,8 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
     def __init__(
         self,
         ctx: StageContext,
-        run_registry: "RunRegistry | None" = None,
-        run_registries: "dict[str, RunRegistry] | None" = None,
+        run_registry: RunRegistry | None = None,
+        run_registries: dict[str, RunRegistry] | None = None,
     ) -> None:
         self.ctx = ctx
         # ``run_registry`` is the default/fallback (board-less ticks).
@@ -1135,7 +1135,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     asyncio.gather(*inflight, return_exceptions=True),
                     timeout=grace if grace > 0 else None,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 log.warning(
                     "stop: in-flight passes did not finish within %ds — "
                     "cancelling remaining %d",

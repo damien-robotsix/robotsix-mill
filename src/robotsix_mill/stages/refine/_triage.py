@@ -19,18 +19,16 @@ from ...core.service import TicketService
 from ...core.states import State
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
-from . import _reconcile
-from . import _result_paths
+from . import _reconcile, _result_paths
 from .helpers import (
-    OPERATOR_SENDBACK_PREFIX,
     _AUTO_APPROVE_SOURCES,
     _NOT_DOC_ONLY_TERMS_RE,
+    OPERATOR_SENDBACK_PREFIX,
     _draft_has_complete_spec,
     _fast_path_scope_checks,
     _summarize_spec_for_auto_approve,
     log,
 )
-
 
 # ---------------------------------------------------------------------------
 # module-level triage helpers

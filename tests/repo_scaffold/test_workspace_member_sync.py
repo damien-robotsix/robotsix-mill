@@ -17,6 +17,7 @@ from robotsix_mill.config import (
     Settings,
     _reset_repos_config,
 )
+from robotsix_mill.config.workspace_members import DetectedMember
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
@@ -24,8 +25,6 @@ from robotsix_mill.repo_scaffold.member_sync import (
     _member_repo_id,
     sync_workspace_members,
 )
-from robotsix_mill.config.workspace_members import DetectedMember
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,7 +50,6 @@ def _master_cfg(repo_id="ros2-workspace"):
 def _register_master(monkeypatch, master_cfg, *extra):
     """No-op now: member-sync no longer looks up the master via
     get_repos_config — it writes langfuse_from unconditionally."""
-    pass
 
 
 def _member(path, url, version=None, cross_repo_target=None):
@@ -61,7 +59,7 @@ def _member(path, url, version=None, cross_repo_target=None):
 
 
 def _read(repos_file):
-    with open(repos_file, "r") as fh:
+    with open(repos_file) as fh:
         return yaml.safe_load(fh)
 
 

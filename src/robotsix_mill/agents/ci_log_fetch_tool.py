@@ -54,7 +54,7 @@ def build_ci_log_fetch_tool(
         run_url: str = "",
         full_log: bool = False,
     ) -> str:
-        """Fetch CI job logs for a workflow run.
+        f"""Fetch CI job logs for a workflow run.
 
         Call with either *run_id* (the numeric GitHub Actions / GitLab CI run
         id printed in the failure summary) or *run_url* (the full run URL, e.g.
@@ -70,7 +70,7 @@ def build_ci_log_fetch_tool(
         failed jobs / the fetch fails.
 
         Guardrailed branch: {branch}
-        """.format(branch=branch)
+        """
 
         with trace_stage("fetch_ci_logs"):
             if fetch_fn is None:

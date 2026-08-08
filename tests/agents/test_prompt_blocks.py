@@ -13,7 +13,6 @@ import pytest
 
 from robotsix_mill.agents.prompt_blocks import section
 
-
 # ---------------------------------------------------------------------------
 # Basic wrapping — the canonical shape from the module docstring
 # ---------------------------------------------------------------------------

@@ -5,14 +5,14 @@ from pathlib import Path
 
 from robotsix_mill.agents import auditing
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_audit_pass,
     PeriodicPassResult,
+    run_audit_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import SourceKind, TicketKind
 
 
 def _test_repo_config():
@@ -125,7 +125,7 @@ def test_run_audit_agent_wires_workflow_caller_audit(monkeypatch):
         captured["kwargs"] = kwargs
         return auditing.AuditResult()
 
-    import robotsix_mill.agents.periodic_base as periodic_base
+    from robotsix_mill.agents import periodic_base
 
     monkeypatch.setattr(periodic_base, "run_periodic_agent", fake_run_periodic)
 

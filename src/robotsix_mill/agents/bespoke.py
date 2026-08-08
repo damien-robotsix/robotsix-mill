@@ -75,11 +75,10 @@ def run_bespoke_agent(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from ._repo_tools import _build_repo_tools
+    from .base import _safe_close, build_agent
     from .prompt_blocks import section
     from .retry import run_agent
-
-    from ._repo_tools import _build_repo_tools
 
     tools = _build_repo_tools(repo_dir, settings, tool_names=("read_file", "list_dir"))
 

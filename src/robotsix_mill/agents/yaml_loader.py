@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..core.duration import parse_duration
 from .._resources import agent_definitions_dir
+from ..core.duration import parse_duration
 
 _MAX_INCLUDE_DEPTH = 10
 
@@ -94,7 +94,7 @@ class AgentDefinition(BaseModel):
     enabled: bool | None = None
 
     @model_validator(mode="after")
-    def _interval_xor(self) -> "AgentDefinition":
+    def _interval_xor(self) -> AgentDefinition:
         if self.interval is not None and self.interval_seconds is not None:
             raise ValueError(
                 "set at most one of 'interval' (human-readable, e.g. '1d') "
@@ -249,7 +249,7 @@ def load_periodic_agent_definition(
 
 def load_and_run_agent(
     *,
-    settings: "Settings",
+    settings: Settings,
     definition_name: str,
     tools: list | None = None,
     level: int | None = None,
@@ -292,7 +292,7 @@ def load_and_run_agent(
             ``build_agent_from_definition``
             (e.g. ``system_prompt``, ``board_id``).
     """
-    from .base import build_agent_from_definition, _safe_close
+    from .base import _safe_close, build_agent_from_definition
     from .retry import run_agent
 
     definition = load_agent_definition(

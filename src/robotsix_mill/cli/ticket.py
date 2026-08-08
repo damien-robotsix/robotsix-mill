@@ -9,8 +9,8 @@ from pathlib import Path
 
 import httpx
 
-from . import _client, _resolve_repo_id, _read_body_from_args
 from ..config import Settings
+from . import _client, _read_body_from_args, _resolve_repo_id
 
 
 def _upload_screenshot(c: httpx.Client, ticket_id: str, path: str) -> None:

@@ -10,7 +10,8 @@ mill-specific surface that stays: the export-failure registry, the
 
 import contextlib
 import os
-from datetime import datetime as _real_datetime, timezone as _real_timezone
+from datetime import UTC
+from datetime import datetime as _real_datetime
 
 import pytest
 
@@ -478,7 +479,7 @@ def test_no_otel_imports_at_module_level():
 class _FakeDatetime:
     @staticmethod
     def now(tz=None):
-        return _real_datetime(2026, 5, 21, 14, 30, 25, tzinfo=_real_timezone.utc)
+        return _real_datetime(2026, 5, 21, 14, 30, 25, tzinfo=UTC)
 
 
 class _FakeUUIDObj:
@@ -811,12 +812,12 @@ def test_set_current_span_attribute_skips_non_recording_span(monkeypatch):
 
 def test_set_current_span_attribute_noop_on_import_error(monkeypatch):
     """set_current_span_attribute is a no-op when opentelemetry is not installed."""
-    import robotsix_mill.runtime.tracing as tracing_mod
-
     # Simulate ImportError by removing opentelemetry from sys.modules
     # temporarily — but this is fragile.  Instead, test that the function
     # handles ImportError gracefully.
     import builtins
+
+    import robotsix_mill.runtime.tracing as tracing_mod
 
     orig_import = builtins.__import__
 

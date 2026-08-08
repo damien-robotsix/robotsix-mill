@@ -22,11 +22,8 @@ from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
-from robotsix_mill.stages.refine import _triage
-from robotsix_mill.stages.refine import _reconcile
-from robotsix_mill.stages.refine import _result_paths
+from robotsix_mill.stages.refine import _reconcile, _result_paths, _triage
 from robotsix_mill.stages.refine.helpers import OPERATOR_SENDBACK_PREFIX
-
 
 # ---------------------------------------------------------------------------
 # fixtures

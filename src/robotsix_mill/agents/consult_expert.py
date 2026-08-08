@@ -78,10 +78,10 @@ async def run_consult_expert(
     from pydantic_ai.usage import UsageLimits
 
     from .base import _aclose_async_client, build_openrouter_model
-    from .fs_tools import build_fs_tools
 
     # 1. Load expert definition.
     from .expert_manager import ExpertManager
+    from .fs_tools import build_fs_tools
 
     mgr = ExpertManager(settings, repo_dir)
     try:

@@ -13,11 +13,11 @@ from __future__ import annotations
 import pytest
 
 from robotsix_mill.agents.runners import periodic_runner
-from robotsix_mill.config import RepoConfig
 from robotsix_mill.agents.runners.periodic_runner import (
-    PeriodicPassResult,
     PERIODIC_PASS_CONFIGS,
+    PeriodicPassResult,
 )
+from robotsix_mill.config import RepoConfig
 
 
 def _repo_config() -> RepoConfig:

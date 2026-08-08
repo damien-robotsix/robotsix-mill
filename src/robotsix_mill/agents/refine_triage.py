@@ -17,6 +17,7 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 from .prompt_blocks import section
 
@@ -172,9 +173,9 @@ def triage_refine(
     """
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .base import _safe_close, build_agent_from_definition
     from .retry import run_agent
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "triage.yaml")
 

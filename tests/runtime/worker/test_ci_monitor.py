@@ -1,10 +1,11 @@
 """Tests for the target-branch CI monitor poll loop."""
 
+import contextlib
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-
+from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.config import (
     RepoConfig,
     ReposRegistry,
@@ -18,9 +19,7 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
-from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.vcs.git_ops import PostPushResult
-import contextlib
 
 
 def _ctx(tmp_path, repo_config=None, **env):
@@ -41,8 +40,8 @@ def _ctx(tmp_path, repo_config=None, **env):
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
     if ft is not None:
-        from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+        from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
@@ -664,7 +663,7 @@ def _make_canonical_ci_ticket(ctx, wf_name, target, title, created_minutes_ago):
         f"**Commit:** `old-sha`\n"
     )
     t = ctx.service.create(title=title, description=body, source=SourceKind.CI)
-    when = datetime.now(timezone.utc) - timedelta(minutes=created_minutes_ago)
+    when = datetime.now(UTC) - timedelta(minutes=created_minutes_ago)
     _set_ticket_created_at(ctx, t.id, when)
     return t
 

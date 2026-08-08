@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from robotsix_mill.config import Settings
 from robotsix_mill.agents.runners.diagnostic_check_recurring_ci import (
     RecurringCIFailureCheck,
 )
@@ -17,7 +16,7 @@ from robotsix_mill.agents.runners.diagnostic_events import (
     emit_diagnostic_event,
     list_diagnostic_events,
 )
-
+from robotsix_mill.config import Settings
 
 # ---------------------------------------------------------------------------
 # Fixtures

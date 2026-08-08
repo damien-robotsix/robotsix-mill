@@ -7,7 +7,6 @@ holds ``run`` (the orchestrator) plus ``_clone_or_resume``.
 
 from __future__ import annotations
 
-
 from pathlib import Path
 
 from ...config import target_branch_for
@@ -447,7 +446,7 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
         return cand
 
     @staticmethod
-    def _inject_config_standard_footprint(ws: "Workspace") -> None:
+    def _inject_config_standard_footprint(ws: Workspace) -> None:
         """Append the canonical config-standard four-file allowlist to the spec.
 
         Called after refine produces a spec for a ``config_standard``

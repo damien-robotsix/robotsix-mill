@@ -514,10 +514,11 @@ def test_build_agent_missing_api_key_raises(monkeypatch, settings):
 def test_build_agent_claude_sdk_path(monkeypatch):
     """When the resolved transport is the Claude SDK (level 3), build_agent
     delegates to robotsix-llmio's ClaudeSDKProvider via get_provider_for_level."""
-    from robotsix_mill.agents import base as bmod
     from robotsix_llmio.claude_sdk.provider import (
         ClaudeSDKProvider as RealClaudeSDKProvider,
     )
+
+    from robotsix_mill.agents import base as bmod
 
     s = Settings()
 

@@ -17,6 +17,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings, get_secrets
 from .prompt_blocks import section
 
@@ -52,9 +53,9 @@ def run_review_revision_agent(
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .base import _safe_close, build_agent_from_definition
     from .fs_tools import build_fs_tools
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "review_revision.yaml")
 

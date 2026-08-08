@@ -22,8 +22,8 @@ from ..base import Outcome, StageContext
 from ._base import _ImplementStageBase
 from ._shared import (
     _ImplementContext,
-    _SinglePassResult,
     _parse_spec_code_blocks,
+    _SinglePassResult,
     log,
 )
 
@@ -460,11 +460,7 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             original = target_file.read_text()
 
             # --- Strategy 1: unified diff ---------------------------------
-            if (
-                code.startswith("--- ")
-                or code.startswith("+++ ")
-                or code.startswith("@@")
-            ):
+            if code.startswith(("--- ", "+++ ", "@@")):
                 try:
                     result = sp.run(
                         ["patch", "--batch", "-p0", "-o", "-", str(target_file)],

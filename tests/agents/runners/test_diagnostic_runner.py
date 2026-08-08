@@ -13,12 +13,11 @@ import logging
 import typing
 from types import SimpleNamespace
 
-from robotsix_mill.config import Settings
 from robotsix_mill.agents.runners import diagnostic_checks as dc
 from robotsix_mill.agents.runners import diagnostic_runner as dr
+from robotsix_mill.config import Settings
 from robotsix_mill.runtime.run_registry import RunEntry
 from robotsix_mill.runtime.worker.poll_loops import PollLoopsMixin
-
 
 # --- a minimal fake check -------------------------------------------------
 

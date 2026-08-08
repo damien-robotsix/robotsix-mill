@@ -26,7 +26,7 @@ datetimes.  ``_as_utc()`` remains as a defense-in-depth helper for any
 value that bypasses the ORM type machinery.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.types import DateTime, TypeDecorator
 
@@ -58,12 +58,12 @@ class TZDateTime(TypeDecorator):
                     "TZDateTime requires timezone-aware values; got naive datetime"
                 )
             # Convert to UTC and strip tzinfo for storage.
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+            value = value.astimezone(UTC).replace(tzinfo=None)
         return value
 
     def process_result_value(self, value: datetime | None, dialect):
         if value is not None:
-            value = value.replace(tzinfo=timezone.utc)
+            value = value.replace(tzinfo=UTC)
         return value
 
 
@@ -74,4 +74,4 @@ def _as_utc(dt: datetime) -> datetime:
     ``datetime.now(timezone.utc)``).  Already-aware values pass through
     unchanged.
     """
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)

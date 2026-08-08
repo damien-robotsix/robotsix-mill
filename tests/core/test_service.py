@@ -1,7 +1,10 @@
+import itertools
 import json
+from datetime import UTC
 
 import pytest
 
+from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import (
     AmbiguousTicketId,
     TicketService,
@@ -11,8 +14,6 @@ from robotsix_mill.core.service import (
     _slug,
 )
 from robotsix_mill.core.states import State, can_transition
-from robotsix_mill.core.models import SourceKind, TicketKind
-import itertools
 
 
 def test_slug_strips_dash_exposed_at_truncation_boundary():
@@ -753,7 +754,7 @@ def test_self_dependency_rejected_deterministic(service, monkeypatch):
     import datetime as dt
 
     # Freeze the timestamp and token to get a predictable ID.
-    fake_now = dt.datetime(2025, 1, 1, 0, 0, 0, tzinfo=dt.timezone.utc)
+    fake_now = dt.datetime(2025, 1, 1, 0, 0, 0, tzinfo=dt.UTC)
     monkeypatch.setattr(
         "robotsix_mill.core.service._create_mixin.datetime",
         type(
@@ -2268,9 +2269,10 @@ def test_awaiting_user_reply_no_prior_events_no_recovery(service):
     """When a ticket is in AWAITING_USER_REPLY with no paused_from AND
     no prior events exist (e.g. direct DB corruption beyond the legacy
     case), the fallback logs a warning and does NOT resume."""
+    from sqlmodel import select
+
     from robotsix_mill.core import db
     from robotsix_mill.core.models import Ticket, TicketEvent
-    from sqlmodel import select
 
     t = service.create("No prior events")
     # Delete all events to simulate a ticket with no history at all.
@@ -2349,8 +2351,8 @@ def test_close_thread_no_ask_user_threads_on_paused_no_resume(service):
 
 def test_collect_ask_user_replies_single_thread(service, settings):
     """AC2: Single [ASK_USER] thread with one reply."""
-    from robotsix_mill.stages.pause import _collect_ask_user_replies
     from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
 
     t = service.create("Single ask")
     service.transition(t.id, State.READY)
@@ -2371,8 +2373,8 @@ def test_collect_ask_user_replies_single_thread(service, settings):
 
 def test_collect_ask_user_replies_multiple_threads(service, settings):
     """AC2: Multiple [ASK_USER] threads, each with replies."""
-    from robotsix_mill.stages.pause import _collect_ask_user_replies
     from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
 
     t = service.create("Multi ask")
     service.transition(t.id, State.READY)
@@ -2397,8 +2399,8 @@ def test_collect_ask_user_replies_multiple_threads(service, settings):
 
 def test_collect_ask_user_replies_closed_without_reply(service, settings):
     """AC5: [ASK_USER] thread closed with no child comments."""
-    from robotsix_mill.stages.pause import _collect_ask_user_replies
     from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
 
     t = service.create("No reply collect")
     service.transition(t.id, State.READY)
@@ -2416,8 +2418,8 @@ def test_collect_ask_user_replies_closed_without_reply(service, settings):
 def test_collect_ask_user_replies_skips_open_ask_threads(service, settings):
     """Only closed [ASK_USER] threads contribute replies; open ones are
     skipped."""
-    from robotsix_mill.stages.pause import _collect_ask_user_replies
     from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
 
     t = service.create("Mixed open closed")
     service.transition(t.id, State.READY)
@@ -2439,8 +2441,8 @@ def test_collect_ask_user_replies_skips_open_ask_threads(service, settings):
 
 def test_collect_ask_user_replies_no_answered_threads(service, settings):
     """When no [ASK_USER] threads are closed, returns fallback."""
-    from robotsix_mill.stages.pause import _collect_ask_user_replies
     from robotsix_mill.stages.base import StageContext
+    from robotsix_mill.stages.pause import _collect_ask_user_replies
 
     t = service.create("No answered")
     service.transition(t.id, State.READY)
@@ -3470,7 +3472,7 @@ class TestDbMaintenancePass:
     def test_comment_cap_protects_open_thread(self, service, settings):
         """An open top-level thread (closed_at IS NULL) and its replies
         are never pruned, even when the ticket exceeds the cap."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from robotsix_mill.core import db
         from robotsix_mill.core.models import Comment
@@ -3489,7 +3491,7 @@ class TestDbMaintenancePass:
             # Close it so it's unprotected.
             with db.session(settings, service._board_for(t.id)) as s:
                 cmt = s.get(Comment, c.id)
-                cmt.closed_at = datetime.now(timezone.utc)
+                cmt.closed_at = datetime.now(UTC)
                 s.add(cmt)
                 s.commit()
 
@@ -3514,7 +3516,7 @@ class TestDbMaintenancePass:
     def test_comment_cap_resets_orphaned_parent_id(self, service, settings):
         """When a parent comment is deleted, surviving replies have their
         parent_id reset to None."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from robotsix_mill.core import db
         from robotsix_mill.core.models import Comment
@@ -3540,7 +3542,7 @@ class TestDbMaintenancePass:
         with db.session(settings, service._board_for(t.id)) as s:
             for cid in [parent.id, reply.id, *filler_ids]:
                 cmt = s.get(Comment, cid)
-                cmt.closed_at = datetime.now(timezone.utc)
+                cmt.closed_at = datetime.now(UTC)
                 s.add(cmt)
             s.commit()
 
@@ -3769,6 +3771,7 @@ def _write_retired_state_event(settings, service, ticket_id: str) -> None:
     across 5 boards, left behind when that state was retired).
     """
     from sqlalchemy import text
+
     from robotsix_mill.core.db import session as db_session
 
     with db_session(settings, service.board_id) as s:

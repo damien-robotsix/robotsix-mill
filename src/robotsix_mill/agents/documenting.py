@@ -16,6 +16,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 
 log = logging.getLogger(__name__)
@@ -99,8 +100,8 @@ def run_doc_classifier(
         tools=[],
     )
     try:
-        from .prompt_blocks import section
         from ..core.text_utils import truncate_at_boundary
+        from .prompt_blocks import section
 
         # The classifier only needs enough diff to judge user-facing vs
         # internal-only; cap it (truncate_at_boundary is a no-op when the
@@ -155,12 +156,12 @@ def run_doc_agent(
     """
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from ..agents.runners.pass_runner import load_memory, persist_memory
+    from .base import _safe_close, build_agent_from_definition
     from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
-    from ..agents.runners.pass_runner import load_memory, persist_memory
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "document.yaml")
 

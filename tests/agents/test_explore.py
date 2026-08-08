@@ -5,7 +5,7 @@ import contextlib
 
 from robotsix_mill.agents import explore
 from robotsix_mill.agents.explore import make_explore_tool
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 def _settings(tmp_path, **env):
@@ -370,8 +370,9 @@ def test_explore_tool_runs_inside_an_active_event_loop(tmp_path, monkeypatch):
 def _patch_explore_model(monkeypatch, cap):
     """Patch the level-1 model seam (base.build_openrouter_model) so the
     explore sub-agent builds nothing real. Captures the resolved model name."""
-    from robotsix_mill.agents import base as bmod
     from robotsix_llmio.core.factory import default_tier_config
+
+    from robotsix_mill.agents import base as bmod
 
     class FakeModel:
         def __init__(self, name):
@@ -707,8 +708,8 @@ def test_explore_max_tokens_validator_rejects_zero_or_negative():
     """The config validator rejects explore_max_tokens < 1."""
     from pathlib import Path
 
-    from pydantic import ValidationError
     import pytest
+    from pydantic import ValidationError
 
     with pytest.raises(ValidationError) as exc_info:
         _settings(Path("."), explore_max_tokens="0")

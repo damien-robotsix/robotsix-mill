@@ -14,7 +14,6 @@ digest keeps the input small.
 
 from __future__ import annotations
 
-
 import yaml as _yaml
 from pydantic import BaseModel, Field
 
@@ -68,7 +67,7 @@ def run_run_health_agent(
     """
     from pydantic_ai import PromptedOutput
 
-    from .base import build_agent, _safe_close
+    from .base import _safe_close, build_agent
     from .prompt_blocks import section
     from .retry import run_agent
 

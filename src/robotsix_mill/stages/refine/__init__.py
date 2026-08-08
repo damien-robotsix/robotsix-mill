@@ -36,10 +36,12 @@ from __future__ import annotations
 # ``...refine.refining``, etc.) resolve to the same module objects the
 # gate/orchestration code calls through.
 from ...agents import dedup, freshness, obsolescence, refining
-from ...forge.auth import _resolve_remote_url
 from ...agents.runners.pass_runner import load_memory, persist_memory
+from ...forge.auth import _resolve_remote_url
 from .core import RefineStage
 from .helpers import (
+    _AUTO_APPROVE_SOURCES,
+    _TRIAGE_REJECTION_PATTERNS,
     DEDUP_ALREADY_DONE_PREFIX,
     DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
@@ -48,9 +50,6 @@ from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
     UNMERGED_BRANCH_PREFIX,
-    _AUTO_APPROVE_SOURCES,
-    _TRIAGE_REJECTION_PATTERNS,
-    log,
     _build_candidates_block,
     _build_deployed_log_summary,
     _draft_has_complete_spec,
@@ -62,6 +61,7 @@ from .helpers import (
     _tail_file,
     _verify_branch_merged,
     _verify_cited_fix_at_head,
+    log,
     verify_claim,
 )
 

@@ -17,6 +17,7 @@ its own prior push (no foreign commits).
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC
 from pathlib import Path
 from typing import Literal
 
@@ -52,8 +53,8 @@ def run_ci_fix_agent(
     target: str = "main",
     remote_url: str | None = None,
     token: str | None = None,
-    ci_status_fn: "Callable[[], tuple[str, str]] | None" = None,
-    ci_log_fetch_fn: "Callable[[int, bool], str] | None" = None,
+    ci_status_fn: Callable[[], tuple[str, str]] | None = None,
+    ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
 ) -> CiFixResult:
     """Run the CI-fix agent, which OWNS the fix→push→verify loop.
 
@@ -84,9 +85,6 @@ def run_ci_fix_agent(
 
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_and_run_agent
-    from .fs_tools import build_fs_tools
-
     # --- load structured pattern memory ---
     from .ci_patterns import (
         CiPatternEntry,
@@ -94,6 +92,8 @@ def run_ci_fix_agent(
         load_patterns,
         save_patterns,
     )
+    from .fs_tools import build_fs_tools
+    from .yaml_loader import load_and_run_agent
 
     patterns_file = settings.ci_patterns_file_for(board_id)
     patterns = load_patterns(patterns_file)
@@ -200,7 +200,7 @@ def run_ci_fix_agent(
     output = result.output
     # An OUT_OF_SCOPE verdict is not a fix-attempt pattern — skip persistence.
     if output.pattern_signature and output.status != "OUT_OF_SCOPE":
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         entry = CiPatternEntry(
             category=output.pattern_category or "unknown",
@@ -209,7 +209,7 @@ def run_ci_fix_agent(
             success=(output.status == "DONE"),
             attempts=1,
             ticket_id=ticket_id or "unknown",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
         patterns.append(entry)
         try:

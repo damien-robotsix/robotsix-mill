@@ -23,6 +23,7 @@ discovery cycle directly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -34,7 +35,6 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
-import contextlib
 
 
 def _write_yaml(path, data):
@@ -88,8 +88,9 @@ def _stub_clone_helpers(monkeypatch):
     tests don't touch the network or hit the real git. The supervisor
     imports subprocess inline; patch the global module to neutralise
     the ``git reset --hard origin/<branch>`` it issues on each cycle."""
-    from robotsix_mill.vcs import git_ops
     import subprocess as _sp
+
+    from robotsix_mill.vcs import git_ops
 
     monkeypatch.setattr(git_ops, "clone", lambda *a, **k: None)
     monkeypatch.setattr(git_ops, "fetch", lambda *a, **k: None)

@@ -20,16 +20,15 @@ import inspect
 import logging
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
-
-_T = TypeVar("_T")
-
 
 log = logging.getLogger(__name__)
 
@@ -136,7 +135,7 @@ class ValidationResult(BaseModel):
         iterations: int,
         max_iters: int,
         feedback: str = "",
-    ) -> "ValidationResult":
+    ) -> ValidationResult:
         """Route deterministically from a test-gate outcome.
 
         ``passed`` → ``proceed``; a failure with attempts remaining →
@@ -158,11 +157,11 @@ class ValidationResult(BaseModel):
         )
 
 
-def _call_with_timeout(
-    fn: Callable[[], _T],
+def _call_with_timeout[T](
+    fn: Callable[[], T],
     timeout_seconds: int,
     what: str = "agent run",
-) -> _T:
+) -> T:
     """Run *fn* in a thread, return its result or raise TimeoutError.
 
     Uses a single-thread executor so the stage can reclaim control when
@@ -229,13 +228,13 @@ def _wrap_tools_with_progress(
     return wrapped
 
 
-def _call_with_progress_watchdog(
-    fn: Callable[[], _T],
+def _call_with_progress_watchdog[T](
+    fn: Callable[[], T],
     timeout_seconds: int,
     progress_event: threading.Event,
     what: str = "agent run",
     poll_interval: float = 1.0,
-) -> _T:
+) -> T:
     """Run *fn* in a thread with a progress-reset watchdog.
 
     The deadline resets to ``now + timeout_seconds`` every time
@@ -308,13 +307,13 @@ def run_coordinator(
     """
     from pydantic_ai.usage import UsageLimits
 
-    from .yaml_loader import load_agent_definition
-    from .base import build_agent_from_definition, _safe_close
+    from .base import _safe_close, build_agent_from_definition
+    from .changelog_tool import make_add_changelog_fragment_tool
     from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
-    from .changelog_tool import make_add_changelog_fragment_tool
     from .verify_diff_tool import make_verify_diff_tool
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "implement.yaml")
 

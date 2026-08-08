@@ -24,7 +24,6 @@ from robotsix_mill.agents.copy_pasting import (
 )
 from robotsix_mill.config import Settings
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

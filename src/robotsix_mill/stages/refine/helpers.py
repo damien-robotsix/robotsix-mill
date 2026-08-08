@@ -16,7 +16,7 @@ import logging
 import re
 import subprocess
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ...agents import refining
@@ -24,8 +24,8 @@ from ...config.settings import Settings
 from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
-from ...core.text_noop import is_degenerate_body
 from ...core.states import State
+from ...core.text_noop import is_degenerate_body
 from ..base import StageContext
 
 # Re-export prefix constants for backward compatibility
@@ -106,8 +106,8 @@ def _load_refine_memory(s: Settings, memory_board_id: str) -> str:
     ``s.memory_file_for("refine", memory_board_id)`` but only used as a
     fallback; the DB is the primary store.
     """
-    from robotsix_mill.core.db import load_memory_db
     from robotsix_mill.agents.runners.pass_runner import load_memory as _file_load
+    from robotsix_mill.core.db import load_memory_db
 
     content = load_memory_db(s, memory_board_id, "refine", max_chars=s.max_memory_chars)
     if content:
@@ -219,7 +219,7 @@ def _build_deployed_log_summary(path: Path, config_path: str) -> str:
         count += 1
         try:
             stat = entry.stat()
-            mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+            mtime = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
             size = _human_size(stat.st_size)
         except OSError:
             mtime = "unknown"
@@ -285,7 +285,7 @@ def _tail_file(filepath: Path, max_lines: int) -> str:
     Never raises — best-effort only.
     """
     try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
             tail = deque(f, maxlen=max_lines)
         return "".join(tail).rstrip("\n")
     except OSError:

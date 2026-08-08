@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import select
 
-from .. import db
 from ...config import Settings
+from .. import db
 from ..models import (
     Comment,
     SourceKind,
@@ -306,7 +306,7 @@ class _QueryMixin(_ServiceBase):
         settings: Settings,
         *,
         blocking: bool = True,
-        repo_config: "RepoConfig | None" = None,
+        repo_config: RepoConfig | None = None,
     ) -> float:
         """Return the cumulative cost of *ticket_id* and all descendants (recursive).
 
@@ -447,6 +447,5 @@ class _QueryMixin(_ServiceBase):
                 return None
             # Strip the marker prefix: f"{ASK_USER_MARKER}\n\n{question}"
             text = result.body
-            if text.startswith(ASK_USER_MARKER):
-                text = text[len(ASK_USER_MARKER) :]
+            text = text.removeprefix(ASK_USER_MARKER)
             return text.lstrip("\n").strip()

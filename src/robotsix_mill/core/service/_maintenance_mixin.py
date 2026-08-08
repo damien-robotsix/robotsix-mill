@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from sqlmodel import col, select
@@ -209,7 +209,7 @@ class _MaintenanceMixin(_ServiceBase):
         if ttl_days <= 0:
             return 0
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
+        cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
 
         with retry_on_db_full(self.settings, self.board_id) as s:
             stmt = (

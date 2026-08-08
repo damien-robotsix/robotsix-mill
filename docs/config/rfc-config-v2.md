@@ -367,8 +367,10 @@ Secrets live in `config/secrets.yaml` and are loaded into a **separate
 ```python
 # src/robotsix_mill/config.py (post-migration)
 
+
 class Secrets(BaseModel):
     """Secrets loaded from config/secrets.yaml.  Never merged into Settings."""
+
     openrouter_api_key: str | None = None
     forge_token: str | None = None
     github_app_id: str | None = None
@@ -495,6 +497,7 @@ def max_concurrency_positive(cls, v: int) -> int:
         raise ValueError("max_concurrency must be ≥ 1")
     return v
 
+
 @field_validator("model_request_timeout")
 @classmethod
 def timeout_positive(cls, v: float) -> float:
@@ -516,12 +519,11 @@ def forge_auth_requires_credentials(self) -> "Settings":
             )
     return self
 
+
 @model_validator(mode="after")
 def forge_remote_required(self) -> "Settings":
     if self.forge_kind in ("github", "gitlab") and not self.forge_remote_url:
-        raise ValueError(
-            f"FORGE_KIND={self.forge_kind} requires FORGE_REMOTE_URL"
-        )
+        raise ValueError(f"FORGE_KIND={self.forge_kind} requires FORGE_REMOTE_URL")
     return self
 ```
 

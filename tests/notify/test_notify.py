@@ -8,8 +8,7 @@ import pytest
 from robotsix_mill.core.states import State
 from robotsix_mill.notify import send_notification
 from robotsix_mill.runtime.worker import process_ticket
-from robotsix_mill.stages import Outcome, StageContext
-from robotsix_mill.stages import registry
+from robotsix_mill.stages import Outcome, StageContext, registry
 from robotsix_mill.stages.base import Stage
 
 
@@ -174,7 +173,6 @@ def _notify_settings(secrets_set):
     """Enable ntfy for the integration tests."""
     secrets_set(ntfy_url="https://ntfy.sh/mill")
     # Return nothing — the fixture just sets up secrets
-    return None
 
 
 async def test_notifies_on_human_issue_approval(

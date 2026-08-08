@@ -13,7 +13,6 @@ so operator-authored Markdown isn't mangled.
 
 from __future__ import annotations
 
-
 from robotsix_mill.agents.overlays import apply_overlay, load_overlay
 
 

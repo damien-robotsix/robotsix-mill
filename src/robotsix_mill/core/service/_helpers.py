@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlmodel import Session, select
@@ -68,7 +68,7 @@ def _make_event(
     note: str | None = None,
 ) -> TicketEvent:
     """Build a TicketEvent with hash-chain fields populated."""
-    at = datetime.now(timezone.utc)
+    at = datetime.now(UTC)
     prev_hash = _prev_hash_for(db_session, ticket_id)
     h = _event_hash(
         ticket_id=ticket_id,

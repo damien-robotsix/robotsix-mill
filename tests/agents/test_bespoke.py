@@ -13,9 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from robotsix_mill.agents.bespoke import BespokeResult, MAX_DRAFTS, run_bespoke_agent
+from robotsix_mill.agents.bespoke import MAX_DRAFTS, BespokeResult, run_bespoke_agent
 from robotsix_mill.agents.bespoke_loader import BespokeAgentDefinition
-
 
 # ---------------------------------------------------------------------------
 #  Result schema
@@ -58,8 +57,7 @@ def test_clips_draft_lists_to_max_drafts(settings, monkeypatch):
         gap_ids=[f"g{i}" for i in range(n)],
     )
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", lambda *a, **k: object())
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -101,8 +99,7 @@ def test_happy_path_returns_result(settings, monkeypatch):
         gap_ids=["g1"],
     )
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", lambda *a, **k: object())
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -142,8 +139,7 @@ def test_uses_definition_level_when_set(settings, monkeypatch):
         captured.update(kwargs)
         return object()
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", fake_build_agent)
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -174,8 +170,7 @@ def test_defaults_to_level_1_when_unset(settings, monkeypatch):
         captured.update(kwargs)
         return object()
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", fake_build_agent)
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -209,8 +204,7 @@ def test_web_knowledge_passed_to_build_agent(settings, monkeypatch):
         captured.update(kwargs)
         return object()
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", fake_build_agent)
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -240,8 +234,7 @@ def test_web_knowledge_false_passed_to_build_agent(settings, monkeypatch):
         captured.update(kwargs)
         return object()
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", fake_build_agent)
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -273,8 +266,7 @@ def test_safe_close_called(settings, monkeypatch):
     handle = object()
     close_calls = []
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", lambda *a, **k: handle)
     monkeypatch.setattr(base, "_safe_close", lambda agent: close_calls.append(agent))
@@ -300,8 +292,7 @@ def test_safe_close_called_on_error(settings, monkeypatch):
     handle = object()
     close_calls = []
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", lambda *a, **k: handle)
     monkeypatch.setattr(base, "_safe_close", lambda agent: close_calls.append(agent))
@@ -336,8 +327,7 @@ def test_agent_name_prefixes_bespoke(settings, monkeypatch):
         captured.update(kwargs)
         return object()
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", fake_build_agent)
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)
@@ -373,8 +363,7 @@ def test_output_type_is_prompted_bespoke_result(settings, monkeypatch):
         captured.update(kwargs)
         return object()
 
-    import robotsix_mill.agents.base as base
-    import robotsix_mill.agents.retry as retry
+    from robotsix_mill.agents import base, retry
 
     monkeypatch.setattr(base, "build_agent", fake_build_agent)
     monkeypatch.setattr(base, "_safe_close", lambda agent: None)

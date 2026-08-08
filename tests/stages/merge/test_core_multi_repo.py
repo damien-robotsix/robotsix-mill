@@ -8,9 +8,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages.merge import MergeStage
 from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
-
 from tests.stages.merge.test_core import _gh, _human_mr_approval
-
 
 # ============================================================
 # Multi-repo PR aggregation
@@ -19,8 +17,8 @@ from tests.stages.merge.test_core import _gh, _human_mr_approval
 
 def _install_multirepo_registry(entries: list[tuple[str, str]]) -> None:
     """Populate the global ``_repos_config`` for multi-repo tests."""
-    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
 
     _reset_repos_config()
     _cfg._repos_config = ReposRegistry(
@@ -793,8 +791,8 @@ def test_multi_repo_ci_fix_cycle_ceiling_blocks(tmp_path, monkeypatch):
     repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
     (repo_b_dir / ".git").mkdir(parents=True)
 
-    from robotsix_mill.stages import merge as merge_mod
     from robotsix_mill.agents.ci_fixing import CiFixResult
+    from robotsix_mill.stages import merge as merge_mod
 
     agent_calls = {"n": 0}
 
@@ -881,8 +879,8 @@ def test_multi_repo_ci_fix_cycle_reset_on_green(tmp_path, monkeypatch):
     repo_b_dir = ctx.service.workspace(t).dir / "repos" / "repo-b"
     (repo_b_dir / ".git").mkdir(parents=True)
 
-    from robotsix_mill.stages import merge as merge_mod
     from robotsix_mill.agents.ci_fixing import CiFixResult
+    from robotsix_mill.stages import merge as merge_mod
 
     monkeypatch.setattr(
         merge_mod,

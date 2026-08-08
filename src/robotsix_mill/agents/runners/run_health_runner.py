@@ -33,7 +33,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ...agents.run_health import (
@@ -42,9 +42,9 @@ from ...agents.run_health import (
     run_run_health_agent,
 )
 from ...config import Settings, get_repos_config
+from ...core.dedup import normalize
 from ...core.models import SourceKind
 from ...core.service import TicketService
-from ...core.dedup import normalize
 from .pass_runner import load_memory, persist_memory
 
 log = logging.getLogger("robotsix_mill.run_health")
@@ -110,7 +110,7 @@ def _parse_ts(value: object) -> datetime | None:
     except ValueError:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -136,7 +136,7 @@ def _collect_candidates(settings: Settings) -> list[_Candidate]:
     ``(kind, normalized signature)``.
     """
     window = float(settings.run_health_window_hours)
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=window)
+    cutoff = datetime.now(UTC) - timedelta(hours=window)
     groups: dict[tuple[str, str], _Candidate] = {}
 
     for repo in get_repos_config().repos.values():

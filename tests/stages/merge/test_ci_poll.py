@@ -29,8 +29,8 @@ def _ctx(tmp_path, **env):
     s = Settings(**env)
     ft = env.get("FORGE_TOKEN")
     if ft is not None:
-        from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+        from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
@@ -1694,11 +1694,11 @@ def test_refresh_pushes_at_most_one_empty_commit_per_head(tmp_path, monkeypatch)
 def test_refresh_allowed_again_once_the_branch_really_moves(tmp_path, monkeypatch):
     """The sentinel must not wedge the refresh forever — a real push (a
     landed fix) moves the head, and that new head gets its own budget."""
+    from robotsix_mill.stages.merge import _shared as shared_mod
     from robotsix_mill.stages.merge._shared import (
         _CI_POLL_REFRESH_SHA,
         _refresh_branch_for_ci,
     )
-    from robotsix_mill.stages.merge import _shared as shared_mod
 
     pushed = _refresh_env(tmp_path, monkeypatch, head_seq=["sha-a", "sha-b"])
     sentinel = tmp_path / "artifacts" / _CI_POLL_REFRESH_SHA

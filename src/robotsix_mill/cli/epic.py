@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 
-from . import _client, _resolve_repo_id, _read_body_from_args
 from ..config import Settings
+from . import _client, _read_body_from_args, _resolve_repo_id
 
 
 def _epic_new(args: argparse.Namespace, settings: Settings) -> int:

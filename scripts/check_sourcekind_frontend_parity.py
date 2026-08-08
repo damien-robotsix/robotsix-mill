@@ -37,7 +37,7 @@ def load_sourcekind_values() -> set[str]:
             in_sourcekind = True
             continue
         if in_sourcekind:
-            if stripped.startswith("class ") or stripped.startswith("def "):
+            if stripped.startswith(("class ", "def ")):
                 break
             m = re.match(r'^(\w+)\s*=\s*"([^"]+)"', stripped)
             if m:

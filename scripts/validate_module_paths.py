@@ -45,7 +45,7 @@ def find_stale_paths(modules_yaml_path: Path) -> list[str]:
     An empty list means every listed path resolves to at least one
     real file on disk.
     """
-    with open(modules_yaml_path, "r", encoding="utf-8") as fh:
+    with open(modules_yaml_path, encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
 
     stale: list[str] = []
@@ -63,7 +63,7 @@ def find_stale_paths(modules_yaml_path: Path) -> list[str]:
 
 
 def main() -> int:
-    with open(_MODULES_YAML, "r", encoding="utf-8") as fh:
+    with open(_MODULES_YAML, encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
 
     total_literal = 0

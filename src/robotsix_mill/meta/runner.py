@@ -11,17 +11,17 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from .agent import MetaAgentResult, run_meta_agent
-from ..config import Settings, get_repos_config
-from ..core.models import SourceKind
-from ..core.service import TicketService
 from ..agents.runners.pass_runner import (
     _format_recent_proposals,
     load_memory,
     persist_memory,
 )
+from ..config import Settings, get_repos_config
+from ..core.models import SourceKind
+from ..core.service import TicketService
 from ..runtime.tracing import force_traces_to_mill
 from ..vcs import clone_all_repos
+from .agent import MetaAgentResult, run_meta_agent
 
 log = logging.getLogger("robotsix_mill.meta.runner")
 

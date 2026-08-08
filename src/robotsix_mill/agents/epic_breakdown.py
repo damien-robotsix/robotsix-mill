@@ -12,11 +12,11 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+import yaml as _yaml
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-import yaml as _yaml
-
 from robotsix_mill._resources import agent_definitions_dir
+
 from ..config import Settings
 from .prerequisite import (  # cross-repo prerequisite parsing
     _IMPORT_RE,

@@ -25,6 +25,8 @@ from ...config import ConfigError, RepoConfig, get_repo_config
 from ...core.states import State
 from ...core.workspace import (
     read_counter as _read_counter,
+)
+from ...core.workspace import (
     write_counter as _write_counter,
 )
 from ...vcs import git_ops
@@ -636,7 +638,7 @@ def _duplicate_changelog_fragments(
         # _template.md).
         if not name.endswith(".md"):
             continue
-        if name.startswith(".") or name.startswith("_"):
+        if name.startswith((".", "_")):
             continue
         if "." not in name:
             continue

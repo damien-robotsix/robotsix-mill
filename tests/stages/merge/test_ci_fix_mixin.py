@@ -18,7 +18,6 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.merge.ci_fix_mixin import MultiRepoCiFixMixin
 
-
 # ------------------------------------------------------------------ fixtures
 
 

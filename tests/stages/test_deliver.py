@@ -10,8 +10,8 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages import StageContext
-from robotsix_mill.stages.deliver import DeliverStage
 from robotsix_mill.stages import deliver as deliver_module
+from robotsix_mill.stages.deliver import DeliverStage
 from robotsix_mill.vcs import git_ops
 
 
@@ -44,8 +44,8 @@ def _ctx(tmp_path, **env):
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
     if ft is not None:
-        from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+        from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
@@ -126,8 +126,8 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr(httpx, "Client", FakeClient)
-    from robotsix_mill.config import Secrets, _reset_secrets
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import Secrets, _reset_secrets
 
     _reset_secrets()
     _cfg._secrets = Secrets(forge_token="tok")
@@ -548,8 +548,8 @@ def _install_repos_registry(entries: list[tuple[str, str]]) -> None:
 
     ``entries`` is a list of ``(repo_id, forge_remote_url)`` pairs.
     """
-    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
     import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
 
     _reset_repos_config()
     _cfg._repos_config = ReposRegistry(

@@ -9,7 +9,6 @@ from robotsix_mill.stages.refine._impl_ready import (
     _validate_implementation_ready_spec,
 )
 
-
 # ===========================================================================
 # _is_implementation_ready
 # ===========================================================================

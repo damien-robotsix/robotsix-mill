@@ -3,11 +3,10 @@
 import pydantic_ai
 import pytest
 
-from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
-from robotsix_mill.agents.coordinating import ImplementResult
 from robotsix_mill.agents import base as bmod
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
-
+from robotsix_mill.agents.coordinating import ImplementResult
+from robotsix_mill.agents.tool_registry import ToolInfo, ToolRegistry
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -135,9 +134,9 @@ def test_all_tools_registered(tmp_path, monkeypatch):
         bmod, "new_deepseek_model", lambda model_name, level: (object(), object())
     )
 
+    from robotsix_mill.agents.base import build_agent
     from robotsix_mill.agents.explore import make_explore_tool
     from robotsix_mill.agents.fs_tools import build_fs_tools
-    from robotsix_mill.agents.base import build_agent
 
     # Build the agent the same way the coordinator does — this triggers
     # all the tool registrations as a side effect.

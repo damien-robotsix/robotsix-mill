@@ -26,9 +26,9 @@ def main() -> int:
         return 0
 
     from robotsix_llmio.core import constants as llmio_constants
+    from robotsix_mill.agents.fallback import FallbackAgentHandle
 
     from robotsix_mill.agents import base
-    from robotsix_mill.agents.fallback import FallbackAgentHandle
     from robotsix_mill.agents.retry import run_agent
     from robotsix_mill.config import Settings, get_secrets
 

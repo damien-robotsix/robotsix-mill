@@ -21,8 +21,8 @@ import subprocess
 from robotsix_mill.agents import base as base_mod
 from robotsix_mill.agents import explore as explore_mod
 from robotsix_mill.agents import fs_tools as fs_tools_mod
-from robotsix_mill.meta.agent import SYSTEM_PROMPT, MetaAgentResult, run_meta_agent
 from robotsix_mill.config import Settings
+from robotsix_mill.meta.agent import SYSTEM_PROMPT, MetaAgentResult, run_meta_agent
 
 
 def test_prompt_covers_adoption_check_contract():

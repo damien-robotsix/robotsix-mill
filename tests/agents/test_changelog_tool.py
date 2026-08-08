@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from robotsix_mill.agents import changelog_tool
-from robotsix_mill.agents.changelog_tool import _insert_changelog_entry, _HEADER
+from robotsix_mill.agents.changelog_tool import _HEADER, _insert_changelog_entry
 
 
 def test_creates_file_when_missing(tmp_path: Path):

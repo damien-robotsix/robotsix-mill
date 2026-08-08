@@ -9,13 +9,14 @@ and multi-source vs single-source candidate querying.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlmodel import select as _select
 
 try:
-    from hypothesis import given, strategies as st
+    from hypothesis import given
+    from hypothesis import strategies as st
 
     _HYPOTHESIS_AVAILABLE = True
 except ImportError:
@@ -23,10 +24,6 @@ except ImportError:
 
 from robotsix_mill.config import Settings, _reset_secrets
 from robotsix_mill.core.db import session as db_session
-from robotsix_mill.core.models import SourceKind, Ticket, TicketKind
-from robotsix_mill.core.service import TicketService
-from robotsix_mill.core.states import State
-from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.core.dedup import (
     _ci_draft_fingerprint,
     _concern_gate,
@@ -45,6 +42,10 @@ from robotsix_mill.core.dedup import (
     normalize,
     paths_excluding_out_of_scope,
 )
+from robotsix_mill.core.models import SourceKind, Ticket, TicketKind
+from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
+from robotsix_mill.core.workspace import Workspace
 
 _BOARD = "test-board"
 _TARGET_PATH = "src/robotsix_mill/foo.py"
@@ -82,7 +83,7 @@ def _backdate(settings, ticket_id, when):
 
 
 def _now():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

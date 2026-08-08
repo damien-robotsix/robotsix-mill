@@ -5,7 +5,6 @@ import contextlib
 from robotsix_mill.agents import validate_artifact_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 
-
 # ── validate_artifact_path ─────────────────────────────────────────────
 
 

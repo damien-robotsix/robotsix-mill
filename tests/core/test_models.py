@@ -10,10 +10,11 @@ and ``settings`` fixtures (via ``conftest.py``).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
+
 from robotsix_mill.core import db
 from robotsix_mill.core.models import (
     CaseTolerantEnum,
@@ -31,7 +32,6 @@ from robotsix_mill.core.models import (
 )
 from robotsix_mill.core.states import State
 
-
 # ---------------------------------------------------------------------------
 # _now()
 # ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ def test_now_returns_aware_utc_datetime():
     """_now() returns a datetime with tzinfo == timezone.utc."""
     result = _now()
     assert isinstance(result, datetime)
-    assert result.tzinfo == timezone.utc
+    assert result.tzinfo == UTC
 
 
 # ---------------------------------------------------------------------------
@@ -161,16 +161,16 @@ def test_ticket_kind_accepts_task_inquiry_epic():
 def test_ticket_created_at_and_updated_at_are_aware_utc():
     """created_at and updated_at carry timezone.utc after construction."""
     ticket = Ticket(id="t-5", title="T", workspace_path="/tmp/t-5")
-    assert ticket.created_at.tzinfo == timezone.utc
-    assert ticket.updated_at.tzinfo == timezone.utc
+    assert ticket.created_at.tzinfo == UTC
+    assert ticket.updated_at.tzinfo == UTC
 
 
 def test_ticket_next_retry_at_with_aware_datetime():
     """next_retry_at explicitly set with aware datetime preserves tzinfo on read-back."""
-    dt = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+    dt = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
     ticket = Ticket(id="t-6", title="T", workspace_path="/tmp/t-6", next_retry_at=dt)
     assert ticket.next_retry_at is not None
-    assert ticket.next_retry_at.tzinfo == timezone.utc
+    assert ticket.next_retry_at.tzinfo == UTC
     assert ticket.next_retry_at == dt
 
 
@@ -216,7 +216,7 @@ def test_ticket_all_fields_in_roundtrip():
         review_rounds=2,
         retry_attempt=1,
         last_transient_error="timeout",
-        next_retry_at=datetime(2025, 7, 1, tzinfo=timezone.utc),
+        next_retry_at=datetime(2025, 7, 1, tzinfo=UTC),
         depends_on='["dep-1"]',
         board_id="brd-99",
         priority=True,
@@ -259,7 +259,7 @@ def test_ticket_event_defaults():
 def test_ticket_event_at_is_aware_utc():
     """at is populated with a UTC-aware datetime."""
     event = TicketEvent(ticket_id="t-1", state=State.DRAFT)
-    assert event.at.tzinfo == timezone.utc
+    assert event.at.tzinfo == UTC
 
 
 def test_ticket_event_with_note():
@@ -306,15 +306,15 @@ def test_comment_defaults():
 def test_comment_created_at_is_aware_utc():
     """created_at is populated by _now() with tzinfo=utc."""
     comment = Comment(ticket_id="t-1", body="hi")
-    assert comment.created_at.tzinfo == timezone.utc
+    assert comment.created_at.tzinfo == UTC
 
 
 def test_comment_closed_at_aware_roundtrip():
     """closed_at set with aware datetime survives model_dump()."""
-    dt = datetime(2025, 10, 1, tzinfo=timezone.utc)
+    dt = datetime(2025, 10, 1, tzinfo=UTC)
     comment = Comment(ticket_id="t-1", body="x", closed_at=dt)
     assert comment.closed_at == dt
-    assert comment.closed_at.tzinfo == timezone.utc
+    assert comment.closed_at.tzinfo == UTC
     dumped = comment.model_dump()
     restored = Comment.model_validate(dumped)
     assert restored.closed_at == dt
@@ -327,7 +327,7 @@ def test_comment_model_dump_and_validate_roundtrip():
         body="Needs work",
         author="reviewer",
         parent_id=5,
-        closed_at=datetime(2025, 5, 5, tzinfo=timezone.utc),
+        closed_at=datetime(2025, 5, 5, tzinfo=UTC),
     )
     dumped = comment.model_dump()
     restored = Comment.model_validate(dumped)
@@ -563,8 +563,8 @@ def test_ticket_read_roundtrip():
         next_retry_at=None,
         priority=True,
         board_id="b",
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
-        updated_at=datetime(2025, 1, 2, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 2, tzinfo=UTC),
     )
     dumped = tr.model_dump()
     restored = TicketRead.model_validate(dumped)
@@ -624,7 +624,7 @@ def test_comment_read_all_fields_present():
         author="reviewer",
         parent_id=None,
         closed_at=None,
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
     assert cr.id == 1
     assert cr.ticket_id == "t-1"
@@ -643,7 +643,7 @@ def test_comment_read_parent_id_and_closed_at_can_be_none():
         author="a",
         parent_id=None,
         closed_at=None,
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
     assert cr.parent_id is None
     assert cr.closed_at is None
@@ -651,7 +651,7 @@ def test_comment_read_parent_id_and_closed_at_can_be_none():
 
 def test_comment_read_with_closed_at():
     """closed_at with an aware datetime survives validation."""
-    dt = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    dt = datetime(2025, 6, 1, tzinfo=UTC)
     cr = CommentRead(
         id=3,
         ticket_id="t-3",
@@ -659,14 +659,14 @@ def test_comment_read_with_closed_at():
         author="bot",
         parent_id=1,
         closed_at=dt,
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
     assert cr.closed_at == dt
 
 
 def test_comment_read_model_dump_and_validate_roundtrip():
     """CommentRead round-trip preserves all fields."""
-    dt = datetime(2025, 3, 3, tzinfo=timezone.utc)
+    dt = datetime(2025, 3, 3, tzinfo=UTC)
     cr = CommentRead(
         id=10,
         ticket_id="t-round",
@@ -674,7 +674,7 @@ def test_comment_read_model_dump_and_validate_roundtrip():
         author="alice",
         parent_id=5,
         closed_at=dt,
-        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
     dumped = cr.model_dump()
     restored = CommentRead.model_validate(dumped)
@@ -769,7 +769,7 @@ def test_case_tolerant_enum_result_invalid_string_raises():
 
 def _raw_insert_ticket(settings, board_id: str, ticket_id: str, kind: str) -> None:
     """Insert a minimal ticket row via raw SQL with an explicit *kind*."""
-    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     engine = db.get_engine(settings, board_id)
     with engine.begin() as conn:
         conn.exec_driver_sql(

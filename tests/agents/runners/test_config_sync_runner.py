@@ -1,14 +1,14 @@
 """Tests for the config-sync runner."""
 
 from robotsix_mill.agents.runners.periodic_runner import (
-    run_config_sync_pass,
     PeriodicPassResult,
+    run_config_sync_pass,
 )
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.core.models import TicketKind
 
 
 def _test_repo_config():

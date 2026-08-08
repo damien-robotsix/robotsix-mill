@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from ..config import Settings, Secrets
+from ..config import Secrets, Settings
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def _record_version(
     new_version = (versions[0]["version"] + 1) if versions else 1
     record: dict[str, Any] = {
         "version": new_version,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "changed_keys": [
             f"{k} (secret)" if _is_secret_key(k) else k for k in changed_keys
         ],

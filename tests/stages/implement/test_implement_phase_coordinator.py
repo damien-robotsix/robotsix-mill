@@ -37,7 +37,6 @@ from robotsix_mill.stages.implement._shared import (
     _SinglePassResult,
 )
 
-
 # --- fixtures / helpers (copied from tests/stages/test_implement.py) ------
 
 

@@ -19,7 +19,6 @@ from robotsix_mill.agents.runners.periodic_runner import (
 from robotsix_mill.config import Secrets, Settings
 from robotsix_mill.core import db
 
-
 # ------------------------------------------------------------------ helpers
 
 

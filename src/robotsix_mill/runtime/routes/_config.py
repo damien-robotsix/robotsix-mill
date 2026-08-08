@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from robotsix_mill.config import Settings
-from robotsix_mill.runtime.deps import get_settings
 from robotsix_mill.runtime.config_service import (
     ConfigValidationError,
     get_config,
@@ -21,6 +20,7 @@ from robotsix_mill.runtime.config_service import (
     rollback_config,
     update_config,
 )
+from robotsix_mill.runtime.deps import get_settings
 
 router = APIRouter(tags=["Config"])
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -177,7 +177,7 @@ class _MigrateMixin(_ServiceBase):
                         retry_attempt=0,
                         last_transient_error=None,
                         next_retry_at=None,
-                        updated_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(UTC),
                     )
                     s2.add(Ticket(**td))
 
@@ -378,7 +378,7 @@ class _MigrateMixin(_ServiceBase):
                     retry_attempt=0,
                     last_transient_error=None,
                     next_retry_at=None,
-                    updated_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(UTC),
                 )
                 s.add(Ticket(**ticket_data))
                 for ev in event_data:

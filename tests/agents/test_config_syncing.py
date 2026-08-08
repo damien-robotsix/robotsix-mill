@@ -2,7 +2,6 @@
 
 from types import SimpleNamespace
 
-
 from robotsix_mill.agents import config_syncing
 
 

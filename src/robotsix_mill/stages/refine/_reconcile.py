@@ -19,11 +19,10 @@ from ...core.states import State
 from ...core.workspace import Workspace
 from ...vcs import git_ops
 from ..base import Outcome, StageContext
+from . import _result_paths
 from .helpers import (
     log,
 )
-from . import _result_paths
-
 
 # ---------------------------------------------------------------------------
 # triage complexity / findings I/O

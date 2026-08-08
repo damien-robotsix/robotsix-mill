@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-
-from robotsix_mill.core import db
-from robotsix_mill.core.models import TicketEvent
-from robotsix_mill.core.states import State
-from robotsix_mill.core.service import _event_hash
 from robotsix_mill.agents.runners.verify_runner import (
     VerifyResult,
     run_verify_pass,
 )
-
+from robotsix_mill.core import db
+from robotsix_mill.core.models import TicketEvent
+from robotsix_mill.core.service import _event_hash
+from robotsix_mill.core.states import State
 
 # ---------------------------------------------------------------------------
 # _event_hash — pure function (imported from core.service)

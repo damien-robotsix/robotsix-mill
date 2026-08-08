@@ -2,7 +2,7 @@
 
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -10,10 +10,9 @@ import pytest
 
 from robotsix_mill.runtime.worker.poll_loops import (
     PollLoopsMixin,
-    _dependabot_title,
     _dependabot_body,
+    _dependabot_title,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -65,7 +64,7 @@ class TestInitialDelay:
         assert result < 1.0 + 60 + 60
 
     def test_recent_run_returns_remaining_time(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         recent = now - timedelta(seconds=30)
         interval = 120
 
@@ -87,7 +86,6 @@ class TestInitialDelay:
         class FakeRegistry:
             def most_recent(self, kind, repo_id=None):
                 calls.append((kind, repo_id))
-                return None
 
         mixin = _make_mixin(run_registry=None)
         reg = FakeRegistry()
@@ -305,7 +303,7 @@ class TestFindCanonicalCiTicket:
             SourceKind.USER,
             State.DRAFT.value,
             "title",
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
         service = _fake_service({"t1": "**Workflow:** wf\n**Branch:** main"})
         mixin = _make_mixin()
@@ -317,7 +315,7 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.states import State
 
         t = _fake_ticket(
-            "t1", SourceKind.CI, State.CLOSED.value, "title", datetime.now(timezone.utc)
+            "t1", SourceKind.CI, State.CLOSED.value, "title", datetime.now(UTC)
         )
         service = _fake_service({"t1": "**Workflow:** wf\n**Branch:** main"})
         mixin = _make_mixin()
@@ -329,7 +327,7 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.states import State
 
         t = _fake_ticket(
-            "t1", SourceKind.CI, State.DONE.value, "title", datetime.now(timezone.utc)
+            "t1", SourceKind.CI, State.DONE.value, "title", datetime.now(UTC)
         )
         service = _fake_service({"t1": "**Workflow:** wf\n**Branch:** main"})
         mixin = _make_mixin()
@@ -340,7 +338,7 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.models import SourceKind
         from robotsix_mill.core.states import State
 
-        created = datetime.now(timezone.utc) - timedelta(minutes=10)
+        created = datetime.now(UTC) - timedelta(minutes=10)
         t = _fake_ticket(
             "t1", SourceKind.CI, State.DRAFT.value, "Some CI failure title", created
         )
@@ -358,7 +356,7 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.models import SourceKind
         from robotsix_mill.core.states import State
 
-        created = datetime.now(timezone.utc) - timedelta(minutes=5)
+        created = datetime.now(UTC) - timedelta(minutes=5)
         t = _fake_ticket(
             "t2",
             SourceKind.CI,
@@ -379,7 +377,7 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.models import SourceKind
         from robotsix_mill.core.states import State
 
-        created = datetime.now(timezone.utc)
+        created = datetime.now(UTC)
         # Title only contains wf_name but not target → should NOT match
         t = _fake_ticket(
             "t3",
@@ -399,8 +397,8 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.models import SourceKind
         from robotsix_mill.core.states import State
 
-        older = datetime.now(timezone.utc) - timedelta(minutes=20)
-        newer = datetime.now(timezone.utc) - timedelta(minutes=5)
+        older = datetime.now(UTC) - timedelta(minutes=20)
+        newer = datetime.now(UTC) - timedelta(minutes=5)
 
         t1 = _fake_ticket("t1", SourceKind.CI, State.DRAFT.value, "CI fail 1", older)
         t2 = _fake_ticket("t2", SourceKind.CI, State.DRAFT.value, "CI fail 2", newer)
@@ -422,9 +420,9 @@ class TestFindCanonicalCiTicket:
         from robotsix_mill.core.models import SourceKind
         from robotsix_mill.core.states import State
 
-        created_t1 = datetime.now(timezone.utc) - timedelta(minutes=30)
-        created_t2 = datetime.now(timezone.utc) - timedelta(minutes=25)
-        comment_time = datetime.now(timezone.utc) - timedelta(minutes=1)
+        created_t1 = datetime.now(UTC) - timedelta(minutes=30)
+        created_t2 = datetime.now(UTC) - timedelta(minutes=25)
+        comment_time = datetime.now(UTC) - timedelta(minutes=1)
 
         t1 = _fake_ticket(
             "t1", SourceKind.CI, State.DRAFT.value, "CI fail old", created_t1

@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from robotsix_mill.core.states import State
 from robotsix_mill.core.models import TicketKind
-from robotsix_mill.stages import Outcome, StageContext
+from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker.processing import (
+    _TERMINAL,
     _block_ticket_and_notify,
     _handle_stage_error,
     _maybe_reevaluate_epic,
@@ -20,9 +20,8 @@ from robotsix_mill.runtime.worker.processing import (
     _root_output_summary,
     _root_span_attributes,
     _StageDeadlineExceeded,
-    _TERMINAL,
 )
-
+from robotsix_mill.stages import Outcome, StageContext
 
 # ---------------------------------------------------------------------------
 # fixtures

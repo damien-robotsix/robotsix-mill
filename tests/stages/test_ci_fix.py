@@ -4,13 +4,13 @@ import json
 
 import pytest
 
+from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
-from robotsix_mill.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.ci_fix import CIFixStage, _extract_check_names
 from robotsix_mill.stages.ci_fix_helpers import (
@@ -21,8 +21,7 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _read_counter,
     _write_counter,
 )
-from robotsix_mill.agents.ci_fixing import CiFixResult
-
+from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # Module-level autouse fixture: prevent any test from accidentally running
@@ -87,8 +86,8 @@ def _ctx(tmp_path, **env):
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.get("FORGE_TOKEN")
     if ft is not None:
-        from robotsix_mill.config import Secrets, _reset_secrets
         import robotsix_mill.config as _cfg
+        from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
@@ -3177,7 +3176,6 @@ def test_agent_timeout_produces_diagnostic_note(tmp_path, monkeypatch):
     def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
         self._last_agent_timed_out = True
         self._last_agent_timeout_elapsed = 1850.0
-        return None
 
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",
@@ -3220,7 +3218,6 @@ def test_agent_timeout_unknown_check_fallback(tmp_path, monkeypatch):
     def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
         self._last_agent_timed_out = True
         self._last_agent_timeout_elapsed = 1200.0
-        return None
 
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",

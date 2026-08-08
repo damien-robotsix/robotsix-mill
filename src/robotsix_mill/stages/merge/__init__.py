@@ -60,12 +60,10 @@ from __future__ import annotations
 from ...agents.ci_fixing import run_ci_fix_agent
 from ...agents.rebasing import run_rebase_agent
 from ...agents.review_revision import run_review_revision_agent
-from ...forge.auth import _resolve_remote_url, github_push_token, github_token
 from ...agents.runners.pass_runner import load_memory, persist_memory
+from ...forge.auth import _resolve_remote_url, github_push_token, github_token
 from ...runtime import tracing
 from ...vcs import git_ops
-
-from .core import MergeStage
 from ._shared import (
     _MERGE_REASON,
     _REBASE_COUNTER,
@@ -87,6 +85,7 @@ from ._shared import (
     _write_reason,
     log,
 )
+from .core import MergeStage
 
 __all__ = [
     "_MERGE_REASON",

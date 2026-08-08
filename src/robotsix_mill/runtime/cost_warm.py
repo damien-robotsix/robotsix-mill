@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Sequence
+from typing import Any
 
 log = logging.getLogger("robotsix_mill.runtime.cost_warm")
 

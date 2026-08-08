@@ -1,12 +1,11 @@
 """Tests for the module-curator agent and runner."""
 
 from robotsix_mill.agents import module_curator as mc_agent
-from robotsix_mill.agents.runners.periodic_runner import (
-    run_module_curator_pass,
-    PeriodicPassResult,
-)
 from robotsix_mill.agents.runners.pass_runner import _GAP_ID_RE
-
+from robotsix_mill.agents.runners.periodic_runner import (
+    PeriodicPassResult,
+    run_module_curator_pass,
+)
 
 # --- Agent tests ---
 
@@ -150,8 +149,8 @@ def test_gap_id_re_rejects_malformed():
 
 def test_module_curator_cli_command(capsys, monkeypatch):
     """Test that CLI module-curator command works."""
-    from robotsix_mill.cli import main
     from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
+    from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
         return PeriodicPassResult(
@@ -174,8 +173,8 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
     """Test JSON output flag for module-curator CLI."""
     import json
 
-    from robotsix_mill.cli import main
     from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
+    from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
         return PeriodicPassResult(
@@ -200,8 +199,8 @@ def test_module_curator_cli_json_output(capsys, monkeypatch):
 
 def test_module_curator_cli_no_drafts(capsys, monkeypatch):
     """CLI module-curator command when no drafts created."""
-    from robotsix_mill.cli import main
     from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
+    from robotsix_mill.cli import main
 
     def mock_run(session_id=None):
         return PeriodicPassResult(

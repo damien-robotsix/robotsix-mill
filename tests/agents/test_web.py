@@ -8,10 +8,10 @@ from robotsix_mill.agents import web_research as wr
 from robotsix_mill.agents.base import compose_prompt
 from robotsix_mill.agents.web_tools import (
     make_web_fetch,
-    reset_web_fetch_budget,
     reset_trace_web_fetch_budget,
+    reset_web_fetch_budget,
 )
-from robotsix_mill.config import Settings, Secrets, _reset_secrets
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
 @pytest.fixture(autouse=True)
@@ -90,8 +90,9 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
             return type("R", (), {"output": "ok"})()
 
     import pydantic_ai
-    from robotsix_mill.agents import base as bmod
     from robotsix_llmio.core.factory import default_tier_config
+
+    from robotsix_mill.agents import base as bmod
 
     def fake_build_openrouter_model(level=1, *, online=False):
         model_name = default_tier_config().for_level(level).model_name
@@ -222,7 +223,7 @@ def test_web_fetch_strips_html_to_prose(tmp_path, monkeypatch):
     The exact prose content + ordering is what the LLM reads; the
     markup is dead weight.
     """
-    from robotsix_mill.agents.web_tools import make_web_fetch, _cache
+    from robotsix_mill.agents.web_tools import _cache, make_web_fetch
 
     _cache.clear()
 
@@ -592,6 +593,7 @@ def test_run_web_knowledge_resets_budget(tmp_path, monkeypatch):
             return type("R", (), {"output": "the answer"})()
 
     import pydantic_ai
+
     from robotsix_mill.agents import base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
@@ -620,8 +622,8 @@ class TestTraceWebFetchBudget:
         counters)."""
         from robotsix_mill.agents.web_tools import (
             _cache,
-            reset_web_fetch_budget,
             reset_trace_web_fetch_budget,
+            reset_web_fetch_budget,
         )
 
         _cache.clear()
@@ -662,8 +664,8 @@ class TestTraceWebFetchBudget:
         ceiling."""
         from robotsix_mill.agents.web_tools import (
             _cache,
-            reset_web_fetch_budget,
             reset_trace_web_fetch_budget,
+            reset_web_fetch_budget,
         )
 
         _cache.clear()
@@ -708,8 +710,8 @@ class TestTraceWebFetchBudget:
         per-consult budget gates."""
         from robotsix_mill.agents.web_tools import (
             _cache,
-            reset_web_fetch_budget,
             reset_trace_web_fetch_budget,
+            reset_web_fetch_budget,
         )
 
         _cache.clear()
@@ -744,8 +746,8 @@ class TestTraceWebFetchBudget:
         counters."""
         from robotsix_mill.agents.web_tools import (
             _cache,
-            reset_web_fetch_budget,
             reset_trace_web_fetch_budget,
+            reset_web_fetch_budget,
         )
 
         _cache.clear()

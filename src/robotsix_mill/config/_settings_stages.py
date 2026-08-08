@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 
 from robotsix_mill._resources import (
     language_instructions_dir as _resources_language_instructions_dir,
+)
+from robotsix_mill._resources import (
     skills_dir as _resources_skills_dir,
 )
 

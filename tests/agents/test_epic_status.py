@@ -8,8 +8,7 @@ from robotsix_mill.runtime.worker import (
     _process_ticket_inner,
     _run_epic_reeval,
 )
-from robotsix_mill.stages import Outcome, StageContext
-from robotsix_mill.stages import registry
+from robotsix_mill.stages import Outcome, StageContext, registry
 from robotsix_mill.stages.base import Stage
 
 
@@ -863,10 +862,10 @@ def test_closure_triggers_from_child_closed(settings, service, monkeypatch):
 # Orphaned-epic safety-net sweep (_maybe_sweep_orphaned_epic)
 # -----------------------------------------------------------------------
 
+import contextlib
 from types import SimpleNamespace
 
 from robotsix_mill.runtime.worker import Worker
-import contextlib
 
 
 def _sweep_self(ctx):

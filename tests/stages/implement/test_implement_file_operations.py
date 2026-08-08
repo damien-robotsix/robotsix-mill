@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from types import SimpleNamespace
 
 import pytest
-from types import SimpleNamespace
 
 from robotsix_mill.config import ConfigError, CrossRepoTarget, RepoConfig, Settings
 from robotsix_mill.core import db
@@ -24,7 +24,6 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement.file_operations import FileOperationsMixin
-
 
 # ---------------------------------------------------------------------------
 # helpers

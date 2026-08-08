@@ -17,11 +17,11 @@ Returns `None` when no PR/MR exists. When one exists, returns:
     "failing": [
         {
             "name": str,
-            "summary": str | None,    # capped at 2000 chars
-            "text": str | None,       # capped at 4000 chars
-            "annotations": [...]      # capped at 20 per check
+            "summary": str | None,  # capped at 2000 chars
+            "text": str | None,  # capped at 4000 chars
+            "annotations": [...],  # capped at 20 per check
         }
-    ]
+    ],
 }
 ```
 

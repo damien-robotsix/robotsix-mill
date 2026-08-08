@@ -14,6 +14,7 @@ all three mixins), shared helpers, and repo-CRUD operations
 from __future__ import annotations
 
 import re
+
 from ._http import _ApiClient
 from .base import Forge, NotConfiguredError, RepoInfo
 from .github_ci import GitHubForgeCIMixin
@@ -21,7 +22,6 @@ from .github_code_scanning import GitHubForgeCodeScanningMixin
 from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
 from .github_security import GitHubForgeSecurityMixin
-
 
 # ---------------------------------------------------------------------------
 # Shared module-level helpers
@@ -166,7 +166,6 @@ class GitHubForge(
             private = self.settings.repo_visibility_default == "private"
 
         from ..config import get_secrets
-
         from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
@@ -293,7 +292,6 @@ class GitHubForge(
         target_namespace: str | None = None,
     ) -> RepoInfo:
         from ..config import get_secrets
-
         from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
@@ -417,7 +415,6 @@ class GitHubForge(
     # --- HTTP seam (monkeypatched in tests) ---
     def _get_repo_description(self, *, owner: str, repo: str) -> str:
         from ..config import get_secrets
-
         from .auth import github_token
 
         s = self.settings
@@ -437,7 +434,6 @@ class GitHubForge(
 
     def _update_repo(self, *, owner: str, repo: str, description: str) -> bool:
         from ..config import get_secrets
-
         from .auth import github_token
 
         s = self.settings
