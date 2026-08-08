@@ -40,16 +40,7 @@ jobs:
       #     fixed in 10.14; mill's lock pins 10.21.3 — above the fix version.
       #     pymdown-extensions is a transitive docs-only dependency, never
       #     shipped or served to users.
-      #   GHSA-jwv3-5hgf-82ww (cryptography): duplicate self-signed
-      #     intermediates can cause exponential path-building; fixed in 49.0.0.
-      #     Pinned 48.0.1 via uv.lock; upgrade tracked by dependabot.
-      #   GHSA-m2h6-j472-rp4c (cryptography): verifier accepts wildcard DNS
-      #     names allowing escape from permittedSubtrees; fixed in 49.0.0.
-      #     Pinned 48.0.1 via uv.lock; upgrade tracked by dependabot.
-      #   GHSA-g6cj-pr64-35w5 (cryptography): PKCS#7 EnvelopedData decryption
-      #     exposes a Bleichenbacher oracle; fixed in 50.0.0.
-      #     Pinned 48.0.1 via uv.lock; upgrade tracked by dependabot.
-      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
+      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2"
 
   mill-specific:
     runs-on: ubuntu-latest
