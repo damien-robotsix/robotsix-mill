@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robotsix-mill"
-dynamic = ["version"]
+version = "0.1.0"
 description = "Self-contained LLM-driven ticket solver. SQLite-backed management plane + file workspaces, event-driven worker, delivers merge requests to GitHub/GitLab."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -76,9 +76,6 @@ robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
 robotsix-autoupdate = "robotsix_mill.dev_tooling.autoupdate:main"
-
-[tool.hatch.version]
-path = "src/robotsix_mill/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill"]

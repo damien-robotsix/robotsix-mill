@@ -1,1 +1,0 @@
-Changelog validation now skips repos that have migrated to release-please. `_modules_yaml_check` does not merely report — it *inserts* a `changelog.d/*.md` glob into `docs/modules.yaml`, so on a release-please repo (which has no such directory) mill was actively breaking the repo's own `check-registration` job the next time it worked a ticket there.

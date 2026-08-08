@@ -1,1 +1,0 @@
-Classify SQLite "database is locked" errors on the mill's own per-board DB as transient so lock contention gets a stage retry with backoff instead of escalating the ticket to BLOCKED, and raise the SQLite busy timeout from 5s to 30s so write bursts across the worker thread pool rarely hit the lock error at all.

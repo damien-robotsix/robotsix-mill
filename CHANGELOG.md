@@ -1,4 +1,235 @@
-## 0.0.0 (unreleased)
+## 0.1.0 (2026-08-08)
+
+### Features
+
+- Added a daily config pin-drift check. `config/config.json` pins ~288 settings and
+  a pin always beats the model default, so changing a `Field(default=…)` is a no-op
+  in production until someone edits the pin too. That silently reverted the move to
+  weekly periodics — twelve generators ran daily for weeks at roughly 7× the
+  intended ticket volume — and a change disabling the per-ticket spend caps. Both
+  were found by hand, long after. The pass reports only drift not listed in
+  `config_pin_drift_baseline`, so deliberate operator choices stay quiet. (config-pin-drift-check)
+- Add a refine-time standards gate: for repos that follow robotsix-standards (auto-detected from the `robotsix-` id prefix, overridable per repo via `follows_standards` in repos.yaml), a single cheap LLM call discards agent-spawned drafts whose goal violates an explicit standards prohibition (e.g. "publish to npm" vs distribution-packaging.md's no-registry rule) before any refine budget is spent. The fetched standards context now also includes distribution-packaging.md and free-tier-only.md so both the gate and the refine agent see the fleet's prohibition rules. (refine-standards-gate)
+- New `sandbox_cpus` setting caps each sandbox container's CPU, in cores
+  (`MILL_SANDBOX_CPUS`, `0` = unlimited, the previous behaviour). Sandboxes
+  already capped memory and PIDs but nothing bounded CPU, so
+  `max_global_concurrency` bounded the sandbox *count* while host load stayed
+  unbounded — N sandboxes could take N cores. Setting a quota makes the two
+  proportional, which is what allows raising the concurrency cap on a small host. (sandbox-cpu-quota)
+- Add outbound event mechanism that fires HTTP POSTs to configured subscriber URLs on every ticket state transition. Events carry ``{ticket_id, board_id, old_state, new_state, timestamp}``. Delivery is best-effort and asynchronous — subscriber downtime does not block or slow down ticket transitions. Configured via ``subscriber_urls`` and ``subscriber_shared_secret`` settings. (20260807T133210Z-emit-outbound-ticket-state-change-events-b31b)
+- Auto-rebase PRs that become conflicted due to sibling merges: when a PR in human_mr_approval or waiting_auto_merge is detected as conflicted, the merge stage now tries the server-side update-branch API first — resolving base-moved-forward conflicts cheaply without invoking the rebase agent. Genuine content conflicts still fall through to the rebase agent as before. (20260807T210552Z-auto-rebase-prs-that-fall-into-merge-con-2f27)
+- Add ``module_size`` periodic agent: scans source and test files for
+  excessive line counts and proposes concrete split tickets for the
+  highest-priority offenders. (#0)
+- Added `POST /tickets/{id}/request-implementation-changes`, letting an operator reviewing an open PR send the ticket back to the implement stage for rework. Previously the only send-back path was `request-changes`, which applies to `human_issue_approval` and re-refines the spec from `draft` — discarding the implementation — so an operator who simply wanted the code adjusted had no way to ask for it. The ticket returns to `ready` and implement re-runs against the same spec. The request body is required and is recorded as a comment, which is the channel the implement stage reads operator feedback from; the stale-spec fingerprint guard and the implement spawn counter are cleared so an operator request is never refused for an unchanged spec or an exhausted retry budget. Documented in the chat skill so robotsix-chat can offer it alongside `merge-now` as the two outcomes of a PR review.
+
+### Bugfixes
+
+- `ci_fix` no longer livelocks on a genuinely failing CI. When the rebase was a no-op the stage pushed an empty commit to force a fresh CI run — reasonable for a stale or flaky run — and then read the check status about two seconds later. The run it had just triggered was necessarily still `queued`, so the status came back `pending` and the stage returned to `implement_complete` without ever reaching the fix path below it. Every subsequent entry into `fixing_ci` did the same thing, so a real failure was refreshed forever and never diagnosed: on `robotsix-auto-mail` ticket `…-6a4e` this cycled for hours (each pass returning in under 10 seconds) while the fix agent ran zero times. The refresh is now bounded — one per failure, reset on genuine forward progress — and the stage returns immediately after pushing rather than reading a status it just invalidated. Once the budget is spent it falls through to the real status, so a failure that survives a fresh run reaches the fix agent. (bound-ci-fix-empty-commit-refresh)
+- The merge stage's CI refresh now pushes at most one empty commit per branch head, and skips the empty commit entirely when the rebase it just did already pushed. Previously every entry into the `implement_complete` poll that found a concluded CI run pushed a fresh no-op commit, and a ticket bouncing `implement_complete → fixing_ci → implement_complete` re-entered that poll on each transition: observed on `robotsix-http` ticket `…-d320`, three empty commits in 22 seconds from two different call sites, each one abandoning the CI run the previous had triggered. The in-flight guard added earlier stops the refresh while checks are running, but not this case, where each run concludes before the next poll. A sentinel now records the head SHA produced by the last refresh, so the next poll is a no-op until something real moves the branch on — self-resetting, so a landed fix still gets its own refresh budget. (bound-merge-poll-ci-refresh)
+- The implement agent now records changelog entries as towncrier fragments
+  (`add_changelog_fragment`) instead of inserting bullets into `CHANGELOG.md`
+  (`insert_changelog_entry`). Every ticket previously wrote to the same spot under
+  `## 0.0.0 (unreleased)`, so any two open PRs conflicted pairwise — a
+  combinatorial problem no `gh pr update-branch` could resolve. Fragments are one
+  file per ticket, which is what the fleet standard requires and what makes
+  parallel PRs conflict-free. The fragment directory and valid types are read from
+  each repo's own `[tool.towncrier]`, since the fleet is not uniform. (changelog-fragment-tool)
+- ci_fix: the stage no longer kills its own agent mid-verify-loop. The ci-fix agent owns a fix→push→``wait_for_ci``→verify loop budgeted at ``ci_fix_max_iterations × ci_fix_wait_timeout_s``, but the stage wrapper fell back to the generic ``stage_timeout_seconds`` (2400 s) because ``ci_fix`` had no override — with the values pinned in production that killed the agent at 26% of its sanctioned budget and discarded fixes it had already pushed. ``ci_fix`` accounted for 25 of the 31 stage timeouts ever recorded. The stage ceiling is now *derived* from the agent's budget so the two cannot drift apart, a ci_fix deadline is retried as a transient stall instead of hard-blocking the ticket (matching ``implement``), and the shipped loop defaults are resized to observed run times (3 × 900 s; sampled successful runs finished in 300-900 s on a single iteration). (ci-fix-stage-budget)
+- Classify SQLite "database is locked" errors on the mill's own per-board DB as transient so lock contention gets a stage retry with backoff instead of escalating the ticket to BLOCKED, and raise the SQLite busy timeout from 5s to 30s so write bursts across the worker thread pool rarely hit the lock error at all. (db-locked-is-transient)
+- The disk gate now checks the container root alongside `data_dir`, via the new
+  `disk_check_extra_paths` setting. Sandbox containers write package installs to
+  the Docker overlay, which lives on a different device from the workspace
+  volume — so a rebase could fail three times with ENOSPC on every command while
+  the gate, looking only at the data volume, saw 146 GB free and waved the ticket
+  straight back in. Park notes now name the filesystem that is actually full. (disk-gate-checks-overlay-fs)
+- Turn off the per-ticket runaway budgets (`max_spend_usd_per_ticket`,
+  `max_traces_per_ticket`, `max_openrouter_marginal_usd_per_ticket`) and remove
+  `max_tokens` from every agent definition.
+
+  A per-ticket budget is the wrong unit for guarding against a model that
+  consumes erratically: that is a property of the model, not of whichever ticket
+  happened to be running, so the cap punishes the unlucky ticket while the real
+  problem continues on the next one. Measured against real fleet behaviour these
+  fired on ordinary long work rather than on runaways — on 2026-08-06 the trace
+  cap alone had 20 tickets BLOCKED at $0.00 of recorded OpenRouter spend.
+
+  Agent `max_tokens` could not be honoured at all on the Claude SDK transport:
+  it was forwarded as an advisory `task_budget` that capped nothing and instead
+  told the model it had a small allowance for the whole task. Also bumps the
+  llmio pin to pick up the transport-side fix.
+
+  The mechanism is retained, not deleted — set any cap non-zero to re-arm it.
+  `max_turns` and the per-stage wall-clock timeout remain the real backstops. (drop-per-ticket-budget-caps)
+- The edit-claim contradiction guard no longer blocks a resuming run whose edits
+  were an idempotent re-application. When every file the run claimed to edit is
+  already changed on the branch, the empty diff means a prior pass committed the
+  work — not that the work was lost — and the ticket proceeds to deliver. An edit
+  to a file the branch never touched still trips the guard. (edit-claim-resume-idempotent)
+- Fixed stale `files:` trigger paths in the `validate-config-sync` and `check-builtin-kinds` pre-commit hooks so they fire locally on relevant file edits. (fix-stale-pre-commit-files-triggers)
+- The scope-triage flood guard now counts only files the branch newly introduced,
+  not every out-of-scope file. A build-artifact flood is thousands of new paths; a
+  cross-cutting refactor is edits to files that already existed. Counting both
+  alike blocked exactly the changes that are most tedious by hand — a
+  default-account removal touching 79 files and a mypy-gate promotion touching 71,
+  both correctly scoped and neither containing an artifact. The prompt-overflow
+  protection the cap also provided moves to a separate, far higher
+  `scope_triage_hard_max_files` ceiling. (flood-guard-newly-added)
+- Data-dir GC now reclaims the ``.venv`` inside workspaces of PARKED
+  tickets — ``BLOCKED``, ``HUMAN_MR_APPROVAL`` and ``HUMAN_ISSUE_APPROVAL``.
+  Previously only terminal states (``CLOSED`` / ``EPIC_CLOSED`` /
+  ``ANSWERED``) were reclaimable, so a blocked ticket pinned its whole
+  dependency tree indefinitely. Measured on the deploy box 2026-08-06: 157
+  parked workspaces holding 45 GB of ``.venv``, 34 GB of it under
+  ``BLOCKED`` — on the very volume whose exhaustion had blocked 146 of
+  those tickets, a loop that could not drain on its own. Only ``.venv`` is
+  removed; the clone, its git history and any uncommitted work stay
+  inspectable for the human the ticket is parked for, and ``uv sync``
+  rebuilds the venv on resume from the shared package cache. Guarded by a
+  1-hour park-age threshold and a live-sandbox check so a ticket resumed
+  mid-pass never loses its venv under a running sync. Knobs:
+  ``data_dir_gc_prune_parked_venvs`` (default on) and
+  ``data_dir_gc_prune_parked_venvs_age_seconds``. (gc-parked-ticket-venvs)
+- Restored the Langfuse test helpers' tracing setup. The config-standard cutover
+  moved the Langfuse credentials onto `Settings` itself, but the helpers in
+  `tests/langfuse/` still populated only the `Secrets` singleton — so
+  `Settings.tracing_enabled` was False, every runner short-circuited, and 17
+  tests asserted against empty results. They now set the `Settings` fields too. (langfuse-test-tracing-creds)
+- A full data volume no longer mass-blocks the board. ENOSPC now
+  classifies as transient, and — mirroring the existing network-outage
+  parking — a stage that fails on a genuinely full volume PARKS without
+  consuming a retry attempt, re-polling every
+  ``disk_full_retry_seconds`` until space returns. Previously ENOSPC was
+  fatal, so one full volume became one hand-resumable BLOCKED ticket per
+  affected ticket: 146 of them on 2026-08-06, whose retained workspaces
+  then pinned the disk they were waiting on. A new pre-dispatch admission
+  gate (``disk_min_free_mb``, default 5 GB) parks tickets *before* a stage
+  starts, so a stage can no longer die partway through and leave a
+  half-written workspace consuming the space it just ran out of. Disk
+  exhaustion arriving as subprocess stderr is detected too, so a
+  ``git clone`` that died on a full disk is no longer reported as an
+  opaque ``Fatal: CalledProcessError``. (park-tickets-on-full-disk)
+- The global concurrency cap now admits waiting tickets by rank instead of arrival order, so the priority flag works fleet-wide rather than only within one board. Each repo's queue already sorted its own tickets `(priority, then closest-to-CLOSED, then FIFO)`, but every board then contended for the same `max_global_concurrency` slots through a plain `asyncio.Semaphore` — which hands slots out strictly FIFO and cannot see what its waiters are carrying. In production (26 consumer tasks across 21 boards, cap 3) a flagged ticket won its own queue instantly and then lost the global slot to whichever other repo's unflagged ticket happened to reach the semaphore first, so operators flagged a ticket and watched unflagged work start ahead of it. The new `PriorityGate` keeps the same cap but orders its waiters by the `(priority_rank, stage_rank)` tuple the per-board queues already use, breaking ties FIFO so nothing starves within a rank. (priority-aware-global-slot)
+- The sandbox concurrency ceiling now admits waiting work by priority instead of arrival order, closing the last priority-blind gate on the path from "operator flags a ticket" to "that ticket runs". The ceiling deliberately lives where sandboxes are created, so it is shared between ticket stages — which carry the operator's flag — and the ~20 per-repo periodic passes (audit, test-gap, survey, …), which carry nothing. Because it was a plain `BoundedSemaphore`, a `test_gap_workspace` pass could take the last of the three slots ahead of a flagged ticket that had already won both its board queue and the global stage gate. The pool now orders its waiters by the same `(priority_rank, stage_rank)` tuple used elsewhere, breaking ties FIFO, with the same bounded wait and the same `SandboxError` on timeout. The board consumer publishes each ticket's rank through a context variable, which `asyncio.to_thread` carries into the worker thread, so no stage signature changes; passes that never set it keep the unflagged default. (priority-aware-sandbox-slots)
+- Bumped `pypdf` to 6.15.0, closing GHSA-fp3f-mc75-235c and GHSA-fwg2-594c-jp42
+  (both resource exhaustion). The release landed inside the rolling `exclude-newer`
+  window, so it needed a per-package override — the same shape as the cryptography
+  override above it. (pypdf-advisories)
+- The post-rebase drop guard no longer blocks tickets over registry and
+  boilerplate files. `docs/modules.yaml` and `site/modules.yaml` join the
+  changelog paths already exempt, and the list is now the
+  `rebase_drop_exempt_paths` setting rather than a hardcoded tuple. These files
+  are a function of the whole repo and are re-derived by CI, so a rebase settles
+  them on a version matching neither the branch nor the target — a case the
+  blob-equality excuse cannot clear, which reported healthy reconciliations as
+  silent drops. (rebase-drop-exempt-registry)
+- Unblock the refine agent, which was failing every call, and stop a permanent API error from being swallowed as a successful empty run.
+
+  On the Claude SDK transport an agent's `max_tokens` becomes `task_budget.total`, which the API rejects below 20,000 tokens. `refine.yaml` set `8192`, so with `refine_subscription_tier_routing_enabled` on, every refine call was rejected with `400 \`task_budget.total\` must be at least 20,000 tokens for this model`. Raised to `20000` — a hard floor, not a preference.
+
+  The failure was invisible because the SDK collapses the 400 into its degenerate-`success` frame, which `_is_claude_sdk_degenerate_result` matched through the cause chain — so the refine runner logged "treating as successful run with no changes" and returned an empty result. An API `400` now takes precedence over that signature in both `_is_claude_sdk_degenerate_result` and `is_transient`, so it fails loudly instead of silently no-opping (and is never retried — the retry re-sends an identically invalid request). Matched on the message so the guard holds regardless of the installed `robotsix_llmio` version; scoped to 400, since 429 and 5xx stay retryable. (refine-task-budget-floor)
+- `Settings()` reads `config/config.json` again. The clean-cutover to the
+  robotsix config-standard (#2525) removed the model's JSON source and replaced
+  it with a `load_settings()` helper that was never wired to a caller — and
+  nothing else reads the file, so every one of the several hundred bare
+  `Settings()` constructions across the codebase silently fell back to model
+  defaults. The commit had not been deployed yet; the next deploy would have
+  reverted mill's entire runtime configuration, `MILL_MAX_GLOBAL_CONCURRENCY`
+  included. The file source is restored below `os.environ`, and
+  `tests/config/test_config.py` now pins the precedence. (restore-json-config-sourcing)
+- Sandbox `uv`/`pip` caches now live on a shared disk-backed volume subpath
+  instead of the sandbox's `/tmp`. `HOME=/tmp` is a tmpfs — RAM charged to the
+  container's own memory limit — so ever since the test gate began installing the
+  project, each sandbox spent its memory budget caching the dependency tree
+  (measured: 625 MB of `/tmp/.cache` in one live sandbox, another pinned at
+  1022 MiB against a 1 GiB cap). The tmpfs is also size-bounded now, so an
+  overflow fails with `ENOSPC` rather than an unexplained OOM kill, and the
+  sandbox-reaper pass drops the shared cache once it exceeds its budget. (sandbox-cache-off-tmpfs)
+- `max_global_concurrency` is now a hard ceiling on live `mill-sbx-*` sandbox
+  containers, not just on board-consumer stages. It was applied only around
+  `process_ticket`, so the ~20 per-repo periodic passes, the meta-agent, the
+  diagnostic pass and refine's warnings collection all spawned sandboxes outside
+  it — with the cap set to 1, three sandboxes ran at once. The limit now lives in
+  `sandbox.run()` itself, where the containers are actually created. (sandbox-hard-ceiling)
+- Scanner findings are grouped under a rollup epic again for all 19 scanner
+  sources, not 5. #2672 (epic parents for scanner findings) and #2667 (collapse N
+  findings into one ticket) landed as concurrent PRs and both named their source
+  set `_SCANNER_SOURCES`, so the second definition silently shadowed the first —
+  `AUDIT`, `TRACE_HEALTH` and 12 others stopped getting an epic parent. The
+  narrower set is now `_ROLLUP_SOURCES`. This also clears the `no-redef` mypy
+  violation that was failing CI on `main` and therefore on every open PR. (scanner-sources-name-collision)
+- Delegate the Claude SDK `task_budget` floor and API-400 classification to `robotsix_llmio` instead of reimplementing them locally.
+
+  `robotsix-llmio` is bumped to `c65df6b`, which adds `build_task_budget()` (clamps a below-floor `max_tokens` up to the API's 20,000-token `task_budget` minimum) and `ClaudeSDKPermanentAPIError` (an API 400, excluded from the transient set). With those in place:
+
+  - `refine.yaml` returns to its intended `max_tokens: 8192`. The previous bump to `20000` was mill working around the floor itself, which also silently loosened the cap on the OpenRouter path, where `max_tokens` is a real per-response limit rather than an advisory budget. llmio now clamps only the Claude SDK value, warning once.
+  - `agents/retry.py` drops its local `_is_permanent_api_error` message matcher and its `_chain_contains` helper in favour of llmio's `is_claude_sdk_permanent_api_error`. `is_transient` no longer needs an explicit guard either — `is_claude_sdk_transient` already excludes a 400 ahead of the degenerate-`success` signature. `_is_claude_sdk_degenerate_result` still defers to the library predicate, since the refine runner consults it directly when deciding whether to swallow a failure as an empty result.
+
+  Adds a regression test asserting that **every** agent definition's `max_tokens` yields an API-valid `task_budget`, so a future below-floor value can't take a stage offline again. This also covers `retrospect` (16384) and `periodic/completeness_check` (8192), which were previously safe only because they don't route to the Claude SDK.
+
+  (use-llmio-task-budget-clamp)
+- Wire per-repo `auto_merge_enabled` from `repos.yaml`/`repos.json` through `load_repos_config()` to `RepoConfig`. Previously the field was declared and documented but never passed from the config data, so per-repo opt-in was silently ignored. (wire-auto-merge-enabled)
+- `changelog_fragment` now maps a requested kind onto the repo's own towncrier spelling instead of rejecting it. robotsix-llmio names its types `feat`/`fix` where every other repo uses `feature`/`bugfix`, so an agent choosing the majority spelling hit a hard error and the ticket blocked. A kind with no configured equivalent still raises, because towncrier silently skips a fragment with an unconfigured extension. (20260808T040000Z-changelog-kind-aliases)
+- Fix `GET /tickets?created_after=...` filter: naive ISO-8601 datetimes (e.g. `2020-01-01T00:00:00`) are now treated as UTC instead of raising a `TypeError` inside the ORM layer. The list endpoint also now skips individual tickets whose enrichment fails (e.g. a row with NULL `created_at`) instead of 500-ing the whole board — the bad row is logged and the remaining tickets are returned. (20260808T072512Z-get-tickets-list-endpoint-returns-an-err-916e)
+- Fix queue.task_done() counter mismatch in the drain-at-gate-entry loop that would cause queue.join() to hang forever after N swaps. Also fix cap-deferred rank undoing (demoted tickets were re-enqueued at their real priority rank during drain swaps) and extract _peek() helper for PriorityQueue private-attribute access. (20260808T113243Z-global-gate-head-of-line-blocking-a-boar-2b91)
+- Fix config drift: `auto_merge_enabled` in `config.example.json` now matches the model default (`true`) and the documented default. (20260801T125422Z-config-drift-auto-merge-enabled-default-5475)
+- Retrospect stage now enforces ``retrospect_max_drafts_per_run`` — the per-run draft cap that was declared in settings but never consumed at runtime. Drafts, follow-ups, and AGENT.md proposal tickets all count against the same shared cap, and surplus proposals are silently skipped once the budget is exhausted. (20260802T160626Z-wire-retrospect-max-drafts-per-run-into-2a1e)
+- Changelog validation now skips repos that have migrated to release-please. `_modules_yaml_check` does not merely report — it *inserts* a `changelog.d/*.md` glob into `docs/modules.yaml`, so on a release-please repo (which has no such directory) mill was actively breaking the repo's own `check-registration` job the next time it worked a ticket there. (20260808T195500Z-changelog-validate-skip-release-please)
+- The CI_FAILURE diagnostic event emitter in the ci_fix stage now falls back to `ticket.board_id` when `ctx.repo_config` is `None` or has no `board_id`.  Previously a missing or unresolvable repo config silently skipped the event, starving the recurring-category → auto-fix-proposal pipeline of input.  Successful and skipped emissions are now logged at info / warning level for observability.  Three regression tests cover the happy path, the `repo_config=None` fallback, and the non-emission on pending CI. (20260807T195906Z-ci-failure-diagnostic-emitter-is-not-emi-e251)
+- Fix test suite: disable disk-admission gate in test Settings so tests are not parked at DRAFT/READY due to insufficient free space in /tmp. (20260807T210552Z-auto-rebase-prs-that-fall-into-merge-con-2f27)
+- Regenerate uv.lock after removing cryptography exclude-newer-package override in pyproject.toml, resolving the stale `cryptography = "2026-08-01T00:00:00Z"` entry that would cause `uv sync --locked` to fail in CI. (20260807T211754Z-bump-cryptography-to-50-0-0-to-remediate-a309)
+- Allow `POST /tickets/ingest` to create tickets on the synthetic `meta` board by falling back to `repos.meta` when the `repo_id` is not in `repos.repos`. (20260807T212743Z-post-tickets-ingest-rejects-the-syntheti-8791)
+- Bump `cryptography` to 50.0.0, clearing GHSA-m2h6-j472-rp4c and
+  GHSA-g6cj-pr64-35w5 (a Bleichenbacher oracle in PKCS#7 EnvelopedData
+  decryption). The vulnerability scan had been failing on `main` since
+  2026-08-03, which tripped mill's own target-branch-debt guard and blocked
+  13 tickets from merging. The fix version landed inside the rolling 7-day
+  `exclude-newer` window, so it needed a per-package override to be
+  resolvable — safe to remove once the window has passed. (bump-cryptography-50)
+- Merge: a forge merge rejection that only means "a required status check has not reported yet" no longer strands the ticket. GitHub answers 405 both for a permanent refusal and for a still-settling required gate; mill collapsed both into the guess ``merge not allowed (branch protection?)``, discarded the response body, and transitioned straight to ``BLOCKED``. The rejection is now marked retryable, carries GitHub's own message, and is re-polled up to five passes before failing closed. (merge-405-retryable-not-blocked)
+- A triage note matching `_TRIAGE_REJECTION_PATTERNS` no longer rejects the ticket by itself; it now only suppresses the deterministic auto-approve shortcut so the LLM classifier decides. These patterns are substrings of free-form LLM prose, and the identical phrase carries opposite meanings depending on its referent — "Grounding is confirmed: the source file exists, the test file does not exist" describes the work to do, while "'mail-ingester' does not exist anywhere in this repository" is a genuinely ungrounded premise. Treating a match as a verdict rejected the first kind too, parking healthy tickets in `human_issue_approval`, a state with no automated stage that nothing ever closes, so they accumulated indefinitely. Confirmed false positives included a test-coverage ticket whose target module exists, a devcontainer fix rejected over an unrelated footnote, and a `NO_CHANGE` audit describing its desired end state. The classifier reads the actual spec and can tell the cases apart; over-matching now costs one classifier call rather than stranding a ticket.
+- Fix the deploy-time config-standard footprint gate
+  (`validate_config_standard_footprint`) that globbed every `*.yaml`/`*.yml`
+  in a repo and blocked any delivery whose tree carried ordinary yaml
+  (`config/default.yaml`, a root `docker-compose.yml`, `.pre-commit-config.yaml`,
+  `mkdocs.yml`, …) — which was virtually every repo, blocking tickets
+  fleet-wide. The gate now only flags a genuine stray `_standards/` copy, the
+  one artifact that is never legitimate.
+- Git operations that talk to a remote (clone, fetch, push) now run under a 300s timeout with `GIT_TERMINAL_PROMPT=0`, and per-repo clone/fetch refreshes are capped at two concurrent operations. Every stage offloads its blocking work to Python's default thread pool, which holds only `min(32, cpu_count + 4)` threads — 8 on the deploy host — so an unbounded git call that stalled removed one worker from that pool permanently, and a bad or expired token could hang on `/dev/tty` rather than failing. With ~22 registered repos all refreshing simultaneously at start-up (the supervisor deliberately skips its initial delay), this was observed live as the entire pool wedged in the periodic repo refresh while merge stages sat "active" for 10+ minutes having done no work. `TimeoutExpired` is now credential-redacted like `CalledProcessError`, since its `cmd` carries the same tokenized URL.
+- Implement loop no longer wastes the entire spawn budget on no-progress
+  re-attempts (b92d): a review re-spawn whose previous attempt committed
+  only changelog fragments while review threads remain open now escalates
+  to BLOCKED in preflight — before the agent loop, without consuming a
+  spawn — and the block note carries the reviewer's open gap list (not
+  the summary tail). Adds regression tests locking review-feedback
+  injection into the implement context after a review bounce.
+- Implement no longer takes an LLM-free bypass when a reviewer has asked for changes. The trivial-config-only, rename-only and spec-exact levels apply whatever is already in the working tree and never read the feedback field, so on a review sendback they re-emitted the exact diff the reviewer had just rejected. Review sent it straight back, implement bypassed again, and after four identical passes the cycle ceiling blocked the ticket for human review — a loop that produced the largest blocked class on the board, with reviews naming a concrete edit and every pass summarised "trivial config-only addition". Those three levels are now skipped whenever feedback is present; the cheaper level-1 model stays available because it is a real LLM pass and can act on what the reviewer asked for.
+- Implement resume guard now routes a green-CI-but-no-open-PR branch to DELIVERABLE (which opens the PR) instead of IMPLEMENT_COMPLETE (the post-deliver merge-poll state). Routing to IMPLEMENT_COMPLETE skipped the deliver stage entirely, so the PR was never created and the ticket churned back into implement until the spawn cap tripped — the deeper half of the "implement finishes green but never emits a PR" deadlock.
+- Implement stage: preserve uncommitted edits on resume. When a cycle terminated on a non-finalizing exit path (transient `AgentRunError` re-raise, pause/interrupt, worker-scheduled retry) it left real edits uncommitted in the worktree; the next resume's `try_rebase_onto` (`git reset --hard` + `git clean -fd`) silently destroyed them, so the agent re-did the work every spawn until the spawn cap tripped and the ticket blocked with 0 commits. `_clone_and_branch` now WIP-commits a dirty worktree that has no commits beyond base before the rebase, so the work survives to the deliver stage.
+- Per-repo `auto_merge_enabled` is now read from the repos config and defaults to enabled. The field was declared on `RepoConfig` but never populated in `load_repos_config()`, so it kept its opt-in `False` default for every repo regardless of configuration — making gate 3 of the auto-merge eligibility check unsatisfiable fleet-wide. Every green, review-approved PR bounced back to `HUMAN_MR_APPROVAL` instead of merging, and boards filled with tickets no automated stage could advance. Auto-merge remains gated by the global switch, the global kill-switch, the review gate, the trusted-bot-author check and the sensitive-path globs; set `auto_merge_enabled: false` on a repo entry to opt that repo out.
+- Refine no longer hard-blocks a ticket when the refiner returns no usable spec. Both degenerate-spec paths resolved the next state from a literal empty string, which always tripped the "never auto-approve an empty spec" guard and returned `BLOCKED` — while the recorded note still claimed the original draft had been kept and the run had carried on. Every ticket whose refiner produced nothing has been silently blocked since that guard landed, including ones with substantial drafts, making it the single largest blocked class on the board. The next state is now resolved from the original draft: a substantive draft follows its normal approval route, and a draft that is *also* degenerate still blocks — correctly, and with a note that says so instead of claiming otherwise.
+- Replaying a prior `triage SKIP` verdict now keeps only the triage's own reasoning. The stored history note also carries the routing verdict appended to it (`" | auto-approve: …"`), and the short-circuit replayed the whole string: it rewrote the stale verdict into the new history entry, where it reads as a fresh decision, and fed it back in as `triage_note` so the obsolete verdict re-derived itself on every pass. A ticket in that state could never be re-judged — live, 11 tickets kept replaying an `auto-approve: REJECTED` suffix produced by a gate that no longer exists, even after the gate was fixed.
+- Retrospect no longer files a draft whose body is a placeholder. The spawn condition tested `draft_body` for truthiness only, and a body of literally `"..."` is truthy, so such a draft reached the board with a plausible title and then blocked in refine, which could not build a spec from it. Both the improvement-draft and the follow-up paths now reject a degenerate body. The predicate refine already used for this moved to `core.text_noop` so the body an agent may file and the spec refine will accept can never disagree; dropping an under-specified finding costs one report the agent can raise again, while filing it costs a refine pass and a permanent blocked ticket.
+- The `NO_CHANGE`→implement route no longer forwards its own triage reason as a rejection signal. When triage concludes a ticket's work is already done, refine deliberately routes it to `READY` so the implement stage can verify the claim against the live tree. But it also passed the triage reason to the auto-approve gate, and a `NO_CHANGE` reason says by definition "this is already implemented / no change is needed" — verbatim what `_TRIAGE_REJECTION_PATTERNS` scans for. The gate therefore fired on the premise of the route itself, diverting the ticket to `HUMAN_ISSUE_APPROVAL`, where it sat indefinitely: nothing auto-closes that state and no operator approves a ticket whose own note says there is nothing to do. Live, such tickets accumulated for up to six days and became the board's largest and oldest bucket. The spec still faces the normal auto-approve triage; only the self-referential rejection match is skipped.
+- The implement stage's spawn counter is now cleared when a ticket leaves `READY` for a later stage. The counter caps implement invocations so a ticket looping through `BLOCKED`→`READY`→`BLOCKED` cannot burn unbounded LLM quota, but nothing ever reset it on success — it was monotonic across the ticket's entire life. A ticket therefore got three implement passes *ever*, and a fourth (an entirely routine outcome after review feedback) dead-ended it with `implement spawn limit reached (3/3)` no matter how much genuine progress it had made. That became the largest blocked class on the live board, on tickets whose own summaries reported every gate passing. Loop protection is unaffected: the implement↔review ping-pong is separately bounded by `implement_cycles` against `max_implement_review_cycles`, and an unproductive ticket never reaches a progress state, so its budget still runs out. The block message no longer tells operators to delete a workspace file — `resume_blocked` has always cleared the counter itself.
+- The merge stage no longer pushes a new head SHA while CI checks are still running. Each `IMPLEMENT_COMPLETE` poll refreshed the branch unconditionally — rebasing, or pushing an empty commit when the branch was already current — to un-stick a stale SHA pinning old failed check-runs. A new SHA makes the forge abandon the in-progress run and start a fresh one, and the poll interval is far shorter than a CI run, so every poll restarted the very checks it was waiting on and no run could ever conclude. Measured on the live board: 477 empty commits in one hour across 15 tickets, one of them looping for 20 hours restarting 18 checks every 2 minutes, with 22 tickets stacked in `IMPLEMENT_COMPLETE` because none could finish CI. A cheap probe now skips the refresh while anything is in flight; once a run has concluded the refresh still happens before the status the stage acts on is read, so a stale failing SHA is re-run rather than re-diagnosed as a genuine failure.
+- The per-stage outcome cache no longer stores or replays a BLOCKED outcome. Its premise — same input, same result, so skip the expensive re-run — does not hold for BLOCKED, which means a human must intervene; resume-blocked, a code fix and a config change all exist to produce a *different* result next pass. Caching it made a blocked ticket unrecoverable unless its description changed: a ticket resumed after the fix written for it had been deployed logged `refine cache hit (hash=…) → blocked` and replayed the pre-fix outcome verbatim, note and all, without running the fixed code. Root-cause fixes could not reach the tickets they were written for. The read path also ignores pre-existing BLOCKED entries, so workspaces already holding one recover on their next pass rather than needing the cache file deleted by hand.
+- The post-push check no longer reports mill's own automation as a foreign human push. It required every commit ahead of the target to have both author and committer equal to `mill@robotsix.local`, so a repo's own CI auto-format commit (`github-actions[bot]@users.noreply.github.com`) and mill's own GitHub App (`…+robotsix-mill[bot]@users.noreply.github.com`, committed by `noreply@github.com`) were classified as foreign. Affected tickets were blocked with "a human likely pushed to the PR branch. Manual reconciliation required" when no human had touched the branch. Commits from GitHub Apps and Actions are now recognised as automation, matched on the shared `[bot]@users.noreply.github.com` suffix so app installation ids need no enumeration. A genuine human commit still trips the check.
+- The post-rebase integrity check no longer reports a file as silently dropped when the target branch already carries the branch's version of it. A file legitimately leaves the post-rebase diff when a sibling PR lands the same change first — the rebase correctly collapses the now-redundant delta to nothing — and blocking on that dead-ends a perfectly healthy ticket. Live, ten tickets blocked on the identical `Dockerfile` immediately after the canonical fix for it merged from another PR. Both cases leave `HEAD` agreeing with the target afterwards, so the rebase stage now snapshots each changed file's blob id before the agent runs and a file is excused only when the target's content is byte-for-byte what the branch was trying to deliver; a genuinely discarded change leaves the target on its original content and is still reported.
+- Ticket deletion, redraft and the data-dir GC now remove history rows with bulk `DELETE` statements instead of loading each row as an ORM object. Materialising a `TicketEvent` decodes its `state` column through the strict SQLModel `Enum`, which raises `KeyError` for any value retired from `State` since the row was written — live, 200 legacy `MAINTENANCE` rows across five boards made every archived-ticket purge crash. Because the purge runs from `transition()`, each crash also aborted the worker's post-transition stage chaining, costing the ticket a poll cycle, and archived tickets accumulated without bound. Rows being deleted never need to be decoded, and this is now one statement per table rather than a `SELECT` plus N deletes.
+- `POST /tickets/{id}/merge-now` is now documented in the `/chat-skill` document, with explicit guidance to call it rather than sending the operator to the forge UI. The endpoint was implemented and served but absent from the skill — the chat agent's only description of the mill API — so the agent could not know it existed and told operators to open the PR and merge by hand, which is precisely the manual step the endpoint exists to remove. A ticket parks in `human_mr_approval` when the merge stage deliberately declines to auto-merge (sensitive path such as `.github/workflows/**`, or a repo on the infra denylist); the PR is already green and mergeable and only a human decision is missing, so the agent should surface the blocking reason and then act on the answer itself. A new test enumerates state-changing ticket routes from the live router and fails when one is undocumented, against a recorded baseline of the seven operator-only routes that were already exempt.
+- `ci_fix` dependency tickets are now exempt from the pre-existing target-branch CI-debt guard. The guard blocks a PR when every workflow failing on its head is also failing on the merge target — but a `ci_fix` ticket is spawned precisely to repair that debt, so blocking it deadlocked the board: the repair for a red `main` was refused because `main` was red, and only a human merging by hand could break the cycle. Observed live on `robotsix-chat`, where one red Dockerfile check wedged 22 tickets along with all three `ci_fix` tickets spawned to clear it. These tickets now fall through to the auto-fix loop, which remains bounded by the existing cross-stage cycle counter.
+- `run_command` loop-guard no longer bricks legitimate large-file exploration. It now counts only *distinct* greps per file (byte-identical repeats are already refused separately) and raises the per-file threshold from 3 to 8, so a large source file that genuinely needs many different greps is not refused after the third one.
+
+### Deprecations and Removals
+
+- Board: removed the per-card column-move control and the `POST /board/move/{card_id}/{target_status}` route behind it. The route had been returning 500 (`AttributeError: 'str' object has no attribute 'value'` in `board_move`), and the control itself was already invisible on the mill board — `board-mill.css` hid it with `.board-card-move { display: none }` because all 22 mill columns are automated pipeline stages, so a manual move "is misleading and can drop a ticket into a state inconsistent with the pipeline". robotsix-board no longer renders the form, so both the hide rule and mill's `move_endpoint()` / `move_endpoint_template()` adapter methods are gone. A state change goes through `POST /tickets/{id}/transition`, the path the pipeline itself uses. Mill's own "Move to board…" button (`.move-btn`, `POST /tickets/{id}/migrate`) is unaffected — it migrates a ticket between repos, not between columns.
+
+### Misc
+
+- 20260801T130251Z-upgrade-ruff-from-0-15-15-to-0-16-0-and-cb29, #0
+
+### Other changes
 
 - Harden module-registration CI check against deleted-but-not-yet-git-rm'd files: filter out files that no longer exist on disk before flagging them as unclassified.  Update implement agent instructions to ``git rm`` deleted files before running ``check-registration``, preventing the loop where an agent keeps re-adding a ``docs/modules.yaml`` entry for a file it just deleted.
 - Add docstring to `PrioritySlots.release` matching the sibling `acquire` method.

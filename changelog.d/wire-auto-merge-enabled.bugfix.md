@@ -1,1 +1,0 @@
-Wire per-repo `auto_merge_enabled` from `repos.yaml`/`repos.json` through `load_repos_config()` to `RepoConfig`. Previously the field was declared and documented but never passed from the config data, so per-repo opt-in was silently ignored.

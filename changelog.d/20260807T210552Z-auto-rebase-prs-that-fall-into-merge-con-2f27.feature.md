@@ -1,1 +1,0 @@
-Auto-rebase PRs that become conflicted due to sibling merges: when a PR in human_mr_approval or waiting_auto_merge is detected as conflicted, the merge stage now tries the server-side update-branch API first — resolving base-moved-forward conflicts cheaply without invoking the rebase agent. Genuine content conflicts still fall through to the rebase agent as before.
