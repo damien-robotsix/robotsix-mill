@@ -231,8 +231,9 @@
 
 ### Other changes
 
+- Remove `docker` pytest marker and two dead integration tests (`tests/sandbox/test_sandbox_integration.py`) that had no CI execution path. Sandbox integration behavior is already covered hermetic-ally by the monkeypatched tests in `tests/sandbox/test_sandbox.py`.
 - Harden module-registration CI check against deleted-but-not-yet-git-rm'd files: filter out files that no longer exist on disk before flagging them as unclassified.  Update implement agent instructions to ``git rm`` deleted files before running ``check-registration``, preventing the loop where an agent keeps re-adding a ``docs/modules.yaml`` entry for a file it just deleted.
-- Add docstring to `PrioritySlots.release` matching the sibling `acquire` method.
+- Add docstring to `PrioritySlots.release` matching the sibling `acquire` method. (mill: Resolve dead docker-marked sandbox integration tests: give them a real CI home or mark local-only (20260806T184416Z-resolve-dead-docker-marked-sandbox-integ-c421))
 - Add dedicated unit tests for `PollLoopsMixin` (`_initial_delay`, `_load_ci_state`, `_prune_ci_state`, `_find_canonical_ci_ticket`, `_fetch_run_logs_with_deferral`, `_dependabot_title`, `_dependabot_body`) and for `processing.py` helpers (`_post_trace_event`, `_block_ticket_and_notify`, `_handle_stage_error`, `_maybe_reevaluate_epic`, `_root_span_attributes`, `_root_input_summary`, `_root_output_summary`)
 - Configure Renovate `platformAutomerge` (squash) for patch, minor, and digest dependency updates, replacing the dead `dependabot-auto-merge.yml` wrapper that gated only on `dependabot[bot]` (Renovate PRs were never auto-merged).
 - Sandbox: clean stale build artifacts (`build/`, `src/*.egg-info/`) before every project install so a single transient setuptools failure doesn't poison the entire sandbox run. Audit agent prompt updated to treat repeated identical build errors as a terminal signal and fall back to pre-built-venv commands.
@@ -242,7 +243,7 @@
   to declare and validate the before→after version against local git
   tags before editing, treat unverified web results as terminal, and
   enforce one-edit convergence so investigation can't consume the full
-  run budget on a single-line change. (mill: tool_error — The docs subtask `update-docs-mill-env-vars` (obs 80fd8d53c4a9d727) took 266 seconds, and  (20260803T115102Z-tool-error-the-docs-subtask-update-docs-1d04))
+  run budget on a single-line change.) (mill: Resolve dead docker-marked sandbox integration tests: give them a real CI home or mark local-only (20260806T184416Z-resolve-dead-docker-marked-sandbox-integ-c421))
 - Strengthen `run_command` tool docstring to explicitly forbid prefixing commands with ``cd`` to any absolute path (the sandbox already sets the working directory), preventing agents from hallucinating workspace-root ``cd`` prefixes that waste ~160 s on doomed calls.
 - Implement stage: when `github_token()` fails permanently (e.g. missing
   credentials, App not installed), clone failures now skip the transient-retry

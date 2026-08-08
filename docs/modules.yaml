@@ -85,7 +85,6 @@ modules:
       - tests/core/test_tool_wrappers.py
       - tests/core/test_delta_context.py
       - tests/core/test_event_notifier.py
-      - changelog.d/*.md
     dependencies: [config]
 
   - id: deps
@@ -424,7 +423,6 @@ modules:
     paths:
       - src/robotsix_mill/sandbox/**/*.py
       - tests/sandbox/test_sandbox.py
-      - tests/sandbox/test_sandbox_integration.py
       - tests/sandbox/test_slots.py
       - sandbox/**/*
       - docs/sandbox/**/*
@@ -571,7 +569,6 @@ modules:
       - ARCHITECTURE.md
       - CONTRIBUTING.md
       - CHANGELOG.md
-      - changelog.d/*.md
       - release-please-config.json
       - .release-please-manifest.json
       - doc-agent-ledger.md
