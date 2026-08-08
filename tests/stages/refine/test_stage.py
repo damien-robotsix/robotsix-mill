@@ -1100,7 +1100,7 @@ def test_refine_triage_skip_no_paths_writes_empty_file_map(ctx_factory, monkeypa
 # ---------------------------------------------------------------------------
 
 
-def test_refine_triage_exception_short_circuits_to_human_approval(
+def test_refine_triage_exception_short_circuits_to_human_issue_approval(
     ctx_factory, monkeypatch
 ):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
