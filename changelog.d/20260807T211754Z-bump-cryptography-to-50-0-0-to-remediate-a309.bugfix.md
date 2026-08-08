@@ -1,0 +1,1 @@
+Regenerate uv.lock after removing cryptography exclude-newer-package override in pyproject.toml, resolving the stale `cryptography = "2026-08-01T00:00:00Z"` entry that would cause `uv sync --locked` to fail in CI.
