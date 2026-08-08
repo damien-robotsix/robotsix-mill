@@ -913,6 +913,147 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
     assert post_check_calls["branch"] == f"mill/{t.id}"
 
 
+def test_mechanical_rebase_skips_agent_when_clean(tmp_path, monkeypatch):
+    """When try_mechanical_rebase succeeds and push_with_lease works,
+    the rebase agent is never spawned."""
+    ctx = _gh(tmp_path)
+
+    agent_called = []
+
+    def fake_rebase(**kwargs):
+        agent_called.append(1)
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.try_mechanical_rebase",
+        lambda repo, target_branch: True,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
+        lambda repo, branch, remote_url, token: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda repo, target: [],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.file_blobs",
+        lambda repo, files: {},
+    )
+    # Post-rebase routing checks whether a PR exists; mock so the
+    # forge reports a PR → route stays IMPLEMENT_COMPLETE.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_called == [], "rebase agent should not have been called"
+
+
+def test_mechanical_rebase_falls_through_on_conflict(tmp_path, monkeypatch):
+    """When try_mechanical_rebase returns False (conflicts), the rebase
+    agent IS spawned."""
+    ctx = _gh(tmp_path)
+
+    agent_called = []
+
+    def fake_rebase(**kwargs):
+        agent_called.append(1)
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.try_mechanical_rebase",
+        lambda repo, target_branch: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    MergeStage().run(t, ctx)
+    assert agent_called == [1], "rebase agent should have been called"
+
+
+def test_mechanical_push_failure_falls_through_to_agent(tmp_path, monkeypatch):
+    """When try_mechanical_rebase succeeds but push_with_lease fails,
+    the rebase agent IS spawned (fallthrough)."""
+    import subprocess
+
+    ctx = _gh(tmp_path)
+
+    agent_called = []
+
+    def fake_rebase(**kwargs):
+        agent_called.append(1)
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.try_mechanical_rebase",
+        lambda repo, target_branch: True,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.push_with_lease",
+        lambda repo, branch, remote_url, token: (
+            # Simulate lease violation or network error
+            (_ for _ in ()).throw(subprocess.CalledProcessError(1, ["git", "push"]))
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    MergeStage().run(t, ctx)
+    assert agent_called == [1], "rebase agent should have been called on push failure"
+
+
 def test_rebase_clears_stale_review_artifact_and_cache(tmp_path, monkeypatch):
     """After a successful rebase, the review.md artifact and the review
     stage-outcome cache must be cleared so a subsequent review pass

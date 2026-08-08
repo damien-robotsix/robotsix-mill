@@ -536,6 +536,91 @@ class TestTryRebaseOnto:
 
 
 # ===========================================================================
+# 9b. try_mechanical_rebase — integration (real git)
+# ===========================================================================
+
+
+class TestTryMechanicalRebase:
+    def test_clean_rebase_returns_true(self, tmp_path):
+        """Branch with a single commit rebases cleanly onto updated main."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+
+        # Push a new commit to main so there's something to rebase onto
+        wd = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(wd)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(wd, "config", "user.email", "op@t")
+        _git(wd, "config", "user.name", "operator")
+        (wd / "main_update.txt").write_text("operator edit on main\n")
+        _git(wd, "add", "-A")
+        _git(wd, "commit", "-q", "-m", "operator edit")
+        _git(wd, "push", "origin", "main")
+
+        result = git_ops.try_mechanical_rebase(dest, "main")
+        assert result is True
+
+        # Verify the feature commit is on top
+        log = (
+            subprocess.run(
+                ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+                capture_output=True,
+                text=True,
+            )
+            .stdout.strip()
+            .split("\n")
+        )
+        assert log[0] == "feature commit"
+
+    def test_conflict_aborts_returns_false(self, tmp_path):
+        """Create a conflicting change on the branch and push a
+        conflicting change to main → rebase fails, returns False,
+        working tree is left clean, no ongoing rebase."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "README.md").write_text("conflicting edit from feature\n")
+        git_ops.commit_all(dest, "conflict on feature")
+
+        # Push a conflicting edit to main
+        wd = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(wd)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(wd, "config", "user.email", "op@t")
+        _git(wd, "config", "user.name", "operator")
+        (wd / "README.md").write_text("conflicting edit from main\n")
+        _git(wd, "add", "-A")
+        _git(wd, "commit", "-q", "-m", "conflicting main edit")
+        _git(wd, "push", "origin", "main")
+
+        result = git_ops.try_mechanical_rebase(dest, "main")
+        assert result is False
+
+        # Working tree should be clean after abort
+        assert git_ops.has_changes(dest) is False
+        # No ongoing rebase: git should report we are on the feature branch
+        branch = subprocess.run(
+            ["git", "-C", str(dest), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert branch == "feature"
+
+
+# ===========================================================================
 # 10. head_sha — integration (real git)
 # ===========================================================================
 

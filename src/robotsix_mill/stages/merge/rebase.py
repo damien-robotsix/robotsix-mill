@@ -173,9 +173,9 @@ class RebaseMixin(_MergeStageBase):
         bridged git tools.  This method only builds the context
         (remote_url, token) and delegates to the agent.
 
-        Returns ``(ok, detail, pre_rebase_files)`` — ``ok`` True on success, False on a
-        (retryable) rebase failure; ``detail`` is the agent's summary of
-        what it found / why it could not resolve (surfaced in the BLOCKED
+        Returns ``(ok, detail, pre_rebase_files, pre_rebase_blobs)`` — ``ok`` True on
+        success, False on a (retryable) rebase failure; ``detail`` is the agent's
+        summary of what it found / why it could not resolve (surfaced in the BLOCKED
         note so a human sees the actual conflict, not a generic message).
         May instead return an ``Outcome`` to return directly (e.g. BLOCKED
         when the remote PR branch has diverged and must not be force-pushed
@@ -185,6 +185,61 @@ class RebaseMixin(_MergeStageBase):
 
         pre_rebase_files: list[str] = []
         pre_rebase_blobs: dict[str, str] = {}
+
+        # Resolve remote_url and token early — the mechanical pre-pass
+        # needs them for push_with_lease, and the agent path also uses them.
+        remote_url = _facade._resolve_remote_url(s, repo_config)
+        token = _facade.github_push_token(s, repo_config=repo_config)
+
+        # Reconcile with the remote PR branch first so the
+        # rebase agent operates on a branch that includes any
+        # foreign commits (e.g. a human pushed a fix directly).
+        blocked = _reconcile_with_remote_pr(
+            _facade, repo_dir, remote_url, branch, token, ticket.id
+        )
+        if blocked is not None:
+            return blocked
+
+        # Capture the implement commit's source-file diff before
+        # the rebase agent mutates the branch, so the post-rebase
+        # integrity check can detect silent drops.
+        pre_rebase_files = _facade.git_ops.changed_source_files(Path(repo_dir), target)
+        # Also snapshot each file's blob id. After the rebase,
+        # HEAD agrees with the target both when the change was
+        # discarded AND when a sibling PR already landed it —
+        # only the pre-rebase content tells those apart.
+        pre_rebase_blobs = _facade.git_ops.file_blobs(Path(repo_dir), pre_rebase_files)
+
+        # --- mechanical rebase pre-pass (no LLM) ---
+        try:
+            try_ok = _facade.git_ops.try_mechanical_rebase(Path(repo_dir), target)
+        except Exception:
+            try_ok = False  # defensive: fall through to agent
+
+        if try_ok:
+            try:
+                _facade.git_ops.push_with_lease(
+                    Path(repo_dir), branch, remote_url, token
+                )
+                log.info(
+                    "%s: mechanical rebase succeeded — no LLM agent needed",
+                    ticket.id,
+                )
+                return (
+                    True,
+                    "mechanical rebase: no conflicts",
+                    pre_rebase_files,
+                    pre_rebase_blobs,
+                )
+            except Exception as push_err:
+                log.warning(
+                    "%s: mechanical push failed (%s) — falling through to agent",
+                    ticket.id,
+                    push_err,
+                )
+                # fall through to agent path below
+
+        # --- agent path (LLM-driven rebase) ---
         try:
             # The merge stage is traced=False (poll-driven, normally no
             # LLM), so the worker does NOT open the ticket's root span.
@@ -206,32 +261,6 @@ class RebaseMixin(_MergeStageBase):
                 )
             stack.enter_context(_facade.tracing.trace_stage("rebase"))
             with stack:
-                remote_url = _facade._resolve_remote_url(s, repo_config)
-                token = _facade.github_push_token(s, repo_config=repo_config)
-
-                # Reconcile with the remote PR branch first so the
-                # rebase agent operates on a branch that includes any
-                # foreign commits (e.g. a human pushed a fix directly).
-                blocked = _reconcile_with_remote_pr(
-                    _facade, repo_dir, remote_url, branch, token, ticket.id
-                )
-                if blocked is not None:
-                    return blocked
-
-                # Capture the implement commit's source-file diff before
-                # the rebase agent mutates the branch, so the post-rebase
-                # integrity check can detect silent drops.
-                pre_rebase_files = _facade.git_ops.changed_source_files(
-                    Path(repo_dir), target
-                )
-                # Also snapshot each file's blob id. After the rebase,
-                # HEAD agrees with the target both when the change was
-                # discarded AND when a sibling PR already landed it —
-                # only the pre-rebase content tells those apart.
-                pre_rebase_blobs = _facade.git_ops.file_blobs(
-                    Path(repo_dir), pre_rebase_files
-                )
-
                 # The agent now drives fetch + rebase + push via bridged
                 # git tools — pass the per-repo remote_url and token so
                 # the tool closures can execute host-side. The token is

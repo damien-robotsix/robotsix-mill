@@ -444,6 +444,27 @@ def try_rebase_onto(
         return False
 
 
+def try_mechanical_rebase(repo: Path, target_branch: str) -> bool:
+    """Attempt a clean git rebase onto origin/<target_branch>.
+
+    Fetches the target branch, then runs `git rebase origin/<target_branch>`.
+    Returns True on clean success (exit 0, no conflicts).
+    On any failure (including conflicts), runs `git rebase --abort` and returns False,
+    leaving the working tree in a clean state for the caller (LLM agent) to take over.
+    """
+    try:
+        _git(repo, "fetch", "origin", target_branch, timeout=NETWORK_GIT_TIMEOUT)
+    except subprocess.CalledProcessError:
+        return False
+    try:
+        _git(repo, "rebase", f"origin/{target_branch}")
+        return True
+    except subprocess.CalledProcessError:
+        with contextlib.suppress(subprocess.CalledProcessError):
+            _git(repo, "rebase", "--abort")
+        return False
+
+
 def head_sha(repo: Path) -> str:
     """Current HEAD commit SHA. Used to detect a no-op rebase so the
     merge stage can skip a pointless force-push (an unchanged push still

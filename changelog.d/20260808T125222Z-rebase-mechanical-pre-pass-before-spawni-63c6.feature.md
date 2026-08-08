@@ -1,0 +1,1 @@
+Rebase: attempt deterministic host-side mechanical rebase before spawning the LLM agent. When a clean rebase succeeds and push lands, the rebase agent is never spawned — saving ~$1.5–2/day in OpenRouter costs. On conflict or push failure, the agent path runs as before.
