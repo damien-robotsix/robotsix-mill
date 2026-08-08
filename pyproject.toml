@@ -60,19 +60,12 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
 exclude-newer = "7d"
-# Per-package override for a security fix that landed inside the rolling
-# 7-day window. cryptography 50.0.0 (published 2026-07-31) fixes
-# GHSA-m2h6-j472-rp4c and GHSA-g6cj-pr64-35w5, both of which the CI
-# vulnerability scan fails main on. Waiting out the window would have left
-# main red — and mill's own target-branch-debt guard blocking 13 tickets —
-# for another day. Safe to delete once the window has passed.
 # pypdf 6.15.0 fixes GHSA-fp3f-mc75-235c and GHSA-fwg2-594c-jp42 (both
-# resource-exhaustion), and was published 2026-08-06 — inside the same
-# rolling window. Same reasoning as cryptography above: a per-package
-# override rather than a wider cutoff, so exactly one package escapes.
-# The cutoff must post-date the release itself; 2026-08-01 (copied from
-# cryptography, published 07-31) silently resolved nothing.
-exclude-newer-package = { cryptography = "2026-08-01T00:00:00Z", pypdf = "2026-08-07T00:00:00Z" }
+# resource-exhaustion), and was published 2026-08-06 — inside the rolling
+# 7-day window. A per-package override rather than a wider cutoff, so
+# exactly one package escapes.  The cutoff must post-date the release
+# itself.
+exclude-newer-package = { pypdf = "2026-08-07T00:00:00Z" }
 
 [tool.uv.sources]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "621f9e5196a2d4b2c2fbddf83cf07b3220c49ff4" }
