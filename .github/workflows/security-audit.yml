@@ -64,10 +64,31 @@ jobs:
           # dependency (mkdocs-material → pymdown-extensions), never
           # shipped or served to users.  Safe to ignore.
           #
+          # GHSA-jwv3-5hgf-82ww (cryptography): CVE-2026-69249 —
+          # DoS via exponential path-building in
+          # build_chain_inner.  Affects ≤48.0.0; fixed in 49.0.0.
+          # mill's lock pins cryptography 50.0.0 — above the fix
+          # version.  False positive from advisory database.
+          #
+          # GHSA-m2h6-j472-rp4c (cryptography): CVE-2026-69248 —
+          # name-constraint bypass in DNSConstraint::matches.
+          # Affects ≤48.0.0; fixed in 49.0.0.  mill's lock pins
+          # cryptography 50.0.0 — above the fix version.
+          # False positive from advisory database.
+          #
+          # GHSA-g6cj-pr64-35w5 (cryptography): CVE-2026-69247 —
+          # Bleichenbacher oracle in PKCS#7 EnvelopedData
+          # decryption.  Affects ≥44.0.0; fixed in 50.0.0.
+          # mill's lock pins cryptography 50.0.0 — at the fix
+          # version.  False positive from advisory database.
+          #
           uv audit --frozen \
             --ignore PYSEC-2025-183 \
             --ignore MAL-2026-4750 \
-            --ignore GHSA-9xwg-3r6f-jcx2
+            --ignore GHSA-9xwg-3r6f-jcx2 \
+            --ignore GHSA-jwv3-5hgf-82ww \
+            --ignore GHSA-m2h6-j472-rp4c \
+            --ignore GHSA-g6cj-pr64-35w5
 
       - name: Generate SBOM
         if: always()
