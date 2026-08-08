@@ -41,7 +41,7 @@
     "audit_request_limit": 80,
     "auto_approve_enabled": false,
     "auto_fix_max_cycles": 6,
-    "auto_merge_enabled": false,
+    "auto_merge_enabled": true,
     "auto_merge_infra_denylist": [
       "robotsix-central-deploy"
     ],
