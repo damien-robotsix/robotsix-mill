@@ -588,7 +588,7 @@ def _maybe_cache(ws: Workspace, input_hash: str | None, outcome: Outcome) -> Non
 
 
 def _detect_convergence(
-    verdict: "ReviewVerdict",
+    verdict: ReviewVerdict,
     ticket_id: str,
     rounds: int,
     ws: Workspace,
