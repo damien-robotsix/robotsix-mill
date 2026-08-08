@@ -9,6 +9,7 @@ verdict as an [ASK_USER] thread; operator's reply auto-resumes review).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -586,6 +587,94 @@ def _maybe_cache(ws: Workspace, input_hash: str | None, outcome: Outcome) -> Non
         _update(ws, "review", input_hash, outcome)
 
 
+def _detect_convergence(
+    verdict: ReviewVerdict,
+    ticket_id: str,
+    rounds: int,
+    ws: Workspace,
+    ctx: StageContext,
+    input_hash: str,
+) -> Outcome | None:
+    """Detect repeated review findings across rounds via SHA-256 fingerprint.
+
+    Returns an ``Outcome(BLOCKED, …)`` when the current round's findings
+    match the previous round's exactly — the implement agent is stuck.
+    Returns ``None`` when no convergence is detected (the caller proceeds
+    normally).  Writes the current fingerprint to disk so the next round
+    can compare against it.
+    """
+    fp = hashlib.sha256()
+    for ask in sorted(verdict.request_changes, key=lambda a: a.title or ""):
+        fp.update((ask.title or "").encode())
+        fp.update((ask.description or "").encode())
+        for f in sorted(ask.files_touched or []):
+            fp.update(f.encode())
+    fingerprint = fp.hexdigest()
+    fp_path = ws.artifacts_dir / "findings_fingerprint.txt"
+    prev_fp = None
+    if fp_path.exists():
+        try:
+            prev_fp = fp_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            log.warning("%s: failed to read findings fingerprint", ticket_id)
+    if prev_fp == fingerprint:
+        ctx.service.add_comment(
+            ticket_id,
+            f"Convergence detected: review round {rounds} found the "
+            f"same {len(verdict.request_changes)} issue(s) as the "
+            "previous round. Implement is not making progress on "
+            "these findings — escalating to BLOCKED for human "
+            "inspection.",
+            author="review",
+        )
+        ctx.service.set_review_rounds(ticket_id, 0)
+        outcome = Outcome(
+            State.BLOCKED,
+            "convergence: repeated review findings — implement stuck",
+        )
+        _maybe_cache(ws, input_hash, outcome)
+        return outcome
+    fp_path.parent.mkdir(parents=True, exist_ok=True)
+    fp_path.write_text(fingerprint, encoding="utf-8")
+    return None
+
+
+def _verify_already_addressed_asks(
+    already_addressed: list[ReviewAsk],
+    ticket_id: str,
+    repo_dir: Path,
+) -> tuple[list[ReviewAsk], list[ReviewAsk]]:
+    """Verify claims in *already_addressed* asks against the repo.
+
+    Returns ``(truly_addressed, unverified)``.  An ask whose
+    :func:`verify_claim` fails is moved to *unverified* so the caller
+    can treat it as still-out-of-scope.  Asks with no files_touched or
+    no description are treated as verified (we cannot disprove them).
+    """
+    if not already_addressed:
+        return [], []
+    truly: list[ReviewAsk] = []
+    unverified: list[ReviewAsk] = []
+    for ask in already_addressed:
+        if (
+            ask.files_touched
+            and ask.description
+            and not verify_claim(ask.description, ask.files_touched, repo_dir)
+        ):
+            log.info(
+                "%s: review ask claim unverified — "
+                "cited refs in '%s' do not touch %s; "
+                "treating as still out-of-scope",
+                ticket_id,
+                ask.description[:120],
+                ", ".join(ask.files_touched[:5]),
+            )
+            unverified.append(ask)
+        else:
+            truly.append(ask)
+    return truly, unverified
+
+
 class _DiffMeta:
     """Resolved diff and metadata bundle returned by
     :meth:`ReviewStage._resolve_diff_and_metadata`.
@@ -1121,41 +1210,9 @@ class ReviewStage(Stage):
             return outcome
 
         # Convergence detection: repeated findings fingerprint.
-        import hashlib
-
-        fp = hashlib.sha256()
-        for ask in sorted(verdict.request_changes, key=lambda a: a.title or ""):
-            fp.update((ask.title or "").encode())
-            fp.update((ask.description or "").encode())
-            for f in sorted(ask.files_touched or []):
-                fp.update(f.encode())
-        fingerprint = fp.hexdigest()
-        fp_path = ws.artifacts_dir / "findings_fingerprint.txt"
-        prev_fp = None
-        if fp_path.exists():
-            try:
-                prev_fp = fp_path.read_text(encoding="utf-8").strip()
-            except OSError:
-                log.warning("%s: failed to read findings fingerprint", ticket.id)
-        if prev_fp == fingerprint:
-            ctx.service.add_comment(
-                ticket.id,
-                f"Convergence detected: review round {rounds} found the "
-                f"same {len(verdict.request_changes)} issue(s) as the "
-                "previous round. Implement is not making progress on "
-                "these findings — escalating to BLOCKED for human "
-                "inspection.",
-                author="review",
-            )
-            ctx.service.set_review_rounds(ticket.id, 0)
-            outcome = Outcome(
-                State.BLOCKED,
-                "convergence: repeated review findings — implement stuck",
-            )
-            _maybe_cache(ws, input_hash, outcome)
-            return outcome
-        fp_path.parent.mkdir(parents=True, exist_ok=True)
-        fp_path.write_text(fingerprint, encoding="utf-8")
+        converged = _detect_convergence(verdict, ticket.id, rounds, ws, ctx, input_hash)
+        if converged is not None:
+            return converged
 
         # Split asks against the ticket's file_map.
         file_map = _load_file_map(ws)
@@ -1170,25 +1227,11 @@ class ReviewStage(Stage):
 
         # Verify any PR/commit claims in the "already addressed" asks.
         if already_addressed:
-            truly_addressed: list[ReviewAsk] = []
-            for ask in already_addressed:
-                if (
-                    ask.files_touched
-                    and ask.description
-                    and not verify_claim(ask.description, ask.files_touched, repo_dir)
-                ):
-                    log.info(
-                        "%s: review ask claim unverified — "
-                        "cited refs in '%s' do not touch %s; "
-                        "treating as still out-of-scope",
-                        ticket.id,
-                        ask.description[:120],
-                        ", ".join(ask.files_touched[:5]),
-                    )
-                    still_out_of_scope.append(ask)
-                else:
-                    truly_addressed.append(ask)
+            truly_addressed, unverified = _verify_already_addressed_asks(
+                already_addressed, ticket.id, repo_dir
+            )
             already_addressed = truly_addressed
+            still_out_of_scope.extend(unverified)
 
         if already_addressed:
             lines = [
