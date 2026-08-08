@@ -1108,6 +1108,19 @@ class _StagesSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # When a PR parked in human_mr_approval becomes conflicting or behind
+    # target, the merge stage normally falls through to IMPLEMENT_COMPLETE
+    # (→ REBASING next poll).  This cooldown keeps it in HUMAN_MR_APPROVAL
+    # for N hours after the last successful rebase, avoiding continuous
+    # re-rebasing of PRs nobody has approved yet.  Set to 0 to disable
+    # (always fall through, pre-existing behaviour).
+    parked_rebase_cooldown_hours: int = Field(
+        description="Hours to wait before re-rebasing a PR parked in human_mr_approval. Set to 0 to disable.",
+        default=4,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # --- merge stage: auto-fix of failing remote CI ---
     # When a PR in human_mr_approval has failing CI checks, the merge stage
     # transitions to fixing_ci and invokes the ci-fix agent.  The agent OWNS

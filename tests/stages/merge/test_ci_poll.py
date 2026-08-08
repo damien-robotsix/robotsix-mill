@@ -8,6 +8,8 @@ Covers:
 - Diagnostic message quality
 """
 
+import datetime
+
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
@@ -20,6 +22,7 @@ from robotsix_mill.stages.merge._shared import (
     _AUTO_FIX_CYCLES,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
+    _REBASE_LAST_TS,
 )
 
 
@@ -1965,3 +1968,177 @@ def test_green_pr_behind_many_times_never_hits_cycle_ceiling(
 
     # After 10 cycles the ticket is still not blocked.
     assert out.next_state is not State.BLOCKED
+
+
+# === Parked-PR rebase cooldown ===========================================
+
+
+def test_human_mr_approval_cooldown_prevents_rebase_on_conflict(tmp_path, monkeypatch):
+    """A fresh rebase timestamp + conflicting PR → stays in HUMAN_MR_APPROVAL."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    # PR is open but mergeable=False.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    # Write a fresh last_rebase_at.txt timestamp.
+    ts_path = ctx.service.workspace(t).artifacts_dir / _REBASE_LAST_TS
+    ts_path.write_text(
+        datetime.datetime.now(datetime.UTC).isoformat(),
+        encoding="utf-8",
+    )
+
+    out = MergeStage().run(t, ctx)
+    # Cooldown active → stays in HUMAN_MR_APPROVAL.
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_human_mr_approval_cooldown_expired_allows_rebase(tmp_path, monkeypatch):
+    """A stale rebase timestamp (>4h ago) + conflicting PR → IMPLEMENT_COMPLETE."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    # Write a stale timestamp (5 hours ago).
+    ts_path = ctx.service.workspace(t).artifacts_dir / _REBASE_LAST_TS
+    stale = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=5)
+    ts_path.write_text(stale.isoformat(), encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    # Cooldown expired → falls through to IMPLEMENT_COMPLETE.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_human_mr_approval_cooldown_zero_always_allows_rebase(tmp_path, monkeypatch):
+    """parked_rebase_cooldown_hours=0 → cooldown disabled, conflicting PR routes normally."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path, parked_rebase_cooldown_hours=0)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    # Write a fresh timestamp — should be ignored when cooldown is 0.
+    ts_path = ctx.service.workspace(t).artifacts_dir / _REBASE_LAST_TS
+    ts_path.write_text(
+        datetime.datetime.now(datetime.UTC).isoformat(),
+        encoding="utf-8",
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_human_mr_approval_no_timestamp_allows_rebase(tmp_path, monkeypatch):
+    """No last_rebase_at.txt → routes normally to IMPLEMENT_COMPLETE."""
+    from robotsix_mill.stages import merge as merge_mod
+
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
+    monkeypatch.setattr(merge_mod, "_workspace_repo_dir", lambda ctx, t: "/repo")
+
+    t = ctx.service.create("x", "y")
+    for st in (
+        State.READY,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    ):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+
+    # No last_rebase_at.txt written — cooldown has no reference point.
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
