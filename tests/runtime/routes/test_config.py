@@ -137,6 +137,47 @@ class TestPutConfig:
         assert raw["settings"]["auto_approve_enabled"] is True  # changed
         assert raw["settings"]["review_enabled"] is False  # unchanged
 
+    def test_update_with_langfuse_block(self, tmp_path, monkeypatch):
+        """PUT /config succeeds when the config file has a langfuse block.
+
+        Regression test: the config snapshot stored in version history
+        must be JSON-serializable even when Settings fields contain
+        Pydantic model instances (e.g. LangfuseConfig).
+        """
+        config_path = tmp_path / "config.json"
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        config_data = {
+            "settings": {
+                "api_port": 8077,
+                "data_dir": str(data_dir),
+                "trace_review_interval_seconds": 86400,
+            },
+            "langfuse": {
+                "host": "https://langfuse.example.com",
+                "projects": {
+                    "mill": {
+                        "public_key": "pk-test",
+                        "secret_key": "sk-test",
+                        "project_id": "test-project",
+                    }
+                },
+            },
+        }
+        config_path.write_text(json.dumps(config_data, indent=2))
+        monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(config_path))
+
+        from robotsix_mill.runtime.config_service import update_config
+
+        result = update_config(
+            {"trace_review_interval_seconds": 1209600}, data_dir=data_dir
+        )
+        assert result["version"] >= 1
+        assert result["config"]["trace_review_interval_seconds"] == 1209600
+        # langfuse must be a plain dict, not a Pydantic model instance
+        assert isinstance(result["config"]["langfuse"], dict)
+        assert result["config"]["langfuse"]["host"] == "https://langfuse.example.com"
+
 
 class TestGetConfigVersions:
     def test_returns_empty_versions_initially(self, config_client):

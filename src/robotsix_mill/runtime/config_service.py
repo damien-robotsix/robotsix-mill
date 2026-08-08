@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ..config import Secrets, Settings
 
@@ -124,8 +124,17 @@ def _record_version(
     }
     vp = _versions_path(data_dir)
     vp.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        record_json = json.dumps(record, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        log.warning(
+            "config version snapshot not JSON-serializable (%s); "
+            "storing with fallback serialization",
+            exc,
+        )
+        record_json = json.dumps(record, ensure_ascii=False, default=str)
     with open(vp, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.write(record_json + "\n")
     # Prune to last 20
     _prune_versions(data_dir, keep=20)
     return new_version
@@ -252,9 +261,16 @@ def get_config(
             # Always mask secrets per the config-ownership standard
             config[alias] = "**********"
         else:
-            # Convert Path to string for JSON serialization
+            # Convert non-serializable types for JSON output
             if isinstance(value, Path):
                 config[alias] = str(value)
+            elif isinstance(value, BaseModel):
+                config[alias] = value.model_dump(mode="json")
+            elif isinstance(value, (list, tuple)):
+                config[alias] = [
+                    v.model_dump(mode="json") if isinstance(v, BaseModel) else v
+                    for v in value
+                ]
             else:
                 config[alias] = value
 
