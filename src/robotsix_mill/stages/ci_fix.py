@@ -108,19 +108,33 @@ def _emit_ci_failure_event(
     stable key so recurring failure modes cluster.  Deduplicates on
     ``(ticket.id, normalized_key)`` so retries of the same failure on
     the same ticket do not flood the category.
+
+    Resolves *board_id* from ``ctx.repo_config.board_id``, falling back
+    to ``ticket.board_id`` so that a missing or unresolvable repo config
+    (e.g. ``_repo_config_for_ticket`` returning ``None``) never silently
+    skips the emission.
     """
     try:
-        board_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        board_id = (
+            ctx.repo_config.board_id
+            if ctx.repo_config and ctx.repo_config.board_id
+            else (ticket.board_id or "")
+        )
         if not board_id:
             log.warning(
-                "%s: no board_id available — skipping CI_FAILURE event",
+                "%s: no board_id available (repo_config=%s, ticket.board_id=%s) — "
+                "emitting CI_FAILURE event with empty board_id",
                 ticket.id,
+                ctx.repo_config.board_id if ctx.repo_config else None,
+                ticket.board_id,
             )
-            return
+            # Still emit — an event with an empty board_id is better than
+            # a silent drop that starves the recurring-category pipeline.
+            board_id = ""
         normalized_key = _normalize_ci_failure_reason(failing, failing_summary)
         names = [chk.get("name", "?") for chk in failing]
         reason = f"failing checks: {', '.join(names)}"
-        emit_diagnostic_event(
+        emitted = emit_diagnostic_event(
             ctx.settings,
             board_id,
             category="CI_FAILURE",
@@ -128,6 +142,21 @@ def _emit_ci_failure_event(
             reason=reason,
             normalized_key=normalized_key,
         )
+        if emitted:
+            log.info(
+                "%s: emitted CI_FAILURE event (board_id=%s, key=%s)",
+                ticket.id,
+                board_id,
+                normalized_key,
+            )
+        else:
+            log.warning(
+                "%s: CI_FAILURE event NOT emitted (duplicate or write failure, "
+                "board_id=%s, key=%s)",
+                ticket.id,
+                board_id,
+                normalized_key,
+            )
     except Exception:
         log.exception("%s: failed to emit CI_FAILURE event", ticket.id)
 
