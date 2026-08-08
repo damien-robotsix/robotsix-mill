@@ -106,6 +106,41 @@ def _insert_changelog_entry(repo_dir: Path, entry_text: str) -> str:
 _DEFAULT_FRAGMENT_DIR = "changelog.d"
 _DEFAULT_TYPES = ("feature", "bugfix", "doc", "removal", "misc")
 
+#: Equivalent spellings of the same towncrier type, so a kind an agent
+#: reasonably chose still lands in a repo that names it differently.
+#: llmio uses ``feat``/``fix`` where every other repo uses
+#: ``feature``/``bugfix``; without this the tool rejects a correct choice
+#: and the ticket blocks on an agent error.
+_KIND_ALIASES: dict[str, tuple[str, ...]] = {
+    "feature": ("feat", "added", "change"),
+    "feat": ("feature", "added", "change"),
+    "bugfix": ("fix", "bug", "fixed"),
+    "fix": ("bugfix", "bug", "fixed"),
+    "doc": ("docs", "documentation"),
+    "docs": ("doc", "documentation"),
+    "removal": ("removed", "deprecation", "breaking"),
+    "misc": ("chore", "other", "internal"),
+    "chore": ("misc", "other", "internal"),
+    "security": ("bugfix", "fix"),
+    "breaking": ("removal", "change"),
+}
+
+
+def _resolve_kind(kind: str, valid_types: tuple[str, ...]) -> str | None:
+    """Return the configured type matching *kind*, or ``None``.
+
+    Exact match wins. Otherwise the first equivalent spelling this repo does
+    configure is used — a fragment recorded under a near-synonym is far
+    better than a blocked ticket, and towncrier renders the section heading
+    from the repo's own config either way.
+    """
+    if kind in valid_types:
+        return kind
+    for candidate in _KIND_ALIASES.get(kind, ()):
+        if candidate in valid_types:
+            return candidate
+    return None
+
 
 def _towncrier_config(repo_dir: Path) -> tuple[str, tuple[str, ...]]:
     """Return ``(fragment_dir, valid_types)`` from the repo's own pyproject.
@@ -163,13 +198,22 @@ def _add_changelog_fragment(
         raise ValueError("changelog_fragment: summary must not be empty")
 
     fragment_dir, valid_types = _towncrier_config(repo_dir)
-    if kind not in valid_types:
+    resolved = _resolve_kind(kind, valid_types)
+    if resolved is None:
         raise ValueError(
-            f"changelog_fragment: kind {kind!r} is not configured for this repo. "
+            f"changelog_fragment: kind {kind!r} is not configured for this repo "
+            f"and has no configured equivalent. "
             f"Valid kinds: {', '.join(valid_types)}. "
             "A fragment with an unconfigured extension is silently skipped by "
             "towncrier build, so the entry would be lost."
         )
+    if resolved != kind:
+        log.info(
+            "changelog_fragment: kind %r is not configured here; using %r",
+            kind,
+            resolved,
+        )
+    kind = resolved
 
     target_dir = repo_dir / fragment_dir
     target_dir.mkdir(parents=True, exist_ok=True)
