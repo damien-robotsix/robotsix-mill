@@ -40,7 +40,13 @@ jobs:
       #     fixed in 10.14; mill's lock pins 10.21.3 — above the fix version.
       #     pymdown-extensions is a transitive docs-only dependency, never
       #     shipped or served to users.
-      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2"
+      #   GHSA-jwv3-5hgf-82ww (cryptography): CVE-2026-69249 — DoS in
+      #     build_chain_inner; ≤48.0.0, fixed in 49.0.0. Lock pins 50.0.0.
+      #   GHSA-m2h6-j472-rp4c (cryptography): CVE-2026-69248 — name-constraint
+      #     bypass; ≤48.0.0, fixed in 49.0.0. Lock pins 50.0.0.
+      #   GHSA-g6cj-pr64-35w5 (cryptography): CVE-2026-69247 — Bleichenbacher
+      #     oracle; ≥44.0.0, fixed in 50.0.0. Lock pins 50.0.0 (at fix version).
+      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
 
   mill-specific:
     runs-on: ubuntu-latest
