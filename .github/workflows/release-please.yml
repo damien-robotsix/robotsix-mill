@@ -52,5 +52,44 @@ jobs:
           permission-pull-requests: write   # open and update the release PR
 
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        id: release
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      # Only the lock-sync step below needs these; release-please itself needs
+      # neither a checkout nor uv.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
+        with:
+          # No cache: this job has contents:write, and a poisoned cache in a
+          # write-privileged workflow is a supply-chain risk (zizmor
+          # cache-poisoning).
+          enable-cache: false
+
+      # uv.lock records the project's own version, so a release that bumps
+      # [project].version leaves it stale and `uv sync --locked` fails.
+      # release-please cannot maintain it: `extra-files` would need a jsonpath
+      # into an array whose index shifts with every dependency change.
+      - name: Sync uv.lock to the released version
+        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: release-please--branches--main
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+          uv lock
+          if git diff --quiet -- uv.lock; then
+            echo "uv.lock already matches the released version."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: sync uv.lock to the released version" -- uv.lock
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
