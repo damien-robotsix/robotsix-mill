@@ -234,7 +234,11 @@ def get_engine(settings: Settings, board_id: str) -> Engine:
             url,
             connect_args={
                 "check_same_thread": False,
-                "timeout": 5,
+                # Busy timeout for lock contention. 5s proved too short
+                # under a write burst across the worker's thread pool —
+                # a comment INSERT hit "database is locked" and blocked
+                # the ticket it was annotating.
+                "timeout": 30,
             },
         )
 

@@ -413,6 +413,24 @@ def test_classify_transient_exceeded_max_output_retries_lowercase():
     assert classify_stage_error(exc) == "transient"
 
 
+def test_classify_transient_sqlite_database_locked():
+    """SQLite lock contention on the mill's own DB → transient."""
+    exc = Exception(
+        "(sqlite3.OperationalError) database is locked "
+        "[SQL: INSERT INTO comment (ticket_id, body, author, parent_id, "
+        "closed_at, created_at) VALUES (?, ?, ?, ?, ?, ?)]"
+    )
+    assert classify_stage_error(exc) == "transient"
+
+
+def test_classify_transient_sqlite_database_locked_in_cause_chain():
+    """The db-locked pattern is transient even when nested in a cause chain."""
+    inner = Exception("(sqlite3.OperationalError) database is locked")
+    outer = Exception("agent run failed")
+    outer.__cause__ = inner
+    assert classify_stage_error(outer) == "transient"
+
+
 # ---------------------------------------------------------------------------
 # reraise_if_transient — LLM stages (review/refine/retrospect) call this so a
 # transient model error gets the worker's stage-retry instead of a hard BLOCK.

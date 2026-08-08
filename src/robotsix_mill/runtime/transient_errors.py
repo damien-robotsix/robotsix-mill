@@ -86,6 +86,13 @@ _NETWORK_DOWN_RE = re.compile(
 _TRANSIENT_MESSAGE_RE = [
     re.compile(r"[Ii]nvalid response from openrouter"),
     re.compile(r"[Ee]xceeded max(imum)? output retries"),
+    # Lock contention on the mill's own per-board SQLite DB: a write
+    # burst can outlast the connection's busy timeout and the resulting
+    # OperationalError says nothing about the ticket's work — the same
+    # stage succeeds once the writer that held the lock finishes.
+    # Classifying it fatal turned internal DB contention into BLOCKED
+    # tickets needing a manual resume.
+    re.compile(r"database is locked"),
 ]
 
 
