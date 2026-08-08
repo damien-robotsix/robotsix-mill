@@ -42,7 +42,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
     """
 
     def _multi_repo_fix_ci(
-        self, ticket: Ticket, ctx: StageContext, status: dict
+        self, ticket: Ticket, ctx: StageContext, status: dict[str, Any]
     ) -> Outcome:
         """Run the CI-fix agent on one multi-repo PR whose CI is failing.
 
@@ -119,7 +119,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
         # CodeQL FP triage path can inspect them.
         failing = (ci or {}).get("failing", [])
         log_text = ""
-        alerts: list[dict] = []
+        alerts: list[dict[str, Any]] = []
         changed_paths: set[str] = set()
         try:
             alerts = forge.list_code_scanning_alerts(source_branch=branch)

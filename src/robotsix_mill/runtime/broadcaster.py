@@ -11,6 +11,7 @@ from asyncio import Queue
 
 from ..core.models import Ticket
 import contextlib
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class BoardBroadcaster:
     """
 
     def __init__(self) -> None:
-        self._queues: list[Queue] = []
+        self._queues: list[Queue[Any]] = []
 
     def broadcast_sync(self, ticket: Ticket, old_state: str = "") -> None:
         """Schedule a broadcast of *ticket* to all connected clients.
@@ -67,7 +68,7 @@ class BoardBroadcaster:
 
         Must be called on the event-loop thread.
         """
-        dead: list[Queue] = []
+        dead: list[Queue[Any]] = []
         for q in self._queues:
             try:
                 q.put_nowait(data)
@@ -77,7 +78,7 @@ class BoardBroadcaster:
             with contextlib.suppress(ValueError):
                 self._queues.remove(q)
 
-    async def subscribe(self, initial_tickets: list[dict]) -> Queue:
+    async def subscribe(self, initial_tickets: list[dict[str, Any]]) -> Queue[Any]:
         """Register a new WebSocket client.
 
         Returns an ``asyncio.Queue`` that the client can iterate to
@@ -85,13 +86,13 @@ class BoardBroadcaster:
         first message (a ``ticket_list`` event) so the client doesn't
         need a separate HTTP fetch on connect.
         """
-        q: Queue = asyncio.Queue()
+        q: Queue[Any] = asyncio.Queue[Any]()
         self._queues.append(q)
         # Send initial state as the first message.
         await q.put(json.dumps({"type": "ticket_list", "tickets": initial_tickets}))
         return q
 
-    def unsubscribe(self, q: Queue) -> None:
+    def unsubscribe(self, q: Queue[Any]) -> None:
         """Remove a client queue (called on disconnect)."""
         with contextlib.suppress(ValueError):
             self._queues.remove(q)

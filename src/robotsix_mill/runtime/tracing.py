@@ -72,7 +72,7 @@ _shutdown_requested: bool = False  # set by signal handlers to prevent double-fl
 # via /langfuse-status so the operator notices when traces aren't
 # making it through. (Without this, OTel's BatchSpanProcessor logs
 # at DEBUG and the worker continues silently.)
-_export_failures: list[dict] = []
+_export_failures: list[dict[str, Any]] = []
 _EXPORT_FAILURE_CAP = 20
 _export_lock = __import__("threading").Lock()
 
@@ -97,7 +97,7 @@ def record_export_failure(
             del _export_failures[: len(_export_failures) - _EXPORT_FAILURE_CAP]
 
 
-def get_export_failures() -> list[dict]:
+def get_export_failures() -> list[dict[str, Any]]:
     """Return a snapshot of recent Langfuse export failures."""
     with _export_lock:
         return list(_export_failures)

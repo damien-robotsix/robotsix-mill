@@ -8,7 +8,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 MAX_ENTRIES = 50
 
@@ -191,7 +191,7 @@ class RunRegistry:
         self,
         kind: str,
         repo_id: str | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Return the newest successful entry of the given *kind*.
 
         Only ``status == "ok"`` counts as "ran" for the periodic
@@ -213,7 +213,7 @@ class RunRegistry:
                 return asdict(e)
             return None
 
-    def list_all(self) -> list[dict]:
+    def list_all(self) -> list[dict[str, Any]]:
         """Return all entries as dicts, newest first (includes running)."""
         with self._lock:
             return [asdict(e) for e in reversed(self._entries)]

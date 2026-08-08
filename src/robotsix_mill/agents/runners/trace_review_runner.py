@@ -107,8 +107,8 @@ def _median(values: list[float]) -> float:
 
 
 def _compute_baselines(
-    traces: list[dict],
-    observations_per_trace: dict[str, list[dict]],
+    traces: list[dict[str, Any]],
+    observations_per_trace: dict[str, Any][str, list[dict[str, Any]]],
     settings: Settings,
 ) -> _Baselines:
     """Compute median × multiplier thresholds for cost and observation
@@ -154,8 +154,8 @@ class _TraceFlags:
 
 
 def _extract_trace_end_time(
-    trace: dict,
-    observations: list[dict] | None,
+    trace: dict[str, Any],
+    observations: list[dict[str, Any]] | None,
 ) -> datetime | None:
     """Extract the latest timestamp from a trace for restart correlation.
 
@@ -183,9 +183,9 @@ def _extract_trace_end_time(
 
 
 def _classify_trace(
-    trace: dict,
+    trace: dict[str, Any],
     settings: Settings,
-    observations: list[dict] | None = None,
+    observations: list[dict[str, Any]] | None = None,
     baselines: _Baselines | None = None,
     started_at: datetime | None = None,
 ) -> _TraceFlags:
@@ -524,7 +524,7 @@ def _finding_cites_only_missing_paths(
 class TraceReviewPassResult:
     """Summary of one trace-review pass."""
 
-    drafts_created: list[dict] = field(default_factory=list)
+    drafts_created: list[dict[str, Any]] = field(default_factory=list)
     traces_scanned: int = 0
     traces_flagged: int = 0
     window_start: str = ""
@@ -657,7 +657,7 @@ def run_trace_review_pass(
         repo_config.repo_id,
     )
 
-    drafts: list[dict] = []
+    drafts: list[dict[str, Any]] = []
     flagged_count = 0
     # Snapshot open trace-review titles ONCE up front; we'll grow the
     # set as we file new drafts to avoid intra-run duplicates too.
@@ -669,8 +669,8 @@ def run_trace_review_pass(
     # main cost of the deterministic phase — they're already paid for
     # by the classifier below, so caching them here is essentially
     # free.
-    details_by_id: dict[str, dict] = {}
-    observations_by_id: dict[str, list[dict]] = {}
+    details_by_id: dict[str, Any][str, dict[str, Any]] = {}
+    observations_by_id: dict[str, Any][str, list[dict[str, Any]]] = {}
     for trace in traces:
         trace_id = trace.get("id")
         if not trace_id:

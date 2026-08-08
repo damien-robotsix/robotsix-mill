@@ -141,7 +141,7 @@ def _build_periodic_tools(
     include_parallel_commands: bool = False,
     include_write_file: bool = False,
     extra_roots: list[Path] | None,
-) -> list:
+) -> list[Any]:
     """Build the conditional tool list for a periodic agent run.
 
     Extracted from :func:`run_periodic_agent` so the entry point stays

@@ -23,6 +23,7 @@ from ...agents.bespoke_loader import BespokeAgentDefinition
 from ...config import RepoConfig, Settings
 from ...core.service import TicketService
 from .pass_runner import run_agent_pass
+from typing import Any
 
 log = logging.getLogger("robotsix_mill.bespoke")
 
@@ -38,7 +39,7 @@ class BespokePassResult:
 
     source_label: str
     updated_memory: str
-    drafts_created: list[dict]
+    drafts_created: list[dict[str, Any]]
     session_id: str = ""
 
 

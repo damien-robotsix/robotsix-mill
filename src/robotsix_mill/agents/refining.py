@@ -503,13 +503,13 @@ def _build_refine_overrides(
     definition,
     settings: Settings,
     reviewer_comments: str | None,
-) -> dict:
+) -> dict[str, Any]:
     """Assemble the ``build_agent_from_definition`` overrides for refine:
     the reviewer-sendback prompt + thread flags when handling feedback.
     The model comes from the definition's ``level`` (refine is level 3
     → Claude Opus).
     """
-    overrides: dict = {}
+    overrides: dict[str, Any] = {}
     if reviewer_comments:
         overrides["system_prompt"] = REVIEWER_SENDBACK_PROMPT
         overrides["reply_to_thread"] = True
@@ -528,7 +528,7 @@ def run_refine_agent(
     memory: str = "",
     epic_context: str = "",
     extra_roots: list[Path] | None = None,
-    message_history: list | None = None,
+    message_history: list[Any] | None = None,
     board_id: str = "",
     current_ticket_id: str = "",
     language_instructions: str = "",

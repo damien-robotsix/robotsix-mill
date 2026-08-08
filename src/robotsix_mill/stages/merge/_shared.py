@@ -185,7 +185,7 @@ def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
     return mergeable_state in (None, "clean", "unstable")
 
 
-def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
+def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict[str, Any]] | None:
     """Read ``pr_urls.json``.
 
     Returns the list when present + parseable, ``None`` when the file
@@ -208,7 +208,7 @@ def _load_pr_urls(ws_artifacts_dir: Path) -> list[dict] | None:
     return data
 
 
-def _repo_config_for_entry(entry: dict) -> RepoConfig:
+def _repo_config_for_entry(entry: dict[str, Any]) -> RepoConfig:
     """Resolve a per-repo :class:`RepoConfig` from a ``pr_urls.json``
     entry. Propagates :class:`ConfigError` when the ``repo_id`` is
     missing, non-string, empty, or not registered so the caller's
@@ -223,9 +223,9 @@ def _repo_config_for_entry(entry: dict) -> RepoConfig:
 
 
 def _build_failing_summary(
-    failing: list[dict],
+    failing: list[dict[str, Any]],
     log_text: str = "",
-    alerts: list[dict] | None = None,
+    alerts: list[dict[str, Any]] | None = None,
     changed_paths: set[str] | None = None,
 ) -> str:
     """Markdown summary of failing checks for the CI-fix agent.

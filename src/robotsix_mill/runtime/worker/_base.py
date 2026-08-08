@@ -11,7 +11,7 @@ methods on the assembled ``Worker`` override these declarations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, ParamSpec, TypeVar
+from typing import Any, TYPE_CHECKING, Callable, ParamSpec, TypeVar
 
 if TYPE_CHECKING:
     import asyncio
@@ -33,7 +33,7 @@ class _WorkerBase:
         ctx: StageContext
         run_registry: RunRegistry | None
         run_registries: dict[str, RunRegistry]
-        _inflight_passes: set[asyncio.Task]
+        _inflight_passes: set[asyncio.Task[Any]]
         # Caps concurrent per-repo clone/fetch refreshes so repo
         # maintenance can never occupy the whole shared thread pool and
         # starve ticket stages. Defined on Worker.

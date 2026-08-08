@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -106,7 +106,7 @@ class RetrospectResult(BaseModel):
     draft_target: Literal["current"] = "current"
     # Same routing for the follow-up draft.
     follow_up_target: Literal["current"] = "current"
-    agented_md_proposals: list[dict] | None = None
+    agented_md_proposals: list[dict[str, Any]] | None = None
 
 
 def _is_structural_quote_end(text: str, quote_idx: int) -> bool:
@@ -276,7 +276,7 @@ def run_retrospect_agent(
     # multi-step verification — their internal calls don't count against
     # the retrospect agent's pydantic-ai `request_limit`, preventing the
     # saturation that previously BLOCKED already-delivered tickets.
-    tools: list = []
+    tools: list[Any] = []
     if repo_dir is not None and repo_dir.exists():
         from .fs_tools import build_fs_tools
         from .explore import make_explore_tool, make_parallel_explore_tool

@@ -149,7 +149,7 @@ def _verify_prior_proposals(
     service: TicketService,
     settings: Settings,
     source_label: SourceKind,
-) -> dict[str, dict]:
+) -> dict[str, Any][str, dict[str, Any]]:
     """Query the ticket store for drafts previously spawned by the
     agent identified by *source_label*, check their state, and return a
     mapping from ``gap_id`` → ``{ticket_id, state, resolution, branch}``.
@@ -158,7 +158,7 @@ def _verify_prior_proposals(
     ... -->`` marker matching *source_label* are included.  Pre-rollout
     drafts without markers are silently skipped.
     """
-    result: dict[str, dict] = {}
+    result: dict[str, Any][str, dict[str, Any]] = {}
 
     # 1. List all tickets; filter client-side to matching source.
     try:
@@ -216,7 +216,7 @@ def _verify_prior_proposals(
     return result
 
 
-def _render_verified_summary(verified: dict[str, dict]) -> str:
+def _render_verified_summary(verified: dict[str, Any][str, dict[str, Any]]) -> str:
     """Render a one-line summary of prior proposals for agent input.
 
     The agent has ``read_ticket`` for on-demand lookup — no need to
@@ -435,7 +435,7 @@ class AgentPassResult:
     """Internal result of running an agent pass."""
 
     updated_memory: str
-    drafts_created: list[dict]  # [{"id": ..., "title": ...}, ...]
+    drafts_created: list[dict[str, Any]]  # [{"id": ..., "title": ...}, ...]
     session_id: str = ""
     # The agent's one-line account of what it examined + the basis for the
     # number of drafts it filed. Surfaced as the run-registry summary so an
@@ -666,7 +666,7 @@ def _verify_prior_on_board(
     settings: Any,
     board_id: str,
     source_label: SourceKind,
-) -> dict[str, dict]:
+) -> dict[str, Any][str, dict[str, Any]]:
     """Verify prior proposals on an arbitrary *board_id*.
 
     Identical to :func:`_verify_prior_proposals` but scoped to a

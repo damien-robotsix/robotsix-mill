@@ -86,7 +86,7 @@ def _build_read_client(
 def _langfuse_api_get(
     settings: Settings,
     path: str,
-    params: dict | None = None,
+    params: dict[str, Any] | None = None,
     repo_config: RepoConfig | None = None,
 ):
     """Single authenticated GET to the Langfuse public API.
@@ -153,7 +153,7 @@ def session_traces(
     settings: Settings,
     session_id: str,
     repo_config: RepoConfig | None = None,
-) -> list[dict] | None:
+) -> list[dict[str, Any]] | None:
     """Return Langfuse traces for *session_id* as a list of
     ``{name, cost, at, trace_id, model}`` dicts ordered by timestamp
     ascending.
@@ -182,7 +182,7 @@ def session_traces(
         except TypeError, ValueError:
             return 0.0
 
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for t in data.get("data") or []:
         # latency > 0 means Langfuse has the trace's end time. While
         # the trace is still running it'll be 0/null — the drawer uses
@@ -271,7 +271,7 @@ def session_cost_cached(
 
 def fetch_trace_detail(
     settings: Settings, trace_id: str, repo_config: RepoConfig | None = None
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Fetch a single trace by ID from the Langfuse API.
 
     Returns the JSON-decoded response body, or ``None`` on failure
@@ -286,7 +286,7 @@ def fetch_trace_observations(
     settings: Settings,
     trace_id: str,
     repo_config: RepoConfig | None = None,
-) -> list[dict] | None:
+) -> list[dict[str, Any]] | None:
     """Return the list of observations for a trace, filtered to
     the fields relevant for event-mode validation.
 
@@ -357,7 +357,7 @@ def fetch_session_summary(
     # --- group by stage name -------------------------------------------
     from collections import defaultdict
 
-    stages: dict[str, list[dict]] = defaultdict(list)
+    stages: dict[str, Any][str, list[dict[str, Any]]] = defaultdict(list)
     for t in traces:
         stages[t.get("name", "?")].append(t)
 
@@ -408,7 +408,7 @@ def list_recent_traces(
     min_cost: float | None = None,
     max_cost: float | None = None,
     repo_config: RepoConfig | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return up to *limit* most-recent traces from Langfuse, ordered by
     timestamp descending. Optionally filter by totalCost (inclusive).
 
@@ -425,7 +425,7 @@ def list_recent_traces(
     """
     cost_filter_active = min_cost is not None or max_cost is not None
 
-    def _named(t: dict) -> bool:
+    def _named(t: dict[str, Any]) -> bool:
         """A trace is 'ready for review' iff its root span has closed
         and propagated a name. In-flight traces show as unnamed/null
         until completion — they shouldn't appear in the picker since
@@ -460,7 +460,7 @@ def list_recent_traces(
     #      back in time were never even examined.
     # Paginate in pages of 100 (Langfuse's max), bounded by
     # ``examine_cap`` so a too-strict filter can't paginate forever.
-    def _cost(t: dict) -> float:
+    def _cost(t: dict[str, Any]) -> float:
         try:
             return float(t.get("totalCost") or 0)
         except TypeError, ValueError:
@@ -468,7 +468,7 @@ def list_recent_traces(
 
     PAGE_SIZE = 100
     examine_cap = max(limit * 20, 500)  # don't scan more than this
-    filtered: list[dict] = []
+    filtered: list[dict[str, Any]] = []
     examined = 0
     page = 1
     while len(filtered) < limit and examined < examine_cap:
@@ -504,7 +504,7 @@ def list_recent_traces(
     return filtered
 
 
-def trace_observation_summary(trace: dict) -> dict:
+def trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
     """Extract a compact observation summary from a Langfuse trace dict.
 
     The Langfuse list-endpoint response includes an ``observations`` array
@@ -536,7 +536,7 @@ def trace_observation_summary(trace: dict) -> dict:
     tool_calls: dict[str, int] = {}
     error_count = 0
     warning_count = 0
-    generations: list[dict] = []
+    generations: list[dict[str, Any]] = []
 
     # Fallback from mill.step_usage metadata when GENERATION observations
     # are absent or lack usage — the pydantic-ai OTel instrumentation path

@@ -12,6 +12,7 @@ from ...config import ConfigError, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
 from ...forge import get_forge
+from typing import Any
 
 # _resolve_remote_url, github_token, load_memory, persist_memory
 # are accessed through the _facade import inside method bodies
@@ -35,7 +36,7 @@ class MultiRepoMixin(_MergeStageBase):
         self,
         ticket: Ticket,
         ctx: StageContext,
-        pr_entries: list[dict],
+        pr_entries: list[dict[str, Any]],
     ) -> Outcome:
         """Aggregate per-repo PR status into one ticket-level outcome, with
         per-repo auto-recovery.
@@ -66,7 +67,7 @@ class MultiRepoMixin(_MergeStageBase):
         """
         s = ctx.settings
 
-        statuses: list[dict] = []
+        statuses: list[dict[str, Any]] = []
         for entry in pr_entries:
             repo_id = entry.get("repo_id", "")
             branch = entry.get("branch", "")
@@ -197,7 +198,7 @@ class MultiRepoMixin(_MergeStageBase):
         return Outcome(ticket.state)
 
     def _multi_repo_rebase(
-        self, ticket: Ticket, ctx: StageContext, status: dict
+        self, ticket: Ticket, ctx: StageContext, status: dict[str, Any]
     ) -> Outcome:
         """Run the rebase agent on one multi-repo PR that is conflicting.
 
@@ -350,7 +351,7 @@ class MultiRepoMixin(_MergeStageBase):
         return Outcome(ticket.state)
 
     def _multi_repo_auto_merge(
-        self, ticket: Ticket, ctx: StageContext, green: list[dict]
+        self, ticket: Ticket, ctx: StageContext, green: list[dict[str, Any]]
     ) -> Outcome:
         """Auto-merge the green multi-repo PRs when the review gate marks the
         ticket eligible. Held in HUMAN_MR_APPROVAL when not eligible, so a human

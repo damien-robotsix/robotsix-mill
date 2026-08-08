@@ -256,7 +256,7 @@ async def health_ready(
 
 
 @router.get("/langfuse-status")
-def langfuse_status() -> dict:
+def langfuse_status() -> dict[str, Any]:
     """Return recent Langfuse export failures so the UI can surface
     "tracing broken" without the operator having to grep worker logs.
 
@@ -367,7 +367,7 @@ def _public_forge_url(url: str | None) -> str | None:
 def list_repos(
     request: Request,
     repos=Depends(get_repos_registry),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return the registered repos for the UI repo selector.
 
     No secrets (Langfuse keys) are included — ``repo_id``, ``board_id``
@@ -397,7 +397,7 @@ def list_repos(
 
 
 @router.get("/gates")
-def gates(settings=Depends(get_settings)) -> dict:
+def gates(settings=Depends(get_settings)) -> dict[str, Any]:
     """Return the four pipeline gate flags from the live configuration.
 
     Same open access model as ``/health`` — no auth.  The board polls

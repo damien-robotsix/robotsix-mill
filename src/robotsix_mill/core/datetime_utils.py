@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from sqlalchemy.types import DateTime, TypeDecorator
 
 
-class TZDateTime(TypeDecorator):
+class TZDateTime(TypeDecorator[datetime]):
     """A SQLAlchemy column type that stores aware UTC datetimes as naive
     UTC in the database (compatible with SQLite, which has no native
     timezone support) and re-attaches ``timezone.utc`` on read-back.

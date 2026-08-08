@@ -12,6 +12,8 @@ import json
 import logging
 from pathlib import Path
 
+from typing import Any
+
 from pydantic_ai.messages import (
     ModelMessagesTypeAdapter,
     ModelRequest,
@@ -119,7 +121,7 @@ def build_compact_resume_message_history(
     reply_text: str,
     *,
     git_stat: str | None = None,
-) -> list:
+) -> list[Any]:
     """Build a compact 3-message resume history from the prior session.
 
     Unlike the former ``build_resume_message_history`` — which replayed
@@ -139,7 +141,7 @@ def build_compact_resume_message_history(
         A ``list[ModelMessage]`` of exactly 3 messages.
     """
     # 1. Deserialize the full prior transcript.
-    messages: list = ModelMessagesTypeAdapter.validate_json(saved_state)
+    messages: list[Any] = ModelMessagesTypeAdapter.validate_json(saved_state)
 
     # 2. Find the last ModelResponse with at least one TextPart.
     prior_summary = "(prior session contained no text summary)"
