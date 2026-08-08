@@ -1426,3 +1426,78 @@ def test_guard_does_not_fire_when_langfuse_present(tmp_path, monkeypatch):
     )
     assert isinstance(out, RetrospectResult)
     assert calls, "the agent path must be taken when Langfuse data is present"
+
+
+def test_max_drafts_per_run_enforced(tmp_path, monkeypatch):
+    """When ``retrospect_max_drafts_per_run`` is set, at most that many
+    drafts are filed across all spawn paths (draft, follow-up, AGENT.md
+    proposals).  Surplus proposals are silently skipped."""
+    ctx = _ctx(
+        tmp_path,
+        retrospect_max_drafts_per_run="2",
+        retrospect_spawn_agented_proposals="true",
+    )
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "session-cap-test",
+    )
+    # Agent proposes three distinct things: a regular draft, a follow-up,
+    # and an AGENT.md proposal.  With cap=2 only the first two should land.
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="three things found",
+            conclusion="cap tested",
+            propose_draft=True,
+            draft_title="Draft one",
+            draft_body="body one",
+            follow_up_title="Follow-up two",
+            follow_up_body="body two",
+            agented_md_proposals=[
+                {
+                    "section": "## Security",
+                    "rule": "Always validate input",
+                    "rationale": "input was not validated",
+                }
+            ],
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    # Exactly 2 drafts filed (regular draft + follow-up, AGENT.md skipped).
+    assert len(drafts) == 2, f"expected 2 drafts, got {len(drafts)}"
+    titles = {d.title for d in drafts}
+    assert "Draft one" in titles
+    assert "Follow-up two" in titles
+
+
+def test_max_drafts_per_run_zero_skips_all(tmp_path, monkeypatch):
+    """When ``retrospect_max_drafts_per_run`` is 0, no drafts are filed
+    regardless of what the agent proposes."""
+    ctx = _ctx(
+        tmp_path,
+        retrospect_max_drafts_per_run="0",
+    )
+    _no_langfuse(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _default_result(
+            findings="issue found",
+            conclusion="draft would help",
+            propose_draft=True,
+            draft_title="Should not appear",
+            draft_body="body",
+            follow_up_title="Also not",
+            follow_up_body="nope",
+        ),
+    )
+    t = _done(ctx)
+    out = RetrospectStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    drafts = [x for x in ctx.service.list() if x.state is State.DRAFT]
+    assert len(drafts) == 0

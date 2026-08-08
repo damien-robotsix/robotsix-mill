@@ -295,11 +295,16 @@ class RetrospectStage(Stage):
         ticket: Ticket,
         settings: Settings,
         ctx: StageContext,
+        drafts_remaining: list[int],
     ) -> str | None:
         """Conditionally spawn a draft ticket from the agent's proposal.
 
         Returns the spawned draft ID, or None if no draft was created.
         """
+        # Zeroth guard — per-run draft cap exhausted.
+        if drafts_remaining[0] <= 0:
+            return None
+
         # First guard — spawn conditions not met.
         if not (
             settings.retrospect_spawn_drafts
@@ -347,6 +352,7 @@ class RetrospectStage(Stage):
             source=SourceKind.RETROSPECT,
             origin_session=current_session(),
         )
+        drafts_remaining[0] -= 1
         # Only set the parent link when the draft lives on the same
         # board as the originating ticket — cross-board parents would
         # dangle (the parent lookup is per-board).
@@ -366,11 +372,16 @@ class RetrospectStage(Stage):
         ticket: Ticket,
         settings: Settings,
         ctx: StageContext,
+        drafts_remaining: list[int],
     ) -> str | None:
         """Conditionally file a concrete incomplete-work follow-up ticket.
 
         Returns the spawned draft ID, or None if no follow-up was created.
         """
+        # Zeroth guard — per-run draft cap exhausted.
+        if drafts_remaining[0] <= 0:
+            return None
+
         if not res.follow_up_title or not res.follow_up_body:
             return None
 
@@ -415,6 +426,7 @@ class RetrospectStage(Stage):
             source=SourceKind.RETROSPECT,
             origin_session=current_session(),
         )
+        drafts_remaining[0] -= 1
         if target_service.board_id == ctx.service.board_id:
             ctx.service.set_parent(draft.id, ticket.id)
         log.info(
@@ -495,6 +507,7 @@ class RetrospectStage(Stage):
         ticket: Ticket,
         settings: Settings,
         ctx: StageContext,
+        drafts_remaining: list[int],
     ) -> list[str]:
         """File a draft ticket per AGENT.md proposal on the originating
         repo's board.
@@ -564,12 +577,17 @@ class RetrospectStage(Stage):
                 )
                 continue
 
+            # Per-run draft cap check — stop filing once exhausted.
+            if drafts_remaining[0] <= 0:
+                break
+
             draft = target_service.create(
                 title,
                 body,
                 source=SourceKind.RETROSPECT,
                 origin_session=current_session(),
             )
+            drafts_remaining[0] -= 1
             # Same board as the originating ticket → parent link is safe.
             ctx.service.set_parent(draft.id, ticket.id)
             spawned.append(draft.id)
@@ -792,13 +810,20 @@ class RetrospectStage(Stage):
         if persisted:
             persist_memory(memory_file, persisted, max_chars=s.max_memory_chars)
 
-        spawned = self._maybe_spawn_draft(res, ticket, s, ctx)
-        follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx)
+        # Per-run draft cap — shared mutable counter decremented by each
+        # spawn helper.  Each create() call checks it first; once it hits
+        # zero the remaining spawn paths are silently skipped.
+        drafts_remaining = [s.retrospect_max_drafts_per_run]
+
+        spawned = self._maybe_spawn_draft(res, ticket, s, ctx, drafts_remaining)
+        follow_up = self._maybe_spawn_follow_up(res, ticket, s, ctx, drafts_remaining)
         self._suppress_duplicate_agented_proposals(res, ticket, s, ctx)
         # File a draft ticket per AGENT.md proposal on the originating
         # repo's board so the change enters the normal refine → implement
         # pipeline.
-        self._maybe_spawn_agented_proposal_tickets(res, ticket, s, ctx)
+        self._maybe_spawn_agented_proposal_tickets(
+            res, ticket, s, ctx, drafts_remaining
+        )
 
         (ws.artifacts_dir / "retrospect.md").write_text(
             f"# Retrospect\nlangfuse: "

@@ -1,0 +1,1 @@
+Retrospect stage now enforces ``retrospect_max_drafts_per_run`` — the per-run draft cap that was declared in settings but never consumed at runtime. Drafts, follow-ups, and AGENT.md proposal tickets all count against the same shared cap, and surplus proposals are silently skipped once the budget is exhausted.
