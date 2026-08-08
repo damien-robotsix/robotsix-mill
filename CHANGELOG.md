@@ -1,5 +1,6 @@
 ## 0.0.0 (unreleased)
 
+- Add docstring to `PrioritySlots.release` matching the sibling `acquire` method.
 - Add dedicated unit tests for `PollLoopsMixin` (`_initial_delay`, `_load_ci_state`, `_prune_ci_state`, `_find_canonical_ci_ticket`, `_fetch_run_logs_with_deferral`, `_dependabot_title`, `_dependabot_body`) and for `processing.py` helpers (`_post_trace_event`, `_block_ticket_and_notify`, `_handle_stage_error`, `_maybe_reevaluate_epic`, `_root_span_attributes`, `_root_input_summary`, `_root_output_summary`)
 - Configure Renovate `platformAutomerge` (squash) for patch, minor, and digest dependency updates, replacing the dead `dependabot-auto-merge.yml` wrapper that gated only on `dependabot[bot]` (Renovate PRs were never auto-merged).
 - Sandbox: clean stale build artifacts (`build/`, `src/*.egg-info/`) before every project install so a single transient setuptools failure doesn't poison the entire sandbox run. Audit agent prompt updated to treat repeated identical build errors as a terminal signal and fall back to pre-built-venv commands.

@@ -109,6 +109,12 @@ class PrioritySlots:
                 raise
 
     def release(self) -> None:
+        """Return one held slot to the pool and wake the best-ranked waiter.
+
+        Raises:
+            RuntimeError: if called more times than the slot was acquired, i.e.
+                the in-use counter is already at zero.
+        """
         with self._cv:
             if self._in_use <= 0:
                 raise RuntimeError("PrioritySlots released more times than acquired")
