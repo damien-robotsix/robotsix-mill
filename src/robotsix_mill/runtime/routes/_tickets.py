@@ -342,10 +342,19 @@ def _list_tickets_compute(
     ]
     background.add_task(warm_ticket_costs, settings, warm_items)
 
-    return [
-        enrich_ticket_read(t, settings, svc, blocking_cost=False, fetch_pr_url=False)
-        for t in tickets
-    ]
+    enriched: list[TicketRead] = []
+    for t in tickets:
+        try:
+            enriched.append(
+                enrich_ticket_read(
+                    t, settings, svc, blocking_cost=False, fetch_pr_url=False
+                )
+            )
+        except Exception:
+            log.exception(
+                "list_tickets: skipping ticket %s due to enrichment error", t.id
+            )
+    return enriched
 
 
 @router.get("/tickets/{ticket_id}", response_model=TicketRead)

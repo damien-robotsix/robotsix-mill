@@ -3315,3 +3315,147 @@ def test_update_description_fingerprint_changes_on_update(client, service):
     fp1_note = fp_notes[0]
     fp2_note = fp_notes[1]
     assert fp1_note != fp2_note
+
+
+# --- GET /tickets resilience: one bad ticket must not break the list ---
+
+
+def test_list_tickets_survives_corrupted_row(client, service, settings):
+    """GET /tickets returns 200 and includes healthy tickets even when
+    one row has data that would fail TicketRead serialization.
+
+    Inserts a ticket with ``created_at=NULL`` via raw SQL — the
+    TicketRead model requires a non-optional ``created_at: datetime``.
+    The list endpoint must skip the bad row, log the error, and return
+    the remaining tickets instead of 500-ing the whole board.
+    """
+    # Create healthy tickets the list endpoint should still return.
+    good = service.create("Healthy ticket")
+    service.create("Another healthy ticket")
+
+    # Insert a corrupted row directly — bypass the ORM's default factory.
+    # Include all non-nullable columns; leave created_at=NULL to trigger
+    # the serialisation failure.
+    from sqlalchemy import text as sa_text
+    from robotsix_mill.core import db as _db
+
+    with _db.session(settings, "test-board") as s:
+        s.connection().execute(
+            sa_text(
+                "INSERT INTO ticket (id, title, state, kind, workspace_path, "
+                "content_hash, source, cost_usd, pre_redraft_cost_usd, "
+                "pre_redraft_trace_count, "
+                "review_rounds, implement_cycles, refine_passes, "
+                "refine_output_hash, retry_attempt, board_id, priority, "
+                "created_at, updated_at) "
+                "VALUES (:id, :title, :state, :kind, :workspace_path, "
+                ":content_hash, :source, :cost_usd, :pre_redraft_cost_usd, "
+                ":pre_redraft_trace_count, "
+                ":review_rounds, :implement_cycles, :refine_passes, "
+                ":refine_output_hash, :retry_attempt, :board_id, :priority, "
+                "NULL, NULL)"
+            ),
+            {
+                "id": "00000000T000000Z-corrupted-0000",
+                "title": "Corrupted ticket",
+                "state": "DRAFT",
+                "kind": "task",
+                "workspace_path": "/none",
+                "content_hash": "",
+                "source": "test",
+                "cost_usd": 0.0,
+                "pre_redraft_cost_usd": 0.0,
+                "pre_redraft_trace_count": 0,
+                "review_rounds": 0,
+                "implement_cycles": 0,
+                "refine_passes": 0,
+                "refine_output_hash": "",
+                "retry_attempt": 0,
+                "board_id": "test-board",
+                "priority": 0,
+            },
+        )
+        s.commit()
+
+    # The list endpoint must return 200, including the healthy tickets
+    # but skipping the corrupted one.
+    r = client.get("/tickets")
+    assert r.status_code == 200, (
+        "list endpoint must not 500 when one row has bad data"
+    )
+    ids = [t["id"] for t in r.json()]
+    assert good.id in ids, "healthy ticket must still appear"
+    assert "00000000T000000Z-corrupted-0000" not in ids, (
+        "corrupted ticket must be skipped"
+    )
+
+
+def test_list_tickets_all_states_and_filters(client, service):
+    """GET /tickets works with every supported state filter, sort, and
+    pagination combination on a board containing tickets in all states.
+    """
+    from robotsix_mill.core.states import State
+
+    # Create one ticket per state.
+    for state in State:
+        t = service.create(f"State {state.value}")
+        try:
+            service.transition(t.id, state)
+        except Exception:
+            pass
+
+    # No-params list (terminal states CLOSED, EPIC_CLOSED, ANSWERED are
+    # excluded by default when include_closed=False).
+    r = client.get("/tickets")
+    assert r.status_code == 200
+    all_ids = [t["id"] for t in r.json()]
+    terminal = {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
+    expected_min = len(State) - len(terminal)
+    assert len(all_ids) >= expected_min, (
+        f"must return at least {expected_min} tickets "
+        f"(all states minus terminal), got {len(all_ids)}"
+    )
+
+    # State filter.
+    r = client.get("/tickets?state=draft")
+    assert r.status_code == 200
+    assert all(t["state"] == "draft" for t in r.json())
+
+    # include_closed.
+    r = client.get("/tickets?include_closed=true")
+    assert r.status_code == 200
+
+    # Pagination: offset + limit.
+    r = client.get("/tickets?offset=0&limit=3")
+    assert r.status_code == 200
+    assert len(r.json()) <= 3
+
+    # Sort by title.
+    r = client.get("/tickets?sort_by=title")
+    assert r.status_code == 200
+    titles = [t["title"] for t in r.json()]
+    assert titles == sorted(titles)
+
+    # Sort by priority.
+    r = client.get("/tickets?sort_by=priority")
+    assert r.status_code == 200
+
+    # Sort by kind.
+    r = client.get("/tickets?sort_by=kind")
+    assert r.status_code == 200
+
+    # Sort by updated_at.
+    r = client.get("/tickets?sort_by=updated_at")
+    assert r.status_code == 200
+
+    # created_after filter.
+    r = client.get("/tickets?created_after=2020-01-01T00:00:00")
+    assert r.status_code == 200
+
+    # Bad created_after → 400.
+    r = client.get("/tickets?created_after=not-a-date")
+    assert r.status_code == 400
+
+    # Bad sort_by → 400.
+    r = client.get("/tickets?sort_by=invalid_column")
+    assert r.status_code == 400
