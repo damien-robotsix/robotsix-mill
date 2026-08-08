@@ -29,7 +29,7 @@ jobs:
       coverage-threshold: 80
       pytest-args: -m "not docker" -n auto
       bandit-severity: "medium"
-      mypy-advisory: false
+      mypy-advisory: true
       # CVE ignores mirroring security-audit.yml:
       #   PYSEC-2025-183 (pyjwt): disputed advisory — key strength is the
       #     caller's responsibility; mill supplies ≥2048-bit GitHub App keys.
@@ -74,6 +74,12 @@ jobs:
         run: uv sync --locked --extra tracing
         env:
           UV_PROJECT_ENVIRONMENT: system
+
+      - name: mypy (strict, gating on new errors vs baseline)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: |
+          uv run mypy src/ --strict | uv run mypy-baseline filter --baseline-path mypy-baseline.txt
 
       - name: Reject bare string TicketKind literals
         # Mill-domain check (TicketKind) — kept here, not in the shared
