@@ -189,6 +189,20 @@ class RepoConfig(BaseModel):
         True,
         description="When true, the merge stage may auto-merge green PRs for this repo (per-repo opt-out).",
     )
+    # Whether this repo follows the fleet-wide robotsix-standards
+    # conventions. Tri-state: ``None`` (the default, and what every
+    # machine-registered entry gets) auto-detects from the repo id —
+    # ``robotsix-*`` repos are fleet members, anything else (hexarchy,
+    # ros2 workspaces, external contributions) is not. An explicit
+    # ``true``/``false`` in repos.yaml overrides the heuristic either
+    # way. Gates that enforce the standards (the refine-time standards
+    # gate) consult :meth:`follows_robotsix_standards` and skip
+    # non-fleet repos entirely.
+    follows_standards: bool | None = Field(
+        None,
+        description="Whether this repo follows robotsix-standards. None auto-detects from the 'robotsix-' id prefix; explicit true/false overrides.",
+        json_schema_extra={"advanced": True},
+    )
     # Source discriminator: ``"config"`` for operator-configured entries,
     # ``"auto"`` for machine-registered overlay entries.
     source: Literal["config", "auto"] = Field(
@@ -235,6 +249,16 @@ class RepoConfig(BaseModel):
         if v < 0:
             raise ValueError("max_inflight_prs must be ≥ 0")
         return v
+
+    def follows_robotsix_standards(self) -> bool:
+        """Resolve the tri-state ``follows_standards`` flag.
+
+        An explicit value wins; ``None`` auto-detects fleet membership
+        from the ``robotsix-`` repo-id prefix.
+        """
+        if self.follows_standards is not None:
+            return self.follows_standards
+        return self.repo_id.startswith("robotsix-")
 
 
 class ReposRegistry(BaseModel):

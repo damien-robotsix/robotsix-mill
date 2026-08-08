@@ -133,6 +133,20 @@
           "description": "Host path to the live deployment's log directory for this repo. When set, the refine agent can read deployment logs.",
           "title": "Deployed Log Folder"
         },
+        "follows_standards": {
+          "advanced": true,
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether this repo follows robotsix-standards. None auto-detects from the 'robotsix-' id prefix; explicit true/false overrides.",
+          "title": "Follows Standards"
+        },
         "forge_remote_url": {
           "anyOf": [
             {
@@ -2752,6 +2766,12 @@
           "description": "Branch is eligible for cleanup only if its last commit is older than this many days.",
           "title": "Stale Branch Max Age Days",
           "type": "integer"
+        },
+        "standards_gate_enabled": {
+          "default": true,
+          "description": "When true, an LLM pre-refine gate discards drafts whose goal violates an explicit robotsix-standards prohibition (fleet repos only).",
+          "title": "Standards Gate Enabled",
+          "type": "boolean"
         },
         "startup_jitter_seconds": {
           "advanced": true,

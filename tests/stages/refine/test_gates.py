@@ -1405,3 +1405,147 @@ def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
 
     out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
     assert out is None
+
+
+# ===========================================================================
+# 8. _run_standards_gate
+# ===========================================================================
+
+import robotsix_mill.agents.standards_gate as standards_gate_mod
+from robotsix_mill.stages.refine.helpers import STANDARDS_GATE_PREFIX
+
+
+def _fleet_repo_config():
+    from robotsix_mill.config import RepoConfig
+
+    return RepoConfig(
+        repo_id="robotsix-testrepo",
+        board_id="test-board",
+        langfuse_project_name="test",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+
+
+def test_standards_gate_disabled_returns_none(ctx_factory, monkeypatch):
+    ctx = ctx_factory(standards_gate_enabled=False)
+    ctx.repo_config = _fleet_repo_config()
+    t = _ticket(ctx, source="agent_check")
+
+    calls: list = []
+    monkeypatch.setattr(
+        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
+    )
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is None
+    assert calls == []
+
+
+def test_standards_gate_non_fleet_repo_returns_none(ctx_factory, monkeypatch):
+    ctx = ctx_factory()  # repo_id="test-repo" — not a robotsix-* fleet repo
+    t = _ticket(ctx, source="agent_check")
+
+    calls: list = []
+    monkeypatch.setattr(
+        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
+    )
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is None
+    assert calls == []
+
+
+def test_standards_gate_user_authored_returns_none(ctx_factory, monkeypatch):
+    ctx = ctx_factory()
+    ctx.repo_config = _fleet_repo_config()
+    t = _ticket(ctx)
+    assert t.source == SourceKind.USER
+
+    calls: list = []
+    monkeypatch.setattr(
+        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
+    )
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is None
+    assert calls == []
+
+
+def test_standards_gate_violation_routes_to_done(ctx_factory, monkeypatch):
+    ctx = ctx_factory()
+    ctx.repo_config = _fleet_repo_config()
+    t = _ticket(ctx, source="agent_check")
+
+    monkeypatch.setattr(
+        standards_gate_mod,
+        "run_standards_gate_check",
+        lambda *, settings, draft_title, draft_body: {
+            "violates": True,
+            "standard": "distribution-packaging.md",
+            "reason": "asks to publish to npm; the standard mandates no registry publish step",
+        },
+    )
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert out.note.startswith(STANDARDS_GATE_PREFIX)
+    assert "distribution-packaging.md" in out.note
+
+
+def test_standards_gate_no_violation_returns_none(ctx_factory, monkeypatch):
+    ctx = ctx_factory()
+    ctx.repo_config = _fleet_repo_config()
+    t = _ticket(ctx, source="agent_check")
+
+    monkeypatch.setattr(
+        standards_gate_mod,
+        "run_standards_gate_check",
+        lambda *, settings, draft_title, draft_body: {
+            "violates": False,
+            "standard": "",
+            "reason": "goal is standards-compliant",
+        },
+    )
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is None
+
+
+def test_standards_gate_check_raises_is_swallowed(ctx_factory, monkeypatch):
+    ctx = ctx_factory()
+    ctx.repo_config = _fleet_repo_config()
+    t = _ticket(ctx, source="agent_check")
+
+    def _boom(**k):
+        raise RuntimeError("standards boom")
+
+    monkeypatch.setattr(standards_gate_mod, "run_standards_gate_check", _boom)
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is None
+
+
+def test_standards_gate_explicit_optout_returns_none(ctx_factory, monkeypatch):
+    ctx = ctx_factory()
+    repo_config = _fleet_repo_config()
+    repo_config.follows_standards = False
+    ctx.repo_config = repo_config
+    t = _ticket(ctx, source="agent_check")
+
+    calls: list = []
+    monkeypatch.setattr(
+        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
+    )
+
+    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+
+    assert out is None
+    assert calls == []
