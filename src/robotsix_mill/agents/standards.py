@@ -28,12 +28,21 @@ log = logging.getLogger(__name__)
 # release, repo lifecycle, CI conventions — the domain where the
 # most costly spec-vs-standard conflicts arise (e.g. commitizen vs
 # towncrier).  The README gives the high-level stack overview.
+# distribution-packaging.md and free-tier-only.md carry the explicit
+# PROHIBITIONS (no registry publishing, no paid GitHub features) that
+# the refine-time standards gate enforces — a draft like "publish
+# @robotsix/ui to npm" sailed through refine because neither rule was
+# in the fetched context.
 _STANDARDS_SOURCE_URLS: tuple[str, ...] = (
     "https://raw.githubusercontent.com/damien-robotsix/robotsix-standards/main/README.md",
     "https://raw.githubusercontent.com/damien-robotsix/robotsix-standards/main/docs/repo-baseline.md",
+    "https://raw.githubusercontent.com/damien-robotsix/robotsix-standards/main/docs/distribution-packaging.md",
+    "https://raw.githubusercontent.com/damien-robotsix/robotsix-standards/main/docs/free-tier-only.md",
 )
 
-_STANDARDS_CACHE_FILENAME = "robotsix-standards.md"
+# v2: bumped when _STANDARDS_SOURCE_URLS changes so a warm TTL cache
+# from the previous URL set cannot serve stale (narrower) content.
+_STANDARDS_CACHE_FILENAME = "robotsix-standards-v2.md"
 
 
 def _standards_cache_file(settings: Settings) -> Path:

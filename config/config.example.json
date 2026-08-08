@@ -305,6 +305,7 @@
     "shutdown_grace_seconds": 1800,
     "smoke_command": "",
     "spec_review_enabled": true,
+    "standards_gate_enabled": true,
     "stage_retry_base_delay": 2.0,
     "stage_retry_max_attempts": 5,
     "stage_retry_max_delay": 60.0,

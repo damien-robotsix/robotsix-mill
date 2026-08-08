@@ -377,6 +377,19 @@ class _StagesSettings(BaseModel):
         description="When true, an LLM pre-refine gate re-evaluates whether a cited gap still exists on HEAD.",
         default=False,
     )
+    # When True (default), a single-LLM-call pre-refine gate checks the
+    # draft's GOAL against robotsix-standards for repos that follow the
+    # fleet conventions (RepoConfig.follows_robotsix_standards()).  A
+    # draft whose objective clearly requires something a standard
+    # explicitly prohibits (e.g. "publish to npm" vs the
+    # distribution-packaging no-registry rule) is short-circuited to
+    # DONE with the citation before any refine budget is spent.  The
+    # gate is conservative (≥90% confidence, prohibition-only) and
+    # never fires on user-authored drafts or non-fleet repos.
+    standards_gate_enabled: bool = Field(
+        description="When true, an LLM pre-refine gate discards drafts whose goal violates an explicit robotsix-standards prohibition (fleet repos only).",
+        default=True,
+    )
     # When True (default), a deterministic pre-refine gate detects
     # drafts that reference mill-specific source paths
     # When True, a deterministic pre-implement gate verifies that

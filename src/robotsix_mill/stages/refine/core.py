@@ -123,6 +123,17 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, wp_gate, ws, input_hash
             )
 
+        # Phase 2.17: standards gate — a single cheap LLM call that
+        # discards agent-spawned drafts whose GOAL violates an explicit
+        # robotsix-standards prohibition (fleet repos only).  Runs
+        # before the triage classifier so a violating draft cannot
+        # slip through as SKIP (already-precise spec).
+        std_gate = RefineStage._run_standards_gate(ctx, ticket, draft, title, s)
+        if std_gate is not None:
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, std_gate, ws, input_hash
+            )
+
         # Phase 2.2: triage classifier — a single cheap LLM call that
         # classifies the draft as SKIP / NO_CHANGE / REFINE.
         # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,

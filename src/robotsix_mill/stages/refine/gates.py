@@ -30,6 +30,7 @@ from .helpers import (
     FRESHNESS_STALE_PREFIX,
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OBSOLESCENCE_GAP_PREFIX,
+    STANDARDS_GATE_PREFIX,
     WORKFLOW_PORTABILITY_GATE_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
@@ -883,6 +884,95 @@ class RefineGatesMixin:
                     ".robotsix-mill/periodic/ presence file",
                 )
 
+        return None
+
+    @staticmethod
+    def _run_standards_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        title: str,
+        s: Settings,
+    ) -> Outcome | None:
+        """Run the LLM-based fleet-standards gate (best-effort).
+
+        For repos that follow robotsix-standards
+        (:meth:`RepoConfig.follows_robotsix_standards`), a single cheap
+        LLM call judges whether the draft's GOAL conflicts with an
+        explicit standards prohibition — e.g. "publish @robotsix/ui to
+        npm" against distribution-packaging.md's no-registry rule.  A
+        clear violation is short-circuited to ``DONE`` with the citation
+        before any refine LLM budget is spent.
+
+        Returns ``None`` (proceed) when the gate is disabled, the repo
+        does not follow the standards, the draft is trivial or
+        user-authored, the check fails, or no violation is found.
+        User-authored drafts reflect deliberate human intent and are
+        never auto-closed — the operator can consciously depart from a
+        standard; the gate targets the agent-spawned drafts
+        (retrospect, trace-review, chat) that propose off-standards
+        work nobody asked for.
+        """
+        if not s.standards_gate_enabled:
+            return None
+
+        repo_config = ctx.repo_config
+        if repo_config is None or not repo_config.follows_robotsix_standards():
+            return None
+
+        if not draft or len(draft) < 50:
+            log.debug(
+                "%s: trivial draft (%d chars), skipping standards gate",
+                ticket.id,
+                len(draft or ""),
+            )
+            return None
+
+        if ticket.source == SourceKind.USER:
+            log.debug(
+                "%s: user-authored draft, skipping standards gate",
+                ticket.id,
+            )
+            return None
+
+        from ...agents import standards_gate
+
+        try:
+            result = standards_gate.run_standards_gate_check(
+                settings=s,
+                draft_title=title,
+                draft_body=draft,
+            )
+        except Exception:
+            log.warning(
+                "%s: standards gate check failed, proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        if result.get("violates"):
+            standard = result.get("standard", "robotsix-standards")
+            reason = result.get("reason", "draft goal violates a fleet standard")
+            log.info(
+                "%s: standards gate flagged violation of %s — %s",
+                ticket.id,
+                standard,
+                reason,
+            )
+            # Discarded drafts go to DONE so retrospect still analyses
+            # them — same pattern as the freshness/dedup/obsolescence
+            # gates.
+            return Outcome(
+                State.DONE,
+                f"{STANDARDS_GATE_PREFIX} draft conflicts with {standard} — {reason}",
+            )
+
+        log.debug(
+            "%s: standards gate passed — %s",
+            ticket.id,
+            result.get("reason", ""),
+        )
         return None
 
     @staticmethod
