@@ -12,6 +12,17 @@ from pathlib import Path
 # Directories to scan for ``*.md`` fragment files.
 _FRAGMENT_DIRS = ("changelog.d", "changelog", "changes")
 
+# Presence of this file means the repo generates its changelog from
+# conventional commits via release-please, the fleet standard (see
+# robotsix-standards release-please.md).  Such a repo has no fragment
+# directory at all.
+_RELEASE_PLEASE_CONFIG = "release-please-config.json"
+
+
+def uses_release_please(repo_dir: Path) -> bool:
+    """Return True when *repo_dir* has migrated to release-please."""
+    return (repo_dir / _RELEASE_PLEASE_CONFIG).is_file()
+
 
 def _trailing_newline_errors(repo_dir: Path) -> list[str]:
     """Check / auto-fix trailing newlines on every ``*.md`` fragment file.
@@ -137,6 +148,13 @@ def validate_changelog(repo_dir: Path) -> list[str]:
     """Run all changelog validation checks.  Returns diagnostic messages
     for anything that was auto-fixed (empty list means clean).
     """
+    # A release-please repo has no fragments to validate, and
+    # _modules_yaml_check would *insert* a `changelog.d/*.md` glob pointing at
+    # a directory that no longer exists — which then fails the repo's own
+    # check-registration job.  Skip both entirely.
+    if uses_release_please(repo_dir):
+        return []
+
     msgs: list[str] = []
     msgs.extend(_trailing_newline_errors(repo_dir))
     msgs.extend(_modules_yaml_check(repo_dir))
