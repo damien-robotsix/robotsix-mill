@@ -172,6 +172,9 @@ retrospect_max_drafts_per_run
 # -- core --------------------------------------------------------------------
 # resolve_under_src — called from tests only; vulture cannot trace test calls.
 resolve_under_src
+# notify_sync — EventNotifier method used only in tests; vulture (60%) cannot
+# trace test calls.
+notify_sync
 # paths_excluding_out_of_scope — callers removed when ticket-based maintenance
 # flow was retired; kept as reusable dedup utility.
 paths_excluding_out_of_scope

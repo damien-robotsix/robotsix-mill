@@ -205,6 +205,7 @@ class _DeleteMixin(_ServiceBase):
             ticket.cost_usd = 0.0
 
             note = f"redrafted: {body}" if body else "redrafted"
+            old_state = ticket.state.value
             ticket.state = State.DRAFT
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -213,5 +214,5 @@ class _DeleteMixin(_ServiceBase):
             s.commit()
             s.refresh(ticket)
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
             return None, ticket

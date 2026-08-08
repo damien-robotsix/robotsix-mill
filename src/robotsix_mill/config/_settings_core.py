@@ -1022,3 +1022,18 @@ class _CoreSettings(BaseModel):
         pattern=r"^https?://",
         description="Deploy server management API URL. When set, used to check worker image freshness before resuming blocked tickets.",
     )
+
+    # --- outbound event subscribers ---
+    # List of HTTP endpoints that receive a JSON POST on every ticket
+    # state transition.  Delivery is best-effort and asynchronous (a
+    # dead subscriber does not block or slow down state transitions).
+    subscriber_urls: list[str] = Field(
+        default_factory=list,
+        description="List of subscriber endpoint URLs that receive ticket state-change events via HTTP POST.",
+    )
+    # Optional shared secret sent as an ``X-Mill-Event-Secret`` header
+    # on every outbound event POST.  Empty → header omitted.
+    subscriber_shared_secret: SecretStr | None = Field(
+        default=None,
+        description="Optional shared secret for the X-Mill-Event-Secret header on outbound events.",
+    )

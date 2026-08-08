@@ -348,6 +348,7 @@ class _CommentMixin(_ServiceBase):
             dst = State(ticket.paused_from)
             ticket.blocked_from = None
             ticket.paused_from = None
+            old_state = ticket.state.value
             ticket.state = dst
             ticket.updated_at = datetime.now(timezone.utc)
             s.add(ticket)
@@ -370,7 +371,7 @@ class _CommentMixin(_ServiceBase):
                 len(ask_threads),
             )
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
 
     def reopen_thread(
         self,

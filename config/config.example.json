@@ -320,6 +320,8 @@
     "startup_jitter_seconds": 30,
     "state_sync_interval_seconds": 604800,
     "state_sync_periodic": true,
+    "subscriber_shared_secret": null,
+    "subscriber_urls": [],
     "subtask_request_limit": 30,
     "survey_interval_seconds": 604800,
     "survey_periodic": true,

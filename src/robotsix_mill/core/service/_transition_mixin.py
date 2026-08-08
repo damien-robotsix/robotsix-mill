@@ -445,6 +445,7 @@ class _TransitionMixin(_ServiceBase):
             # actually delivered — reset its spawn budget.
             if ticket.state is State.READY and dst in _IMPLEMENT_PROGRESS_STATES:
                 _reset_implement_spawn_counter(self.workspace(ticket))
+            old_state = ticket.state.value
             ticket.state = dst
             ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
@@ -456,7 +457,7 @@ class _TransitionMixin(_ServiceBase):
             if dst in self._ARCHIVABLE_STATES:
                 self._maybe_purge_archived()
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
             # Capture unblock targets to fire AFTER this session closes
             # (cross-board: each target may live on another board's DB; we
             # must not hold this session open while transitioning them).
@@ -536,6 +537,7 @@ class _TransitionMixin(_ServiceBase):
             ticket.last_transient_error = None
             ticket.next_retry_at = None
             ticket.pre_redraft_trace_count = -1  # sentinel: set baseline on next poll
+            old_state = ticket.state.value
             ticket.state = dst
             ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
@@ -603,7 +605,7 @@ class _TransitionMixin(_ServiceBase):
                 except FileNotFoundError:
                     pass  # best-effort; file may already be gone
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
             return ticket
 
     def set_retry_state(
@@ -650,6 +652,7 @@ class _TransitionMixin(_ServiceBase):
                 comment = Comment(ticket_id=ticket_id, body=body, author=author)
                 s.add(comment)
             note = f"changes requested: {body}"
+            old_state = ticket.state.value
             ticket.state = State.DRAFT
             ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
@@ -660,7 +663,7 @@ class _TransitionMixin(_ServiceBase):
                 s.refresh(comment)
             s.refresh(ticket)
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
             return comment, ticket
 
     def request_implementation_changes(
@@ -706,6 +709,7 @@ class _TransitionMixin(_ServiceBase):
             comment = Comment(ticket_id=ticket_id, body=body, author=author)
             s.add(comment)
             note = f"implementation changes requested: {body}"
+            old_state = ticket.state.value
             ticket.state = State.READY
             ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
@@ -718,7 +722,7 @@ class _TransitionMixin(_ServiceBase):
         _clear_stale_implement_guard(ws)
         _reset_implement_spawn_counter(ws)
         if self._on_transition is not None:
-            self._on_transition(ticket)
+            self._on_transition(ticket, old_state)
         return comment, ticket
 
     def close_tracker(self, ticket_id: str, note: str = "") -> Ticket:
@@ -745,6 +749,7 @@ class _TransitionMixin(_ServiceBase):
                 )
             ticket.blocked_from = None
             ticket.paused_from = None
+            old_state = ticket.state.value
             ticket.state = State.CLOSED
             ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
@@ -760,7 +765,7 @@ class _TransitionMixin(_ServiceBase):
             s.commit()
             s.refresh(ticket)
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
         # Purge oldest terminal tickets if we just crossed the cap.
         self._maybe_purge_archived()
         return self.get(ticket_id) or ticket
@@ -866,6 +871,7 @@ class _TransitionMixin(_ServiceBase):
                 comment = Comment(ticket_id=ticket_id, body=note, author=author)
                 s.add(comment)
             event_note = f"mark done: {note}" if note else "mark done"
+            old_state = ticket.state.value
             ticket.state = State.DONE
             ticket.updated_at = datetime.now(UTC)
             s.add(ticket)
@@ -878,5 +884,5 @@ class _TransitionMixin(_ServiceBase):
                 s.refresh(comment)
             s.refresh(ticket)
             if self._on_transition is not None:
-                self._on_transition(ticket)
+                self._on_transition(ticket, old_state)
             return comment, ticket

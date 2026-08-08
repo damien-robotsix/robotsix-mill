@@ -29,7 +29,7 @@ class _ServiceBase:
 
     settings: Settings
     board_id: str
-    _on_transition: Callable[[Ticket], None] | None
+    _on_transition: Callable[[Ticket, str], None] | None
     _ARCHIVABLE_STATES: set[State]
 
     if TYPE_CHECKING:

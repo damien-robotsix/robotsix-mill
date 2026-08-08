@@ -12,19 +12,23 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import AsyncContextManager, Callable
+from typing import TYPE_CHECKING, AsyncContextManager, Callable
 
 from fastapi import FastAPI
 from robotsix_llmio.logging import setup_logging as llmio_setup_logging
 
 from ..config import ReposRegistry, Settings
 from ..core import db
+from ..core.event_notifier import EventNotifier
 from ..core.service import TicketService
 from ..stages import StageContext
 from . import tracing
 from .broadcaster import BoardBroadcaster
 from .run_registry import RunRegistry
 from .worker import Worker
+
+if TYPE_CHECKING:
+    from ..core.models import Ticket
 
 
 def setup_logging() -> None:
@@ -167,7 +171,22 @@ def create_lifespan(
         )
         service = TicketService(settings, board_id=lead_board_id)
         broadcaster = BoardBroadcaster()
-        service._on_transition = broadcaster.broadcast_sync
+        notifier = EventNotifier(
+            subscriber_urls=settings.subscriber_urls,
+            shared_secret=(
+                settings.subscriber_shared_secret.get_secret_value()
+                if settings.subscriber_shared_secret is not None
+                else None
+            ),
+        )
+
+        # Chain both callbacks — broadcaster for WebSocket clients,
+        # notifier for outbound event subscribers.
+        def _on_transition(ticket: Ticket, old_state: str) -> None:
+            broadcaster.broadcast_sync(ticket, old_state)
+            notifier.notify(ticket, old_state)
+
+        service._on_transition = _on_transition
         ctx = StageContext(settings=settings, service=service, repo_config=repo_config)
         app.state.repos = repos
         app.state.single_repo_id = single_repo_id
