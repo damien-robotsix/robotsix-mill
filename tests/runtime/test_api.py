@@ -3359,7 +3359,7 @@ def test_list_tickets_survives_corrupted_row(client, service, settings):
                 "id": "00000000T000000Z-corrupted-0000",
                 "title": "Corrupted ticket",
                 "state": "DRAFT",
-                "kind": "task",
+                "kind": TicketKind.TASK,
                 "workspace_path": "/none",
                 "content_hash": "",
                 "source": "test",
