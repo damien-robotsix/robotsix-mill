@@ -169,7 +169,9 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         return cls._STAGE_RANK.get(ticket.state, cls._DEFAULT_STAGE_RANK)
 
     @staticmethod
-    def _peek(queue: "asyncio.PriorityQueue[tuple[int, int, int, str]]") -> "tuple[int, int, int, str]":
+    def _peek(
+        queue: "asyncio.PriorityQueue[tuple[int, int, int, str]]",
+    ) -> "tuple[int, int, int, str]":
         """Return the smallest item from *queue* without dequeuing it.
 
         ``asyncio.PriorityQueue`` stores its heap in a bare list at
