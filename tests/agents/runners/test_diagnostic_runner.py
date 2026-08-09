@@ -297,3 +297,41 @@ def test_loop_started_when_enabled():
         worker._diagnostic_task.cancel()
 
     asyncio.run(_run())
+
+
+# --- registration wiring --------------------------------------------------
+
+
+def test_importing_the_runner_registers_every_concrete_check() -> None:
+    """Importing the runner alone must populate the check registry.
+
+    Each check module calls ``register_check`` at import time, so a module
+    that nothing imports never registers and the pass silently runs zero
+    checks while still reporting success. This ran in production: only the
+    per-check unit tests imported those modules directly, so the registry
+    was empty everywhere else.
+
+    Deliberately a subprocess: the registry is a module-level list, so in a
+    full-suite run sibling test modules import the check modules directly and
+    would populate it regardless of the runner's own imports.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "from robotsix_mill.agents.runners.diagnostic_runner import "
+        "get_registered_checks; "
+        "print(','.join(sorted(c.name for c in get_registered_checks())))"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    registered = set(proc.stdout.strip().split(",")) - {""}
+    assert registered >= {"errored_runs", "recurring_ci_failure"}, (
+        f"importing diagnostic_runner registered {sorted(registered)}; "
+        "a check module is missing from its side-effect import block"
+    )
