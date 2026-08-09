@@ -80,8 +80,11 @@ _NORMALIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     # Bare line-reference suffixes: :123, :45-67
     (re.compile(r":\d+(?:-\d+)?"), " "),
-    # Hex suffixes often used as dedup counters: -a1b2, -deadbeef
-    (re.compile(r"\b[a-f0-9]{4,8}\b", re.IGNORECASE), " "),
+    # Hex suffixes often used as dedup counters: -a1b2, -deadbeef.
+    # Anchored to a hyphen or underscore prefix so we don't strip
+    # genuine English words whose letters happen to be all hex
+    # (e.g. "feed", "dead", "face", "bead", "deed", "decade").
+    (re.compile(r"[-_][a-f0-9]{4,8}\b", re.IGNORECASE), " "),
 ]
 
 
