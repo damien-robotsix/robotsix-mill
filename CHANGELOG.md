@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.3.0...v0.4.0) (2026-08-09)
+
+
+### Features
+
+* Autonomous MR lifecycle: mill rebases conflicted PRs, merges mergeable PRs continuously, escalates only on validity doubts (20260808T075448Z-autonomous-mr-lifecycle-mill-rebases-con-958d) ([#2814](https://github.com/damien-robotsix/robotsix-mill/issues/2814)) ([610a594](https://github.com/damien-robotsix/robotsix-mill/commit/610a59411a43cb11a07cc6d4fd9d2d9cf15fbe76))
+
+
+### Bug Fixes
+
+* **release:** don't fail lock-sync when the release branch is gone ([#2812](https://github.com/damien-robotsix/robotsix-mill/issues/2812)) ([5db323b](https://github.com/damien-robotsix/robotsix-mill/commit/5db323b101b9fde919208bf2392bd702d0481726))
+
 ## [0.3.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.2.1...v0.3.0) (2026-08-09)
 
 
