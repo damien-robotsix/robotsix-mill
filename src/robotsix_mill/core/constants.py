@@ -78,3 +78,15 @@ BINARY_EXTENSIONS: frozenset[str] = frozenset(
         ".elf",
     }
 )
+
+# ---------------------------------------------------------------------------
+# Comment authors whose comments are NOT reviewer feedback.  ``mill`` and
+# ``system`` are diagnostic auto-posts (trace-link breadcrumbs,
+# timeout-escalation pings); ``operator`` is the human's own
+# resume-blocked / triage justification, recorded by
+# ``ServiceMixin.resume_blocked`` as a root comment that nothing ever
+# closes.  Counting an operator note as unaddressed review feedback made
+# every manual unblock arm the implement preflight guards it was meant to
+# clear — an intervention that tightened the trap instead of releasing it.
+# ---------------------------------------------------------------------------
+NON_FEEDBACK_AUTHORS: frozenset[str] = frozenset({"mill", "system", "operator"})

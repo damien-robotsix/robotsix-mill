@@ -10,6 +10,7 @@ from typing import Any
 from ...agents.runners.pass_runner import load_memory
 from ...agents.testing import ENV_ERROR_PREFIX
 from ...config import effective_target_branch
+from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import get_forge
@@ -398,24 +399,33 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
         feedback: str | None = None
         open_thread_ids: set[int] | None = None
-        # ``mill`` and ``system`` author comments (worker trace-link
-        # breadcrumbs, timeout-escalation pings) are diagnostic
-        # metadata, not feedback. Including them taught implement to
-        # treat unreadable Langfuse URLs as review comments and ask
-        # the operator "what did the reviewer say?". Trace links now
-        # write to history (see worker._post_trace_event) but the
-        # filter stays as defence-in-depth.
-        _NON_FEEDBACK_AUTHORS = {"mill", "system"}
+        # Authors in NON_FEEDBACK_AUTHORS are dropped: ``mill`` /
+        # ``system`` are worker trace-link breadcrumbs and
+        # timeout-escalation pings — including them taught implement to
+        # treat unreadable Langfuse URLs as review comments and ask the
+        # operator "what did the reviewer say?" (trace links now write
+        # to history, see worker._post_trace_event, but the filter stays
+        # as defence-in-depth) — and ``operator`` is the human's own
+        # resume-blocked justification, not a gap to close.
         comments = ctx.service.list_comments(ticket.id)
-        comments = [c for c in comments if c.author not in _NON_FEEDBACK_AUTHORS]
+        comments = [c for c in comments if c.author not in NON_FEEDBACK_AUTHORS]
         if comments:
             open_threads = [
                 c for c in comments if c.parent_id is None and c.closed_at is None
             ]
             if open_threads:
                 open_thread_ids = {c.id for c in open_threads}
+            # Label each comment with its real author.  Tagging the
+            # whole thread ``[REVIEW …]`` fed implement its OWN prior
+            # replies as if a reviewer had written them, so an attempt
+            # that had claimed "I've now made the actual fix" read that
+            # claim back as an authoritative verdict and re-affirmed it
+            # instead of re-checking the tree — three rebuttals, zero
+            # edits, on a branch where the file was demonstrably
+            # untouched (ticket bbd6).
             review_feedback = "\n".join(
-                f"[REVIEW id={c.id} @ {c.created_at.isoformat()}] {c.body}"
+                f"[{'REVIEW' if c.author == 'review' else c.author.upper()} "
+                f"id={c.id} @ {c.created_at.isoformat()}] {c.body}"
                 for c in comments
             )
             feedback = review_feedback
@@ -988,13 +998,12 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             # resourcing problem.
             review_ids: list[str] = []
             try:
-                _NON_FEEDBACK = {"mill", "system"}
                 comments = ctx.service.list_comments(ticket.id)
                 for c in comments:
                     if (
                         c.parent_id is None
                         and c.closed_at is None
-                        and c.author not in _NON_FEEDBACK
+                        and c.author not in NON_FEEDBACK_AUTHORS
                     ):
                         review_ids.append(str(c.id))
             except Exception:
