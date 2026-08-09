@@ -65,6 +65,7 @@ from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
+from ._conventional import conventional_subject
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.deliver")
@@ -763,7 +764,10 @@ class DeliverStage(Stage):
                 f"push failed for {repo_label} — resumable: {(e.stderr or '')[:300]}",
             )
 
-        title = f"mill: {ticket.title} ({ticket.id})"
+        # Conventional subject: with squash_merge_commit_title =
+        # COMMIT_OR_PR_TITLE a multi-commit PR squashes under the PR
+        # title, so this is the other half of the same requirement.
+        title = conventional_subject(repo_dir, ticket.id, ticket.title)
         ws = ctx.service.workspace(ticket)
         spec = ws.read_description()
 

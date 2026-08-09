@@ -15,6 +15,7 @@ from ...forge import get_forge
 from ...forge.auth import _resolve_remote_url, github_token
 from ...vcs import git_ops
 from .. import short_circuit_verify
+from .._conventional import conventional_subject, drop_fragments
 from ..base import Outcome, StageContext
 from ..pause import (
     build_compact_resume_message_history,
@@ -1087,10 +1088,21 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 ticket.id,
                 exc_info=True,
             )
-        # Commit message format — identical for all repos.
-        commit_message = f"mill: {ticket.title} ({ticket.id})" + (
-            "" if ok else " [WIP]"
+        # Commit message format — identical for all repos.  The subject
+        # must be a conventional commit: with squash_merge_commit_title
+        # = COMMIT_OR_PR_TITLE, a single-commit PR is squashed under
+        # THIS subject, and release-please ignores anything it cannot
+        # parse.  The type comes from the fragment the agent just wrote.
+        commit_message = conventional_subject(
+            repo_dir,
+            ticket.id,
+            ticket.title,
+            suffix="" if ok else " [WIP]",
         )
+        # Only now that the kind has been folded into the subject: on a
+        # release-please repo nothing drains changelog.d, so leaving the
+        # fragment behind litters main with dead duplicates.
+        drop_fragments(repo_dir, ticket.id)
         # Per-repo commit for extra_roots (multi-repo meta tickets).
         # Write a touched_repos.json artifact listing every repo that
         # received a commit so the downstream deliver stage knows which

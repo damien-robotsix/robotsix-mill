@@ -716,8 +716,11 @@ def test_finalize_writes_artifacts_and_commits(ctx_factory, tmp_path, monkeypatc
 
     assert (ws.artifacts_dir / "implement_summary.md").read_text() == "the summary"
 
-    # has_changes True → commit_all with the non-WIP message.
-    assert fake.commits == [(str(repo_dir), f"mill: {t.title} ({t.id})")]
+    # has_changes True → commit_all with the non-WIP message.  No
+    # changelog fragment in this fixture, so the conventional type falls
+    # back to `chore`; the ticket id must survive either way, because
+    # merge/refine locate a squash-merged branch by grepping for it.
+    assert fake.commits == [(str(repo_dir), f"chore: {t.title} ({t.id})")]
 
 
 def test_finalize_blocked_header_and_no_changes(ctx_factory, tmp_path, monkeypatch):
