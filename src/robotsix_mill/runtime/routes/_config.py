@@ -56,7 +56,7 @@ def config_put(
             },
         )
     except Exception:
-        log.exception("config_put: unhandled error applying updates %s", list(updates.keys()))
+        log.exception("config_put: unhandled error applying updates %s", repr(list(updates.keys())))
         return JSONResponse(
             status_code=500,
             content={
@@ -112,7 +112,7 @@ def config_rollback(
             },
         )
     except Exception:
-        log.exception("config_rollback: unhandled error rolling back to version %s", target_version)
+        log.exception("config_rollback: unhandled error rolling back to version %s", repr(target_version))
         return JSONResponse(
             status_code=500,
             content={
