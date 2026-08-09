@@ -22,8 +22,27 @@ Returns `None` when no PR/MR exists. When one exists, returns:
             "annotations": [...],  # capped at 20 per check
         }
     ],
+    "pending": [str, ...],  # names of pending checks
+    "jobs": [
+        {"name": str, "conclusion": str | None}  # all jobs/checks, per-job detail
+    ],
 }
 ```
+
+The `jobs` field is a flat list of every CI job/check for the commit,
+each with its `name` and `conclusion` (`"success"`, `"failure"`,
+`"pending"`, `"skipped"`, `"cancelled"`, or `None` when unknown).
+This gives callers a complete per-job picture without needing an
+external API call.
+
+The `failing` list carries only checks whose conclusion is a genuine
+failure (failure, timed_out, action_required, startup_failure), each
+with detailed annotations and truncated log text. The `jobs` list
+carries *every* check and its raw conclusion, making it easy to
+identify which job failed (and what status the other jobs have) at
+a glance. The `pending` list holds the names of checks that are
+still in-flight or inconclusive (cancelled/stale — treated as pending
+to avoid false CI-failure loops).
 
 ### `fetch_workflow_job_logs(*, run_id: int) -> str`
 
@@ -101,8 +120,9 @@ Failure markers matched:
 ## Edge cases
 
 - **No CI configured**: When both check-runs and statuses are empty,
-  `check_status()` returns `{"conclusion": "success", "failing": []}`.
-  This prevents the merge stage from looping forever.
+  `check_status()` returns `{"conclusion": "success", "failing": [],
+  "pending": [], "jobs": []}`. This prevents the merge stage from
+  looping forever.
 - **Pending pipelines**: A pipeline/check that is still running yields
   `"conclusion": "pending"` — the merge stage polls again next cycle.
 - **403 on checks endpoint**: Treated as "no data" rather than an error.
