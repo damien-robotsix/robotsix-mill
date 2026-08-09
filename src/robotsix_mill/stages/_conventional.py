@@ -95,6 +95,41 @@ def fragment_kind(repo_dir: Path, ticket_id: str) -> str | None:
     )
 
 
+# Where the kind is parked for the deliver stage.  Implement deletes the
+# fragment from the branch, so by the time deliver builds the PR title the
+# original evidence is gone and every PR would fall back to ``chore``.
+_KIND_ARTIFACT = "changelog_kind.txt"
+
+
+def record_kind(artifacts_dir: Path | None, kind: str | None) -> None:
+    """Park *kind* so deliver can still classify after the fragment is gone."""
+    if artifacts_dir is None or not kind:
+        return
+    try:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        (artifacts_dir / _KIND_ARTIFACT).write_text(kind + "\n", encoding="utf-8")
+    except OSError:
+        log.warning("could not record the changelog kind", exc_info=True)
+
+
+def _recorded_kind(artifacts_dir: Path | None) -> str | None:
+    if artifacts_dir is None:
+        return None
+    try:
+        return (artifacts_dir / _KIND_ARTIFACT).read_text(
+            encoding="utf-8"
+        ).strip() or None
+    except OSError:
+        return None
+
+
+def resolve_kind(
+    repo_dir: Path, ticket_id: str, artifacts_dir: Path | None = None
+) -> str | None:
+    """The fragment when it is still on the branch, else what implement parked."""
+    return fragment_kind(repo_dir, ticket_id) or _recorded_kind(artifacts_dir)
+
+
 def _already_conventional(title: str) -> bool:
     """Return True when *title* already opens with a conventional type."""
     head, sep, _ = title.partition(":")
@@ -113,6 +148,7 @@ def conventional_subject(
     title: str,
     *,
     suffix: str = "",
+    artifacts_dir: Path | None = None,
 ) -> str:
     """Build the commit/PR subject for a mill-authored change.
 
@@ -127,10 +163,11 @@ def conventional_subject(
         # authoritative; prefixing a second one would break parsing.
         return f"{title} ({ticket_id}){suffix}"
 
-    kind = fragment_kind(repo_dir, ticket_id)
+    kind = resolve_kind(repo_dir, ticket_id, artifacts_dir)
     if kind is None:
         log.warning(
-            "%s: no changelog fragment found in %s — falling back to '%s:', "
+            "%s: no changelog fragment or recorded kind for %s — falling back "
+            "to '%s:', "
             "so this change will not appear in CHANGELOG.md or bump the "
             "version",
             ticket_id,

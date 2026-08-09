@@ -1,1 +1,0 @@
-Decomposed `_handle_request_changes` in review.py: extracted `_detect_convergence` (fingerprint/convergence detection with module-level `import hashlib`) and `_verify_already_addressed_asks` (claim-verification loop) as module-level helpers. Method reduced from 178 to ~136 lines.
