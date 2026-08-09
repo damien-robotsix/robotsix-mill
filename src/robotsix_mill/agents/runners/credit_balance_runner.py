@@ -133,13 +133,16 @@ def run_credit_balance_check(
 
 
 def run_credit_balance_pass(
+    session_id: str = "",
     repo_config: object = None,
     settings: object = None,
 ) -> CreditBalanceResult:
-    """Pass-compatible wrapper for manual / board triggering.
+    """Pass-compatible wrapper for the periodic dispatcher and manual runs.
 
-    Conforms to the generic dispatcher contract ``(repo_config, **extra)``
-    used by ``_PASS_REGISTRY`` schedule_only passes.
+    ``_fire_periodic_pass`` invokes every schedule-only runner as
+    ``fn(session_id=..., repo_config=...)``, so both must be accepted even
+    though a credit poll is global and uses neither: the balance is per
+    OpenRouter account, not per repo.
     """
     return run_credit_balance_check(
         settings=settings,  # type: ignore[arg-type]
