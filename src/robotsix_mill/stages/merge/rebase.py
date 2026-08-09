@@ -117,7 +117,7 @@ class RebaseMixin(_MergeStageBase):
 
         if isinstance(run, Outcome):
             return run  # e.g. BLOCKED on a diverged PR branch
-        ok, detail, pre_rebase_files, pre_rebase_blobs = run
+        ok, detail, pre_rebase_files, pre_rebase_blobs, target_pre_blobs = run
         if ok:
             return self._handle_rebase_success(
                 ticket,
@@ -129,6 +129,7 @@ class RebaseMixin(_MergeStageBase):
                 max_attempts,
                 pre_rebase_files,
                 pre_rebase_blobs,
+                target_pre_blobs,
             )
         return self._handle_rebase_failure(
             ticket, repo_dir, counter_path, attempt, max_attempts, detail
@@ -168,17 +169,23 @@ class RebaseMixin(_MergeStageBase):
         target: str,
         attempt: int,
         previously_dropped_files: list[str] | None = None,
-    ) -> tuple[bool, str, list[str], dict[str, str]] | Outcome:
+    ) -> tuple[bool, str, list[str], dict[str, str], dict[str, str]] | Outcome:
         """Invoke the rebase agent with bridged git tools.
 
         The agent now drives its own fetch + rebase + push via the
         bridged git tools.  This method only builds the context
         (remote_url, token) and delegates to the agent.
 
-        Returns ``(ok, detail, pre_rebase_files, pre_rebase_blobs)`` — ``ok`` True on
-        success, False on a (retryable) rebase failure; ``detail`` is the agent's
-        summary of what it found / why it could not resolve (surfaced in the BLOCKED
-        note so a human sees the actual conflict, not a generic message).
+        Returns ``(ok, detail, pre_rebase_files, pre_rebase_blobs,
+        target_pre_blobs)`` — ``ok`` True on success, False on a
+        (retryable) rebase failure; ``detail`` is the agent's summary of
+        what it found / why it could not resolve (surfaced in the
+        BLOCKED note so a human sees the actual conflict, not a generic
+        message).  *target_pre_blobs* is a snapshot of the target
+        branch's content for each pre-rebase file, captured before the
+        agent runs, so the post-rebase integrity check can distinguish
+        sibling-PR supersession from a genuine drop.
+
         May instead return an ``Outcome`` to return directly (e.g. BLOCKED
         when the remote PR branch has diverged and must not be force-pushed
         over).
@@ -232,6 +239,7 @@ class RebaseMixin(_MergeStageBase):
                     "mechanical rebase: no conflicts",
                     pre_rebase_files,
                     pre_rebase_blobs,
+                    {},
                 )
             except Exception as push_err:
                 log.warning(
@@ -240,6 +248,19 @@ class RebaseMixin(_MergeStageBase):
                     push_err,
                 )
                 # fall through to agent path below
+
+        # Snapshot the target branch's content for each of our changed
+        # files BEFORE the agent runs (and before the agent's own fetch
+        # may pull in newer target commits).  This lets the post-rebase
+        # integrity check tell apart two failure modes:
+        #   (a) genuine drop — target never changed; agent discarded
+        #       our delta   → hard BLOCK.
+        #   (b) sibling-modified — a sibling PR changed the same file
+        #       on the target during the rebase window   → BLOCK with
+        #       advisory diagnostic.
+        target_pre_blobs: dict[str, str] = _facade.git_ops.file_blobs(
+            Path(repo_dir), pre_rebase_files, ref=f"origin/{target}"
+        )
 
         # --- agent path (LLM-driven rebase) ---
         try:
@@ -296,7 +317,7 @@ class RebaseMixin(_MergeStageBase):
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
             detail = f"rebase agent crashed: {e}"
-        return (ok, detail, pre_rebase_files, pre_rebase_blobs)
+        return (ok, detail, pre_rebase_files, pre_rebase_blobs, target_pre_blobs)
 
     def _handle_rebase_success(
         self,
@@ -309,6 +330,7 @@ class RebaseMixin(_MergeStageBase):
         max_attempts: int,
         pre_rebase_files: list[str] | None = None,
         pre_rebase_blobs: dict[str, str] | None = None,
+        target_pre_blobs: dict[str, str] | None = None,
     ) -> Outcome:
         """Post-check after the agent-driven rebase+push.
 
@@ -353,29 +375,49 @@ class RebaseMixin(_MergeStageBase):
             # files).  Compare the post-rebase file list against the
             # snapshot taken before the agent ran.
             if pre_rebase_files:
-                ok, dropped = _facade.git_ops.check_rebase_diff_integrity(
-                    Path(repo_dir),
-                    target,
-                    pre_rebase_files,
-                    pre_rebase_blobs,
-                    exempt_paths=s.rebase_drop_exempt_paths,
+                ok, dropped, sibling_likely = (
+                    _facade.git_ops.check_rebase_diff_integrity(
+                        Path(repo_dir),
+                        target,
+                        pre_rebase_files,
+                        pre_rebase_blobs,
+                        exempt_paths=s.rebase_drop_exempt_paths,
+                        target_pre_blobs=target_pre_blobs,
+                    )
                 )
                 if not ok:
-                    shown = ", ".join(f"`{p}`" for p in dropped[:10])
-                    more = f" (+{len(dropped) - 10} more)" if len(dropped) > 10 else ""
+                    if dropped:
+                        shown = ", ".join(f"`{p}`" for p in dropped[:10])
+                        more = (
+                            f" (+{len(dropped) - 10} more)" if len(dropped) > 10 else ""
+                        )
+                        msg = (
+                            f"rebase succeeded but silently dropped {len(dropped)} "
+                            f"implement-stage file(s): {shown}{more}. "
+                            "The rebase agent may have discarded the PR's changes "
+                            "during conflict resolution. "
+                            "Resume-blocked to retry from human_mr_approval."
+                        )
+                    else:
+                        shown = ", ".join(f"`{p}`" for p in sibling_likely[:10])
+                        more = (
+                            f" (+{len(sibling_likely) - 10} more)"
+                            if len(sibling_likely) > 10
+                            else ""
+                        )
+                        msg = (
+                            f"rebase succeeded but {len(sibling_likely)} file(s) may "
+                            f"have been superseded by a sibling PR: {shown}{more}. "
+                            "The target branch changed these files during the rebase. "
+                            "Verify that the sibling's version incorporates the PR's "
+                            "changes. Resume-blocked to retry from human_mr_approval."
+                        )
                     _write_counter(counter_path, 0)
                     # Persist the dropped file list so the next rebase
                     # attempt receives it as context.
                     dropped_path = counter_path.parent / _REBASE_DROPPED
-                    _write_dropped_files(dropped_path, dropped)
-                    return Outcome(
-                        State.BLOCKED,
-                        f"rebase succeeded but silently dropped {len(dropped)} "
-                        f"implement-stage file(s): {shown}{more}. "
-                        "The rebase agent may have discarded the PR's changes "
-                        "during conflict resolution. "
-                        "Resume-blocked to retry from human_mr_approval.",
-                    )
+                    _write_dropped_files(dropped_path, dropped + sibling_likely)
+                    return Outcome(State.BLOCKED, msg)
                 # Integrity check passed — clear any stale dropped-files
                 # artifact from a prior attempt.
                 dropped_cleanup_path = counter_path.parent / _REBASE_DROPPED

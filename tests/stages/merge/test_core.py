@@ -1203,9 +1203,10 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
         pre_rebase_files,
         pre_rebase_blobs=None,
         exempt_paths=None,
+        target_pre_blobs=None,
     ):
         seen_exempt.append(exempt_paths)
-        return (False, ["src/dropped.py"])
+        return (False, ["src/dropped.py"], [])
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
@@ -1224,6 +1225,87 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
     # default-only path would silently ignore an operator's override.
     assert seen_exempt == [ctx.settings.rebase_drop_exempt_paths]
     assert "docs/modules.yaml" in ctx.settings.rebase_drop_exempt_paths
+
+
+def test_rebase_sibling_modified_produces_targeted_blocked_message(
+    tmp_path, monkeypatch
+):
+    """When pre-rebase files are superseded by a sibling PR (target
+    changed the same files during the rebase window), the BLOCKED message
+    must mention "sibling PR" / "sibling's version" rather than the
+    generic "silently dropped" wording."""
+    ctx = _gh(tmp_path)
+
+    def fake_rebase(
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
+    ):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+
+    pre_files = ["src/keep.py", "src/sibling_modified.py"]
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda repo, target_branch="main", ref="HEAD": pre_files,
+    )
+
+    def fake_integrity(
+        repo,
+        target_branch,
+        pre_rebase_files,
+        pre_rebase_blobs=None,
+        exempt_paths=None,
+        target_pre_blobs=None,
+    ):
+        return (False, [], ["src/sibling_modified.py"])
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
+        fake_integrity,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    note = out.note or ""
+    assert "src/sibling_modified.py" in note
+    assert "sibling" in note.lower(), (
+        "sibling-modified BLOCKED message must mention 'sibling'"
+    )
 
 
 def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
