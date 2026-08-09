@@ -127,6 +127,7 @@ modules:
       - tests/vcs/__init__.py
       - tests/vcs/test_clone_all_repos.py
       - tests/vcs/test_git_ops.py
+      - tests/vcs/test_rebase_exempt_paths_in_step.py
       - docs/vcs/**/*
     dependencies: []
 
