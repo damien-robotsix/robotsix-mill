@@ -783,6 +783,48 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 )
                 return Outcome(State.DELIVERABLE, note)
 
+            # --- single-pass edit-claim contradiction ------------------------
+            # The agent invoked file-mutating tools (edit_file, write_file,
+            # etc.) yet produced NO working-tree diff on this pass.  This is
+            # the "claimed an edit but the file is unchanged" failure mode
+            # that silently wastes retries when left to the multi-pass
+            # stuck-loop threshold.  Replay the edits (+ formatter) to
+            # distinguish a real lost-work contradiction from a formatter-
+            # normalised no-op, then BLOCK immediately on the FIRST occurrence
+            # instead of burning 3 passes.
+            if not has_diff and progress["edit_calls"] > 0:
+                fmt_result = cls._edits_formatter_reverted(repo_dir, result.new_msgs)
+                if fmt_result is not True:
+                    tool_list = short_circuit_verify.run_invoked_edit_tools(
+                        result.new_msgs,
+                    )
+                    tool_desc = ", ".join(tool_list) if tool_list else "edit"
+                    diag = (
+                        f"edit-claim contradiction on pass {attempt}: the agent "
+                        f"invoked {tool_desc} tool(s) ({progress['edit_calls']} "
+                        f"call(s)) but the working tree is unchanged.  Replaying "
+                        "the edits + running the formatter still produced a real "
+                        "change (or could not be verified), so the edits did NOT "
+                        "persist.  Short-circuiting to BLOCKED instead of "
+                        "exhausting the full retry budget."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ic.reference_files,
+                        extra_roots=extra_roots,
+                    )
+                    return Outcome(State.BLOCKED, diag)
+                # Edits were formatter-reverted (``fmt_result is True``):
+                # the replay + format produced no diff, so the edits were
+                # genuinely redundant — don't count this as a stuck pass.
+                no_diff_passes = max(0, no_diff_passes - 1)
+                cls._stuck_no_diff_passes = no_diff_passes
+
             if no_diff_passes >= _STUCK_NO_DIFF_PASSES:
                 # progress is always set in the not-has_diff branch above.
                 if progress is None:  # pragma: no cover — defensive
