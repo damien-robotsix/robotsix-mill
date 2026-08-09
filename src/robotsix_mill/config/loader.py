@@ -121,8 +121,8 @@ def decrypt_secrets_block(token: str) -> dict[str, Any] | None:
         loaded = json.loads(data)
         if isinstance(loaded, dict):
             return loaded
-    except Exception:  # noqa: S110
-        pass  # Decryption failure — treat block as unset.
+    except Exception:  # noqa: S110 — Decryption failure; treat block as unset.
+        pass
     return None
 
 
@@ -159,8 +159,8 @@ def load_secrets_block() -> dict[str, Any]:
             loaded = json.loads(decoded)
             if isinstance(loaded, dict):
                 return loaded
-        except Exception:  # noqa: S110
-            pass  # Decoding failure — treat block as unset.
+        except Exception:  # noqa: S110 — Decoding failure; treat block as unset.
+            pass
         return {}
     return dict(block) if isinstance(block, dict) else {}
 

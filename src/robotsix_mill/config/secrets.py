@@ -189,7 +189,7 @@ class Secrets:
         """
         try:
             raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError):  # fmt: skip
             return {}
         if not isinstance(raw, dict):
             return {}
@@ -207,8 +207,8 @@ class Secrets:
                 loaded = json.loads(decoded)
                 if isinstance(loaded, dict):
                     return loaded
-            except Exception:  # noqa: S110
-                pass  # Decoding failure — treat block as unset.
+            except Exception:  # noqa: S110 — Decoding failure; treat block as unset.
+                pass
             return {}
         return secrets_block if isinstance(secrets_block, dict) else {}
 

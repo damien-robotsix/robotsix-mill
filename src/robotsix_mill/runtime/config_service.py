@@ -350,8 +350,8 @@ def _decode_secrets_block(block: Any) -> dict[str, Any]:
             loaded = json.loads(decoded)
             if isinstance(loaded, dict):
                 return loaded
-        except Exception:  # noqa: S110
-            pass  # Decoding failure — treat block as unset.
+        except Exception:  # noqa: S110 — Decoding failure; treat block as unset.
+            pass
     return {}
 
 
@@ -377,7 +377,8 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
         and write_data["secrets"]
     ):
         write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
-    tmp.write_text(  # lgtm[py/clear-text-storage-sensitive-data]: secrets encrypted above
+    # lgtm[py/clear-text-storage-sensitive-data]
+    tmp.write_text(
         json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     tmp.replace(path)
@@ -519,7 +520,8 @@ def rollback_config(  # noqa: C901
         and write_data["secrets"]
     ):
         write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
-    tmp.write_text(  # lgtm[py/clear-text-storage-sensitive-data]: secrets encrypted above
+    # lgtm[py/clear-text-storage-sensitive-data]
+    tmp.write_text(
         json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     tmp.replace(config_path)
