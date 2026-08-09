@@ -48,19 +48,21 @@ def maybe_generate_towncrier_fragment(
     if not tc:
         return False
 
-    directory = str(tc.get("directory") or "changes")
+    from robotsix_mill.agents.changelog_tool import _DEFAULT_FRAGMENT_DIR
+
+    directory = str(tc.get("directory") or _DEFAULT_FRAGMENT_DIR)
 
     try:
         fragment_dir = repo_dir / directory
         fragment_dir.mkdir(parents=True, exist_ok=True)
 
-        # If an LLM agent already wrote a towncrier fragment (e.g.
-        # <id>.feature.md), skip the auto-generated .misc.md to avoid
-        # duplicate fragments for the same ticket id.
+        # Slugify the ticket id the same way _add_changelog_fragment
+        # does, so the glob check finds fragments the agent wrote.
+        from robotsix_mill.agents.changelog_tool import _slugify_ticket
+
+        slug = _slugify_ticket(ticket_id)
         existing = (
-            list(fragment_dir.glob(f"{ticket_id}.*.md"))
-            if fragment_dir.is_dir()
-            else []
+            list(fragment_dir.glob(f"{slug}.*.md")) if fragment_dir.is_dir() else []
         )
         if existing:
             log.info(
@@ -70,7 +72,7 @@ def maybe_generate_towncrier_fragment(
             )
             return False
 
-        fragment_file = fragment_dir / f"{ticket_id}.misc.md"
+        fragment_file = fragment_dir / f"{slug}.misc.md"
         fragment_file.write_text(title + "\n", encoding="utf-8")
     except OSError:
         log.warning(

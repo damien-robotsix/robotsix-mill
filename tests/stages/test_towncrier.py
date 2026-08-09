@@ -40,7 +40,7 @@ def test_default_directory_fragment_created(tmp_path: Path) -> None:
     )
     result = maybe_generate_towncrier_fragment(tmp_path, "TICKET-1", "Fix bug")
     assert result is True
-    fragment = tmp_path / "changes" / "TICKET-1.misc.md"
+    fragment = tmp_path / "changelog.d" / "TICKET-1.misc.md"
     assert fragment.is_file()
     assert fragment.read_text() == "Fix bug\n"
 
@@ -82,7 +82,7 @@ def test_empty_title_fragment_created(tmp_path: Path) -> None:
     )
     result = maybe_generate_towncrier_fragment(tmp_path, "TICKET-4", "")
     assert result is True
-    fragment = tmp_path / "changes" / "TICKET-4.misc.md"
+    fragment = tmp_path / "changelog.d" / "TICKET-4.misc.md"
     assert fragment.is_file()
     assert fragment.read_text() == "\n"
 
@@ -94,7 +94,7 @@ def test_existing_fragment_skips_misc(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         '[tool.towncrier]\npackage = "myproject"\n'
     )
-    changes = tmp_path / "changes"
+    changes = tmp_path / "changelog.d"
     changes.mkdir()
     (changes / "TICKET-5.feature.md").write_text("Existing fragment")
     result = maybe_generate_towncrier_fragment(tmp_path, "TICKET-5", "Should not write")
@@ -109,7 +109,7 @@ def test_oserror_on_write_returns_false(tmp_path: Path, monkeypatch, caplog) -> 
     (tmp_path / "pyproject.toml").write_text(
         '[tool.towncrier]\npackage = "myproject"\n'
     )
-    changes = tmp_path / "changes"
+    changes = tmp_path / "changelog.d"
     changes.mkdir()
 
     def _failing_write_text(*args, **kwargs):
