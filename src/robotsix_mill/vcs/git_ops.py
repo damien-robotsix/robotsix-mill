@@ -1177,6 +1177,11 @@ DEFAULT_REBASE_DROP_EXEMPT_PATHS = (
     "changelog/",
     "docs/modules.yaml",
     "site/modules.yaml",
+    # detect-secrets' baseline: regenerated from a scan of the whole repo,
+    # so like the registries above its content is a function of the tree
+    # rather than of one branch. A rebase can legitimately land a version
+    # matching neither side, which the blob-equality excuse cannot clear.
+    ".secrets.baseline",
 )
 
 
