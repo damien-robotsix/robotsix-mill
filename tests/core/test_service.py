@@ -270,8 +270,8 @@ def test_can_transition_covers_rebasing():
     assert can_transition(State.REBASING, State.ERRORED)
     # REBASING → BLOCKED
     assert can_transition(State.REBASING, State.BLOCKED)
-    # REBASING → HUMAN_MR_APPROVAL is NOT allowed (must go through IMPLEMENT_COMPLETE)
-    assert not can_transition(State.REBASING, State.HUMAN_MR_APPROVAL)
+    # REBASING → HUMAN_MR_APPROVAL is allowed (post-rebase routing back to merge loop)
+    assert can_transition(State.REBASING, State.HUMAN_MR_APPROVAL)
     # BLOCKED → REBASING with blocked_from=REBASING (resume)
     assert can_transition(State.BLOCKED, State.REBASING, blocked_from=State.REBASING)
     # BLOCKED → REBASING without blocked_from → False

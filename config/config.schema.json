@@ -825,6 +825,12 @@
           "title": "Auto Merge Sensitive Globs",
           "type": "array"
         },
+        "autonomous_rebase_enabled": {
+          "default": true,
+          "description": "When true, the merge stage autonomously rebases parked PRs that become conflicting.",
+          "title": "Autonomous Rebase Enabled",
+          "type": "boolean"
+        },
         "bc_check_interval_seconds": {
           "advanced": true,
           "default": 604800,
