@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.2.1...v0.3.0) (2026-08-09)
+
+
+### Features
+
+* **periodic:** cap the drafts one periodic pass run can create ([#2810](https://github.com/damien-robotsix/robotsix-mill/issues/2810)) ([e9e513c](https://github.com/damien-robotsix/robotsix-mill/commit/e9e513caeb28a4c840e2139cbcdda8ccb3b738f1))
+
+
+### Bug Fixes
+
+* **deliver:** keep the changelog kind so PR titles are not all chore ([#2806](https://github.com/damien-robotsix/robotsix-mill/issues/2806)) ([cae58bb](https://github.com/damien-robotsix/robotsix-mill/commit/cae58bb3b96c4b3c68ac579e3ced6debcad7c6fc))
+* **implement:** unclaim a dropped fragment from modules.yaml ([#2809](https://github.com/damien-robotsix/robotsix-mill/issues/2809)) ([e0f996a](https://github.com/damien-robotsix/robotsix-mill/commit/e0f996a344d4bc42e6712817562ded9d4fbc8cf6))
+* **periodic:** credit_balance was wired to a non-pass-shaped runner ([#2811](https://github.com/damien-robotsix/robotsix-mill/issues/2811)) ([40bfaca](https://github.com/damien-robotsix/robotsix-mill/commit/40bfaca7a6a0002f91093446e17f7980070126ae))
+
 ## [0.2.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.2.0...v0.2.1) (2026-08-09)
 
 
