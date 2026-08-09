@@ -79,16 +79,25 @@ class GitLabForgeCIMixin:
 
             pipeline = self._get_latest_pipeline(project_path, mr["iid"])
             if pipeline is None:
-                return {"conclusion": None, "failing": [], "pending": []}
+                return {"conclusion": None, "failing": [], "pending": [], "jobs": []}
 
             status = pipeline.get("status", "")
             conclusion = _map_pipeline_status(status)
+            pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
 
             failing: list[dict[str, Any]] = []
             if conclusion == "failure":
                 failing = self._get_failed_jobs(project_path, pipeline["id"])
 
-            return {"conclusion": conclusion, "failing": failing, "pending": []}
+            # Lightweight per-job list — name + conclusion only, no trace fetch.
+            jobs = self._get_pipeline_job_summaries(pid, pipeline["id"])
+
+            return {
+                "conclusion": conclusion,
+                "failing": failing,
+                "pending": [],
+                "jobs": jobs,
+            }
         except Exception:
             return None
 
@@ -140,6 +149,29 @@ class GitLabForgeCIMixin:
         if not items:
             return None
         return items[0]
+
+    def _get_pipeline_job_summaries(
+        self, pid: str, pipeline_id: int
+    ) -> list[dict[str, Any]]:
+        """GET /projects/:id/pipelines/:pipeline_id/jobs (all jobs, no trace).
+
+        Returns a lightweight list of ``{"name": str, "conclusion": str}``
+        dicts — one per job in the pipeline.  This is intentionally cheap
+        (no trace fetch, no ANSI stripping) so callers can get a complete
+        per-job picture without the overhead of ``_get_failed_jobs``.
+        """
+        try:
+            r = self._http.get(  # type: ignore[attr-defined]
+                f"/projects/{pid}/pipelines/{pipeline_id}/jobs",
+                params={"per_page": 100},
+            )
+            r.raise_for_status()
+            jobs = r.json()
+        except Exception:
+            return []
+        return [
+            {"name": j.get("name", ""), "conclusion": j.get("status")} for j in jobs
+        ]
 
     def _get_failed_jobs(
         self, project_path: str, pipeline_id: int

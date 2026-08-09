@@ -535,7 +535,7 @@ def test_check_status_pipeline_success(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.check_status(source_branch="feature/x")
-    assert result == {"conclusion": "success", "failing": [], "pending": []}
+    assert result == {"conclusion": "success", "failing": [], "pending": [], "jobs": []}
 
 
 def test_check_status_pipeline_failure(tmp_path, monkeypatch):
@@ -599,7 +599,7 @@ def test_check_status_pipeline_pending(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.check_status(source_branch="feature/x")
-    assert result == {"conclusion": "pending", "failing": [], "pending": []}
+    assert result == {"conclusion": "pending", "failing": [], "pending": [], "jobs": []}
 
 
 def test_check_status_no_pipeline(tmp_path, monkeypatch):
@@ -622,7 +622,7 @@ def test_check_status_no_pipeline(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.check_status(source_branch="feature/x")
-    assert result == {"conclusion": None, "failing": [], "pending": []}
+    assert result == {"conclusion": None, "failing": [], "pending": [], "jobs": []}
 
 
 @pytest.mark.parametrize(

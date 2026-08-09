@@ -206,9 +206,9 @@ def _derive_check_conclusion(
     headers: dict[str, Any],
     check_runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Derive the overall conclusion and build the failing/pending lists."""
+    """Derive the overall conclusion and build the failing/pending/jobs lists."""
     if not check_runs:
-        return {"conclusion": None, "failing": [], "pending": []}
+        return {"conclusion": None, "failing": [], "pending": [], "jobs": []}
 
     # Collapse same-name reruns so a superseded ``cancelled`` run doesn't
     # mask the authoritative ``success`` and pin the PR at pending forever.
@@ -218,21 +218,38 @@ def _derive_check_conclusion(
     has_failure = False
     failing: list[dict[str, Any]] = []
     pending: list[str] = []
+    jobs: list[dict[str, Any]] = []
 
     for cr in check_runs:
         cat = _conclusion_for_check(cr)
+        name = cr.get("name", "unknown")
+        conclusion = cr.get("conclusion")
+        jobs.append({"name": name, "conclusion": conclusion})
         if cat == "pending":
             has_pending = True
-            pending.append(cr.get("name", "unknown"))
+            pending.append(name)
         elif cat == "failure":
             has_failure = True
             failing.append(_extract_annotations(client, api, owner, repo, headers, cr))
 
+    result: dict[str, Any]
     if has_failure:
-        return {"conclusion": "failure", "failing": failing, "pending": pending}
-    if has_pending:
-        return {"conclusion": "pending", "failing": [], "pending": pending}
-    return {"conclusion": "success", "failing": [], "pending": []}
+        result = {
+            "conclusion": "failure",
+            "failing": failing,
+            "pending": pending,
+            "jobs": jobs,
+        }
+    elif has_pending:
+        result = {
+            "conclusion": "pending",
+            "failing": [],
+            "pending": pending,
+            "jobs": jobs,
+        }
+    else:
+        result = {"conclusion": "success", "failing": [], "pending": [], "jobs": jobs}
+    return result
 
 
 class GitHubForgeCIMixin:
@@ -403,6 +420,7 @@ class GitHubForgeCIMixin:
                         "conclusion": "pending",
                         "failing": [],
                         "pending": [],
+                        "jobs": [],
                         "_no_checks": True,
                         "_sha": sha,
                     }
@@ -410,6 +428,7 @@ class GitHubForgeCIMixin:
                     "conclusion": "success",
                     "failing": [],
                     "pending": [],
+                    "jobs": [],
                     "_sha": sha,
                 }
 

@@ -204,6 +204,7 @@ def get_merge_info(
     # --- CI conclusion / failing checks ----------------------------------
     ci_conclusion: str | None = None
     ci_failing: list[dict[str, Any]] = []
+    ci_jobs: list[dict[str, Any]] = []
     if forge is not None:
         try:
             cs = forge.check_status(source_branch=branch)
@@ -217,6 +218,7 @@ def get_merge_info(
                         }
                         for f in (cs.get("failing") or [])
                     ]
+                ci_jobs = cs.get("jobs") or []
         except Exception:
             pass  # best-effort: CI status is optional
 
@@ -247,6 +249,7 @@ def get_merge_info(
         "mergeable": mergeable,
         "ci_conclusion": ci_conclusion,
         "ci_failing": ci_failing,
+        "ci_jobs": ci_jobs,
         "files": files,
         "changelog_warnings": changelog_warnings,
     }
