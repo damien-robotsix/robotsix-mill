@@ -159,7 +159,7 @@ class Secrets:
         if secrets_file:
             file_data = self._load_secrets_file(secrets_file)
         else:
-            from .loader import load_secrets_block
+            from .loader import decrypt_secrets_block, load_secrets_block
 
             file_data = load_secrets_block()
         data = {**file_data, **data}
@@ -184,8 +184,8 @@ class Secrets:
     def _load_secrets_file(path: str) -> dict[str, Any]:
         """Read the ``secrets:`` block from a JSON file.
 
-        Handles both the legacy plain-dict format and the new
-        base64-encoded format.
+        Handles Fernet-encrypted, base64-encoded, and legacy
+        plain-dict formats transparently.
         """
         try:
             raw = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -195,12 +195,19 @@ class Secrets:
             return {}
         secrets_block = raw.get("secrets", {})
         if isinstance(secrets_block, str) and secrets_block:
-            # New format: base64-encoded JSON string.
+            # Try Fernet decryption first (current format).
+            decrypted = decrypt_secrets_block(secrets_block)
+            if decrypted is not None:
+                return decrypted
+            # Legacy fallback: base64-encoded JSON.
             try:
                 decoded = base64.b64decode(secrets_block)
-                secrets_block = json.loads(decoded)
+                loaded = json.loads(decoded)
+                if isinstance(loaded, dict):
+                    return loaded
             except Exception:
-                return {}
+                pass
+            return {}
         return secrets_block if isinstance(secrets_block, dict) else {}
 
     # --- Property accessors (unwrapping SecretStr) -----------------------

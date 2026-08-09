@@ -25,6 +25,7 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ..config import Secrets, Settings
+from ..config.loader import decrypt_secrets_block, encrypt_secrets_block
 
 log = logging.getLogger(__name__)
 
@@ -331,13 +332,19 @@ def _read_json_config(path: Path) -> dict[str, Any]:
 
 
 def _decode_secrets_block(block: Any) -> dict[str, Any]:
-    """Decode a ``secrets`` block that may be base64-encoded or a plain dict.
+    """Decode a ``secrets`` block that may be Fernet-encrypted, base64-encoded,
+    or a plain dict.
 
     Returns an empty dict for any unreadable input.
     """
     if isinstance(block, dict):
         return block
     if isinstance(block, str) and block:
+        # Try Fernet decryption first (current format).
+        decrypted = decrypt_secrets_block(block)
+        if decrypted is not None:
+            return decrypted
+        # Legacy fallback: base64-encoded JSON.
         try:
             decoded = base64.b64decode(block)
             loaded = json.loads(decoded)
@@ -357,16 +364,15 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     config-ownership standard.  The file is gitignored and never
     leaves the machine.
 
-    The ``secrets`` block is base64-encoded before writing to avoid
+    The ``secrets`` block is Fernet-encrypted before writing to avoid
     clear-text secret storage.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    # Encode the secrets block for at-rest storage.
+    # Encrypt the secrets block for at-rest storage.
     write_data = dict(data)
     if "secrets" in write_data and isinstance(write_data["secrets"], dict) and write_data["secrets"]:
-        secrets_json = json.dumps(write_data["secrets"])
-        write_data["secrets"] = base64.b64encode(secrets_json.encode()).decode()
+        write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
     tmp.write_text(
         json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -501,11 +507,10 @@ def rollback_config(
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = config_path.with_suffix(".tmp")
-    # Encode the secrets block for at-rest storage.
+    # Encrypt the secrets block for at-rest storage.
     write_data = dict(new_config)
     if "secrets" in write_data and isinstance(write_data["secrets"], dict) and write_data["secrets"]:
-        secrets_json = json.dumps(write_data["secrets"])
-        write_data["secrets"] = base64.b64encode(secrets_json.encode()).decode()
+        write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
     tmp.write_text(
         json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
