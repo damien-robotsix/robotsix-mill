@@ -113,6 +113,8 @@ def run_bespoke_pass(
         service=service,
         settings=settings,
         origin_session=session_id,
+        # Bespoke passes declare no cap of their own.
+        max_drafts=settings.periodic_max_drafts_per_run,
         repo_dir=repo_dir,
     )
 
