@@ -700,6 +700,32 @@ def test_human_mr_approval_conflicting_falls_back_to_implement_complete(
     assert "rebasing automatically" in out.note
 
 
+def test_human_mr_approval_conflicting_kill_switch_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """HUMAN_MR_APPROVAL + mergeable=False + autonomous_rebase_enabled=False → IMPLEMENT_COMPLETE."""
+    ctx = _gh(tmp_path, autonomous_rebase_enabled="false")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
+    t = _human_mr_approval(ctx)
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "gates no longer pass" in out.note
+
+
 def test_human_mr_approval_conflicting_update_branch_succeeds_stays_in_human_mr_approval(
     tmp_path, monkeypatch
 ):
@@ -911,6 +937,143 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert post_check_calls["branch"] == f"mill/{t.id}"
+
+
+def test_rebasing_success_routes_to_waiting_auto_merge_when_from_human_mr_approval(
+    tmp_path, monkeypatch
+):
+    """REBASING with _REBASE_FROM_STATE=human_mr_approval + auto_merge eligible → WAITING_AUTO_MERGE."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+
+    def fake_rebase(**kwargs):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+
+    # Two-phase pr_status: first call (entry check in _run_rebase) returns
+    # "behind" so the rebase proceeds; second call (post-rebase routing in
+    # _handle_rebase_success) returns "clean" so it enters the from_state
+    # routing logic.
+    pr_call_count = []
+
+    def staged_pr(self, *, source_branch):
+        pr_call_count.append(1)
+        if len(pr_call_count) == 1:
+            # Entry check — not clean, must proceed to _handle_conflict.
+            return {
+                "merged": False,
+                "state": "open",
+                "url": "u",
+                "mergeable": True,
+                "mergeable_state": "behind",
+            }
+        # Post-rebase routing — PR is now clean after rebase.
+        return {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        }
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", staged_pr)
+
+    monkeypatch.setattr(
+        MergeStage,
+        "_auto_merge_eligible",
+        lambda self, ticket, ctx, pr_head_sha=None, forge=None, pr=None: (True, ""),
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    from_state_path = ctx.service.workspace(t).artifacts_dir / "rebase_from_state.txt"
+    from_state_path.write_text(State.HUMAN_MR_APPROVAL.value, encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.WAITING_AUTO_MERGE
+    assert "resuming autonomous merge monitoring" in out.note
+
+
+def test_rebasing_success_routes_to_human_mr_approval_when_auto_merge_not_eligible(
+    tmp_path, monkeypatch
+):
+    """REBASING with _REBASE_FROM_STATE=human_mr_approval + auto_merge NOT eligible → HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+
+    def fake_rebase(**kwargs):
+        return RebaseResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        fake_rebase,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+
+    # Two-phase pr_status: first call returns "behind" so the rebase
+    # proceeds; second call returns "clean" for the from_state routing.
+    pr_call_count = []
+
+    def staged_pr(self, *, source_branch):
+        pr_call_count.append(1)
+        if len(pr_call_count) == 1:
+            return {
+                "merged": False,
+                "state": "open",
+                "url": "u",
+                "mergeable": True,
+                "mergeable_state": "behind",
+            }
+        return {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        }
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", staged_pr)
+
+    monkeypatch.setattr(
+        MergeStage,
+        "_auto_merge_eligible",
+        lambda self, ticket, ctx, pr_head_sha=None, forge=None, pr=None: (
+            False,
+            "review required",
+        ),
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    from_state_path = ctx.service.workspace(t).artifacts_dir / "rebase_from_state.txt"
+    from_state_path.write_text(State.HUMAN_MR_APPROVAL.value, encoding="utf-8")
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert "rebase succeeded but review required" in out.note
 
 
 def test_mechanical_rebase_skips_agent_when_clean(tmp_path, monkeypatch):
@@ -3510,6 +3673,42 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.REBASING
     assert "rebasing automatically" in out.note
+
+
+def test_waiting_auto_merge_conflicting_kill_switch_falls_back_to_implement_complete(
+    tmp_path, monkeypatch
+):
+    """WAITING_AUTO_MERGE + mergeable=False + autonomous_rebase_enabled=False → IMPLEMENT_COMPLETE."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        autonomous_rebase_enabled="false",
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: {"updated": False, "reason": "merge conflict"},
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="CI pending")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "gates no longer pass" in out.note
 
 
 def test_waiting_auto_merge_conflicting_update_branch_succeeds_stays_in_waiting_auto_merge(
