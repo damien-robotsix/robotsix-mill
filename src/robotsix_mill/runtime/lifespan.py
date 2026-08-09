@@ -13,7 +13,7 @@ import os
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, AsyncContextManager
+from typing import TYPE_CHECKING, Any, AsyncContextManager
 
 from fastapi import FastAPI
 from robotsix_llmio.logging import setup_logging as llmio_setup_logging
@@ -109,7 +109,7 @@ def create_lifespan(
     settings: Settings,
     repos: ReposRegistry,
     single_repo_id: str | None = None,
-) -> Callable[[FastAPI], AsyncContextManager]:
+) -> Callable[[FastAPI], AsyncContextManager[Any]]:
     """Build a FastAPI lifespan callable that performs the same startup
     and shutdown steps as the original inline ``@asynccontextmanager``:
 

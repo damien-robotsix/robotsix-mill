@@ -6,6 +6,8 @@ that were previously defined inside ``create_app()``.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException, Query, Request
 
 from ..config import RepoConfig, ReposRegistry, Settings
@@ -274,7 +276,7 @@ def _parent_title_for(ticket: Ticket, service: TicketService) -> str | None:
     return parent.title if parent else None
 
 
-def _dependencies_for(ticket: Ticket, service: TicketService) -> list[dict]:
+def _dependencies_for(ticket: Ticket, service: TicketService) -> list[dict[str, Any]]:
     """Resolve each declared dependency to ``{id, title, state}`` so the
     drawer can render a readable list instead of opaque IDs.
     """
@@ -288,7 +290,7 @@ def _dependencies_for(ticket: Ticket, service: TicketService) -> list[dict]:
         return []
     if not isinstance(dep_ids, list):
         return []
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for dep_id in dep_ids:
         if not isinstance(dep_id, str):
             continue

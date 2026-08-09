@@ -918,7 +918,7 @@ class PeriodicPassesMixin(_WorkerBase):
         # namespaced key -> (task, comparison object). The comparison object
         # (a ResolvedPeriodicWorkflow or BespokeAgentDefinition) drives
         # respawn-on-change via ``==``.
-        running: dict[str, tuple[asyncio.Task, Any]] = {}
+        running: dict[str, tuple[asyncio.Task[Any], Any]] = {}
 
         def _cancel_running() -> None:
             for task, _ in running.values():

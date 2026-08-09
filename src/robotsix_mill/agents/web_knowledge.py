@@ -48,6 +48,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
@@ -435,7 +436,7 @@ Plan your turns accordingly:
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings) -> list:
+def _make_tools(settings: Settings) -> list[Any]:
     """Build the closures the agent calls during a consult."""
     from .web_research import run_web_research
 

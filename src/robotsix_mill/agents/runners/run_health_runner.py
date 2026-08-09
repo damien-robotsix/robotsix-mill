@@ -35,6 +35,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from ...agents.run_health import (
     MAX_PROPOSALS,
@@ -85,7 +86,7 @@ class _Candidate:
     sample: str  # raw summary/error text of the most-recent occurrence
 
 
-def _read_registry_entries(path: Path) -> list[dict]:
+def _read_registry_entries(path: Path) -> list[dict[str, Any]]:
     """Parse a board's ``runs.json`` READ-ONLY into a list of entry dicts.
 
     Missing or corrupt files are treated as empty (never raises). Crucially
@@ -255,10 +256,10 @@ def _file_drafts(
     settings: Settings,
     session_id: str,
     board_id: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     service = TicketService(settings, board_id=board_id)
     seen_titles, seen_gaps = _existing_markers(service)
-    created: list[dict] = []
+    created: list[dict[str, Any]] = []
     triples = list(
         zip(result.draft_titles, result.draft_bodies, result.gap_ids, strict=True)
     )
@@ -296,7 +297,7 @@ class RunHealthPassResult:
     """Result of a run-health periodic pass."""
 
     updated_memory: str
-    drafts_created: list[dict]
+    drafts_created: list[dict[str, Any]]
     session_id: str
 
 

@@ -65,13 +65,13 @@ _PENDING_STATUSES = frozenset(
 )
 
 
-def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
+def _statuses_to_check_runs(statuses_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert combined statuses response into check-run–shaped dicts."""
     statuses = statuses_data.get("statuses", [])
     if not statuses:
         return []
     # Collapse per-context into a single item.
-    by_context: dict[str, list[dict]] = {}
+    by_context: dict[str, Any][str, list[dict[str, Any]]] = {}
     for st in statuses:
         ctx = st.get("context", "")
         by_context.setdefault(ctx, []).append(st)
@@ -96,7 +96,7 @@ def _statuses_to_check_runs(statuses_data: dict) -> list[dict]:
     return runs
 
 
-def _conclusion_for_check(cr: dict) -> str:
+def _conclusion_for_check(cr: dict[str, Any]) -> str:
     """Classify a single check run as 'pending', 'failure', or 'neutral'."""
     if cr.get("status", "") in _PENDING_STATUSES:
         return "pending"
@@ -150,15 +150,15 @@ def _extract_annotations(
     api: str,
     owner: str,
     repo: str,
-    headers: dict,
-    cr: dict,
-) -> dict:
+    headers: dict[str, Any],
+    cr: dict[str, Any],
+) -> dict[str, Any]:
     """Fetch and parse annotations for a failing check run (best-effort)."""
     cr_id = cr.get("id")
     name = cr.get("name", "unknown")
     summary = None
     text = None
-    annotations: list[dict] = []
+    annotations: list[dict[str, Any]] = []
 
     if cr_id is not None:
         try:
@@ -203,9 +203,9 @@ def _derive_check_conclusion(
     api: str,
     owner: str,
     repo: str,
-    headers: dict,
-    check_runs: list[dict],
-) -> dict:
+    headers: dict[str, Any],
+    check_runs: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Derive the overall conclusion and build the failing/pending lists."""
     if not check_runs:
         return {"conclusion": None, "failing": [], "pending": []}
@@ -244,7 +244,7 @@ class GitHubForgeCIMixin:
 
     def check_status(
         self, *, source_branch: str, require_checks: bool = False
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Return the aggregate CI check status for *source_branch*'s PR head.
 
         Returns a ``dict`` with ``conclusion`` (``"success"`` /
@@ -264,7 +264,7 @@ class GitHubForgeCIMixin:
             owner=owner, repo=repo, head=source_branch, require_checks=require_checks
         )
 
-    def commit_ci_conclusion(self, *, sha: str) -> dict | None:
+    def commit_ci_conclusion(self, *, sha: str) -> dict[str, Any] | None:
         """Aggregate CI conclusion for an arbitrary commit SHA (no PR).
 
         Same return shape as check_status: {"conclusion": "success"|"failure"|
@@ -279,7 +279,7 @@ class GitHubForgeCIMixin:
 
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Return completed GitHub Actions workflow runs.
 
         :param branch: when set, filter runs to this branch.
@@ -336,7 +336,7 @@ class GitHubForgeCIMixin:
         head: str,
         sha: str | None = None,
         require_checks: bool = False,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         if sha is None:
             pr = self._get_pr(owner=owner, repo=repo, head=head)  # type: ignore[attr-defined]
             if pr is None:
@@ -356,7 +356,7 @@ class GitHubForgeCIMixin:
             # for this repo. That's a config gap, not a transient error
             # — treat it as "no check_runs visible" and fall through to
             # statuses + no-CI handling.
-            check_runs: list[dict] = []
+            check_runs: list[dict[str, Any]] = []
             cr_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
                 headers=headers,
@@ -373,7 +373,7 @@ class GitHubForgeCIMixin:
             # statuses_data["statuses"] — we use that to distinguish
             # "no CI configured" (pass-through) from "CI pending"
             # (wait). 403 on statuses follows the same logic.
-            status_runs: list[dict] = []
+            status_runs: list[dict[str, Any]] = []
             st_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/commits/{sha}/status",
                 headers=headers,
@@ -425,8 +425,8 @@ class GitHubForgeCIMixin:
         repo: str,
         branch: str | None,
         head_sha: str | None,
-    ) -> list[dict]:
-        params: dict = {"status": "completed", "per_page": 30}
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"status": "completed", "per_page": 30}
         if branch is not None:
             params["branch"] = branch
         if head_sha is not None:

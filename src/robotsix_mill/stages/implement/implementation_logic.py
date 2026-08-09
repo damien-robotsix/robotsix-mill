@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 from ...agents import coding
 from ...agents.coding import AgentBudgetError, AgentRunError
@@ -132,7 +133,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         ic: _ImplementContext,
         language_instructions: str,
         agent_level: int | None,
-        resume_history: list | None,
+        resume_history: list[Any] | None,
         extra_roots: list[Path] | None,
         memory_board_id: str,
         ws=None,  # Workspace — needed for save_conversation_state on budget error
@@ -243,7 +244,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         updated_memory: str,
         settings,
         memory_board_id: str,
-    ) -> tuple[list | None, str | None]:
+    ) -> tuple[list[Any] | None, str | None]:
         """Persist memory, ``reference_files.json`` and ``implement_summary.md``."""
         if updated_memory:
             persist_memory(
@@ -921,7 +922,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         ic: _ImplementContext,
         attempt: int,
         max_iters: int,
-        resume_history: list | None,
+        resume_history: list[Any] | None,
         resuming: bool,
         extra_roots: list[Path] | None = None,
     ) -> _SinglePassResult:

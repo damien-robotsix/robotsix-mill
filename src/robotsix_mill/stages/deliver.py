@@ -54,6 +54,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ..agents.base import build_agent
 from ..agents.retry import run_agent
@@ -170,7 +171,7 @@ def _meta_triage_was_fallback(artifacts_dir: Path) -> bool:
     return isinstance(data, dict) and bool(data.get("fallback"))
 
 
-def _write_pr_urls(artifacts_dir: Path, entries: list[dict]) -> None:
+def _write_pr_urls(artifacts_dir: Path, entries: list[dict[str, Any]]) -> None:
     """Atomically (re)write the ``pr_urls.json`` manifest.
 
     Uses ``.json.tmp`` → :func:`os.replace` so a mid-loop crash never
@@ -431,7 +432,7 @@ class DeliverStage(Stage):
         ctx: StageContext,
         ticket: Ticket,
         s,
-        touched_repos: list[dict],
+        touched_repos: list[dict[str, Any]],
     ) -> Outcome:
         """Iterate the touched-repos manifest, opening one PR per repo.
 
@@ -545,7 +546,7 @@ class DeliverStage(Stage):
 
                 return Outcome(State.BLOCKED, block_note)
 
-        opened: list[dict] = []
+        opened: list[dict[str, Any]] = []
         skipped: list[str] = []
         skipped_targets: dict[str, str] = {}
 

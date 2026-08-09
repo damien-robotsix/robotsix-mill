@@ -391,7 +391,7 @@ def _resolve_bot_logins(settings: Settings, forge: Forge) -> set[str] | None:
 
 
 def _classify_branches(
-    mill_prs: list[dict],
+    mill_prs: list[dict[str, Any]],
     allowed_logins: set[str],
     settings: Settings,
     service: TicketService,
@@ -409,7 +409,7 @@ def _classify_branches(
     per-type and combined caps.
     """
     # ---- phase 0a: author guard --------------------------------------
-    prs_after_author: list[dict] = []
+    prs_after_author: list[dict[str, Any]] = []
     for pr in mill_prs:
         author = pr["author_login"]
         if allowed_logins and author not in allowed_logins:

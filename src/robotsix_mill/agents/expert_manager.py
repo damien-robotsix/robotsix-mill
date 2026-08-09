@@ -158,7 +158,7 @@ class ExpertManager:
     # -- glob matching for module_paths ----------------------------------
 
     @staticmethod
-    def _glob_to_regex(pattern: str) -> re.Pattern:
+    def _glob_to_regex(pattern: str) -> re.Pattern[str]:
         """Convert a POSIX-style glob to an anchored regex.
 
         Semantics (intentionally narrow — designed for ``module_paths``,

@@ -31,6 +31,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ...config import RepoConfig, Settings, target_branch_for
 from ...core.models import SourceKind, Ticket, TicketKind
@@ -139,9 +140,9 @@ def insert_markers(markdown: str, new_ids: dict[int, str]) -> str:
 class RoadmapSyncPassResult:
     """Summary of one roadmap-sync pass."""
 
-    created: list[dict]  # [{id, title}]
-    updated: list[dict]  # [{id, title, fields: ["title", "body"]}]
-    skipped: list[dict]  # [{title, reason}]
+    created: list[dict[str, Any]]  # [{id, title}]
+    updated: list[dict[str, Any]]  # [{id, title, fields: ["title", "body"]}]
+    skipped: list[dict[str, Any]]  # [{title, reason}]
     pr_url: str | None = None
     summary: str = ""
     session_id: str = ""
@@ -169,7 +170,12 @@ def _normalize_body(text: str) -> str:
 def _create_or_update_epics(
     service: TicketService,
     sections: list[EpicSection],
-) -> tuple[list[dict], list[dict], list[dict], dict[int, str]]:
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any][int, str],
+]:
     """Apply each parsed section to the board.
 
     Returns ``(created, updated, skipped, new_ids_by_section_index)``
@@ -178,9 +184,9 @@ def _create_or_update_epics(
     :func:`insert_markers` to splice the marker back into ROADMAP.md.
     """
     existing = _list_existing_epics(service)
-    created: list[dict] = []
-    updated: list[dict] = []
-    skipped: list[dict] = []
+    created: list[dict[str, Any]] = []
+    updated: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     new_ids: dict[int, str] = {}
 
     for idx, section in enumerate(sections):
@@ -241,7 +247,7 @@ def _commit_and_open_pr(
     settings: Settings,
     repo_config: RepoConfig | None,
     repo_dir: Path,
-    created: list[dict],
+    created: list[dict[str, Any]],
 ) -> str | None:
     """Commit ROADMAP.md, push a fresh branch, open a PR. Returns the
     PR URL on success or ``None`` when remote/credentials aren't

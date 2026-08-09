@@ -1211,7 +1211,7 @@ class PollLoopsMixin(_WorkerBase):
         poll_loop_fn,
         task_attr: str,
         log_msg: str | None = None,
-        log_args: tuple = (),
+        log_args: tuple[Any, ...] = (),
     ) -> None:
         """Start a dedicated poll-loop periodic pass if its settings flag
         (derived from *label*) is on and the task attribute is still ``None``.

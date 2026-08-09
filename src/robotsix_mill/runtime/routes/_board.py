@@ -12,8 +12,9 @@ uses.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...config import Settings
 from ...core.models import Ticket
@@ -23,6 +24,9 @@ from ..deps import (
     enrich_ticket_read,
     get_service,
     get_settings,
+    get_worker,
+    maybe_enqueue,
+    resolve_ticket_id,
 )
 
 # Terminal states excluded from default board listings — matches the
@@ -76,7 +80,7 @@ def board_cards(
     svc=Depends(get_service),
     settings=Depends(get_settings),
     include_closed: bool = False,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return all tickets as card objects for the board JS hydration.
 
     Mirrors ``GET /tickets`` but returns the flat card shape expected
@@ -132,6 +136,31 @@ def board_cards(
     )
 
     return [_ticket_to_card(t, settings, s) for t, settings, s in collected]
+
+
+@router.post("/board/move/{card_id}/{target_status}")
+def board_move(
+    card_id: str,
+    target_status: str,
+    request: Request,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> dict[str, Any]:
+    """Move a card to a new column (robotsix-board move action).
+
+    Receives the ``POST`` from robotsix-board's ``board-card-move``
+    form (JSON_HYDRATION mode).  Translates to a ticket state
+    transition.
+    """
+    card_id = resolve_ticket_id(card_id, svc)
+    try:
+        ticket = svc.transition(card_id, target_status, None)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+
+    maybe_enqueue(ticket, worker)
+    return {"ok": True, "id": card_id, "status": target_status}
 
 
 def _resolve_board_id(repo_id: str, repos) -> str:

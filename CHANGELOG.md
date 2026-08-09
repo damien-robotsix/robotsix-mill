@@ -323,6 +323,7 @@
 
 ### Other changes
 
+- Promote mypy from advisory to a gating CI check and clear 293 `[type-arg]` baseline errors — bare `dict`, `list`, `Task`, `Queue`, `PriorityQueue`, `tuple`, `set`, `Pattern`, `CompletedProcess`, `AbstractAsyncContextManager`, and `TypeDecorator` generics now carry explicit type arguments. The baseline shrinks from 697 to 412 lines (~41% reduction). Add `make mypy-baseline-shrink` target for snapshot regeneration.
 - Remove `docker` pytest marker and two dead integration tests (`tests/sandbox/test_sandbox_integration.py`) that had no CI execution path. Sandbox integration behavior is already covered hermetic-ally by the monkeypatched tests in `tests/sandbox/test_sandbox.py`.
 - Harden module-registration CI check against deleted-but-not-yet-git-rm'd files: filter out files that no longer exist on disk before flagging them as unclassified.  Update implement agent instructions to ``git rm`` deleted files before running ``check-registration``, preventing the loop where an agent keeps re-adding a ``docs/modules.yaml`` entry for a file it just deleted.
 - Add docstring to `PrioritySlots.release` matching the sibling `acquire` method. (mill: Resolve dead docker-marked sandbox integration tests: give them a real CI home or mark local-only (20260806T184416Z-resolve-dead-docker-marked-sandbox-integ-c421))

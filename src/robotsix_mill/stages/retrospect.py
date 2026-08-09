@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC
+from typing import Any
 
 from ..agents import retrospecting
 from ..agents.retrospecting import MemoryEdit, RetrospectResult
@@ -468,7 +469,7 @@ class RetrospectStage(Stage):
         from ..core.dedup import find_agent_md_proposal_overlap
 
         now = datetime.now(UTC)
-        kept: list[dict] = []
+        kept: list[dict[str, Any]] = []
         for prop in proposals:
             section = prop.get("section", "")
             rule = prop.get("rule", "")

@@ -14,6 +14,7 @@ all three mixins), shared helpers, and repo-CRUD operations
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from ._http import _ApiClient
 from .base import Forge, NotConfiguredError, RepoInfo
@@ -35,7 +36,7 @@ _REMOTE_RE = re.compile(
 _MAX_REPO_DESCRIPTION = 350
 
 
-def _build_headers(token: str) -> dict:
+def _build_headers(token: str) -> dict[str, Any]:
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -63,7 +64,7 @@ def _clamp_repo_description(description: str) -> str:
     return text[: _MAX_REPO_DESCRIPTION - 1].rstrip() + "…"
 
 
-def _parse_repo_info(r: dict) -> RepoInfo:
+def _parse_repo_info(r: dict[str, Any]) -> RepoInfo:
     """Extract ``RepoInfo`` from a GitHub ``POST /repos`` response dict."""
     return RepoInfo(
         id=r["id"],
@@ -296,7 +297,7 @@ class GitHubForge(
 
         s = self.settings
         url = f"/repos/{source_owner}/{source_repo}/forks"
-        payload: dict = {}
+        payload: dict[str, Any] = {}
         if target_namespace is not None:
             payload["organization"] = target_namespace
 

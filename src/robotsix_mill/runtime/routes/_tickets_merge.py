@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -170,7 +171,7 @@ def get_merge_info(
     request: Request,
     svc=Depends(get_service),
     settings=Depends(get_settings),
-) -> dict:
+) -> dict[str, Any]:
     """Return CI status, mergeable flag, and changed files for the PR/MR
     backing *ticket_id*.  Each forge call is individually resilient —
     a failure in one field does not crash the whole response.
@@ -202,7 +203,7 @@ def get_merge_info(
 
     # --- CI conclusion / failing checks ----------------------------------
     ci_conclusion: str | None = None
-    ci_failing: list[dict] = []
+    ci_failing: list[dict[str, Any]] = []
     if forge is not None:
         try:
             cs = forge.check_status(source_branch=branch)
@@ -220,7 +221,7 @@ def get_merge_info(
             pass  # best-effort: CI status is optional
 
     # --- files -----------------------------------------------------------
-    files: list[dict] = []
+    files: list[dict[str, Any]] = []
     if forge is not None:
         try:
             raw = forge.pr_files(source_branch=branch)
@@ -234,7 +235,7 @@ def get_merge_info(
             pass  # best-effort: file list is optional
 
     # --- changelog warnings ----------------------------------------------
-    changelog_warnings: list[dict] = []
+    changelog_warnings: list[dict[str, Any]] = []
     if forge is not None:
         try:
             repo_dir = _workspace_repo_dir_from_svc(svc, ticket)
@@ -255,7 +256,7 @@ def get_merge_info(
 def get_merge_reason(
     ticket_id: str,
     svc=Depends(get_service),
-) -> dict:
+) -> dict[str, Any]:
     """Return the auto-merge blocking reason written by the merge
     stage, or an empty string when no reason has been recorded.
     """

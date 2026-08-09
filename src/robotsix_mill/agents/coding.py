@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings
 from ..vcs.git_ops import _git
@@ -37,7 +38,7 @@ class AgentBudgetError(RuntimeError):
     def __init__(
         self,
         message: str,
-        messages: list,
+        messages: list[Any],
         conversation_state: bytes | None = None,
     ) -> None:
         super().__init__(message)
@@ -59,7 +60,7 @@ class AgentRunError(RuntimeError):
     def __init__(
         self,
         message: str,
-        messages: list,
+        messages: list[Any],
         cause: BaseException | None = None,
     ) -> None:
         super().__init__(message)
@@ -73,8 +74,8 @@ def run_implement_agent(
     repo_dir: Path,
     spec: str,
     feedback: str | None = None,
-    reference_files: list[dict] | None = None,
-    message_history: list | None = None,
+    reference_files: list[dict[str, Any]] | None = None,
+    message_history: list[Any] | None = None,
     memory: str = "",
     epic_context: str = "",
     previous_attempt_summary: str | None = None,

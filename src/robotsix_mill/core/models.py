@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import Column, TypeDecorator
 from sqlalchemy import String as SAString
@@ -337,7 +338,7 @@ class TicketRead(SQLModel):
     # no dependencies. The legacy ``depends_on`` JSON string and
     # ``unmet_deps`` ID list are kept for back-compat (the worker
     # gate keys off ``unmet_deps``).
-    dependencies: list[dict] = []
+    dependencies: list[dict[str, Any]] = []
     pr_url: str | None = None
     retry_attempt: int
     last_transient_error: str | None

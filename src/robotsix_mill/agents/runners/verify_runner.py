@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlmodel import select
 
@@ -18,7 +19,7 @@ class VerifyResult:
 
     total_events: int = 0
     tickets_verified: int = 0
-    breaks: list[dict] = field(default_factory=list)
+    breaks: list[dict[str, Any]] = field(default_factory=list)
 
 
 def run_verify_pass(

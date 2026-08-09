@@ -387,7 +387,7 @@ class RefineAgentMixin:
         )
         memory_text = _load_refine_memory(s, memory_board_id)
 
-        resume_history: list | None = None
+        resume_history: list[Any] | None = None
         saved_state = load_conversation_state(ws, "refine")
         if saved_state is not None:
             own_history = ctx.service.history(ticket.id)

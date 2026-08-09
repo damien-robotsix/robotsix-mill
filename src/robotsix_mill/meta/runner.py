@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from ..agents.runners.pass_runner import (
     _format_recent_proposals,
@@ -36,9 +37,9 @@ class MetaPassResult:
     """Result of a completed ``run_meta_pass`` invocation."""
 
     updated_memory: str
-    extraction_drafts_created: list[dict]  # [{"id": ..., "title": ...}, ...]
-    alignment_drafts_created: list[dict]
-    todo_drafts_created: list[dict] = field(default_factory=list)
+    extraction_drafts_created: list[dict[str, Any]]  # [{"id": ..., "title": ...}, ...]
+    alignment_drafts_created: list[dict[str, Any]]
+    todo_drafts_created: list[dict[str, Any]] = field(default_factory=list)
     session_id: str = ""
 
 
@@ -91,12 +92,12 @@ def _build_body_with_gap_id(body: str, gap_id: str) -> str:
 
 
 def _file_extraction_drafts(
-    drafts: list,
+    drafts: list[Any],
     settings: Settings,
     session_id: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """File extraction drafts to the meta board.  Best-effort."""
-    created: list[dict] = []
+    created: list[dict[str, Any]] = []
     meta_service = TicketService(settings, board_id="meta")
     for draft in drafts:
         gap_id = _slugify_title(draft.title)
@@ -119,18 +120,18 @@ def _file_extraction_drafts(
 
 
 def _file_repo_drafts(
-    drafts: list,
+    drafts: list[Any],
     settings: Settings,
     session_id: str,
     *,
     label: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """File per-repo drafts to their target repo boards.  Best-effort.
 
     Shared by alignment and TODO filing — ``label`` (``"alignment"`` /
     ``"todo"``) is used only in log messages.
     """
-    created: list[dict] = []
+    created: list[dict[str, Any]] = []
     repos_config = get_repos_config()
     for draft in drafts:
         if not draft.target_repo_id:

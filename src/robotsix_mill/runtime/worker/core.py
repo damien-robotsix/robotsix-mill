@@ -13,7 +13,7 @@ import asyncio
 import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config
 from ...core.models import TicketKind
@@ -141,7 +141,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
     # state-in-pipeline) but we keep them in the table to avoid KeyError
     # on any drift. _DEFAULT_STAGE_RANK applies to unknown states.
     _DEFAULT_STAGE_RANK: int = 99
-    _STAGE_RANK: dict = {
+    _STAGE_RANK: dict[str, Any] = {
         State.DONE: 0,  # retrospect → CLOSED
         State.DELIVERABLE: 1,  # deliver opens the PR
         State.DOCUMENTING: 2,  # document → DELIVERABLE
@@ -201,23 +201,23 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # priority tickets, 1 otherwise → priority tickets pop first;
         # seq breaks ties as FIFO within a rank. The "" key holds the
         # fallback queue for tickets without a matching repo.
-        self.queues: dict[str, asyncio.PriorityQueue] = {
+        self.queues: dict[str, asyncio.PriorityQueue[Any]] = {
             self._DEFAULT_BOARD: asyncio.PriorityQueue(),
         }
         self._enqueue_seq = 0
         # pool of consumer tasks — populated by start(), one or more
         # per repo per its max_concurrency.
-        self._tasks: dict[str, list[asyncio.Task]] = {}
-        self._poll_task: asyncio.Task | None = None
-        self._audit_task: asyncio.Task | None = None
-        self._trace_health_task: asyncio.Task | None = None
-        self._trace_review_task: asyncio.Task | None = None
+        self._tasks: dict[str, list[asyncio.Task[Any]]] = {}
+        self._poll_task: asyncio.Task[Any] | None = None
+        self._audit_task: asyncio.Task[Any] | None = None
+        self._trace_health_task: asyncio.Task[Any] | None = None
+        self._trace_review_task: asyncio.Task[Any] | None = None
         # Periodic-pass runs currently executing in worker threads.
         # The to_thread wrapper registers them on entry and removes
         # on exit; ``stop()`` awaits this set (with a grace timeout)
         # before tearing the loops down so a survey / audit / etc.
         # mid-run isn't killed by a container restart.
-        self._inflight_passes: set[asyncio.Task] = set()
+        self._inflight_passes: set[asyncio.Task[Any]] = set()
         # Bounds how many per-repo clone/fetch refreshes may occupy the
         # shared thread pool at once. Every stage offloads its blocking
         # work to the SAME default executor, which holds only
@@ -230,26 +230,26 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # threads available for ticket work no matter how many repos are
         # registered.
         self._repo_refresh_sem = asyncio.Semaphore(2)
-        self._health_task: asyncio.Task | None = None
-        self._agent_check_task: asyncio.Task | None = None
-        self._bc_check_task: asyncio.Task | None = None
-        self._completeness_check_task: asyncio.Task | None = None
-        self._copy_paste_task: asyncio.Task | None = None
-        self._module_curator_task: asyncio.Task | None = None
-        self._ci_monitor_task: asyncio.Task | None = None
-        self._test_gap_task: asyncio.Task | None = None
-        self._survey_task: asyncio.Task | None = None
-        self._config_sync_task: asyncio.Task | None = None
-        self._data_dir_gc_task: asyncio.Task | None = None
-        self._langfuse_cleanup_task: asyncio.Task | None = None
-        self._timeout_escalation_task: asyncio.Task | None = None
+        self._health_task: asyncio.Task[Any] | None = None
+        self._agent_check_task: asyncio.Task[Any] | None = None
+        self._bc_check_task: asyncio.Task[Any] | None = None
+        self._completeness_check_task: asyncio.Task[Any] | None = None
+        self._copy_paste_task: asyncio.Task[Any] | None = None
+        self._module_curator_task: asyncio.Task[Any] | None = None
+        self._ci_monitor_task: asyncio.Task[Any] | None = None
+        self._test_gap_task: asyncio.Task[Any] | None = None
+        self._survey_task: asyncio.Task[Any] | None = None
+        self._config_sync_task: asyncio.Task[Any] | None = None
+        self._data_dir_gc_task: asyncio.Task[Any] | None = None
+        self._langfuse_cleanup_task: asyncio.Task[Any] | None = None
+        self._timeout_escalation_task: asyncio.Task[Any] | None = None
         self._config_pin_drift_task: asyncio.Task[None] | None = None
-        self._meta_task: asyncio.Task | None = None
-        self._run_health_task: asyncio.Task | None = None
+        self._meta_task: asyncio.Task[Any] | None = None
+        self._run_health_task: asyncio.Task[Any] | None = None
         self._diagnostic_task: asyncio.Task[None] | None = None
-        self._stale_branch_task: asyncio.Task | None = None
+        self._stale_branch_task: asyncio.Task[Any] | None = None
         self._orphaned_pr_check_task: asyncio.Task[None] | None = None
-        self._db_maintenance_task: asyncio.Task | None = None
+        self._db_maintenance_task: asyncio.Task[Any] | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._ci_debt_recheck_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
@@ -277,7 +277,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # explicit priority flip calls requeue_with_current_priority.
         self._cap_deferred: set[str] = set()
         # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
-        self._active: dict[str, dict] = {}
+        self._active: dict[str, dict[str, Any]] = {}
         # Global gate capping total concurrently-running stages across all
         # boards. Created in start() to bind to the running event loop.
         # Priority-aware: the per-board queues rank tickets, but every board
@@ -298,7 +298,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
 
         await _asyncio.gather(*(q.join() for q in self.queues.values()))
 
-    def _queue_for(self, board_id: str) -> asyncio.PriorityQueue:
+    def _queue_for(self, board_id: str) -> asyncio.PriorityQueue[Any]:
         """Return the per-repo queue, creating it on first use.
 
         Empty/unknown ``board_id`` falls through to the default queue

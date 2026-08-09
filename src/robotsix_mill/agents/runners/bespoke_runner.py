@@ -17,6 +17,7 @@ import logging
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 from ...agents import bespoke as _bespoke_agent
 from ...agents.bespoke_loader import BespokeAgentDefinition
@@ -38,7 +39,7 @@ class BespokePassResult:
 
     source_label: str
     updated_memory: str
-    drafts_created: list[dict]
+    drafts_created: list[dict[str, Any]]
     session_id: str = ""
 
 

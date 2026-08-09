@@ -6,6 +6,8 @@ Split from ``github.py``.  Defines ``GitHubForgeCodeScanningMixin`` that
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class CodeScanningAlertsUnavailable(Exception):
     """Raised when the code-scanning alerts API returns 403.
@@ -24,7 +26,9 @@ class GitHubForgeCodeScanningMixin:
     """
 
     # --- HTTP seam (monkeypatched in tests) ---
-    def _fetch_alerts_for_ref(self, *, owner: str, repo: str, ref: str) -> list[dict]:
+    def _fetch_alerts_for_ref(
+        self, *, owner: str, repo: str, ref: str
+    ) -> list[dict[str, Any]]:
         """Fetch raw open code-scanning alerts for a single *ref* (best-effort).
 
         Returns ``[]`` on 404 (code-scanning not enabled) or any other
@@ -55,7 +59,7 @@ class GitHubForgeCodeScanningMixin:
 
     def _wait_for_code_scanning_analysis(
         self, *, owner: str, repo: str, pr_ref: str
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Poll code-scanning analyses for *pr_ref* and retry the alert fetch.
 
         When default-setup CodeQL analysis has completed but its alerts
@@ -124,7 +128,7 @@ class GitHubForgeCodeScanningMixin:
         # Exhausted backoff window — alerts still unavailable.
         return []
 
-    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict]:
+    def list_code_scanning_alerts(self, *, source_branch: str) -> list[dict[str, Any]]:
         """Return open code-scanning (CodeQL) alerts for *source_branch*.
 
         Queries both the PR merge ref and the branch ref, unioning the
@@ -160,7 +164,7 @@ class GitHubForgeCodeScanningMixin:
         branch_ref = f"refs/heads/{source_branch}"
 
         seen: set[int] = set()
-        raw_alerts: list[dict] = []
+        raw_alerts: list[dict[str, Any]] = []
 
         # Merge ref first (PR-triggered CodeQL).  When the initial query
         # returns empty but a PR exists, poll for eventual consistency.
@@ -189,7 +193,7 @@ class GitHubForgeCodeScanningMixin:
                 seen.add(num)
             raw_alerts.append(a)
 
-        out: list[dict] = []
+        out: list[dict[str, Any]] = []
         for a in raw_alerts:
             rule = a.get("rule") or {}
             inst = a.get("most_recent_instance") or {}

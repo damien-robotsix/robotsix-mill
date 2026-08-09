@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["Passes"])
 
 
-def _resolve_agent_run_repos(repo_id: str | None, request: Request) -> list:
+def _resolve_agent_run_repos(repo_id: str | None, request: Request) -> list[Any]:
     """Resolve *repo_id* to a list of ``RepoConfig`` (or ``None``) for
     agent-run routes.
 
@@ -65,8 +65,8 @@ def _make_background_pass(
     docstring: str,
     uses_tracing: bool = True,
     summary_builder: Callable[[Any], str] | None = None,
-    extra_runner_kwargs: Callable[[Request], dict] | None = None,
-) -> Callable[..., dict]:
+    extra_runner_kwargs: Callable[[Request], dict[str, Any]] | None = None,
+) -> Callable[..., dict[str, Any]]:
     """Factory for background-pass POST handlers.
 
     Returns a callable with signature ``(repo_id, request, registry) -> dict``
@@ -104,7 +104,7 @@ def _make_background_pass(
         repo_id: str | None = None,
         request: Request = None,  # type: ignore[assignment]
         registry=Depends(get_run_registry),
-    ) -> dict:
+    ) -> dict[str, Any]:
         def _run() -> None:
             # Lazy-import the runner so that monkeypatch.setattr in tests
             # can intercept it before the background thread starts.
@@ -116,7 +116,9 @@ def _make_background_pass(
 
             repo_configs = _resolve_agent_run_repos(repo_id, request)
 
-            extra: dict = extra_runner_kwargs(request) if extra_runner_kwargs else {}
+            extra: dict[str, Any] = (
+                extra_runner_kwargs(request) if extra_runner_kwargs else {}
+            )
 
             for rc in repo_configs:
                 run_id = None
@@ -373,7 +375,7 @@ def list_passes(
     request: Request,
     repo_id: str | None = None,
     repos=Depends(get_repos_registry),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return all known periodic passes with their kind, label, and
     per-repo enabled status.
 
@@ -415,7 +417,7 @@ def run_pass(
     repo_id: str | None = None,
     request: Request = None,  # type: ignore[assignment]
     registry=Depends(get_run_registry),
-) -> dict:
+) -> dict[str, Any]:
     """Kick off a periodic pass in the BACKGROUND and return at once.
 
     Looks up *pass_id* in the pass registry, imports its runner lazily,
@@ -432,7 +434,7 @@ def run_pass(
     runner_func: str = entry["runner_func"]
     uses_tracing: bool = entry.get("uses_tracing", True)
     global_only: bool = entry.get("global_only", False)
-    extra_kwargs_builder: Callable[[Request], dict] | None = entry.get(
+    extra_kwargs_builder: Callable[[Request], dict[str, Any]] | None = entry.get(
         "extra_runner_kwargs"
     )
 
@@ -448,7 +450,9 @@ def run_pass(
         else:
             repo_configs = _resolve_agent_run_repos(repo_id, request)
 
-        extra: dict = extra_kwargs_builder(request) if extra_kwargs_builder else {}
+        extra: dict[str, Any] = (
+            extra_kwargs_builder(request) if extra_kwargs_builder else {}
+        )
 
         for rc in repo_configs:
             run_id = None

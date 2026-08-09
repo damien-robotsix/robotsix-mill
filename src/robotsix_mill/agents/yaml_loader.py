@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -251,13 +251,13 @@ def load_and_run_agent(
     *,
     settings: Settings,
     definition_name: str,
-    tools: list | None = None,
+    tools: list[Any] | None = None,
     level: int | None = None,
     prompt: str,
     what: str,
     repo_dir: Path | None = None,
-    run_kwargs: dict | None = None,
-    system_prompt_format_kwargs: dict | None = None,
+    run_kwargs: dict[str, Any] | None = None,
+    system_prompt_format_kwargs: dict[str, Any] | None = None,
     **build_overrides,
 ):
     """Load a YAML agent definition, build the agent, run it, and return output.

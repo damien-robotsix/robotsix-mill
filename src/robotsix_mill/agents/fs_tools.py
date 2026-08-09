@@ -14,6 +14,7 @@ import contextlib
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic_ai import RunContext
@@ -100,7 +101,7 @@ def build_preseed_history(
     user_prompt: str | None = None,
     max_files: int = 20,
     max_total_bytes: int = 200_000,
-) -> list:
+) -> list[Any]:
     """Build a synthetic ``message_history`` that pre-loads *paths*
     under *repo_dir* into the agent's context.
 
@@ -151,8 +152,8 @@ def build_preseed_history(
         UserPromptPart,
     )
 
-    calls: list = []
-    returns: list = []
+    calls: list[Any] = []
+    returns: list[Any] = []
     total_bytes = 0
     for path in paths:
         if len(calls) >= max_files:
@@ -206,7 +207,7 @@ def build_preseed_history(
             )
         )
 
-    history: list = []
+    history: list[Any] = []
     if user_prompt is not None:
         history.append(
             ModelRequest(
@@ -283,7 +284,7 @@ def build_fs_tools(
     sandbox_image: str | None = None,
     read_file_max_calls: int | None = None,
     write_blocked_prefixes: list[str] | None = None,
-) -> list:
+) -> list[Any]:
     """Build the filesystem + shell tool closures sandboxed to *root*.
 
     Returns the ``read_file``, ``write_file``, ``edit_file``,

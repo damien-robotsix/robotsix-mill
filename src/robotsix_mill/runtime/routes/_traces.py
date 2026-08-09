@@ -24,7 +24,7 @@ def list_runs(
     repo_id: str | None = None,
     request: Request = None,
     registry=Depends(get_run_registry),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return recent background-run entries (newest first).
 
     ``?repo_id=X`` returns X's runs. Without it (or ``?repo_id=all``) the
@@ -33,11 +33,13 @@ def list_runs(
     lead repo's, so reading only the default registry would hide them on
     the all-repos board even though they show on the per-repo board.
     """
-    registries: dict = getattr(request.app.state, "run_registries", None) or {}
+    registries: dict[str, Any] = (
+        getattr(request.app.state, "run_registries", None) or {}
+    )
 
     if repo_id is None or repo_id == "all":
-        seen: set = set()
-        merged: list[dict] = []
+        seen: set[Any] = set[Any]()
+        merged: list[dict[str, Any]] = []
         for reg in list(registries.values()) or [registry]:
             for e in reg.list_all():
                 eid = e.get("id")
@@ -74,7 +76,7 @@ def list_active(
     repo_id: str | None = None,
     request: Request = None,
     worker=Depends(get_worker),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return tickets currently being processed by a pipeline stage.
 
     ``?repo_id=X`` filters to active tickets belonging to that repo.
@@ -116,7 +118,7 @@ def list_recent_traces(
     min_cost: float | None = None,
     max_cost: float | None = None,
     settings=Depends(get_settings),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return recent Langfuse traces, filtered by cost and limited in
     count.  *limit* is clamped to 1–50; *min_cost* and *max_cost* are
     inclusive USD filters on ``totalCost``.

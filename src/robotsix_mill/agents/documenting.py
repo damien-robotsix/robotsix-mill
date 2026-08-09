@@ -235,7 +235,7 @@ def run_doc_agent(
         user_prompt = section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.doc_request_limit)
         run_user_prompt: str | None = user_prompt
-        run_kwargs: dict = {"usage_limits": limits}
+        run_kwargs: dict[str, Any] = {"usage_limits": limits}
         # Pre-load the modified files (and any docs the operator
         # supplied) into a single parallel-read_file turn, with the
         # user_prompt as the leading ModelRequest so the trace reads

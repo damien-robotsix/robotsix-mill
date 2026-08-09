@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -132,7 +133,7 @@ def run_dedup_check(
     draft_body: str,
     candidates_json: str,
     repo_dir: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Return ``{"duplicate_of": ..., "already_done": ..., "reason": ...}``.
 
     Degrades gracefully: on any exception, returns nulls with a failure
@@ -148,7 +149,7 @@ def run_dedup_check(
 
     # Build filesystem tools when a repo_dir is available; the dedup
     # agent is read-only — only read_file and list_dir are exposed.
-    tools: list = []
+    tools: list[Any] = []
     if repo_dir is not None:
         from .fs_tools import build_fs_tools
 

@@ -178,7 +178,7 @@ def _resolve_delivery(
     return {"delivered": False, "label": "closed (not delivered)", "canonical": None}
 
 
-def _build_child_summaries(svc, epic_id: str) -> list[dict]:
+def _build_child_summaries(svc, epic_id: str) -> list[dict[str, Any]]:
     r"""Build the per-child summary dicts passed to the epic-status agent.
 
     Each child's description is read and truncated to 500 chars (with a
@@ -191,7 +191,7 @@ def _build_child_summaries(svc, epic_id: str) -> list[dict]:
     """
     from ...core.service import TicketService
 
-    child_summaries: list[dict] = []
+    child_summaries: list[dict[str, Any]] = []
     for child in svc.list_children_across_boards(epic_id):
         child_desc = svc.workspace(child).read_description()
         if len(child_desc) > 500:

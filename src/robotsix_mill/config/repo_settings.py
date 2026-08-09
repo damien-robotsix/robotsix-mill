@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -147,7 +148,7 @@ def load_repo_skip_ci(repo_dir: Path | None) -> bool:
     return value
 
 
-def _load_repo_config_dict(repo_dir: Path | None) -> dict | None:
+def _load_repo_config_dict(repo_dir: Path | None) -> dict[str, Any] | None:
     """Read + validate ``<repo_dir>/.robotsix-mill/config.yaml`` into a dict.
 
     Shared hardened reader: returns the parsed top-level mapping, or
