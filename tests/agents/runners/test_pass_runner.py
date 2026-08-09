@@ -2986,3 +2986,61 @@ def test_scanner_and_rollup_source_sets_are_distinct():
     assert _ROLLUP_SOURCES < _SCANNER_SOURCES
     assert SourceKind.AUDIT not in _ROLLUP_SOURCES
     assert SourceKind.DOCSTRING_COVERAGE in _ROLLUP_SOURCES
+
+
+# --- scanner rollup positive test ---
+
+
+def test_scanner_rollup_collapses_multiple_drafts_to_one(tmp_path):
+    """When ``scanner_rollup`` is enabled (default) and a scanner source
+    produces ≥2 findings, the runner collapses them into a single rollup
+    ticket with title '{source} scan: N findings (YYYY-MM-DD)'.  Every
+    finding body is in the ticket description."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("memory", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="memory",
+        draft_titles=["Missing test A", "Missing test B", "Missing test C"],
+        draft_bodies=["Body A details.", "Body B details.", "Body C details."],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.HEALTH,
+        service=service,
+        settings=settings,
+    )
+
+    # Only 1 draft created (the rollup).
+    assert len(result.drafts_created) == 1
+    rollup = result.drafts_created[0]
+    assert "scan:" in rollup["title"]
+    assert "3 findings" in rollup["title"]
+
+    # Verify DB: 1 rollup task + 1 rollup EPIC = 2 tickets.
+    tickets = service.list()
+    assert len(tickets) == 2
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
+    draft = draft_tickets[0]
+    assert "scan:" in draft.title
+    assert "3 findings" in draft.title
+    # Body (workspace on-disk description) contains all three findings.
+    body = Workspace(
+        settings.workspaces_dir_for("test-board"), draft.id
+    ).read_description()
+    assert "Missing test A" in body
+    assert "Missing test B" in body
+    assert "Missing test C" in body
+    assert "Body A details." in body
+    assert "Body B details." in body
+    assert "Body C details." in body
+
+    db.reset_engine()
