@@ -393,11 +393,22 @@ class RebaseMixin(_MergeStageBase):
                             f" (+{len(dropped) - 10} more)" if len(dropped) > 10 else ""
                         )
                         msg = (
-                            f"rebase succeeded but silently dropped {len(dropped)} "
-                            f"implement-stage file(s): {shown}{more}. "
-                            "The rebase agent may have discarded the PR's changes "
-                            "during conflict resolution. "
-                            "Resume-blocked to retry from human_mr_approval."
+                            f"rebase succeeded but {len(dropped)} implement-stage "
+                            f"file(s) are absent from the post-rebase diff: "
+                            f"{shown}{more}. Either the rebase agent discarded "
+                            "the change, or the target already carries it in a "
+                            "form this check cannot recognise (it compares bytes, "
+                            "not meaning).\n"
+                            "Do NOT resume to retry — a retry re-runs the same "
+                            "rebase against the same target and reproduces the "
+                            "same result; tickets blocked this way have "
+                            "accumulated 5-7 identical blocks.\n"
+                            "Decide it instead, per file:\n"
+                            f"  git show origin/{target}:<path>\n"
+                            "  - target already has the change (or an equivalent): "
+                            "the delta is superseded — close the ticket.\n"
+                            "  - target lacks it: the drop is real — restore the "
+                            "file on the branch and push."
                         )
                     else:
                         shown = ", ".join(f"`{p}`" for p in sibling_likely[:10])
@@ -409,9 +420,13 @@ class RebaseMixin(_MergeStageBase):
                         msg = (
                             f"rebase succeeded but {len(sibling_likely)} file(s) may "
                             f"have been superseded by a sibling PR: {shown}{more}. "
-                            "The target branch changed these files during the rebase. "
-                            "Verify that the sibling's version incorporates the PR's "
-                            "changes. Resume-blocked to retry from human_mr_approval."
+                            "The target branch changed these files during the "
+                            "rebase, so the agent took the sibling's version. "
+                            "A retry cannot change that — decide whether the "
+                            "sibling's version already covers this PR's intent: "
+                            "if it does, close the ticket as superseded; if it "
+                            "does not, re-apply the missing delta on the branch "
+                            "and push."
                         )
                     _write_counter(counter_path, 0)
                     # Persist the dropped file list so the next rebase
