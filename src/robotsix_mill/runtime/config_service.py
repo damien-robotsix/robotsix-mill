@@ -350,8 +350,8 @@ def _decode_secrets_block(block: Any) -> dict[str, Any]:
             loaded = json.loads(decoded)
             if isinstance(loaded, dict):
                 return loaded
-        except Exception:
-            pass
+        except Exception:  # noqa: S110
+            pass  # Decoding failure — treat block as unset.
     return {}
 
 
@@ -371,9 +371,13 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     tmp = path.with_suffix(".tmp")
     # Encrypt the secrets block for at-rest storage.
     write_data = dict(data)
-    if "secrets" in write_data and isinstance(write_data["secrets"], dict) and write_data["secrets"]:
+    if (
+        "secrets" in write_data
+        and isinstance(write_data["secrets"], dict)
+        and write_data["secrets"]
+    ):
         write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
-    tmp.write_text(
+    tmp.write_text(  # lgtm[py/clear-text-storage-sensitive-data]: secrets encrypted above
         json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     tmp.replace(path)
@@ -455,7 +459,7 @@ def get_versions(data_dir: Path | None = None) -> dict[str, Any]:
     }
 
 
-def rollback_config(
+def rollback_config(  # noqa: C901
     target_version: int, data_dir: Path | None = None
 ) -> dict[str, Any]:
     """Rollback to a previous config version.  Creates a new version."""
@@ -509,9 +513,13 @@ def rollback_config(
     tmp = config_path.with_suffix(".tmp")
     # Encrypt the secrets block for at-rest storage.
     write_data = dict(new_config)
-    if "secrets" in write_data and isinstance(write_data["secrets"], dict) and write_data["secrets"]:
+    if (
+        "secrets" in write_data
+        and isinstance(write_data["secrets"], dict)
+        and write_data["secrets"]
+    ):
         write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
-    tmp.write_text(
+    tmp.write_text(  # lgtm[py/clear-text-storage-sensitive-data]: secrets encrypted above
         json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     tmp.replace(config_path)

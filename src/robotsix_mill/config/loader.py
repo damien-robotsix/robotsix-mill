@@ -97,9 +97,7 @@ def _derive_fernet_key() -> bytes:
     file permissions on config.json.
     """
     hostname = os.uname().nodename
-    raw = hashlib.sha256(
-        hostname.encode() + b":robotsix-mill-config-v1"
-    ).digest()
+    raw = hashlib.sha256(hostname.encode() + b":robotsix-mill-config-v1").digest()
     return base64.urlsafe_b64encode(raw)
 
 
@@ -123,8 +121,8 @@ def decrypt_secrets_block(token: str) -> dict[str, Any] | None:
         loaded = json.loads(data)
         if isinstance(loaded, dict):
             return loaded
-    except Exception:
-        pass
+    except Exception:  # noqa: S110
+        pass  # Decryption failure — treat block as unset.
     return None
 
 
@@ -161,8 +159,8 @@ def load_secrets_block() -> dict[str, Any]:
             loaded = json.loads(decoded)
             if isinstance(loaded, dict):
                 return loaded
-        except Exception:
-            pass
+        except Exception:  # noqa: S110
+            pass  # Decoding failure — treat block as unset.
         return {}
     return dict(block) if isinstance(block, dict) else {}
 

@@ -159,7 +159,7 @@ class Secrets:
         if secrets_file:
             file_data = self._load_secrets_file(secrets_file)
         else:
-            from .loader import decrypt_secrets_block, load_secrets_block
+            from .loader import load_secrets_block
 
             file_data = load_secrets_block()
         data = {**file_data, **data}
@@ -196,6 +196,8 @@ class Secrets:
         secrets_block = raw.get("secrets", {})
         if isinstance(secrets_block, str) and secrets_block:
             # Try Fernet decryption first (current format).
+            from .loader import decrypt_secrets_block
+
             decrypted = decrypt_secrets_block(secrets_block)
             if decrypted is not None:
                 return decrypted
@@ -205,8 +207,8 @@ class Secrets:
                 loaded = json.loads(decoded)
                 if isinstance(loaded, dict):
                     return loaded
-            except Exception:
-                pass
+            except Exception:  # noqa: S110
+                pass  # Decoding failure — treat block as unset.
             return {}
         return secrets_block if isinstance(secrets_block, dict) else {}
 
