@@ -1,1 +1,0 @@
-Raise `retries` in `agent_definitions/retrospect.yaml` from 2 to 3, consistent with the review and document agents (PR #2692), to reduce hard audit failures from `UnexpectedModelBehavior` output-retry exhaustion.
