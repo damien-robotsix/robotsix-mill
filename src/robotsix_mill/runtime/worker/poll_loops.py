@@ -295,7 +295,7 @@ class PollLoopsMixin(_WorkerBase):
             "robotsix_mill.agents.runners.data_dir_gc:run_data_dir_gc_pass"
         ),
         "credit_balance": (
-            "robotsix_mill.agents.runners.credit_balance_runner:run_credit_balance_check"
+            "robotsix_mill.agents.runners.credit_balance_runner:run_credit_balance_pass"
         ),
         "changelog_autofill": "robotsix_mill.agents.runners.changelog_autofill_runner:run_changelog_autofill_pass",
         "diagnostic": "robotsix_mill.agents.runners.diagnostic_runner:run_diagnostic_pass",
