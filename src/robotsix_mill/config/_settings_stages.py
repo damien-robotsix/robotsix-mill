@@ -277,6 +277,10 @@ class _StagesSettings(BaseModel):
             "changelog/",
             "docs/modules.yaml",
             "site/modules.yaml",
+            # detect-secrets' baseline: regenerated from a whole-repo scan,
+            # so like the registries above its content is a function of the
+            # tree rather than of one branch.
+            ".secrets.baseline",
         ],
         description=(
             "Repo-relative paths/prefixes the post-rebase drop guard ignores "
