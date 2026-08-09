@@ -308,7 +308,15 @@ def resolve_periodic_workflow(
         name=pwf.name,
         kind=kind,
         definition=definition,
-        interval_seconds=pwf.interval_seconds,
+        # Overlay interval_seconds wins; when absent, inherit from the
+        # builtin definition (which may carry its own interval).  Only
+        # when BOTH are absent does the scheduler fall back to the
+        # legacy *_interval_seconds Settings keys.
+        interval_seconds=(
+            pwf.interval_seconds
+            if pwf.interval_seconds is not None
+            else (definition.interval_seconds if definition is not None else None)
+        ),
         enabled=enabled,
     )
 

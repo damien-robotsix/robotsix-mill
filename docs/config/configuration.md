@@ -649,10 +649,16 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
 >
-> ² Most agents default to `604800` (7 days). Exceptions defaulting to `86400` (1 day):
-> `trace_health`, `trace_review`, `config_sync`, `member_sync`, `data_dir_gc`,
-> `langfuse_cleanup`, `changelog_autofill`, `dependabot_ingest`, `orphaned_pr_check`, `pin_bump`, `stale_branch_cleanup`.
-> `timeout_escalation`, `sandbox_reaper`, and `ci_debt_recheck` default to `3600` (1 hour).
+> ² The **primary** interval now lives in each agent's base YAML definition
+> (``agent_definitions/periodic/<name>.yaml``), defaulting to **14 days**
+> (``interval: 14d``, i.e. 1,209,600 seconds) for all built-in periodic
+> agents.  Per-repo overlays (``.robotsix-mill/periodic/<name>.yaml``)
+> can override it per repository.  The ``*_interval_seconds`` Settings
+> keys below are a **fallback** — the scheduler only reads them when
+> neither the base YAML nor an overlay sets an interval.  The code
+> defaults in ``_settings_periodic.py`` are kept at 604800 (7d) for
+> backward compatibility but are superseded in practice by the YAML
+> values.
 >
 > `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` write no
 > per-agent memory ledger (`member_sync` and `diagnostic` are deterministic

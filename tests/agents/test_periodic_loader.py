@@ -39,12 +39,15 @@ def test_name_only_inherits_builtin(tmp_path):
     assert r is not None
     assert r.kind == "llm_agent"
     assert r.enabled is True
-    # inherits the shipped prompt + model
+    # inherits the shipped prompt + model + interval
     from robotsix_mill.agents.yaml_loader import load_agent_definition
 
     builtin = load_agent_definition(Path("agent_definitions/periodic/audit.yaml"))
     assert r.definition.system_prompt == builtin.system_prompt
     assert r.definition.name == "audit"
+    # base YAML interval is inherited (14d = 1,209,600 s)
+    assert r.interval_seconds == 1_209_600
+    assert r.definition.interval_seconds == 1_209_600
 
 
 def test_field_override_merges(tmp_path):
@@ -163,6 +166,8 @@ def test_bespoke_builds_definition(tmp_path):
     assert r.kind == "bespoke"
     assert r.definition.system_prompt == "do the thing"
     assert r.definition.level == 2
+    # No interval set → None, so the scheduler will fall back to Settings.
+    assert r.interval_seconds is None
 
 
 def test_bespoke_empty_level_defaults_to_one(tmp_path):

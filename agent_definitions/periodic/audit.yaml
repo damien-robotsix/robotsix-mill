@@ -12,7 +12,7 @@ category: periodic
 
 # Periodic schedule lives in the agent YAML so a repo can override it
 # by shipping its own .robotsix-mill/agents/audit.yaml clone-side.
-interval: 7d
+interval: 14d
 enabled: true
 
 level: 2

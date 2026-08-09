@@ -554,8 +554,19 @@ Examples:
 - `interval_seconds: 3600` — once per hour
 
 If both `interval` and `interval_seconds` are set, validation fails.
-When `interval_seconds` is absent, the agent inherits the corresponding
-`Settings` field (e.g. `audit_interval_seconds` from config).
+
+**Resolution order** for periodic agents:
+
+1. **Per-repo overlay** (``.robotsix-mill/periodic/<name>.yaml``) — if
+   ``interval`` or ``interval_seconds`` is present, that value wins.
+2. **Base YAML** (``agent_definitions/periodic/<name>.yaml``) — the
+   shipped definition provides a default cadence (14d for all built-in
+   periodic agents).
+3. **Settings fallback** — when neither the overlay nor the base YAML
+   sets an interval, the scheduler falls back to the corresponding
+   ``*_interval_seconds`` config key (e.g. ``audit_interval_seconds``).
+   This is a legacy escape hatch; new agents should declare their
+   interval in the YAML.
 
 ---
 

@@ -9,7 +9,7 @@ description: >-
 
 category: periodic
 
-interval: 1w
+interval: 14d
 enabled: true
 
 level: 2
