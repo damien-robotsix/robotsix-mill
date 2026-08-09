@@ -217,8 +217,32 @@ def _add_changelog_fragment(
 
     target_dir = repo_dir / fragment_dir
     target_dir.mkdir(parents=True, exist_ok=True)
-    path = target_dir / f"{_slugify_ticket(ticket_id)}.{kind}.md"
+    slug = _slugify_ticket(ticket_id)
+    path = target_dir / f"{slug}.{kind}.md"
     path.write_text(summary.rstrip() + "\n", encoding="utf-8")
+
+    # When the agent promotes an auto-draft .misc.md to a higher-priority
+    # type (e.g. .bugfix.md, .change.md), delete the stale .misc.md so
+    # towncrier never renders both — an empty 'Miscellaneous' bullet
+    # alongside the real entry.
+    if kind != "misc":
+        misc_path = target_dir / f"{slug}.misc.md"
+        if misc_path.exists():
+            misc_path.unlink()
+            log.info(
+                "changelog_fragment: removed stale auto-draft %s",
+                misc_path.name,
+            )
+
+    # Guard: no two fragments may carry the same ticket slug/suffix.
+    same_slug = list(target_dir.glob(f"{slug}.*.md"))
+    if len(same_slug) > 1:
+        names = sorted(f.name for f in same_slug)
+        raise RuntimeError(
+            f"changelog_fragment: multiple fragments for ticket {ticket_id!r}: "
+            + ", ".join(names)
+        )
+
     return f"changelog_fragment: wrote {fragment_dir}/{path.name}"
 
 
