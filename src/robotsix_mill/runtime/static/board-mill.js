@@ -2341,7 +2341,7 @@
   var settingsOpen = false;
 
   function openSettings() {
-    if (settingsOpen) { close_(); settingsOpen = false; return; }
+    if (settingsOpen) { closeSettings(); return; }
     if (sel || runsOpen || candidatesOpen) close_();
     settingsOpen = true;
     document.getElementById("d").style.display = "none";

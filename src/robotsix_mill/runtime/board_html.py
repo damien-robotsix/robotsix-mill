@@ -140,8 +140,8 @@ margin-left:4px" title="Component-owned config (Settings panel)">
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>
 {CONFIG_SCRIPT}
 <script type="module">
-  import {{ mountConfigPanel }} from "/static/mill/robotsix-ui-vanilla.js?v={ASSET_VERSION}";
-  mountConfigPanel(document.getElementById("settings-panel"), {{ title: "Settings" }});
+  import { mountConfigPanel } from "/static/mill/robotsix-ui-vanilla.js?v={ASSET_VERSION}";
+  mountConfigPanel(document.getElementById("settings-panel"), { title: "Settings" });
 </script>
 <script src="/static/board.js?v={ASSET_VERSION}"></script>
 <script src="/static/mill/board-mill.js?v={ASSET_VERSION}"></script></body></html>"""
