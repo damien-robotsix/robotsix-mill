@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -66,8 +67,6 @@ def _canonical_config_path() -> Path:
     When ``ROBOTSIX_CONFIG_FILE`` is set, use it; otherwise
     target ``config/config.json`` (never the example file).
     """
-    import os
-
     explicit = os.environ.get("ROBOTSIX_CONFIG_FILE")
     if explicit:
         return Path(explicit)
@@ -331,13 +330,21 @@ def _read_json_config(path: Path) -> dict[str, Any]:
 
 
 def _write_json_config(path: Path, data: dict[str, Any]) -> None:
-    """Write the JSON config file atomically."""
+    """Write the JSON config file atomically.
+
+    Sets restrictive permissions (0o600) on the file after writing
+    because it may contain a ``secrets`` block — secret values are
+    stored at rest in the local config file per the robotsix
+    config-ownership standard.  The file is gitignored and never
+    leaves the machine.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"  # lgtm[py/clear-text-storage-sensitive-data]: secrets at rest in local config file, 0600 perms
     )
     tmp.replace(path)
+    os.chmod(path, 0o600)
 
 
 def update_config(
@@ -466,9 +473,10 @@ def rollback_config(
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = config_path.with_suffix(".tmp")
     tmp.write_text(
-        json.dumps(new_config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        json.dumps(new_config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"  # lgtm[py/clear-text-storage-sensitive-data]: secrets at rest in local config file, 0600 perms
     )
     tmp.replace(config_path)
+    os.chmod(config_path, 0o600)
 
     changed_keys = list(clean_snapshot.keys())
     _record_version(data_dir, get_config(data_dir=data_dir)["config"], changed_keys)
