@@ -128,6 +128,10 @@ class Forge(ABC):
                         ]
                     }
                 ],
+                "pending": [str, ...],
+                "jobs": [
+                    {"name": str, "conclusion": str | None}
+                ]
             }
 
         ``"success"`` = all completed checks pass.
@@ -136,6 +140,12 @@ class Forge(ABC):
         ``"pending"``  = at least one check is not yet complete and none
                          have failed.
         ``None``       = no checks exist at all.
+
+        ``jobs`` is a flat list of every CI job/check for the commit,
+        each with its ``name`` and ``conclusion`` (``"success"``,
+        ``"failure"``, ``"pending"``, ``"skipped"``, ``"cancelled"``,
+        or ``None`` when unknown).  This gives callers a complete
+        per-job picture without needing an external API call.
 
         When *require_checks* is ``True``, an empty check list (no CI
         registered yet for the commit) is classified as ``"pending"``

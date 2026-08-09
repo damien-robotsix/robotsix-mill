@@ -491,8 +491,10 @@ def test_check_status_happy_path(tmp_path, monkeypatch):
     assert result is not None
     assert "conclusion" in result
     assert "failing" in result
+    assert "jobs" in result
     assert result["conclusion"] == "success"
     assert result["failing"] == []
+    assert result["jobs"] == [{"name": "CI / test", "conclusion": "success"}]
 
 
 # ---------------------------------------------------------------------------
