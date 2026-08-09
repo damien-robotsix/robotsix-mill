@@ -1471,6 +1471,80 @@ def test_rebase_sibling_modified_produces_targeted_blocked_message(
     )
 
 
+def test_rebase_drop_messages_do_not_advise_a_retry(tmp_path, monkeypatch):
+    """Neither drop message may tell the operator to resume-and-retry.
+
+    A retry re-runs the same rebase against the same target and reproduces
+    the same result. Measured on the live board: tickets blocked this way
+    accumulated 5, 6 and 7 identical BLOCKED events before anyone looked.
+    Of four such blocks investigated, three were files the target already
+    carried (superseded) and one was a genuine drop — a retry resolves
+    neither. The message must send the operator to a decision instead.
+    """
+    for dropped, sibling in (
+        (["src/gone.py"], []),
+        ([], ["src/superseded.py"]),
+    ):
+        ctx = _gh(tmp_path / f"case{len(dropped)}")
+
+        def fake_rebase(
+            *,
+            settings,
+            repo_dir,
+            branch,
+            target,
+            memory="",
+            remote_url=None,
+            token=None,
+            pre_rebase_files=None,
+            previously_dropped_files=None,
+        ):
+            return RebaseResult(status="DONE", summary="ok")
+
+        monkeypatch.setattr("robotsix_mill.stages.merge.run_rebase_agent", fake_rebase)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.merge.git_ops.post_push_check",
+            lambda *a, **k: PostPushResult.PASS,
+        )
+        monkeypatch.setattr(
+            github.GitHubForge,
+            "pr_status",
+            lambda self, *, source_branch: {
+                "merged": False,
+                "state": "open",
+                "url": "u",
+                "mergeable": False,
+            },
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.merge.git_ops.changed_source_files",
+            lambda repo, target_branch="main", ref="HEAD": ["src/keep.py"],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
+            lambda *a, _d=dropped, _s=sibling, **k: (False, _d, _s),
+        )
+
+        t_ = _in_rebasing(ctx)
+        repo_dir = ctx.service.workspace(t_).dir / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / ".git").mkdir(exist_ok=True)
+
+        out = MergeStage().run(t_, ctx)
+        note = (out.note or "").lower()
+        assert out.next_state is State.BLOCKED
+        assert "resume-blocked to retry" not in note, (
+            f"rebase-drop message still advises a retry: {out.note!r}"
+        )
+        # It must instead point at how to decide.
+        assert "supersed" in note or "close the ticket" in note, (
+            f"message gives no way to decide the case: {out.note!r}"
+        )
+
+
 def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
     """When a prior rebase dropped files (recorded in rebase_dropped_files.txt),
     the next run_rebase_agent call receives them as previously_dropped_files."""
