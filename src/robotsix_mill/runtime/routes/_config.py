@@ -7,6 +7,7 @@ rejected on write — they remain env-injected by the deploy plane.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -21,6 +22,8 @@ from robotsix_mill.runtime.config_service import (
     update_config,
 )
 from robotsix_mill.runtime.deps import get_settings
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Config"])
 
@@ -49,6 +52,23 @@ def config_put(
                 "type": "urn:robotsix:error:config-validation",
                 "title": "Config validation failed",
                 "detail": str(exc),
+                "instance": str(request.url.path),
+            },
+        )
+    except Exception:
+        log.exception(
+            "config_put: unhandled error applying updates %s",
+            str(list(updates.keys())).replace("\n", "\\n").replace("\r", "\\r"),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "type": "urn:robotsix:error:config-write",
+                "title": "Config write failed",
+                "detail": (
+                    "An internal error occurred while writing the config update. "
+                    "Check the server logs for details."
+                ),
                 "instance": str(request.url.path),
             },
         )
@@ -91,6 +111,23 @@ def config_rollback(
                 "type": "urn:robotsix:error:config-validation",
                 "title": "Config validation failed",
                 "detail": str(exc),
+                "instance": str(request.url.path),
+            },
+        )
+    except Exception:
+        log.exception(
+            "config_rollback: unhandled error rolling back to version %s",
+            str(target_version).replace("\n", "\\n").replace("\r", "\\r"),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "type": "urn:robotsix:error:config-write",
+                "title": "Config rollback failed",
+                "detail": (
+                    "An internal error occurred while rolling back the config. "
+                    "Check the server logs for details."
+                ),
                 "instance": str(request.url.path),
             },
         )

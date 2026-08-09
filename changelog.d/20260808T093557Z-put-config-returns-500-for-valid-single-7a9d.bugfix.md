@@ -1,0 +1,1 @@
+`PUT /config` no longer returns 500 for configs with nested model blocks (e.g. `langfuse`). Pydantic model instances are now serialized to plain dicts in `get_config()`, and `_record_version()` has a fallback JSON encoder with warning logging so future serialization gaps don't silently crash the write path.
