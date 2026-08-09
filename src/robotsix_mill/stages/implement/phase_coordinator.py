@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ...agents.runners.pass_runner import load_memory
 from ...agents.testing import ENV_ERROR_PREFIX
@@ -17,8 +18,6 @@ from ...vcs import git_ops
 from .. import short_circuit_verify
 from .._conventional import conventional_subject, drop_fragments
 from ..base import Outcome, StageContext
-from typing import Any
-
 from ..pause import (
     build_compact_resume_message_history,
     check_for_pause,

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import Column, TypeDecorator
 from sqlalchemy import String as SAString
@@ -18,7 +19,6 @@ from sqlmodel import Field, SQLModel
 
 from .datetime_utils import TZDateTime
 from .states import State
-from typing import Any
 
 
 class SourceKind(StrEnum):

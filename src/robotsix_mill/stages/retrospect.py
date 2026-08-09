@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import timezone
+from datetime import UTC
+from typing import Any
 
 from ..agents import retrospecting
 from ..agents.retrospecting import MemoryEdit, RetrospectResult
@@ -27,7 +28,6 @@ from ..forge import get_forge
 from ..langfuse import client as langfuse_client
 from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
-from typing import Any
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
 
@@ -468,7 +468,7 @@ class RetrospectStage(Stage):
 
         from ..core.dedup import find_agent_md_proposal_overlap
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         kept: list[dict[str, Any]] = []
         for prop in proposals:
             section = prop.get("section", "")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 from ...agents import coding
 from ...agents.coding import AgentBudgetError, AgentRunError
@@ -18,8 +19,6 @@ from ...core.states import State
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
-from typing import Any
-
 from ..pause import (
     acknowledge_unanswered_threads,
     save_conversation_state,

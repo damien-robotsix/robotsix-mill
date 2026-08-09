@@ -14,6 +14,7 @@ all three mixins), shared helpers, and repo-CRUD operations
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from ._http import _ApiClient
 from .base import Forge, NotConfiguredError, RepoInfo
@@ -22,7 +23,6 @@ from .github_code_scanning import GitHubForgeCodeScanningMixin
 from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
 from .github_security import GitHubForgeSecurityMixin
-from typing import Any
 
 # ---------------------------------------------------------------------------
 # Shared module-level helpers

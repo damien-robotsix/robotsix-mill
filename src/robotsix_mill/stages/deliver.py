@@ -54,6 +54,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ..agents.base import build_agent
 from ..agents.retry import run_agent
@@ -67,7 +68,6 @@ from ..forge.github import _parse_owner_repo
 from ..vcs import git_ops
 from ._conventional import conventional_subject
 from .base import Outcome, Stage, StageContext
-from typing import Any
 
 log = logging.getLogger("robotsix_mill.stages.deliver")
 

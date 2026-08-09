@@ -5,6 +5,7 @@ Split from ``github.py``.  Defines ``GitHubForgeCodeScanningMixin`` that
 """
 
 from __future__ import annotations
+
 from typing import Any
 
 

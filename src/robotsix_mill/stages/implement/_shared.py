@@ -20,7 +20,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..base import Outcome
 

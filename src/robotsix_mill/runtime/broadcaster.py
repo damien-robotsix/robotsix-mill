@@ -9,9 +9,9 @@ import contextlib
 import json
 import logging
 from asyncio import Queue
+from typing import Any
 
 from ..core.models import Ticket
-from typing import Any
 
 log = logging.getLogger(__name__)
 

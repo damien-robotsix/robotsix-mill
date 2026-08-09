@@ -6,6 +6,8 @@ that were previously defined inside ``create_app()``.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException, Query, Request
 
 from ..config import RepoConfig, ReposRegistry, Settings
@@ -16,7 +18,6 @@ from ..forge import get_forge
 from .broadcaster import BoardBroadcaster
 from .run_registry import RunRegistry
 from .worker import Worker
-from typing import Any
 
 
 def get_service(request: Request) -> TicketService:

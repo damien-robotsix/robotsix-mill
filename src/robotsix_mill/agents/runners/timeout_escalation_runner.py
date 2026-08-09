@@ -8,8 +8,8 @@ no pass_runner, no Langfuse tracing.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import select
 
@@ -74,7 +74,7 @@ def run_timeout_escalation(settings: Settings) -> dict[str, Any]:
         return {"escaped": 0, "skipped": 0}
 
     boards = _boards_to_scan(settings)
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=threshold)
+    cutoff = datetime.now(UTC) - timedelta(seconds=threshold)
 
     escalated = 0
     skipped = 0
@@ -133,9 +133,7 @@ def run_timeout_escalation(settings: Settings) -> dict[str, Any]:
                         continue
 
                 # Calculate staleness for the comment.
-                stale_delta = datetime.now(timezone.utc) - ticket.updated_at.replace(
-                    tzinfo=timezone.utc
-                )
+                stale_delta = datetime.now(UTC) - ticket.updated_at.replace(tzinfo=UTC)
                 stale_days = max(1, stale_delta.days)
 
                 # Build the escalation note (fits in a 200-char transition note).

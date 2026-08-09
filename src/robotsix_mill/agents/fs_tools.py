@@ -14,6 +14,7 @@ import contextlib
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic_ai import RunContext
@@ -23,7 +24,6 @@ from ..config import Settings
 from ..core.repo_layout import src_path_candidates
 from ..runtime.tracing import trace_stage
 from .periodic_loader import validate_periodic_file_content
-from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -510,8 +510,7 @@ def build_fs_tools(
                     if not tc_id:
                         continue
                     o = args.get("offset", 1) or 1
-                    if o < 1:
-                        o = 1
+                    o = max(o, 1)
                     lim = args.get("limit")
                     call_info[tc_id] = (o, lim)
 
@@ -748,7 +747,7 @@ def build_fs_tools(
                 )
 
         # Normalize offset (offset ≤ 0 is treated as 1).
-        _offset = offset if offset >= 1 else 1
+        _offset = max(offset, 1)
         is_full_read = _offset == 1 and limit is None
 
         # Refuse partial slices when the file's content (or the

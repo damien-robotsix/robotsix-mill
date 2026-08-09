@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -22,7 +23,6 @@ from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from ..core.models import Ticket
 from .prompt_blocks import section
-from typing import Any
 
 
 class DedupResult(BaseModel):

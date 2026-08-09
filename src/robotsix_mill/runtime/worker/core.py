@@ -12,8 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterator
-from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config
 from ...core.models import TicketKind
@@ -87,7 +87,7 @@ def _count_inflight_prs(service: TicketService) -> int:
     unreadable is COUNTED, so a parsing edge case can never silently
     disable the cap.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     n = 0
     for t in service.list():
         if t.state not in _IN_FLIGHT_PR_STATES:
@@ -95,7 +95,7 @@ def _count_inflight_prs(service: TicketService) -> int:
         updated = getattr(t, "updated_at", None)
         if updated is not None:
             if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
+                updated = updated.replace(tzinfo=UTC)
             if (now - updated).total_seconds() > _INFLIGHT_PR_STALE_SECONDS:
                 # stuck/stale → not an active slot; skip (don't gate fresh work)
                 continue

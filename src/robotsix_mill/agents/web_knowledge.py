@@ -48,10 +48,10 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
-from typing import Any
 
 log = logging.getLogger(__name__)
 

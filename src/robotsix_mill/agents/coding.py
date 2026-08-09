@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings
 from ..vcs.git_ops import _git
-from typing import Any
 
 log = logging.getLogger("robotsix_mill.coding")
 

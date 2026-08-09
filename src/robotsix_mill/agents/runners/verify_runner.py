@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlmodel import select
 
@@ -10,7 +11,6 @@ from ...config import Settings
 from ...core import db
 from ...core.models import TicketEvent
 from ...core.service import _event_hash
-from typing import Any
 
 
 @dataclass

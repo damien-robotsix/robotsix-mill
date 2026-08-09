@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
@@ -12,8 +13,6 @@ from ...core.models import CommentCreate, TicketRead
 from ...core.service import TicketService
 from ...core.states import STAGE_FOR_STATE, State
 from ...deploy import check_deploy_freshness
-from typing import Any
-
 from ..deps import (
     enrich_ticket_read,
     get_service,

@@ -12,6 +12,7 @@ uses.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -19,8 +20,6 @@ from ...config import Settings
 from ...core.models import Ticket
 from ...core.states import State
 from ..board_adapter import MillBoardAdapter
-from typing import Any
-
 from ..deps import (
     enrich_ticket_read,
     get_service,

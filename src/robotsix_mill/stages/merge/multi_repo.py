@@ -7,12 +7,12 @@ per-repo status polling, inline ci-fix and rebase recovery, and auto-merge.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ...config import ConfigError, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
 from ...forge import get_forge
-from typing import Any
 
 # _resolve_remote_url, github_token, load_memory, persist_memory
 # are accessed through the _facade import inside method bodies

@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
 from ..config import Settings
 from .prompt_blocks import section
-from typing import Any
 
 
 class ObsolescenceResult(BaseModel):

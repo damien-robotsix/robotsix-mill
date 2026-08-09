@@ -15,6 +15,7 @@ import logging
 import time
 from collections import Counter
 from datetime import UTC, datetime
+from typing import Any
 
 from ...core.models import Ticket, TicketKind
 from ...core.service._helpers import TransitionError
@@ -27,7 +28,6 @@ from .. import tracing
 from ..tracing import langfuse_trace_url
 from ..transient_errors import first_full_path
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
-from typing import Any
 
 log = logging.getLogger("robotsix_mill.worker")
 

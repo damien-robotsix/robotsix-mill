@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -12,8 +13,6 @@ from ...core.models import TicketRead
 from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
-from typing import Any
-
 from ...stages.merge import (
     _changelog_warnings_for_ticket,
     _verify_merge_ancestor,
