@@ -220,4 +220,44 @@ def drop_fragments(repo_dir: Path, ticket_id: str) -> list[Path]:
                 directory.rmdir()
         except OSError:
             pass
+
+    _unclaim(repo_dir, removed)
     return removed
+
+
+def _unclaim(repo_dir: Path, removed: list[Path]) -> None:
+    """Drop deleted fragments from ``docs/modules.yaml``.
+
+    The implement agent registers the fragment it writes, so deleting the
+    file without the claim leaves the registry pointing at nothing and the
+    drift check fails with "matches no files on disk" — turning a cleanup
+    into a red PR.
+    """
+    if not removed:
+        return
+    modules = repo_dir / "docs" / "modules.yaml"
+    if not modules.is_file():
+        return
+
+    names = {p.name for p in removed}
+    try:
+        lines = modules.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        log.warning("could not read %s", modules, exc_info=True)
+        return
+
+    kept = [
+        line
+        for line in lines
+        if not (line.lstrip().startswith("- ") and any(n in line for n in names))
+    ]
+    if len(kept) == len(lines):
+        return
+    try:
+        modules.write_text("".join(kept), encoding="utf-8")
+    except OSError:
+        log.warning("could not rewrite %s", modules, exc_info=True)
+        return
+    log.info(
+        "unclaimed %d fragment path(s) from docs/modules.yaml", len(lines) - len(kept)
+    )

@@ -194,3 +194,54 @@ def test_record_kind_tolerates_a_missing_dir_and_a_none_kind(tmp_path):
     record_kind(None, "feature")  # no artifacts dir
     record_kind(tmp_path / "new", None)  # nothing to record
     assert not (tmp_path / "new" / "changelog_kind.txt").exists()
+
+
+def _modules_yaml(repo: Path, *entries: str) -> Path:
+    d = repo / "docs"
+    d.mkdir(exist_ok=True)
+    body = "modules:\n  - id: housekeeping\n    paths:\n"
+    body += "".join(f"      - {e}\n" for e in entries)
+    p = d / "modules.yaml"
+    p.write_text(body)
+    return p
+
+
+def test_dropping_a_fragment_also_unclaims_it_in_modules_yaml(tmp_path):
+    """Otherwise the drift check fails with 'matches no files on disk'."""
+    repo = _repo(tmp_path)
+    _fragment(repo, "bugfix")
+    my = _modules_yaml(
+        repo,
+        "src/**/*.py",
+        f"changelog.d/{TICKET}.bugfix.md",
+    )
+
+    drop_fragments(repo, TICKET)
+
+    text = my.read_text()
+    assert f"{TICKET}.bugfix.md" not in text
+    assert "src/**/*.py" in text
+
+
+def test_unclaim_leaves_another_tickets_claim_alone(tmp_path):
+    other = "20260809T000000Z-someone-else-9999"
+    repo = _repo(tmp_path)
+    _fragment(repo, "bugfix")
+    _fragment(repo, "feature", ticket=other)
+    my = _modules_yaml(
+        repo,
+        f"changelog.d/{TICKET}.bugfix.md",
+        f"changelog.d/{other}.feature.md",
+    )
+
+    drop_fragments(repo, TICKET)
+
+    text = my.read_text()
+    assert f"{TICKET}.bugfix.md" not in text
+    assert f"{other}.feature.md" in text
+
+
+def test_unclaim_is_a_noop_without_modules_yaml(tmp_path):
+    repo = _repo(tmp_path)
+    _fragment(repo, "misc")
+    assert drop_fragments(repo, TICKET)  # does not raise
