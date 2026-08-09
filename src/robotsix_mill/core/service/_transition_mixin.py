@@ -75,19 +75,56 @@ def _clear_stale_implement_guard(ws: Workspace) -> None:
     Best-effort and silent when absent — an operator override note is
     the explicit signal that a retry is wanted despite the guard.
 
-    Before deleting, the stall-detection state (summary-fingerprint
-    and stall-count) is extracted from ``implement.md`` and persisted
-    to ``implement_stall_state.json`` so the cross-spawn stall guard
-    survives operator-initiated resume/reset cycles.  The
-    spec-fingerprint is also persisted to ``implement_spec_override``
-    so the stale-spec guard stays suppressed across subsequent spawns
-    for the same ticket lifecycle — re-blocking only when the spec
-    actually changes.
+    Before deleting, the stall-detection state (summary-fingerprint)
+    is extracted from ``implement.md`` and persisted to
+    ``implement_stall_state.json`` so the cross-spawn stall guard keeps
+    its comparison baseline across operator-initiated resume/reset
+    cycles.  The counter itself is reset to zero: the note IS the
+    override, and a stall count that survives it made the guard
+    terminal — nothing but a progressing implement pass clears the
+    counter, and the guard blocks before that pass can run.  The
+    fingerprint is retained so an attempt that once again returns a
+    byte-identical summary re-trips the guard on its very next cycle.
+
+    The spec-fingerprint is persisted to ``implement_spec_override``
+    and the current branch tip to ``implement_changelog_override`` so
+    the stale-spec and changelog-only guards stay suppressed for this
+    exact spec / branch state — re-arming as soon as either moves.
     """
-    _persist_stall_state_from_implement_md(ws)
+    _persist_stall_state_from_implement_md(ws, reset_count=True)
     _persist_spec_fingerprint_override(ws)
+    _persist_changelog_guard_override(ws)
     with contextlib.suppress(FileNotFoundError):
         (ws.artifacts_dir / "implement.md").unlink()
+
+
+def _persist_changelog_guard_override(ws: Workspace) -> None:
+    """Record the current branch tip in ``implement_changelog_override``.
+
+    Tells the preflight changelog-only guard that the operator has
+    explicitly authorised one fresh attempt at this exact branch state.
+    Once the attempt commits anything the tip moves and the guard
+    re-arms on its own.
+
+    Best-effort — silently no-ops when the workspace has no clone yet.
+    """
+    repo_dir = ws.dir / "repo"
+    if not (repo_dir / ".git").exists():
+        return
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+    except (subprocess.SubprocessError, OSError):  # fmt: skip
+        return
+    if head:
+        with contextlib.suppress(OSError):
+            (ws.artifacts_dir / "implement_changelog_override").write_text(
+                head, encoding="utf-8"
+            )
 
 
 def _persist_spec_fingerprint_override(ws: Workspace) -> None:
@@ -120,10 +157,16 @@ def _persist_spec_fingerprint_override(ws: Workspace) -> None:
             return
 
 
-def _persist_stall_state_from_implement_md(ws: Workspace) -> None:
+def _persist_stall_state_from_implement_md(
+    ws: Workspace, *, reset_count: bool = False
+) -> None:
     """Extract ``summary-fingerprint`` and ``stall-count`` from
     ``artifacts/implement.md`` and persist them to
     ``artifacts/implement_stall_state.json``.
+
+    With *reset_count* the counter is zeroed while the fingerprint is
+    kept — the operator override path, which wants a fresh attempt but
+    still wants an identical re-run caught immediately.
 
     Best-effort — silently no-ops when ``implement.md`` is absent or
     unreadable.  The JSON file provides stall-detection continuity
@@ -132,12 +175,28 @@ def _persist_stall_state_from_implement_md(ws: Workspace) -> None:
     """
     import json
 
+    state_path = ws.artifacts_dir / "implement_stall_state.json"
     md_path = ws.artifacts_dir / "implement.md"
-    if not md_path.exists():
-        return
-    try:
-        md_content = md_path.read_text(encoding="utf-8")
-    except OSError:
+    md_content = ""
+    if md_path.exists():
+        try:
+            md_content = md_path.read_text(encoding="utf-8")
+        except OSError:
+            md_content = ""
+    if not md_content:
+        # Nothing to extract.  An override still has to zero any
+        # counter a previous cycle left behind in the JSON — that
+        # leftover is the whole reason the stall guard could outlive
+        # every resume-blocked and pin a ticket to BLOCKED for good.
+        if reset_count and state_path.exists():
+            try:
+                prev = json.loads(state_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError, OSError:  # fmt: skip
+                prev = {}
+            if prev.get("stall_count"):
+                prev["stall_count"] = 0
+                with contextlib.suppress(OSError):
+                    state_path.write_text(json.dumps(prev), encoding="utf-8")
         return
     summary_fp = ""
     stall_count = 0
@@ -149,9 +208,11 @@ def _persist_stall_state_from_implement_md(ws: Workspace) -> None:
                 stall_count = int(line.split("stall-count: ", 1)[1].strip())
             except ValueError:
                 stall_count = 0
-    if summary_fp or stall_count:
+    if reset_count:
+        stall_count = 0
+    if summary_fp or stall_count or reset_count:
         with contextlib.suppress(OSError):
-            (ws.artifacts_dir / "implement_stall_state.json").write_text(
+            state_path.write_text(
                 json.dumps(
                     {"summary_fingerprint": summary_fp, "stall_count": stall_count}
                 ),

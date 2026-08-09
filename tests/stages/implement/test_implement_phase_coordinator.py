@@ -2001,8 +2001,10 @@ def test_finalize_extra_roots_regenerates_config_schema(
 def test_resume_clears_cached_summary_and_ref_files(ctx_factory, tmp_path, monkeypatch):
     """After resume-blocked (with note, dst=READY), implement_summary.md
     and reference_files.json are deleted so the next implement cycle
-    does not feed the agent its own prior summary as context.  The stall
-    state survives in implement_stall_state.json."""
+    does not feed the agent its own prior summary as context.  The
+    stall FINGERPRINT survives in implement_stall_state.json; the
+    counter is zeroed — see
+    ``test_resume_blocked_note_resets_stall_counter``."""
     ctx = ctx_factory()
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
@@ -2046,13 +2048,62 @@ def test_resume_clears_cached_summary_and_ref_files(ctx_factory, tmp_path, monke
     assert not (ws.artifacts_dir / "implement_conversation_state.json").exists()
     # Spawn counter is reset.
     assert not (ws.artifacts_dir / "implement_spawn_count").exists()
-    # Stall state survives in JSON.
+    # The comparison baseline survives in JSON; the counter does not.
     assert (ws.artifacts_dir / "implement_stall_state.json").exists()
     ss = json.loads(
         (ws.artifacts_dir / "implement_stall_state.json").read_text(encoding="utf-8")
     )
-    assert ss["stall_count"] == 1
+    assert ss["stall_count"] == 0
     assert ss["summary_fingerprint"] == "cafebabe00000000"
+
+
+def test_resume_blocked_note_resets_stall_counter(ctx_factory, tmp_path):
+    """A stall count that outlives resume-blocked makes the preflight
+    stall guard terminal: only a progressing implement pass resets the
+    counter, and the guard blocks before that pass can run.  The
+    operator note IS the override, so it zeroes the counter — including
+    when implement.md is already gone and the count lives only in the
+    JSON, which is the state every earlier resume left behind."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    ctx.service.transition(t.id, State.BLOCKED, note="stall guard")
+    (ws.artifacts_dir / "implement_stall_state.json").write_text(
+        json.dumps({"summary_fingerprint": "cafebabe00000000", "stall_count": 4}),
+        encoding="utf-8",
+    )
+
+    assert ctx.service.resume_blocked(t.id, note="retry").state is State.READY
+
+    ss = json.loads(
+        (ws.artifacts_dir / "implement_stall_state.json").read_text(encoding="utf-8")
+    )
+    assert ss["stall_count"] == 0
+    # Baseline kept: an identical next summary re-trips on the very
+    # next cycle rather than silently starting from scratch.
+    assert ss["summary_fingerprint"] == "cafebabe00000000"
+
+
+def test_resume_blocked_without_note_keeps_stall_counter(ctx_factory, tmp_path):
+    """No note, no override — a bare resume must not launder the stall
+    counter away."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    ctx.service.transition(t.id, State.BLOCKED, note="stall guard")
+    (ws.artifacts_dir / "implement_stall_state.json").write_text(
+        json.dumps({"summary_fingerprint": "cafebabe00000000", "stall_count": 4}),
+        encoding="utf-8",
+    )
+
+    ctx.service.resume_blocked(t.id)
+
+    ss = json.loads(
+        (ws.artifacts_dir / "implement_stall_state.json").read_text(encoding="utf-8")
+    )
+    assert ss["stall_count"] == 4
 
 
 # --- _validate_changelog_fragments ---------------------------------------

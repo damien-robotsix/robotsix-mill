@@ -27,6 +27,7 @@ from typing import Any, cast
 from ...agents import refining
 from ...agents.standards import fetch_standards_context
 from ...config.settings import Settings
+from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import Ticket
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -325,13 +326,15 @@ class RefineAgentMixin:
     ) -> tuple[str | None, set[int]]:
         """Gather open reviewer comments for the sendback guard.
 
-        ``mill`` and ``system`` author comments (trace-link auto-posts
-        from runtime.worker._post_trace_comment; timeout-escalation
-        pings) are diagnostic notes, not human feedback. Including
-        them taught refine to treat an inaccessible Langfuse URL as
-        reviewer comments and ask_user what the reviewer said.
+        Authors in ``NON_FEEDBACK_AUTHORS`` are excluded: ``mill`` /
+        ``system`` are diagnostic auto-posts (trace links,
+        timeout-escalation pings) — including them taught refine to
+        treat an inaccessible Langfuse URL as reviewer comments and
+        ask_user what the reviewer said — and ``operator`` is the
+        human's own resume-blocked justification, which no reviewer
+        ever closes.
         """
-        _NON_FEEDBACK_AUTHORS = {"mill", "system"}
+        _NON_FEEDBACK_AUTHORS = NON_FEEDBACK_AUTHORS
         reviewer_comments: str | None = None
         open_thread_ids: set[int] = set()
         try:

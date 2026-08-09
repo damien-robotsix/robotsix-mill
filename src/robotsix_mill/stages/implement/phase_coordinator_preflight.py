@@ -21,6 +21,7 @@ from ..._resources import agent_definitions_dir
 from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...agents.yaml_loader import load_agent_definition
 from ...config import effective_target_branch
+from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import Comment, Ticket, TicketKind
 from ...core.states import State
 from ...deploy import check_deploy_freshness
@@ -387,27 +388,52 @@ def run_preflight_checks(
     return None
 
 
+def _is_changelog_path(path: str) -> bool:
+    """True for paths that only carry changelog prose.
+
+    ``CHANGELOG.md`` counts alongside ``changelog.d/`` fragments: an
+    attempt that rewrote the rendered changelog and nothing else is
+    just as much a no-op against open review feedback.
+    """
+    return path.startswith("changelog.d/") or path == "CHANGELOG.md"
+
+
 def _changelog_only_review_respawn_guard(
     ticket: Ticket,
     ctx: StageContext,
 ) -> Outcome | None:
     """Detect a changelog-only re-attempt with unaddressed review feedback.
 
-    A review re-spawn whose previous implement attempt committed only
-    changelog fragment(s) while review threads remain open would
-    re-review the same diff and burn the remaining spawn budget.
-    Returns the BLOCKED outcome for preflight to short-circuit with,
-    or ``None`` when the guard does not apply.
+    A review re-spawn whose branch carries only changelog fragment(s)
+    while review threads remain open would re-review the same diff and
+    burn the remaining spawn budget.  Returns the BLOCKED outcome for
+    preflight to short-circuit with, or ``None`` when the guard does
+    not apply.
+
+    The verdict is taken over the WHOLE branch diff
+    (``origin/<target>...HEAD``), not the tip commit.  Implement
+    routinely lands its code in one commit and the changelog fragment
+    in a follow-up, so a tip-commit check called every such attempt
+    changelog-only and blocked tickets whose branch held a full
+    implementation (ticket aadb: eight source files in HEAD~1, blocked
+    on a HEAD that added one ``.feature.md``).
+
+    Like the stale-spec guard above, the block is suppressed while a
+    matching ``implement_changelog_override`` marker is present —
+    written by ``_clear_stale_implement_guard`` on an operator
+    ``resume-blocked`` with a justification note.  Without an escape
+    hatch this guard was terminal: it fires from repo state alone, and
+    the only thing that can change that state is the implement pass it
+    refuses to spawn, so the ticket ping-pongs BLOCKED→READY→BLOCKED
+    forever.  The marker holds the branch tip it was granted for, so
+    one override buys exactly one fresh attempt — if that attempt again
+    commits nothing but changelog, HEAD has moved and the guard re-arms.
     """
     ws = ctx.service.workspace(ticket)
     repo_dir = ws.dir / "repo"
     if ticket.review_rounds <= 0 or not (repo_dir / ".git").exists():
         return None
 
-    # ``mill``/``system`` comments are diagnostic auto-posts (trace
-    # links, timeout-escalation pings), not reviewer feedback — the
-    # same filter refine's sendback guard uses.
-    non_feedback_authors = {"mill", "system"}
     comments: list[Comment] = []
     try:
         comments = ctx.service.list_comments(ticket.id)
@@ -418,39 +444,29 @@ def _changelog_only_review_respawn_guard(
         for c in comments
         if c.parent_id is None
         and c.closed_at is None
-        and c.author not in non_feedback_authors
+        and c.author not in NON_FEEDBACK_AUTHORS
     ]
     if not open_feedback:
         return None
 
     target = effective_target_branch(ctx.settings, ctx.repo_config)
     try:
-        ahead = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo_dir),
-                "rev-list",
-                "--count",
-                f"origin/{target}..HEAD",
-            ],
+        head = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             timeout=10,
         ).stdout.strip()
-        if not ahead or int(ahead) <= 0:
-            return None
-        last_files = [
+        branch_files = [
             ln.strip()
             for ln in subprocess.run(
                 [
                     "git",
                     "-C",
                     str(repo_dir),
-                    "show",
+                    "diff",
                     "--name-only",
-                    "--format=",
-                    "HEAD",
+                    f"origin/{target}...HEAD",
                 ],
                 capture_output=True,
                 text=True,
@@ -458,18 +474,26 @@ def _changelog_only_review_respawn_guard(
             ).stdout.splitlines()
             if ln.strip()
         ]
-    except (subprocess.SubprocessError, OSError, ValueError):  # fmt: skip
+    except (subprocess.SubprocessError, OSError):  # fmt: skip
         return None
-    if not last_files or not all(f.startswith("changelog.d/") for f in last_files):
+    if not branch_files or not all(_is_changelog_path(f) for f in branch_files):
         return None
+
+    override_path = ws.artifacts_dir / "implement_changelog_override"
+    if head and override_path.exists():
+        try:
+            if override_path.read_text(encoding="utf-8").strip() == head:
+                return None
+        except OSError:
+            pass
 
     gaps = "\n".join(f"- [review #{c.id}] {c.body.strip()}" for c in open_feedback)
     return Outcome(
         State.BLOCKED,
         "changelog-only re-attempt with unaddressed review "
-        "feedback — the previous implement attempt committed "
-        "only changelog fragment(s) while review threads are "
-        "still open; re-spawning would re-review the same "
-        "diff without addressing the feedback.  "
-        "Unaddressed review feedback:\n" + gaps,
+        "feedback — the branch carries only changelog fragment(s) "
+        "while review threads are still open; re-spawning would "
+        "re-review the same diff without addressing the feedback.  "
+        "Resume-blocked WITH a justification note to force one fresh "
+        "attempt.  Unaddressed review feedback:\n" + gaps,
     )

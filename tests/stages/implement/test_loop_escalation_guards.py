@@ -135,6 +135,59 @@ def test_changelog_only_review_respawn_blocks_in_preflight(
         implement_max_spawns_per_ticket="10",
     )
     t = _ticket(ctx)
+    _write_file_map(ctx, t, "changelog.d/+noop.bugfix.md")
+
+    monkeypatch.setattr(
+        ImplementStage,
+        "_run_prerequisite_gate",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _agent(*, repo_dir, **_kwargs):
+        frag = Path(repo_dir) / "changelog.d" / "+noop.bugfix.md"
+        frag.parent.mkdir(exist_ok=True)
+        frag.write_text("changelog-only no-op\n")
+        return ("done", ["changelog.d/+noop.bugfix.md"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+
+    out1 = ImplementStage().run(t, ctx)
+    assert out1.next_state is not State.BLOCKED
+
+    # The whole branch is changelog prose and a review thread is open —
+    # a re-spawn would re-review an identical diff.
+    ctx.service.set_review_rounds(t.id, 1)
+    c = ctx.service.add_comment(
+        t.id,
+        "gap: LICENSE check missing",
+        author="reviewer",
+    )
+
+    t = ctx.service.get(t.id)
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "changelog-only" in out.note.lower()
+    assert "gap: LICENSE check missing" in out.note
+    assert f"#{c.id}" in out.note
+
+
+def test_changelog_tip_over_real_code_not_blocked(ctx_factory, tmp_path, monkeypatch):
+    """Implement commonly lands code in one commit and the changelog
+    fragment in a follow-up.  The guard reads the whole branch diff, so
+    a changelog-only TIP over a branch that carries real code must not
+    block (ticket aadb: eight source files in HEAD~1, blocked on a HEAD
+    that added one .feature.md)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="10",
+    )
+    t = _ticket(ctx)
     _write_file_map(ctx, t, "feature.txt")
 
     monkeypatch.setattr(
@@ -153,13 +206,11 @@ def test_changelog_only_review_respawn_blocks_in_preflight(
     out1 = ImplementStage().run(t, ctx)
     assert out1.next_state is not State.BLOCKED
 
-    # Simulate the no-progress re-spawn: a changelog-only commit lands
-    # on the branch while a review thread is still open.
     ws = ctx.service.workspace(t)
     repo_dir = ws.dir / "repo"
     frag = repo_dir / "changelog.d" / "+noop.bugfix.md"
     frag.parent.mkdir(exist_ok=True)
-    frag.write_text("changelog-only no-op\n")
+    frag.write_text("fragment for the code above\n")
     _git(repo_dir, "add", "-A")
     _git(
         repo_dir,
@@ -173,20 +224,114 @@ def test_changelog_only_review_respawn_blocks_in_preflight(
         "changelog only",
     )
     ctx.service.set_review_rounds(t.id, 1)
-    c = ctx.service.add_comment(
-        t.id,
-        "gap: LICENSE check missing",
-        author="reviewer",
-    )
+    ctx.service.add_comment(t.id, "gap: LICENSE check missing", author="reviewer")
 
     t = ctx.service.get(t.id)
-    out = ImplementStage().preflight(t, ctx)
+    assert ImplementStage().preflight(t, ctx) is None
 
-    assert out is not None
-    assert out.next_state is State.BLOCKED
-    assert "changelog-only" in out.note.lower()
-    assert "gap: LICENSE check missing" in out.note
-    assert f"#{c.id}" in out.note
+
+def test_operator_note_alone_does_not_arm_changelog_guard(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """``operator`` comments are the human's own resume-blocked
+    justification — nothing ever closes them, so counting one as
+    unaddressed review feedback made every manual unblock re-arm the
+    guard it was meant to clear."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "changelog.d/+noop.bugfix.md")
+
+    monkeypatch.setattr(
+        ImplementStage,
+        "_run_prerequisite_gate",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _agent(*, repo_dir, **_kwargs):
+        frag = Path(repo_dir) / "changelog.d" / "+noop.bugfix.md"
+        frag.parent.mkdir(exist_ok=True)
+        frag.write_text("changelog-only no-op\n")
+        return ("done", ["changelog.d/+noop.bugfix.md"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+    assert ImplementStage().run(t, ctx).next_state is not State.BLOCKED
+
+    ctx.service.set_review_rounds(t.id, 1)
+    ctx.service.add_comment(t.id, "Operator sweep: bulk triage.", author="operator")
+
+    t = ctx.service.get(t.id)
+    assert ImplementStage().preflight(t, ctx) is None
+
+
+def test_resume_blocked_note_releases_changelog_guard_once(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """The guard fires from repo state alone, and only an implement pass
+    can change that state — so without an escape hatch a blocked ticket
+    ping-ponged BLOCKED→READY→BLOCKED forever.  A resume-blocked note
+    buys exactly one fresh attempt: the marker pins the branch tip it
+    was granted for, and the guard re-arms once HEAD moves."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="10",
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "changelog.d/+noop.bugfix.md")
+
+    monkeypatch.setattr(
+        ImplementStage,
+        "_run_prerequisite_gate",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _agent(*, repo_dir, **_kwargs):
+        frag = Path(repo_dir) / "changelog.d" / "+noop.bugfix.md"
+        frag.parent.mkdir(exist_ok=True)
+        frag.write_text("changelog-only no-op\n")
+        return ("done", ["changelog.d/+noop.bugfix.md"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+    assert ImplementStage().run(t, ctx).next_state is not State.BLOCKED
+
+    ctx.service.set_review_rounds(t.id, 1)
+    ctx.service.add_comment(t.id, "gap: LICENSE check missing", author="reviewer")
+    t = ctx.service.get(t.id)
+    assert ImplementStage().preflight(t, ctx) is not None
+
+    ctx.service.transition(t.id, State.BLOCKED, note="changelog-only re-attempt")
+    ctx.service.resume_blocked(t.id, note="verified by hand — retry once")
+    t = ctx.service.get(t.id)
+    assert ImplementStage().preflight(t, ctx) is None
+
+    # A second changelog-only commit moves HEAD past the marker: the
+    # override is spent and the guard re-arms without operator action.
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / "changelog.d" / "+noop.bugfix.md").write_text("still no-op\n")
+    _git(repo_dir, "add", "-A")
+    _git(
+        repo_dir,
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "-m",
+        "changelog only again",
+    )
+    t = ctx.service.get(t.id)
+    assert ImplementStage().preflight(t, ctx) is not None
 
 
 def test_real_code_respawn_not_blocked_by_changelog_guard(
