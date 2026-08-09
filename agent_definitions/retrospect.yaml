@@ -22,7 +22,7 @@ read_ticket: true
 # version-specific syntax it reads in the trace / clone.
 inject_language_conventions: true
 output_type: RetrospectResult
-retries: 2
+retries: 3
 # The ceiling must fit a full PATH-3 re-emit of the worst-case runtime
 # memory ledger. The runtime per-board ledger surfaced to the agent is
 # ~34K chars; for dense Markdown laden with snake_case identifiers, file
