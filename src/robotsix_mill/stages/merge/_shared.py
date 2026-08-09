@@ -161,6 +161,11 @@ _MERGE_MAX_RETRIES = 5
 _CI_POLL_REFRESH_SHA = "ci_poll_refresh_sha.txt"
 _CI_FIX_MIXIN_REFRESH_SHA = "ci_fix_mixin_refresh_sha.txt"
 _REBASE_LAST_TS = "last_rebase_at.txt"
+# Records which state the ticket was in before entering REBASING
+# (human_mr_approval or waiting_auto_merge).  The rebase handler reads
+# it after a successful rebase to route back to the merge loop instead
+# of falling through to IMPLEMENT_COMPLETE.
+_REBASE_FROM_STATE = "rebase_from_state.txt"
 
 
 def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:

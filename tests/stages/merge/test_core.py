@@ -677,7 +677,7 @@ def test_rebasing_does_not_skip_when_not_clean(tmp_path, monkeypatch, mstate):
 def test_human_mr_approval_conflicting_falls_back_to_implement_complete(
     tmp_path, monkeypatch
 ):
-    """HUMAN_MR_APPROVAL + mergeable=False + update_branch fails → IMPLEMENT_COMPLETE."""
+    """HUMAN_MR_APPROVAL + mergeable=False + update_branch fails → REBASING (autonomous rebase enabled by default)."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge,
@@ -696,8 +696,8 @@ def test_human_mr_approval_conflicting_falls_back_to_implement_complete(
     )
     t = _human_mr_approval(ctx)
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert "gates no longer pass" in out.note
+    assert out.next_state is State.REBASING
+    assert "rebasing automatically" in out.note
 
 
 def test_human_mr_approval_conflicting_update_branch_succeeds_stays_in_human_mr_approval(
@@ -2366,7 +2366,7 @@ def test_check_status_exception_is_noop(tmp_path, monkeypatch):
 
 
 def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
-    """Conflicting PR → update_branch attempted, then IMPLEMENT_COMPLETE; check_status never called."""
+    """Conflicting PR → update_branch attempted, then REBASING; check_status never called."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2393,7 +2393,7 @@ def test_conflicting_pr_skips_check_status(tmp_path, monkeypatch):
 
     t = _human_mr_approval(ctx)
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.REBASING
     assert check_calls == []  # never called for conflicting PR
 
 
@@ -2892,7 +2892,7 @@ def test_auto_merge_skipped_when_ci_failure(tmp_path, monkeypatch):
 
 
 def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
-    """mergeable=False + update_branch fails → IMPLEMENT_COMPLETE (merge_pr never called)."""
+    """mergeable=False + update_branch fails → REBASING (merge_pr never called)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -2921,7 +2921,7 @@ def test_auto_merge_skipped_when_not_mergeable(tmp_path, monkeypatch):
     _write_review_artifact(ctx, t)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.REBASING
     assert merge_called == []
 
 
@@ -3484,7 +3484,7 @@ def test_waiting_auto_merge_to_done_on_ci_success(tmp_path, monkeypatch):
 def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     tmp_path, monkeypatch
 ):
-    """WAITING_AUTO_MERGE + mergeable=False + update_branch fails → IMPLEMENT_COMPLETE."""
+    """WAITING_AUTO_MERGE + mergeable=False + update_branch fails → REBASING (autonomous rebase enabled by default)."""
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     monkeypatch.setattr(
         github.GitHubForge,
@@ -3508,8 +3508,8 @@ def test_waiting_auto_merge_conflicting_falls_back_to_implement_complete(
     t = ctx.service.get(t.id)
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert "gates no longer pass" in out.note
+    assert out.next_state is State.REBASING
+    assert "rebasing automatically" in out.note
 
 
 def test_waiting_auto_merge_conflicting_update_branch_succeeds_stays_in_waiting_auto_merge(

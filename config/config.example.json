@@ -46,6 +46,7 @@
       "robotsix-central-deploy"
     ],
     "auto_merge_kill_switch": false,
+    "autonomous_rebase_enabled": true,
     "auto_merge_main_debt_detection_enabled": true,
     "auto_merge_sensitive_globs": [
       ".github/workflows/**",

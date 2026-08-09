@@ -870,7 +870,8 @@ def test_skip_ci_human_mr_approval_failing_ci_stays_noop(tmp_path, monkeypatch):
 
 def test_skip_ci_human_mr_approval_conflict_still_falls_back(tmp_path, monkeypatch):
     """Even with skip_ci=True, a conflicting PR in HUMAN_MR_APPROVAL
-    still falls back to IMPLEMENT_COMPLETE for rebase handling."""
+    now routes directly to REBASING (autonomous rebase) instead of
+    the old IMPLEMENT_COMPLETE intermediate hop."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -909,8 +910,8 @@ def test_skip_ci_human_mr_approval_conflict_still_falls_back(tmp_path, monkeypat
     ctx.service.set_branch(t.id, f"mill/{t.id}")
 
     out = MergeStage().run(t, ctx)
-    # Conflict → fallback to IMPLEMENT_COMPLETE regardless of skip_ci.
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # Conflict → REBASING (autonomous rebase enabled by default).
+    assert out.next_state is State.REBASING
 
 
 def test_skip_ci_false_human_mr_approval_still_falls_back_on_failing_ci(
@@ -2020,7 +2021,7 @@ def test_human_mr_approval_cooldown_prevents_rebase_on_conflict(tmp_path, monkey
 
 
 def test_human_mr_approval_cooldown_expired_allows_rebase(tmp_path, monkeypatch):
-    """A stale rebase timestamp (>4h ago) + conflicting PR → IMPLEMENT_COMPLETE."""
+    """A stale rebase timestamp (>4h ago) + conflicting PR → REBASING."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -2058,12 +2059,12 @@ def test_human_mr_approval_cooldown_expired_allows_rebase(tmp_path, monkeypatch)
     ts_path.write_text(stale.isoformat(), encoding="utf-8")
 
     out = MergeStage().run(t, ctx)
-    # Cooldown expired → falls through to IMPLEMENT_COMPLETE.
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # Cooldown expired → REBASING (autonomous rebase enabled by default).
+    assert out.next_state is State.REBASING
 
 
 def test_human_mr_approval_cooldown_zero_always_allows_rebase(tmp_path, monkeypatch):
-    """parked_rebase_cooldown_hours=0 → cooldown disabled, conflicting PR routes normally."""
+    """parked_rebase_cooldown_hours=0 → cooldown disabled, conflicting PR routes to REBASING."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path, parked_rebase_cooldown_hours=0)
@@ -2103,11 +2104,11 @@ def test_human_mr_approval_cooldown_zero_always_allows_rebase(tmp_path, monkeypa
     )
 
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.REBASING
 
 
 def test_human_mr_approval_no_timestamp_allows_rebase(tmp_path, monkeypatch):
-    """No last_rebase_at.txt → routes normally to IMPLEMENT_COMPLETE."""
+    """No last_rebase_at.txt → routes to REBASING (autonomous rebase enabled)."""
     from robotsix_mill.stages import merge as merge_mod
 
     ctx = _gh(tmp_path)
@@ -2141,4 +2142,4 @@ def test_human_mr_approval_no_timestamp_allows_rebase(tmp_path, monkeypatch):
 
     # No last_rebase_at.txt written — cooldown has no reference point.
     out = MergeStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert out.next_state is State.REBASING

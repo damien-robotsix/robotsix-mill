@@ -27,6 +27,7 @@ from ._shared import (
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
+    _REBASE_FROM_STATE,
     _REBASE_LAST_TS,
     _ci_truly_green,
     _duplicate_changelog_fragments,
@@ -788,11 +789,26 @@ class CIPollMixin(_MergeStageBase):
             if self._try_update_branch_for_conflict(ticket, ctx, branch):
                 return Outcome(State.HUMAN_MR_APPROVAL)
             # update-branch failed — genuine content conflict.
-            # Fall through to IMPLEMENT_COMPLETE for the rebase agent.
-            log.info(
-                "%s: PR conflicting — falling back to IMPLEMENT_COMPLETE",
-                ticket.id,
-            )
+            if not s.autonomous_rebase_enabled:
+                # Autonomous rebase disabled — fall back to the legacy
+                # IMPLEMENT_COMPLETE path (rebase on next poll cycle).
+                if _within_rebase_cooldown(
+                    ctx.service.workspace(ticket).artifacts_dir,
+                    s.parked_rebase_cooldown_hours,
+                ):
+                    log.info(
+                        "%s: parked PR re-conflict within cooldown window — staying in HUMAN_MR_APPROVAL",
+                        ticket.id,
+                    )
+                    return Outcome(State.HUMAN_MR_APPROVAL)
+                log.info(
+                    "%s: PR conflicting — falling back to IMPLEMENT_COMPLETE (autonomous rebase disabled)",
+                    ticket.id,
+                )
+                return Outcome(
+                    State.IMPLEMENT_COMPLETE,
+                    "PR is now conflicting; gates no longer pass",
+                )
             if _within_rebase_cooldown(
                 ctx.service.workspace(ticket).artifacts_dir,
                 s.parked_rebase_cooldown_hours,
@@ -802,9 +818,20 @@ class CIPollMixin(_MergeStageBase):
                     ticket.id,
                 )
                 return Outcome(State.HUMAN_MR_APPROVAL)
+            # Route directly to REBASING — the rebase agent will resolve
+            # the conflict and the post-rebase handler will route back to
+            # the merge loop (WAITING_AUTO_MERGE or HUMAN_MR_APPROVAL).
+            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+            artifacts_dir.joinpath(_REBASE_FROM_STATE).write_text(
+                State.HUMAN_MR_APPROVAL.value, encoding="utf-8"
+            )
+            log.info(
+                "%s: PR conflicting — routing directly to REBASING",
+                ticket.id,
+            )
             return Outcome(
-                State.IMPLEMENT_COMPLETE,
-                "PR is now conflicting; gates no longer pass",
+                State.REBASING,
+                "PR is now conflicting; rebasing automatically",
             )
 
         # mergeable=True or None (unchecked) → no conflict. This is the
@@ -1112,12 +1139,30 @@ class CIPollMixin(_MergeStageBase):
             # falling back to the heavy rebase agent.
             if self._try_update_branch_for_conflict(ticket, ctx, branch):
                 return Outcome(State.WAITING_AUTO_MERGE)
+            # update-branch failed — genuine content conflict.
+            if not s.autonomous_rebase_enabled:
+                # Autonomous rebase disabled — fall back to the legacy
+                # IMPLEMENT_COMPLETE path.
+                log.info(
+                    "%s: PR became conflicting while waiting for CI → IMPLEMENT_COMPLETE (autonomous rebase disabled)",
+                    ticket.id,
+                )
+                return Outcome(
+                    State.IMPLEMENT_COMPLETE,
+                    "PR is now conflicting; gates no longer pass",
+                )
+            # Route directly to REBASING so the PR is auto-rebased
+            # and returned to the merge loop without operator action.
+            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+            artifacts_dir.joinpath(_REBASE_FROM_STATE).write_text(
+                State.WAITING_AUTO_MERGE.value, encoding="utf-8"
+            )
             log.info(
-                "%s: PR became conflicting while waiting for CI → IMPLEMENT_COMPLETE",
+                "%s: PR became conflicting while waiting for CI → REBASING",
                 ticket.id,
             )
             return Outcome(
-                State.IMPLEMENT_COMPLETE, "PR is now conflicting; gates no longer pass"
+                State.REBASING, "PR is now conflicting; rebasing automatically"
             )
 
         # --- Review feedback check (opt-in): a late CHANGES_REQUESTED must

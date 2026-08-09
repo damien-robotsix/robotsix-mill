@@ -180,11 +180,13 @@ TRANSITIONS: dict[State, set[State]] = {
     },
     # PR open in human review: merge stage polls → merged=done,
     # closed-unmerged=blocked, gates degrade → implement_complete
-    # (silent fallback — no human re-notification).
+    # (silent fallback — no human re-notification).  Conflicting →
+    # rebasing (autonomous rebase).
     State.HUMAN_MR_APPROVAL: {
         State.DONE,
         State.WAITING_AUTO_MERGE,
         State.IMPLEMENT_COMPLETE,
+        State.REBASING,
         State.ADDRESSING_REVIEW,
         # An operator reviewing the open PR can send it back for rework
         # (TicketService.request_implementation_changes). The spec is
@@ -196,22 +198,27 @@ TRANSITIONS: dict[State, set[State]] = {
         State.AWAITING_USER_REPLY,
     },
     # waiting_auto_merge: merge stage polls CI; when green → done (auto-merge),
-    # on CI failure or conflict → implement_complete (gate re-check),
+    # on CI failure or conflict → implement_complete (gate re-check) or
+    # rebasing (autonomous rebase of stale branch),
     # on eligibility change → human_mr_approval.
     State.WAITING_AUTO_MERGE: {
         State.DONE,
         State.IMPLEMENT_COMPLETE,
         State.HUMAN_MR_APPROVAL,
+        State.REBASING,
         State.ADDRESSING_REVIEW,
         State.ERRORED,
         State.BLOCKED,
         State.AWAITING_USER_REPLY,
     },
-    # rebasing: merge stage runs rebase agent → back to implement_complete on
-    # success (re-verify gates), retry on failure, block on exhaustion.
+    # rebasing: merge stage runs rebase agent → back to implement_complete,
+    # waiting_auto_merge, or human_mr_approval on success (re-verify gates),
+    # retry on failure, block on exhaustion.
     State.REBASING: {
         State.IMPLEMENT_COMPLETE,
         State.READY,
+        State.WAITING_AUTO_MERGE,
+        State.HUMAN_MR_APPROVAL,
         State.ERRORED,
         State.BLOCKED,
         State.AWAITING_USER_REPLY,

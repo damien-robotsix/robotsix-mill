@@ -23,6 +23,7 @@ from ._base import _MergeStageBase
 from ._shared import (
     _REBASE_COUNTER,
     _REBASE_DROPPED,
+    _REBASE_FROM_STATE,
     _REBASE_LAST_TS,
     _read_counter,
     _read_dropped_files,
@@ -445,6 +446,17 @@ class RebaseMixin(_MergeStageBase):
             except Exception:
                 pr = None
 
+            # Check if this rebase was triggered from human_mr_approval or
+            # waiting_auto_merge — if so, route back to the merge loop
+            # instead of falling through to IMPLEMENT_COMPLETE.
+            from_state_path = (
+                ctx.service.workspace(ticket).artifacts_dir / _REBASE_FROM_STATE
+            )
+            from_state: str | None = None
+            if from_state_path.exists():
+                from_state = from_state_path.read_text(encoding="utf-8").strip()
+                from_state_path.unlink()
+
             if pr is None:
                 # No PR exists — route to READY so the ticket re-enters implement.
                 _write_counter(counter_path, 0)
@@ -454,6 +466,32 @@ class RebaseMixin(_MergeStageBase):
             if mergeable is True and pr.get("mergeable_state") == "clean":
                 # PR is genuinely clean — reset counter.
                 _write_counter(counter_path, 0)
+                if from_state in (
+                    State.HUMAN_MR_APPROVAL.value,
+                    State.WAITING_AUTO_MERGE.value,
+                ):
+                    # The rebase was triggered autonomously from a parked
+                    # state.  Re-check auto-merge eligibility and route
+                    # back to the merge loop.
+                    forge = get_forge(s, repo_config=ctx.repo_config)
+                    feature_tip_sha = pr.get("sha", "")
+                    eligible, reason = self._auto_merge_eligible(
+                        ticket,
+                        ctx,
+                        pr_head_sha=feature_tip_sha,
+                        forge=forge,
+                        pr=pr,
+                    )
+                    if eligible:
+                        return Outcome(
+                            State.WAITING_AUTO_MERGE,
+                            "rebase succeeded; resuming autonomous merge monitoring",
+                        )
+                    else:
+                        return Outcome(
+                            State.HUMAN_MR_APPROVAL,
+                            f"rebase succeeded but {reason}",
+                        )
                 return Outcome(State.IMPLEMENT_COMPLETE)
             if mergeable is None:
                 # GitHub may report mergeable=None transiently after a

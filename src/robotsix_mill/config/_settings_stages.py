@@ -1097,6 +1097,14 @@ class _StagesSettings(BaseModel):
     )
 
     # --- merge stage: auto-rebase of stale PRs ---
+    # When True (default), the merge stage autonomously rebases PRs in
+    # human_mr_approval and waiting_auto_merge when they become conflicting
+    # or stale-behind-target.  Set False to disable autonomous rebase
+    # globally (the REBASING path from IMPLEMENT_COMPLETE is unaffected).
+    autonomous_rebase_enabled: bool = Field(
+        description="When true, the merge stage autonomously rebases parked PRs that become conflicting.",
+        default=True,
+    )
     # When a PR in human_mr_approval becomes conflicting (other PRs merged to
     # the target branch), the merge stage invokes the rebase agent to
     # resolve conflicts automatically.  This is the max number of

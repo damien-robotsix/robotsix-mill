@@ -237,8 +237,8 @@ def test_human_mr_approval_to_implement_complete():
 
 
 def test_human_mr_approval_to_rebasing_removed():
-    """HUMAN_MR_APPROVAL → REBASING is INVALID (removed — falls back via IMPLEMENT_COMPLETE)."""
-    assert can_transition(State.HUMAN_MR_APPROVAL, State.REBASING) is False
+    """HUMAN_MR_APPROVAL → REBASING is VALID (autonomous rebase of parked PRs)."""
+    assert can_transition(State.HUMAN_MR_APPROVAL, State.REBASING) is True
 
 
 def test_human_mr_approval_to_fixing_ci_removed():
@@ -255,8 +255,8 @@ def test_rebasing_to_implement_complete():
 
 
 def test_rebasing_to_human_mr_approval_removed():
-    """REBASING → HUMAN_MR_APPROVAL is INVALID (removed — goes via IMPLEMENT_COMPLETE)."""
-    assert can_transition(State.REBASING, State.HUMAN_MR_APPROVAL) is False
+    """REBASING → HUMAN_MR_APPROVAL is VALID (post-rebase routing when auto-merge not eligible)."""
+    assert can_transition(State.REBASING, State.HUMAN_MR_APPROVAL) is True
 
 
 # --- FIXING_CI transitions (now go to IMPLEMENT_COMPLETE) ---
@@ -303,8 +303,8 @@ def test_waiting_auto_merge_to_fixing_ci_removed():
 
 
 def test_waiting_auto_merge_to_rebasing_removed():
-    """WAITING_AUTO_MERGE → REBASING is INVALID (falls back via IMPLEMENT_COMPLETE)."""
-    assert can_transition(State.WAITING_AUTO_MERGE, State.REBASING) is False
+    """WAITING_AUTO_MERGE → REBASING is VALID (autonomous rebase of conflicted PRs in auto-merge)."""
+    assert can_transition(State.WAITING_AUTO_MERGE, State.REBASING) is True
 
 
 def test_errored_as_destination():
