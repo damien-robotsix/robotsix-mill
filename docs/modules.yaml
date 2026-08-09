@@ -326,6 +326,8 @@ modules:
       - tests/stages/merge/test_review_revision.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - src/robotsix_mill/stages/_changelog_validate.py
+      - src/robotsix_mill/stages/_conventional.py
+      - tests/test_conventional_subject.py
       - tests/stages/test_changelog_validate_release_please.py
       - src/robotsix_mill/stages/towncrier.py
       - tests/stages/test_towncrier.py
