@@ -66,6 +66,7 @@ modules:
       - src/robotsix_mill/core/event_notifier.py
       - src/robotsix_mill/core/repo_layout.py
       - src/robotsix_mill/core/tool_wrappers.py
+      - changelog.d/*.md
       - docs/core/**/*
       - tests/core/test_core_dedup.py
       - tests/core/test_db.py
@@ -546,6 +547,7 @@ modules:
       - tests/conftest.py
       - tests/test_doctests.py
       - tests/script_loader.py
+      - tests/dev-tooling/test_check_config_docs_sync.py
       - tests/dev-tooling/test_check_config_sync.py
       - tests/dev-tooling/test_docs_nav.py
       - tests/dev-tooling/test_emit_config_schema.py
