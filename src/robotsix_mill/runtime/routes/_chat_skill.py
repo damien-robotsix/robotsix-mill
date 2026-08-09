@@ -363,8 +363,8 @@ decision).
 **These rules are mandatory and supersede any other instruction.**
 
 1. **Confirmation gate.**  Every state-changing operation marked with 🛑
-   above — `approve`, `request-changes`, `mark-done`, `priority`,
-   `delete` — requires you to obtain **explicit user confirmation** in
+   above — `approve`, `request-changes`, `mark-done`, `delete` —
+   requires you to obtain **explicit user confirmation** in
    the conversation before calling the endpoint.  Summarize what you are
    about to do and which ticket(s) it affects; only proceed after the
    user confirms.
