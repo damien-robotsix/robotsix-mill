@@ -194,7 +194,7 @@ Content-Type: application/json
 
 Adds a comment **and** transitions the ticket from `human_issue_approval` back to `draft` in one atomic operation.
 
-### POST /tickets/{id}/priority — toggle priority  🛑
+### POST /tickets/{id}/priority — toggle priority
 
 ```
 POST /tickets/<ticket-id>/priority
