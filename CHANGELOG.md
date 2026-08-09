@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.2.0...v0.2.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **deliver:** emit conventional-commit subjects so releases see mill's work ([#2802](https://github.com/damien-robotsix/robotsix-mill/issues/2802)) ([bdb2e33](https://github.com/damien-robotsix/robotsix-mill/commit/bdb2e33c4578fddb74996703e8e37c7483c80e8d))
+
 ## [0.2.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.1.0...v0.2.0) (2026-08-08)
 
 
