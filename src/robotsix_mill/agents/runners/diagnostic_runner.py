@@ -5,10 +5,10 @@ It is a plain-Python orchestrator (no LLM, no memory ledger) that
 iterates the pluggable check registry (``diagnostic_checks``) and
 aggregates the per-check results into a single pass result.
 
-The skeleton ships with ZERO registered checks: an empty-registry pass
-returns an empty-but-valid result. Later epic children register concrete
-checks (error detection, draft-count validation) via
-``diagnostic_checks.register_check`` WITHOUT editing this runner.
+An empty-registry pass returns an empty-but-valid result. Concrete checks
+register themselves via ``diagnostic_checks.register_check`` at module
+import time, so a new check module must be added to the side-effect import
+block below — registration cannot happen if nothing imports the module.
 
 Each check is run inside its own ``try/except`` so one failing check
 never aborts the pass — the failure is logged, recorded as a failed
@@ -22,16 +22,25 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ...config import Settings
-from .diagnostic_checks import (
-    DiagnosticCheckContext,
-    DiagnosticCheckResult,
-    get_registered_checks,
-)
 
 # Import concrete check modules for their register_check side-effect.
 # These live here (not in diagnostic_checks) to avoid a cyclic import:
 # each check module imports from diagnostic_checks, so importing them
 # from diagnostic_checks would create a cycle.
+#
+# Every check module MUST be listed here. Each one calls register_check()
+# at import time, so a module nobody imports never registers: the pass then
+# runs zero checks and still reports success. Only the per-check unit tests
+# imported these directly, so the registry was empty everywhere else.
+from . import (  # noqa: F401  (imported for register_check side-effect)
+    diagnostic_check_errors,
+    diagnostic_check_recurring_ci,
+)
+from .diagnostic_checks import (
+    DiagnosticCheckContext,
+    DiagnosticCheckResult,
+    get_registered_checks,
+)
 
 log = logging.getLogger(__name__)
 
