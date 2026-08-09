@@ -227,3 +227,53 @@ class TestRunBespokePass:
 
         assert captured["definition"].name == "mail-checker"
         assert captured["repo_dir"] == clone
+
+
+class TestPeriodicDraftCap:
+    """A pass without its own cap must not be able to flood the board."""
+
+    def _run_with_n_findings(self, tmp_path, monkeypatch, n, **settings_overrides):
+        s = _settings(tmp_path, **settings_overrides)
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.bespoke_runner.Settings",
+            lambda: s,
+        )
+
+        def fake_agent(**kwargs):
+            return BespokeResult(
+                updated_memory="seen",
+                draft_titles=[f"Finding {i}" for i in range(n)],
+                draft_bodies=[f"Body {i}" for i in range(n)],
+                gap_ids=[f"gap_{i}" for i in range(n)],
+            )
+
+        monkeypatch.setattr(_bespoke, "run_bespoke_agent", fake_agent)
+        run_bespoke_pass(
+            session_id="sess-cap",
+            definition=_definition(name="flooder"),
+            repo_config=_test_repo_config(),
+            repo_dir=None,
+        )
+        return TicketService(s, board_id="test-board").list()
+
+    def test_a_flood_of_findings_is_truncated_to_the_default(
+        self, tmp_path, monkeypatch
+    ):
+        tickets = self._run_with_n_findings(tmp_path, monkeypatch, 25)
+        assert len(tickets) == 3, "uncapped bespoke pass flooded the board"
+
+    def test_the_cap_is_configurable(self, tmp_path, monkeypatch):
+        tickets = self._run_with_n_findings(
+            tmp_path, monkeypatch, 25, periodic_max_drafts_per_run=1
+        )
+        assert len(tickets) == 1
+
+    def test_zero_disables_draft_creation(self, tmp_path, monkeypatch):
+        tickets = self._run_with_n_findings(
+            tmp_path, monkeypatch, 25, periodic_max_drafts_per_run=0
+        )
+        assert tickets == []
+
+    def test_a_pass_under_the_cap_is_unaffected(self, tmp_path, monkeypatch):
+        tickets = self._run_with_n_findings(tmp_path, monkeypatch, 2)
+        assert len(tickets) == 2

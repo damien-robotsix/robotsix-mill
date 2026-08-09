@@ -171,6 +171,20 @@ class PeriodicPassConfig:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_max_drafts(config: Any, settings: Settings) -> int:
+    """How many drafts one run of *config* may create.
+
+    Precedence: a runtime function, then the pass's own static cap, then
+    the fleet default. A pass that declares nothing used to be unbounded,
+    which is how a single run could flood the board.
+    """
+    if config.max_drafts_fn is not None:
+        return int(config.max_drafts_fn(settings))
+    if config.max_drafts is not None:
+        return int(config.max_drafts)
+    return int(settings.periodic_max_drafts_per_run)
+
+
 def run_periodic_pass(
     session_id: str,
     repo_config: RepoConfig | None,
@@ -289,9 +303,7 @@ def run_periodic_pass(
     extra_kwargs = dict(config.extra_agent_kwargs)
     if config.extra_kwargs_fn is not None:
         extra_kwargs.update(config.extra_kwargs_fn(settings))
-    max_drafts = config.max_drafts
-    if config.max_drafts_fn is not None:
-        max_drafts = config.max_drafts_fn(settings)
+    max_drafts = _resolve_max_drafts(config, settings)
 
     agent_fn_callable = getattr(agent_module, config.agent_fn_name)
     # Thread the per-repo merged definition (resolved by the periodic

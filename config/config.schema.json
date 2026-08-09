@@ -2048,6 +2048,14 @@
           "title": "Parked Rebase Cooldown Hours",
           "type": "integer"
         },
+        "periodic_max_drafts_per_run": {
+          "advanced": true,
+          "default": 3,
+          "description": "Default maximum draft tickets per periodic pass run, for passes without their own cap. 0 disables draft creation from them.",
+          "minimum": 0,
+          "title": "Periodic Max Drafts Per Run",
+          "type": "integer"
+        },
         "pin_bump_interval_seconds": {
           "advanced": true,
           "default": 86400,

@@ -714,3 +714,48 @@ def test_periodic_pass_configs_each_has_required_fields():
     for key, cfg in PERIODIC_PASS_CONFIGS.items():
         for field in required:
             assert getattr(cfg, field, None) is not None, f"{key}.{field} is None"
+
+
+# ---------------------------------------------------------------------------
+#  Per-run draft cap
+# ---------------------------------------------------------------------------
+
+
+class _FakeConfig:
+    def __init__(self, max_drafts=None, max_drafts_fn=None):
+        self.max_drafts = max_drafts
+        self.max_drafts_fn = max_drafts_fn
+
+
+class TestResolveMaxDrafts:
+    """16 of 17 built-in passes declare no cap; they must not be unbounded."""
+
+    def test_a_pass_without_a_cap_gets_the_fleet_default(self):
+        from robotsix_mill.agents.runners.periodic_runner import _resolve_max_drafts
+
+        s = Settings(periodic_max_drafts_per_run=3)
+        assert _resolve_max_drafts(_FakeConfig(), s) == 3
+
+    def test_a_pass_with_its_own_cap_keeps_it(self):
+        from robotsix_mill.agents.runners.periodic_runner import _resolve_max_drafts
+
+        s = Settings(periodic_max_drafts_per_run=3)
+        assert _resolve_max_drafts(_FakeConfig(max_drafts=10), s) == 10
+
+    def test_a_runtime_function_wins_over_both(self):
+        from robotsix_mill.agents.runners.periodic_runner import _resolve_max_drafts
+
+        s = Settings(periodic_max_drafts_per_run=3)
+        cfg = _FakeConfig(max_drafts=10, max_drafts_fn=lambda _s: 7)
+        assert _resolve_max_drafts(cfg, s) == 7
+
+    def test_zero_is_honoured_not_treated_as_unset(self):
+        """0 disables draft creation; it must not fall through to the default."""
+        from robotsix_mill.agents.runners.periodic_runner import _resolve_max_drafts
+
+        s = Settings(periodic_max_drafts_per_run=3)
+        assert _resolve_max_drafts(_FakeConfig(max_drafts=0), s) == 0
+        assert (
+            _resolve_max_drafts(_FakeConfig(), Settings(periodic_max_drafts_per_run=0))
+            == 0
+        )

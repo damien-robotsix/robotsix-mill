@@ -476,6 +476,26 @@ class _PeriodicSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Default ceiling on draft tickets created by ONE periodic pass run.
+    # Applies to every pass that does not set its own cap — 16 of the 17
+    # built-in periodic passes and all bespoke passes were previously
+    # unbounded, which is how the board reached 325 open drafts against
+    # single-digit daily throughput. Findings past the cap are dropped and
+    # resurface on the next run, so the pass stays useful without letting
+    # one run flood the board. A pass that sets max_drafts (or
+    # max_drafts_fn) keeps its own value.
+    # Override with MILL_PERIODIC_MAX_DRAFTS_PER_RUN; 0 disables draft
+    # creation from uncapped passes entirely.
+    periodic_max_drafts_per_run: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Default maximum draft tickets per periodic pass run, for passes "
+            "without their own cap. 0 disables draft creation from them."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+
     # --- completeness_check agent (feature-wiring completeness) ---
     # Opt-in periodic completeness-check pass. Defaults to False (off);
     # flip to true to schedule the pass every
