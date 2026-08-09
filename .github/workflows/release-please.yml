@@ -82,6 +82,15 @@ jobs:
           BRANCH: release-please--branches--main
         run: |
           set -euo pipefail
+          # The release branch is deleted when its PR merges, yet a later
+          # run can still report an existing PR and satisfy this step's
+          # guard. A missing branch means there is nothing to sync — not a
+          # failure. Without this the job dies on `git checkout -B` with
+          # "not a commit", reddening main.
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "No $BRANCH on origin — nothing to sync."
+            exit 0
+          fi
           git fetch --depth=1 origin "$BRANCH"
           git checkout -B "$BRANCH" "origin/$BRANCH"
           uv lock
