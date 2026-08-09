@@ -1501,9 +1501,7 @@ def test_rebase_drop_messages_do_not_advise_a_retry(tmp_path, monkeypatch):
         ):
             return RebaseResult(status="DONE", summary="ok")
 
-        monkeypatch.setattr(
-            "robotsix_mill.stages.merge.run_rebase_agent", fake_rebase
-        )
+        monkeypatch.setattr("robotsix_mill.stages.merge.run_rebase_agent", fake_rebase)
         monkeypatch.setattr(
             "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
         )
