@@ -8,15 +8,13 @@ permissions: {}  # no workflow-level default; the job grants its own
 jobs:
   auto-merge:
     name: Dependabot auto-merge
-    # Two classes of PR merge themselves once their checks are green:
-    #   1. Dependabot dependency bumps.
-    #   2. release-please's release PRs — matched on the BRANCH PREFIX, never
-    #      on the bot identity. release-please runs as robotsix-mill[bot], and
-    #      that same identity authors mill's ticket PRs, which must keep going
-    #      through mill's own review and merge stages.
-    if: >-
-      github.event.pull_request.user.login == 'dependabot[bot]'
-      || startsWith(github.head_ref, 'release-please--branches--')
+    # Dependabot dependency bumps only.
+    #
+    # release-please PRs are deliberately NOT auto-merged: that PR *is* the
+    # release gate. Auto-merging it would cut a release on every push to
+    # main, which makes the version number meaningless. Releases stay a
+    # human decision.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     # contents: write and pull-requests: write needed to approve and merge PRs
     permissions:
       contents: write  # approve and merge the PR
