@@ -40,7 +40,7 @@ description: >-
 
 category: periodic
 
-interval: 1d
+interval: 14d
 enabled: true
 
 model: ${MILL_HEALTH_MODEL}
