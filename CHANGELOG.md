@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.4.0...v0.5.0) (2026-08-09)
+
+
+### Features
+
+* Move periodic-agent interval from global config into per-agent YAML (overridable by overlay) (20260809T062413Z-move-periodic-agent-interval-from-global-0b63) ([#2819](https://github.com/damien-robotsix/robotsix-mill/issues/2819)) ([ddfe7e3](https://github.com/damien-robotsix/robotsix-mill/commit/ddfe7e38ac78ff94c9e8c7c4c17c94cb37fd0534))
+
+
+### Bug Fixes
+
+* **diagnostic:** register the concrete checks so the pass stops running zero ([#2820](https://github.com/damien-robotsix/robotsix-mill/issues/2820)) ([ef463f0](https://github.com/damien-robotsix/robotsix-mill/commit/ef463f01dd709a46132c4db6276cf5658f320488))
+* **implement:** stop resume-blocked being a no-op against the preflight guards ([#2818](https://github.com/damien-robotsix/robotsix-mill/issues/2818)) ([625a36d](https://github.com/damien-robotsix/robotsix-mill/commit/625a36d62e38ee77cd9359d9360a6f06dafbd506))
+* **rebase:** exempt .secrets.baseline from the drop guard ([#2817](https://github.com/damien-robotsix/robotsix-mill/issues/2817)) ([d5ecfd8](https://github.com/damien-robotsix/robotsix-mill/commit/d5ecfd8d270510c8fda6d64af287adf422dee74c))
+* **rebase:** stop the drop guard advising a retry that cannot work ([#2815](https://github.com/damien-robotsix/robotsix-mill/issues/2815)) ([ef68d95](https://github.com/damien-robotsix/robotsix-mill/commit/ef68d9595d91aff5d20584a37f26335ec7a618dc))
+
 ## [0.4.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.3.0...v0.4.0) (2026-08-09)
 
 
