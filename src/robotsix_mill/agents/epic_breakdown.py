@@ -473,7 +473,7 @@ def run_epic_breakdown_agent(
     The agent is constructed via :func:`~.base.build_agent` with
     ``PromptedOutput(EpicBreakdownResult)``, ``web=False``,
     ``report_issue=False``, and the epic_breakdown definition's
-    ``level: 3`` (Claude Opus). Decomposition emits a structured
+    ``level: 4`` (Claude fable-5). Decomposition emits a structured
     ``PromptedOutput`` whose field names a cheap model (e.g. the
     ``audit_model`` tier — haiku under the Claude SDK backend) fails to
     honor: it returns the children under ``titles``/``bodies`` rather
@@ -481,7 +481,11 @@ def run_epic_breakdown_agent(
     yields zero children. The default model is reliable here.
 
     Execution is wrapped in :func:`~.retry.call_with_retry` for
-    transient/rate-limit resilience.
+    transient/rate-limit resilience, and in llmio's tier-fallback loop
+    for an unavailable tier. Because a lower tier is exactly what mangles
+    the structured output, :func:`_require_children` is passed as the
+    run's validator: a childless result is treated as a tier failure
+    rather than an empty success.
     """
     from .yaml_loader import load_and_run_agent
 
@@ -510,5 +514,23 @@ def run_epic_breakdown_agent(
         tools=[],
         prompt=prompt,
         what="epic-breakdown",
+        validate=_require_children,
     )
     return result.output
+
+
+def _require_children(result: Any) -> None:
+    """Reject a breakdown that produced no children, so the tier loop retries.
+
+    Zero children is the exact failure mode a weaker tier produces here: the
+    ``PromptedOutput`` schema is described in the prompt, not enforced, so a
+    model that emits the wrong keys parses into empty lists. Silence would
+    look like a successful decomposition of an epic into nothing. Raising
+    makes llmio's tier-fallback loop move to the next tier, and — if every
+    tier fails the same way — surfaces a real error instead.
+    """
+    if not result.output.child_titles:
+        raise ValueError(
+            "epic breakdown returned zero children — the model likely emitted "
+            "the structured output under unexpected keys"
+        )

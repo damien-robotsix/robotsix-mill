@@ -1,11 +1,14 @@
 """Tests for the epic breakdown agent."""
 
+import pytest
+
 from robotsix_mill.agents.epic_breakdown import (
     SYSTEM_PROMPT,
     EpicBreakdownResult,
     _detect_cross_repo_deps,
     _is_init_repo_child,
     _parse_prereq_packages,
+    _require_children,
     plan_child_dependencies,
     run_epic_breakdown_agent,
 )
@@ -557,7 +560,10 @@ def test_comments_parameter_appended_to_prompt(monkeypatch):
         def run_sync(self, prompt):
             nonlocal captured_prompt
             captured_prompt = prompt
-            return type("R", (), {"output": EpicBreakdownResult()})()
+            # A child is required: an empty breakdown is rejected as a
+            # tier failure (see ``_require_children``), which would
+            # re-run this fake at the next tier.
+            return type("R", (), {"output": EpicBreakdownResult(child_titles=["a"])})()
 
     # build_agent and call_with_retry are imported locally inside
     # run_epic_breakdown_agent from .base and .retry respectively.
@@ -669,7 +675,10 @@ def test_run_epic_breakdown_agent_injects_available_repos(monkeypatch):
         def run_sync(self, prompt):
             nonlocal captured_prompt
             captured_prompt = prompt
-            return type("R", (), {"output": EpicBreakdownResult()})()
+            # A child is required: an empty breakdown is rejected as a
+            # tier failure (see ``_require_children``), which would
+            # re-run this fake at the next tier.
+            return type("R", (), {"output": EpicBreakdownResult(child_titles=["a"])})()
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.build_agent",
@@ -716,3 +725,23 @@ def test_run_epic_breakdown_agent_injects_available_repos(monkeypatch):
     assert captured_prompt.index("````epic-description") < captured_prompt.index(
         "````available-repos"
     )
+
+
+def test_require_children_rejects_an_empty_breakdown():
+    """Zero children is a tier failure, not a successful decomposition.
+
+    ``PromptedOutput`` describes the schema in the prompt but does not
+    enforce it, so a weaker tier can emit the children under keys the
+    parser drops. Raising here makes llmio's tier-fallback loop try the
+    next tier instead of filing an epic broken into nothing.
+    """
+
+    class _Result:
+        def __init__(self, output):
+            self.output = output
+
+    with pytest.raises(ValueError, match="zero children"):
+        _require_children(_Result(EpicBreakdownResult()))
+
+    # A populated result passes through untouched.
+    _require_children(_Result(EpicBreakdownResult(child_titles=["a"])))

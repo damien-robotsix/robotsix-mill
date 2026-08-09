@@ -15,6 +15,7 @@ and the stdlib-only ``core.duration`` helper for the human-readable
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -258,6 +259,7 @@ def load_and_run_agent(
     repo_dir: Path | None = None,
     run_kwargs: dict[str, Any] | None = None,
     system_prompt_format_kwargs: dict[str, Any] | None = None,
+    validate: Callable[[Any], None] | None = None,
     **build_overrides,
 ):
     """Load a YAML agent definition, build the agent, run it, and return output.
@@ -270,6 +272,13 @@ def load_and_run_agent(
        and any ``**build_overrides``
     3. ``run_agent`` with *prompt* and any ``**run_kwargs``
     4. ``_safe_close`` in a ``finally`` block
+
+    Steps 2-4 run inside llmio's tier-fallback loop, so a tier that is
+    unavailable (provider outage, exhausted subscription credits) is followed
+    by the next one — rebuilding the agent, since the level selects the
+    provider. The definition's ``level`` is the starting tier; the chain
+    prefers a higher tier, then lower ones. Local retry of transient errors
+    still happens inside ``run_agent``; only what survives that escalates.
 
     Args:
         settings: Application configuration.
@@ -284,6 +293,11 @@ def load_and_run_agent(
         run_kwargs: Extra keyword arguments forwarded to
             ``h.run_sync(prompt, **run_kwargs)`` (e.g. ``usage_limits``,
             ``message_history``).
+        validate: Optional check run on the agent's result inside the
+            tier-fallback loop. It should raise when the result is
+            unusable, which makes the loop try the next tier instead of
+            returning a hollow success (e.g. a structured output a weaker
+            tier parsed into an empty list).
         system_prompt_format_kwargs: When set, ``definition.system_prompt``
             is formatted with these kwargs (via ``str.format(**kwargs)``)
             and passed as ``system_prompt`` to ``build_agent_from_definition``.
@@ -292,6 +306,10 @@ def load_and_run_agent(
             ``build_agent_from_definition``
             (e.g. ``system_prompt``, ``board_id``).
     """
+    from robotsix_llmio.config.tier import TierLevel, TierLevelConfig
+    from robotsix_llmio.core.factory import default_tier_config
+    from robotsix_llmio.core.tier_fallback import call_with_tier_fallback
+
     from .base import _safe_close, build_agent_from_definition
     from .retry import run_agent
 
@@ -306,20 +324,55 @@ def load_and_run_agent(
         build_overrides["system_prompt"] = definition.system_prompt.format(
             **system_prompt_format_kwargs
         )
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools or [],
-        level=level if level is not None else definition.level,
-        repo_dir=repo_dir,
-        **build_overrides,
+    start_level = level if level is not None else definition.level
+
+    # A tier can be unavailable for reasons that have nothing to do with this
+    # agent — a provider outage, or a Claude subscription whose usage credits
+    # are exhausted until they reset. llmio's tier loop rebuilds the agent at
+    # the next tier and retries, so the run lands somewhere instead of dying
+    # (observed 2026-08-09: epic-breakdown pinned to level 4 died on exhausted
+    # credits while level 3, a different model with its own limit, was fine).
+    #
+    # The agent is rebuilt inside the factory, not reused: the level selects
+    # the provider, so a new tier needs a new agent and a new HTTP client.
+    tier_config = default_tier_config()
+    level_by_model: dict[str, int] = {}
+    for n in (1, 2, 3, 4):
+        level_by_model.setdefault(getattr(tier_config, f"level{n}").model, n)
+
+    def _tier_factory(tlc: TierLevelConfig) -> Callable[[], Any]:
+        tier_level = level_by_model.get(tlc.model, start_level)
+
+        def _build_and_run() -> Any:
+            agent = build_agent_from_definition(
+                settings,
+                definition,
+                tools=tools or [],
+                level=tier_level,
+                repo_dir=repo_dir,
+                **build_overrides,
+            )
+            try:
+                result = run_agent(
+                    agent,
+                    lambda h: h.run_sync(prompt, **(run_kwargs or {})),
+                    what=what,
+                )
+                if validate is not None:
+                    # Raising here is deliberate: a result that parsed but is
+                    # unusable (a structured output a weaker tier mangled into
+                    # nothing) is a tier failure, and the loop should try the
+                    # next tier rather than hand back a hollow success.
+                    validate(result)
+                return result
+            finally:
+                _safe_close(agent)
+
+        return _build_and_run
+
+    return call_with_tier_fallback(
+        _tier_factory,
+        tier_config=tier_config,
+        level=TierLevel(f"level{start_level}"),
+        what=what,
     )
-    try:
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(prompt, **(run_kwargs or {})),
-            what=what,
-        )
-    finally:
-        _safe_close(agent)
-    return result
