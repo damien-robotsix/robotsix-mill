@@ -4,6 +4,7 @@ GET /config/versions, POST /config/rollback).
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -119,7 +120,9 @@ class TestPutConfig:
         assert r.status_code == 200
 
         raw = json.loads(tmp_config_file.read_text())
-        assert raw["secrets"]["openrouter_api_key"] == "sk-real-secret"
+        # Secrets block is base64-encoded at rest.
+        decoded = base64.b64decode(raw["secrets"]).decode()
+        assert json.loads(decoded)["openrouter_api_key"] == "sk-real-secret"
 
     def test_secret_merge_on_write_explicit_overwrites(
         self, config_client, tmp_config_file
@@ -135,7 +138,9 @@ class TestPutConfig:
         assert r.status_code == 200
 
         raw = json.loads(tmp_config_file.read_text())
-        assert raw["secrets"]["openrouter_api_key"] == "sk-new-secret"
+        # Secrets block is base64-encoded at rest.
+        decoded = base64.b64decode(raw["secrets"]).decode()
+        assert json.loads(decoded)["openrouter_api_key"] == "sk-new-secret"
 
     def test_secret_written_to_secrets_block(self, config_client, tmp_config_file):
         """PUT /config writes secret values to the secrets block."""
@@ -144,7 +149,9 @@ class TestPutConfig:
 
         raw = json.loads(tmp_config_file.read_text())
         assert "secrets" in raw
-        assert raw["secrets"]["openrouter_api_key"] == "sk-test"
+        # Secrets block is base64-encoded at rest.
+        decoded = base64.b64decode(raw["secrets"]).decode()
+        assert json.loads(decoded)["openrouter_api_key"] == "sk-test"
         # Should NOT be in settings
         assert "openrouter_api_key" not in raw.get("settings", {})
 

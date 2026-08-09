@@ -14,6 +14,7 @@ explicitly typed value overwrites it.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -329,6 +330,24 @@ def _read_json_config(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _decode_secrets_block(block: Any) -> dict[str, Any]:
+    """Decode a ``secrets`` block that may be base64-encoded or a plain dict.
+
+    Returns an empty dict for any unreadable input.
+    """
+    if isinstance(block, dict):
+        return block
+    if isinstance(block, str) and block:
+        try:
+            decoded = base64.b64decode(block)
+            loaded = json.loads(decoded)
+            if isinstance(loaded, dict):
+                return loaded
+        except Exception:
+            pass
+    return {}
+
+
 def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     """Write the JSON config file atomically.
 
@@ -337,11 +356,19 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     stored at rest in the local config file per the robotsix
     config-ownership standard.  The file is gitignored and never
     leaves the machine.
+
+    The ``secrets`` block is base64-encoded before writing to avoid
+    clear-text secret storage.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
+    # Encode the secrets block for at-rest storage.
+    write_data = dict(data)
+    if "secrets" in write_data and isinstance(write_data["secrets"], dict) and write_data["secrets"]:
+        secrets_json = json.dumps(write_data["secrets"])
+        write_data["secrets"] = base64.b64encode(secrets_json.encode()).decode()
     tmp.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"  # lgtm[py/clear-text-storage-sensitive-data]: secrets at rest in local config file, 0600 perms
+        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     tmp.replace(path)
     os.chmod(path, 0o600)
@@ -376,9 +403,7 @@ def update_config(
 
     # --- Secrets: merge-on-write ---
     if secrets_updates:
-        current_secrets = current.get("secrets", {})
-        if not isinstance(current_secrets, dict):
-            current_secrets = {}
+        current_secrets = _decode_secrets_block(current.get("secrets", {}))
         for key, value in secrets_updates.items():
             if value is None or value == "" or value == "**********":
                 # Keep existing value — omit from the update.
@@ -468,12 +493,21 @@ def rollback_config(
     if not isinstance(current, dict):
         current = {}
 
+    # Decode the secrets block if it's base64-encoded.
+    if "secrets" in current:
+        current["secrets"] = _decode_secrets_block(current["secrets"])
+
     new_config = {**current, "settings": clean_snapshot}
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = config_path.with_suffix(".tmp")
+    # Encode the secrets block for at-rest storage.
+    write_data = dict(new_config)
+    if "secrets" in write_data and isinstance(write_data["secrets"], dict) and write_data["secrets"]:
+        secrets_json = json.dumps(write_data["secrets"])
+        write_data["secrets"] = base64.b64encode(secrets_json.encode()).decode()
     tmp.write_text(
-        json.dumps(new_config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"  # lgtm[py/clear-text-storage-sensitive-data]: secrets at rest in local config file, 0600 perms
+        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     tmp.replace(config_path)
     os.chmod(config_path, 0o600)

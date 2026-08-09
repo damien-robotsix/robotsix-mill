@@ -12,6 +12,7 @@ backward-compat with ``check_config_sync.py`` and ``emit_config_schema.py``.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from pathlib import Path
@@ -181,14 +182,25 @@ class Secrets:
 
     @staticmethod
     def _load_secrets_file(path: str) -> dict[str, Any]:
-        """Read the ``secrets:`` block from a JSON file."""
+        """Read the ``secrets:`` block from a JSON file.
+
+        Handles both the legacy plain-dict format and the new
+        base64-encoded format.
+        """
         try:
             raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        except FileNotFoundError, json.JSONDecodeError:
+        except (FileNotFoundError, json.JSONDecodeError):
             return {}
         if not isinstance(raw, dict):
             return {}
         secrets_block = raw.get("secrets", {})
+        if isinstance(secrets_block, str) and secrets_block:
+            # New format: base64-encoded JSON string.
+            try:
+                decoded = base64.b64decode(secrets_block)
+                secrets_block = json.loads(decoded)
+            except Exception:
+                return {}
         return secrets_block if isinstance(secrets_block, dict) else {}
 
     # --- Property accessors (unwrapping SecretStr) -----------------------

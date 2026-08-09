@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -100,11 +101,22 @@ def load_secrets_block() -> dict[str, Any]:
 
     Never raises: a missing or malformed file means "all unset", matching
     :func:`load_settings_block`.
+
+    The ``secrets`` block may be stored base64-encoded (new format) or as
+    a plain dict (legacy format).  Both are handled transparently.
     """
     main_path = _resolve_main_config_path()
     if main_path is None:
         return {}
     block = _load_file(main_path).get("secrets")
+    if isinstance(block, str) and block:
+        # New format: base64-encoded JSON string.
+        try:
+            decoded = base64.b64decode(block)
+            block = json.loads(decoded)
+        except Exception:
+            # Legacy plain-dict format or malformed string.
+            return {}
     return dict(block) if isinstance(block, dict) else {}
 
 
