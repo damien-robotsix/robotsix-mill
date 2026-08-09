@@ -767,8 +767,10 @@ class DeliverStage(Stage):
         # Conventional subject: with squash_merge_commit_title =
         # COMMIT_OR_PR_TITLE a multi-commit PR squashes under the PR
         # title, so this is the other half of the same requirement.
-        title = conventional_subject(repo_dir, ticket.id, ticket.title)
         ws = ctx.service.workspace(ticket)
+        title = conventional_subject(
+            repo_dir, ticket.id, ticket.title, artifacts_dir=ws.artifacts_dir
+        )
         spec = ws.read_description()
 
         # Generate a structured PR body from the diff when enabled.

@@ -15,7 +15,12 @@ from ...forge import get_forge
 from ...forge.auth import _resolve_remote_url, github_token
 from ...vcs import git_ops
 from .. import short_circuit_verify
-from .._conventional import conventional_subject, drop_fragments
+from .._conventional import (
+    conventional_subject,
+    drop_fragments,
+    record_kind,
+    resolve_kind,
+)
 from ..base import Outcome, StageContext
 from ..pause import (
     build_compact_resume_message_history,
@@ -1093,11 +1098,15 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # = COMMIT_OR_PR_TITLE, a single-commit PR is squashed under
         # THIS subject, and release-please ignores anything it cannot
         # parse.  The type comes from the fragment the agent just wrote.
+        # Park the kind before the fragment goes: deliver builds the PR
+        # title later, by which point the branch no longer carries it.
+        record_kind(ws.artifacts_dir, resolve_kind(repo_dir, ticket.id))
         commit_message = conventional_subject(
             repo_dir,
             ticket.id,
             ticket.title,
             suffix="" if ok else " [WIP]",
+            artifacts_dir=ws.artifacts_dir,
         )
         # Only now that the kind has been folded into the subject: on a
         # release-please repo nothing drains changelog.d, so leaving the

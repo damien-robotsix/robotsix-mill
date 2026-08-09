@@ -141,3 +141,56 @@ def test_drop_fragments_is_a_noop_on_a_towncrier_repo(tmp_path):
     frag = _fragment(repo, "feature")
     assert drop_fragments(repo, TICKET) == []
     assert frag.exists()
+
+
+def test_deliver_still_classifies_after_implement_dropped_the_fragment(tmp_path):
+    """The regression: implement deletes the fragment, deliver runs later.
+
+    Without the parked kind every PR title falls back to `chore`, and for a
+    multi-commit PR GitHub squashes under that title — so the real type is
+    lost exactly where release-please reads it.
+    """
+    from robotsix_mill.stages._conventional import record_kind, resolve_kind
+
+    repo = _repo(tmp_path)
+    artifacts = tmp_path / "artifacts"
+    _fragment(repo, "feature")
+
+    # implement: park the kind, then drop the fragment from the branch
+    record_kind(artifacts, resolve_kind(repo, TICKET))
+    drop_fragments(repo, TICKET)
+    assert not (repo / "changelog.d").exists()
+
+    # deliver: the branch no longer carries it, the artifact does
+    subject = conventional_subject(repo, TICKET, "Do a thing", artifacts_dir=artifacts)
+    assert subject == f"feat: Do a thing ({TICKET})"
+
+
+def test_a_fresh_fragment_wins_over_a_stale_recorded_kind(tmp_path):
+    from robotsix_mill.stages._conventional import record_kind
+
+    repo = _repo(tmp_path)
+    artifacts = tmp_path / "artifacts"
+    record_kind(artifacts, "misc")
+    _fragment(repo, "bugfix")
+    assert (
+        conventional_subject(repo, TICKET, "Do a thing", artifacts_dir=artifacts)
+        == f"fix: Do a thing ({TICKET})"
+    )
+
+
+def test_no_fragment_and_no_artifact_still_falls_back(tmp_path, caplog):
+    repo = _repo(tmp_path)
+    with caplog.at_level(logging.WARNING):
+        s = conventional_subject(
+            repo, TICKET, "Do a thing", artifacts_dir=tmp_path / "nope"
+        )
+    assert s.startswith("chore: ")
+
+
+def test_record_kind_tolerates_a_missing_dir_and_a_none_kind(tmp_path):
+    from robotsix_mill.stages._conventional import record_kind
+
+    record_kind(None, "feature")  # no artifacts dir
+    record_kind(tmp_path / "new", None)  # nothing to record
+    assert not (tmp_path / "new" / "changelog_kind.txt").exists()
