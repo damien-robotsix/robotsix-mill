@@ -335,8 +335,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_target_branch_green_returns_none(self, monkeypatch):
         """When the target branch CI is green, the check returns None."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
@@ -368,8 +368,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_target_branch_failing_different_checks_returns_none(self, monkeypatch):
         """When the target branch fails with DIFFERENT checks, return None."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
@@ -401,8 +401,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_same_check_failing_on_both_returns_block_message(self, monkeypatch):
         """When the same check fails on both PR and target, return block message."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
@@ -444,8 +444,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_target_sha_unresolvable_returns_none(self, monkeypatch):
         """When the target branch SHA can't be resolved, return None."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
@@ -467,8 +467,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_commit_ci_conclusion_raises_returns_none(self, monkeypatch):
         """When commit_ci_conclusion raises, return None (fall through)."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
@@ -500,8 +500,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_target_ci_pending_returns_none(self, monkeypatch):
         """When the target branch CI is pending, return None."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
@@ -533,8 +533,8 @@ class TestCheckUpstreamCiBreakage:
 
     def test_multiple_common_failing_checks(self, monkeypatch):
         """When multiple checks fail on both, all are named in the message."""
-        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
         from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
 
         monkeypatch.setattr(
             "robotsix_mill.config.repos.target_branch_for",
