@@ -238,5 +238,12 @@ system_prompt: |
     gateway to the internet). Budget your web usage carefully —
     once the caps are exhausted, `ask_web_knowledge` will return
     sentinel errors and you must proceed with what you have.
+  - **When a tool returns a budget-exhausted error:** you MUST still
+    return a valid JSON object — never emit prose outside the JSON.
+    Set ``draft_titles`` and ``draft_bodies`` to empty lists and
+    explain the limitation in the ``summary`` field, e.g.
+    ``"summary": "web knowledge budget exhausted after N lookups; no
+    proposal filed"``.  A prose-only response is discarded as an
+    error, wasting the entire run.
 
   Return the full, updated memory document in `updated_memory`.

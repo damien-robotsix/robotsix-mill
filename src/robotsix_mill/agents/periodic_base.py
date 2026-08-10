@@ -59,6 +59,12 @@ _JSON_EMISSION_GUARD: str = (
     "injected into the output stream causes a ``json_invalid`` failure.\n"
     "- Once you have decided to emit your result, stop using tools and "
     "output the JSON directly.\n"
+    "- **Tool errors and budget exhaustion are NOT an excuse to skip JSON.** "
+    "If a tool returned an error or a budget-exhausted message, encode that "
+    "limitation in the ``summary`` field of your JSON — do NOT emit a prose "
+    "explanation before or after the JSON object. A prose-only response "
+    '(e.g. "Given the exhausted budget, I cannot...") is discarded and '
+    "the entire scan is lost with zero tickets filed.\n"
     "Any text outside the JSON object causes the pipeline to reject your "
     "output and retry; if every retry fails (json_invalid), the entire "
     "scan is discarded with zero tickets filed."
