@@ -1118,6 +1118,15 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             )
 
     async def stop(self) -> None:
+        """Stop all worker tasks: cancel consumers, periodic supervisors,
+        and mid-flight periodic passes.
+
+        Waits for in-progress periodic passes (survey, audit, health, …)
+        to finish within ``shutdown_grace_seconds`` before cancelling
+        them.  Then cancels every per-board consumer task and all
+        periodic-supervisor tasks, awaiting their ``CancelledError``
+        completion.
+        """
         # Wait for periodic passes that are mid-run (survey, audit,
         # health, …) to finish before tearing the loops down. Without
         # this a SIGTERM during a survey run would lose the work and
