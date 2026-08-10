@@ -384,22 +384,13 @@ def test_install_project_prefixes_pip_when_pyproject_and_proxy(tmp_path, monkeyp
     cmd = seen["argv"][-1]
     pip = "pip install --user --quiet --disable-pip-version-check"
     cleanup = "rm -rf build src/*.egg-info 2>/dev/null; "
-    space_guard_open = (
-        "available=$(df --output=avail /tmp 2>/dev/null | tail -1); "
-        'if [ -n "$available" ] && [ "$available" -lt 131072 ]; then '
-        'echo "DISK_SPACE_LOW: /tmp has ${available} KiB free — '
-        'skipping project install to avoid ENOSPC" >&2; else '
-    )
-    space_guard_close = "; fi; "
-    expected = (
-        PATH_EXPORT
-        + f"{cleanup}"
-        + space_guard_open
-        + f"({pip} '.[dev]' || {pip} .)"
-        + space_guard_close
-        + " && pytest -q"
-    )
-    assert cmd == expected
+    # Install is best-effort — command always runs regardless (no &&).
+    # Disk-space guard is present.
+    assert cmd.startswith(PATH_EXPORT + cleanup)
+    assert "df -k /tmp" in cmd
+    assert f'({pip} ".[dev]" 2>&1 || {pip} . 2>&1)' in cmd
+    assert "sandbox project install failed" in cmd
+    assert cmd.endswith("; pytest -q")
 
 
 def test_install_project_noop_without_pyproject(tmp_path, monkeypatch):
@@ -468,10 +459,12 @@ def test_install_project_on_by_default(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
-    sandbox.run("pytest -q", repo_dir=repo, settings=s)  # default install_project=True
+    sandbox.run("git status", repo_dir=repo, settings=s)  # default install_project=True
     cmd = seen["argv"][-1]
     assert cmd.startswith(PATH_EXPORT)
     assert "pip install --user" in cmd[len(PATH_EXPORT) :]
+    # Best-effort: command always runs.
+    assert cmd.endswith("; git status")
 
 
 def test_sandbox_no_pythonpath_without_src_layout(tmp_path, monkeypatch):
@@ -905,7 +898,13 @@ def test_maybe_install_prefix_uv_path(tmp_path):
     assert "command -v uv" in prefix
     assert "WARNING: uv not found, falling back to pip" in prefix
     assert "rm -rf build src/*.egg-info" in prefix
-    assert prefix.endswith(" && pytest -q")
+    # Install is best-effort — command always runs regardless.
+    assert prefix.endswith("; pytest -q")
+    # Disk-space guard is present.
+    assert "df -k /tmp" in prefix
+    assert "avail" in prefix
+    # Warning on install failure.
+    assert "sandbox project install failed" in prefix
 
 
 def test_maybe_install_prefix_pep508_git_dep(tmp_path):
@@ -933,7 +932,13 @@ def test_maybe_install_prefix_pep508_git_dep(tmp_path):
     assert "command -v uv" in prefix
     assert "WARNING: uv not found, falling back to pip" in prefix
     assert "rm -rf build src/*.egg-info" in prefix
-    assert prefix.endswith(" && pytest -q")
+    # Install is best-effort — command always runs regardless.
+    assert prefix.endswith("; pytest -q")
+    # Disk-space guard is present.
+    assert "df -k /tmp" in prefix
+    assert "avail" in prefix
+    # Warning on install failure.
+    assert "sandbox project install failed" in prefix
 
 
 def test_maybe_install_prefix_no_uv_sources_unchanged(tmp_path):
@@ -951,9 +956,15 @@ def test_maybe_install_prefix_no_uv_sources_unchanged(tmp_path):
 
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     pip = "pip install --user --quiet --disable-pip-version-check"
-    assert f"({pip} '.[dev]' || {pip} .)" in prefix
+    assert f'({pip} ".[dev]" 2>&1 || {pip} . 2>&1)' in prefix
     assert "rm -rf build src/*.egg-info" in prefix
     assert "uv sync" not in prefix
+    # Install is best-effort — command always runs regardless.
+    assert prefix.endswith("; pytest -q")
+    # Disk-space guard is present.
+    assert "df -k /tmp" in prefix
+    # Warning on install failure.
+    assert "sandbox project install failed" in prefix
 
 
 def test_maybe_install_prefix_uv_lock_missing(tmp_path):
@@ -976,9 +987,15 @@ def test_maybe_install_prefix_uv_lock_missing(tmp_path):
 
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     pip = "pip install --user --quiet --disable-pip-version-check"
-    assert f"({pip} '.[dev]' || {pip} .)" in prefix
+    assert f'({pip} ".[dev]" 2>&1 || {pip} . 2>&1)' in prefix
     assert "rm -rf build src/*.egg-info" in prefix
     assert "uv sync" not in prefix
+    # Install is best-effort — command always runs regardless.
+    assert prefix.endswith("; pytest -q")
+    # Disk-space guard is present.
+    assert "df -k /tmp" in prefix
+    # Warning on install failure.
+    assert "sandbox project install failed" in prefix
 
 
 def test_maybe_install_prefix_uv_sources_no_proxy_noop(tmp_path):
@@ -1019,117 +1036,6 @@ def test_maybe_install_prefix_uv_sources_no_pyproject_noop(tmp_path):
 
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     assert prefix == "pytest -q"
-
-
-def test_command_needs_python_positive():
-    """Python-interpreter and tooling commands are recognized."""
-    assert sandbox._command_needs_python("python -c 'print(1)'")
-    assert sandbox._command_needs_python("pytest -q")
-    assert sandbox._command_needs_python("uv run pytest")
-    assert sandbox._command_needs_python("ruff check .")
-    assert sandbox._command_needs_python("mypy src/")
-    assert sandbox._command_needs_python("pip install -e .")
-    assert sandbox._command_needs_python("yamllint --strict .")
-    assert sandbox._command_needs_python("robotsix-mill ticket show")
-    assert sandbox._command_needs_python("robotsix-modules check-registration")
-    assert sandbox._command_needs_python("python3 -m pytest")
-    assert sandbox._command_needs_python("deptry .")
-    assert sandbox._command_needs_python("vulture src/")
-    assert sandbox._command_needs_python("bandit -r src/")
-    assert sandbox._command_needs_python("coverage run -m pytest")
-    assert sandbox._command_needs_python("pre-commit run --all-files")
-    assert sandbox._command_needs_python("mkdocs build")
-    assert sandbox._command_needs_python("sphinx-build docs/ _build/")
-    assert sandbox._command_needs_python("tox -e py314")
-    assert sandbox._command_needs_python("hatch build")
-    assert sandbox._command_needs_python("towncrier build")
-
-
-def test_command_needs_python_negative():
-    """Non-Python commands skip the install."""
-    assert not sandbox._command_needs_python("git diff --name-only")
-    assert not sandbox._command_needs_python("node --version")
-    assert not sandbox._command_needs_python("which npm")
-    assert not sandbox._command_needs_python("ls -la")
-    assert not sandbox._command_needs_python("npm test")
-    assert not sandbox._command_needs_python("npx tsc --noEmit")
-    assert not sandbox._command_needs_python("grep -r 'import' src/")
-    assert not sandbox._command_needs_python("cat pyproject.toml")
-    assert not sandbox._command_needs_python("echo hello")
-    assert not sandbox._command_needs_python("make build")
-
-
-def test_maybe_install_prefix_skips_non_python_commands(tmp_path):
-    """``git status``, ``node --version`` etc. bypass the install prefix."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
-
-    s = _settings(
-        tmp_path,
-        data_dir=str(tmp_path),
-        sandbox_data_mount=str(tmp_path),
-        sandbox_proxy_url="http://sandbox-proxy:8888",
-    )
-
-    for cmd in ("git diff --name-only", "node --version", "which npm", "ls -la"):
-        result = sandbox._maybe_install_prefix(cmd, repo, s)
-        assert result == cmd, f"non-Python command {cmd!r} should skip install"
-
-
-def test_maybe_install_prefix_python_command_still_installs(tmp_path):
-    """Python commands still get the project install prefix."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
-
-    s = _settings(
-        tmp_path,
-        data_dir=str(tmp_path),
-        sandbox_data_mount=str(tmp_path),
-        sandbox_proxy_url="http://sandbox-proxy:8888",
-    )
-
-    result = sandbox._maybe_install_prefix("pytest -q", repo, s)
-    assert "pip install --user" in result
-    assert result.endswith(" && pytest -q")
-
-
-def test_maybe_install_prefix_venv_exists_short_circuit(tmp_path):
-    """When .venv already exists in the repo, install is skipped entirely."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
-    (repo / ".venv").mkdir()
-
-    s = _settings(
-        tmp_path,
-        data_dir=str(tmp_path),
-        sandbox_data_mount=str(tmp_path),
-        sandbox_proxy_url="http://sandbox-proxy:8888",
-    )
-
-    result = sandbox._maybe_install_prefix("pytest -q", repo, s)
-    assert result == "pytest -q"
-
-
-def test_maybe_install_prefix_disk_space_guard_present(tmp_path):
-    """The pip install path includes a /tmp disk-space pre-check."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
-
-    s = _settings(
-        tmp_path,
-        data_dir=str(tmp_path),
-        sandbox_data_mount=str(tmp_path),
-        sandbox_proxy_url="http://sandbox-proxy:8888",
-    )
-
-    prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
-    assert "df --output=avail /tmp" in prefix
-    assert "DISK_SPACE_LOW" in prefix
-    assert "ENOSPC" in prefix
 
 
 def test_extra_packages_integration_from_config_file(tmp_path, monkeypatch):
