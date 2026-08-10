@@ -656,8 +656,11 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 > can override it per repository.  The ``*_interval_seconds`` Settings
 > keys below are a **fallback** — the scheduler only reads them when
 > neither the base YAML nor an overlay sets an interval.  The code
-> defaults in ``_settings_periodic.py`` are also set to 1209600 (14d),
-> matching the YAML values.
+> defaults for the four agents targeted by this cadence change
+> (audit, trace_review, survey, completeness_check) are also set to
+> 1209600 in ``_settings_periodic.py``; the remaining periodic agents'
+> code defaults remain at 604800 (7 d) — their YAML definitions
+> specifying ``interval: 14d`` take precedence over the code fallback.
 >
 > `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` write no
 > per-agent memory ledger (`member_sync` and `diagnostic` are deterministic
