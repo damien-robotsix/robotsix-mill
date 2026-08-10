@@ -57,7 +57,7 @@ curl -X POST http://localhost:8077/passes/audit/run
 periodic:
   audit:
     enabled: true
-    interval_seconds: 604800  # 7 days (weekly)
+    interval_seconds: 1209600  # 14 days
 ```
 
 ## Configuration
@@ -65,7 +65,7 @@ periodic:
 | Variable | Default | Description |
 |---|---|---|
 | `MILL_AUDIT_PERIODIC` | `false` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `604800` | Seconds between automatic audits (7 days) |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `1209600` | Seconds between automatic audits (14 days) |
 
 The audit memory ledger path is fixed (not overridable): in multi-repo
 mode, per-repo memory lives at `<data_dir>/<repo_id>/audit_memory.md`;

@@ -343,7 +343,7 @@ def test_audit_config_defaults():
     """Audit config has correct defaults."""
     s = Settings()
     assert s.audit_periodic is True
-    assert s.audit_interval_seconds == 604800
+    assert s.audit_interval_seconds == 1209600
 
 
 # --- CLI tests ---

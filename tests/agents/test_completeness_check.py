@@ -328,7 +328,7 @@ def test_completeness_check_config_defaults():
     """Completeness-check config has correct defaults."""
     s = Settings()
     assert s.completeness_check_periodic is True
-    assert s.completeness_check_interval_seconds == 604800
+    assert s.completeness_check_interval_seconds == 1209600
 
 
 def test_completeness_check_periodic_config():
