@@ -1043,6 +1043,69 @@ class TestReviewerAgreementGuard:
         assert outcome.next_state == State.DONE
         assert "no change needed" in outcome.note
 
+    def test_admin_only_routes_to_implement(self, ctx_factory, monkeypatch):
+        """ADMIN_ONLY always routes to implement — skips Opus."""
+        ctx = ctx_factory(
+            reviewer_agreement_gate_enabled=True, refine_triage_enabled=True
+        )
+        t = _ticket(ctx)
+        ws = _ws(ctx, t)
+        s = ctx.settings
+
+        monkeypatch.setattr(
+            refining,
+            "triage_reviewer_agreement",
+            lambda **kw: ReviewerAgreementResult(
+                decision="ADMIN_ONLY",
+                reason="Reviewer feedback is administrative only — resumed after block fix.",
+            ),
+        )
+
+        outcome = _reconcile.reviewer_agreement_guard(
+            ctx,
+            t,
+            "some draft",
+            ws,
+            s,
+            "Resumed after underlying block cause was fixed.",
+        )
+
+        assert outcome is not None
+        assert outcome.next_state is not State.DONE
+        assert "administrative feedback" in outcome.note.lower()
+        assert (ws.artifacts_dir / "draft-original.md").exists()
+        assert (ws.artifacts_dir / "file_map.json").exists()
+
+    def test_admin_only_task_with_branch_routes_to_implement(
+        self, ctx_factory, monkeypatch
+    ):
+        """ADMIN_ONLY for a TASK with a branch → still routes to implement."""
+        ctx = ctx_factory(
+            reviewer_agreement_gate_enabled=True, refine_triage_enabled=True
+        )
+        t = _ticket(ctx)
+        ctx.service.set_branch(t.id, "feat/some-branch")
+        t = ctx.service.get(t.id)
+        ws = _ws(ctx, t)
+        s = ctx.settings
+
+        monkeypatch.setattr(
+            refining,
+            "triage_reviewer_agreement",
+            lambda **kw: ReviewerAgreementResult(
+                decision="ADMIN_ONLY",
+                reason="Reviewer feedback is administrative only.",
+            ),
+        )
+
+        outcome = _reconcile.reviewer_agreement_guard(
+            ctx, t, "some draft", ws, s, "Resumed after block fix."
+        )
+
+        assert outcome is not None
+        assert outcome.next_state is not State.DONE
+        assert "administrative feedback" in outcome.note.lower()
+
     def test_disagree_returns_none(self, ctx_factory, monkeypatch):
         ctx = ctx_factory(
             reviewer_agreement_gate_enabled=True, refine_triage_enabled=True

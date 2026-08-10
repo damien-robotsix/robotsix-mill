@@ -145,9 +145,13 @@ class ReviewerAgreementResult(BaseModel):
 
     When AGREE, the pipeline short-circuits to DONE (skipping Opus).
     When DISAGREE, the full refine agent runs as normal.
+    When ADMIN_ONLY, the reviewer feedback is purely administrative
+    (no substantive change requests, no confirmation of the draft's
+    conclusion) — skip Opus but route to implement for the actual
+    code change.
     """
 
-    decision: Literal["AGREE", "DISAGREE"]
+    decision: Literal["AGREE", "DISAGREE", "ADMIN_ONLY"]
     reason: str
 
 
