@@ -757,7 +757,7 @@
         },
         "audit_interval_seconds": {
           "advanced": true,
-          "default": 604800,
+          "default": 1209600,
           "description": "Seconds between periodic audit passes.",
           "title": "Audit Interval Seconds",
           "type": "integer"
@@ -1054,7 +1054,7 @@
         },
         "completeness_check_interval_seconds": {
           "advanced": true,
-          "default": 604800,
+          "default": 1209600,
           "description": "Seconds between periodic completeness-check passes.",
           "title": "Completeness Check Interval Seconds",
           "type": "integer"
@@ -2848,7 +2848,7 @@
         },
         "survey_interval_seconds": {
           "advanced": true,
-          "default": 604800,
+          "default": 1209600,
           "description": "Seconds between automatic survey passes.",
           "title": "Survey Interval Seconds",
           "type": "integer"
@@ -3040,7 +3040,7 @@
         },
         "trace_review_interval_seconds": {
           "advanced": true,
-          "default": 86400,
+          "default": 1209600,
           "description": "Seconds between automatic trace-review passes.",
           "title": "Trace Review Interval Seconds",
           "type": "integer"

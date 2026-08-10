@@ -43,7 +43,7 @@ class _PeriodicSettings(BaseModel):
     # Interval between periodic audit passes (seconds). Only used when
     # MILL_AUDIT_PERIODIC=true.
     audit_interval_seconds: int = Field(
-        default=604800,  # 7d — weekly default; per-repo override via YAML
+        default=1209600,  # 14d — per-repo override via YAML
         description="Seconds between periodic audit passes.",
         json_schema_extra={"advanced": True},
     )
@@ -77,9 +77,9 @@ class _PeriodicSettings(BaseModel):
         description="When true, run periodic trace-review passes (scans traces, flags outliers, files drafts).",
     )
     # Interval between automatic trace-review passes (seconds). Default
-    # daily. Enforced minimum 3600s (1h) in the worker.
+    # 14 days. Enforced minimum 3600s (1h) in the worker.
     trace_review_interval_seconds: int = Field(
-        default=86400,
+        default=1209600,  # 14d — per-repo override via YAML
         description="Seconds between automatic trace-review passes.",
         json_schema_extra={"advanced": True},
     )
@@ -253,10 +253,10 @@ class _PeriodicSettings(BaseModel):
         description="When true, run periodic survey passes for OSS project discovery.",
     )
     # Seconds between automatic survey passes when
-    # MILL_SURVEY_PERIODIC=true. Default 604800 (7 days). Minimum
+    # MILL_SURVEY_PERIODIC=true. Default 1209600 (14 days). Minimum
     # enforced at 60s in the worker loop.
     survey_interval_seconds: int = Field(
-        default=604800,  # 7d — weekly default; per-repo override via YAML
+        default=1209600,  # 14d — per-repo override via YAML
         description="Seconds between automatic survey passes.",
         json_schema_extra={"advanced": True},
     )
@@ -509,7 +509,7 @@ class _PeriodicSettings(BaseModel):
     # MILL_COMPLETENESS_CHECK_PERIODIC=true. Minimum enforced at 60s
     # in the worker loop.
     completeness_check_interval_seconds: int = Field(
-        default=604800,  # 7d — weekly default; per-repo override via YAML
+        default=1209600,  # 14d — per-repo override via YAML
         description="Seconds between periodic completeness-check passes.",
         json_schema_extra={"advanced": True},
     )

@@ -413,7 +413,7 @@ def test_survey_config_defaults():
     """Survey config has correct defaults."""
     s = Settings()
     assert s.survey_periodic is True
-    assert s.survey_interval_seconds == 604800
+    assert s.survey_interval_seconds == 1209600
 
 
 def test_survey_periodic_config():

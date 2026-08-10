@@ -639,7 +639,7 @@ Each periodic agent shares this pattern:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `true`¹ | Enable periodic passes |
-| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `604800`² | Seconds between automatic passes |
+| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `1209600`² | Seconds between automatic passes |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
@@ -656,9 +656,8 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 > can override it per repository.  The ``*_interval_seconds`` Settings
 > keys below are a **fallback** — the scheduler only reads them when
 > neither the base YAML nor an overlay sets an interval.  The code
-> defaults in ``_settings_periodic.py`` are kept at 604800 (7d) for
-> backward compatibility but are superseded in practice by the YAML
-> values.
+> defaults in ``_settings_periodic.py`` are also set to 1209600 (14d),
+> matching the YAML values.
 >
 > `trace_health`, `ci_monitor`, `member_sync`, and `diagnostic` write no
 > per-agent memory ledger (`member_sync` and `diagnostic` are deterministic
@@ -699,7 +698,7 @@ variable and its dotted YAML path.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `periodic.trace_review.enabled` | `MILL_TRACE_REVIEW_PERIODIC` | `true` | Enable periodic trace-review passes |
-| `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `86400` | Seconds between trace-review passes (minimum 3600) |
+| `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `1209600` | Seconds between trace-review passes (minimum 3600) |
 | `periodic.trace_review.cost_multiplier` | `MILL_TRACE_REVIEW_COST_MULTIPLIER` | `3.0` | Outlier threshold: cost > batch median × N → flagged |
 | `periodic.trace_review.per_obs_cost_threshold` | `MILL_TRACE_REVIEW_PER_OBS_COST_THRESHOLD` | `0.001` | Per-observation cost threshold for flagging |
 | `periodic.trace_review.obs_multiplier` | `MILL_TRACE_REVIEW_OBS_MULTIPLIER` | `3.0` | Outlier threshold: observation count > batch median × N → flagged |
@@ -846,7 +845,7 @@ pattern control its tool-call and web-fetch budgets:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_SURVEY_PERIODIC` | `true` | Enable periodic survey passes |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `604800` | Seconds between survey passes |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `1209600` | Seconds between survey passes |
 | `MILL_SURVEY_REQUEST_LIMIT` | `40` | Per-call request cap for the survey agent |
 | `MILL_SURVEY_WEB_FETCH_MAX_CALLS` | `5` | Max real (cache-miss) web_fetch calls per survey run |
 | `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
@@ -862,7 +861,7 @@ controls its request budget:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_AUDIT_PERIODIC` | `true` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `604800` | Seconds between audit passes |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `1209600` | Seconds between audit passes |
 | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the audit agent |
 
 #### test_gap
@@ -937,7 +936,7 @@ and as environment variables:
 | `MILL_CI_DEBT_RECHECK_PERIODIC` | `true` | Enable periodic CI-debt recheck passes (auto-resumes BLOCKED tickets when target-branch CI debt clears) |
 | `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` | `3600` | Seconds between CI-debt recheck passes (1 hour) |
 | `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
-| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between completeness-check passes |
+| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `1209600` | Seconds between completeness-check passes |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_CONFIG_SYNC_PERIODIC` | `true` | Enable periodic config/drift detection passes |
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day) |

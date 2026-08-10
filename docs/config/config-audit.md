@@ -196,7 +196,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_AUDIT_PERIODIC` | `audit_periodic` | `false` | `bool` | Settings | non-sensitive | default | §11 | `audit_runner.py`, `runtime/worker.py` | |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `audit_interval_seconds` | `86400` | `int` | Settings | non-sensitive | default | §11 | `runtime/worker.py` | Local YAML overrides to 1 week |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `audit_interval_seconds` | `1209600` | `int` | Settings | non-sensitive | default | §11 | `runtime/worker.py` | 14 days |
 
 ### 1.15  Periodic agents — trace-health
 
@@ -231,7 +231,7 @@ other code depends on.
 | Env var | Field | Default | Type | Source | Sensitivity | YAML | Docs | Consumers | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `MILL_SURVEY_PERIODIC` | `survey_periodic` | `true` | `bool` | Settings | non-sensitive | default | **missing** | `survey_runner.py`, `runtime/worker.py` | ⚠️ Undocumented; default `true` (on by default) |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `604800` | `int` | Settings | non-sensitive | default | §16 | `runtime/worker.py` | |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `survey_interval_seconds` | `1209600` | `int` | Settings | non-sensitive | default | §16 | `runtime/worker.py` | |
 
 ### 1.20  Periodic agents — diagnostic
 

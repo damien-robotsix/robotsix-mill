@@ -36,7 +36,7 @@
     "api_host": "0.0.0.0",
     "api_port": 8077,
     "api_url": "http://127.0.0.1:8077",
-    "audit_interval_seconds": 604800,
+    "audit_interval_seconds": 1209600,
     "audit_periodic": true,
     "audit_request_limit": 80,
     "auto_approve_enabled": false,
@@ -326,7 +326,7 @@
     "subscriber_shared_secret": null,
     "subscriber_urls": [],
     "subtask_request_limit": 30,
-    "survey_interval_seconds": 604800,
+    "survey_interval_seconds": 1209600,
     "survey_periodic": true,
     "survey_request_limit": 40,
     "survey_web_fetch_max_calls": 5,
@@ -353,7 +353,7 @@
     "trace_review_inspector_min_requests": 20,
     "trace_review_inspector_requests_per_obs": 0.1,
     "trace_review_inspector_toolless_requests": 3,
-    "trace_review_interval_seconds": 86400,
+    "trace_review_interval_seconds": 1209600,
     "trace_review_max_drafts_per_run": 5,
     "trace_review_max_errors": 20,
     "trace_review_max_inspections_per_run": 5,
@@ -396,3 +396,4 @@
     }
   }
 }
+
