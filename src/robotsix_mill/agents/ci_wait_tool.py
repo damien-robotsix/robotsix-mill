@@ -71,7 +71,13 @@ def build_ci_wait_tool(
 
         - ``CI_PASSED`` — every check is green. Report DONE.
         - ``CI_FAILING (attempt N/M): <summary>`` — CI is still red; the new
-          failing summary follows. Fix it and push again, then call
+          failing summary follows, prefixed with ``[sha: ..., run: ..., url:
+          ...]`` when run identifiers are available.  If the prefix includes a
+          ``run:`` id or ``url:``, you can pass it directly to
+          ``fetch_ci_logs`` to retrieve full job logs.  When no run identifier
+          is present, the inline job logs in the summary ("**Job logs:**"
+          section) contain enough detail — do NOT call ``fetch_ci_logs`` with
+          a placeholder id (0) in that case.  Fix it and push again, then call
           wait_for_ci once more.
         - ``CI_STILL_PENDING`` — checks did not finish within the wait window.
           Call wait_for_ci again to keep waiting, or report FAILED if CI looks
