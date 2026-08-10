@@ -44,6 +44,26 @@ _VERIFICATION_GATE: str = (
     "output alone."
 )
 
+# JSON-emission guard — prevents the model from contaminating its structured
+# output with prose, tool-call blocks, or trailing text.  The pydantic-ai
+# ``output_mode:'prompted'`` validator calls ``json.loads`` on the raw
+# message; any leading/trailing/interspersed non-JSON text causes a
+# ``json_invalid`` parse failure and exhausts the retry budget, aborting the
+# entire scan with zero tickets filed.  Applied uniformly to all periodic
+# detectors that emit structured ``PeriodicAgentResult`` output.
+_JSON_EMISSION_GUARD: str = (
+    "\n\nJSON-ONLY FINAL OUTPUT — your last message must contain ONLY the "
+    "JSON object and nothing else:\n"
+    "- Start with ``{``, end with ``}``.  No prose before or after.\n"
+    "- Do NOT call any tool during final synthesis — a tool-call block "
+    "injected into the output stream causes a ``json_invalid`` failure.\n"
+    "- Once you have decided to emit your result, stop using tools and "
+    "output the JSON directly.\n"
+    "Any text outside the JSON object causes the pipeline to reject your "
+    "output and retry; if every retry fails (json_invalid), the entire "
+    "scan is discarded with zero tickets filed."
+)
+
 
 def _count_active_proposals(recent_proposals: str) -> int:
     """Parse the ``<recent_proposals>`` block and return the number of
@@ -413,6 +433,7 @@ def run_periodic_agent(
     # Require every concrete claim to be grounded in the live tree before a
     # draft is filed — applied uniformly to all periodic detectors.
     prompt += _VERIFICATION_GATE
+    prompt += _JSON_EMISSION_GUARD
 
     # ------------------------------------------------------------------
     # Step 6 — run with retry
