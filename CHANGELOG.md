@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.5.0...v0.6.0) (2026-08-10)
+
+
+### Features
+
+* Add pre-commit hook to enforce `.trivyignore` expiry annotations (20260804T143808Z-add-pre-commit-hook-to-enforce-trivyigno-a70c) ([#2838](https://github.com/damien-robotsix/robotsix-mill/issues/2838)) ([43ec348](https://github.com/damien-robotsix/robotsix-mill/commit/43ec34832359c36bb4e0f63a0bccfe907468408c))
+* Improve CI failure diagnosis by exposing job-level status in the mill board API (20260803T092623Z-improve-ci-failure-diagnosis-by-exposing-be21) ([#2821](https://github.com/damien-robotsix/robotsix-mill/issues/2821)) ([fb31255](https://github.com/damien-robotsix/robotsix-mill/commit/fb312553684ffe0822ce9092006b2ba14431a61c))
+* run agents through llmio's tier-fallback loop ([#2830](https://github.com/damien-robotsix/robotsix-mill/issues/2830)) ([d4a2b97](https://github.com/damien-robotsix/robotsix-mill/commit/d4a2b97a6d507640af9562d3aa2e05b4ed808698))
+
+
+### Bug Fixes
+
+* agent_limitation — Every run_command invocation in the trace is polluted by a sandbox env hook that triggers (20260804T122541Z-agent-limitation-every-run-command-invoc-d8ab) ([#2835](https://github.com/damien-robotsix/robotsix-mill/issues/2835)) ([91ee9b9](https://github.com/damien-robotsix/robotsix-mill/commit/91ee9b93e9a75c76ac9ce36f2743bf37ab066907))
+* agent_limitation — Root AGENT span 9f475bc14081061b ('test_gap run') ended at ERROR 'UnexpectedModelBehavior: (20260804T122541Z-agent-limitation-root-agent-span-9f475bc-2d49) ([#2836](https://github.com/damien-robotsix/robotsix-mill/issues/2836)) ([c79873e](https://github.com/damien-robotsix/robotsix-mill/commit/c79873e69213fdc782201ca533144b264b9cfa53))
+
 ## [0.5.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.4.0...v0.5.0) (2026-08-09)
 
 
