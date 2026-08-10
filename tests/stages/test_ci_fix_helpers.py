@@ -323,3 +323,272 @@ def test_failing_context_is_namedtuple():
     assert "head_sha" in ctx._fields
     assert "failing_run_ids" in ctx._fields
     assert "failing_run_urls" in ctx._fields
+
+
+# ---------------------------------------------------------------------------
+# _check_upstream_ci_breakage
+# ---------------------------------------------------------------------------
+
+
+class TestCheckUpstreamCiBreakage:
+    """Tests for _check_upstream_ci_breakage."""
+
+    def test_target_branch_green_returns_none(self, monkeypatch):
+        """When the target branch CI is green, the check returns None."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "abc123def456",
+        )
+        mock_forge = _FakeForge(
+            commit_ci_conclusion={
+                "conclusion": "success",
+                "failing": [],
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "ruff", "conclusion": "failure"}],
+        )
+        assert result is None
+
+    def test_target_branch_failing_different_checks_returns_none(self, monkeypatch):
+        """When the target branch fails with DIFFERENT checks, return None."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "abc123def456",
+        )
+        mock_forge = _FakeForge(
+            commit_ci_conclusion={
+                "conclusion": "failure",
+                "failing": [{"name": "Security Audit"}],
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "ruff"}],
+        )
+        assert result is None
+
+    def test_same_check_failing_on_both_returns_block_message(self, monkeypatch):
+        """When the same check fails on both PR and target, return block message."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "abc123def4567890",
+        )
+        mock_forge = _FakeForge(
+            commit_ci_conclusion={
+                "conclusion": "failure",
+                "failing": [
+                    {"name": "ruff"},
+                    {"name": "CI"},
+                ],
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [
+                {"name": "ruff"},
+                {"name": "mypy"},
+            ],
+        )
+        assert result is not None
+        assert "Upstream CI breakage" in result
+        assert "ruff" in result
+        assert "main" in result
+        assert "abc123de" in result
+
+    def test_target_sha_unresolvable_returns_none(self, monkeypatch):
+        """When the target branch SHA can't be resolved, return None."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: None,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "ruff"}],
+        )
+        assert result is None
+
+    def test_commit_ci_conclusion_raises_returns_none(self, monkeypatch):
+        """When commit_ci_conclusion raises, return None (fall through)."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "abc123",
+        )
+
+        def _raise(*a, **k):
+            raise RuntimeError("forge unavailable")
+
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: _FakeForge(
+                commit_ci_conclusion=_raise,
+            ),
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "ruff"}],
+        )
+        assert result is None
+
+    def test_target_ci_pending_returns_none(self, monkeypatch):
+        """When the target branch CI is pending, return None."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "abc123",
+        )
+        mock_forge = _FakeForge(
+            commit_ci_conclusion={
+                "conclusion": "pending",
+                "failing": [{"name": "ruff"}],
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "ruff"}],
+        )
+        assert result is None
+
+    def test_multiple_common_failing_checks(self, monkeypatch):
+        """When multiple checks fail on both, all are named in the message."""
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+        from robotsix_mill.config import Settings
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "develop",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "deadbeefcafe",
+        )
+        mock_forge = _FakeForge(
+            commit_ci_conclusion={
+                "conclusion": "failure",
+                "failing": [
+                    {"name": "ruff"},
+                    {"name": "mypy"},
+                    {"name": "Security Audit"},
+                ],
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [
+                {"name": "mypy"},
+                {"name": "ruff"},
+            ],
+        )
+        assert result is not None
+        assert "Upstream CI breakage" in result
+        assert "mypy" in result
+        assert "ruff" in result
+        assert "Security Audit" not in result  # not failing on PR
+        assert "develop" in result
+        assert "deadbeef" in result
+
+
+# --- fake forge for _check_upstream_ci_breakage tests ---
+
+
+class _FakeForge:
+    """Minimal forge stub that returns a canned dict (or raises) from
+    ``commit_ci_conclusion``."""
+
+    def __init__(self, commit_ci_conclusion=None):
+        self._ccc = commit_ci_conclusion
+
+    def commit_ci_conclusion(self, *, sha):
+        if callable(self._ccc):
+            return self._ccc(sha=sha)
+        return self._ccc

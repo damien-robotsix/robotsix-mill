@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -19,6 +20,8 @@ from ..core.workspace import (
 from ..forge.base import Forge
 
 __all__ = ["_read_counter", "_write_counter"]
+
+_log = logging.getLogger("robotsix_mill.stages.ci_fix_helpers")
 
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
@@ -343,3 +346,102 @@ class _FailingContext(NamedTuple):
     head_sha: str = ""
     failing_run_ids: list[int] = []
     failing_run_urls: list[str] = []
+
+
+def _check_upstream_ci_breakage(
+    ticket_id: str,
+    settings: Any,
+    repo_config: Any,
+    repo_dir: str,
+    failing: list[dict[str, Any]],
+) -> str | None:
+    """Check whether the PR's CI failures also exist on the target branch.
+
+    Compares failing check names between the PR branch and the target
+    branch's latest commit.  When the SAME check names are failing on
+    both, the failure is upstream (pre-existing on the target branch) and
+    the PR's changes are not the cause — the ci-fix agent should not burn
+    cycles trying to fix it.
+
+    Returns a block-reason string when upstream breakage is detected, or
+    ``None`` when the target branch is green, has no CI configured, or
+    the target SHA cannot be resolved (in which case we fall through to
+    the normal ci-fix path).
+    """
+    from ..config.repos import target_branch_for
+    from ..forge import get_forge
+    from ..vcs import git_ops
+
+    # 1. Get the target branch name.
+    target = target_branch_for(settings, repo_config)
+
+    # 2. Resolve the target branch's HEAD from the local clone.
+    try:
+        target_sha = git_ops.remote_branch_sha(Path(repo_dir), target)
+    except Exception:
+        _log.warning(
+            "%s: could not resolve target branch SHA for '%s' — "
+            "skipping upstream CI breakage check",
+            ticket_id,
+            target,
+        )
+        return None
+    if target_sha is None:
+        _log.info(
+            "%s: target branch '%s' has no remote ref — skipping upstream check",
+            ticket_id,
+            target,
+        )
+        return None
+
+    # 3. Check CI status on the target branch's HEAD.
+    try:
+        forge = get_forge(settings, repo_config=repo_config)
+        target_ci = forge.commit_ci_conclusion(sha=target_sha)
+    except Exception:
+        _log.warning(
+            "%s: commit_ci_conclusion failed for target branch '%s' "
+            "(%s) — skipping upstream check",
+            ticket_id,
+            target,
+            target_sha,
+        )
+        return None
+
+    if target_ci is None:
+        _log.info(
+            "%s: no CI status available for target branch '%s' (%s) — "
+            "skipping upstream check",
+            ticket_id,
+            target,
+            target_sha,
+        )
+        return None
+
+    target_conclusion = target_ci.get("conclusion")
+    if target_conclusion != "failure":
+        # Target branch CI is green/pending/unknown — the PR's failures
+        # are not upstream.
+        return None
+
+    # 4. Compare failing check names.
+    target_failing = target_ci.get("failing", [])
+    target_failing_names = {
+        chk.get("name", "") for chk in target_failing if chk.get("name")
+    }
+    pr_failing_names = {chk.get("name", "") for chk in failing if chk.get("name")}
+
+    common = target_failing_names & pr_failing_names
+    if not common:
+        return None
+
+    # 5. Same checks failing on both — upstream breakage.
+    common_list = sorted(common)
+    check_names = ", ".join(common_list)
+    return (
+        f"Upstream CI breakage detected: the following check(s) are failing "
+        f"on both this PR **and** the target branch `{target}` "
+        f"({target_sha[:8]}): {check_names}. "
+        f"The target branch CI is broken — this PR's changes are not the cause. "
+        f"Fix the target branch CI first, then resume this ticket."
+    )

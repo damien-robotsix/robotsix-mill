@@ -21,7 +21,11 @@ from ..ci_fix_codeql import (
     _codeql_block_note,
     _eligible_for_triage,
 )
-from ..ci_fix_helpers import _only_codeql_failing, _pr_changed_paths
+from ..ci_fix_helpers import (
+    _check_upstream_ci_breakage,
+    _only_codeql_failing,
+    _pr_changed_paths,
+)
 from ._base import _MergeStageBase
 from ._shared import (
     _CI_FIX_MIXIN_REFRESH_SHA,
@@ -139,6 +143,27 @@ class MultiRepoCiFixMixin(_MergeStageBase):
             log.warning(
                 "%s: failed to fetch job logs / alerts for %s", ticket.id, repo_id
             )
+
+        # --- Upstream CI breakage check ---
+        # Before consuming any ci-fix attempts, check whether the target
+        # branch's CI is also failing with the same checks.
+        if conclusion == "failure":
+            try:
+                rc_for_upstream = get_repo_config(repo_id)
+            except ConfigError:
+                rc_for_upstream = None
+            upstream_block = _check_upstream_ci_breakage(
+                ticket.id,
+                s,
+                rc_for_upstream,
+                str(repo_dir),
+                failing,
+            )
+            if upstream_block is not None:
+                return Outcome(
+                    State.BLOCKED,
+                    f"[{repo_id}] {upstream_block}",
+                )
 
         # --- CodeQL FP triage: early trigger before consuming attempts ---
         # If CodeQL is the sole remaining red check, try FP triage
