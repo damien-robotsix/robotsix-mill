@@ -25,18 +25,40 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import socket
 import subprocess
 import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Settings
 from ..config.repo_settings import load_extra_sandbox_packages
+from ._fetch import (
+    SandboxError as SandboxError,
+)
+from ._fetch import (
+    _list_sandbox_containers as _list_sandbox_containers,
+)
+from ._fetch import (
+    _parse_docker_started_at as _parse_docker_started_at,
+)
+from ._fetch import (
+    fetch as fetch,
+)
+from ._lifecycle import (
+    _CACHE_SUBDIR as _CACHE_SUBDIR,
+)
+from ._lifecycle import (
+    live_sandbox_workspace_paths as live_sandbox_workspace_paths,
+)
+from ._lifecycle import (
+    prune_package_cache as prune_package_cache,
+)
+from ._lifecycle import (
+    reap_orphan_sandboxes as reap_orphan_sandboxes,
+)
 from ._slots import (
     DEFAULT_RANK as DEFAULT_RANK,  # re-exported: callers set/read the rank here
 )
@@ -50,17 +72,7 @@ from ._slots import (
 
 _OUT_CAP = 8000
 
-# Name prefixes of the disposable sibling containers this module spawns:
-# ``run()`` uses ``mill-sbx-*`` and ``fetch()`` uses ``mill-fetch-*``.
-_SANDBOX_CONTAINER_PREFIXES = ("mill-sbx-", "mill-fetch-")
-
 log = logging.getLogger("robotsix_mill.sandbox")
-
-
-class SandboxError(RuntimeError):
-    """Infrastructure failure (no Docker, daemon/image error) — distinct
-    from the command itself exiting non-zero.
-    """
 
 
 # Hard ceiling on live sandbox containers -----------------------------------
@@ -360,7 +372,6 @@ def _repo_mount(repo_dir: Path, settings: Settings) -> list[str]:
 # wheel written by one is visible to the next. Acceptable here — sandboxes run
 # first-party repo code whose author could equally well edit the repo — and
 # ``sandbox_package_cache=false`` turns it off.
-_CACHE_SUBDIR = "_sandbox_cache"
 _CACHE_TARGET = "/sbxcache"
 
 
@@ -818,339 +829,3 @@ def run(
     # above (non-125 → return; 125 non-EOF → raise; 125 EOF on last
     # attempt → raise).  Included as a safety net.
     raise SandboxError("docker run failed: unexpected EOF after all retries")
-
-
-def fetch(url: str, *, settings: Settings) -> tuple[int, str]:
-    """HTTP(S) GET ``url`` in a dedicated, network-ENABLED container.
-
-    Deliberately weaker isolation than :func:`run` (network is on), so
-    it is locked down the other way: NO repo/data mount (nothing local
-    to exfiltrate), non-root, read-only, caps dropped, no-new-privs,
-    fixed ``curl`` (not a shell — the URL is a plain argv item, no
-    injection), size/time capped. Residual risk: an agent can encode
-    data into the URL it asks to fetch. http(s) only.
-    """
-    if not (url.startswith(("http://", "https://"))):
-        return 1, f"refused: only http(s) URLs allowed: {url!r}"
-
-    name = f"mill-fetch-{uuid.uuid4().hex[:12]}"
-    argv = [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        name,
-        "--read-only",
-        "--tmpfs",
-        "/tmp",  # nosec B108 — Docker tmpfs INSIDE the sandbox container, not host /tmp
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges",
-        "--pids-limit",
-        str(settings.sandbox_pids_limit),
-        "--memory",
-        settings.sandbox_memory,
-        settings.fetch_image,
-        "-sSL",
-        "--max-time",
-        str(settings.web_fetch_timeout),
-        "--max-filesize",
-        str(settings.web_fetch_max_bytes),
-        "-A",
-        "robotsix-mill-fetch",
-        "--",
-        url,
-    ]
-    try:
-        r = subprocess.run(
-            argv,
-            capture_output=True,
-            text=False,  # was text=True — avoid UnicodeDecodeError
-            timeout=settings.web_fetch_timeout + 15,
-        )
-    except FileNotFoundError as e:
-        raise SandboxError("docker CLI not found in the mill image") from e
-    except subprocess.TimeoutExpired:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=True)
-        return 124, f"fetch timed out after {settings.web_fetch_timeout}s"
-
-    # Decode stdout/stderr with replacement for non-UTF-8 bytes
-    stderr = r.stderr.decode("utf-8", errors="replace") if r.stderr else ""
-    body = r.stdout.decode("utf-8", errors="replace") if r.stdout else ""
-
-    if r.returncode == 125:
-        raise SandboxError(f"docker run failed: {stderr.strip()[:300]}")
-    if len(body) > settings.web_fetch_max_bytes:
-        body = body[: settings.web_fetch_max_bytes] + "\n... [truncated]"
-    if r.returncode != 0:
-        body = f"(curl exit {r.returncode}) {stderr.strip()[:300]}\n{body}"
-    return r.returncode, body
-
-
-def _parse_docker_started_at(value: str) -> datetime | None:
-    """Parse Docker's ``State.StartedAt`` into an aware ``datetime``.
-
-    Docker emits RFC3339 with up to 9 fractional digits and a ``Z`` suffix
-    (e.g. ``2026-06-18T20:34:45.483641388Z``).  Returns ``None`` for the
-    zero value (a container that never started) or anything unparseable —
-    callers treat ``None`` as "leave it alone".
-    """
-    value = value.strip()
-    if not value or value.startswith("0001-01-01"):
-        return None
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    # ``datetime.fromisoformat`` accepts at most 6 fractional digits;
-    # Docker emits 9, so truncate the fractional part to microseconds.
-    value = re.sub(r"(\.\d{6})\d+", r"\1", value)
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def _list_sandbox_containers() -> list[tuple[str, str]]:
-    """Return ``(id, name)`` for every ``mill-sbx-*``/``mill-fetch-*``
-    container in ANY state (``docker ps -a``), not just running ones.
-
-    Restarting the mill mid-run kills its in-flight ``docker run`` children,
-    leaving their containers stuck in the ``Created`` state (never started).
-    Those are invisible to a plain ``docker ps`` (running only), so a
-    running-only reaper left them to accumulate and (when the worker blocked
-    on the hung ``docker run``) stall the pipeline. Listing all states lets
-    the startup reaper (which removes everything, since nothing is legitimately
-    running at boot) sweep these leftovers. The age-gated periodic reaper
-    still skips ``Created`` containers (they have no StartedAt → treated as
-    "leave alone"), so it can't race a sandbox the worker just created.
-    Best-effort: an empty list on any Docker CLI failure.
-    """
-    filters: list[str] = []
-    for prefix in _SANDBOX_CONTAINER_PREFIXES:
-        filters += ["--filter", f"name={prefix}"]
-    try:
-        listing = subprocess.run(
-            [
-                "docker",
-                "ps",
-                "-a",
-                "--no-trunc",
-                "--format",
-                "{{.ID}}\t{{.Names}}",
-                *filters,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except OSError, subprocess.SubprocessError:
-        return []
-    if listing.returncode != 0:
-        return []
-    out: list[tuple[str, str]] = []
-    for line in listing.stdout.splitlines():
-        cid, _, name = line.partition("\t")
-        cid = cid.strip()
-        if cid:
-            out.append((cid, name.strip() or cid))
-    return out
-
-
-def live_sandbox_workspace_paths() -> set[Path]:
-    """Workspace dirs currently mounted into a RUNNING sandbox.
-
-    Mill mounts each workspace by volume-subpath, so a sandbox's mount
-    *destination* is the ``/data/<board>/workspaces/<ticket>/repo`` (or
-    ``…/repos/<name>``) path; this maps those back to workspace roots.
-
-    Consumed by the data-dir GC, which reclaims ``.venv`` from parked
-    tickets: a parked ticket normally has no sandbox at all, so this set
-    is usually disjoint from the prune candidates. It exists to close the
-    resume race — a ticket un-parked between the GC's DB read and its
-    ``rmtree`` would otherwise have the venv deleted out from under a
-    live ``uv sync``, failing that ticket's gate for no reason.
-
-    Only RUNNING containers count, unlike :func:`_list_sandbox_containers`
-    (which lists all states so the reaper can sweep ``Created`` husks): a
-    container that is not running holds nothing open.
-
-    Best-effort — an empty set on any Docker CLI failure, degrading to an
-    unguarded prune rather than skipping reclamation entirely.
-    """
-    try:
-        listing = subprocess.run(
-            ["docker", "ps", "--no-trunc", "--format", "{{.ID}}"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if listing.returncode != 0:
-            return set()
-        ids = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
-        if not ids:
-            return set()
-        inspected = subprocess.run(
-            ["docker", "inspect", "--format", "{{json .Mounts}}", *ids],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if inspected.returncode != 0:
-            return set()
-    except OSError, subprocess.SubprocessError:
-        return set()
-
-    paths: set[Path] = set()
-    for line in inspected.stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            mounts = json.loads(line)
-        except ValueError:
-            continue
-        for mount in mounts or ():
-            dest = Path(str(mount.get("Destination", "")))
-            if dest.name == "repo":
-                paths.add(dest.parent)
-            elif dest.parent.name == "repos":
-                paths.add(dest.parent.parent)
-    return paths
-
-
-def _container_age_exceeds(cid: str, max_age_seconds: int) -> bool:
-    """True when container ``cid``'s uptime exceeds ``max_age_seconds``.
-
-    Returns ``False`` on any inspect/parse failure so an unreadable
-    container is left alone — the startup reaper (which ignores age) is
-    the guaranteed backstop for those.
-    """
-    try:
-        ins = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.StartedAt}}", cid],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except OSError, subprocess.SubprocessError:
-        return False
-    if ins.returncode != 0:
-        return False
-    started = _parse_docker_started_at(ins.stdout)
-    if started is None:
-        return False
-    return (datetime.now(UTC) - started).total_seconds() > max_age_seconds
-
-
-def reap_orphan_sandboxes(*, max_age_seconds: int | None = None) -> int:
-    """Force-remove leaked sandbox containers; return the count removed.
-
-    Sandbox containers (``mill-sbx-*`` from :func:`run`, ``mill-fetch-*``
-    from :func:`fetch`) are disposable: they are created with ``--rm`` and
-    their only deadline is the *parent* ``subprocess.run(timeout=...)``.
-    If the mill process dies or is restarted while a sandbox is mid-run,
-    the ``except TimeoutExpired`` cleanup never executes and ``--rm`` never
-    fires (it triggers on container *exit*, which a runaway command never
-    reaches) — leaving the container running forever, potentially pegging a
-    CPU core (observed: a 3.5-day runaway that saturated the API).
-
-    ``max_age_seconds=None`` removes **all** matching containers — correct
-    at process startup, where any present are by definition orphans from
-    before this process began (nothing has launched a sandbox yet).  A
-    positive value removes only containers whose uptime exceeds it — used
-    by the periodic reaper, where a legitimate sandbox never outlives
-    ``command_timeout``.
-
-    Best-effort: never raises.  A missing/slow/erroring Docker CLI must not
-    crash lifespan startup or the worker poll loop, so failures are
-    swallowed and reported as ``0`` reaped.
-    """
-    candidates = _list_sandbox_containers()
-    if max_age_seconds is not None:
-        candidates = [
-            (cid, name)
-            for cid, name in candidates
-            if _container_age_exceeds(cid, max_age_seconds)
-        ]
-
-    reaped = 0
-    for cid, name in candidates:
-        try:
-            rm = subprocess.run(
-                ["docker", "rm", "-f", cid],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except OSError, subprocess.SubprocessError:
-            continue
-        if rm.returncode == 0:
-            reaped += 1
-            log.warning("reaped orphan sandbox container %s", name)
-    return reaped
-
-
-def _dir_size_bytes(path: Path) -> int:
-    """Total size of *path*, ignoring anything that vanishes mid-walk."""
-    total = 0
-    for p in path.rglob("*"):
-        try:
-            if p.is_file() and not p.is_symlink():
-                total += p.stat().st_size
-        except OSError:
-            continue
-    return total
-
-
-def prune_package_cache(settings: Settings) -> int:
-    """Drop the shared sandbox package cache when it outgrows its budget;
-    return the bytes freed (0 when nothing was done).
-
-    uv and pip caches only ever grow, and this one lives on the data
-    volume — the same volume whose exhaustion has taken the mill down
-    before. It is pure cache, so the cheap correct answer is to delete it
-    wholesale and let the next sandbox refill it.
-
-    Only runs when NO sandbox container is alive: deleting entries under a
-    concurrent ``uv sync`` would fail that ticket's gate for no reason. The
-    caller (the sandbox-reaper pass) retries every few minutes, so skipping
-    a busy moment costs nothing.
-
-    Best-effort: never raises — a failed prune must not kill the poll loop.
-    """
-    if not settings.sandbox_package_cache:
-        return 0
-    cache_dir = Path(settings.data_dir).resolve() / _CACHE_SUBDIR
-    if not cache_dir.is_dir():
-        return 0
-    budget = max(0, settings.sandbox_package_cache_max_mb) * 1024 * 1024
-    if budget <= 0:
-        return 0
-    try:
-        size = _dir_size_bytes(cache_dir)
-    except OSError:
-        return 0
-    if size <= budget:
-        return 0
-    if _list_sandbox_containers():
-        log.info(
-            "sandbox package cache is %d MiB (budget %d MiB) but sandboxes "
-            "are live; deferring prune",
-            size // (1024 * 1024),
-            settings.sandbox_package_cache_max_mb,
-        )
-        return 0
-    import shutil
-
-    try:
-        shutil.rmtree(cache_dir)
-        cache_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        log.warning("sandbox package cache prune failed", exc_info=True)
-        return 0
-    log.info(
-        "pruned sandbox package cache: freed %d MiB (budget %d MiB)",
-        size // (1024 * 1024),
-        settings.sandbox_package_cache_max_mb,
-    )
-    return size

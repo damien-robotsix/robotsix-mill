@@ -1628,12 +1628,17 @@ def test_prune_skips_while_sandboxes_live(tmp_path, monkeypatch):
 
     s2 = _settings(tmp_path, sandbox_package_cache_max_mb=1)
     (cache / "big").write_bytes(b"x" * (2 * 1024 * 1024))
-    monkeypatch.setattr(sandbox, "_list_sandbox_containers", lambda: [("id", "sbx")])
+    # Patch the name in _lifecycle (where prune_package_cache lives) — the
+    # function imports _list_sandbox_containers directly from _fetch, so
+    # patching the re-export in sandbox.__init__ has no effect.
+    monkeypatch.setattr(
+        sandbox._lifecycle, "_list_sandbox_containers", lambda: [("id", "sbx")]
+    )
     assert sandbox.prune_package_cache(s2) == 0
     assert (cache / "big").exists()
 
     # ...and prunes once the box is idle
-    monkeypatch.setattr(sandbox, "_list_sandbox_containers", list)
+    monkeypatch.setattr(sandbox._lifecycle, "_list_sandbox_containers", list)
     assert sandbox.prune_package_cache(s2) > 0
     assert not (cache / "big").exists()
     assert cache.is_dir()
