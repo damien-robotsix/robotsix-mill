@@ -1,1 +1,0 @@
-Removed `"D102"` and the `# FIXME: add method docstrings` comment from the `pyproject.toml` per-file-ignore for `src/robotsix_mill/runtime/worker/*.py` — all 8 worker files already had docstrings on every public method.
