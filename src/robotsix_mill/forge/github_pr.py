@@ -418,6 +418,10 @@ class GitHubForgePRMixin:
         return self._list_open_prs(owner=owner, repo=repo)
 
     def get_pr_labels(self, pr_number: int) -> list[str]:
+        """Return the labels on PR *pr_number* as a list of name strings.
+
+        Paginates the GitHub issues labels API. Returns ``[]`` on failure.
+        """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._get_pr_labels(owner=owner, repo=repo, pr_number=pr_number)
 
