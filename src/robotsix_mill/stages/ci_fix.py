@@ -45,6 +45,7 @@ from .ci_fix_helpers import (
     _CI_REFRESH_COUNTER,
     _CODQL_CHECK_NAMES,
     _build_failing_summary,
+    _check_upstream_ci_breakage,
     _ci_failure_fingerprint,
     _FailingContext,
     _format_alert_refs,
@@ -197,6 +198,17 @@ class CIFixStage(Stage):
         # diagnostic event so the recurring-category check can detect
         # systemic failures and auto-file fix-proposal tickets.
         _emit_ci_failure_event(ticket, ctx, failing, failing_summary)
+
+        # --- Upstream CI breakage check ---
+        # Before consuming any ci-fix attempts, check whether the target
+        # branch's CI is also failing with the same checks.  If so, the
+        # failure is pre-existing (not caused by this PR) — block
+        # immediately rather than burning cycles on an unfixable failure.
+        upstream_block = _check_upstream_ci_breakage(
+            ticket.id, ctx.settings, ctx.repo_config, repo_dir, failing
+        )
+        if upstream_block is not None:
+            return Outcome(State.BLOCKED, upstream_block)
 
         # --- Early guard: CodeQL failing but alerts unreadable (403) ---
         # When CodeQL is among the failing checks and the alerts API
