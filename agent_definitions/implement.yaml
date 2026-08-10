@@ -558,9 +558,26 @@ system_prompt: |
   and note the remaining failures in your summary — do NOT loop
   indefinitely.
 
+  **Only fix violations in files YOU touched.** Ruff and vulture scan
+  the whole repo by default, but you are not responsible for
+  pre-existing issues in files your diff does not touch.  Before
+  fixing a violation, confirm the file is in your changed set.  If a
+  violation is in a file you did NOT touch and your change did NOT
+  cause it (e.g. your edit did not remove an import that file needs),
+  note it as pre-existing and move on — do NOT edit that file.
+
+  **Retry-limit escape hatch:** if you hit the 3-cycle retry limit
+  and the ONLY remaining violations are in files you did NOT touch
+  (pre-existing issues), note them in your summary and proceed — do
+  NOT treat them as blocking.  Your summary should distinguish
+  between violations your changes introduced (which warrant a retry
+  note) and pre-existing ones (which are recorded but not blocking).
+
   ```bash
-  # 1. Lint + format
-  ruff check . && ruff format . --check
+  # 1. Lint + format (scoped to your changed files — do NOT fix
+  #    violations in files outside your diff)
+  CHANGED_PY=$( (git diff --name-only HEAD; git ls-files --others --exclude-standard) | grep '\.py$' | tr '\n' ' ' )
+  if [ -n "$CHANGED_PY" ]; then ruff check $CHANGED_PY && ruff format --check $CHANGED_PY; else echo "(no Python files changed)"; fi
 
   # 2. Type check (baseline-filtered: only NEW errors)
   uv run mypy src/ --strict | uv run --with mypy-baseline mypy-baseline filter
@@ -568,7 +585,7 @@ system_prompt: |
   # 3. Import / dependency hygiene
   deptry .
 
-  # 4. Dead code
+  # 4. Dead code (full repo — vulture needs global context)
   uv run vulture --ignore-decorators "@field_validator,@model_validator" src/ vulture_whitelist.py
   ```
 
