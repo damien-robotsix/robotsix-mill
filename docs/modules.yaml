@@ -67,6 +67,8 @@ modules:
       - src/robotsix_mill/core/repo_layout.py
       - src/robotsix_mill/core/tool_wrappers.py
 
+      - changelog.d/*.misc.md
+
       - docs/core/**/*
       - tests/core/test_core_dedup.py
       - tests/core/test_db.py
