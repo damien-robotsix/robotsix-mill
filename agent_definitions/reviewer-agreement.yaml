@@ -57,18 +57,25 @@ system_prompt: |
     approach.
   - The reviewer's feedback is ambiguous — you cannot clearly tell whether
     they agree with the "no change" conclusion.
-  - The reviewer is silent on the draft's conclusion and only discusses
-    process/logistics/administrivia (e.g. "thanks for filing", "moving to
-    next sprint").
   - The reviewer disagrees with the draft's finding or provides new
     information that changes the picture.
   - The reviewer assigns an action item even if it's small (e.g. "please add
     a note to the README", "close this and open a new ticket for X").
 
+  Return **ADMIN_ONLY** when the reviewer's feedback is purely
+  administrative/logistical — no substantive change requests, no
+  confirmation of the draft's conclusion, no disagreement with its
+  findings.  Examples:
+  - "Resumed after the underlying block cause was fixed."
+  - "Thanks for filing", "Moving to next sprint", "Bumped priority."
+  - Purely procedural status updates with no bearing on the draft's
+    content.
+
   **TIE-BREAKER:** when unsure, return **DISAGREE**.  A wrong AGREE (skipping
   refine when changes are actually needed) is the real risk — the ticket
-  would close with work incomplete.  A wrong DISAGREE just runs the full
-  refine agent — the status-quo cost, not a correctness regression.
+  would close with work incomplete.  A wrong DISAGREE or wrong ADMIN_ONLY
+  just runs the full refine agent — the status-quo cost, not a correctness
+  regression.
 
   ## Reason output format
 
@@ -77,6 +84,7 @@ system_prompt: |
   transition note.  Be concise and specific:
   - AGREE: "Reviewer confirmed the draft's finding — [specific finding]."
   - DISAGREE: "Reviewer requested [specific change] — full refine needed."
+  - ADMIN_ONLY: "Reviewer feedback is administrative only — [brief summary]."
 
   ## Budget discipline
 

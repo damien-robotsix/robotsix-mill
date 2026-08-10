@@ -397,10 +397,10 @@ def reviewer_agreement_guard(
         )
         return None
 
-    if agreement.decision != "AGREE":
+    if agreement.decision == "DISAGREE":
         return None
 
-    # Reviewer agrees with the draft's conclusion — short-circuit.
+    # AGREE or ADMIN_ONLY — short-circuit the expensive Opus refine call.
     (ws.artifacts_dir / "draft-original.md").write_text(
         draft if draft else "(title-only ticket, no body provided)",
         encoding="utf-8",
@@ -408,6 +408,18 @@ def reviewer_agreement_guard(
     write_file_map(ws, [], only_if_absent=True)
     short = agreement.reason[:400] + ("…" if len(agreement.reason) > 400 else "")
 
+    # ADMIN_ONLY: the reviewer feedback is purely administrative — skip
+    # Opus but route to implement so the actual code change can proceed.
+    if agreement.decision == "ADMIN_ONLY":
+        return _result_paths.resolved_outcome(
+            ctx,
+            draft,
+            ticket.id,
+            f"reviewer agreement — administrative feedback, routing to implement: {short}",
+            source=ticket.source,
+        )
+
+    # AGREE: reviewer confirms the draft's conclusion.
     # A TASK-kind (implementation) ticket that hasn't produced a branch
     # must not be auto-closed from DRAFT.  Route it toward READY so
     # implement can verify the claim against the live tree.
