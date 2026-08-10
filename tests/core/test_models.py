@@ -885,6 +885,10 @@ def test_init_db_migration_uppercases_lowercase_row(service, settings):
     assert before is not None
     assert before[0] == "task"
 
+    # Discard board from _initialized so init_db re-runs the migration.
+    # Earlier tests (service.get/list → session → init_db) already
+    # marked this board as initialized.
+    db._initialized.discard(service.board_id)
     # Run init_db — this should trigger the UPDATE ticket SET kind = upper(kind)
     db.init_db(settings, service.board_id)
 
@@ -900,6 +904,8 @@ def test_init_db_migration_is_idempotent(service, settings):
     """Calling init_db twice after inserting a lowercase row is safe (no error)."""
     _raw_insert_ticket(settings, service.board_id, "t-idem-mig", "inquiry")
 
+    # Discard board from _initialized so init_db re-runs the migration.
+    db._initialized.discard(service.board_id)
     # First migration: lowercase → uppercase
     db.init_db(settings, service.board_id)
     engine = db.get_engine(settings, service.board_id)
@@ -910,6 +916,8 @@ def test_init_db_migration_is_idempotent(service, settings):
     assert first is not None
     assert first[0] == "INQUIRY"
 
+    # Discard again — the first init_db re-added it to _initialized.
+    db._initialized.discard(service.board_id)
     # Second migration: no-op (already uppercase)
     db.init_db(settings, service.board_id)
     with engine.connect() as conn:

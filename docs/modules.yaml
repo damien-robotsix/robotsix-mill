@@ -66,6 +66,7 @@ modules:
       - src/robotsix_mill/core/event_notifier.py
       - src/robotsix_mill/core/repo_layout.py
       - src/robotsix_mill/core/tool_wrappers.py
+      - changelog.d/*.bugfix.md
 
       - docs/core/**/*
       - tests/core/test_core_dedup.py
