@@ -185,6 +185,66 @@ def _call_with_timeout[T](
         executor.shutdown(wait=False)
 
 
+def _compress_tool_outputs(
+    tools: list[Any],
+    max_chars: int = 8_000,
+) -> list[Any]:
+    """Wrap each callable tool to truncate large string returns.
+
+    Large tool outputs (e.g. full-file reads) bloat the conversation
+    context and are re-sent on every subsequent turn. This wrapper
+    caps each tool's return value at *max_chars*; when truncation
+    occurs a summary line is appended so the model knows content was
+    elided and can re-read with ``offset``/``limit`` for the
+    specific region it needs.
+
+    Only string-return tools are affected. Non-callable entries and
+    tools that return non-string values pass through unchanged.
+    """
+
+    def _make_wrapper(original: Any) -> Any:
+        if not callable(original):
+            return original
+
+        if inspect.iscoroutinefunction(original):
+
+            @functools.wraps(original)
+            async def _compress_async(
+                *args: Any, _original: Any = original, **kwargs: Any
+            ) -> Any:
+                result = await _original(*args, **kwargs)
+                if isinstance(result, str) and len(result) > max_chars:
+                    truncated = result[:max_chars]
+                    elided = len(result) - max_chars
+                    return (
+                        f"{truncated}\n\n[... tool output truncated: "
+                        f"{elided} chars elided. Total: {len(result)} "
+                        f"chars. Re-read with offset/limit for specific "
+                        f"sections. ...]"
+                    )
+                return result
+
+            return _compress_async
+
+        @functools.wraps(original)
+        def _compress_sync(*args: Any, _original: Any = original, **kwargs: Any) -> Any:
+            result = _original(*args, **kwargs)
+            if isinstance(result, str) and len(result) > max_chars:
+                truncated = result[:max_chars]
+                elided = len(result) - max_chars
+                return (
+                    f"{truncated}\n\n[... tool output truncated: "
+                    f"{elided} chars elided. Total: {len(result)} "
+                    f"chars. Re-read with offset/limit for specific "
+                    f"sections. ...]"
+                )
+            return result
+
+        return _compress_sync
+
+    return [_make_wrapper(t) for t in tools]
+
+
 def _wrap_tools_with_progress(
     tools: list[Any],
     progress_event: threading.Event,
@@ -416,6 +476,8 @@ def run_coordinator(
     ]
     if _progress_event is not None:
         _all_tools = _wrap_tools_with_progress(_all_tools, _progress_event)
+
+    _all_tools = _compress_tool_outputs(_all_tools)
 
     agent = build_agent_from_definition(
         settings,
