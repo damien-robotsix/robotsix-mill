@@ -69,6 +69,12 @@ class GitLabForgeCIMixin:
     def check_status(
         self, *, source_branch: str, require_checks: bool = False
     ) -> dict[str, Any] | None:
+        """Return pipeline conclusion + failed job details for the MR of *source_branch*.
+
+        Returns a dict with ``conclusion``, ``failing``, ``pending``, and
+        ``jobs`` keys, or ``None`` when the MR or pipeline is not found.
+        Never raises.
+        """
         try:
             from .core import _parse_gitlab_project_path
 
@@ -104,6 +110,11 @@ class GitLabForgeCIMixin:
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict[str, Any]]:
+        """List pipeline runs for *branch* and/or *head_sha*, newest first.
+
+        Returns a list of terminal pipeline dicts with ``id``, ``name``,
+        ``head_sha``, ``conclusion``, ``html_url``, and ``created_at`` keys.
+        """
         from .core import _parse_gitlab_project_path
 
         project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
@@ -112,6 +123,11 @@ class GitLabForgeCIMixin:
         )
 
     def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
+        """Fetch concatenated failed-job logs from a pipeline by *run_id*.
+
+        Returns ANSI-stripped, size-capped log text, or ``""`` when there
+        are no failed jobs.
+        """
         from .core import _parse_gitlab_project_path
 
         project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]

@@ -108,6 +108,11 @@ class GitLabForge(
         body: str,
         head_repo: str | None = None,
     ) -> str:
+        """Open a merge request from *source_branch* to the target branch.
+
+        Returns the MR web URL.  Raises :class:`RuntimeError` when the
+        API returns a non-201 status that is not a recoverable conflict.
+        """
         s = self.settings
         from ...config import target_branch_for  # lazy: avoid import cycle
 
@@ -141,6 +146,12 @@ class GitLabForge(
         )
 
     def pr_status(self, *, source_branch: str) -> dict[str, Any] | None:
+        """Return the canonical status dict for the MR of *source_branch*.
+
+        Returns a dict with ``merged``, ``state``, ``url``, ``mergeable``,
+        ``sha``, ``number``, and ``author`` keys, or ``None`` when the MR
+        is not found.  Never raises.
+        """
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -151,6 +162,13 @@ class GitLabForge(
             return None
 
     def pr_status_by_url(self, *, url: str) -> dict[str, Any] | None:
+        """Return the canonical status dict for an MR identified by *url*.
+
+        Extracts the MR IID from the URL and fetches the MR directly,
+        even when the source branch no longer exists.  Returns ``None``
+        when the URL cannot be parsed or the MR is not found.
+        Never raises.
+        """
         m = re.search(r"merge_requests/(\d+)", url or "")
         if not m:
             return None
@@ -164,6 +182,12 @@ class GitLabForge(
             return None
 
     def pr_files(self, *, source_branch: str) -> list[dict[str, Any]]:
+        """Return the changed files in the MR for *source_branch*.
+
+        Each file dict has ``path``, ``status``, ``additions``, and
+        ``deletions`` keys.  Returns an empty list when the MR is not
+        found.  Never raises.
+        """
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -177,6 +201,13 @@ class GitLabForge(
             return []
 
     def merge_pr(self, *, source_branch: str) -> dict[str, Any]:
+        """Merge the MR for *source_branch* with MWPS + squash.
+
+        Returns ``{"merged": True, "reason": "merged"}`` on success, or a
+        dict with ``"merged": False`` and a ``"reason"`` string on failure.
+        May include ``"retryable": True`` for transient 405/409 responses.
+        Never raises.
+        """
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -235,6 +266,12 @@ class GitLabForge(
             return False
 
     def update_branch(self, *, source_branch: str) -> dict[str, Any]:
+        """Rebase the MR for *source_branch* onto the current target branch tip.
+
+        Returns ``{"updated": True, "reason": "rebase accepted"}`` on
+        success, or ``{"updated": False, "reason": ...}`` on failure.
+        Never raises.
+        """
         try:
             project_path = _parse_gitlab_project_path(self._remote_url)
             mr = self._find_mr(project_path=project_path, source_branch=source_branch)
@@ -245,6 +282,11 @@ class GitLabForge(
             return {"updated": False, "reason": str(e)}
 
     def list_pr_reviews(self, *, source_branch: str) -> list[dict[str, Any]]:
+        """List general (non-inline) review notes on the MR for *source_branch*.
+
+        Each review dict has ``id``, ``author``, ``created_at``, and
+        ``body`` keys.  Returns an empty list when the MR is not found.
+        """
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
         if mr is None:
@@ -265,6 +307,12 @@ class GitLabForge(
         ]
 
     def list_review_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
+        """List inline review comments (with file/line position) on the MR for *source_branch*.
+
+        Each comment dict has ``id``, ``author``, ``created_at``, ``body``,
+        ``file_path``, ``line``, and ``diff_hunk`` keys.  Returns an empty
+        list when the MR is not found.
+        """
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
         if mr is None:
@@ -291,6 +339,13 @@ class GitLabForge(
         return result
 
     def pr_review_status(self, *, source_branch: str) -> dict[str, Any] | None:
+        """Aggregate review state from MR approvals and notes.
+
+        Returns a dict with ``state`` (one of ``"APPROVED"``,
+        ``"CHANGES_REQUESTED"``, ``"COMMENTED"``, ``"DISMISSED"``, or
+        ``"PENDING"``), ``comments``, and ``files`` keys, or ``None``
+        when the MR is not found.
+        """
         project_path = _parse_gitlab_project_path(self._remote_url)
         mr = self._find_mr(project_path=project_path, source_branch=source_branch)
         if mr is None:
@@ -300,6 +355,12 @@ class GitLabForge(
     def create_repo(
         self, *, name: str, owner: str, private: bool | None = None, description: str
     ) -> RepoInfo:
+        """Create a new project under *owner* and return a :class:`RepoInfo`.
+
+        Raises :class:`NotConfiguredError` when repo creation is disabled.
+        Raises :class:`RuntimeError` when the namespace lookup fails or
+        the API returns an error.
+        """
         if not self.settings.enable_repo_creation:
             raise NotConfiguredError(
                 "Repo creation is disabled. Set enable_repo_creation=True "
@@ -320,6 +381,11 @@ class GitLabForge(
         source_repo: str,
         target_namespace: str | None = None,
     ) -> RepoInfo:
+        """Fork *source_owner*/*source_repo* into *target_namespace* and return a :class:`RepoInfo`.
+
+        Raises :class:`NotConfiguredError` when repo creation is disabled.
+        Raises :class:`RuntimeError` when the API returns an error.
+        """
         if not self.settings.enable_repo_creation:
             raise NotConfiguredError(
                 "Repo creation is disabled. Set enable_repo_creation=True "
@@ -333,6 +399,12 @@ class GitLabForge(
         )
 
     def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
+        """Update the description of *owner*/*repo*.
+
+        Returns ``True`` on success, ``False`` on failure.
+        Raises :class:`NotConfiguredError` when repo metadata updates are
+        disabled.
+        """
         if not self.settings.enable_repo_creation:
             raise NotConfiguredError(
                 "Repo metadata updates are disabled. Set enable_repo_creation=True "
@@ -358,18 +430,35 @@ class GitLabForge(
         return r.status_code == 200
 
     def delete_branch(self, *, branch: str) -> bool:
+        """Delete *branch* from the project.
+
+        Returns ``True`` when the branch is deleted or was already absent
+        (HTTP 204/404), ``False`` on any other failure.
+        """
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._delete_branch(project_path, branch)
 
     def list_branches(self) -> list[BranchInfo]:
+        """List all branches in the project, paginated.
+
+        Returns a list of :class:`BranchInfo` named tuples, or an empty
+        list on failure.
+        """
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_branches(project_path)
 
     def list_open_pr_branches(self) -> set[str]:
+        """Return the set of source branch names with open MRs in the project."""
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_open_pr_branches(project_path)
 
     def list_open_prs(self) -> list[dict[str, Any]]:
+        """List metadata for every open MR in the project, paginated.
+
+        Returns a list of dicts with ``branch``, ``author_login``,
+        ``number``, ``url``, and ``title`` keys, or an empty list on
+        failure.  Never raises.
+        """
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_open_prs(project_path)
 
