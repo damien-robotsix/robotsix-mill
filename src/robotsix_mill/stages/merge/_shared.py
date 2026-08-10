@@ -126,6 +126,7 @@ def _merge_rejection_outcome(
 
 
 __all__ = [
+    "_APPROVED_DIFF_HASH",
     "_CI_POLL_REFRESH_SHA",
     "_MERGE_MAX_RETRIES",
     "_MERGE_RETRY_COUNTER",
@@ -166,6 +167,12 @@ _REBASE_LAST_TS = "last_rebase_at.txt"
 # it after a successful rebase to route back to the merge loop instead
 # of falling through to IMPLEMENT_COMPLETE.
 _REBASE_FROM_STATE = "rebase_from_state.txt"
+# Hash of PR files (sorted filename + blob SHA pairs) stored when a human
+# approves a PR blocked by the sensitive-path gate.  On subsequent
+# HUMAN_MR_APPROVAL cycles after a rebase, if the hash matches the
+# current PR files, the sensitive-path gate is skipped — the human
+# already reviewed an identical diff.
+_APPROVED_DIFF_HASH = "approved_diff_hash.txt"
 
 
 def _ci_truly_green(conclusion: str | None, pr: dict[str, Any]) -> bool:
