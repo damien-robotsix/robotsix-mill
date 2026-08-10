@@ -17,6 +17,7 @@ from typing import Any, Literal
 # Re-export SYSTEM_PROMPT for tests (loaded from YAML without env-var resolution)
 import yaml as _yaml
 from pydantic import BaseModel, Field
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 from robotsix_mill._resources import agent_definitions_dir
 
@@ -136,15 +137,24 @@ _OUTPUT_TOKEN_EXHAUSTION_SIGNALS = ("before any response was generated",)
 def _is_token_limit_error(exc: BaseException) -> bool:
     """True when *exc*'s message matches a known token-limit signal."""
     msg = str(exc).lower()
-    return any(sig in msg for sig in _TOKEN_LIMIT_SIGNALS)
+    if any(sig in msg for sig in _TOKEN_LIMIT_SIGNALS):
+        return True
+    # Check UnexpectedModelBehavior.body for wrapped model errors.
+    if isinstance(exc, UnexpectedModelBehavior) and exc.body:
+        body_lower = exc.body.lower()
+        return any(sig in body_lower for sig in _TOKEN_LIMIT_SIGNALS)
+    return False
 
 
 def _is_output_token_exhaustion(exc: BaseException) -> bool:
-    """True when *exc* indicates output-token exhaustion (max_tokens too
-    low for reasoning output), NOT input context overflow.
-    """
+    """True when *exc* indicates output-token exhaustion."""
     msg = str(exc).lower()
-    return any(sig in msg for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS)
+    if any(sig in msg for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS):
+        return True
+    if isinstance(exc, UnexpectedModelBehavior) and exc.body:
+        body_lower = exc.body.lower()
+        return any(sig in body_lower for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS)
+    return False
 
 
 def _review_attempt(
