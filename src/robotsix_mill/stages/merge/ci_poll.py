@@ -10,6 +10,8 @@ from __future__ import annotations
 import contextlib
 import datetime
 import fnmatch
+import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ from ...stages.ci_transient import is_transient_ci_failure
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
+    _APPROVED_DIFF_HASH,
     _AUTO_FIX_CYCLES,
     _CI_POLL_REFRESH_SHA,
     _LAST_AUTO_FIX_STAGE,
@@ -879,6 +882,13 @@ class CIPollMixin(_MergeStageBase):
         )
 
         if _ci_truly_green(conclusion, pr):
+            if not eligible and self._try_skip_sensitive_path_for_approved_diff(
+                ticket, ctx, forge, pr, branch, feature_tip_sha
+            ):
+                # Only the sensitive-path gate was blocking and a human
+                # already approved an identical diff (e.g. before a
+                # rebase) — skip the gate.
+                eligible = True
             if eligible:
                 # CI green + eligible → auto-merge now.
                 feature_tip_sha = pr.get("sha", "")
@@ -1018,6 +1028,109 @@ class CIPollMixin(_MergeStageBase):
         )
         return False
 
+    def _compute_pr_diff_hash(self, forge: Forge, ticket: Ticket) -> str | None:
+        """Return a content-stable hash of the PR's file set.
+
+        Uses sorted (filename, blob SHA) pairs so the hash is identical
+        before and after a rebase when the file *content* hasn't changed.
+        Returns ``None`` on any error (fail-safe).
+        """
+        try:
+            files = forge.pr_files(source_branch=ticket.branch or "")
+        except Exception:
+            return None
+        try:
+            pairs = sorted((f.get("path", ""), f.get("sha", "")) for f in files)
+            digest = hashlib.sha256(
+                json.dumps(pairs, sort_keys=True).encode()
+            ).hexdigest()
+        except Exception:
+            return None
+        return digest
+
+    def _try_skip_sensitive_path_for_approved_diff(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        forge: Forge,
+        pr: dict[str, Any],
+        branch: str,
+        pr_head_sha: str,
+    ) -> bool:
+        """Return True if the sensitive-path gate should be skipped.
+
+        Only returns True when ALL of:
+        1. The sensitive-path gate is the *only* thing blocking auto-merge
+           (all other gates pass).
+        2. The current PR diff matches a previously human-approved diff
+           (stored hash matches), OR the PR currently has a human
+           approval — in which case we store the hash for future rebases.
+
+        This prevents the approval storm: each rebase produces a new
+        commit SHA which re-triggers the sensitive-path check, but the
+        underlying file diffs haven't changed.
+        """
+        # Fast path: check if only sensitive-path gate blocks.
+        eligible_skipped, _ = self._auto_merge_eligible(
+            ticket,
+            ctx,
+            pr_head_sha=pr_head_sha,
+            forge=forge,
+            pr=pr,
+            skip_sensitive_path_check=True,
+        )
+        if not eligible_skipped:
+            return False  # Something else is blocking too.
+
+        current_hash = self._compute_pr_diff_hash(forge, ticket)
+        if current_hash is None:
+            return False  # Fail-safe: can't compute hash.
+
+        artifacts = ctx.service.workspace(ticket).artifacts_dir
+        hash_path = artifacts / _APPROVED_DIFF_HASH
+
+        # Already-approved identical diff?
+        try:
+            if hash_path.exists():
+                stored = hash_path.read_text(encoding="utf-8").strip()
+                if stored == current_hash:
+                    log.info(
+                        "%s: sensitive-path diff unchanged since last "
+                        "human approval — skipping gate",
+                        ticket.id,
+                    )
+                    return True
+        except Exception:
+            log.debug(
+                "%s: could not read approved diff hash sentinel",
+                ticket.id,
+                exc_info=True,
+            )
+
+        # Not yet stored.  Check if the PR has a current human approval.
+        try:
+            review = forge.pr_review_status(source_branch=branch)
+        except Exception:
+            return False
+        if review is None or review.get("state") != "APPROVED":
+            return False
+
+        # Human approved this exact diff — store hash for future rebases.
+        try:
+            hash_path.parent.mkdir(parents=True, exist_ok=True)
+            hash_path.write_text(current_hash, encoding="utf-8")
+        except Exception:
+            log.debug(
+                "%s: could not write approved diff hash sentinel",
+                ticket.id,
+                exc_info=True,
+            )
+        log.info(
+            "%s: human approved sensitive-path PR — stored diff hash",
+            ticket.id,
+        )
+        return True
+
     def _auto_merge_eligible(
         self,
         ticket: Ticket,
@@ -1026,6 +1139,7 @@ class CIPollMixin(_MergeStageBase):
         *,
         forge: Forge | None = None,
         pr: dict[str, Any] | None = None,
+        skip_sensitive_path_check: bool = False,
     ) -> tuple[bool, str]:
         """Return ``(eligible, reason)`` for auto-merge.
 
@@ -1035,11 +1149,16 @@ class CIPollMixin(_MergeStageBase):
         3. ``settings.review_enabled`` is True
         4. Repo is NOT in ``settings.auto_merge_infra_denylist``
         5. PR author is the mill/chat agent (only when *forge* + *pr* given)
-        6. No sensitive paths touched (only when *forge* + *pr* given)
+        6. No sensitive paths touched (only when *forge* + *pr* given,
+           and *skip_sensitive_path_check* is False)
 
         When *forge* + *pr* are not provided, only config-only gates
         (1–4) are evaluated.  Provide both to enable the forge-dependent
         safety checks (5–6).  The review artifact is no longer required.
+
+        *skip_sensitive_path_check* bypasses gate 6.  This lets callers
+        that have already confirmed the diff was human-approved skip the
+        sensitive-path check after a no-op rebase.
 
         The per-repo ``auto_merge_enabled`` toggle is NOT checked here —
         it controls routing (autonomous merge vs. human-in-the-loop), not
@@ -1080,20 +1199,21 @@ class CIPollMixin(_MergeStageBase):
                     )
 
             # 6. No sensitive paths touched.
-            try:
-                files = forge.pr_files(source_branch=ticket.branch or "")
-            except Exception:
-                # Fail-closed: any error fetching files → not eligible.
-                return False, "failed to fetch PR file list"
-            sensitive = s.auto_merge_sensitive_globs or []
-            for f in files:
-                path = f.get("path", "")
-                for pattern in sensitive:
-                    if fnmatch.fnmatch(path, pattern):
-                        return False, (
-                            f"sensitive path touched: {path!r} "
-                            f"(matched glob {pattern!r})"
-                        )
+            if not skip_sensitive_path_check:
+                try:
+                    files = forge.pr_files(source_branch=ticket.branch or "")
+                except Exception:
+                    # Fail-closed: any error fetching files → not eligible.
+                    return False, "failed to fetch PR file list"
+                sensitive = s.auto_merge_sensitive_globs or []
+                for f in files:
+                    path = f.get("path", "")
+                    for pattern in sensitive:
+                        if fnmatch.fnmatch(path, pattern):
+                            return False, (
+                                f"sensitive path touched: {path!r} "
+                                f"(matched glob {pattern!r})"
+                            )
 
         return True, "eligible"
 
