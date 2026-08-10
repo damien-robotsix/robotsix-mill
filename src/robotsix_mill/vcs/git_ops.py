@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -86,7 +87,50 @@ def _paths_from_diff(diff: str) -> list[str]:
     return out
 
 
-from ._git_core import NETWORK_GIT_TIMEOUT, _authed_url, _git, _git_env
+def _authed_url(url: str, token: str | None) -> str:
+    """Inject a token into an https remote for non-interactive clone/push.
+    Other schemes (file://, ssh) are returned unchanged. Never log the
+    result — it contains the credential.
+    """
+    if token and url.startswith("https://"):
+        return url.replace("https://", f"https://oauth2:{token}@", 1)
+    return url
+
+
+# Wall-clock ceiling for git operations that talk to a remote (clone,
+# fetch, push). Without one, a stalled connection hangs the calling
+# thread forever — and because every stage offloads its blocking work to
+# a shared thread pool, each hung git permanently removes one worker from
+# that pool until the process is restarted. Observed live: the whole pool
+# wedged in the periodic repo-refresh fetch while merge stages sat
+# "active" for 10+ minutes doing nothing. Local-only git calls (log,
+# diff, rev-parse) cannot hang on the network and stay unbounded.
+NETWORK_GIT_TIMEOUT = 300
+
+
+def _git_env() -> dict[str, str]:
+    """Environment for git subprocesses: never prompt for credentials.
+
+    A git process that decides it needs a username/password will block on
+    the terminal indefinitely. There is no terminal here, but git can
+    still wait on ``/dev/tty``, so a bad or expired token would hang the
+    call rather than failing it. ``GIT_TERMINAL_PROMPT=0`` turns that
+    into a clean non-zero exit.
+    """
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
+
+def _git(repo: Path, *args: str, timeout: float | None = None) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=_git_env(),
+    ).stdout.strip()
 
 
 def _git_redacted(repo: Path, *args: str, timeout: float | None = None) -> str:
@@ -1021,20 +1065,40 @@ def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:
         return True
 
 
-from .git_diff import (  # noqa: F401
-    DEFAULT_REBASE_DROP_EXEMPT_PATHS,
-    added_files,
-    branch_has_net_diff,
-    branch_is_behind_main,
-    changed_files,
-    changed_source_files,
-    check_rebase_diff_integrity,
-    conflicted_files,
-    diff_base,
-    file_blobs,
-    ignored_existing_paths,
-    ignored_paths,
-    introduced_files,
-    restore_paths,
-    tracked_paths_at,
+# Re-exports from git_diff — lazily loaded via __getattr__ to avoid the
+# import cycle between git_ops (defines _git, _authed_url,
+# NETWORK_GIT_TIMEOUT that git_diff needs) and git_diff (defines the
+# diff/analysis functions below that callers access through git_ops).
+# Module-level ``from .git_diff import (...)`` would create a cycle:
+# git_ops → git_diff → git_ops.  PEP 562 __getattr__ defers the import
+# until a caller actually accesses one of these names, at which point
+# git_ops is fully initialized and git_diff can safely import from it.
+_DIFF_REEXPORTS: frozenset[str] = frozenset(
+    {
+        "DEFAULT_REBASE_DROP_EXEMPT_PATHS",
+        "added_files",
+        "branch_has_net_diff",
+        "branch_is_behind_main",
+        "changed_files",
+        "changed_source_files",
+        "check_rebase_diff_integrity",
+        "conflicted_files",
+        "diff_base",
+        "file_blobs",
+        "ignored_existing_paths",
+        "ignored_paths",
+        "introduced_files",
+        "restore_paths",
+        "tracked_paths_at",
+    }
 )
+
+
+def __getattr__(name: str):
+    if name in _DIFF_REEXPORTS:
+        from . import git_diff
+
+        return getattr(git_diff, name)
+    raise AttributeError(
+        f"module {__name__!r} has no attribute {name!r}"
+    )

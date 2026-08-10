@@ -12,7 +12,7 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from ._git_core import NETWORK_GIT_TIMEOUT, _authed_url, _git
+from .git_ops import NETWORK_GIT_TIMEOUT, _authed_url, _git
 
 log = logging.getLogger("robotsix_mill.vcs.git_diff")
 

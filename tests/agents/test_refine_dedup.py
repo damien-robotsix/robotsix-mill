@@ -18,7 +18,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import RefineStage
 
-from tests.agents.test_refine import _install_refine_spy, _single, ctx
+from tests.agents.test_refine import _install_refine_spy, _single, ctx  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
