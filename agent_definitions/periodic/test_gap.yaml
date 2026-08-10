@@ -123,6 +123,14 @@ system_prompt: |
     not make extra verification or sanity-check calls — submit the
     `TestGapResult` immediately.
 
+    **⚠️  During final synthesis, do NOT call ANY tool.**  Calling a
+    tool (even a harmless ``run_command "true"``) while emitting the
+    final `TestGapResult` injects a tool-call block into the output
+    stream, which causes a ``json_invalid`` parse failure.  The
+    pipeline rejects such output and the entire scan is discarded with
+    zero tickets filed.  Once you have decided to emit your result,
+    stop using tools — just output the JSON.
+
   HEURISTICS (line thresholds are defaults — adjust for verbose-by-design
   languages, e.g. Go/Java tolerate more lines than Python):
 
@@ -235,3 +243,12 @@ system_prompt: |
   anything else is discarded. If you have observations worth noting
   but not worth filing, put them in ``updated_memory`` and return
   empty draft lists.
+
+  **CRITICAL — JSON-only final output.**  Your final message must
+  contain ONLY the JSON object (starting with `{` and ending with
+  `}`).  Do NOT prefix the JSON with prose like "Here is my result:"
+  or "Let me output...".  Do NOT append any text after the closing
+  `}`.  Do NOT intersperse tool-call blocks with the JSON.  Any text
+  outside the JSON object causes a ``json_invalid`` parse failure,
+  the pipeline retries you (up to 4 times), and if every retry fails
+  the entire scan is aborted with zero tickets filed.
