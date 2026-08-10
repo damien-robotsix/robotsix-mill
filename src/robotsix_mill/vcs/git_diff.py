@@ -12,7 +12,7 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from .git_ops import NETWORK_GIT_TIMEOUT, _authed_url, _git
+from ._git_core import NETWORK_GIT_TIMEOUT, _authed_url, _git
 
 log = logging.getLogger("robotsix_mill.vcs.git_diff")
 
@@ -444,7 +444,7 @@ def restore_paths(repo: Path, target_branch: str, paths: list[str]) -> None:
             if file_path.exists():
                 file_path.unlink()
         except OSError:
-            pass
+            pass  # best-effort: unlink failure is non-fatal
 
 
 def ignored_existing_paths(repo: Path, paths: list[str]) -> list[str]:

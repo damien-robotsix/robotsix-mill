@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 import re
 import shutil
 import subprocess
@@ -87,50 +86,7 @@ def _paths_from_diff(diff: str) -> list[str]:
     return out
 
 
-def _authed_url(url: str, token: str | None) -> str:
-    """Inject a token into an https remote for non-interactive clone/push.
-    Other schemes (file://, ssh) are returned unchanged. Never log the
-    result — it contains the credential.
-    """
-    if token and url.startswith("https://"):
-        return url.replace("https://", f"https://oauth2:{token}@", 1)
-    return url
-
-
-# Wall-clock ceiling for git operations that talk to a remote (clone,
-# fetch, push). Without one, a stalled connection hangs the calling
-# thread forever — and because every stage offloads its blocking work to
-# a shared thread pool, each hung git permanently removes one worker from
-# that pool until the process is restarted. Observed live: the whole pool
-# wedged in the periodic repo-refresh fetch while merge stages sat
-# "active" for 10+ minutes doing nothing. Local-only git calls (log,
-# diff, rev-parse) cannot hang on the network and stay unbounded.
-NETWORK_GIT_TIMEOUT = 300
-
-
-def _git_env() -> dict[str, str]:
-    """Environment for git subprocesses: never prompt for credentials.
-
-    A git process that decides it needs a username/password will block on
-    the terminal indefinitely. There is no terminal here, but git can
-    still wait on ``/dev/tty``, so a bad or expired token would hang the
-    call rather than failing it. ``GIT_TERMINAL_PROMPT=0`` turns that
-    into a clean non-zero exit.
-    """
-    env = dict(os.environ)
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    return env
-
-
-def _git(repo: Path, *args: str, timeout: float | None = None) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=_git_env(),
-    ).stdout.strip()
+from ._git_core import NETWORK_GIT_TIMEOUT, _authed_url, _git, _git_env
 
 
 def _git_redacted(repo: Path, *args: str, timeout: float | None = None) -> str:
