@@ -82,7 +82,7 @@
     "codeql_fp_triage_enabled": true,
     "command_timeout": 1800,
     "comments_after_body": false,
-    "completeness_check_interval_seconds": 604800,
+    "completeness_check_interval_seconds": 1209600,
     "completeness_check_periodic": true,
     "completeness_check_request_limit": 80,
     "config_pin_drift_baseline": [],
