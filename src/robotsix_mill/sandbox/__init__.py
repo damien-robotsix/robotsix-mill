@@ -432,15 +432,68 @@ def _has_uv_sources(repo_dir: Path) -> bool:
     return isinstance(sources, dict) and len(sources) > 0
 
 
+def _command_needs_python(command: str) -> bool:
+    """Return ``True`` when *command* references a Python interpreter or
+    tool that requires the project's dependencies to be installed.
+
+    Many sandbox commands (``git diff``, ``which npm``, ``node --version``,
+    ``ls``, etc.) do not need Python at all.  Skipping the project install
+    for those avoids wasting ~10–70 s per call on redundant ``uv sync``
+    / ``pip install`` provisioning — and avoids the failure modes that
+    provisioning introduces (network-less git resolution, ``ENOSPC`` from
+    repeated .venv creation on a sized tmpfs).
+    """
+    import re
+
+    _PYTHON_TOOLS = (
+        # Python interpreters and package managers.
+        r"python[23]?(?:\d\.\d+)?\b|"
+        r"\buv\b|"
+        r"pip[23]?\b|"
+        # Test runners.
+        r"pytest\b|py\.test\b|"
+        r"\btox\b|"
+        r"\bnox\b|"
+        # Linters and type checkers.
+        r"\bmypy\b|"
+        r"\bruff\b|"
+        r"\bdeptry\b|"
+        r"\bvulture\b|"
+        r"\bpyright\b|"
+        r"\bpylint\b|"
+        r"\bbandit\b|"
+        r"\byamllint\b|"
+        r"\bpre-commit\b|"
+        # Coverage and profiling.
+        r"\bcoverage\b|"
+        # Build and packaging tools.
+        r"\bhatch\b|"
+        r"\btwine\b|"
+        r"\btowncrier\b|"
+        # Documentation generators.
+        r"\bmkdocs\b|"
+        r"\bsphinx-build\b|"
+        r"\bsphinx-autobuild\b|"
+        # robotsix CLI tools (any robotsix-* command).
+        r"robotsix-\w*\b|"
+        # python -m <module> invocations.
+        r"python[23]?\s+-m\b"
+    )
+    return bool(re.search(_PYTHON_TOOLS, command))
+
+
 def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> str:
     """Prepend a read-only-safe project install to *command*, if warranted.
 
     Returns *command* unchanged unless ALL of:
 
-    * the repo is a Python project (``pyproject.toml`` present), and
+    * the repo is a Python project (``pyproject.toml`` present),
     * the sandbox has egress (an egress proxy is configured) — without
       network ``pip`` can't reach PyPI, so installing is impossible and
-      we must not turn a runnable gate into a guaranteed failure.
+      we must not turn a runnable gate into a guaranteed failure, AND
+    * the command actually references a Python tool (see
+      ``_command_needs_python``) — ``git diff``, ``node --version``, etc.
+      never need the project's Python deps installed.
 
     When the repo declares ``[tool.uv.sources]`` AND a ``uv.lock`` exists,
     the function prefers ``uv sync --frozen --no-dev`` over ``pip install``.
@@ -449,6 +502,13 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     existing lockfile (no git resolution needed) so the sandbox's lack of
     GitHub credentials is NOT a problem.  Falls back to pip when ``uv`` is
     not on ``PATH`` or ``uv sync`` exits non-zero.
+
+    The function short-circuits entirely when ``.venv`` already exists in
+    *repo_dir* (left behind by a prior sandbox run).  The prebuilt image
+    (docker-compose's ``:dev`` sandbox image) already carries all declared
+    deps baked into its system site-packages; re-running ``uv sync`` on
+    every sandbox invocation is redundant and, on a sized tmpfs, can
+    exhaust the sandbox's disk allocation with repeated ``.venv`` creation.
 
     The install is made safe for the locked-down sandbox:
 
@@ -461,13 +521,24 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
       shadows the freshly-installed package with the MOUNTED edits, so
       the gate tests the ticket's code while importing its declared deps.
 
-    Build/runtime deps that are already baked into the image are simply
-    re-resolved as already-satisfied — cheap. The win is the deps the
-    image lacks (the ticket's newly-added ones).
+    A disk-space guard before the install catches ``ENOSPC`` early with a
+    clear message so the agent can diagnose the problem instead of retrying
+    the same failing command.
     """
     if not settings.sandbox_proxy_url:
         return command
     if not (repo_dir / "pyproject.toml").exists():
+        return command
+    if not _command_needs_python(command):
+        return command
+
+    # Short-circuit: when a prior sandbox run already created .venv in the
+    # repo (the working directory is a bind-mount of the host clone, so
+    # .venv persists across sandbox invocations), skip the install entirely.
+    # The prebuilt image already carries all declared deps in its system
+    # site-packages; re-syncing is redundant and can exhaust disk on a
+    # sized tmpfs through repeated .venv creation.
+    if (repo_dir / ".venv").is_dir():
         return command
 
     pip = "pip install --user --quiet --disable-pip-version-check"
@@ -484,13 +555,28 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # doesn't poison the entire sandbox run.
     cleanup = "rm -rf build src/*.egg-info 2>/dev/null; "
 
+    # Disk-space guard: the sandbox tmpfs is sized (sandbox_tmpfs_size),
+    # and a full tmpfs produces a cryptic "No space left on device (os
+    # error 28)" from uv/pip.  Check available space before the install
+    # so the agent gets a clear signal instead of retrying blindly.
+    space_guard = (
+        "available=$(df --output=avail /tmp 2>/dev/null | tail -1); "
+        'if [ -n "$available" ] && [ "$available" -lt 131072 ]; then '
+        'echo "DISK_SPACE_LOW: /tmp has ${available} KiB free — '
+        'skipping project install to avoid ENOSPC" >&2; '
+        "else "
+    )
+    space_guard_close = "; fi; "
+
     if _has_uv_sources(repo_dir) and (repo_dir / "uv.lock").exists():
         uv = "uv sync --frozen --no-dev --quiet 2>&1"
         return (
             f"{cleanup}"
+            f"{space_guard}"
             f"(command -v uv >/dev/null 2>&1 && ({uv}) || "
             f"(echo 'WARNING: uv not found, falling back to pip' >&2; "
-            f"({pip} '.[dev]' || {pip} .))) && " + command
+            f"({pip} '.[dev]' || {pip} .)))"
+            f"{space_guard_close} && " + command
         )
 
     # No [tool.uv.sources] — pip path unchanged.
@@ -501,7 +587,12 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     # robotsix repos); fall back to a plain install for any repo that has
     # no `dev` extra (pip would otherwise error), so this never regresses
     # a previously-runnable gate.
-    return f"{cleanup}({pip} '.[dev]' || {pip} .) && " + command
+    return (
+        f"{cleanup}"
+        f"{space_guard}"
+        f"({pip} '.[dev]' || {pip} .)"
+        f"{space_guard_close} && " + command
+    )
 
 
 def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
