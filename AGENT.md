@@ -138,7 +138,8 @@ are:
   `document.yaml`, `retrospect.yaml`, `dedup.yaml`,
   `epic_breakdown.yaml`, `obsolescence.yaml`, `auto-approve.yaml`,
   `doc_classifier.yaml`, `scope_triage.yaml`,
-  `spec-review.yaml`, `run_tests.yaml`, `pipeline/meta_triage.yaml`).
+  `spec-review.yaml`, `run_tests.yaml`, `pipeline/meta_triage.yaml`,
+  `epic_status.yaml`).
 
 - **`periodic`** — background scheduled agents, almost always under
   `agent_definitions/periodic/` (e.g. `periodic/audit.yaml`,
@@ -148,8 +149,7 @@ are:
   `periodic/completeness_check.yaml`,
   `periodic/copy_paste.yaml`,
   `periodic/diagnostic.yaml`, `periodic/forge_parity.yaml`,
-  `periodic/module_curator.yaml`, `periodic/run_health.yaml`, and
-  `epic_status.yaml` at the root).
+  `periodic/module_curator.yaml`, `periodic/run_health.yaml`).
 
 - **`sandboxed`** — agents that execute in ephemeral sandboxes
   (e.g. `ci_fix.yaml`, `rebase.yaml`, `review_revision.yaml`).
