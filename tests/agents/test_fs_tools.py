@@ -2720,7 +2720,7 @@ class TestReadFileSizeGuard:
         s = self._small_cap_settings(tmp_path, 1000)
         tools = _build(root, s)
 
-        result = tools["read_file"](path="big.txt")
+        result = tools["read_file"](path="big.txt", limit=None)
         # Bounded by the cap (+ the short marker).
         assert len(result) < 1000 + 500
         # Marker states the total line count and steers to offset/limit.
@@ -2758,7 +2758,7 @@ class TestReadFileSizeGuard:
         assert "truncated" not in with_limit
 
         # Explicit offset > 1 → verbatim from that offset to EOF.
-        with_offset = tools["read_file"](path="big.txt", offset=2)
+        with_offset = tools["read_file"](path="big.txt", offset=2, limit=None)
         assert with_offset == body[len("line0000-padding\n") :]
         assert "truncated" not in with_offset
 
@@ -2778,7 +2778,7 @@ class TestReadFileSizeGuard:
         s = self._small_cap_settings(tmp_path, 0)
         tools = _build(root, s)
 
-        result = tools["read_file"](path="big.txt")
+        result = tools["read_file"](path="big.txt", limit=None)
         assert result == body
         assert "truncated" not in result
 

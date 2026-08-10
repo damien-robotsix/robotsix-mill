@@ -35,6 +35,13 @@ _PERIODIC_PATH_RE = re.compile(
 # pydantic-ai message history once the same file is read fresh again.
 _PRUNED_PLACEHOLDER = "[content pruned — more recent content above]"
 
+# Default line limit for read_file.  Previously was None (read entire
+# file), which caused excessive context growth when the agent re-read
+# large source files across many turns.  200 lines (~8-16 KB) keeps
+# per-turn context lean; the agent can always pass limit=None for a
+# full read or use offset/limit for a specific region.
+_DEFAULT_READ_LIMIT = 200
+
 
 def _bound_full_read(text: str, max_chars: int) -> str:
     """Bound an *implicit full* ``read_file`` payload to *max_chars*.
@@ -632,7 +639,7 @@ def build_fs_tools(
         *,
         path: str,
         offset: int = 1,
-        limit: int | None = None,
+        limit: int = _DEFAULT_READ_LIMIT,
     ) -> str:
         """⚠️  **BEFORE YOU CALL:** Check your conversation history
         first — if a full copy of *path*'s content is already visible
@@ -666,9 +673,10 @@ def build_fs_tools(
         ``limit`` (both 1-indexed):
         - ``offset`` — first line to return (default 1). Values ≤ 0
           are treated as 1.
-        - ``limit`` — maximum number of lines to return (None = to
-          end).  When ``limit`` exceeds remaining lines, returns
-          what's available.
+        - ``limit`` — maximum number of lines to return (default
+          200).  Pass ``None`` to read the entire file.  When
+          ``limit`` exceeds remaining lines, returns what's
+          available.
         - If ``offset`` is past the last line, returns a note with
           the actual line count.
 
@@ -757,7 +765,11 @@ def build_fs_tools(
         # contains the request.  Encourages the model to use the
         # content it already has instead of layering a redundant
         # slice onto the still-present context.
-        if ctx is not None and not is_full_read:
+        if (
+            ctx is not None
+            and not is_full_read
+            and not (_offset == 1 and limit == _DEFAULT_READ_LIMIT)
+        ):
             covering = _find_covering_read(ctx, p, _offset, limit)
             if covering is not None:
                 cov_o, cov_l = covering
@@ -838,6 +850,19 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
+        # When the requested range covers all remaining lines (file
+        # fits within the default limit), upgrade to a full-read —
+        # prune stale copies and record None so dedup guards behave
+        # as if the agent read to EOF.
+        effective_limit: int | None = limit
+        if not is_full_read and limit is not None:
+            line_count = text.count("\n")
+            remaining = max(0, line_count - (_offset - 1))
+            if limit > remaining:
+                effective_limit = None
+                if _offset == 1:
+                    is_full_read = True
+
         # A fresh full-file read makes every earlier copy of this file in
         # the message history redundant. Pruning them rewrites the prefix —
         # which invalidates the upstream prompt cache on THIS turn only, but
@@ -852,7 +877,7 @@ def build_fs_tools(
         # reads (offset > 1 or limit set) are never truncated here —
         # that escape hatch always retrieves any specific region.
         if is_full_read:
-            _record_served_read(str(p.resolve()), _offset, limit)
+            _record_served_read(str(p.resolve()), _offset, effective_limit)
             return resolved_note + _bound_full_read(text, settings.read_file_max_chars)
 
         lines = text.splitlines(keepends=True)
@@ -862,9 +887,9 @@ def build_fs_tools(
                 + f"(file has {len(lines)} lines; offset {offset} is beyond end)"
             )
         start = _offset - 1
-        end = start + limit if limit is not None else None
+        end = start + effective_limit if effective_limit is not None else None
         result = "".join(lines[start:end])
-        _record_served_read(str(p.resolve()), _offset, limit)
+        _record_served_read(str(p.resolve()), _offset, effective_limit)
         return resolved_note + result
 
     def _check_python_syntax(path: str, content: str) -> str | None:
@@ -1264,7 +1289,7 @@ def build_fs_tools(
             parameters={
                 "path": "str",
                 "offset": "int = 1",
-                "limit": "int | None = None",
+                "limit": "int = 200",
             },
         )
     )
