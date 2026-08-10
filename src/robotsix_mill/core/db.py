@@ -404,20 +404,17 @@ def init_db(settings: Settings, board_id: str) -> None:
                 with _alembic_lock:
                     _run_alembic_migrations(settings, board_id, engine)
 
-                _initialized.add(board_id)
+                # Self-heal any legacy rows whose ``kind`` was persisted
+                # as the lowercase StrEnum *value* instead of the
+                # canonical uppercase member NAME.  Idempotent:
+                # upper(upper(x)) == upper(x).  The CaseTolerantEnum
+                # column on Ticket.kind already tolerates lowercase on
+                # read, so this is defense-in-depth that also normalizes
+                # the stored bytes.
+                with engine.begin() as conn, suppress(sqlite3.OperationalError):
+                    conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
 
-    # Self-heal any legacy rows whose ``kind`` was persisted as the
-    # lowercase StrEnum *value* instead of the canonical uppercase
-    # member NAME.  Idempotent: upper(upper(x)) == upper(x).  The
-    # CaseTolerantEnum column on Ticket.kind already tolerates
-    # lowercase on read, so this is defense-in-depth that also
-    # normalizes the stored bytes.
-    try:
-        engine = get_engine(settings, board_id)
-        with engine.begin() as conn:
-            conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
-    except sqlite3.OperationalError:
-        pass
+                _initialized.add(board_id)
 
 
 def session(settings: Settings, board_id: str) -> Session:
