@@ -411,7 +411,7 @@ def init_db(settings: Settings, board_id: str) -> None:
                 # column on Ticket.kind already tolerates lowercase on
                 # read, so this is defense-in-depth that also normalizes
                 # the stored bytes.
-                with engine.begin() as conn:
+                with engine.begin() as conn, suppress(sqlite3.OperationalError):
                     conn.exec_driver_sql("UPDATE ticket SET kind = upper(kind)")
 
                 _initialized.add(board_id)
