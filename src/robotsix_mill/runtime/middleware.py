@@ -24,6 +24,14 @@ class RequestIDMiddleware:
         self.app = app
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        """Assign a unique request ID, store it in context, and pass through.
+
+        Extracts ``X-Request-ID`` from the incoming request or generates a
+        UUID4 hex string.  Stores the ID in a :class:`ContextVar` and in
+        ``scope["state"]`` so ``request.state.request_id`` works in route
+        handlers.  Returns the ID to the client in the ``X-Request-ID``
+        response header.
+        """
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -60,5 +68,10 @@ class RequestIDLogFilter(logging.Filter):
     """stdlib logging filter that injects the current request ID."""
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Inject the current request ID into the log *record*.
+
+        Returns:
+            Always ``True`` (all records pass the filter).
+        """
         record.request_id = request_id_var.get()
         return True

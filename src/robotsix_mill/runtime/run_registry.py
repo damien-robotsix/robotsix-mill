@@ -141,6 +141,7 @@ class RunRegistry:
             self.flush()
 
     def flush(self) -> None:
+        """Persist in-memory entries to the JSON file, trimming to ``MAX_ENTRIES``."""
         self._file.parent.mkdir(parents=True, exist_ok=True)
         if len(self._entries) > MAX_ENTRIES:
             self._entries = self._entries[-MAX_ENTRIES:]
