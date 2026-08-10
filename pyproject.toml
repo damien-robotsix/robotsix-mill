@@ -314,7 +314,6 @@ convention = "google"
 # D102: missing method docstrings — document each public method.
 "src/robotsix_mill/config/json_source.py" = ["D102"]
 "src/robotsix_mill/core/datetime_utils.py" = ["D102"]
-"src/robotsix_mill/forge/gitlab/*.py" = ["D102"]
 "src/robotsix_mill/agents/runners/diagnostic_check_errors.py" = ["D102"]
 "src/robotsix_mill/agents/runners/diagnostic_check_recurring_ci.py" = ["D102"]
 "src/robotsix_mill/runtime/middleware.py" = ["D102"]
