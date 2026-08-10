@@ -705,6 +705,49 @@ def test_report_issue_consistency(monkeypatch):
             )
 
 
+def test_flag_skill_implication(monkeypatch):
+    """Flag→skill consistency: if an agent enables a board capability
+    flag, the corresponding skill must be listed.
+
+    - ``read_ticket: true`` → ``board-read`` MUST be in ``skills:``
+    - ``report_issue: true`` → ``board-report`` MUST be in ``skills:``
+
+    Soft-gated via ``KNOWN_EXCEPTIONS`` so the test can land while
+    known gaps (ci_fix, implement) are still being addressed.
+    """
+    import warnings
+
+    READ_TICKET_EXCEPTIONS = {"implement"}
+    REPORT_ISSUE_EXCEPTIONS = {"ci_fix"}
+
+    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
+        monkeypatch.setenv(var, "mock/model")
+
+    for yf, ad in _all_definitions():
+        if (
+            ad.read_ticket
+            and "board-read" not in ad.skills
+            and ad.name not in READ_TICKET_EXCEPTIONS
+        ):
+            warnings.warn(
+                f"{yf.name}: read_ticket=true but 'board-read' not in "
+                f"skills. Add 'board-read' to skills, or if this is "
+                f"intentional, add '{ad.name}' to READ_TICKET_EXCEPTIONS.",
+                stacklevel=2,
+            )
+        if (
+            ad.report_issue
+            and "board-report" not in ad.skills
+            and ad.name not in REPORT_ISSUE_EXCEPTIONS
+        ):
+            warnings.warn(
+                f"{yf.name}: report_issue=true but 'board-report' not in "
+                f"skills. Add 'board-report' to skills, or if this is "
+                f"intentional, add '{ad.name}' to REPORT_ISSUE_EXCEPTIONS.",
+                stacklevel=2,
+            )
+
+
 def test_interval_seconds_round_trips(tmp_path):
     """The new ``interval_seconds`` field on AgentDefinition parses
     from YAML and is exposed on the model."""
