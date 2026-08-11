@@ -378,8 +378,8 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     ):
         write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
     tmp.write_text(
-        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",  # lgtm[py/clear-text-storage-sensitive-data]
+        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n",  # lgtm[py/clear-text-storage-sensitive-data]
+        encoding="utf-8",
     )
     tmp.replace(path)
     os.chmod(path, 0o600)
@@ -521,8 +521,8 @@ def rollback_config(  # noqa: C901
     ):
         write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
     tmp.write_text(
-        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",  # lgtm[py/clear-text-storage-sensitive-data]
+        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n",  # lgtm[py/clear-text-storage-sensitive-data]
+        encoding="utf-8",
     )
     tmp.replace(config_path)
     os.chmod(config_path, 0o600)
