@@ -745,6 +745,121 @@ class CIPollMixin(_MergeStageBase):
 
         return None
 
+    def _try_auto_merge(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        pr: dict[str, Any],
+        branch: str,
+        feature_tip_sha: str,
+        forge: Forge,
+        *,
+        merge_fail_same_state: State,
+        verify_fail_state: State,
+    ) -> Outcome:
+        """Execute ``forge.merge_pr`` and handle all success/failure paths.
+
+        Caller must have already verified CI is truly green and the PR is
+        eligible for auto-merge.
+
+        On success: writes ``merge.md`` artifact, cleans up branch, returns
+        ``DONE``.  On merge-ancestor verification failure: returns
+        *verify_fail_state*.  On forge rejection: delegates to
+        ``_merge_rejection_outcome`` with *merge_fail_same_state* as the
+        same-state fallback.
+        """
+        from robotsix_mill.stages import merge as _facade
+
+        s = ctx.settings
+        result = forge.merge_pr(source_branch=branch)
+        if result.get("merged"):
+            repo_dir = _facade._workspace_repo_dir(ctx, ticket)
+            target = target_branch_for(s, ctx.repo_config)
+            if not _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id, target):
+                log.warning(
+                    "%s: auto-merge reported success but commit %s is not an "
+                    "ancestor of origin/%s — falling back to %s",
+                    ticket.id,
+                    feature_tip_sha[:8] if feature_tip_sha else "(none)",
+                    target,
+                    verify_fail_state.value,
+                )
+                return Outcome(
+                    verify_fail_state,
+                    f"auto-merge reported success but merge not confirmed on origin/{target}",
+                )
+            ctx.service.workspace(ticket).artifacts_dir.joinpath("merge.md").write_text(
+                f"auto-merged: {pr.get('url', '')}\n",
+                encoding="utf-8",
+            )
+            self._cleanup_branch_on_done(ticket, ctx, branch)
+            log.info("%s: auto-merged → done", ticket.id)
+            return Outcome(
+                State.DONE,
+                f"auto-merged: {pr.get('url', '')}",
+            )
+        # Forge rejected the merge — retry a bounded number of
+        # passes when it may just be a required check that has
+        # not reported yet, else fail closed to BLOCKED.
+        outcome = _merge_rejection_outcome(
+            ticket.id,
+            ctx.service.workspace(ticket).artifacts_dir,
+            result,
+            same_state=merge_fail_same_state,
+        )
+        if outcome.next_state is State.BLOCKED:
+            self._maybe_comment(ticket, ctx, outcome.note or "")
+            log.warning(
+                "%s: auto-merge failed: %s — transition to BLOCKED",
+                ticket.id,
+                result.get("reason", "unknown"),
+            )
+        return outcome
+
+    def _handle_behind_target(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        forge: Forge,
+    ) -> Outcome:
+        """Try the server-side update-branch API when CI is green but the
+        PR head is behind the target branch.
+
+        On success: returns ``WAITING_AUTO_MERGE`` (CI must re-run).
+        On failure within the rebase cooldown window: returns
+        ``HUMAN_MR_APPROVAL``.  On failure outside the cooldown: returns
+        ``IMPLEMENT_COMPLETE``.
+        """
+        s = ctx.settings
+        log.info(
+            "%s: CI green but branch behind target — attempting update-branch",
+            ticket.id,
+        )
+        update_result = forge.update_branch(source_branch=branch)
+        if update_result.get("updated"):
+            self._maybe_comment(
+                ticket,
+                ctx,
+                "Branch was behind target; auto-updated via update-branch API. "
+                "Waiting for CI to re-run before retrying auto-merge.",
+            )
+            return Outcome(State.WAITING_AUTO_MERGE)
+        if _within_rebase_cooldown(
+            ctx.service.workspace(ticket).artifacts_dir,
+            s.parked_rebase_cooldown_hours,
+        ):
+            log.info(
+                "%s: parked PR behind-target within cooldown — staying in HUMAN_MR_APPROVAL",
+                ticket.id,
+            )
+            return Outcome(State.HUMAN_MR_APPROVAL)
+        return Outcome(
+            State.IMPLEMENT_COMPLETE,
+            f"branch behind target; update-branch failed: "
+            f"{update_result.get('reason', 'unknown')}",
+        )
+
     def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""
         from robotsix_mill.stages import merge as _facade
@@ -890,90 +1005,22 @@ class CIPollMixin(_MergeStageBase):
                 # rebase) — skip the gate.
                 eligible = True
             if eligible:
-                # CI green + eligible → auto-merge now.
-                feature_tip_sha = pr.get("sha", "")
-                result = forge.merge_pr(source_branch=branch)
-                if result.get("merged"):
-                    repo_dir = _facade._workspace_repo_dir(ctx, ticket)
-                    target = target_branch_for(s, ctx.repo_config)
-                    if not _verify_merge_ancestor(
-                        repo_dir, feature_tip_sha, ticket.id, target
-                    ):
-                        log.warning(
-                            "%s: auto-merge reported success but commit %s is not an "
-                            "ancestor of origin/%s — falling back to HUMAN_MR_APPROVAL",
-                            ticket.id,
-                            feature_tip_sha[:8] if feature_tip_sha else "(none)",
-                            target,
-                        )
-                        return Outcome(
-                            State.HUMAN_MR_APPROVAL,
-                            f"auto-merge reported success but merge not confirmed on origin/{target}",
-                        )
-                    ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                        "merge.md"
-                    ).write_text(
-                        f"auto-merged: {pr.get('url', '')}\n",
-                        encoding="utf-8",
-                    )
-                    self._cleanup_branch_on_done(ticket, ctx, branch)
-                    log.info("%s: auto-merged → done", ticket.id)
-                    return Outcome(
-                        State.DONE,
-                        f"auto-merged: {pr.get('url', '')}",
-                    )
-                # Forge rejected the merge — retry a bounded number of
-                # passes when it may just be a required check that has
-                # not reported yet, else fail closed to BLOCKED.
-                outcome = _merge_rejection_outcome(
-                    ticket.id,
-                    ctx.service.workspace(ticket).artifacts_dir,
-                    result,
-                    same_state=State.IMPLEMENT_COMPLETE,
-                )
-                if outcome.next_state is State.BLOCKED:
-                    self._maybe_comment(ticket, ctx, outcome.note or "")
-                    log.warning(
-                        "%s: auto-merge failed: %s — transition to BLOCKED",
-                        ticket.id,
-                        result.get("reason", "unknown"),
-                    )
-                return outcome
-            else:
-                # CI green but not eligible → human approval needed.
-                self._maybe_comment(ticket, ctx, eligibility_reason)
-                return Outcome(State.HUMAN_MR_APPROVAL)
-
-        if conclusion == "success" and pr.get("mergeable_state") == "behind":
-            # Green CI on a stale head — try the server-side update-branch
-            # API to bring the PR head current without a full local rebase.
-            log.info(
-                "%s: CI green but branch behind target — attempting update-branch",
-                ticket.id,
-            )
-            update_result = forge.update_branch(source_branch=branch)
-            if update_result.get("updated"):
-                self._maybe_comment(
+                return self._try_auto_merge(
                     ticket,
                     ctx,
-                    "Branch was behind target; auto-updated via update-branch API. "
-                    "Waiting for CI to re-run before retrying auto-merge.",
+                    pr,
+                    branch,
+                    feature_tip_sha,
+                    forge,
+                    merge_fail_same_state=State.IMPLEMENT_COMPLETE,
+                    verify_fail_state=State.HUMAN_MR_APPROVAL,
                 )
-                return Outcome(State.WAITING_AUTO_MERGE)
-            if _within_rebase_cooldown(
-                ctx.service.workspace(ticket).artifacts_dir,
-                s.parked_rebase_cooldown_hours,
-            ):
-                log.info(
-                    "%s: parked PR behind-target within cooldown — staying in HUMAN_MR_APPROVAL",
-                    ticket.id,
-                )
-                return Outcome(State.HUMAN_MR_APPROVAL)
-            return Outcome(
-                State.IMPLEMENT_COMPLETE,
-                f"branch behind target; update-branch failed: "
-                f"{update_result.get('reason', 'unknown')}",
-            )
+            # CI green but not eligible → human approval needed.
+            self._maybe_comment(ticket, ctx, eligibility_reason)
+            return Outcome(State.HUMAN_MR_APPROVAL)
+
+        if conclusion == "success" and pr.get("mergeable_state") == "behind":
+            return self._handle_behind_target(ticket, ctx, branch, forge)
 
         # pending, None, or a premature success (mergeable_state not yet
         # "clean") — not yet safe to merge.
@@ -1229,8 +1276,6 @@ class CIPollMixin(_MergeStageBase):
         - CI still pending → WAITING_AUTO_MERGE (same-state no-op)
         - Eligibility lost → HUMAN_MR_APPROVAL with comment
         """
-        from robotsix_mill.stages import merge as _facade
-
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
 
@@ -1325,52 +1370,16 @@ class CIPollMixin(_MergeStageBase):
             # fast checks can report success before the slow required gate
             # starts, with mergeable_state still "blocked"/"behind" — merging
             # then would redden the target branch.
-            feature_tip_sha = pr.get("sha", "")  # capture before merge
-            result = forge.merge_pr(source_branch=branch)
-            if result.get("merged"):
-                repo_dir = _facade._workspace_repo_dir(ctx, ticket)
-                target = target_branch_for(s, ctx.repo_config)
-                if _verify_merge_ancestor(repo_dir, feature_tip_sha, ticket.id, target):
-                    ctx.service.workspace(ticket).artifacts_dir.joinpath(
-                        "merge.md"
-                    ).write_text(
-                        f"auto-merged: {pr.get('url', '')}\n",
-                        encoding="utf-8",
-                    )
-                    self._cleanup_branch_on_done(ticket, ctx, branch)
-                    log.info("%s: auto-merged → done", ticket.id)
-                    return Outcome(
-                        State.DONE,
-                        f"auto-merged: {pr.get('url', '')}",
-                    )
-                log.warning(
-                    "%s: auto-merge reported success but commit %s is not an "
-                    "ancestor of origin/%s — falling back to IMPLEMENT_COMPLETE",
-                    ticket.id,
-                    feature_tip_sha[:8] if feature_tip_sha else "(none)",
-                    target,
-                )
-                return Outcome(
-                    State.IMPLEMENT_COMPLETE,
-                    f"auto-merge reported success but merge not confirmed on origin/{target}: {pr.get('url', '')}",
-                )
-            # Forge rejected the merge — retry a bounded number of passes
-            # when it may just be a required check that has not reported
-            # yet, else fail closed to BLOCKED.
-            outcome = _merge_rejection_outcome(
-                ticket.id,
-                ctx.service.workspace(ticket).artifacts_dir,
-                result,
-                same_state=State.WAITING_AUTO_MERGE,
+            return self._try_auto_merge(
+                ticket,
+                ctx,
+                pr,
+                branch,
+                pr.get("sha", ""),
+                forge,
+                merge_fail_same_state=State.WAITING_AUTO_MERGE,
+                verify_fail_state=State.IMPLEMENT_COMPLETE,
             )
-            if outcome.next_state is State.BLOCKED:
-                self._maybe_comment(ticket, ctx, outcome.note or "")
-                log.warning(
-                    "%s: auto-merge failed: %s — transition to BLOCKED",
-                    ticket.id,
-                    result.get("reason", "unknown"),
-                )
-            return outcome
 
         if conclusion == "success" and pr.get("mergeable_state") == "behind":
             # Green CI on a stale head — try the server-side update-branch
