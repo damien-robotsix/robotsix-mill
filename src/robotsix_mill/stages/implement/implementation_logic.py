@@ -305,6 +305,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         attempt: int,
         max_iters: int,
         extra_roots: list[Path] | None,
+        head_before: str | None = None,
     ) -> _SinglePassResult:
         """Run the test gate, apply ``ValidationResult.decide``, route the pass."""
         target = target_branch_for(settings, ctx.repo_config)
@@ -415,6 +416,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 resuming,
                 attempt,
                 max_iters,
+                head_before=head_before,
             )
             if verify_result is not None:
                 return verify_result
@@ -977,6 +979,8 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 extra_roots,
             )
 
+        head_before = git_ops.head_sha(repo_dir)
+
         agent_result = cls._invoke_implement_agent(
             ctx,
             ticket,
@@ -1090,6 +1094,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             attempt,
             max_iters,
             extra_roots,
+            head_before=head_before,
         )
 
     # ------------------------------------------------------------------

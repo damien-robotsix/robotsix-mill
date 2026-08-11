@@ -592,7 +592,11 @@ class TestEvaluateTestResults:
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.implementation_editing.git_ops",
-            _simple_namespace(introduced_files=lambda rd, tgt: []),
+            _simple_namespace(
+                introduced_files=lambda rd, tgt: [],
+                has_changes=lambda rd: False,
+                head_sha=lambda rd: "abc1234",
+            ),
         )
 
     @staticmethod
@@ -781,7 +785,11 @@ class TestEvaluateTestResults:
         )
         monkeypatch.setattr(
             "robotsix_mill.stages.implement.implementation_editing.git_ops",
-            _simple_namespace(introduced_files=_fake_introduced_files),
+            _simple_namespace(
+                introduced_files=_fake_introduced_files,
+                has_changes=lambda rd: False,
+                head_sha=lambda rd: "abc1234",
+            ),
         )
 
         # Per-repo target: repo-a → "custom", repo-b → "develop".
