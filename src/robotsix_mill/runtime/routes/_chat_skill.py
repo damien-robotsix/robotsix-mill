@@ -150,6 +150,23 @@ Content-Type: application/json
 
 Returns the created `Comment` object.
 
+### POST /tickets/{id}/comments/{comment_id}/close — close a comment thread
+
+```
+POST /tickets/<ticket-id>/comments/<comment-id>/close
+```
+
+Close a top-level comment thread on a ticket.
+
+**Safety gate:** this endpoint refuses to close any thread when the
+ticket is in `awaiting_user_reply` state — the thread represents a live
+question the state machine still depends on.  Only use this on tickets
+that have already advanced past `awaiting_user_reply` (e.g.
+`human_mr_approval`, `implement_complete`, `done`), where an orphaned
+`[ASK_USER]` thread is blocking a transition like `merge-now`.
+
+Returns the updated `Comment` object with `closed_at` set.
+
 ---
 
 ## State transitions
