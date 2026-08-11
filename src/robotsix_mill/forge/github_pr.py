@@ -554,7 +554,22 @@ class GitHubForgePRMixin:
                 "reason": f"HTTP {r.status_code}: {r.text[:200]}",
             }
         except Exception as e:
-            return {"merged": False, "reason": str(e)}
+            import logging
+
+            from .auth import classify_token_error
+
+            transient = classify_token_error(e) == "transient"
+            result: dict[str, Any] = {"merged": False, "reason": str(e)}
+            if transient:
+                logging.getLogger(__name__).info(
+                    "_merge_pr transient auth error for %s/%s PR #%d: %s",
+                    owner,
+                    repo,
+                    pull_number,
+                    e,
+                )
+                result["retryable"] = True
+            return result
 
     def _close_pr(
         self,

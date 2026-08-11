@@ -198,6 +198,103 @@ def test_push_token_pat_fallback(tmp_path):
     assert auth.github_push_token(S(tmp_path, FORGE_TOKEN="pat123")) == "pat123"
 
 
+# ---------------------------------------------------------------------------
+# classify_token_error
+# ---------------------------------------------------------------------------
+
+
+def test_classify_missing_config_is_permanent():
+    """RuntimeError about missing GITHUB_APP_ID is a permanent config error."""
+    assert (
+        auth.classify_token_error(RuntimeError("FORGE_AUTH=app needs GITHUB_APP_ID"))
+        == "permanent"
+    )
+
+
+def test_classify_missing_forge_token_is_permanent():
+    """RuntimeError about FORGE_TOKEN is permanent."""
+    assert auth.classify_token_error(RuntimeError("FORGE_TOKEN not set")) == "permanent"
+
+
+def test_classify_app_not_installed_is_permanent():
+    """GitHubAppNotInstalledError must be fixed by an operator."""
+    assert (
+        auth.classify_token_error(auth.GitHubAppNotInstalledError("o", "r"))
+        == "permanent"
+    )
+
+
+def test_classify_connection_error_is_transient():
+    """httpx.ConnectError is a network blip — safe to retry."""
+    import httpx
+
+    assert (
+        auth.classify_token_error(httpx.ConnectError("connection refused"))
+        == "transient"
+    )
+
+
+def test_classify_timeout_is_transient():
+    """httpx.TimeoutException means GitHub didn't respond in time."""
+    import httpx
+
+    assert auth.classify_token_error(httpx.TimeoutException("timed out")) == "transient"
+
+
+def test_classify_http_500_is_transient():
+    """GitHub returning 5xx is a transient server-side issue."""
+    import httpx
+
+    assert (
+        auth.classify_token_error(
+            httpx.HTTPStatusError(
+                "server error",
+                request=httpx.Request("GET", "https://api.github.com"),
+                response=httpx.Response(503),
+            )
+        )
+        == "transient"
+    )
+
+
+def test_classify_http_400_is_permanent():
+    """4xx (other than 401's auto-retry) is a permanent request error."""
+    import httpx
+
+    assert (
+        auth.classify_token_error(
+            httpx.HTTPStatusError(
+                "bad request",
+                request=httpx.Request("GET", "https://api.github.com"),
+                response=httpx.Response(400),
+            )
+        )
+        == "permanent"
+    )
+
+
+def test_classify_jwt_error_is_permanent():
+    """A JWT/crypto error means the private key is invalid — don't retry."""
+    try:
+        import jwt
+
+        exc = jwt.exceptions.PyJWTError("invalid key")
+        assert auth.classify_token_error(exc) == "permanent"
+    except ImportError:
+        # jwt may not be importable — synthesize an exception whose
+        # message contains the module name.
+        class FakeJWTHttpError(Exception):
+            pass
+
+        exc = FakeJWTHttpError("pyjwt decode error: invalid key format")
+        assert auth.classify_token_error(exc) == "permanent"
+
+
+def test_classify_unknown_exception_is_permanent():
+    """Conservative default: unknown errors are permanent to avoid livelock."""
+    assert auth.classify_token_error(ValueError("unexpected")) == "permanent"
+
+
 def test_push_token_app_mode_mints_fresh_with_contents_write(tmp_path, monkeypatch):
     """github_push_token mints a fresh token with contents:write permission
     and does NOT cache — each call issues a fresh mint."""

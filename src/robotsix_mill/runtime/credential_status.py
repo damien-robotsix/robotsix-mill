@@ -49,6 +49,12 @@ def _forge_missing(settings: Settings) -> dict[str, str] | None:
             secrets.github_app_private_key or secrets.github_app_private_key_path
         )
         if secrets.github_app_id and has_key:
+            # Credentials are present — validate the key is actually
+            # loadable so a misconfigured key (garbage PEM, unreadable
+            # file) is caught at startup rather than at merge time.
+            key_finding = _validate_app_private_key()
+            if key_finding is not None:
+                return key_finding
             return None
         if not secrets.github_app_id and not has_key:
             missing = "github_app_id and github_app_private_key[_path]"
@@ -71,6 +77,53 @@ def _forge_missing(settings: Settings) -> dict[str, str] | None:
         "config_path": "secrets.forge_token",
         "impact": f"forge_auth={settings.forge_auth} has no token — no push or PR",
     }
+
+
+def _validate_app_private_key() -> dict[str, str] | None:
+    """Validate the GitHub App private key can actually be loaded.
+
+    Returns a finding when the key is present but unreadable or not valid
+    PEM, or ``None`` when the key loads successfully (or isn't configured
+    — presence is checked separately by :func:`_forge_missing`).
+
+    A misconfigured key that passes the presence check but fails at JWT
+    signing time is the most common "why are all my tickets blocked?"
+    regression — the banner catches it at startup rather than one
+    ``RuntimeError`` per merge-stage ticket.
+    """
+    secrets = get_secrets()
+    key_data: str | None = None
+    try:
+        if secrets.github_app_private_key_path:
+            with open(secrets.github_app_private_key_path, encoding="utf-8") as f:
+                key_data = f.read()
+        elif secrets.github_app_private_key:
+            key_data = secrets.github_app_private_key.replace("\\n", "\n")
+        else:
+            return None  # key not configured — presence check handles this
+
+        # Basic PEM validation: a valid RSA/EC private key always has the
+        # BEGIN/END markers.  Garbage strings, JSON, or Base64-encoded
+        # blobs won't.
+        if "-----BEGIN" not in key_data or "PRIVATE KEY-----" not in key_data:
+            return {
+                "name": "github_app_private_key",
+                "config_path": "secrets.github_app_private_key[_path]",
+                "impact": (
+                    "forge_auth=app private key is not valid PEM — "
+                    "cannot mint installation tokens"
+                ),
+            }
+    except OSError as e:
+        return {
+            "name": "github_app_private_key_path",
+            "config_path": f"secrets.github_app_private_key_path ({e})",
+            "impact": (
+                "forge_auth=app private key file cannot be read — "
+                "cannot mint installation tokens"
+            ),
+        }
+    return None
 
 
 def get_credential_status(settings: Settings) -> dict[str, Any]:

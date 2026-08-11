@@ -142,6 +142,69 @@ def invalidate_github_token(
     logger.debug("invalidate_github_token key=%s", ck)
 
 
+def classify_token_error(exc: BaseException) -> str:
+    """Classify an exception from token resolution as ``"transient"`` or
+    ``"permanent"``.
+
+    Transient errors (network blips, GitHub API degradation) are safe to
+    retry — the token *can* be obtained once the remote is reachable again.
+    Permanent errors (missing config, invalid key, App not installed) will
+    never resolve on their own.
+
+    Callers in the forge layer use this to decide whether a merge/push/PR
+    operation that failed during auth should be marked ``retryable``, so
+    the merge stage re-polls rather than blocking the ticket.
+    """
+    import httpx
+
+    msg = str(exc)
+
+    # -- permanent: configuration is missing or structurally wrong ---------
+    if isinstance(exc, RuntimeError) and any(
+        phrase in msg
+        for phrase in (
+            "GITHUB_APP_ID",
+            "GITHUB_APP_PRIVATE_KEY",
+            "FORGE_TOKEN",
+            "FORGE_AUTH",
+        )
+    ):
+        return "permanent"
+    if isinstance(exc, GitHubAppNotInstalledError):
+        return "permanent"
+    # jwt / crypto errors: the key is present but invalid
+    msg_lower = msg.lower()
+    for jwt_module in ("jwt", "cryptography", "pyjwt"):
+        if jwt_module in msg_lower:
+            return "permanent"
+
+    # -- transient: the remote is temporarily unreachable ------------------
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code >= 500:
+            return "transient"
+        # 4xx other than 401 (which _ApiClient._do already retries once)
+        # is a permanent request error — the payload won't change on retry.
+        return "permanent"
+    if isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.RemoteProtocolError,
+            httpx.NetworkError,
+        ),
+    ):
+        return "transient"
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+        # OSError covers file-read failures on the private-key path
+        # (e.g. NFS mount hiccup), DNS resolution failures, etc.
+        return "transient"
+
+    # Default conservative: treat unknown errors as permanent so a
+    # truly broken config doesn't livelock.
+    return "permanent"
+
+
 def invalidate_and_backoff(
     settings: Settings, repo_config: RepoConfig | None = None
 ) -> None:
