@@ -5,6 +5,7 @@ from pathlib import Path
 
 from robotsix_mill.agents.runners.pass_runner import (
     _GAP_ID_RE,
+    _create_one_draft,
     _format_recent_proposals,
     _module_curator_premise_check,
     _render_verified_summary,
@@ -3042,5 +3043,142 @@ def test_scanner_rollup_collapses_multiple_drafts_to_one(tmp_path):
     assert "Body A details." in body
     assert "Body B details." in body
     assert "Body C details." in body
+
+    db.reset_engine()
+
+
+# --- same-board gap-id dedup regression (#2688) ---
+
+
+def test_same_board_gap_id_dedup(tmp_path, monkeypatch):
+    """_create_one_draft deduplicates by gap_id on the same board.
+
+    Before #2688 the gap-id check only ran in the cross-board
+    (target_repo_id) branch.  A draft filed onto the pass's own
+    board bypassed the check entirely, causing the same findings
+    to be re-filed on every run.
+    """
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    source_label = "bespoke:security-posture-audit"
+    title = "llm-top-10-v3-currency gap"
+    body = "Body text"
+    gap_id = "llm-top-10-v3-currency"
+
+    res = _FakeAgentResult(
+        updated_memory="mem",
+        draft_titles=[title],
+        draft_bodies=[body],
+        gap_ids=[gap_id],
+    )
+
+    # First call: creates a draft ticket.
+    ticket_info, verified_gap_id = _create_one_draft(
+        i=0,
+        res=res,
+        gap_ids=[gap_id],
+        draft_target_repo_ids=[""],  # no target_repo_id → same board
+        source_label=source_label,
+        service=service,
+        settings=settings,
+        origin_session="test-session",
+        repo_dir=None,
+    )
+    assert ticket_info is not None
+    assert ticket_info["title"] == title
+    assert verified_gap_id == gap_id
+
+    # Verify exactly one ticket exists in the DB.
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    # Second call with the same parameters: must be deduped.
+    ticket_info2, verified_gap_id2 = _create_one_draft(
+        i=0,
+        res=res,
+        gap_ids=[gap_id],
+        draft_target_repo_ids=[""],
+        source_label=source_label,
+        service=service,
+        settings=settings,
+        origin_session="test-session",
+        repo_dir=None,
+    )
+    assert ticket_info2 is None, "second call must be deduped"
+    assert verified_gap_id2 == ""
+
+    # Still only one ticket in the DB.
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+def test_same_board_title_fingerprint_dedup_no_gap_id(tmp_path, monkeypatch):
+    """_create_one_draft deduplicates by normalized-title fingerprint
+    when no gap_id is available (same board)."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    source_label = "bespoke:security-posture-audit"
+    title = "Some recurring finding"
+    body = "Body text"
+
+    res = _FakeAgentResult(
+        updated_memory="mem",
+        draft_titles=[title],
+        draft_bodies=[body],
+        # No gap_ids → triggers fingerprint fallback
+    )
+
+    # First call: creates a draft ticket.
+    ticket_info, verified_gap_id = _create_one_draft(
+        i=0,
+        res=res,
+        gap_ids=[],
+        draft_target_repo_ids=[""],
+        source_label=source_label,
+        service=service,
+        settings=settings,
+        origin_session="test-session",
+        repo_dir=None,
+    )
+    assert ticket_info is not None
+    assert ticket_info["title"] == title
+    assert verified_gap_id == ""
+
+    tickets = service.list()
+    assert len(tickets) == 1
+
+    # Second call with the same title and no gap_id: fingerprint
+    # match must find the existing ticket.
+    ticket_info2, verified_gap_id2 = _create_one_draft(
+        i=0,
+        res=res,
+        gap_ids=[],
+        draft_target_repo_ids=[""],
+        source_label=source_label,
+        service=service,
+        settings=settings,
+        origin_session="test-session",
+        repo_dir=None,
+    )
+    assert ticket_info2 is None, "second call must be deduped by fingerprint"
+    assert verified_gap_id2 == ""
+
+    # Still only one ticket in the DB.
+    tickets = service.list()
+    assert len(tickets) == 1
 
     db.reset_engine()
