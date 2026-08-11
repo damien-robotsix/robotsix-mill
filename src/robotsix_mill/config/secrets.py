@@ -36,6 +36,8 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "github_app_private_key",
         "github_app_private_key_path",
         "openrouter_management_key",
+        "fleet_notify_url",
+        "fleet_notify_token",
         "ntfy_url",
         "ntfy_token",
     }
@@ -253,6 +255,16 @@ class Secrets:
     def openrouter_management_key(self) -> str | None:
         """Return the OpenRouter management API key."""
         return self._openrouter_management_key  # type: ignore[no-any-return]
+
+    @property
+    def fleet_notify_url(self) -> str | None:
+        """Return the fleet notification endpoint URL."""
+        return self._fleet_notify_url  # type: ignore[no-any-return]
+
+    @property
+    def fleet_notify_token(self) -> str | None:
+        """Return the fleet notification bearer token."""
+        return self._fleet_notify_token  # type: ignore[no-any-return]
 
     @property
     def ntfy_url(self) -> str | None:

@@ -355,6 +355,36 @@
     },
     "secrets": {
       "properties": {
+        "fleet_notify_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "",
+          "format": "password",
+          "title": "Fleet Notify Token",
+          "writeOnly": true
+        },
+        "fleet_notify_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "",
+          "format": "password",
+          "title": "Fleet Notify Url",
+          "writeOnly": true
+        },
         "forge_repo_create_token": {
           "anyOf": [
             {
@@ -1571,6 +1601,36 @@
           "title": "Fetch Image",
           "type": "string"
         },
+        "fleet_notify_token": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bearer token for the fleet notification endpoint.",
+          "title": "Fleet Notify Token"
+        },
+        "fleet_notify_url": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fleet notification endpoint URL for dispatching alerts to robotsix-chat.",
+          "title": "Fleet Notify Url"
+        },
         "forge_parity_interval_seconds": {
           "advanced": true,
           "default": 604800,
@@ -1998,7 +2058,7 @@
             }
           ],
           "default": null,
-          "description": "ntfy access token for authenticated push notifications.",
+          "description": "ntfy access token for authenticated push notifications.  Legacy fallback; prefer fleet_notify_token.",
           "title": "Ntfy Token"
         },
         "ntfy_url": {
@@ -2013,7 +2073,7 @@
             }
           ],
           "default": null,
-          "description": "ntfy server URL for push notifications (https://ntfy.sh).",
+          "description": "ntfy server URL for push notifications (https://ntfy.sh).  Legacy fallback; prefer fleet_notify_url.",
           "title": "Ntfy Url"
         },
         "obsolescence_gate_enabled": {

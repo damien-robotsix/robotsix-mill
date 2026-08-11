@@ -30,6 +30,7 @@ run_agent_check_agent
 run_audit_agent
 run_bc_check_agent
 reset_for_tests
+_reset_fleet_notifier  # test helper — reset fleet notifier singleton between tests
 run_completeness_check_agent
 run_config_sync_agent
 

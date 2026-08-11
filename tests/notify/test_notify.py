@@ -1,15 +1,24 @@
-"""Hermetic tests for the ntfy notification subsystem."""
+"""Hermetic tests for the notification subsystem (fleet + ntfy fallback)."""
 
 from __future__ import annotations
+
+import time
 
 import httpx
 import pytest
 
 from robotsix_mill.core.states import State
 from robotsix_mill.notify import send_notification
+from robotsix_mill.notify.fleet import _DEDUP_WINDOW, _reset_fleet_notifier
 from robotsix_mill.runtime.worker import process_ticket
 from robotsix_mill.stages import Outcome, StageContext, registry
 from robotsix_mill.stages.base import Stage
+
+
+@pytest.fixture(autouse=True)
+def _reset_notify():
+    """Reset the fleet notifier singleton between tests."""
+    _reset_fleet_notifier()
 
 
 class _RecordingPost:
@@ -21,9 +30,15 @@ class _RecordingPost:
         self._status = status_code
         self._exc = exc
 
-    def __call__(self, url, *, headers=None, content=None, timeout=None):
+    def __call__(self, url, *, headers=None, content=None, timeout=None, json=None):
         self.calls.append(
-            {"url": url, "headers": headers, "content": content, "timeout": timeout}
+            {
+                "url": url,
+                "headers": headers,
+                "content": content,
+                "json": json,
+                "timeout": timeout,
+            }
         )
         if self._exc is not None:
             raise self._exc
@@ -156,7 +171,219 @@ def test_non_2xx_is_caught(settings, service, monkeypatch, caplog, secrets_set):
 
 
 # ---------------------------------------------------------------------------
-# Worker integration tests (via process_ticket)
+# Fleet notification tests
+# ---------------------------------------------------------------------------
+
+
+def test_fleet_noop_when_url_unset(settings, service, secrets_set):
+    """When fleet_notify_url is None, no POST is made."""
+    secrets_set(fleet_notify_url=None)
+    t = service.create("x")
+    send_notification(t, State.ERRORED, "boom", settings)
+
+
+def test_fleet_posts_json_to_url(settings, service, monkeypatch, secrets_set):
+    """Happy path: a JSON POST is made to the fleet endpoint."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("Add feature")
+    send_notification(t, State.HUMAN_ISSUE_APPROVAL, "refined spec", settings)
+
+    assert len(rec.calls) == 1
+    c = rec.calls[0]
+    assert c["url"] == "https://fleet.example.com/notify"
+    assert c["headers"]["Content-Type"] == "application/json"
+    assert "Authorization" not in c["headers"]
+
+    payload = c["json"]
+    assert payload["source"] == "mill"
+    assert payload["severity"] == "info"
+    assert payload["category"] == "human_approval"
+    assert payload["ticket_id"] == t.id
+    assert payload["ticket_title"] == "Add feature"
+    assert payload["state"] == "human_issue_approval"
+    assert payload["note"] == "refined spec"
+    assert payload["board_url"] == "http://127.0.0.1:8077"
+    assert payload["suppressed_count"] == 0
+    assert "timestamp" in payload
+
+
+def test_fleet_severity_mapping(settings, service, monkeypatch, secrets_set):
+    """Verify severity mapping: BLOCKED → critical, ERRORED → warning."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("stuck")
+    send_notification(t, State.BLOCKED, "timeout", settings)
+    assert rec.calls[0]["json"]["severity"] == "critical"
+    assert rec.calls[0]["json"]["category"] == "blocked"
+
+    t2 = service.create("fail")
+    send_notification(t2, State.ERRORED, "crash", settings)
+    assert rec.calls[1]["json"]["severity"] == "warning"
+    assert rec.calls[1]["json"]["category"] == "errored"
+
+
+def test_fleet_token_sent_as_bearer(settings, service, monkeypatch, secrets_set):
+    """fleet_notify_token is sent as Authorization: Bearer."""
+    secrets_set(
+        fleet_notify_url="https://fleet.example.com/notify",
+        fleet_notify_token="tk_fleet",
+    )
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("x")
+    send_notification(t, State.HUMAN_MR_APPROVAL, "PR opened", settings)
+    assert rec.calls[0]["headers"]["Authorization"] == "Bearer tk_fleet"
+
+
+def test_fleet_dedup_suppresses_within_window(
+    settings, service, monkeypatch, secrets_set
+):
+    """Same (state, board) within dedup window → suppressed, not posted."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    # Freeze time.
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+
+    t1 = service.create("ticket 1")
+    send_notification(t1, State.BLOCKED, "stuck", settings)
+    assert len(rec.calls) == 1
+    assert rec.calls[0]["json"]["suppressed_count"] == 0
+
+    # Same state, same board, within window — suppressed.
+    t2 = service.create("ticket 2")
+    send_notification(t2, State.BLOCKED, "stuck too", settings)
+    assert len(rec.calls) == 1  # no new POST
+
+    t3 = service.create("ticket 3")
+    send_notification(t3, State.BLOCKED, "another", settings)
+    assert len(rec.calls) == 1  # still no new POST
+
+
+def test_fleet_dedup_flushes_after_window(settings, service, monkeypatch, secrets_set):
+    """After the dedup window, the next notification includes suppressed_count."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    # Freeze time at 1000.
+    fake_now = [1000.0]
+
+    def _monotonic():
+        return fake_now[0]
+
+    monkeypatch.setattr(time, "monotonic", _monotonic)
+
+    t1 = service.create("ticket 1")
+    send_notification(t1, State.BLOCKED, "stuck", settings)
+    assert len(rec.calls) == 1
+    assert rec.calls[0]["json"]["suppressed_count"] == 0
+
+    # Suppress two more within the window.
+    t2 = service.create("ticket 2")
+    send_notification(t2, State.BLOCKED, "stuck 2", settings)
+    t3 = service.create("ticket 3")
+    send_notification(t3, State.BLOCKED, "stuck 3", settings)
+    assert len(rec.calls) == 1  # suppressed
+
+    # Advance past the dedup window and send again.
+    fake_now[0] += _DEDUP_WINDOW + 1.0
+    t4 = service.create("ticket 4")
+    send_notification(t4, State.BLOCKED, "still stuck", settings)
+
+    assert len(rec.calls) == 2
+    assert rec.calls[1]["json"]["suppressed_count"] == 2
+    assert rec.calls[1]["json"]["ticket_id"] == t4.id
+
+
+def test_fleet_different_boards_no_dedup(settings, service, monkeypatch, secrets_set):
+    """Different board URLs produce different dedup keys — no suppression."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+
+    # First board
+    t1 = service.create("ticket 1")
+    send_notification(t1, State.BLOCKED, "stuck", settings)
+    assert len(rec.calls) == 1
+
+    # Change the api_url to simulate a different board.
+    settings.api_url = "http://other-board:8077"
+    t2 = service.create("ticket 2")
+    send_notification(t2, State.BLOCKED, "stuck too", settings)
+
+    # Different board → different dedup key → not suppressed.
+    assert len(rec.calls) == 2
+
+
+def test_fleet_network_error_is_caught(
+    settings, service, monkeypatch, caplog, secrets_set
+):
+    """A POST exception does not propagate — logs warning, returns."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(exc=ConnectionError("refused"))
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("x")
+    send_notification(t, State.ERRORED, "fail", settings)
+    assert "fleet notify failed" in caplog.text
+
+
+def test_fleet_non_2xx_is_caught(settings, service, monkeypatch, caplog, secrets_set):
+    """A 500 response is logged, not raised."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(status_code=500)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("x")
+    send_notification(t, State.BLOCKED, "stuck", settings)
+    assert "fleet notify failed" in caplog.text
+
+
+def test_fallback_to_ntfy_when_fleet_unset(settings, service, monkeypatch, secrets_set):
+    """When fleet is unset but ntfy is configured, ntfy fallback fires."""
+    secrets_set(ntfy_url="https://ntfy.sh/test")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("title")
+    send_notification(t, State.ERRORED, "boom", settings)
+
+    assert len(rec.calls) == 1
+    assert rec.calls[0]["url"] == "https://ntfy.sh/test"
+    assert rec.calls[0]["headers"]["Content-Type"] == "text/plain"
+
+
+def test_fleet_preferred_when_both_configured(
+    settings, service, monkeypatch, secrets_set
+):
+    """When both fleet and ntfy are configured, fleet is used."""
+    secrets_set(
+        fleet_notify_url="https://fleet.example.com/notify",
+        ntfy_url="https://ntfy.sh/test",
+    )
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("title")
+    send_notification(t, State.ERRORED, "boom", settings)
+
+    assert len(rec.calls) == 1
+    assert rec.calls[0]["url"] == "https://fleet.example.com/notify"
+    assert rec.calls[0]["headers"]["Content-Type"] == "application/json"
+
+
+# ---------------------------------------------------------------------------
+# Legacy ntfy unit tests
 # ---------------------------------------------------------------------------
 
 

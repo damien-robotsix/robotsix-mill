@@ -1063,8 +1063,10 @@ unset.
 | `langfuse_base_url`¹ | — | Langfuse base URL (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
 | `langfuse_project_id`¹ | — | Langfuse project ID (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
 | `langfuse_project_name`¹ | — | Langfuse project name (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
-| `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications |
-| `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional) |
+| `fleet_notify_url` | — | Fleet notification endpoint URL for dispatching alerts (e.g. to robotsix-chat). Preferred over ntfy. |
+| `fleet_notify_token` | — | Bearer token for the fleet notification endpoint. |
+| `ntfy_url` | `NTFY_URL` | ntfy.sh topic URL for notifications. Legacy fallback; prefer `fleet_notify_url`. |
+| `ntfy_token` | `NTFY_TOKEN` | ntfy.sh bearer token (optional). Legacy fallback; prefer `fleet_notify_token`. |
 | `sandbox_push_token` | — | Optional dedicated token for the sandbox git-push bridge. When set, `github_push_token()` prefers this over `forge_token` (PAT mode only). Falls back to `forge_token` if unset. |
 
 Secrets live in the `"secrets"` block of `config/config.json` (overridable
