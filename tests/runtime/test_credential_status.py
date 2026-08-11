@@ -79,13 +79,17 @@ def test_missing_app_key_is_reported(cfg):
     )
 
 
-def test_private_key_path_satisfies_app_mode(cfg):
+def test_private_key_path_satisfies_app_mode(cfg, tmp_path):
     """A key *path* is an accepted alternative to an inline key."""
+    key_file = tmp_path / "key.pem"
+    key_file.write_text(
+        "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
+    )
     cfg(
         {
             "openrouter_api_key": "sk-or-test",
             "github_app_id": "12345",
-            "github_app_private_key_path": "/app/config/key.pem",
+            "github_app_private_key_path": str(key_file),
         }
     )
     assert get_credential_status(_settings(forge_auth="app"))["ok"] is True
@@ -123,3 +127,49 @@ def test_optional_creds_never_reported(cfg):
     cfg(_FULL_APP_CREDS)
     status = get_credential_status(_settings(forge_auth="app"))
     assert status["ok"] is True
+
+
+def test_invalid_inline_key_is_reported(cfg):
+    """A key that is present but not valid PEM is flagged as misconfigured."""
+    cfg(
+        {
+            "openrouter_api_key": "sk-or-test",
+            "github_app_id": "12345",
+            "github_app_private_key": "not-a-valid-key",
+        }
+    )
+    status = get_credential_status(_settings(forge_auth="app"))
+    assert status["ok"] is False
+    assert status["missing"][0]["name"] == "github_app_private_key"
+    assert "not valid PEM" in status["missing"][0]["impact"]
+
+
+def test_unreadable_key_path_is_reported(cfg):
+    """A key path that cannot be opened is flagged as misconfigured."""
+    cfg(
+        {
+            "openrouter_api_key": "sk-or-test",
+            "github_app_id": "12345",
+            "github_app_private_key_path": "/nonexistent/key.pem",
+        }
+    )
+    status = get_credential_status(_settings(forge_auth="app"))
+    assert status["ok"] is False
+    assert status["missing"][0]["name"] == "github_app_private_key_path"
+    assert "cannot be read" in status["missing"][0]["impact"]
+
+
+def test_valid_key_path_with_pem_is_ok(cfg, tmp_path):
+    """A readable key file with valid PEM content is accepted."""
+    key_file = tmp_path / "app-key.pem"
+    key_file.write_text(
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"
+    )
+    cfg(
+        {
+            "openrouter_api_key": "sk-or-test",
+            "github_app_id": "12345",
+            "github_app_private_key_path": str(key_file),
+        }
+    )
+    assert get_credential_status(_settings(forge_auth="app"))["ok"] is True
