@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -18,6 +20,7 @@ from ..core.workspace import (
     write_counter as _write_counter,
 )
 from ..forge.base import Forge
+from ..vcs import git_ops
 
 __all__ = ["_read_counter", "_write_counter"]
 
@@ -331,6 +334,111 @@ def _normalize_ci_failure_reason(
 
     combined = f"{names_key}\n{core}"
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
+
+
+def _detect_merge_conflict(
+    ticket_id: str,
+    repo_dir: str,
+    target: str,
+    pr: dict[str, Any] | None,
+) -> str | None:
+    """Check whether a PR branch has merge conflicts with its target branch.
+
+    Uses the forge's ``mergeable_state`` field (``"dirty"`` = conflicts).
+    When *pr* is ``None`` or *mergeable_state* is absent / not ``"dirty"``,
+    returns ``None`` (no conflict detected — proceed normally).
+
+    On detection, attempts a local ``git merge`` to identify the specific
+    conflicting files so the block note can list them.  The merge attempt
+    is best-effort — if it fails the block note still contains clear
+    instructions to manually rebase.
+
+    Returns:
+        A block-reason string ready for ``Outcome(State.BLOCKED, ...)``,
+        or ``None`` when no merge conflict is detected.
+    """
+    if pr is None:
+        return None
+
+    mergeable_state = pr.get("mergeable_state")
+    if mergeable_state != "dirty":
+        return None
+
+    # Attempt to identify the specific conflicting files.
+    conflicting = _conflicting_files_via_merge(Path(repo_dir), f"origin/{target}")
+
+    if conflicting:
+        files_list = "\n".join(f"  - `{f}`" for f in conflicting)
+        return (
+            f"Merge conflict detected — the PR branch cannot be "
+            f"rebased onto `{target}` because the following file(s) "
+            f"have conflicts:\n\n{files_list}\n\n"
+            f"**Action required:** Manually rebase this branch onto "
+            f"`{target}`, resolve the conflicts, and push. "
+            f"The mill cannot fix CI until the merge conflict is resolved."
+        )
+    else:
+        return (
+            f"Merge conflict detected — the PR branch has conflicts "
+            f"with `{target}` but the conflicting files could not be "
+            f"determined. **Action required:** Manually rebase this "
+            f"branch onto `{target}`, resolve the conflicts, and push. "
+            f"The mill cannot fix CI until the merge conflict is resolved."
+        )
+
+
+def _conflicting_files_via_merge(repo: Path, merge_target: str) -> list[str]:
+    """Attempt a ``git merge`` and return unresolvable file paths.
+
+    Runs ``git merge --no-commit --no-ff <merge_target>``, then collects
+    unmerged paths via :func:`git_ops.conflicted_files`.  Aborts the merge
+    and resets the working tree afterward regardless of outcome.
+
+    Best-effort: returns ``[]`` on any failure (clean tree, merge succeeded
+    unexpectedly, network error, etc.) so the caller can still produce a
+    useful block note without the file list.
+    """
+    try:
+        cmd = [
+            "git",
+            "-C",
+            str(repo),
+            "merge",
+            "--no-commit",
+            "--no-ff",
+            merge_target,
+        ]
+        subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        # Collect unmerged paths while the tree is still in conflict state.
+        conflicted = git_ops.conflicted_files(repo)
+        # Always clean up — abort the merge and reset the working tree.
+        with contextlib.suppress(Exception):
+            abort_cmd = ["git", "-C", str(repo), "merge", "--abort"]
+            subprocess.run(
+                abort_cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        with contextlib.suppress(Exception):
+            reset_cmd = ["git", "-C", str(repo), "reset", "--hard", "HEAD"]
+            subprocess.run(
+                reset_cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        return conflicted
+    except Exception:
+        return []
 
 
 class _FailingContext(NamedTuple):

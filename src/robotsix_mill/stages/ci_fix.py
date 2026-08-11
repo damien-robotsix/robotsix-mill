@@ -47,6 +47,7 @@ from .ci_fix_helpers import (
     _build_failing_summary,
     _check_upstream_ci_breakage,
     _ci_failure_fingerprint,
+    _detect_merge_conflict,
     _FailingContext,
     _format_alert_refs,
     _normalize_ci_failure_reason,
@@ -331,10 +332,23 @@ class CIFixStage(Stage):
                 )
             else:
                 log.warning(
-                    "%s: rebase onto %s failed or was unnecessary — "
-                    "proceeding with existing branch HEAD",
+                    "%s: rebase onto %s failed or was unnecessary",
                     ticket.id,
                     _target,
+                )
+                # The rebase may have failed because of a merge conflict.
+                # Check the forge's PR state before proceeding — a merge
+                # conflict makes CI-fixing impossible and causes infinite
+                # retry loops if we proceed blindly.
+                conflict_block = self._check_merge_conflict(
+                    ticket, ctx, repo_dir, branch, _target
+                )
+                if conflict_block is not None:
+                    return conflict_block
+                log.warning(
+                    "%s: rebase failure was not a merge conflict — "
+                    "proceeding with existing branch HEAD",
+                    ticket.id,
                 )
         except Exception:
             log.warning(
@@ -467,6 +481,53 @@ class CIFixStage(Stage):
             failing_run_ids,
             failing_run_urls,
         )
+
+    def _check_merge_conflict(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+        target: str,
+    ) -> Outcome | None:
+        """Check whether the PR branch has merge conflicts with *target*.
+
+        Calls the forge's ``pr_status`` to read ``mergeable_state``, then
+        delegates to :func:`_detect_merge_conflict` to build a block note
+        when a conflict is detected.
+
+        Returns:
+            ``Outcome(State.BLOCKED, ...)`` when a merge conflict is
+            detected, or ``None`` when the branch is mergeable (or the
+            forge cannot be reached — fall through to normal CI-fix).
+        """
+        s = ctx.settings
+
+        # Only applicable when a forge is configured.
+        if s.forge_kind == "none":
+            return None
+
+        try:
+            forge = get_forge(s, repo_config=ctx.repo_config)
+            pr = forge.pr_status(source_branch=branch)
+        except Exception:
+            log.warning(
+                "%s: pr_status failed during merge-conflict check",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        reason = _detect_merge_conflict(ticket.id, repo_dir, target, pr)
+        if reason is None:
+            return None
+
+        log.warning(
+            "%s: merge conflict detected — blocking (mergeable_state=%s)",
+            ticket.id,
+            pr.get("mergeable_state") if pr else "N/A",
+        )
+        return Outcome(State.BLOCKED, reason)
 
     def _build_failure_detail(
         self,

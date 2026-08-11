@@ -336,7 +336,7 @@ convention = "google"
 # patterns where the default is a factory-created instance; not a
 # shared-mutable-state bug in practice.
 "src/robotsix_mill/agents/tool_registry.py" = ["RUF012"]
-"src/robotsix_mill/stages/ci_fix_helpers.py" = ["RUF012"]
+"src/robotsix_mill/stages/ci_fix_helpers.py" = ["RUF012", "S603", "S607"]
 # LOG015 (root-logger-call) — intentional warning at startup before
 # logging is configured.
 "src/robotsix_mill/runtime/api.py" = ["LOG015"]
