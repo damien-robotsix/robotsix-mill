@@ -35,6 +35,7 @@ nav:
       - "AGENT.md candidates": agents/md-candidates.md
       - Scope triage: stages/scope-triage.md
   - Agents & Internals:
+      - Skills: skills/index.md
       - Audit agent: agents/audit-agent.md
       - Blocked ticket recovery: stages/blocked-ticket-recovery.md
       - Retrospect memory: stages/retrospect-memory.md
