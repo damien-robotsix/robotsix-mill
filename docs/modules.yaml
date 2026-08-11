@@ -49,6 +49,7 @@ modules:
       TicketService business logic, datetime/text utilities, and the Workspace
       abstraction for file-based ticket workspaces.
     paths:
+      - changelog.d/*.md
       - src/robotsix_mill/core/__init__.py
       - src/robotsix_mill/core/models.py
       - src/robotsix_mill/core/states.py
