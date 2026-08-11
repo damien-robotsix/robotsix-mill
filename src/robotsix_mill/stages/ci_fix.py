@@ -1009,7 +1009,9 @@ class CIFixStage(Stage):
         s = ctx.settings
         self._last_agent_timed_out = False
         self._last_agent_timeout_elapsed = 0.0
-        timeout_s = s.ci_fix_agent_timeout_seconds
+        # Derived, not the raw field: the agent must get at least the
+        # time ci_fix_max_iterations x ci_fix_wait_timeout_s promises it.
+        timeout_s = s.ci_fix_agent_timeout_effective
         try:
             # ci_fix is traced=False, so wrap the LLM agent in the
             # ticket's Langfuse session (session.id = ticket.id) — same

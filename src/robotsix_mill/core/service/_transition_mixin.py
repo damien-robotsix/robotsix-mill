@@ -9,13 +9,14 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ...config import Settings
 from ..db import retry_on_db_full
 from ..models import (
     Comment,
     Ticket,
 )
 from ..states import State, can_transition
-from ..workspace import Workspace
+from ..workspace import Workspace, read_counter
 from ._base import _ServiceBase
 from ._comments import _sanitize_log_value
 from ._helpers import (
@@ -65,6 +66,61 @@ def _reset_implement_spawn_counter(ws: Workspace) -> None:
     """
     with contextlib.suppress(OSError):
         (ws.artifacts_dir / "implement_spawn_count").unlink(missing_ok=True)
+
+
+def _reset_tripped_ci_fix_guards(ws: Workspace, settings: Settings) -> list[str]:
+    """Reset the ci_fix guard counters that are *at or above* their ceiling.
+
+    Two counters bound the merge-side CI loop, both stored in the
+    ticket's artifacts dir and both compared against a ceiling BEFORE
+    the ci-fix agent is allowed to run:
+
+    * ``ci_identical_failure_count.txt`` vs ``ci_fix_max_identical_failures``
+      — the same CI failure fingerprint repeating without progress.
+    * ``auto_fix_cycles.txt`` vs ``auto_fix_max_cycles`` — the combined
+      rebase+ci_fix dispatch ceiling.
+
+    Nothing ever cleared them on an operator resume, which made both
+    guards *terminal*: the gate re-evaluates before the agent phase, so
+    a resumed ticket re-blocks on the very next poll with the counter
+    one higher than before, and no amount of resuming can change that.
+    Live on 2026-08-11 one robotsix-ui ticket carried five consecutive
+    resume→re-block pairs against the identical fingerprint, its block
+    note advising "Resume to retry" each time — advice the code could
+    not honour without manual workspace surgery.
+
+    Only a counter that has actually reached its ceiling is reset, so a
+    resume for an unrelated reason preserves the loop state faithfully —
+    the same rule ``_reset_implement_spawn_counter``'s caller applies to
+    ``implement_spawn_count``. The operator resume IS the intervention
+    that breaks the "consecutive without progress" chain; after the
+    reset the ticket gets a full budget of genuine agent attempts again
+    before the guard re-arms.
+
+    Returns the labels of the counters that were reset, for the resume
+    event note.  Best-effort and silent when absent.
+    """
+    reset: list[str] = []
+    ceilings = (
+        ("ci_identical_failure_count.txt", settings.ci_fix_max_identical_failures),
+        ("auto_fix_cycles.txt", settings.auto_fix_max_cycles),
+    )
+    for fname, ceiling in ceilings:
+        if ceiling <= 0:
+            continue  # guard disabled — nothing to reset
+        path = ws.artifacts_dir / fname
+        if read_counter(path) < ceiling:
+            continue
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+        reset.append(fname)
+    if "ci_identical_failure_count.txt" in reset:
+        # The stored fingerprint is the counter's comparison baseline;
+        # leaving it behind would re-increment from zero to the ceiling
+        # against the same failure without the agent ever being asked.
+        with contextlib.suppress(OSError):
+            (ws.artifacts_dir / "ci_failure_fingerprint.txt").unlink(missing_ok=True)
+    return reset
 
 
 def _clear_stale_implement_guard(ws: Workspace) -> None:
@@ -576,6 +632,14 @@ class _TransitionMixin(_ServiceBase):
         reset is recorded in the event history as "spawn counter reset
         via resume-blocked". Tickets blocked from READY for other
         reasons keep their counter intact.
+
+        The merge-side ci_fix guard counters follow the same rule via
+        :func:`_reset_tripped_ci_fix_guards` — one that has reached its
+        ceiling is cleared (and recorded in the event note), one below
+        its ceiling is preserved.  Without this the identical-failure
+        and auto-fix-cycle guards were terminal: they re-evaluate before
+        the agent phase, so a resume re-blocked on the next poll no
+        matter what the operator had fixed.
         """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
@@ -626,11 +690,24 @@ class _TransitionMixin(_ServiceBase):
                     except ValueError, OSError:
                         spawn_count = 0
                 spawn_reset = spawn_count >= spawn_limit
+            # Same rule on the merge side: a ci_fix guard counter that has
+            # reached its ceiling is terminal until something clears it,
+            # and the resume is that something.  Applies to every dst —
+            # the CI loop is reachable from fixing_ci, implement_complete
+            # and rebasing alike.
+            ci_guards_reset = _reset_tripped_ci_fix_guards(
+                self.workspace(ticket), self.settings
+            )
             event_note = f"resumed from blocked (was blocked from {dst.value})"
             if note:
                 event_note += f"; override: {note}"
             if spawn_reset:
                 event_note += "; spawn counter reset via resume-blocked"
+            if ci_guards_reset:
+                event_note += (
+                    f"; ci_fix guard(s) reset via resume-blocked: "
+                    f"{', '.join(ci_guards_reset)}"
+                )
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=event_note))
             s.commit()
             s.refresh(ticket)

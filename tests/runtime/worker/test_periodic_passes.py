@@ -55,6 +55,16 @@ def _make_blocked_ticket(svc: TicketService, note: str) -> Ticket:
     return svc.get(t.id)
 
 
+def _annotate(settings, repo_config, ticket_id: str, note: str) -> None:
+    """Append a same-state event to a BLOCKED ticket (a trace link etc.)."""
+    from robotsix_mill.core import db as core_db
+    from robotsix_mill.core.service._helpers import _make_event
+
+    with core_db.session(settings, repo_config.board_id) as s:
+        s.add(_make_event(s, ticket_id=ticket_id, state=State.BLOCKED, note=note))
+        s.commit()
+
+
 def _mock_forge(conclusions: dict[str, str]) -> MagicMock:
     """Return a mock Forge whose ``list_workflow_runs`` returns one run
     per workflow name with the given conclusion."""
@@ -211,3 +221,50 @@ def test_list_workflow_runs_error_survives(settings, repo_config, svc, monkeypat
 
     updated = svc.get(t.id)
     assert updated.state == State.BLOCKED
+
+
+# ---------------------------------------------------------------------------
+# The block reason is the transition INTO blocked, not the last note
+# ---------------------------------------------------------------------------
+#
+# A ticket keeps accumulating events while it sits in BLOCKED — trace
+# links, operator comments, same-state re-polls — and they are all
+# recorded with state=blocked. Reading the tail (or merely the last
+# blocked-state note) mistook one of those annotations for the block
+# reason, so the debt note stopped matching and the ticket became
+# invisible to this pass permanently.
+
+
+def test_debt_note_survives_a_later_annotation(settings, repo_config, svc, monkeypatch):
+    """The regression: an appended trace note must not hide the debt."""
+    t = _make_blocked_ticket(svc, CI_DEBT_NOTE)
+    # A trace link appended while the ticket sits in BLOCKED. This is an
+    # annotation, not a transition (blocked -> blocked is not a legal
+    # edge), so it is written straight to the event log the way the
+    # tracing path writes it — same state, later id.
+    _annotate(settings, repo_config, t.id, "🔍 [Trace: review](https://lf/x)")
+
+    forge = _mock_forge({"lint": "success", "test": "success"})
+    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+
+    _ci_debt_recheck_pass(settings, repo_config)
+
+    assert svc.get(t.id).state == State.IMPLEMENT_COMPLETE
+
+
+def test_a_newer_unrelated_block_reason_wins(settings, repo_config, svc, monkeypatch):
+    """Re-blocking for a different reason must NOT be auto-resumed.
+
+    The debt is history at that point; the ticket is now held by
+    something this pass knows nothing about.
+    """
+    t = _make_blocked_ticket(svc, CI_DEBT_NOTE)
+    svc.transition(t.id, State.IMPLEMENT_COMPLETE, note="debt cleared")
+    svc.transition(t.id, State.BLOCKED, note="Blocked partly on CodeQL code-scanning")
+
+    forge = _mock_forge({"lint": "success", "test": "success"})
+    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+
+    _ci_debt_recheck_pass(settings, repo_config)
+
+    assert svc.get(t.id).state == State.BLOCKED

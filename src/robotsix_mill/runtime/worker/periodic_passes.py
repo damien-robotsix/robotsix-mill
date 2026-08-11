@@ -14,7 +14,7 @@ import hashlib
 import logging
 import random
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
@@ -82,6 +82,37 @@ _CI_DEBT_NOTE_RE = re.compile(
 )
 
 
+def _last_block_reason(
+    rows: Sequence[tuple[Any, str | None]],
+) -> str | None:
+    """Return the note of the event that most recently ENTERED blocked.
+
+    *rows* is ``(state, note)`` in chronological order.
+
+    Not simply the ticket's last note, and not simply its last
+    blocked-state note either: a ticket accumulates annotations while it
+    sits in BLOCKED — trace links, operator comments, same-state
+    re-polls — and every one of them is recorded with ``state=blocked``
+    too.  Either shortcut therefore reads an annotation as though it
+    were the block reason, and a debt-blocked ticket whose tail had
+    moved on became invisible to this pass permanently: it could never
+    be auto-resumed however green its target branch went.
+
+    The transition *into* blocked is the only event that carries the
+    reason, so that is what this finds.
+    """
+    from ...core.states import State
+
+    reason: str | None = None
+    prev_blocked = False
+    for state, note in rows:
+        is_blocked = state == State.BLOCKED
+        if is_blocked and not prev_blocked:
+            reason = note
+        prev_blocked = is_blocked
+    return reason
+
+
 def _ci_debt_recheck_pass(
     settings: Settings,
     repo_config: RepoConfig,
@@ -107,14 +138,13 @@ def _ci_debt_recheck_pass(
 
     blocked = svc.list(state=State.BLOCKED)
     for ticket in blocked:
-        # Fetch the most recent event note for this BLOCKED ticket.
         with core_db.session(settings, repo_config.board_id) as s:
-            last_event = s.exec(
-                select(TicketEvent.note)
+            rows = s.exec(
+                select(TicketEvent.state, TicketEvent.note)
                 .where(TicketEvent.ticket_id == ticket.id)
-                .order_by(col(TicketEvent.id).desc())
-            ).first()
-        note = (last_event or "").strip()
+                .order_by(col(TicketEvent.id))
+            ).all()
+        note = (_last_block_reason(rows) or "").strip()
         if not note:
             continue
         m = _CI_DEBT_NOTE_RE.search(note)

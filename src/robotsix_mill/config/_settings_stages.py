@@ -1160,14 +1160,23 @@ class _StagesSettings(BaseModel):
 
     # Wall-clock timeout (seconds) for a single ci-fix agent pass.  This
     # wraps the LLM agent call inside the stage and fires BEFORE the
-    # worker's generic stage_timeout_seconds (default 2400s).  When the
-    # agent exceeds this budget, the stage produces a diagnostic block
+    # worker's stage timeout, so the stage produces a diagnostic block
     # note (failing check, last known state) instead of a bare timeout.
-    # Must be less than stage_timeout_seconds to leave headroom for
-    # clone, guard checks, and finalization.  Set to 0 to disable (agent
-    # runs until the worker timeout or request limit).
+    # Set to 0 to disable (agent runs until the worker timeout or
+    # request limit).
+    #
+    # This is a FLOOR, not the applied value.  Settings.
+    # ci_fix_agent_timeout_effective raises it to at least
+    # ci_fix_agent_budget_seconds (= ci_fix_max_iterations x
+    # ci_fix_wait_timeout_s + the coordinator budget), and
+    # Settings.stage_timeout_for keeps the stage wrapper above that
+    # again — so raising the iteration budget can no longer leave the
+    # agent unable to spend it.  Read those two before tuning this.
     ci_fix_agent_timeout_seconds: int = Field(
-        description="Wall-clock timeout (seconds) for the ci-fix agent pass. 0 disables.",
+        description=(
+            "Floor for the ci-fix agent pass wall-clock (seconds); raised to "
+            "ci_fix_agent_budget_seconds when that is larger. 0 disables."
+        ),
         default=1800,
         ge=0,
         json_schema_extra={"advanced": True},
@@ -1271,11 +1280,19 @@ class _StagesSettings(BaseModel):
     # pausing the ticket to BLOCKED for human review. Guards against an
     # unbounded implement↔review / implement↔ci_fix re-run loop (one ticket
     # spinning the model agent dozens of times and burning subscription
-    # quota). A healthy linear pipeline dispatches each stage once, so this
-    # only trips on genuine bounce-loops. Default 3 allows the initial run
-    # plus 2 re-runs (~2 re-implement cycles). Set to 0 to disable.
+    # quota). Default 3 allows the initial run plus 2 re-runs.
+    # Set to 0 to disable.
+    #
+    # This is a FLOOR, not the applied value: a review round that
+    # requests changes re-dispatches implement, so
+    # Settings.ticket_state_cycle_limit_effective raises it to at least
+    # review_max_rounds + 1.  Without that the guard fired on tickets
+    # that were merely using the review budget the pipeline granted them.
     ticket_state_cycle_limit: int = Field(
-        description="Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
+        description=(
+            "Floor for the per-ticket same-LLM-stage dispatch ceiling within one "
+            "processing pass; raised to review_max_rounds + 1. 0 disables."
+        ),
         default=3,
         ge=0,
         json_schema_extra={"advanced": True},
