@@ -63,6 +63,13 @@ class LangfuseConfig(BaseModel):
     projects: dict[str, LangfuseProjectCredentials]
 
 
+# Seconds the ci_fix stage wrapper is kept above the agent's own timeout,
+# covering clone, guard checks and finalization.  Its only job is to keep
+# the two ordered so the agent's diagnostic block note always wins the
+# race against the wrapper's anonymous kill.
+_CI_FIX_STAGE_HEADROOM_S = 300
+
+
 class Settings(
     # Mixin order is reversed relative to the original field declaration
     # order because pydantic collects fields in reverse-MRO order; listing
@@ -293,12 +300,63 @@ class Settings(
         waits = self.ci_fix_max_iterations * self.ci_fix_wait_timeout_s
         return int(waits + self.coordinator_timeout_seconds)
 
+    @property
+    def ci_fix_agent_timeout_effective(self) -> int:
+        """Wall-clock actually applied to the ci-fix agent call.
+
+        ``ci_fix_agent_timeout_seconds`` is an independent constant, but
+        what the agent is *allowed* to spend is
+        :attr:`ci_fix_agent_budget_seconds` — a product of
+        ``ci_fix_max_iterations``, ``ci_fix_wait_timeout_s`` and the
+        coordinator budget.  Configuring the two separately reproduces,
+        one level down, exactly the drift :meth:`stage_timeout_for`
+        exists to prevent: shipped as 1800 s against a 4500 s budget,
+        the wrapper killed the agent at 40% of its sanctioned time —
+        before it could complete even two of its three sanctioned
+        verify iterations — and the ticket went to BLOCKED with a
+        "timed out, resume to retry" note that retried into the same
+        wall.  Six live tickets were blocked this way on 2026-08-11,
+        every one of them at exactly 1800 s.
+
+        Flooring at the budget means the agent always gets the time its
+        other settings promise it.  A deliberate 0 (disabled) is
+        respected.
+        """
+        configured = int(self.ci_fix_agent_timeout_seconds)
+        if configured == 0:
+            return 0  # explicitly disabled — respect it
+        return max(configured, self.ci_fix_agent_budget_seconds)
+
+    @property
+    def ticket_state_cycle_limit_effective(self) -> int:
+        """Same-stage dispatch ceiling actually applied per processing pass.
+
+        The ceiling exists to catch *unsanctioned* bounce-loops, but it
+        counted dispatches the pipeline sanctions elsewhere: every review
+        round that requests changes re-dispatches ``implement``, so a
+        ticket using its full ``review_max_rounds`` budget dispatches
+        implement ``review_max_rounds + 1`` times and trips a ceiling of
+        3 on the last sanctioned round — "re-ran 4 times this pass
+        (limit 3)", four live tickets on 2026-08-11, each one blocked for
+        doing exactly what review asked of it.
+
+        Flooring at ``review_max_rounds + 1`` keeps the guard aimed at
+        genuine loops.  A deliberate 0 (disabled) is respected.
+        """
+        configured = int(self.ticket_state_cycle_limit)
+        if configured == 0:
+            return 0  # explicitly disabled — respect it
+        return max(configured, int(self.review_max_rounds) + 1)
+
     def stage_timeout_for(self, stage_name: str) -> int:
         """Resolve the wall-clock timeout for *stage_name*.
 
         Normally the explicit override, else ``stage_timeout_seconds``.
         The exception is ``ci_fix``, which is raised to at least
-        :attr:`ci_fix_agent_budget_seconds`.
+        :attr:`ci_fix_agent_timeout_effective` plus
+        :data:`_CI_FIX_STAGE_HEADROOM_S`, so the agent's own timeout
+        always fires first and produces its diagnostic block note
+        instead of the wrapper killing the stage anonymously.
 
         Why the floor exists: ``ci_fix`` is the only stage that blocks on
         *external* CI, so its agent's budget is a product of two other
@@ -317,7 +375,13 @@ class Settings(
         if resolved == 0:
             return 0  # explicitly disabled — respect it
         if stage_name == "ci_fix":
-            return max(resolved, self.ci_fix_agent_budget_seconds)
+            agent = self.ci_fix_agent_timeout_effective
+            floor = (
+                self.ci_fix_agent_budget_seconds
+                if agent == 0
+                else agent + _CI_FIX_STAGE_HEADROOM_S
+            )
+            return max(resolved, floor)
         return resolved
 
     # -- cross-field checks --------------------------------------------

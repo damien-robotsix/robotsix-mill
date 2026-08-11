@@ -3200,8 +3200,12 @@ async def test_bounce_loop_blocks_at_ceiling(ctx, service, monkeypatch):
     monkeypatch.setitem(registry.STAGES, "implement", PingImplement())
     monkeypatch.setitem(registry.STAGES, "review", PongReview())
 
-    limit = 3
-    ctx.settings.ticket_state_cycle_limit = limit
+    ctx.settings.ticket_state_cycle_limit = 3
+    # The applied ceiling is the derived one — it is floored at
+    # review_max_rounds + 1 so a ticket spending its full review budget
+    # (which re-dispatches implement once per round) is not mistaken for
+    # a bounce-loop. Read it rather than assuming the raw field.
+    limit = ctx.settings.ticket_state_cycle_limit_effective
 
     t = service.create("bounce")
     service.transition(t.id, State.READY)

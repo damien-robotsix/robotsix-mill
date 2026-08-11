@@ -529,7 +529,10 @@ async def _process_ticket_inner(
         # stages (merge, deliver) would otherwise emit an empty "ticket"
         # trace into the Langfuse session on every poll.
         traced = getattr(stage, "traced", True)
-        limit = ctx.settings.ticket_state_cycle_limit
+        # Derived, not the raw field: a fully-used review_max_rounds
+        # budget re-dispatches implement once per round and must not
+        # trip the loop guard.
+        limit = ctx.settings.ticket_state_cycle_limit_effective
         if traced and limit > 0:
             dispatch_counts[stage_name] += 1
             if dispatch_counts[stage_name] > limit:

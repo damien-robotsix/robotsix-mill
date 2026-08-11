@@ -35,7 +35,7 @@ def test_ci_fix_stage_covers_the_agent_verify_loop():
     )
 
     assert s.ci_fix_agent_budget_seconds == 3 * 900 + 1800
-    assert s.stage_timeout_for("ci_fix") == s.ci_fix_agent_budget_seconds
+    assert s.stage_timeout_for("ci_fix") > s.ci_fix_agent_budget_seconds
     # The bug: the generic default would have cut the loop short.
     assert s.stage_timeout_for("ci_fix") > 2400
 
@@ -55,7 +55,77 @@ def test_production_pinned_values_are_also_protected():
         stage_timeout_overrides={"implement": 7200, "refine": 3600},
     )
 
-    assert s.stage_timeout_for("ci_fix") == 5 * 1500 + 1800
+    assert s.stage_timeout_for("ci_fix") >= 5 * 1500 + 1800
+
+
+# --- the same drift, one level down: agent timeout vs agent budget ------
+#
+# stage_timeout_for closed the gap between the stage wrapper and the
+# agent's budget, but ci_fix_agent_timeout_seconds remained an
+# independent constant wrapping the very same agent call. Shipped at
+# 1800 s against a 4500 s budget it reproduced the original bug exactly:
+# six live tickets on 2026-08-11 blocked at "timed out after 1800s",
+# none of which had been allowed to finish two of its three sanctioned
+# verify iterations.
+
+
+def test_agent_timeout_covers_its_own_sanctioned_budget():
+    s = _settings(
+        ci_fix_max_iterations=3,
+        ci_fix_wait_timeout_s=900.0,
+        coordinator_timeout_seconds=1800,
+        ci_fix_agent_timeout_seconds=1800,
+    )
+
+    assert s.ci_fix_agent_budget_seconds == 4500
+    assert s.ci_fix_agent_timeout_effective == 4500
+
+
+def test_a_larger_configured_agent_timeout_still_wins():
+    s = _settings(
+        ci_fix_max_iterations=3,
+        ci_fix_wait_timeout_s=900.0,
+        coordinator_timeout_seconds=1800,
+        ci_fix_agent_timeout_seconds=9_999,
+    )
+
+    assert s.ci_fix_agent_timeout_effective == 9_999
+
+
+def test_a_zero_agent_timeout_stays_disabled():
+    """0 means "no agent timeout"; the floor must not resurrect one."""
+    s = _settings(ci_fix_agent_timeout_seconds=0)
+
+    assert s.ci_fix_agent_timeout_effective == 0
+
+
+@pytest.mark.parametrize(
+    "iterations,wait_s,agent_timeout",
+    [(3, 900.0, 1800), (5, 1500.0, 1800), (1, 300.0, 7200), (4, 600.0, 0)],
+)
+def test_the_stage_always_outlives_its_agent(iterations, wait_s, agent_timeout):
+    """The ordering invariant, across configurations.
+
+    Whatever the knobs say, the agent's own timeout must fire first so
+    the ticket gets the diagnostic block note (which failing check, last
+    known state) rather than the wrapper's anonymous stage kill.
+    """
+    s = _settings(
+        ci_fix_max_iterations=iterations,
+        ci_fix_wait_timeout_s=wait_s,
+        coordinator_timeout_seconds=1800,
+        ci_fix_agent_timeout_seconds=agent_timeout,
+        stage_timeout_seconds=2400,
+        stage_timeout_overrides={},
+    )
+
+    stage = s.stage_timeout_for("ci_fix")
+    agent = s.ci_fix_agent_timeout_effective
+    if agent == 0:
+        # Agent timeout disabled: the stage still covers the loop budget.
+        assert stage >= s.ci_fix_agent_budget_seconds
+    else:
+        assert stage > agent
 
 
 def test_a_larger_explicit_override_still_wins():
