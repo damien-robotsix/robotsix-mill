@@ -578,6 +578,9 @@ modules:
       - ARCHITECTURE.md
       - CONTRIBUTING.md
       - CHANGELOG.md
+      - changelog.d/.gitkeep
+      - changelog.d/README.md
+      - changelog.d/*.md
       - release-please-config.json
       - .release-please-manifest.json
       - doc-agent-ledger.md
