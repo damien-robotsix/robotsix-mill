@@ -35,7 +35,7 @@ def make_list_threads_tool(settings: Settings, agent_name: str):
         svc, ticket_id = result
         try:
             comments = svc.list_comments(ticket_id)
-        except KeyError, ValueError:
+        except (KeyError, ValueError):
             # KeyError: ticket not found on the resolved board.
             # ValueError: _board_for cannot resolve the ticket (empty
             # board_id + ticket not found in any candidate board — e.g.
