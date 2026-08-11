@@ -920,7 +920,7 @@
         "ci_fix_agent_timeout_seconds": {
           "advanced": true,
           "default": 1800,
-          "description": "Wall-clock timeout (seconds) for the ci-fix agent pass. 0 disables.",
+          "description": "Floor for the ci-fix agent pass wall-clock (seconds); raised to ci_fix_agent_budget_seconds when that is larger. 0 disables.",
           "minimum": 0,
           "title": "Ci Fix Agent Timeout Seconds",
           "type": "integer"
@@ -2944,7 +2944,7 @@
         "ticket_state_cycle_limit": {
           "advanced": true,
           "default": 3,
-          "description": "Per-ticket ceiling on same-LLM-stage dispatches within one processing pass. 0 disables.",
+          "description": "Floor for the per-ticket same-LLM-stage dispatch ceiling within one processing pass; raised to review_max_rounds + 1. 0 disables.",
           "minimum": 0,
           "title": "Ticket State Cycle Limit",
           "type": "integer"
