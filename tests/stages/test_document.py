@@ -127,7 +127,7 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
         del self, settings, diff, spec
         # Simulate agent writing a doc file as a side effect.
         (Path(repo_dir) / "README.md").write_text("# Updated README\n")
-        return DocResult(user_facing=True, summary="updated README")
+        return DocResult(user_facing=True, summary="updated README"), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
@@ -172,7 +172,7 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
         return DocResult(
             user_facing=False,
             summary="no user-facing changes (internal-only)",
-        )
+        ), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
@@ -220,7 +220,7 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
     ):
         del self, settings, repo_dir, diff, spec
         # Agent claims user-facing but writes nothing.
-        return DocResult(user_facing=True, summary="updated README")
+        return DocResult(user_facing=True, summary="updated README"), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
@@ -262,7 +262,7 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
         reference_files=None,
     ):
         agent_called.append(1)
-        return DocResult(user_facing=False, summary="")
+        return DocResult(user_facing=False, summary=""), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
@@ -429,7 +429,7 @@ def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
     ):
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Changed\n")
-        return DocResult(user_facing=True, summary="updated README")
+        return DocResult(user_facing=True, summary="updated README"), None
 
     def _failing_commit_all(repo, msg):
         raise RuntimeError("commit failed")
@@ -464,7 +464,7 @@ def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
         reference_files=None,
     ):
         del self, settings, repo_dir, diff, spec
-        return DocResult(user_facing=True, summary="updated docs")
+        return DocResult(user_facing=True, summary="updated docs"), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
 
@@ -494,7 +494,7 @@ def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
 
     def _fake_full_agent(self, *args, **kwargs):
         full_agent_called.append(1)
-        return DocResult(user_facing=False, summary="")
+        return DocResult(user_facing=False, summary=""), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _fake_classifier)
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_full_agent)
@@ -537,7 +537,7 @@ def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
     ):
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Updated by doc agent\n")
-        return DocResult(user_facing=True, summary="updated README")
+        return DocResult(user_facing=True, summary="updated README"), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _fake_classifier)
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_full_agent)
@@ -580,7 +580,7 @@ def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypat
         full_agent_called.append(1)
         del self, settings, diff, spec
         (Path(repo_dir) / "README.md").write_text("# Full agent ran\n")
-        return DocResult(user_facing=True, summary="updated docs")
+        return DocResult(user_facing=True, summary="updated docs"), None
 
     monkeypatch.setattr(DocumentStage, "_run_doc_classifier", _failing_classifier)
     monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_full_agent)
