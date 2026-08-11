@@ -2498,11 +2498,16 @@ def test_board_js_references_cumulative_cost(client):
 
 
 class _FakeForge:
-    """Minimal forge stub for merge-now endpoint tests."""
+    """Minimal forge stub for merge-now / update-branch endpoint tests."""
 
     _UNSET = object()
 
-    def __init__(self, merge_result=_UNSET, pr_status_result=_UNSET):
+    def __init__(
+        self,
+        merge_result=_UNSET,
+        pr_status_result=_UNSET,
+        update_branch_result=_UNSET,
+    ):
         if merge_result is self._UNSET:
             merge_result = {"merged": True, "reason": "merged"}
         if pr_status_result is self._UNSET:
@@ -2512,10 +2517,14 @@ class _FakeForge:
                 "state": "open",
                 "mergeable": True,
             }
+        if update_branch_result is self._UNSET:
+            update_branch_result = {"updated": True, "reason": "update-branch accepted"}
         self._merge_result = merge_result
         self._pr_status_result = pr_status_result
+        self._update_branch_result = update_branch_result
         self.merge_calls: list[dict] = []
         self.pr_status_calls: list[dict] = []
+        self.update_branch_calls: list[dict] = []
 
     def merge_pr(self, *, source_branch: str) -> dict:
         self.merge_calls.append({"source_branch": source_branch})
@@ -2524,6 +2533,10 @@ class _FakeForge:
     def pr_status(self, *, source_branch: str) -> dict | None:
         self.pr_status_calls.append({"source_branch": source_branch})
         return self._pr_status_result
+
+    def update_branch(self, *, source_branch: str) -> dict:
+        self.update_branch_calls.append({"source_branch": source_branch})
+        return self._update_branch_result
 
 
 def _patch_forge(monkeypatch, fake_forge):
@@ -2809,6 +2822,133 @@ def test_merge_reason_missing_ticket_404(client):
     """GET /tickets/{id}/merge-reason with a bogus id returns 404."""
     r = client.get("/tickets/nonexistent/merge-reason")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# update-branch tests
+# ---------------------------------------------------------------------------
+
+
+def _to_merge_relevant_state(service, title, target_state):
+    """Walk a fresh ticket to a merge-relevant state for update-branch tests."""
+    t = service.create(title)
+    service.set_branch(t.id, f"mill/{t.id}")
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates checking")
+    if target_state is State.WAITING_AUTO_MERGE:
+        service.transition(t.id, State.WAITING_AUTO_MERGE, note="auto-merge polling")
+    elif target_state is State.HUMAN_MR_APPROVAL:
+        service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
+    # IMPLEMENT_COMPLETE is already reached above.
+    return service.get(t.id)
+
+
+def test_update_branch_human_mr_approval(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch on human_mr_approval calls
+    forge.update_branch and returns the result dict."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Stale PR", State.HUMAN_MR_APPROVAL)
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    assert r.json() == {"updated": True, "reason": "update-branch accepted"}
+
+    assert len(fake.update_branch_calls) == 1
+    assert fake.update_branch_calls[0]["source_branch"] == t.branch
+
+
+def test_update_branch_waiting_auto_merge(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch on waiting_auto_merge works."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Stale WAM", State.WAITING_AUTO_MERGE)
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 200
+    assert r.json()["updated"] is True
+
+
+def test_update_branch_implement_complete(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch on implement_complete works."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Stale IC", State.IMPLEMENT_COMPLETE)
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 200
+    assert r.json()["updated"] is True
+
+
+def test_update_branch_already_up_to_date(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch returns updated=false when the
+    branch is already current."""
+    fake = _FakeForge(
+        update_branch_result={"updated": False, "reason": "already up to date"},
+    )
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Current PR", State.HUMAN_MR_APPROVAL)
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 200
+    assert r.json() == {"updated": False, "reason": "already up to date"}
+
+
+def test_update_branch_wrong_state_409(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch on a non-merge-relevant state
+    returns 409."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = service.create("Ready ticket")
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    assert service.get(t.id).state is State.READY
+
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 409
+    assert "not in a merge-relevant state" in r.text.lower()
+
+
+def test_update_branch_missing_ticket_404(client, monkeypatch):
+    """POST /tickets/{id}/update-branch with a bogus id returns 404."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+    r = client.post("/tickets/nonexistent/update-branch")
+    assert r.status_code == 404
+
+
+def test_update_branch_no_branch_400(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch when the ticket has no branch
+    returns 400."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = service.create("No branch ticket")
+    service.transition(t.id, State.READY, note="approved (autonomous)")
+    service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates checking")
+    service.transition(t.id, State.HUMAN_MR_APPROVAL, note="awaiting merge")
+    # Branch was never set — service.create leaves it None.
+    ticket = service.get(t.id)
+    assert ticket.state is State.HUMAN_MR_APPROVAL
+    assert ticket.branch is None
+
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 400
+
+
+def test_update_branch_done_state_409(client, service, monkeypatch):
+    """POST /tickets/{id}/update-branch on done returns 409."""
+    fake = _FakeForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = service.create("Done ticket")
+    service.transition(t.id, State.DONE, note="merged")
+    assert service.get(t.id).state is State.DONE
+
+    r = client.post(f"/tickets/{t.id}/update-branch")
+    assert r.status_code == 409
 
 
 # ---------------------------------------------------------------------------

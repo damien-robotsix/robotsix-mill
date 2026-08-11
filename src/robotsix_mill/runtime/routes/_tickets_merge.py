@@ -165,6 +165,54 @@ def merge_now(
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
+@router.post("/tickets/{ticket_id}/update-branch")
+def update_branch(
+    ticket_id: str,
+    request: Request,
+    svc: TicketService = Depends(get_service),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    """Update a ticket's PR branch with the latest base branch via the
+    forge's server-side update-branch API.  This merges the base branch
+    into the PR head, resolving "branch is out of date" staleness that
+    causes merge conflicts — without the heavy rebase-agent path.
+
+    Allowed when the ticket is in any merge-relevant state
+    (``human_mr_approval``, ``waiting_auto_merge``,
+    ``implement_complete``).  The ticket state is *not* changed — the
+    caller re-polls CI / mergeability after the update.
+
+    Returns ``{"updated": true, "reason": "update-branch accepted"}``
+    on success, ``{"updated": false, "reason": "..."}`` when the branch
+    is already current, the PR is not found, or the forge rejects the
+    request.  Raises 409 when the ticket is not in a merge-relevant
+    state, 404 when the ticket does not exist, and 400 when the ticket
+    has no branch.
+    """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+
+    if ticket.state not in (
+        State.HUMAN_MR_APPROVAL,
+        State.WAITING_AUTO_MERGE,
+        State.IMPLEMENT_COMPLETE,
+    ):
+        raise HTTPException(
+            409,
+            f"ticket is not in a merge-relevant state (currently {ticket.state.value})",
+        )
+
+    if not ticket.branch:
+        raise HTTPException(400, "ticket has no branch")
+
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    forge = get_forge(settings, repo_config=repo_config)
+    result = forge.update_branch(source_branch=ticket.branch)
+    return result
+
+
 @router.get("/tickets/{ticket_id}/merge-info")
 def get_merge_info(
     ticket_id: str,
