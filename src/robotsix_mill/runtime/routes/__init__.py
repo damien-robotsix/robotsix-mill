@@ -16,6 +16,7 @@ from . import (
     _chat_skill,
     _comments,
     _config,
+    _diagnostic_events,
     _epics,
     _health,
     _passes,
@@ -41,6 +42,7 @@ router.include_router(_candidates.router)
 router.include_router(_agents.router)
 router.include_router(_board.router)
 router.include_router(_chat_skill.router)
+router.include_router(_diagnostic_events.router)
 router.include_router(_repos.router)
 router.include_router(_tickets_ingest.router)
 router.include_router(_config.router)

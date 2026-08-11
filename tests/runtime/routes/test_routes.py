@@ -1738,3 +1738,138 @@ def test_credential_status_ok_when_configured(client, monkeypatch):
     monkeypatch.setattr(cs, "_forge_missing", lambda settings: None)
     body = client.get("/credential-status").json()
     assert body == {"ok": True, "missing": []}
+
+
+# -- GET /diagnostic-events ---------------------------------------------
+
+
+def test_diagnostic_events_empty_store(client):
+    """Returns empty list + zero counts when no events written."""
+    r = client.get("/diagnostic-events")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["events"] == []
+    assert body["category_counts"] == {}
+
+
+def test_diagnostic_events_returns_events_newest_first(client, settings, tmp_path):
+    """Events are returned in reverse chronological order."""
+    from robotsix_mill.agents.runners.diagnostic_events import (
+        emit_diagnostic_event,
+    )
+
+    board = "test-board"
+    emit_diagnostic_event(settings, board, "CI_FAILURE", "t1", "reason 1", "key1")
+    emit_diagnostic_event(settings, board, "RECURRING", "t2", "reason 2", "key2")
+    emit_diagnostic_event(settings, board, "CI_FAILURE", "t3", "reason 3", "key3")
+
+    r = client.get("/diagnostic-events?board_id=test-repo")
+    assert r.status_code == 200
+    body = r.json()
+    events = body["events"]
+    assert len(events) == 3
+    # Newest first: "t3" should be before "t1".
+    timestamps = [e["timestamp"] for e in events]
+    assert timestamps == sorted(timestamps, reverse=True), (
+        f"expected newest-first, got {timestamps}"
+    )
+
+
+def test_diagnostic_events_category_filter(client, settings):
+    """?category=CI_FAILURE returns only CI_FAILURE events."""
+    from robotsix_mill.agents.runners.diagnostic_events import (
+        emit_diagnostic_event,
+    )
+
+    board = "test-board"
+    emit_diagnostic_event(settings, board, "CI_FAILURE", "t1", "r1", "k1")
+    emit_diagnostic_event(settings, board, "RECURRING", "t2", "r2", "k2")
+
+    r = client.get("/diagnostic-events?board_id=test-repo&category=CI_FAILURE")
+    assert r.status_code == 200
+    body = r.json()
+    assert all(e["category"] == "CI_FAILURE" for e in body["events"])
+    assert body["category_counts"].get("CI_FAILURE", 0) == 1
+
+
+def test_diagnostic_events_since_filter(client, settings):
+    """?since=<ts> returns only events with timestamp strictly after."""
+    from robotsix_mill.agents.runners.diagnostic_events import (
+        emit_diagnostic_event,
+    )
+
+    board = "test-board"
+    emit_diagnostic_event(settings, board, "CI_FAILURE", "t1", "r1", "k1")
+
+    # Use a since far in the past — should include the event.
+    r = client.get("/diagnostic-events?board_id=test-repo&since=2000-01-01T00:00:00Z")
+    assert r.status_code == 200
+    assert len(r.json()["events"]) >= 1
+
+    # Use a since far in the future — should be empty.
+    r = client.get("/diagnostic-events?board_id=test-repo&since=2099-01-01T00:00:00Z")
+    assert r.status_code == 200
+    assert r.json()["events"] == []
+
+
+def test_diagnostic_events_limit(client, settings):
+    """?limit=N caps the returned event list."""
+    from robotsix_mill.agents.runners.diagnostic_events import (
+        emit_diagnostic_event,
+    )
+
+    board = "test-board"
+    for i in range(5):
+        emit_diagnostic_event(settings, board, "CI_FAILURE", f"t{i}", f"r{i}", f"k{i}")
+
+    r = client.get("/diagnostic-events?board_id=test-repo&limit=2")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["events"]) == 2
+    # category_counts reflect ALL events, not just the limited slice.
+    assert body["category_counts"]["CI_FAILURE"] == 5
+
+
+def test_diagnostic_events_count_summary(client, settings):
+    """category_counts reflects all matching events across boards."""
+    from robotsix_mill.agents.runners.diagnostic_events import (
+        emit_diagnostic_event,
+    )
+
+    emit_diagnostic_event(settings, "test-board", "CI_FAILURE", "t1", "r1", "k1")
+    emit_diagnostic_event(settings, "test-board", "CI_FAILURE", "t2", "r2", "k2")
+    emit_diagnostic_event(settings, "test-board", "RECURRING", "t3", "r3", "k3")
+
+    r = client.get("/diagnostic-events?board_id=test-repo")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["category_counts"] == {"CI_FAILURE": 2, "RECURRING": 1}
+
+
+def test_diagnostic_events_invalid_since(client):
+    """Invalid since datetime returns 400."""
+    r = client.get("/diagnostic-events?since=not-a-date")
+    assert r.status_code == 400
+
+
+def test_diagnostic_events_unknown_board(client):
+    """Unknown board_id returns 400."""
+    r = client.get("/diagnostic-events?board_id=no-such-board")
+    assert r.status_code == 400
+
+
+def test_diagnostic_events_dedup(client, settings):
+    """Duplicate (ticket_id, normalized_key) pairs are stored once."""
+    from robotsix_mill.agents.runners.diagnostic_events import (
+        emit_diagnostic_event,
+    )
+
+    board = "test-board"
+    emit_diagnostic_event(settings, board, "CI_FAILURE", "t1", "r1", "k1")
+    # Same ticket + key — should be skipped.
+    emit_diagnostic_event(settings, board, "CI_FAILURE", "t1", "r1b", "k1")
+
+    r = client.get("/diagnostic-events?board_id=test-repo")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["category_counts"].get("CI_FAILURE", 0) == 1

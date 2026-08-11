@@ -82,6 +82,10 @@ def create_app(
                 "description": "Board card management and workflow transitions",
             },
             {
+                "name": "DiagnosticEvents",
+                "description": "Diagnostic event store query and health-check surface",
+            },
+            {
                 "name": "Repos",
                 "description": "Runtime repo registration",
             },

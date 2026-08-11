@@ -379,6 +379,50 @@ decision).
 - Returns `200` + `{ticket_id, deduped: true}` when the report matched
   an existing ticket (a history note is appended instead).
 
+### GET /diagnostic-events — query the diagnostic event store
+
+```
+GET /diagnostic-events?board_id=<board-id>&category=<category>&since=<iso-datetime>&limit=<int>
+```
+
+Reads the per-board JSONL diagnostic event store.  Use this to check
+whether feedback loops (CI failure detection, recurring-category
+clustering, auto-fix proposals) are actually emitting data — do not
+guess from ticket state alone.
+
+Query parameters (all optional):
+- `board_id` — restrict to a single board; omit or pass `all` for every board.
+- `category` — filter by event category (e.g. `CI_FAILURE`).
+- `since` — ISO-8601 UTC datetime; only return events with a timestamp
+  strictly after this instant.
+- `limit` — maximum events to return (1–1000, default 100).
+
+Returns:
+```json
+{
+  "events": [
+    {
+      "category": "CI_FAILURE",
+      "ticket_id": "20260808T...",
+      "repo_id": "mill",
+      "reason": "...",
+      "normalized_key": "abc123...",
+      "timestamp": "2026-08-08T12:34:56.789Z"
+    }
+  ],
+  "category_counts": {
+    "CI_FAILURE": 42,
+    "RECURRING": 7
+  }
+}
+```
+
+Events are returned newest-first.  `category_counts` reflects ALL
+matching events (before the limit is applied), so a health check can
+assert `CI_FAILURE events in the last 24 hours > 0` in one call:
+`GET /diagnostic-events?category=CI_FAILURE&since=<24h-ago>&limit=1`
+and inspect `category_counts.CI_FAILURE`.
+
 ---
 
 ## Safety rules
