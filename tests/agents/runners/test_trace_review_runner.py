@@ -1461,7 +1461,9 @@ class TestPreFilingDedup:
         )
         assert result.drafts_created == []
         # Gap-id dedup logged.
-        assert any("gap-id already exists" in rec.getMessage() for rec in caplog.records)
+        assert any(
+            "gap-id already exists" in rec.getMessage() for rec in caplog.records
+        )
 
     def test_skip_when_prior_ticket_is_draft(self, settings, monkeypatch):
         self._seed_prior_ticket(
