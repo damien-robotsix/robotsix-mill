@@ -23,6 +23,7 @@ from ..notify import send_notification
 from ..vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
+from .pause import check_for_pause
 
 log = logging.getLogger("robotsix_mill.stages.document")
 
@@ -151,7 +152,7 @@ class DocumentStage(Stage):
 
         # --- Phase 2: full documentation agent ---
         try:
-            doc_result = self._run_doc_agent(
+            doc_result, new_msgs = self._run_doc_agent(
                 settings=s,
                 repo_dir=repo_dir,
                 diff=diff,
@@ -181,6 +182,28 @@ class DocumentStage(Stage):
             return Outcome(
                 State.DELIVERABLE,
                 note,
+            )
+
+        # Defense-in-depth: if the doc agent somehow called ask_user
+        # (e.g. a future configuration error re-enabling the tool),
+        # transition the ticket atomically so the thread isn't orphaned.
+        if check_for_pause(new_msgs):
+            ctx.service.transition(
+                ticket.id,
+                State.AWAITING_USER_REPLY,
+                note="paused — document agent asked a clarifying question",
+            )
+            updated = ctx.service.get(ticket.id)
+            if updated:
+                send_notification(
+                    updated,
+                    State.AWAITING_USER_REPLY,
+                    "document agent asked a clarifying question",
+                    ctx.settings,
+                )
+            return Outcome(
+                State.AWAITING_USER_REPLY,
+                "paused — document agent asked a clarifying question",
             )
 
         next_state = State.DELIVERABLE
@@ -232,11 +255,12 @@ class DocumentStage(Stage):
         extra_roots: list[Path] | None = None,
         board_id: str = "",
         reference_files: list[str] | None = None,
-    ) -> DocResult:
+    ) -> tuple[DocResult, bytes | None]:
         """Run the documentation agent to classify the diff and update docs.
 
         Returns a ``DocResult`` with ``user_facing`` (bool) and ``summary``
-        (str describing what was updated or that no changes were needed).
+        (str describing what was updated or that no changes were needed),
+        and the raw ``new_messages_json()`` bytes for pause detection.
         """
         from ..agents.documenting import run_doc_agent
 

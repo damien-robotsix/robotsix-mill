@@ -51,10 +51,14 @@ class _FakeAgent:
 
 class _Result:
     """Minimal stand-in for pydantic-ai's run result — only
-    ``.output`` is read by the code under test."""
+    ``.output`` and ``.new_messages_json()`` are read by the code
+    under test."""
 
     def __init__(self, output):
         self.output = output
+
+    def new_messages_json(self) -> bytes | None:
+        return None
 
 
 def _patch_build_agent_from_definition(monkeypatch, agent_factory):
@@ -1050,7 +1054,7 @@ class TestRunDocAgent:
             lambda path, text: persist_calls.append(path),
         )
 
-        result = run_doc_agent(
+        result, _ = run_doc_agent(
             settings=settings,
             repo_dir=repo_dir,
             diff=self.DIFF,
@@ -1188,7 +1192,7 @@ class TestRunDocAgent:
         fake_agent = _FakeAgent(expected)
         self._patch_dependencies(monkeypatch, fake_agent)
 
-        result = run_doc_agent(
+        result, _ = run_doc_agent(
             settings=settings,
             repo_dir=repo_dir,
             diff=self.DIFF,

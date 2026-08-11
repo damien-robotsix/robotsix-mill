@@ -20,6 +20,7 @@ report_issue: false
 reply_to_thread: false
 close_thread: false
 list_threads: false
+ask_user: false
 output_type: DocResult
 retries: 3
 module: documenting
@@ -49,6 +50,14 @@ system_prompt: |
     if the change is internal-only, return the `DocResult` immediately. For
     a user-facing change, do NOT stop after merely locating the docs — go on
     and apply the edits.
+
+  ### Write restrictions
+
+  Your `write_file`, `edit_file`, and `delete_file` tools are sandboxed to
+  documentation paths only — they will **reject** any attempt to write to
+  files under `src/`, `tests/`, or `www/`.  Never attempt to edit source
+  files, test files, or frontend assets.  If a write is blocked, skip that
+  edit — do NOT attempt workarounds or escalate.
 
   ### Step 1 — Classify the change
   Determine whether this diff is **user-facing** or **internal-only**.

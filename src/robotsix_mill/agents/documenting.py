@@ -135,7 +135,7 @@ def run_doc_agent(
     extra_roots: list[Path] | None = None,
     board_id: str = "",
     reference_files: list[str] | None = None,
-) -> DocResult:
+) -> tuple[DocResult, bytes | None]:
     """Build a documentation agent, classify *diff* + *spec*, and update
     docs for user-facing changes.
 
@@ -258,11 +258,12 @@ def run_doc_agent(
             what="document",
         )
         output: DocResult = result.output
+        new_msgs = result.new_messages_json()
         # Persist the agent's updated ledger; empty string = keep
         # existing memory unchanged.  Respect the board_id guard —
         # only persist when we actually have a ledger path.
         if output.updated_memory and doc_memory_path is not None:
             persist_memory(doc_memory_path, output.updated_memory)
-        return output
+        return output, new_msgs
     finally:
         _safe_close(agent)
