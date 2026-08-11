@@ -35,7 +35,12 @@ def make_list_threads_tool(settings: Settings, agent_name: str):
         svc, ticket_id = result
         try:
             comments = svc.list_comments(ticket_id)
-        except KeyError:
+        except KeyError, ValueError:
+            # KeyError: ticket not found on the resolved board.
+            # ValueError: _board_for cannot resolve the ticket (empty
+            # board_id + ticket not found in any candidate board — e.g.
+            # when current_ticket_id() returns a periodic session id
+            # that is not a real ticket id).
             return f"Error: ticket {ticket_id} not found."
 
         threads = [c for c in comments if c.parent_id is None]
