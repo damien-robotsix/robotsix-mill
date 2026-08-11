@@ -33,6 +33,10 @@ reset_for_tests
 run_completeness_check_agent
 run_config_sync_agent
 
+# FastAPI route function — registered via @router.post decorator; vulture
+# (60% confidence) cannot trace decorator-based registration.
+close_thread_for_ticket
+
 # Settings fields retained for backward-compatible config schemas even
 # though their only code-level consumer was removed (dedup now uses
 # gap-id markers rather than title-fingerprint lookback).

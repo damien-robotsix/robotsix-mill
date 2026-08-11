@@ -8,6 +8,8 @@ import threading
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...core.models import Comment, CommentCreate, TicketKind
+from ...core.service import TicketService
+from ...core.states import State
 from ..deps import get_service, get_settings, resolve_ticket_id
 
 log = logging.getLogger(__name__)
@@ -90,6 +92,71 @@ def close_thread(
     DB — Comment.id is per-board (not globally unique), so a bare
     ``comment_id`` lookup is ambiguous across repos.
     """
+    try:
+        return svc.close_thread(comment_id, ticket_id=ticket_id)
+    except KeyError:
+        raise HTTPException(404, "comment not found") from None
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+
+
+@router.post(
+    "/tickets/{ticket_id}/comments/{comment_id}/close",
+    response_model=Comment,
+)
+def close_thread_for_ticket(
+    ticket_id: str,
+    comment_id: int,
+    svc: TicketService = Depends(get_service),
+) -> Comment:
+    """Close a comment thread that is scoped to a specific ticket.
+
+    Safety-gated for chat-agent use: only allows closing threads when
+    the ticket is **not** in ``awaiting_user_reply``.  When the ticket
+    IS in that state the thread represents a live question the state
+    machine still depends on — closing it would silently discard a
+    pending question and break the pipeline.
+
+    After closing the last open ``[ASK_USER]`` thread on a ticket that
+    has already advanced past ``awaiting_user_reply``, this also
+    unblocks the merge path (``POST /tickets/{id}/merge-now`` will no
+    longer 409 on open threads).
+    """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
+
+    # Safety gate: refuse to close a thread on a ticket still in
+    # awaiting_user_reply — that thread represents a live question
+    # the state machine depends on.
+    ticket = svc.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "ticket not found")
+    if ticket.state == State.AWAITING_USER_REPLY:
+        raise HTTPException(
+            409,
+            "cannot close a thread on a ticket in awaiting_user_reply — "
+            "the question is still live.  Answer the question first, then "
+            "the thread will be auto-closed.",
+        )
+
+    # Validate the comment belongs to this ticket.
+    try:
+        board = svc._board_for_comment(comment_id, ticket_id)
+    except ValueError:
+        raise HTTPException(404, "comment not found") from None
+
+    from ...core import db as _db
+
+    with _db.session(svc.settings, board) as s:
+        comment = s.get(Comment, comment_id)
+        if comment is None:
+            raise HTTPException(404, "comment not found")
+        if comment.ticket_id != ticket_id:
+            raise HTTPException(
+                404,
+                f"comment {comment_id} does not belong to ticket {ticket_id}",
+            )
+
+    # Delegate to the existing service method.
     try:
         return svc.close_thread(comment_id, ticket_id=ticket_id)
     except KeyError:
