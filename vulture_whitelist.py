@@ -239,6 +239,9 @@ run_coherence_check
 
 # -- runtime routes (FastAPI decorator-registered handlers) ------------------
 get_trace_detail
+# GET /diagnostic-events handler — invoked via @router.get decorator, not
+# by direct Python call. Tested via HTTP TestClient.
+get_diagnostic_events
 # POST /repos handler — invoked via @router.post decorator, not by direct
 # Python call. Tested via HTTP TestClient.
 register_repo
