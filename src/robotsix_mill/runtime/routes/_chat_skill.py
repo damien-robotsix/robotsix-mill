@@ -280,6 +280,29 @@ Returns 409 when the ticket is not in `human_mr_approval` or when the
 forge rejects the merge (branch protection, conflict, …), 404 when the
 ticket does not exist.
 
+### POST /tickets/{id}/update-branch — update a stale PR branch
+
+```
+POST /tickets/<ticket-id>/update-branch
+```
+
+Calls the forge's server-side update-branch API to merge the base branch
+into the PR head.  Use this when a PR in `human_mr_approval` (or
+`waiting_auto_merge` / `implement_complete`) has a stale branch that
+causes merge conflicts — the PR is open but `mergeable` is `false`
+because the base branch has moved.  No request body required.
+
+The ticket state is NOT changed.  After a successful update the PR's CI
+re-runs against the current base tip; re-check `merge-info` after a few
+seconds to confirm the branch is current.
+
+Returns `{"updated": true, "reason": "update-branch accepted"}` on
+success, `{"updated": false, "reason": "already up to date"}` when the
+branch is current, `{"updated": false, "reason": "PR not found"}` when
+no PR exists for the branch, and a forge-specific reason string on
+failure.  Raises 409 when the ticket is not in a merge-relevant state,
+404 when the ticket does not exist, 400 when the ticket has no branch.
+
 ### POST /tickets/{id}/resume-blocked — unblock a ticket
 
 ```
