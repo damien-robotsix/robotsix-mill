@@ -751,7 +751,9 @@ class TestRunTraceReviewPass:
         assert result.traces_flagged == 1
         assert len(result.drafts_created) == 1
         d = result.drafts_created[0]
-        assert "tool_error" in d["title"]
+        assert "trace-review:" in d["title"]
+        assert "finding" in d["title"]
+        assert "t1" in d["title"]
         # Verify it landed on the board with the right source.
         svc = TicketService(settings, board_id="test-board")
         all_tickets = svc.list()
@@ -765,6 +767,7 @@ class TestRunTraceReviewPass:
         assert "run_command kept failing" in body
         assert "put uv sync in CI" in body
         assert "Inspector confidence" in body
+        assert "trace-review-gap-id: t1" in body
 
     def test_below_confidence_floor_finding_is_dropped(
         self,
@@ -896,12 +899,12 @@ class TestRunTraceReviewPass:
         settings,
         monkeypatch,
     ):
-        # Pre-seed an open trace-review ticket with the same normalized
-        # title the inspector would produce.
+        # Pre-seed an open trace-review ticket whose body carries the
+        # gap-id marker for trace t1 so the gap-id dedup fires.
         svc = TicketService(settings, board_id="test-board")
         svc.create(
-            title="tool_error — run_command kept failing on uv lock",
-            description="seed",
+            title="any title here",
+            description="<!-- trace-review-gap-id: t1 -->",
             source=SourceKind.TRACE_REVIEW,
         )
         monkeypatch.setattr(
@@ -1325,10 +1328,9 @@ class TestTargetRepoRouting:
 
         s = Settings(
             data_dir=str(tmp_path),
-            trace_review_target_repo_id="mill-repo",
         )
         # The runner reconstructs Settings() internally — patch it so
-        # the test's data_dir + target_repo_id propagate.
+        # the test's data_dir propagates.
         monkeypatch.setattr(
             "robotsix_mill.agents.runners.trace_review_runner.Settings",
             lambda: s,
@@ -1337,7 +1339,13 @@ class TestTargetRepoRouting:
 
         monkeypatch.setattr(
             "robotsix_mill.langfuse.client.list_all_traces_since",
-            lambda *a, **kw: [_trace(id="t1", totalCost=0.10)],
+            lambda *a, **kw: [
+                _trace(
+                    id="t1",
+                    totalCost=0.10,
+                    sessionId="mill-repo · audit-20260807T000000Z-aaaa",
+                )
+            ],
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse.client.fetch_trace_detail",
@@ -1391,7 +1399,7 @@ class TestPreFilingDedup:
         produces the given finding."""
         monkeypatch.setattr(
             "robotsix_mill.langfuse.client.list_all_traces_since",
-            lambda *a, **kw: [_trace(totalCost=0.10)],
+            lambda *a, **kw: [_trace(id="t1", totalCost=0.10)],
         )
         monkeypatch.setattr(
             "robotsix_mill.langfuse.client.fetch_trace_detail",
@@ -1427,7 +1435,7 @@ class TestPreFilingDedup:
         svc = TicketService(settings, board_id="test-board")
         ticket = svc.create(
             title=title,
-            description=body,
+            description=body + "\n<!-- trace-review-gap-id: t1 -->",
             source=SourceKind.TRACE_REVIEW,
         )
         return svc, ticket
@@ -1452,8 +1460,8 @@ class TestPreFilingDedup:
             repo_config=_test_repo_config(),
         )
         assert result.drafts_created == []
-        # Prior ticket id mentioned in the skip log.
-        assert any(ticket.id in rec.getMessage() for rec in caplog.records)
+        # Gap-id dedup logged.
+        assert any("gap-id already exists" in rec.getMessage() for rec in caplog.records)
 
     def test_skip_when_prior_ticket_is_draft(self, settings, monkeypatch):
         self._seed_prior_ticket(
@@ -1514,7 +1522,9 @@ class TestPreFilingDedup:
             session_id="sess-closed-done",
             repo_config=_test_repo_config(),
         )
-        assert result.drafts_created == []
+        # CLOSED tickets are excluded from the gap-id scan, so a fresh
+        # draft is filed.
+        assert len(result.drafts_created) == 1
 
     def test_recency_window_excludes_older_matches(self, settings, monkeypatch):
         from datetime import timedelta
@@ -1548,8 +1558,9 @@ class TestPreFilingDedup:
             session_id="sess-recency",
             repo_config=_test_repo_config(),
         )
-        # Older-than-window match is ignored; a fresh draft is filed.
-        assert len(result.drafts_created) == 1
+        # Gap-id dedup has no recency window — the old ticket still
+        # carries the marker and suppresses a new draft.
+        assert len(result.drafts_created) == 0
 
     def test_symptom_fingerprint_matches_without_file_path(self, settings, monkeypatch):
         # Seed a ticket whose title carries the symptom fingerprint, but
@@ -2218,7 +2229,8 @@ class TestNoiseSuppression:
         )
         assert result.traces_flagged == 1
         assert len(result.drafts_created) == 1
-        assert "tool_error" in result.drafts_created[0]["title"]
+        assert "trace-review:" in result.drafts_created[0]["title"]
+        assert "finding" in result.drafts_created[0]["title"]
 
     def test_observation_storm_still_files_regression(self, settings, monkeypatch):
         """An observation_storm trace flagged via the relative baseline
@@ -2293,4 +2305,5 @@ class TestNoiseSuppression:
         )
         assert result.traces_flagged == 1
         assert len(result.drafts_created) == 1
-        assert "optimization" in result.drafts_created[0]["title"]
+        assert "trace-review:" in result.drafts_created[0]["title"]
+        assert "finding" in result.drafts_created[0]["title"]

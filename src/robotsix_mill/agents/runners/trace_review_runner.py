@@ -38,15 +38,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlmodel import select
-
 if TYPE_CHECKING:
     from ...agents.trace_inspector import TraceFinding
 
 from ...config import RepoConfig, Settings
-from ...core.db import session as db_session
-from ...core.dedup import find_prior_matching_ticket, normalize
-from ...core.models import SourceKind, Ticket
+from ...core.models import SourceKind
 from ...core.service import TicketService
 from ...core.states import State
 from ...runtime.lifespan import _process_started_at
@@ -409,28 +405,104 @@ def _save_watermark(settings: Settings, board_id: str, when: datetime) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ticket dedup
+# Session → board resolution
 # ---------------------------------------------------------------------------
 
 
-def _existing_open_titles(service: TicketService, board_id: str) -> set[str]:
-    """Return the set of normalized titles of still-open
-    ``source=trace-review`` tickets on *service*'s board, so we don't
-    re-file the same finding from a second flagged trace.
+def _extract_repo_from_session(session_id: str) -> str | None:
+    """Extract the repo_id prefix from a qualified session id.
+
+    Session format: ``<repo_id> · <kind>-<timestamp>-<hex>``
+    Returns ``None`` for unqualified sessions (no `` · `` separator).
     """
-    out: set[str] = set()
-    settings = service.settings
-    with db_session(settings, board_id) as s:
-        stmt = (
-            select(Ticket)
-            .where(Ticket.source == SourceKind.TRACE_REVIEW)
-            .where(Ticket.state != State.CLOSED)
-        )
-        if board_id:
-            stmt = stmt.where(Ticket.board_id == board_id)
-        for t in s.exec(stmt).all():
-            out.add(normalize(t.title))
-    return out
+    if not session_id:
+        return None
+    parts = session_id.split(" · ", 1)
+    if len(parts) == 2 and parts[0]:
+        return parts[0]
+    return None
+
+
+def _resolve_board_for_session(
+    session_id: str, settings: Settings, fallback_board: str
+) -> str:
+    """Resolve the target board for a trace's session.
+
+    Extracts *repo_id* from the session, looks it up in the repos
+    registry, and returns its ``board_id``.  When the session is
+    unqualified or the extracted repo is unknown, falls back to the
+    mill board (``robotsix-mill`` in the registry); if even that
+    fails, returns *fallback_board*.
+    """
+    repo_id = _extract_repo_from_session(session_id)
+    if repo_id is None:
+        return fallback_board
+    try:
+        from ...config import get_repos_config
+
+        registry = get_repos_config().repos
+        rc = registry.get(repo_id)
+        if rc is not None and rc.board_id:
+            return rc.board_id
+    except Exception:
+        log.debug("trace-review: repo registry lookup failed", exc_info=True)
+    # Unknown repo — fall back to the mill board when possible.
+    log.warning(
+        "trace-review: session repo %r not in registry — falling back to mill board",
+        repo_id,
+    )
+    try:
+        from ...config import get_repos_config
+
+        mill_rc = get_repos_config().repos.get("robotsix-mill")
+        if mill_rc is not None and mill_rc.board_id:
+            return mill_rc.board_id
+    except Exception:
+        log.debug("trace-review: mill board fallback lookup failed", exc_info=True)
+    return fallback_board
+
+
+# Matches <!-- {label}-gap-id: foo_bar --> style markers in ticket
+# descriptions — same pattern as pass_runner._GAP_ID_RE.
+_TRACE_GAP_ID_RE = re.compile(r"<!--\s*trace-review-gap-id:\s*(\S+)\s*-->")
+
+
+def _trace_gap_id_exists(
+    settings: Settings,
+    board_id: str,
+    trace_id: str,
+) -> bool:
+    """Return ``True`` when an open trace-review ticket on *board_id*
+    already carries a ``<!-- trace-review-gap-id: {trace_id} -->``
+    marker for *trace_id*.
+    """
+    try:
+        svc = TicketService(settings, board_id=board_id)
+        all_tickets = svc.list()
+    except Exception:
+        return False
+    for t in all_tickets:
+        if t.source != SourceKind.TRACE_REVIEW:
+            continue
+        if t.state in {State.CLOSED, State.ERRORED}:
+            continue
+        try:
+            from ...core.workspace import Workspace
+
+            desc = Workspace(
+                settings.workspaces_dir_for(t.board_id), t.id
+            ).read_description()
+            for m in _TRACE_GAP_ID_RE.finditer(desc):
+                if m.group(1) == trace_id:
+                    return True
+        except Exception:
+            log.debug(
+                "trace-review: gap-id check failed for ticket %s",
+                t.id,
+                exc_info=True,
+            )
+            continue
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -659,9 +731,9 @@ def run_trace_review_pass(
 
     drafts: list[dict[str, Any]] = []
     flagged_count = 0
-    # Snapshot open trace-review titles ONCE up front; we'll grow the
-    # set as we file new drafts to avoid intra-run duplicates too.
-    seen_titles = _existing_open_titles(service, target_board_id)
+    # Track trace_ids already filed this run (gap-id dedup) to avoid
+    # intra-run duplicates — one draft per trace, ever.
+    filed_gap_ids: set[str] = set()
 
     # Pre-fetch every trace's full detail in one pass so we can compute
     # batch-relative baselines (median cost, median observation count)
@@ -774,20 +846,12 @@ def run_trace_review_pass(
             )
             continue
 
-        # Each finding -> one draft. Dedup against already-open titles.
-        # Cap per-run so a noisy batch can't dump 50+ low-signal drafts;
-        # cross-trace analysis is the right surface for recurring
-        # patterns. Default cap = 5 per run (config-tunable via
-        # trace_review_max_drafts_per_run).
+        # Group all findings for this trace into ONE draft (one trace =
+        # one ticket).  Per-finding noise-suppression guards still
+        # apply — they filter individual findings out of the group.
+        # When every finding is filtered, the trace produces no draft.
+        kept_findings: list[TraceFinding] = []
         for finding in result.findings:
-            if max_drafts > 0 and len(drafts) >= max_drafts:
-                log.info(
-                    "trace-review: hit per-run cap of %d drafts — "
-                    "skipping remaining findings; bumped findings live "
-                    "in Langfuse for the next cycle",
-                    max_drafts,
-                )
-                break
             # Confidence floor: drop findings below trace_review_min_confidence
             # (default "high"). Low/medium tool_error & agent_limitation
             # observations are telemetry, not actionable fixes, and flooded the
@@ -841,67 +905,98 @@ def run_trace_review_pass(
                 )
                 continue
 
-            title = f"{finding.category} — {finding.symptom[:90]}"
-            prior = find_prior_matching_ticket(
-                service,
-                target_board_id,
-                finding.target_files,
-                finding.symptom,
-                settings,
-                now,
-                sources=[SourceKind.TRACE_REVIEW],
-                lookback_days=settings.trace_review_dedup_lookback_days,
-            )
-            if prior is not None:
-                log.info(
-                    "trace-review: skipping draft for trace %s — matches prior "
-                    "ticket %s (%s) in state %s",
-                    trace_id[:8],
-                    prior.id,
-                    prior.title,
-                    prior.state.value,
-                )
-                continue
-            norm = normalize(title)
-            if norm in seen_titles:
-                log.debug(
-                    "trace-review: skipping duplicate finding %r",
-                    title,
-                )
-                continue
-            seen_titles.add(norm)
-            body = (
-                f"_Filed by the periodic trace-review pass.  "
-                f"Source trace: `{trace_id}` "
-                f"(session `{flags.session_id or '(no session)'}`, "
-                f"name `{flags.trace_name}`, total cost "
-                f"${flags.total_cost:.4f})._\n\n"
-                f"_Deterministic flags that surfaced this trace: "
-                f"{', '.join(flags.flags)}._\n\n"
-                "## Symptom\n\n"
-                f"{finding.symptom}\n\n"
-                "## Root cause (inspector hypothesis)\n\n"
-                f"{finding.root_cause}\n\n"
-                "## Proposed solution\n\n"
-                f"{finding.proposed_solution}\n\n"
-                f"_Inspector confidence: **{finding.confidence}**._\n"
-            )
-            try:
-                ticket = service.create(
-                    title=title,
-                    description=body,
-                    source=SourceKind.TRACE_REVIEW,
-                    origin_session=session_id or None,
-                )
-                drafts.append({"id": ticket.id, "title": ticket.title})
-            except Exception:
-                log.exception(
-                    "trace-review: failed to create draft for %r",
-                    title,
-                )
-        # Also break out of the per-trace loop when the run-wide cap hit.
+            kept_findings.append(finding)
+
+        if not kept_findings:
+            continue
+
+        # Per-run draft cap — one draft per trace, so this bounds the
+        # number of traces that can file.
         if max_drafts > 0 and len(drafts) >= max_drafts:
+            log.info(
+                "trace-review: hit per-run cap of %d drafts — "
+                "skipping remaining traces; bumped traces live "
+                "in Langfuse for the next cycle",
+                max_drafts,
+            )
             break
+
+        # Determine the target board from the trace's session.
+        # A qualified session like "robotsix-chat · audit-..." tells us
+        # which repo's board should receive the finding; without it we
+        # fall back to the source board (or mill when unresolvable).
+        trace_session_board = _resolve_board_for_session(
+            flags.session_id, settings, source_board_id
+        )
+
+        # Gap-id dedup: one ticket per trace across all runs.
+        # Prevents the same observation from being filed twice (fan-out
+        # problem), and stops re-filing on later runs.
+        if trace_id in filed_gap_ids:
+            log.debug(
+                "trace-review: skipping trace %s — already filed this run",
+                trace_id[:8],
+            )
+            continue
+        if _trace_gap_id_exists(settings, trace_session_board, trace_id):
+            log.info(
+                "trace-review: skipping trace %s — gap-id already exists on board %s",
+                trace_id[:8],
+                trace_session_board,
+            )
+            continue
+        filed_gap_ids.add(trace_id)
+
+        # Build one draft per trace with all findings enumerated.
+        session_short = flags.session_id or "(no session)"
+        title = (
+            f"trace-review: {len(kept_findings)} finding(s) "
+            f"for trace `{trace_id[:8]}` "
+            f"(session: {session_short})"
+        )
+        findings_body = ""
+        for i, f in enumerate(kept_findings, 1):
+            findings_body += (
+                f"## Finding {i}: {f.category} — {f.symptom}\n\n"
+                f"**Root cause (inspector hypothesis):** {f.root_cause}\n\n"
+                f"**Proposed solution:** {f.proposed_solution}\n\n"
+                f"_Inspector confidence: **{f.confidence}**._\n\n"
+            )
+        body = (
+            f"_Filed by the periodic trace-review pass.  "
+            f"Source trace: `{trace_id}` "
+            f"(session `{flags.session_id or '(no session)'}`, "
+            f"name `{flags.trace_name}`, total cost "
+            f"${flags.total_cost:.4f})._\n\n"
+            f"_Deterministic flags that surfaced this trace: "
+            f"{', '.join(flags.flags)}._\n\n"
+            f"{findings_body}"
+            f"<!-- trace-review-gap-id: {trace_id} -->\n"
+        )
+        try:
+            trace_service = (
+                TicketService(settings, board_id=trace_session_board)
+                if trace_session_board != target_board_id
+                else service
+            )
+            ticket = trace_service.create(
+                title=title,
+                description=body,
+                source=SourceKind.TRACE_REVIEW,
+                origin_session=session_id or None,
+            )
+            drafts.append(
+                {
+                    "id": ticket.id,
+                    "title": ticket.title,
+                    "board": trace_session_board,
+                }
+            )
+        except Exception:
+            log.exception(
+                "trace-review: failed to create draft for trace %s",
+                trace_id[:8],
+            )
 
     # Persist the watermark at ``now``. Each run reviews the most recent
     # traces and intentionally skips any older backlog (see the lookback

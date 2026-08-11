@@ -33,6 +33,11 @@ reset_for_tests
 run_completeness_check_agent
 run_config_sync_agent
 
+# Settings fields retained for backward-compatible config schemas even
+# though their only code-level consumer was removed (dedup now uses
+# gap-id markers rather than title-fingerprint lookback).
+trace_review_dedup_lookback_days
+
 _absorb_summary_typos
 best_k
 failure_summary
