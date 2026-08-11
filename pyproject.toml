@@ -346,7 +346,6 @@ convention = "google"
 # D102: missing method docstrings — document each public method.
 "src/robotsix_mill/agents/runners/diagnostic_check_errors.py" = ["D102"]
 "src/robotsix_mill/agents/runners/diagnostic_check_recurring_ci.py" = ["D102"]
-"src/robotsix_mill/forge/gitlab/*.py" = ["D102"]
 # D417: missing argument descriptions — add Args: sections.
 "src/robotsix_mill/agents/agent_check.py" = ["D417"]
 "src/robotsix_mill/agents/module_curator.py" = ["D417"]
