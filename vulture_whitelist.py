@@ -108,6 +108,10 @@ follow_up_target
 returncode_on_failure
 
 # -- config ------------------------------------------------------------------
+MODEL_FIELDS_NOT_IN_JSON
+MODEL_FIELDS_NOT_IN_JSON_RATIONALES
+SETTINGS_KEYS_NOT_IN_MODEL
+SECRETS_NOT_IN_EXAMPLE
 gitlab_api_url
 audit_periodic
 audit_interval_seconds

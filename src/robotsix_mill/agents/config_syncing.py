@@ -20,6 +20,12 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ..config import Settings
+from ..config._sync_allowlists import (
+    MODEL_FIELDS_NOT_IN_JSON,
+    MODEL_FIELDS_NOT_IN_JSON_RATIONALES,
+    SECRETS_NOT_IN_EXAMPLE,
+    SETTINGS_KEYS_NOT_IN_MODEL,
+)
 from .prompt_blocks import section
 
 SYSTEM_PROMPT = """\
@@ -151,6 +157,76 @@ CONTEXT AND BUDGET DISCIPLINE:
 MAX_GAPS = 5
 
 
+def _build_omissions_section() -> str:
+    """Build the 'intentional omissions' section injected into the system prompt.
+
+    Lists every ``MODEL_FIELDS_NOT_IN_JSON`` / ``SECRETS_NOT_IN_EXAMPLE`` /
+    ``SETTINGS_KEYS_NOT_IN_MODEL`` entry with its rationale so the agent
+    skips fields that are deliberately absent from the config template.
+
+    This is the same data ``scripts/check_config_sync.py`` consults — the
+    CI check and the periodic pass cannot disagree by construction.
+    """
+    lines: list[str] = []
+    lines.append("\n\n## INTENTIONAL OMISSIONS — do NOT file tickets for these\n")
+
+    if MODEL_FIELDS_NOT_IN_JSON:
+        lines.append(
+            "The following ``Settings`` model fields are **intentionally absent** "
+            "from ``config/config.example.json``.  Each has a documented rationale "
+            "in ``src/robotsix_mill/config/_sync_allowlists.py`` — the single "
+            "authoritative source also consulted by the CI check "
+            "(``scripts/check_config_sync.py``).\n"
+        )
+        lines.append(
+            "**When evaluating ``missing-from-json`` findings:** skip every "
+            "field listed below.  These are deliberate omissions; filing a "
+            "ticket for one would contradict a documented decision and create "
+            "a false-positive draft.\n"
+        )
+        for field in sorted(MODEL_FIELDS_NOT_IN_JSON):
+            rationale = MODEL_FIELDS_NOT_IN_JSON_RATIONALES.get(field, "")
+            if rationale:
+                lines.append(f"- ``{field}`` — {rationale}")
+            else:
+                lines.append(f"- ``{field}``")
+        lines.append("")
+    else:
+        lines.append(
+            "No ``Settings`` model fields are currently exempt from "
+            "``config/config.example.json``.\n"
+        )
+
+    if SECRETS_NOT_IN_EXAMPLE:
+        lines.append(
+            "The following ``Secrets`` fields are **intentionally absent** "
+            "from the ``secrets:`` block of ``config/config.example.json``:\n"
+        )
+        for field in sorted(SECRETS_NOT_IN_EXAMPLE):
+            lines.append(f"- ``{field}``")
+        lines.append("")
+    else:
+        lines.append(
+            "No ``Secrets`` fields are currently exempt from the ``secrets:`` block.\n"
+        )
+
+    if SETTINGS_KEYS_NOT_IN_MODEL:
+        lines.append(
+            "The following ``settings`` keys in ``config/config.example.json`` "
+            "are **intentionally NOT** ``Settings`` model fields:\n"
+        )
+        for key in sorted(SETTINGS_KEYS_NOT_IN_MODEL):
+            lines.append(f"- ``{key}``")
+        lines.append("")
+    else:
+        lines.append(
+            "No ``config.example.json`` keys are currently exempt from "
+            "having a matching ``Settings`` model field.\n"
+        )
+
+    return "\n".join(lines)
+
+
 class ConfigSyncResult(BaseModel):
     """Structured result of a config-sync drift inspection pass.
 
@@ -220,9 +296,11 @@ def run_config_sync_agent(
 
     tools = _build_repo_tools(repo_dir, settings, tool_names=("read_file", "list_dir"))
 
+    system_prompt = SYSTEM_PROMPT + _build_omissions_section()
+
     agent = build_agent(
         settings,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         output_type=PromptedOutput(ConfigSyncResult),
         tools=tools,
         web_knowledge=False,
