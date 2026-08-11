@@ -49,16 +49,22 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         resuming: bool,
         attempt: int,
         max_iters: int,
+        head_before: str | None = None,
     ) -> _SinglePassResult | None:
         """Verify that claimed file edits actually landed in the diff.
 
-        Two guards:
+        Three guards:
         1. **Per-claimed-file check** — when the summary names files
            that are absent from the net diff, surface a contradiction
            before handing off to review.
         2. **Zero-tool-call resume guard** — when resuming and no tool
            calls were issued with an empty diff, surface a distinct
            error instead of routing to CODE_REVIEW with no work.
+        3. **Per-pass baseline guard** — when HEAD is unchanged and
+           the tree is clean but review threads are still open, this
+           pass produced nothing (reply-only, no edits landed).
+           Surface a diagnostic so the ticket doesn't burn its cycle
+           ceiling on no-op passes.
 
         Returns a ``_SinglePassResult`` when a guard fires (caller must
         return it); ``None`` when all checks pass.
@@ -161,6 +167,57 @@ class _ImplementationEditingMixin(_ImplementStageBase):
                     next_action="return",
                     outcome=Outcome(State.DONE, done_note),
                 )
+
+        # Per-pass baseline guard: when HEAD is unchanged and the tree
+        # is clean but review threads are still open, this pass produced
+        # nothing — the agent answered review feedback with a reply but
+        # no edits.  Surface a diagnostic (retry while iterations remain,
+        # BLOCK on the last attempt) so the ticket doesn't burn its cycle
+        # ceiling on no-op passes.
+        if (
+            ic.open_thread_ids
+            and head_before is not None
+            and not cls._any_repo_has_changes(
+                repo_dir, extra_roots, target, settings=settings
+            )
+            and head_before == git_ops.head_sha(repo_dir)
+        ):
+            diag = (
+                "[Diagnostic] This pass produced no changes — HEAD is "
+                "unchanged and the working tree is clean, but there are "
+                "still open review threads. Your reply addressed the "
+                "feedback in text but no edits landed in the diff. "
+                "Re-read the review feedback carefully, then apply the "
+                "requested edits (not just reply about them). If you "
+                "believe the feedback is already addressed by prior "
+                "commits, close the corresponding threads."
+            )
+            if attempt < max_iters:
+                new_ic.feedback = diag
+                return _SinglePassResult(
+                    next_action="retry",
+                    feedback=diag,
+                    ic=new_ic,
+                    new_msgs=new_msgs,
+                )
+            cls._finalize(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                diag,
+                ok=False,
+                reference_files=ref_files,
+                extra_roots=extra_roots,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(
+                    State.BLOCKED,
+                    "no-progress pass (HEAD unchanged, clean tree, open threads)",
+                ),
+            )
+
         return None
 
     @classmethod
