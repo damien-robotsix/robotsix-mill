@@ -69,18 +69,13 @@ web_knowledge: true
 list_epic_children: true
 
 output_type: RefineResult
-retries: 2
-
-# Cap the refine agent at 8192 output tokens. Refine produces specs,
-# not code reviews; 8192 is 4× the spec-truncation limit and matches
-# periodic/completeness_check.yaml. The review agent's 32768 cap is
-# appropriate for its verbose code-review output.
 #
-# This is a real per-response cap only on the OpenRouter path. On the Claude
-# SDK path the value becomes `task_budget.total` — an advisory whole-loop
-# budget the API rejects below 20,000 — so robotsix_llmio clamps it up to that
-# floor and warns once. Do not raise this here to work around the floor: that
-# would silently loosen the OpenRouter cap too.
+# max_tokens is intentionally NOT set here.
+# test_no_agent_definition_sets_max_tokens (tests/agents/test_yaml_loader.py)
+# forbids it: the Claude SDK transport has no per-response cap, so forwarding
+# max_tokens as advisory task_budget causes hard-400 rejections (API rejects
+# values <20,000) and agents pacing themselves into abandoning work.
+# The ~4000-token system-prompt length target is the lever for output cost.
 
 # Explicit module path (the loader imports output_type from here).
 # Convention: name "refine" → module "refining".
