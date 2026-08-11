@@ -174,12 +174,25 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         # no edits.  Surface a diagnostic (retry while iterations remain,
         # BLOCK on the last attempt) so the ticket doesn't burn its cycle
         # ceiling on no-op passes.
+        #
+        # IMPORTANT: check working-tree cleanliness only, NOT
+        # ``_any_repo_has_changes``.  The latter folds in
+        # ``branch_is_ahead_of_main``, which is permanently True after
+        # any prior pass commits work — so ``not _any_repo_has_changes``
+        # becomes permanently False and the guard never fires again,
+        # exactly the blind spot the ticket describes (pass 1 commits
+        # something, passes 2-N are reply-only no-ops, and the guard
+        # never catches the no-progress loop).
+        _working_tree_clean = not git_ops.has_changes(repo_dir)
+        if _working_tree_clean and extra_roots:
+            for _rp in extra_roots:
+                if _rp != repo_dir and git_ops.has_changes(_rp):
+                    _working_tree_clean = False
+                    break
         if (
             ic.open_thread_ids
             and head_before is not None
-            and not cls._any_repo_has_changes(
-                repo_dir, extra_roots, target, settings=settings
-            )
+            and _working_tree_clean
             and head_before == git_ops.head_sha(repo_dir)
         ):
             diag = (
