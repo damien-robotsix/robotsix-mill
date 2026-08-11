@@ -627,11 +627,14 @@ class CIFixStage(Stage):
             count = _read_counter(counter_path) + 1
             _write_counter(counter_path, count)
             if count >= s.ci_fix_max_identical_failures:
+                check_names = _extract_check_names(failing_summary)
                 return Outcome(
                     State.BLOCKED,
                     f"Same CI failure fingerprint ({current_fp}) repeated "
-                    f"{count} consecutive times without progress — "
-                    "escalating to BLOCKED. Resume to retry.",
+                    f"{count} consecutive times without progress on: {check_names}. "
+                    "Escalating to BLOCKED — the check is deterministically "
+                    "failing; resuming will not help. Fix the underlying CI issue "
+                    "instead.",
                 )
             return None
 
