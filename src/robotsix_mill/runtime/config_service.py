@@ -370,16 +370,14 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     # Encrypt the secrets block for at-rest storage.
-    write_data = dict(data)
-    if (
-        "secrets" in write_data
-        and isinstance(write_data["secrets"], dict)
-        and write_data["secrets"]
-    ):
-        write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
-    serialized = (
-        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n"
-    )  # lgtm[py/clear-text-storage-sensitive-data]
+    safe_data = dict(data)
+    secrets_block = safe_data.pop("secrets", None)
+    if isinstance(secrets_block, dict) and secrets_block:
+        safe_data["secrets"] = encrypt_secrets_block(secrets_block)
+    elif secrets_block is not None:
+        safe_data["secrets"] = secrets_block
+    serialized = json.dumps(safe_data, indent=2, ensure_ascii=False) + "\n"
+    # lgtm[py/clear-text-storage-sensitive-data]
     tmp.write_text(serialized, encoding="utf-8")
     tmp.replace(path)
     os.chmod(path, 0o600)
@@ -513,16 +511,14 @@ def rollback_config(  # noqa: C901
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = config_path.with_suffix(".tmp")
     # Encrypt the secrets block for at-rest storage.
-    write_data = dict(new_config)
-    if (
-        "secrets" in write_data
-        and isinstance(write_data["secrets"], dict)
-        and write_data["secrets"]
-    ):
-        write_data["secrets"] = encrypt_secrets_block(write_data["secrets"])
-    serialized = (
-        json.dumps(write_data, indent=2, ensure_ascii=False) + "\n"
-    )  # lgtm[py/clear-text-storage-sensitive-data]
+    safe_data = dict(new_config)
+    secrets_block = safe_data.pop("secrets", None)
+    if isinstance(secrets_block, dict) and secrets_block:
+        safe_data["secrets"] = encrypt_secrets_block(secrets_block)
+    elif secrets_block is not None:
+        safe_data["secrets"] = secrets_block
+    serialized = json.dumps(safe_data, indent=2, ensure_ascii=False) + "\n"
+    # lgtm[py/clear-text-storage-sensitive-data]
     tmp.write_text(serialized, encoding="utf-8")
     tmp.replace(config_path)
     os.chmod(config_path, 0o600)
