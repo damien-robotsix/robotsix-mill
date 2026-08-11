@@ -108,6 +108,7 @@ modules:
       preflight and resume-blocked paths can gate on stale images
       before burning an attempt.
     paths:
+      - docs/deploy/**/*
       - src/robotsix_mill/deploy/__init__.py
       - tests/deploy/__init__.py
       - tests/deploy/test_deploy.py
