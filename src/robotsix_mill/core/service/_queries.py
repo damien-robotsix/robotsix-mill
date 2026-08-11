@@ -117,6 +117,7 @@ class _QueryMixin(_ServiceBase):
         limit: int | None = None,
         sort_by: str = "created_at",
         created_after: datetime | None = None,
+        updated_after: datetime | None = None,
     ) -> list[Ticket]:
         """List tickets, optionally filtered by *state* or excluding
         *exclude_states* (e.g. terminal CLOSED/DONE for a fast board).
@@ -132,6 +133,8 @@ class _QueryMixin(_ServiceBase):
 
         Filtering:
           *created_after* — only return tickets whose ``created_at`` is
+          strictly after this UTC datetime.
+          *updated_after* — only return tickets whose ``updated_at`` is
           strictly after this UTC datetime.
 
         Results are ordered by *sort_by* ascending.
@@ -150,6 +153,8 @@ class _QueryMixin(_ServiceBase):
                 stmt = stmt.where(Ticket.state.notin_(list(exclude_states)))
             if created_after is not None:
                 stmt = stmt.where(Ticket.created_at > created_after)
+            if updated_after is not None:
+                stmt = stmt.where(Ticket.updated_at > updated_after)
             if offset:
                 stmt = stmt.offset(offset)
             if limit is not None:

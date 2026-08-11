@@ -55,6 +55,7 @@ nav:
   - Operations:
       - Cost controls & resilience: cost-and-resilience.md
       - Notifications: notify/notifications.md
+      - Event notifications: notify/event-notifications.md
       - Ticket provenance: core/ticket-provenance.md
       - VCS (git) module: vcs/README.md
       - Workspace cleanup: core/workspace-cleanup.md
