@@ -29,6 +29,7 @@ modules:
       - .robotsix-mill/periodic/*.yaml
       - docs/config/**/*
       - tests/config/test_ci_fix_stage_budget.py
+      - tests/config/test_ticket_state_cycle_limit.py
       - tests/config/test_config.py
       - tests/config/test_repo_settings.py
       - tests/config/test_workspace_members.py
@@ -73,6 +74,7 @@ modules:
       - tests/core/test_models.py
       - tests/core/test_states.py
       - tests/core/test_service.py
+      - tests/core/test_resume_blocked_ci_guards.py
       - tests/core/test_sqlite_utils.py
       - tests/core/test_datetime_utils.py
       - tests/core/test_text_noop.py
