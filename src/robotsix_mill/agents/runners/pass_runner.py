@@ -12,7 +12,7 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -144,6 +144,84 @@ _ROLLUP_SOURCES: frozenset[SourceKind] = frozenset(
         SourceKind.COMPLETENESS_CHECK,
     }
 )
+
+
+# Title-normalization patterns for same-board fingerprint dedup.
+# Strips timestamps, file paths, and hex suffixes — two titles that
+# describe the same symptom should produce the same fingerprint.
+# A simplified copy of the _NORMALIZE_PATTERNS in
+# runtime/routes/_tickets_ingest.py (kept local to avoid a
+# runtime → agents/runners dependency inversion).
+_TITLE_NORMALIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(
+            r"\b\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{4}\b", re.IGNORECASE
+        ),
+        " ",
+    ),
+    (
+        re.compile(
+            r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?\b",
+            re.IGNORECASE,
+        ),
+        " ",
+    ),
+    (re.compile(r"\b\d{8}(?:T\d{6}Z)?\b", re.IGNORECASE), " "),
+    (
+        re.compile(
+            r"""(?:\S+/)+   # one or more path segments ending with /
+                     \S+\.\w+    # filename with extension
+                     (?::\d+)?   # optional :line_number
+                     """,
+            re.VERBOSE,
+        ),
+        " ",
+    ),
+    (re.compile(r":\d+(?:-\d+)?"), " "),
+    (re.compile(r"[-_][a-f0-9]{4,8}\b", re.IGNORECASE), " "),
+]
+
+
+def _normalize_title(title: str) -> str:
+    """Produce a fingerprint of *title* for duplicate detection.
+
+    Case-folds, strips timestamps, file paths, line references, and
+    hex suffixes, then collapses whitespace.  Two titles that describe
+    the same symptom should produce the same fingerprint.
+    """
+    normalized = title.casefold()
+    for pattern, replacement in _TITLE_NORMALIZE_PATTERNS:
+        normalized = pattern.sub(replacement, normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    normalized = normalized.strip(".,;:!?-–— \t")
+    return normalized
+
+
+def _title_fingerprint_match(
+    target_service: TicketService,
+    draft_title: str,
+) -> str | None:
+    """Return the ticket id of an existing open ticket on
+    *target_service*'s board whose normalized title matches
+    *draft_title*, or ``None``.
+
+    Only considers tickets that are not in a terminal state
+    (``CLOSED`` or ``ERRORED``).
+    """
+    draft_fp = _normalize_title(draft_title)
+    if not draft_fp:
+        return None
+    try:
+        all_tickets = target_service.list()
+    except Exception:
+        return None
+    for t in all_tickets:
+        if t.state in {State.CLOSED, State.ERRORED}:
+            continue
+        candidate_fp = _normalize_title(t.title)
+        if candidate_fp and candidate_fp == draft_fp:
+            return str(t.id) if t.id is not None else None
+    return None
 
 
 def _verify_prior_proposals(
@@ -775,27 +853,50 @@ def _create_one_draft(
             )
             return None, ""
         target_service = TicketService(settings, board_id=target_board_id)
-        # Cross-board dedup: check the target board for prior proposals
-        # with the same gap_id before filing — prevents re-proposing the
-        # same fleet-wide convention from every repo the survey visits.
-        target_verified = _verify_prior_on_board(
-            settings, target_board_id, source_label
-        )
-        if gap_id and gap_id in target_verified:
-            log.info(
-                "%s draft %d skipped — gap_id %r already exists on target board %s "
-                "(ticket %s, state %s)",
-                source_label,
-                i,
-                gap_id,
-                target_board_id,
-                target_verified[gap_id]["ticket_id"],
-                target_verified[gap_id]["state"],
-            )
-            return None, ""
     else:
         target_board_id = service.board_id
         target_service = service
+
+    # --- Dedup: check the target board for prior proposals ---
+    # Gap-id check (was previously only in the cross-board branch —
+    # now runs unconditionally for same-board drafts too).  Prevents
+    # re-filing the same finding on every run when the draft lands on
+    # the pass's own board.
+    target_verified = _verify_prior_on_board(settings, target_board_id, source_label)
+    if gap_id and gap_id in target_verified:
+        log.info(
+            "%s draft %d skipped — gap_id %r already exists on target board %s "
+            "(ticket %s, state %s)",
+            source_label,
+            i,
+            gap_id,
+            target_board_id,
+            target_verified[gap_id]["ticket_id"],
+            target_verified[gap_id]["state"],
+        )
+        return None, ""
+
+    # Fallback: when there is no gap_id, apply normalized-title
+    # fingerprint matching against open tickets on the target board
+    # before calling create — identical titles collapse onto the
+    # existing ticket with a history note instead of a new card.
+    if not gap_id:
+        dup_id = _title_fingerprint_match(target_service, title)
+        if dup_id is not None:
+            target_service.add_history_note(
+                dup_id,
+                f"re-reported by {source_label} on {date.today().isoformat()} "
+                "(fingerprint match)",
+            )
+            log.info(
+                "%s draft %d skipped — title fingerprint match on target board %s "
+                "(ticket %s)",
+                source_label,
+                i,
+                target_board_id,
+                dup_id,
+            )
+            return None, ""
 
     # Live-filesystem guard: skip drafts whose expected test
     # file(s) already exist on disk.
