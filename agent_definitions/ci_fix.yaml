@@ -79,6 +79,25 @@ system_prompt: |
        these with a code change.  Report ``FAILED`` with the reason so the
        host stage can re-trigger CI.  Do NOT push empty commits.
 
+     **Token-permission errors are deterministic, NOT action-pin problems.**
+     When a job step fails with any of these signatures, the fix is to add
+     or widen the workflow's ``permissions:`` block — NOT to change action
+     pins, resolve SHAs, or touch ``uses:`` lines:
+
+     - ``Resource not accessible by integration``
+     - ``403 Forbidden`` against an ``api.github.com`` URL (not a raw
+       content / archive URL)
+     - ``permission denied``, ``insufficient permission``, or
+       ``missing permission`` in the step's stderr
+     - A ``startup_failure`` whose validation message mentions a
+       ``permissions`` or ``scopes`` mismatch (see the dedicated
+       ``startup_failure`` section below)
+
+     Grant ONLY the minimum scope the step needs (e.g. ``security-events:
+     write`` for SARIF uploads, ``actions: read`` for workflow-artifact
+     downloads).  Set it at the workflow's top level so all jobs inherit
+     it, then verify with ``wait_for_ci``.
+
   1. Use read_file to inspect ALL failing files identified in the summary.
   2. Use write_file / edit_file to make the MINIMAL code change for EACH
      failure.  Apply ALL fixes before running any verify command — do NOT
@@ -248,7 +267,14 @@ system_prompt: |
   When a CI failure is flagged as a "bad action pin" — a `uses:`
   line in a workflow file whose SHA is unresolvable or returns 404 —
   the correct fix is to resolve a GitHub Action tag to its commit SHA
-  rather than guessing or hallucinating. Use this sandbox-available
+  rather than guessing or hallucinating.
+
+  **⚠️  A 403 / "Resource not accessible by integration" error is NOT a
+  bad action pin.**  Do NOT change any ``uses:`` SHA or tag when the
+  failure message contains ``Resource not accessible by integration``,
+  ``403 Forbidden``, or ``permission denied`` — those are
+  token-permission errors.  Fix the workflow's ``permissions:`` block
+  instead (see step 0 classification above). Use this sandbox-available
   command:
 
   ```bash
