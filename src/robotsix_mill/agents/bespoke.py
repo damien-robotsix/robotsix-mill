@@ -93,6 +93,7 @@ def run_bespoke_agent(
         read_ticket=False,
         reply_to_thread=False,
         close_thread=False,
+        list_threads=False,
         ask_user=False,
         output_type=PromptedOutput(BespokeResult),
         retries=2,
