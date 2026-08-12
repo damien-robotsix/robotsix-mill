@@ -70,3 +70,52 @@ def test_towncrier_repo_still_validated(tmp_path: Path) -> None:
     # The missing trailing newline is fixed and reported.
     assert any("trailing newline" in m for m in msgs)
     assert (repo / "changelog.d" / "1.misc.md").read_bytes().endswith(b"\n")
+
+
+def test_release_please_repo_with_fragments_is_validated(tmp_path: Path) -> None:
+    """A release-please repo that also uses towncrier fragments is validated."""
+    repo = _repo(tmp_path, release_please=True)
+    frag = repo / "changelog.d"
+    frag.mkdir()
+    # No trailing newline — the validator should fix it.
+    (frag / "1.misc.md").write_bytes(b"entry")
+
+    msgs = validate_changelog(repo)
+
+    assert any("trailing newline" in m for m in msgs)
+    assert (frag / "1.misc.md").read_bytes().endswith(b"\n")
+    # `_modules_yaml_check` also runs and registers the fragment glob.
+    assert "changelog.d/*.md" in (repo / "docs" / "modules.yaml").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_release_please_fragments_with_glob_registered_elsewhere(
+    tmp_path: Path,
+) -> None:
+    """`_modules_yaml_check` must not duplicate a glob claimed by another module."""
+    repo = _repo(tmp_path, release_please=True)
+    modules_yaml = repo / "docs" / "modules.yaml"
+    modules_yaml.write_text(
+        """\
+modules:
+  - id: core
+    paths:
+      - src/pkg/__init__.py
+  - id: project-root
+    paths:
+      - changelog.d/*.md
+""",
+        encoding="utf-8",
+    )
+    before = modules_yaml.read_text(encoding="utf-8")
+    frag = repo / "changelog.d"
+    frag.mkdir()
+    (frag / "1.misc.md").write_bytes(b"entry")
+
+    msgs = validate_changelog(repo)
+
+    assert any("trailing newline" in m for m in msgs)
+    # The glob already exists under project-root; don't insert a duplicate
+    # into core (which would leave it claimed by two modules).
+    assert modules_yaml.read_text(encoding="utf-8") == before
