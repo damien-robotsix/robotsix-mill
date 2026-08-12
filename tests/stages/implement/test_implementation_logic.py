@@ -1063,6 +1063,172 @@ class TestVerifySummaryClaims:
         )
         assert missing == []
 
+    # -- prepositional pattern (_CLAIM_X_TO_Y_RE) tests ------------------
+
+    def test_added_x_to_y_prepositional_phrase(self, tmp_path):
+        """'added X to Y' where X is a non-path noun → captures Y as path."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "Added a `repo: local` hook `check-trivyignore-expiry` to "
+            "`.pre-commit-config.yaml`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == [".pre-commit-config.yaml"]
+
+    def test_registered_x_in_y_prepositional(self, tmp_path):
+        """'registered X in Y' captures Y as the path."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "registered a new periodic agent `audit.yaml` in "
+            "`agent_definitions/periodic/`",
+            repo_dir,
+            "ticket-1",
+        )
+        # The direct pattern captures ``audit.yaml`` (after "registered"),
+        # and the prepositional pattern captures the container path.
+        # Both are claimed new files that don't exist → both flagged.
+        assert missing == ["audit.yaml", "agent_definitions/periodic/"]
+
+    def test_added_x_into_y_prepositional(self, tmp_path):
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "added a new test file into `tests/test_foo.py`",
+            repo_dir,
+            "ticket-1",
+        )
+        # "tests/test_foo.py" — the path after "into"
+        assert missing == ["tests/test_foo.py"]
+
+    def test_added_to_phrase_with_existing_file_and_diff(self, tmp_path):
+        """Added-to phrasing with a file that exists but has no git diff
+        because there is no git history → gracefully ignored (no
+        origin/target_branch to diff against)."""
+        repo_dir = self._repo(tmp_path, files=[".pre-commit-config.yaml"])
+        missing = _verify_summary_claims(
+            "Added a hook to `.pre-commit-config.yaml`",
+            repo_dir,
+            "ticket-1",
+        )
+        # File exists, but _collect_changed_files will fail in non-git
+        # tmp_path (return set()), so it does NOT flag the file.  This is
+        # acceptable — the true claim will be caught by the filesystem
+        # check when the file doesn't exist.
+        assert missing == []
+
+    def test_added_to_phrase_with_non_existing_file(self, tmp_path):
+        """Added-to phrasing pointing at a path that doesn't exist → flagged."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "Added a pre-commit hook to `.pre-commit-config.yaml`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == [".pre-commit-config.yaml"]
+
+    # -- _looks_like_path widening tests --------------------------------
+
+    def test_dockerfile_without_extension_looks_like_path(self, tmp_path):
+        """Dockerfile (no extension) is now recognised as a valid path."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "created a new Dockerfile for the build stage",
+            repo_dir,
+            "ticket-1",
+        )
+        # "Dockerfile" should be captured and flagged as missing.
+        assert missing == ["Dockerfile"]
+
+    def test_dockerfile_exists(self, tmp_path):
+        repo_dir = self._repo(tmp_path, files=["Dockerfile"])
+        missing = _verify_summary_claims(
+            "created Dockerfile",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_makefile_without_extension_looks_like_path(self, tmp_path):
+        """Makefile (no extension) is now recognised as a valid path."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "wrote a Makefile for the project",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == ["Makefile"]
+
+    def test_existing_file_in_diff_not_flagged(self, tmp_path):
+        """Claiming to have modified an existing file that actually has a
+        working-tree diff → passes verification."""
+        import subprocess
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "README.md").write_text("initial")
+        (repo_dir / ".gitignore").write_text("__pycache__/")
+        for cmd in [
+            ["git", "init"],
+            ["git", "config", "user.email", "test@test"],
+            ["git", "config", "user.name", "Test"],
+            ["git", "checkout", "-b", "main"],
+            ["git", "add", "."],
+            ["git", "commit", "-m", "initial"],
+        ]:
+            subprocess.run(cmd, cwd=repo_dir, capture_output=True, check=True)
+
+        # Modify README.md (the claimed change actually happened).
+        (repo_dir / "README.md").write_text("initial\n\n— updated")
+        # Uncommitted working-tree change.
+
+        missing = _verify_summary_claims(
+            "Updated README.md with a new section",
+            repo_dir,
+            "ticket-1",
+            target_branch="main",
+        )
+        assert missing == []
+
+    def test_existing_file_not_in_diff_flagged(self, tmp_path):
+        """Claiming to have modified an existing file that is in a branch
+        but has no actual diff → flagged as missing."""
+        import subprocess
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / "README.md").write_text("initial")
+        (repo_dir / "setup.py").write_text("setup()")
+        (repo_dir / ".gitignore").write_text("__pycache__/")
+        for cmd in [
+            ["git", "init"],
+            ["git", "config", "user.email", "test@test"],
+            ["git", "config", "user.name", "Test"],
+            ["git", "checkout", "-b", "main"],
+            ["git", "add", "."],
+            ["git", "commit", "-m", "initial"],
+        ]:
+            subprocess.run(cmd, cwd=repo_dir, capture_output=True, check=True)
+        # Simulate origin/main for diff-base ref.
+        subprocess.run(
+            ["git", "branch", "origin/main", "main"],
+            cwd=repo_dir,
+            capture_output=True,
+            check=True,
+        )
+
+        # Claim we modified README.md — exists but has no working-tree or
+        # branch diff (the only diff is setup.py, via working tree).
+        (repo_dir / "setup.py").write_text("setup(name='foo')\n")
+        missing = _verify_summary_claims(
+            "added a section to README.md",
+            repo_dir,
+            "ticket-1",
+            target_branch="main",
+        )
+        # README.md exists on disk but git diff shows only setup.py
+        # changed → should be flagged.
+        assert missing == ["README.md"]
+
 
 class TestRunSummaryVerification:
     def test_passes_when_no_claims(self, tmp_path):
