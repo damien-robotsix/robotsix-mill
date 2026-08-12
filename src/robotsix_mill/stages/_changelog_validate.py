@@ -123,7 +123,8 @@ def _modules_yaml_check(repo_dir: Path) -> list[str]:
     """Check / auto-fix the ``docs/modules.yaml`` module registry.
 
     Ensures ``changelog.d/*.md`` appears under the ``core`` module's
-    ``paths``.  Returns diagnostic strings for changes made.
+    ``paths``, unless it is already registered elsewhere.  Returns
+    diagnostic strings for changes made.
     """
     modules_yaml = repo_dir / "docs" / "modules.yaml"
     if not modules_yaml.is_file():
@@ -132,11 +133,18 @@ def _modules_yaml_check(repo_dir: Path) -> list[str]:
     text = modules_yaml.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
 
+    glob_pattern = "changelog.d/*.md"
+    # Idempotent regardless of which module claims the glob — the fleet
+    # standard is that a fragment glob need only be registered once, and
+    # some repos (e.g. robotsix-mill itself) keep it under a different
+    # module than ``core``.
+    if glob_pattern in text:
+        return []  # Already registered somewhere in modules.yaml.
+
     paths_start, paths_end, indent = _find_core_paths_range(lines)
     if paths_start is None or paths_end is None:
         return ["docs/modules.yaml: core module has no paths key — cannot validate"]
 
-    glob_pattern = "changelog.d/*.md"
     if not _insert_path_glob(lines, paths_start, paths_end, indent, glob_pattern):
         return []  # Already present.
 
@@ -148,12 +156,20 @@ def validate_changelog(repo_dir: Path) -> list[str]:
     """Run all changelog validation checks.  Returns diagnostic messages
     for anything that was auto-fixed (empty list means clean).
     """
-    # A release-please repo has no fragments to validate, and
-    # _modules_yaml_check would *insert* a `changelog.d/*.md` glob pointing at
-    # a directory that no longer exists — which then fails the repo's own
-    # check-registration job.  Skip both entirely.
     if uses_release_please(repo_dir):
-        return []
+        # A release-please repo has no fragments to validate, and
+        # _modules_yaml_check would *insert* a `changelog.d/*.md` glob pointing at
+        # a directory that no longer exists — which then fails the repo's own
+        # check-registration job.  But don't skip when fragment dirs still
+        # contain ``*.md`` files: some repos use both release-please (for
+        # CHANGELOG.md) and towncrier (for RELEASE_NOTES.md via
+        # ``changelog.d/*.md`` fragments).
+        has_fragments = any(
+            (repo_dir / d).is_dir() and any((repo_dir / d).glob("*.md"))
+            for d in _FRAGMENT_DIRS
+        )
+        if not has_fragments:
+            return []
 
     msgs: list[str] = []
     msgs.extend(_trailing_newline_errors(repo_dir))
