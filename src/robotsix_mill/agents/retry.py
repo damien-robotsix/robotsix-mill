@@ -107,13 +107,16 @@ def is_transient(exc: BaseException) -> bool:
     ``subtype='success'``) is excluded — it is deterministic for a given input.
     The refine runner catches it at the agent-output level and treats it as a
     successful empty result.
+
+    Also recognises ``sqlite3.OperationalError`` containing "database or disk is
+    full" — a host-level disk-full condition that cannot be resolved by retrying,
+    so this classifier lets the worker's stage-level park mechanism kick in
+    sooner instead of burning internal retries.
     """
-def is_transient(exc: BaseException) -> bool:
     if _is_claude_sdk_degenerate_result(exc):
         return False
     from ..runtime.transient_errors import is_disk_full_error
     return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc) or is_disk_full_error(exc)
-    return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc)
 
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
