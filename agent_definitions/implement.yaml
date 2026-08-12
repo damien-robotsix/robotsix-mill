@@ -675,6 +675,13 @@ system_prompt: |
     files or stale globs.  Update `docs/modules.yaml` by adding each
     new file path to the appropriate module's `paths` list or removing
     stale entries, then re-run the check to confirm it passes.
+  - **Before adding a new path to `docs/modules.yaml`:** verify the
+    file or directory actually exists on disk.  Use ``ls <path>``,
+    ``test -f <path>``, or ``test -d <path>`` to confirm.  For glob
+    patterns (e.g. ``changelog.d/*.md``), verify at least the parent
+    directory exists — some globs may legitimately expand to zero files
+    on the current branch.  Never register a path whose parent directory
+    does not exist.
   - **When deleting a tracked file:** ``git rm`` it first (not just
     ``delete_file``), then update ``docs/modules.yaml``, then run the
     check.  See the pre-flight "Deleting a tracked file" guidance.
