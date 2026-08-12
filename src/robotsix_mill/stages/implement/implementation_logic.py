@@ -49,7 +49,21 @@ _CLAIM_PATH_RE = re.compile(
     r"""
     \b(?:created|registered|added|wrote|written|generated)\b
     [^\n`]{0,80}?
-    (?P<path>`[^`\n]+`|[\w./-]+\.(?:md|py|yaml|yml|toml|json|js|css|ts|sh|txt))
+    (?P<path>`[^`\n]+`|[\w./-]+\.(?:md|py|yaml|yml|toml|json|js|css|ts|sh|txt)|Dockerfile|Makefile)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# "added X to Y" / "registered X in Y" — the file path appears after a
+# prepositional phrase rather than immediately after the verb.  Captures
+# things like "added a `repo: local` hook `check-trivyignore-expiry`
+# to `.pre-commit-config.yaml`".
+_CLAIM_X_TO_Y_RE = re.compile(
+    r"""
+    \b(?:added|registered)\b                         # trigger verb
+    [^\n]{0,80}?                                     # descriptive noun phrase (may include backtick-delimited tokens)
+    \b(?:to|in|into|under)\s+                        # preposition
+    (?P<path>`[^`\n]+`|[\w./-]+\.\w+|Dockerfile|Makefile)  # the actual path
     """,
     re.IGNORECASE | re.VERBOSE,
 )
@@ -76,12 +90,27 @@ _CHANGELOG_D_PATH_RE = re.compile(r"\bchangelog\.d/[\w./-]+")
 # alternates accepted by ``_changelog_validate``.
 _FRAGMENT_DIRS: tuple[str, ...] = ("changelog.d", "changelog", "changes")
 
+# Common config/build files that have no file extension but are valid
+# repo-relative paths (used by _looks_like_path).
+_COMMON_EXTLESS_PATHS: frozenset[str] = frozenset(
+    {
+        "Dockerfile",
+        "Makefile",
+        "docker-compose",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    }
+)
+
 
 def _looks_like_path(token: str) -> bool:
     """Return True when *token* is a plausible repo-relative file path."""
     if "/" in token or "\\" in token:
         return True
-    return bool(re.search(r"\.\w{1,8}$", token))
+    if bool(re.search(r"\.\w{1,8}$", token)):
+        return True
+    # Allow common extensionless config/build files.
+    return token in _COMMON_EXTLESS_PATHS
 
 
 def _ticket_slug(ticket_id: str) -> str:
@@ -94,6 +123,7 @@ def _verify_summary_claims(
     summary: str,
     repo_dir: Path,
     ticket_id: str,
+    target_branch: str = "main",
 ) -> list[str]:
     """Return repo-relative paths claimed in *summary* but missing on disk.
 
@@ -102,6 +132,11 @@ def _verify_summary_claims(
     claim being the recurring case).  Parse those claims and check each
     against *repo_dir* so the stage can re-prompt instead of accepting a
     hallucinated completion.
+
+    When a claimed path already exists on disk (not a new file), the check
+    also cross-references ``git diff --stat origin/{target_branch}`` to
+    ensure the branch actually modified that file — preventing false
+    acceptances when the agent claims it "added X to Y" but made no diff.
     """
     missing: list[str] = []
 
@@ -119,15 +154,82 @@ def _verify_summary_claims(
         if not any(list((repo_dir / d).glob(f"{slug}.*.md")) for d in _FRAGMENT_DIRS):
             add_missing(f"changelog.d/{slug}.*.md")
 
+    # Collect paths from the direct verb-followed-by-path pattern.
+    claimed_paths: list[str] = []
     for match in _CLAIM_PATH_RE.finditer(summary or ""):
         raw = match.group("path").strip().strip("`\"'").rstrip(".,;:)'\"")
         if not raw or not _looks_like_path(raw):
             continue
         if raw.startswith("changelog.d/"):
             continue
-        add_missing(raw)
+        claimed_paths.append(raw)
+
+    # Collect paths from the "added X to Y" prepositional pattern.
+    for match in _CLAIM_X_TO_Y_RE.finditer(summary or ""):
+        raw = match.group("path").strip().strip("`\"'").rstrip(".,;:)'\"")
+        if not raw or not _looks_like_path(raw):
+            continue
+        if raw.startswith("changelog.d/"):
+            continue
+        if raw not in claimed_paths:
+            claimed_paths.append(raw)
+
+    # Check each claimed path against the filesystem and git diff.
+    changed_files: set[str] | None = None
+    for raw in claimed_paths:
+        file_path = repo_dir / raw
+        if not file_path.exists():
+            missing.append(raw)
+        else:
+            # Existing file claimed as modified — verify it actually
+            # has a working-tree or branch diff.  When the git diff is
+            # unavailable (no git repo, no HEAD) we skip the check.
+            if changed_files is None:
+                changed_files = _collect_changed_files(repo_dir, target_branch)
+            if changed_files is not None and raw not in changed_files:
+                missing.append(raw)
 
     return missing
+
+
+def _collect_changed_files(repo_dir: Path, target_branch: str) -> set[str] | None:
+    """Return every file with an uncommitted change or a branch-introduced
+    diff relative to ``origin/{target_branch}``.
+
+    Combines ``git diff --name-only origin/{b}...HEAD`` (committed
+    branch-introduced changes) and ``git diff --name-only HEAD``
+    (working-tree changes).
+
+    Returns ``None`` when git diff is not available (no git repo, no HEAD,
+    or target branch ref not found).
+    """
+    from ...vcs import git_ops
+
+    try:
+        # First check whether origin/{target_branch} ref exists.
+        ref = f"origin/{target_branch}"
+        try:
+            git_ops._git(repo_dir, "rev-parse", "--verify", ref)
+        except Exception:
+            log.debug(
+                "_collect_changed_files: ref %s not found in %s — "
+                "treating as no-git-diff available",
+                ref,
+                repo_dir,
+            )
+            return None
+
+        introduced = git_ops.introduced_files(repo_dir, target_branch)
+        return set(introduced)
+    except Exception:
+        log.warning(
+            "_collect_changed_files: could not compute git diff for %s "
+            "against origin/%s — treating as no-git-diff available",
+            repo_dir,
+            target_branch,
+            exc_info=True,
+        )
+        return None
 
 
 class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase):
@@ -388,6 +490,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         updated_ref_files: list[Any] | None,
         updated_prev_summary: str | None,
         new_msgs: bytes | None,
+        target_branch: str = "main",
     ) -> _SinglePassResult | None:
         """Verify the summary's claimed artifacts exist on disk.
 
@@ -397,7 +500,12 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         the second consecutive failure (the ``[VERIFY]`` feedback marker
         tells us we already re-prompted once).
         """
-        missing = _verify_summary_claims(summary, repo_dir, ticket.id)
+        missing = _verify_summary_claims(
+            summary,
+            repo_dir,
+            ticket.id,
+            target_branch=target_branch,
+        )
         if not missing:
             return None
 
@@ -1202,6 +1310,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             updated_ref_files=updated_ref_files,
             updated_prev_summary=updated_prev_summary,
             new_msgs=new_msgs,
+            target_branch=target,
         )
         if verification_result is not None:
             return verification_result
