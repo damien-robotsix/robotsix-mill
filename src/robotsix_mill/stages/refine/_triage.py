@@ -27,6 +27,7 @@ from .helpers import (
     _draft_has_complete_spec,
     _fast_path_scope_checks,
     _summarize_spec_for_auto_approve,
+    _verify_branch_merged,
     log,
 )
 
@@ -501,10 +502,13 @@ def triage_skip(
                 "…" if len(triage.reason) > 400 else ""
             )
             # A TASK-kind (implementation) ticket that hasn't produced a
-            # branch must not be auto-closed from DRAFT.  Route to READY
-            # so implement can verify the "no change" claim against the
+            # branch, or whose branch is not merged to the base branch,
+            # must not be auto-closed from DRAFT.  Route to READY so
+            # implement can verify the "no change" claim against the
             # live tree.
-            if ticket.kind == TicketKind.TASK and not ticket.branch:
+            if ticket.kind == TicketKind.TASK and (
+                not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
+            ):
                 # Deliberately NOT passing triage_note here. A NO_CHANGE
                 # reason says, by definition, "this is already done /
                 # no change is needed" — which is verbatim what
