@@ -584,6 +584,18 @@ def run_coordinator(
                     )
                     + "\n\nRevert the out-of-scope changes and stop."
                 )
+            elif feedback.startswith("[VERIFY"):
+                user_prompt += (
+                    "\n\n"
+                    + section(
+                        "verification-failure",
+                        "Your previous edit pass is already on disk, but its "
+                        "summary claimed artifacts that do not exist on disk. "
+                        "Correct the discrepancy before proceeding.\n"
+                        f"{feedback}",
+                    )
+                    + "\n\nCreate the missing files or correct the summary, then stop."
+                )
             else:
                 user_prompt += (
                     "\n\n"
