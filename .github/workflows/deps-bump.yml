@@ -1,0 +1,59 @@
+name: Dependency Bump
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_MALWARE_CHECK: "1"
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Refresh lockfile
+        run: uv lock --upgrade
+
+      - name: Detect lockfile change
+        id: diff
+        run: |
+          if git diff --quiet uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open bump PR
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
+        with:
+          token: ${{ secrets.DEPS_BUMP_TOKEN }}
+          commit-message: "chore(deps): bump uv.lock (weekly automated refresh)"
+          title: "chore(deps): bump uv.lock"
+          body: |
+            Automated `uv lock --upgrade` — advances pinned `robotsix-*` git
+            dependencies to their latest `@main` commits.
+
+            Triggered by the weekly `deps-bump.yml` schedule.
+          branch: deps/bump-uv-lock
+          labels: dependencies,automated
+          delete-branch: true
