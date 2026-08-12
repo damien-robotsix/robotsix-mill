@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import sqlite3
 
 import httpx
 import pytest
@@ -49,6 +50,7 @@ def _httpx_status(code):
         (UsageLimitExceeded("cap"), False),
         (ValueError("bug"), False),
         (json.JSONDecodeError("Expecting value", "x", 0), True),  # bad model JSON
+        (sqlite3.OperationalError("database or disk is full"), True),
     ],
 )
 def test_is_transient(exc, transient):
