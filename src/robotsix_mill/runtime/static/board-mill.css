@@ -1038,6 +1038,17 @@ pre {
   white-space: nowrap;
 }
 .mi-status { color: #7d828c; font-size: 10px; flex-shrink: 0; }
+.mi-jobs-header { margin-top: 8px; font-weight: bold; color: #aab0bd; }
+.mi-job {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  padding: 1px 0;
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+.mi-job-name { color: #cfd3db; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-job-conclusion { color: #7d828c; font-size: 10px; flex-shrink: 0; }
 
 /* ============================================================
    Drawer skeleton / progressive loading
