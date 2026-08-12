@@ -52,7 +52,7 @@ tracing = [
 # — so `ruff format --check` flip-flops and turns CI red on formatting the
 # agent (and humans) already consider clean. Pin so CI, the sandbox, and local
 # format identically. Bump deliberately, reformatting the repo in the same commit.
-dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "pytest-randomly>=4.1.0", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.16.0", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13", "hypothesis>=6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.21", "pytest-cov>=7", "pytest-xdist>=3", "pytest-randomly>=4.1.0", "bandit[toml]>=1.8", "mypy>=1.15", "mypy-baseline>=0.7", "ruff==0.16.0", "deptry>=0.25", "vulture>=2", "robotsix-modules", "shtab", "alembic>=1.13", "hypothesis>=6", "towncrier>=24"]
 docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>=11.0.0"]
 
 [tool.uv]
@@ -136,6 +136,37 @@ fail_under = 80
 targets = ["src/"]
 exclude_dirs = ["tests/"]
 skips = ["B101"]
+
+[tool.towncrier]
+package = "robotsix_mill"
+package_dir = "src"
+filename = "RELEASE_NOTES.md"
+directory = "changelog.d"
+title_format = "## [{version}](https://github.com/damien-robotsix/robotsix-mill/tree/v{version}) ({project_date})"
+# NOTE: filename intentionally NOT "CHANGELOG.md" — release-please manages
+# that file from conventional commits (see release-please-config.json).
+# Towncrier produces a separate curated release-notes file to avoid a
+# two-tool conflict at release time.
+
+[[tool.towncrier.type]]
+name = "Features"
+showcontent = true
+
+[[tool.towncrier.type]]
+name = "Bug Fixes"
+showcontent = true
+
+[[tool.towncrier.type]]
+name = "Documentation"
+showcontent = true
+
+[[tool.towncrier.type]]
+name = "Removals"
+showcontent = true
+
+[[tool.towncrier.type]]
+name = "Miscellaneous"
+showcontent = false
 
 [tool.ruff]
 target-version = "py314"
