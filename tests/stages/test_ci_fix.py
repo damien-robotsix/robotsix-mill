@@ -3362,3 +3362,74 @@ def test_ci_failure_diagnostic_event_not_emitted_on_check_status_pending(
 
     events = list_diagnostic_events(ctx.settings, "test-board", category="CI_FAILURE")
     assert len(events) == 0, "pending CI should not emit CI_FAILURE event"
+
+
+# ---------------------------------------------------------------------------
+# Merge conflict → REBASING (not BLOCKED)
+#
+# CI cannot be fixed on a branch that will not merge. The merge stage already
+# auto-rebases from human_mr_approval / waiting_auto_merge; ci_fix was the one
+# conflict path that demanded a manual rebase, which is what left 10 tickets
+# blocked on 2026-08-12 with nothing wrong but a moved target branch.
+# ---------------------------------------------------------------------------
+
+
+def _conflicting_pr(monkeypatch):
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "sha": "abc123",
+            "mergeable": False,
+            "mergeable_state": "dirty",
+        },
+    )
+
+
+def test_merge_conflict_routes_to_rebasing(tmp_path, monkeypatch):
+    ctx = _gh(tmp_path)
+    ticket = _fixing_ci(ctx)
+    repo_dir = _setup_repo(ctx, ticket)
+    _conflicting_pr(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._detect_merge_conflict",
+        lambda *a, **k: "Merge conflict detected — `CHANGELOG.md`",
+    )
+
+    stage = CIFixStage()
+    outcome = stage._check_merge_conflict(
+        ticket, ctx, repo_dir, ticket.branch or "", "main"
+    )
+
+    assert outcome is not None
+    assert outcome.next_state is State.REBASING
+    assert "Merge conflict detected" in (outcome.note or "")
+
+
+def test_merge_conflict_transition_is_legal(tmp_path):
+    """The routing is only useful if the state machine accepts it."""
+    from robotsix_mill.core.states import can_transition
+
+    assert can_transition(State.FIXING_CI, State.REBASING) is True
+
+
+def test_no_merge_conflict_falls_through(tmp_path, monkeypatch):
+    """A mergeable PR must not be diverted into the rebase agent."""
+    ctx = _gh(tmp_path)
+    ticket = _fixing_ci(ctx)
+    repo_dir = _setup_repo(ctx, ticket)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "sha": "abc123",
+            "mergeable": True,
+            "mergeable_state": "clean",
+        },
+    )
+
+    stage = CIFixStage()
+    assert (
+        stage._check_merge_conflict(ticket, ctx, repo_dir, ticket.branch or "", "main")
+        is None
+    )

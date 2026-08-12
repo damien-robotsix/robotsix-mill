@@ -213,6 +213,52 @@ def test_create_pr_422_no_existing_pr_raises(tmp_path, monkeypatch):
         forge.open_merge_request(source_branch="feature/x", title="t", body="b")
 
 
+def test_create_pr_422_throttled_lookup_raises_transient_not_422(tmp_path, monkeypatch):
+    """422 "already exists" + throttled lookup → surface the throttle.
+
+    GitHub refused the *read* that would have recovered the existing PR's
+    URL, so concluding "no such PR" and raising the create's 422 is a lie:
+    it blocks the ticket for a human when the PR is sitting right there.
+    Re-raising the lookup failure lets the stage classifier see a transient
+    error and retry with backoff instead.
+    """
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+
+    post_422 = _make_response(422, {}, "A pull request already exists for o:feature/x")
+    throttled = _make_response(
+        403, {}, '{"message":"You have exceeded a secondary rate limit"}'
+    )
+    _mock_httpx(
+        monkeypatch, post_response=post_422, get_map={"repos/o/r/pulls": throttled}
+    )
+
+    forge = _forge(tmp_path)
+    with pytest.raises(real_httpx.HTTPStatusError) as excinfo:
+        forge.open_merge_request(source_branch="feature/x", title="t", body="b")
+    assert classify_stage_error(excinfo.value) == "transient"
+
+
+def test_create_pr_422_finds_closed_pr_for_head(tmp_path, monkeypatch):
+    """A closed PR for the head also makes GitHub reject the create.
+
+    The lookup therefore queries ``state=all``; an ``open``-only filter
+    cannot see it and the ticket blocked on a PR that plainly exists.
+    """
+    post_422 = _make_response(422, {}, "already exists")
+    closed_pr = [
+        {"html_url": "https://github.com/o/r/pull/7", "number": 7, "state": "closed"}
+    ]
+    _mock_httpx(
+        monkeypatch,
+        post_response=post_422,
+        get_map={"repos/o/r/pulls": _make_response(200, closed_pr)},
+    )
+
+    forge = _forge(tmp_path)
+    url = forge.open_merge_request(source_branch="feature/x", title="t", body="b")
+    assert url == "https://github.com/o/r/pull/7"
+
+
 def test_create_pr_non_201_non_422_raises(tmp_path, monkeypatch):
     """Any other status → RuntimeError."""
     _mock_httpx(monkeypatch, post_response=_make_response(403, {}, "forbidden"))

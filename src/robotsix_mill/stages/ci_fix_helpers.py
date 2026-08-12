@@ -370,20 +370,19 @@ def _detect_merge_conflict(
     if conflicting:
         files_list = "\n".join(f"  - `{f}`" for f in conflicting)
         return (
-            f"Merge conflict detected — the PR branch cannot be "
-            f"rebased onto `{target}` because the following file(s) "
-            f"have conflicts:\n\n{files_list}\n\n"
-            f"**Action required:** Manually rebase this branch onto "
-            f"`{target}`, resolve the conflicts, and push. "
-            f"The mill cannot fix CI until the merge conflict is resolved."
+            f"Merge conflict detected — the PR branch conflicts with "
+            f"`{target}` in the following file(s):\n\n{files_list}\n\n"
+            f"CI cannot be fixed until the branch is rebased, so the ticket "
+            f"is handed to the rebase agent. No operator action is needed "
+            f"unless the rebase agent itself reports failure."
         )
     else:
         return (
             f"Merge conflict detected — the PR branch has conflicts "
             f"with `{target}` but the conflicting files could not be "
-            f"determined. **Action required:** Manually rebase this "
-            f"branch onto `{target}`, resolve the conflicts, and push. "
-            f"The mill cannot fix CI until the merge conflict is resolved."
+            f"determined. CI cannot be fixed until the branch is rebased, "
+            f"so the ticket is handed to the rebase agent. No operator "
+            f"action is needed unless the rebase agent itself reports failure."
         )
 
 

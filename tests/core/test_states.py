@@ -276,6 +276,16 @@ def test_fixing_ci_to_blocked():
     assert can_transition(State.FIXING_CI, State.BLOCKED) is True
 
 
+def test_fixing_ci_to_rebasing():
+    """FIXING_CI → REBASING is valid (merge conflict → hand to the rebase agent).
+
+    CI cannot be fixed on a branch that will not merge, and the merge stage
+    already auto-rebases from its own parked states; ci_fix used to be the
+    only conflict path that blocked for a human instead.
+    """
+    assert can_transition(State.FIXING_CI, State.REBASING) is True
+
+
 # --- DELIVERABLE transitions (now go to IMPLEMENT_COMPLETE) ---
 
 

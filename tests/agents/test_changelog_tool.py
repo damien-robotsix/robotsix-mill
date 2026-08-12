@@ -308,3 +308,31 @@ class TestKindResolution:
         repo = _repo_with_types(tmp_path, ["feat", "fix"])
         with pytest.raises(ValueError, match="feat, fix"):
             changelog_tool._add_changelog_fragment(repo, "t-6", "nonsense", "x")
+
+    def test_doc_falls_back_to_generic_bucket(self, tmp_path: Path) -> None:
+        """The hexarchy case: a repo configuring no doc type at all.
+
+        ``doc``'s aliases (``docs``, ``documentation``) are equally absent, so
+        before the generic fallback this raised and blocked the ticket —
+        20260811T132405Z-docstring-gap-add-docstring-to-dispatch-b1a9.
+        """
+        repo = _repo_with_types(tmp_path, ["feature", "bugfix", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-7", "doc", "x")
+        assert out.endswith(".misc.md")
+        assert (repo / "changelog.d" / "t-7.misc.md").read_text().strip() == "x"
+
+    def test_generic_fallback_prefers_misc_over_chore(self, tmp_path: Path) -> None:
+        repo = _repo_with_types(tmp_path, ["feature", "chore", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-8", "security", "x")
+        assert out.endswith(".misc.md")
+
+    def test_generic_fallback_uses_chore_when_misc_absent(self, tmp_path: Path) -> None:
+        repo = _repo_with_types(tmp_path, ["feature", "chore"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-9", "doc", "x")
+        assert out.endswith(".chore.md")
+
+    def test_alias_still_wins_over_generic_fallback(self, tmp_path: Path) -> None:
+        """A near-synonym is a better home than the catch-all bucket."""
+        repo = _repo_with_types(tmp_path, ["docs", "misc"])
+        out = changelog_tool._add_changelog_fragment(repo, "t-10", "doc", "x")
+        assert out.endswith(".docs.md")
