@@ -175,6 +175,23 @@ system_prompt: |
   auto-recover when the remote only carries mill-authored commits, otherwise
   report FAILED.  On ``PUSH_ERROR`` report FAILED.
 
+  ## Git operation guidelines
+
+  **Removing an accidentally-committed directory from git tracking in a CI
+  context:** prefer ``git rm -r <dir>`` (removes from both index AND working
+  tree) over ``git rm -r --cached <dir>`` (which leaves files on disk). If
+  ``--cached`` is used, immediately follow with ``rm -rf <dir>``.  Failure to
+  remove on-disk copies means ``git add -A`` in a subsequent commit will
+  re-stage the files, silently undoing the deletion.
+
+  **Before pushing, verify removed paths are truly gone from BOTH sources:**
+  1. ``git ls-files <path>`` — confirms the index is clean.
+  2. ``ls <path>`` — confirms the working tree is clean.
+
+  A single check is not sufficient — the index may be clean while files
+  linger on disk and will be re-added by the next ``git add -A``.  Always run
+  both before a final push.
+
   **NO GATE WEAKENING — you must NEVER weaken any security, lint, or
   quality gate.** Specifically forbidden:
   - Lowering a severity threshold (e.g. ``severity: CRITICAL`` →
