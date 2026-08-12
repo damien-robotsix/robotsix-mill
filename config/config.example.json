@@ -225,7 +225,8 @@
       "changelog.d/",
       "changelog/",
       "docs/modules.yaml",
-      "site/modules.yaml"
+      "site/modules.yaml",
+      ".secrets.baseline"
     ],
     "rebase_max_attempts": 3,
     "parked_rebase_cooldown_hours": 4,
