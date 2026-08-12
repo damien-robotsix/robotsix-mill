@@ -568,8 +568,8 @@ class TestNoChangePath:
         assert outcome.next_state == State.READY
         assert "routed to implement" in outcome.note
 
-    def test_task_without_branch_routes_to_implement(self, ctx_factory, monkeypatch):
-        """TASK ticket without branch → routes to implement for verification."""
+    def test_task_without_branch_routes_to_done(self, ctx_factory, monkeypatch):
+        """TASK ticket without branch → routes to DONE, skipping implement."""
         ctx = ctx_factory()
         t = _ticket(ctx, kind=TicketKind.TASK)
         ws = ctx.service.workspace(t)
@@ -582,17 +582,9 @@ class TestNoChangePath:
             ),
         )
 
-        # Mock _rationale_claims_external_fix → False (so we hit the TASK branch)
+        # Mock _rationale_claims_external_fix → False (so we hit the normal path)
         monkeypatch.setattr(
             _result_paths, "_rationale_claims_external_fix", lambda r: False
-        )
-        monkeypatch.setattr(
-            _result_paths,
-            "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
-                State.READY,
-                None,
-            ),
         )
 
         outcome = _result_paths.no_change_path(
@@ -606,8 +598,8 @@ class TestNoChangePath:
         )
 
         assert outcome is not None
-        assert outcome.next_state == State.READY
-        assert "routing to implement" in outcome.note
+        assert outcome.next_state == State.DONE
+        assert "no change needed" in outcome.note
 
     def test_normal_done(self, ctx_factory, monkeypatch):
         """Non-TASK ticket (e.g. FEATURE) with rationale → DONE."""
