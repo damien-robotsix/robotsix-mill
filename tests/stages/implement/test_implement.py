@@ -4744,6 +4744,90 @@ def test_transition_blocked_to_ready_with_note_clears_fingerprint_guard(
     assert out is None, f"preflight must allow after transition with note, got: {out}"
 
 
+def test_answer_pending_question_clears_fingerprint_guard(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When an AWAITING_USER_REPLY ticket with a stale implement fingerprint
+    is answered via answer_pending_question, the fingerprint guard must be
+    cleared — the operator's answer is the new input, and re-blocking on
+    the unchanged spec alone wastes the spawn budget."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.models import Comment, Ticket
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(ctx, title="Answer-clears-guard", body="Implement feature X")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    ws = ctx.service.workspace(t)
+    import hashlib
+
+    body = ws.read_description() or ""
+    fp = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    (ws.artifacts_dir / "implement.md").write_text(
+        "# Implement (BLOCKED — resumable)\n"
+        "branch: test-branch\n"
+        f"spec-fingerprint: {fp}\n"
+        "\nno changes produced\n",
+        encoding="utf-8",
+    )
+
+    # Put the ticket into AWAITING_USER_REPLY with an open ask_user thread.
+    with db.session(ctx.settings, ctx.service.board_id) as s:
+        row = s.get(Ticket, t.id)
+        row.state = State.AWAITING_USER_REPLY
+        row.paused_from = State.READY.value
+        s.add(row)
+        s.flush()
+        # Add an open [ASK_USER] thread.
+        c = Comment(
+            ticket_id=t.id,
+            body="[ASK_USER] operator clarification needed",
+            author="system",
+            parent_id=None,
+        )
+        s.add(c)
+        s.commit()
+
+    t = ctx.service.get(t.id)
+    assert t.state is State.AWAITING_USER_REPLY
+
+    # Operator answers the question.
+    reply = ctx.service.answer_pending_question(
+        t.id,
+        "Here is the clarification.",
+        author="operator",
+    )
+    assert reply is not None
+
+    # Ticket must resume to READY (its paused_from).
+    t = ctx.service.get(t.id)
+    assert t.state is State.READY
+
+    # The spec-fingerprint override must be persisted.
+    override_path = ws.artifacts_dir / "implement_spec_override"
+    assert override_path.exists(), (
+        "answer_pending_question must persist the spec-fingerprint override"
+    )
+    assert override_path.read_text(encoding="utf-8").strip() == fp, (
+        "override fingerprint must match the current spec fingerprint"
+    )
+
+    # Preflight must now ALLOW the re-spawn.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is None, (
+        f"preflight must allow after answer_pending_question, got: {out}"
+    )
+
+
 def test_automatic_fingerprint_refusal_message_includes_force_retry_remedy(
     ctx_factory, tmp_path, monkeypatch
 ):
