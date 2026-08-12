@@ -887,6 +887,19 @@
     } else if (mi.ci_conclusion === "pending") ciHtml = '<span class="mi-pending">◷</span> CI pending…';
     else ciHtml = '<span class="mi-unknown">—</span> CI unknown';
 
+    var ciJobsHtml = "";
+    if (mi.ci_jobs && mi.ci_jobs.length) {
+      ciJobsHtml = '<div class="mi-jobs-header">CI jobs (' + mi.ci_jobs.length + ')</div>';
+      ciJobsHtml += mi.ci_jobs.map(function(j) {
+        var icon = "";
+        if (j.conclusion === "success") icon = '<span class="mi-ok">✓</span> ';
+        else if (j.conclusion === "failure") icon = '<span class="mi-bad">✗</span> ';
+        else if (j.conclusion === "pending" || j.conclusion === "in_progress") icon = '<span class="mi-pending">◷</span> ';
+        else icon = '<span class="mi-unknown">—</span> ';
+        return '<div class="mi-job">' + icon + '<span class="mi-job-name">' + esc(j.name) + '</span> <span class="mi-job-conclusion">' + esc(j.conclusion || "unknown") + '</span></div>';
+      }).join("");
+    }
+
     var mgHtml = "";
     if (mi.mergeable === true) mgHtml = '<span class="mi-ok">✓</span> No conflicts';
     else if (mi.mergeable === false) mgHtml = '<span class="mi-bad">✗</span> Conflicts detected';
@@ -908,6 +921,7 @@
     return '<div class="mi-section">' +
      '<h3>Merge Info</h3>' +
      '<div class="mi-row">' + ciHtml + '</div>' +
+     ciJobsHtml +
      '<div class="mi-row">' + mgHtml + '</div>' +
      filesHtml +
      renderChangelogWarnings(mi.changelog_warnings) +
