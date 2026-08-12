@@ -140,9 +140,13 @@ skips = ["B101"]
 [tool.towncrier]
 package = "robotsix_mill"
 package_dir = "src"
-filename = "CHANGELOG.md"
+filename = "RELEASE_NOTES.md"
 directory = "changelog.d"
 title_format = "## [{version}](https://github.com/damien-robotsix/robotsix-mill/tree/v{version}) ({project_date})"
+# NOTE: filename intentionally NOT "CHANGELOG.md" — release-please manages
+# that file from conventional commits (see release-please-config.json).
+# Towncrier produces a separate curated release-notes file to avoid a
+# two-tool conflict at release time.
 
 [[tool.towncrier.type]]
 directory = "feature"

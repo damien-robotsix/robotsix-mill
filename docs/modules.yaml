@@ -576,8 +576,8 @@ modules:
     paths:
       - README.md
       - ARCHITECTURE.md
-      - CONTRIBUTING.md
       - CHANGELOG.md
+      - CONTRIBUTING.md
       - changelog.d/.gitkeep
       - changelog.d/README.md
       - changelog.d/*.md

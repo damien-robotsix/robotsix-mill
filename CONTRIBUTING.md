@@ -282,8 +282,12 @@ Commit messages keep the history readable and reviewable for contributors.
 ## Changelog fragments
 
 This project uses [towncrier](https://towncrier.readthedocs.io/) to
-assemble `CHANGELOG.md` from per-PR fragment files.  Each non-trivial
+assemble `RELEASE_NOTES.md` from per-PR fragment files.  Each non-trivial
 PR must add a fragment under `changelog.d/`.
+
+> **Note:** `CHANGELOG.md` is managed by release-please from conventional
+> commits (see `release-please-config.json`).  Towncrier writes to
+> `RELEASE_NOTES.md` instead, to avoid a two-tool conflict at release time.
 
 ### Writing a fragment
 
@@ -303,11 +307,15 @@ lines with two spaces.
 ### Assembly
 
 `towncrier build` consumes all fragments in `changelog.d/` and updates
-`CHANGELOG.md`.  Fragments are deleted after a successful build.
+`RELEASE_NOTES.md`.  Fragments are deleted after a successful build.
+Run it at release time via `towncrier build --yes --version X.Y.Z`,
+passing the target version explicitly (release-please bumps the version
+in `pyproject.toml` and `.release-please-manifest.json`; `--version`
+ensures consistency with the release tag).
 
-Towncrier runs **only at release time** (via `towncrier build --yes`),
-not on every PR.  CI does not gate on the presence of fragments — the
-PR checklist item above is an authoring convention, not a hard gate.
+Towncrier runs **only at release time**, not on every PR.  CI does not
+gate on the presence of fragments — the PR checklist item above is an
+authoring convention, not a hard gate.
 
 ## CI overview
 

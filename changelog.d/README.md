@@ -1,7 +1,12 @@
 # Changelog fragments
 
 Each non-trivial PR must add a fragment file in this directory so the
-release workflow can assemble a curated `CHANGELOG.md`.
+release workflow can assemble curated release notes via towncrier.
+
+> **Note:** The assembled output goes to `RELEASE_NOTES.md`, not
+> `CHANGELOG.md`.  `CHANGELOG.md` is managed by release-please from
+> conventional commits (see `release-please-config.json`); towncrier
+> writes to a separate file to avoid a two-tool conflict at release time.
 
 ## Fragment naming
 
@@ -33,6 +38,9 @@ Adopt towncrier to assemble the mill's own changelog.
 
 ## Assembly
 
-At release time, run `towncrier build` to consume all fragments and
-update `CHANGELOG.md`.  The fragments are automatically deleted after
-a successful build.
+At release time, run `towncrier build --yes --version X.Y.Z` to consume
+all fragments and update `RELEASE_NOTES.md`.  The fragments are
+automatically deleted after a successful build.  Pass `--version`
+explicitly so the output matches the release tag (release-please bumps
+`pyproject.toml` and `.release-please-manifest.json`; `__init__.py`'s
+`__version__` is not always bumped by release-please).
