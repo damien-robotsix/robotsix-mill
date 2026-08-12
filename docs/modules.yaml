@@ -75,6 +75,7 @@ modules:
       - tests/core/test_models.py
       - tests/core/test_states.py
       - tests/core/test_service.py
+      - tests/core/test_service_epic.py
       - tests/core/test_resume_blocked_ci_guards.py
       - tests/core/test_sqlite_utils.py
       - tests/core/test_datetime_utils.py
