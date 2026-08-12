@@ -219,7 +219,7 @@ key, where each entry has:
   structurally depends on (not import-level).
 
 Every tracked file in `src/`, `tests/`, `docs/`, etc. should be claimed
-by exactly one module. There are currently 19 modules; the canonical
+by exactly one module. The canonical
 list is `docs/modules.yaml` itself. The file is validated on every push
 by `docs/modules.schema.yaml` (JSON Schema, draft 2020-12) via a
 pre-commit hook and CI step, both running
