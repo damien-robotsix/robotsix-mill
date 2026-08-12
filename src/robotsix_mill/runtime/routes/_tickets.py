@@ -64,7 +64,7 @@ router = APIRouter(tags=["Tickets"])
 # Keyed by (state, include_closed, repo_id); guarded by a single lock so a
 # burst of cache-miss pollers triggers ONE compute, not N concurrent ones.
 _LIST_CACHE: dict[
-    tuple[str | None, bool, str, int, int | None, str, str],
+    tuple[str | None, bool, str, int, int | None, str, str, str],
     tuple[float, list[TicketRead]],
 ] = {}
 _LIST_CACHE_LOCK = threading.Lock()
@@ -142,6 +142,7 @@ def list_tickets(
     limit: int | None = None,
     sort_by: str = "created_at",
     created_after: str | None = None,
+    updated_after: str | None = None,
     request: Request = None,
     svc=Depends(get_service),
     settings=Depends(get_settings),
@@ -178,6 +179,10 @@ def list_tickets(
     Filtering:
       *created_after* — ISO-8601 UTC datetime string; only tickets
       created strictly after this instant are returned.
+      *updated_after* — ISO-8601 UTC datetime string; only tickets
+      whose ``updated_at`` is strictly after this instant are
+      returned.  Useful as a reconciliation mechanism for event
+      subscribers that may have missed a delivery.
     """
     # The board polls this every 5s. Both expensive enrichments are
     # downgraded for the list:
@@ -207,6 +212,7 @@ def list_tickets(
         limit,
         sort_by,
         created_after or "",
+        updated_after or "",
     )
     if ttl and ttl > 0.0:
         hit = _LIST_CACHE.get(cache_key)
@@ -225,6 +231,7 @@ def list_tickets(
                 limit,
                 sort_by,
                 created_after,
+                updated_after,
                 request,
                 svc,
                 settings,
@@ -240,6 +247,7 @@ def list_tickets(
         limit,
         sort_by,
         created_after,
+        updated_after,
         request,
         svc,
         settings,
@@ -255,6 +263,7 @@ def _list_tickets_compute(
     limit: int | None,
     sort_by: str,
     created_after: str | None,
+    updated_after: str | None,
     request: Request,
     svc: TicketService,
     settings: Settings,
@@ -293,6 +302,20 @@ def _list_tickets_compute(
         if created_after_dt.tzinfo is None:
             created_after_dt = created_after_dt.replace(tzinfo=UTC)
 
+    # Parse updated_after from ISO-8601 string to UTC datetime.
+    updated_after_dt: datetime | None = None
+    if updated_after:
+        try:
+            updated_after_dt = datetime.fromisoformat(updated_after)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"updated_after must be an ISO-8601 datetime string, "
+                f"got {updated_after!r}",
+            ) from None
+        if updated_after_dt.tzinfo is None:
+            updated_after_dt = updated_after_dt.replace(tzinfo=UTC)
+
     # With per-repo DBs the default svc only sees its own board's
     # tickets. Build a list of services to query: one per repo when
     # repo_id is omitted or "all", else just the requested repo.
@@ -326,6 +349,7 @@ def _list_tickets_compute(
                     limit=limit,
                     sort_by=sort_by,
                     created_after=created_after_dt,
+                    updated_after=updated_after_dt,
                 )
             )
         except ValueError as e:

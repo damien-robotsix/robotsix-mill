@@ -3607,3 +3607,19 @@ def test_list_tickets_all_states_and_filters(client, service):
     # Bad sort_by → 400.
     r = client.get("/tickets?sort_by=invalid_column")
     assert r.status_code == 400
+
+    # updated_after filter — a past date must include all non-terminal tickets.
+    r = client.get("/tickets?updated_after=2020-01-01T00:00:00Z")
+    assert r.status_code == 200
+    assert len(r.json()) >= expected_min, (
+        "updated_after in the distant past must include all non-terminal tickets"
+    )
+
+    # updated_after filter — a far-future date must return nothing.
+    r = client.get("/tickets?updated_after=2099-01-01T00:00:00Z")
+    assert r.status_code == 200
+    assert len(r.json()) == 0, "updated_after in the far future must return no tickets"
+
+    # Bad updated_after → 400.
+    r = client.get("/tickets?updated_after=not-a-date")
+    assert r.status_code == 400

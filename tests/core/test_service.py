@@ -55,6 +55,36 @@ def test_explicit_source_is_stored(service):
     assert t.source == SourceKind.RETROSPECT
 
 
+def test_list_filters_by_updated_after(service):
+    """updated_after returns only tickets modified after the cutoff."""
+    from datetime import UTC, datetime
+
+    from robotsix_mill.core.states import State
+
+    t1 = service.create("t1")
+    t2 = service.create("t2")
+
+    # A far-past cutoff must include both.
+    past = datetime(2020, 1, 1, tzinfo=UTC)
+    result = service.list(updated_after=past)
+    ids = [t.id for t in result]
+    assert t1.id in ids
+    assert t2.id in ids
+
+    # A far-future cutoff must include neither.
+    future = datetime(2099, 1, 1, tzinfo=UTC)
+    result = service.list(updated_after=future)
+    assert len(result) == 0
+
+    # Transition t1 so its updated_at moves forward, then verify
+    # an updated_after filter just before now excludes t2.
+    service.transition(t1.id, State.READY)
+    after_transition = datetime.now(UTC)
+    result = service.list(updated_after=after_transition)
+    # No ticket should have updated_at strictly after right now.
+    assert len(result) == 0
+
+
 def test_list_filters_by_state(service):
     a = service.create("a")
     service.create("b")
