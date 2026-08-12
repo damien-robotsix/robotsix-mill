@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,97 @@ from ._shared import (
     log,
 )
 from .implementation_editing import _ImplementationEditingMixin
+
+# ---------------------------------------------------------------------------
+# Post-summary verification gate
+# ---------------------------------------------------------------------------
+
+# Verbs the implement agent's free-text summary uses when it claims to have
+# produced a file.  Only path-shaped tokens are extracted, so phrases like
+# "added a test" or "created a helper" never match.
+_CLAIM_PATH_RE = re.compile(
+    r"""
+    \b(?:created|registered|added|wrote|written|generated)\b
+    [^\n`]{0,80}?
+    (?P<path>`[^`\n]+`|[\w./-]+\.(?:md|py|yaml|yml|toml|json|js|css|ts|sh|txt))
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# "changelog fragment created" / "created a changelog fragment" — the claim
+# names the fragment file almost never explicitly, so it needs a dedicated
+# pattern.
+_CHANGELOG_CLAIM_AFTER_RE = re.compile(
+    r"\bchangelog(?:\s+fragment)?(?:\s+file)?\s+"
+    r"(?:created|added|written|generated|registered)\b",
+    re.IGNORECASE,
+)
+_CHANGELOG_CLAIM_BEFORE_RE = re.compile(
+    r"\b(?:created|added|written|generated|registered)\s+"
+    r"(?:a\s+)?(?:new\s+)?changelog(?:\s+fragment)?(?:\s+file)?\b",
+    re.IGNORECASE,
+)
+
+# Explicit ``changelog.d/<file>`` mentions in the summary.
+_CHANGELOG_D_PATH_RE = re.compile(r"\bchangelog\.d/[\w./-]+")
+
+# Conventional towncrier fragment directories.  ``changelog.d`` is the
+# default used by ``add_changelog_fragment``; the other two are the
+# alternates accepted by ``_changelog_validate``.
+_FRAGMENT_DIRS: tuple[str, ...] = ("changelog.d", "changelog", "changes")
+
+
+def _looks_like_path(token: str) -> bool:
+    """Return True when *token* is a plausible repo-relative file path."""
+    if "/" in token or "\\" in token:
+        return True
+    return bool(re.search(r"\.\w{1,8}$", token))
+
+
+def _ticket_slug(ticket_id: str) -> str:
+    """Filesystem-safe stem used for a ticket's changelog fragment file."""
+    safe = "".join(c if (c.isalnum() or c in "-_") else "-" for c in ticket_id)
+    return safe.strip("-") or "entry"
+
+
+def _verify_summary_claims(
+    summary: str,
+    repo_dir: Path,
+    ticket_id: str,
+) -> list[str]:
+    """Return repo-relative paths claimed in *summary* but missing on disk.
+
+    The implement agent's free-text summary sometimes claims it "created" or
+    "registered" files that never landed on disk (the changelog-fragment
+    claim being the recurring case).  Parse those claims and check each
+    against *repo_dir* so the stage can re-prompt instead of accepting a
+    hallucinated completion.
+    """
+    missing: list[str] = []
+
+    def add_missing(path: str) -> None:
+        if path not in missing and not (repo_dir / path).exists():
+            missing.append(path)
+
+    for raw in _CHANGELOG_D_PATH_RE.findall(summary or ""):
+        add_missing(raw.rstrip(".,;:)'\""))
+
+    if _CHANGELOG_CLAIM_AFTER_RE.search(
+        summary or ""
+    ) or _CHANGELOG_CLAIM_BEFORE_RE.search(summary or ""):
+        slug = _ticket_slug(ticket_id)
+        if not any(list((repo_dir / d).glob(f"{slug}.*.md")) for d in _FRAGMENT_DIRS):
+            add_missing(f"changelog.d/{slug}.*.md")
+
+    for match in _CLAIM_PATH_RE.finditer(summary or ""):
+        raw = match.group("path").strip().strip("`\"'").rstrip(".,;:)'\"")
+        if not raw or not _looks_like_path(raw):
+            continue
+        if raw.startswith("changelog.d/"):
+            continue
+        add_missing(raw)
+
+    return missing
 
 
 class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase):
@@ -285,6 +377,69 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             )
 
         return updated_ref_files, updated_prev_summary
+
+    @classmethod
+    def _run_summary_verification(
+        cls,
+        ticket: Ticket,
+        repo_dir: Path,
+        summary: str,
+        ic: _ImplementContext,
+        updated_ref_files: list[Any] | None,
+        updated_prev_summary: str | None,
+        new_msgs: bytes | None,
+    ) -> _SinglePassResult | None:
+        """Verify the summary's claimed artifacts exist on disk.
+
+        Returns ``None`` when every claim checks out (the pass may proceed),
+        or a ``_SinglePassResult`` to return directly: a single ``retry``
+        re-prompt on the first failure, and a ``return`` with ``BLOCKED`` on
+        the second consecutive failure (the ``[VERIFY]`` feedback marker
+        tells us we already re-prompted once).
+        """
+        missing = _verify_summary_claims(summary, repo_dir, ticket.id)
+        if not missing:
+            return None
+
+        missing_text = ", ".join(missing)
+        feedback = (
+            f"[VERIFY] Verification failed: {missing_text} was claimed "
+            "but does not exist on disk — fix and retry."
+        )
+        if (ic.feedback or "").startswith("[VERIFY]"):
+            log.warning(
+                "%s: summary verification failed again — %s; blocking",
+                ticket.id,
+                missing_text,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(
+                    State.BLOCKED,
+                    f"summary verification failed after retry: {missing_text}",
+                ),
+            )
+
+        log.warning(
+            "%s: summary verification failed — %s; re-prompting",
+            ticket.id,
+            missing_text,
+        )
+        verify_ic = _ImplementContext(
+            spec=ic.spec,
+            memory_text=ic.memory_text,
+            reference_files=updated_ref_files,
+            file_map=ic.file_map,
+            feedback=feedback,
+            previous_attempt_summary=updated_prev_summary,
+            open_thread_ids=ic.open_thread_ids,
+        )
+        return _SinglePassResult(
+            next_action="retry",
+            feedback=feedback,
+            ic=verify_ic,
+            new_msgs=new_msgs,
+        )
 
     @classmethod
     def _evaluate_test_results(
@@ -1032,6 +1187,24 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             settings,
             memory_board_id,
         )
+
+        # --- post-summary verification gate ---
+        # The LLM's free-text summary can claim artifacts that never landed
+        # on disk (the changelog-fragment claim is the recurring case).
+        # Verify those claims before accepting the pass; on failure re-prompt
+        # once with a specific diagnosis instead of advancing with a false
+        # summary.
+        verification_result = cls._run_summary_verification(
+            ticket=ticket,
+            repo_dir=repo_dir,
+            summary=summary,
+            ic=ic,
+            updated_ref_files=updated_ref_files,
+            updated_prev_summary=updated_prev_summary,
+            new_msgs=new_msgs,
+        )
+        if verification_result is not None:
+            return verification_result
 
         guardrail = cls._run_scope_guardrail(
             ctx,

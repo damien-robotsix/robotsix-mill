@@ -20,6 +20,9 @@ from robotsix_mill.stages.implement._shared import (
     _SinglePassResult,
 )
 from robotsix_mill.stages.implement.core import ImplementStage
+from robotsix_mill.stages.implement.implementation_logic import (
+    _verify_summary_claims,
+)
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -968,6 +971,148 @@ class TestPersistPassArtifacts:
         assert summary_path.exists()
         assert summary_path.read_text() == "did the work"
         assert updated_prev_summary == "did the work"
+
+
+# ---------------------------------------------------------------------------
+# 6. summary-claim verification
+# ---------------------------------------------------------------------------
+
+
+class TestVerifySummaryClaims:
+    @staticmethod
+    def _repo(tmp_path, files=()):
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        for f in files:
+            p = repo_dir / f
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x")
+        return repo_dir
+
+    def test_changelog_fragment_claimed_but_missing(self, tmp_path):
+        """'Changelog fragment created' with no fragment on disk → flagged."""
+        repo_dir = self._repo(tmp_path, files=["docs/modules.yaml"])
+        missing = _verify_summary_claims(
+            "Changelog fragment created and registered in docs/modules.yaml",
+            repo_dir,
+            "20260809T161458Z-per-job-ci-status-xxxx",
+        )
+        assert missing == ["changelog.d/20260809T161458Z-per-job-ci-status-xxxx.*.md"]
+
+    def test_changelog_fragment_claimed_before_verb(self, tmp_path):
+        """'added a changelog fragment' ordering is also detected."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "added a new changelog fragment",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == ["changelog.d/ticket-1.*.md"]
+
+    def test_changelog_fragment_exists(self, tmp_path):
+        repo_dir = self._repo(tmp_path, files=["changelog.d/ticket-1.misc.md"])
+        missing = _verify_summary_claims(
+            "Changelog fragment created",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_explicit_changelog_d_path_missing(self, tmp_path):
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "wrote changelog.d/20260809T161458Z.misc.md",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == ["changelog.d/20260809T161458Z.misc.md"]
+
+    def test_generic_created_path_missing(self, tmp_path):
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "created `src/new_module.py`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == ["src/new_module.py"]
+
+    def test_generic_created_path_exists(self, tmp_path):
+        repo_dir = self._repo(tmp_path, files=["src/new_module.py"])
+        missing = _verify_summary_claims(
+            "created `src/new_module.py`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_non_path_claims_ignored(self, tmp_path):
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "added a test and created a helper function",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_no_changelog_claim(self, tmp_path):
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "Skip-Changelog: no user-facing change",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+
+class TestRunSummaryVerification:
+    def test_passes_when_no_claims(self, tmp_path):
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        result = _Stage._run_summary_verification(
+            ticket=FakeTicket(),
+            repo_dir=repo_dir,
+            summary="did the work",
+            ic=_ic(),
+            updated_ref_files=None,
+            updated_prev_summary="did the work",
+            new_msgs=None,
+        )
+        assert result is None
+
+    def test_retry_on_first_failure(self, tmp_path):
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        result = _Stage._run_summary_verification(
+            ticket=FakeTicket(),
+            repo_dir=repo_dir,
+            summary="Changelog fragment created",
+            ic=_ic(),
+            updated_ref_files=None,
+            updated_prev_summary="Changelog fragment created",
+            new_msgs=b"ms",
+        )
+        assert result is not None
+        assert result.next_action == "retry"
+        assert result.feedback.startswith("[VERIFY] Verification failed:")
+        assert result.ic.feedback == result.feedback
+        assert result.ic.previous_attempt_summary == "Changelog fragment created"
+        assert result.new_msgs == b"ms"
+
+    def test_block_on_second_failure(self, tmp_path):
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        result = _Stage._run_summary_verification(
+            ticket=FakeTicket(),
+            repo_dir=repo_dir,
+            summary="Changelog fragment created",
+            ic=_ic(feedback="[VERIFY] Verification failed: x was claimed ..."),
+            updated_ref_files=None,
+            updated_prev_summary=None,
+            new_msgs=None,
+        )
+        assert result is not None
+        assert result.next_action == "return"
+        assert result.outcome.next_state == State.BLOCKED
 
 
 # ---------------------------------------------------------------------------
