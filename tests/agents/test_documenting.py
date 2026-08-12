@@ -1210,7 +1210,7 @@ class TestRunDocAgent:
     ):
         """``run_doc_agent`` passes ``write_blocked_prefixes`` to
         ``build_fs_tools`` so the document agent cannot overwrite
-        source or test files."""
+        source or web-asset files."""
         captured_kwargs: dict = {}
 
         def _spy_build_fs_tools(root, settings, **kwargs):
@@ -1268,5 +1268,4 @@ class TestRunDocAgent:
         assert captured_kwargs.get("write_blocked_prefixes") == [
             "www/",
             "src/",
-            "tests/",
         ]

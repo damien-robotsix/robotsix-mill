@@ -730,8 +730,7 @@ def test_agent_exception_credential_redaction(ctx_factory, monkeypatch):
 def test_doc_stage_preserves_source_files(ctx_factory, monkeypatch):
     """The document stage passes ``write_blocked_prefixes`` through to
     ``build_fs_tools`` so that a document agent cannot overwrite
-    implement-stage source-code changes under ``src/``, ``tests/``, or
-    ``www/``."""
+    implement-stage source-code changes under ``src/`` or ``www/``."""
     ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
@@ -764,8 +763,7 @@ def test_doc_stage_preserves_source_files(ctx_factory, monkeypatch):
     assert captured_kwargs.get("write_blocked_prefixes") == [
         "www/",
         "src/",
-        "tests/",
     ], (
-        f"Expected write_blocked_prefixes=['www/', 'src/', 'tests/'], "
+        f"Expected write_blocked_prefixes=['www/', 'src/'], "
         f"got {captured_kwargs.get('write_blocked_prefixes')!r}"
     )
