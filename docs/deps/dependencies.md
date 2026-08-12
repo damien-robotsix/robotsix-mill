@@ -34,18 +34,22 @@ library repos):
 
 3. **Bump.** A scheduled workflow
    ([`deps-bump.yml`](../.github/workflows/deps-bump.yml)) runs weekly
-   (cron) and on `workflow_dispatch`. It executes `uv lock --upgrade`
-   (refreshing git refs to the latest `@main` commits) and, if `uv.lock`
-   changed, opens a PR via a SHA-pinned `peter-evans/create-pull-request`
-   action with labels `dependencies` and `automated`. That PR triggers
-   the existing `ci.yml` on `pull_request`, running the **full pytest
-   suite** (including `tests/agents/test_retry.py`).
+   (cron) and on `workflow_dispatch`. It delegates to the fleet reusable
+   `damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml`,
+   which runs `uv lock --upgrade-package` for each of the four first-party
+   git deps (`robotsix-llmio`, `robotsix-board`, `robotsix-yaml-config`,
+   `robotsix-modules`),
+   refreshing their pinned commits to the latest `@main` heads, then opens
+   or updates a PR on the stable branch `deps/bump-uv-lock`. That PR
+   triggers the existing `ci.yml` on `pull_request`, running the **full
+   pytest suite** (including `tests/agents/test_retry.py`).
 
-   > **Note:** the bump PR's CI fires only because the PR is opened with
-   > the `DEPS_BUMP_TOKEN` PAT. A PR created with the default
-   > `GITHUB_TOKEN` does **not** trigger workflow runs (GitHub's
-   > recursion guard), so without the PAT the gate would be silently
-   > bypassed.
+   > **Note:** the bump PR's CI fires only because it is created with a
+   > GitHub App installation token (minted from the existing
+   > `RELEASE_APP_PRIVATE_KEY` secret), not the default `GITHUB_TOKEN`.
+   > GitHub deliberately suppresses workflow runs for events created by
+   > `GITHUB_TOKEN` to prevent recursion, so without the App token the
+   > gate would be silently bypassed.
 
 Net effect: a new shared-lib commit can reach mill **only** through the
 bump PR, whose CI runs the full suite. A semantic change that breaks

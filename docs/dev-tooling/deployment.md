@@ -9,13 +9,11 @@ running `mill` container — no manual rebuilds or restarts needed.
 
 ## Required GitHub secrets
 
-| Secret | Purpose |
-|---|---|
-| `DEPS_BUMP_TOKEN` | PAT used by `deps-bump.yml` to open the weekly `uv.lock` bump PR so its CI runs (a PR created with the default `GITHUB_TOKEN` triggers no workflows) |
-
-Set these in the repository **Settings → Secrets and variables →
-Actions**. The publish workflow fires on push to `main` and on manual
-`workflow_dispatch`; it does **not** trigger on pull requests.
+No additional secrets are required — the publish workflow authenticates to
+GHCR via `GITHUB_TOKEN` (auto-provisioned). Set any additional variables in
+the repository **Settings → Secrets and variables → Actions**. The publish
+workflow fires on push to `main` and on manual `workflow_dispatch`; it does
+**not** trigger on pull requests.
 
 ## How auto-update works
 

@@ -1,3 +1,13 @@
+# CRITICAL: This workflow pushes commits and creates PRs, so it MUST use a
+# caller-supplied credential that is NOT the default GITHUB_TOKEN.
+# GitHub deliberately suppresses workflow runs for events created by
+# GITHUB_TOKEN to prevent recursion — CI workflows will NOT fire on the
+# bump PR if you pass GITHUB_TOKEN.
+#
+# The reusable workflow mints an installation token from the shared
+# GitHub App (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation,
+# bot identity.
+
 name: Dependency Bump
 
 on:
@@ -5,55 +15,18 @@ on:
     - cron: "0 8 * * 1"
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-env:
-  UV_MALWARE_CHECK: "1"
+permissions: {}  # no workflow-level default; the job grants its own
 
 jobs:
   bump:
-    runs-on: ubuntu-latest
+    name: Bump uv.lock
     permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
-        with:
-          python-version: "3.14"
-
-      - name: Refresh lockfile
-        run: uv lock --upgrade
-
-      - name: Detect lockfile change
-        id: diff
-        run: |
-          if git diff --quiet uv.lock; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Open bump PR
-        if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
-        with:
-          token: ${{ secrets.DEPS_BUMP_TOKEN }}
-          commit-message: "chore(deps): bump uv.lock (weekly automated refresh)"
-          title: "chore(deps): bump uv.lock"
-          body: |
-            Automated `uv lock --upgrade` — advances pinned `robotsix-*` git
-            dependencies to their latest `@main` commits.
-
-            Triggered by the weekly `deps-bump.yml` schedule.
-          branch: deps/bump-uv-lock
-          labels: dependencies,automated
-          delete-branch: true
+      contents: write       # push bump branch
+      pull-requests: write  # create/update PR
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml@2d57525b51c301fef15576f9d1e962e1c0f18055  # main
+    with:
+      packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"
+      app-id: ${{ vars.RELEASE_APP_ID }}
+      bump-branch: "deps/bump-uv-lock"
+    secrets:
+      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
