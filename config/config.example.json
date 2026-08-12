@@ -74,7 +74,7 @@
     "ci_fix_memory_path": null,
     "ci_fix_request_limit": 120,
     "ci_fix_wait_poll_interval_s": 30.0,
-    "ci_fix_wait_timeout_s": 1500.0,
+    "ci_fix_wait_timeout_s": 900.0,
     "ci_log_max_bytes": 65536,
     "ci_patterns_path": null,
     "ci_transient_max_retries": 3,
