@@ -1,1 +1,1 @@
-The `explore` sub-agent now has a 30-second wall-clock timeout (configurable via `explore_timeout_seconds`) to prevent unbounded exploration. The implement agent's system prompt was updated to discourage multi-part "megaproject" questions in a single `explore` call and steer agents toward focused single questions or `parallel_explore` for batching.
+optimization — The implement agent spent 102 seconds on a single `explore` tool call (15:14:50–15:16:32) 
