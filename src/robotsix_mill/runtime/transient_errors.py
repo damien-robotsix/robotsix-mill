@@ -108,11 +108,59 @@ def _is_transient_message(exc: BaseException) -> bool:
 _MAX_CHAIN_WALK = 10
 
 
+# GitHub answers a throttled caller with 403 (primary quota exhausted or
+# secondary/abuse rate limit) or 429, not 5xx — so the plain
+# ``5xx == transient`` rule below classified throttling as FATAL and every
+# throttled forge call became a BLOCKED ticket needing a manual resume.
+# Observed on 2026-08-11/12: three robotsix-file-hub tickets blocked with a
+# misleading "PR create failed: 422 … a pull request already exists" (the
+# existing-PR lookup that would have recovered the URL was itself throttled),
+# and a robotsix-chat-mobile ticket blocked outright with
+# "Fatal: HTTPStatusError: Client error '403 Forbidden' for url
+# '…/pulls?head=…'".  Nothing about the ticket's work changed; the same call
+# succeeds once the window resets.
+_GITHUB_RATE_LIMIT_BODY_RE = re.compile(
+    r"(rate limit|abuse detection|secondary rate)", re.IGNORECASE
+)
+
+
+def _is_github_rate_limited(response: Any) -> bool:
+    """Return True when *response* is a GitHub throttle, not a real refusal.
+
+    Requires an explicit throttle signal on a 403/429 — an exhausted
+    ``x-ratelimit-remaining``, a ``retry-after`` header, or a rate-limit
+    phrase in the body.  A bare 403 stays fatal so a genuine permission
+    failure (App not installed on the repo, token missing a scope) still
+    blocks instead of retrying forever; a bare 429 keeps its existing
+    fatal classification.
+
+    Header and body values are only trusted when they are the ``str``/``int``
+    the HTTP layer actually produces, so a response object that cannot
+    answer these questions is treated as "no signal" rather than a throttle.
+    """
+    if getattr(response, "status_code", None) not in (403, 429):
+        return False
+
+    headers = getattr(response, "headers", None)
+    get = getattr(headers, "get", None)
+    if callable(get):
+        remaining = get("x-ratelimit-remaining")
+        if isinstance(remaining, (str, int)) and str(remaining).strip() == "0":
+            return True
+        if isinstance(get("retry-after"), (str, int)):
+            return True
+
+    body = getattr(response, "text", None)
+    return bool(isinstance(body, str) and _GITHUB_RATE_LIMIT_BODY_RE.search(body))
+
+
 def _is_transient_httpx(exc: BaseException) -> bool:
     if isinstance(exc, _TRANSIENT_HTTPX_EXCEPTIONS):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
+        if 500 <= exc.response.status_code < 600:
+            return True
+        return _is_github_rate_limited(exc.response)
     return False
 
 

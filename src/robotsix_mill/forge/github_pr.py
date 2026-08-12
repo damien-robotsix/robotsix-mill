@@ -27,6 +27,16 @@ def _api_message(response: Any) -> str:
     return str(message) if message else response.text[:200]
 
 
+def _existing_pr_lookup_unavailable(response: Any) -> bool:
+    """Return True when an existing-PR lookup failed for a retryable reason.
+
+    A 401 (App-token replica flap), 403 (rate/abuse limit) or 429
+    (throttle) means "ask again later", not "no such PR" — the caller
+    must not conclude the PR is absent from an empty list it never got.
+    """
+    return getattr(response, "status_code", None) in (401, 403, 429)
+
+
 def _parse_pr_detail(pr: dict[str, Any]) -> dict[str, Any]:
     """Normalize a GitHub PR detail dict into the standard status shape
     (the same dict ``_get_pr`` / ``pr_status`` return).
@@ -140,16 +150,33 @@ class GitHubForgePRMixin:
                     # head is already fully qualified for cross-fork
                     # PRs (e.g. "fork-owner:branch"); for same-repo
                     # PRs it's just the branch name and needs the
-                    # owner prefix.
-                    head_param = head if ":" in head else f"{owner}:{head}"
+                    # head owner prefix. Use ``_head_owner`` (not the
+                    # upstream ``owner``) so a cross-repo/fork target
+                    # resolves the same way ``_get_pr`` does.
+                    head_owner = getattr(self, "_head_owner", owner) or owner
+                    head_param = head if ":" in head else f"{head_owner}:{head}"
                     q = c.get(
                         url,
                         headers=headers,
-                        params={"head": head_param, "state": "open"},
+                        # ``state=all`` matches ``_get_pr``: a closed PR for
+                        # this head still makes GitHub reject the create, and
+                        # an ``open``-only filter cannot see it.
+                        params={"head": head_param, "state": "all"},
                     )
-                    items = q.json() if q.status_code == 200 else []
-                    if items:
-                        return items[0]["html_url"]
+                    if q.status_code == 200:
+                        items = q.json()
+                        if items:
+                            return items[0]["html_url"]
+                    elif _existing_pr_lookup_unavailable(q):
+                        # The create says a PR already exists but the lookup
+                        # that would recover its URL was itself refused
+                        # (throttled / auth flap). Raising the 422 here is a
+                        # lie — it reads as "PR create failed" and blocks the
+                        # ticket for a human, when in truth the PR is sitting
+                        # there and only the read failed. Surface the lookup
+                        # failure instead so the stage-level classifier sees a
+                        # transient error and retries with backoff.
+                        q.raise_for_status()
                     # No existing PR; treat as a transient "head
                     # invalid" race when the error body says so,
                     # back off and retry. Final attempt falls

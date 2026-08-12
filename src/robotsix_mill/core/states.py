@@ -223,9 +223,13 @@ TRANSITIONS: dict[State, set[State]] = {
         State.BLOCKED,
         State.AWAITING_USER_REPLY,
     },
-    # ci fix: on success → implement_complete (re-verify gates); on failure → blocked; on crash → errored.
+    # ci fix: on success → implement_complete (re-verify gates); on a merge
+    # conflict → rebasing (the rebase agent resolves it and the post-rebase
+    # handler returns via implement_complete, exactly as the merge stage's
+    # own conflict paths do); on failure → blocked; on crash → errored.
     State.FIXING_CI: {
         State.IMPLEMENT_COMPLETE,
+        State.REBASING,
         State.BLOCKED,
         State.ERRORED,
         State.AWAITING_USER_REPLY,

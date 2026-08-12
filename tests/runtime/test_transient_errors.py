@@ -778,3 +778,83 @@ def test_first_full_path_empty_list_is_no_constraint():
     from robotsix_mill.runtime.transient_errors import first_full_path
 
     assert first_full_path([], 5_120) is None
+
+
+# ---------------------------------------------------------------------------
+# _is_github_rate_limited — GitHub answers a throttled caller with 403/429,
+# not 5xx, so these must not fall through to "fatal" and block a ticket.
+# ---------------------------------------------------------------------------
+
+
+def _throttle_response(status, headers=None, text=""):
+    """Build a minimal response double with real str headers and body."""
+    return Mock(status_code=status, headers=dict(headers or {}), text=text)
+
+
+def test_github_403_exhausted_quota_is_transient():
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(403, {"x-ratelimit-remaining": "0"}),
+    )
+    assert _is_transient_httpx(exc) is True
+
+
+def test_github_403_with_retry_after_is_transient():
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(403, {"retry-after": "60"}),
+    )
+    assert _is_transient_httpx(exc) is True
+
+
+def test_github_403_secondary_rate_limit_body_is_transient():
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(
+            403, text='{"message":"You have exceeded a secondary rate limit"}'
+        ),
+    )
+    assert _is_transient_httpx(exc) is True
+
+
+def test_github_429_with_retry_after_is_transient():
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(429, {"retry-after": "30"}),
+    )
+    assert _is_transient_httpx(exc) is True
+
+
+def test_github_403_permission_denied_stays_fatal():
+    """A real refusal must keep blocking — retrying it forever helps nobody."""
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(
+            403, text='{"message":"Resource not accessible by integration"}'
+        ),
+    )
+    assert _is_transient_httpx(exc) is False
+
+
+def test_github_403_with_remaining_quota_stays_fatal():
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(403, {"x-ratelimit-remaining": "4321"}),
+    )
+    assert _is_transient_httpx(exc) is False
+
+
+def test_github_throttle_classified_transient_end_to_end():
+    """classify_stage_error is what decides retry-vs-block for a stage."""
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(403, {"x-ratelimit-remaining": "0"}),
+    )
+    assert classify_stage_error(exc) == "transient"

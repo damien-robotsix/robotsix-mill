@@ -126,6 +126,17 @@ _KIND_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Generic catch-all buckets, tried in order once no exact match and no
+#: near-synonym is configured. Every repo in the fleet configures one of
+#: these, so this is the fallback that keeps a ticket moving when its kind
+#: simply has no home here — e.g. hexarchy configures only
+#: ``feature``/``bugfix``/``misc``, so a ``doc`` fragment matched neither
+#: the exact name nor its ``docs``/``documentation`` aliases and blocked the
+#: ticket on an agent error (2026-08-11,
+#: 20260811T132405Z-docstring-gap-add-docstring-to-dispatch-b1a9).
+_GENERIC_FALLBACK_TYPES = ("misc", "chore", "other", "internal")
+
+
 def _resolve_kind(kind: str, valid_types: tuple[str, ...]) -> str | None:
     """Return the configured type matching *kind*, or ``None``.
 
@@ -133,12 +144,22 @@ def _resolve_kind(kind: str, valid_types: tuple[str, ...]) -> str | None:
     configure is used — a fragment recorded under a near-synonym is far
     better than a blocked ticket, and towncrier renders the section heading
     from the repo's own config either way.
+
+    Failing both, fall back to whichever generic bucket the repo configures.
+    The entry lands under a broader heading than the agent asked for, which
+    is a cosmetic loss; blocking the ticket instead loses the entry *and*
+    costs a human a manual resume. ``None`` is returned only when the repo
+    configures no generic bucket at all, where any guess would be silently
+    dropped by ``towncrier build``.
     """
     if kind in valid_types:
         return kind
     for candidate in _KIND_ALIASES.get(kind, ()):
         if candidate in valid_types:
             return candidate
+    for fallback in _GENERIC_FALLBACK_TYPES:
+        if fallback in valid_types:
+            return fallback
     return None
 
 

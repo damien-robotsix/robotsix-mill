@@ -522,12 +522,23 @@ class CIFixStage(Stage):
         if reason is None:
             return None
 
+        # Hand the conflict to the rebase agent instead of blocking for a
+        # human.  The merge stage already does exactly this from
+        # human_mr_approval and waiting_auto_merge ("Route directly to
+        # REBASING … without operator action"); ci_fix was the one conflict
+        # path that still demanded a manual rebase, which is why 10 tickets
+        # sat blocked on 2026-08-12 with nothing wrong but a moved target
+        # branch.  The rebase stage owns the bound: it retries up to
+        # ``_REBASE_COUNTER``/max_attempts and blocks with its own note when
+        # the conflict really is unresolvable, so this cannot loop forever.
+        # On success it returns IMPLEMENT_COMPLETE, the merge stage
+        # re-verifies the gates, and a still-red CI lands back here.
         log.warning(
-            "%s: merge conflict detected — blocking (mergeable_state=%s)",
+            "%s: merge conflict detected — routing to REBASING (mergeable_state=%s)",
             ticket.id,
             pr.get("mergeable_state") if pr else "N/A",
         )
-        return Outcome(State.BLOCKED, reason)
+        return Outcome(State.REBASING, reason)
 
     def _build_failure_detail(
         self,
