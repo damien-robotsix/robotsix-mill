@@ -436,13 +436,31 @@ async def run_explore(
         )
 
         try:
-            result = await _run_single_explore_attempt(
-                agent=agent,
-                prompt=current_prompt,
-                limits=limits,
-                settings=settings,
+            result = await asyncio.wait_for(
+                _run_single_explore_attempt(
+                    agent=agent,
+                    prompt=current_prompt,
+                    limits=limits,
+                    settings=settings,
+                ),
+                timeout=settings.explore_timeout_seconds,
             )
             return result
+        except TimeoutError:
+            last_error = TimeoutError(
+                f"explore timed out after {settings.explore_timeout_seconds:.0f}s"
+            )
+            log.warning(
+                "explore attempt %d/%d timed out after %.0fs",
+                attempt,
+                _EXPLORE_MAX_ATTEMPTS,
+                settings.explore_timeout_seconds,
+            )
+            if attempt < _EXPLORE_MAX_ATTEMPTS:
+                delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
+                delay += random.uniform(0, delay / 2)
+                await asyncio.sleep(delay)
+            # fall through to next attempt with simplified question
         except UsageLimitExceeded:
             # Budget cap exhausted even after no-tools retry —
             # don't loop, return the failure immediately.

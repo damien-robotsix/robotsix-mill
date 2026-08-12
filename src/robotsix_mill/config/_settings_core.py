@@ -406,6 +406,12 @@ class _CoreSettings(BaseModel):
         description="Maximum output tokens for the exploration sub-agent.",
         json_schema_extra={"advanced": True},
     )
+    explore_timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        description="Wall-clock timeout (seconds) for a single explore sub-agent call.",
+        json_schema_extra={"advanced": True},
+    )
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
     # has its own 100-call budget), so the top-level refine loop should
