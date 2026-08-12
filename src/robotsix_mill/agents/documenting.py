@@ -181,7 +181,7 @@ def run_doc_agent(
         repo_dir,
         settings,
         extra_roots=extra_roots,
-        write_blocked_prefixes=["www/", "src/", "tests/"],
+        write_blocked_prefixes=["www/", "src/"],
     )
     overrides: dict[str, Any] = {}
     if level is not None:
