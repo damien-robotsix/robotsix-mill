@@ -363,6 +363,14 @@ class _CommentMixin(_ServiceBase):
             )
             s.commit()
             s.refresh(ticket)
+            # Clear the stale-spec implement guard so the resumed
+            # ticket doesn't immediately re-block on its own
+            # unchanged fingerprint — the operator's answer IS the
+            # new input.  Best-effort (silently no-ops when
+            # implement.md is absent).
+            from ._transition_mixin import _persist_spec_fingerprint_override
+
+            _persist_spec_fingerprint_override(self.workspace(ticket))
             log.info(
                 "%s: auto-resumed from AWAITING_USER_REPLY → %s "
                 "(all %d ask_user threads closed)",
