@@ -116,7 +116,12 @@ def is_transient(exc: BaseException) -> bool:
     if _is_claude_sdk_degenerate_result(exc):
         return False
     from ..runtime.transient_errors import is_disk_full_error
-    return _is_openrouter_transient(exc) or _is_claude_sdk_transient(exc) or is_disk_full_error(exc)
+
+    return (
+        _is_openrouter_transient(exc)
+        or _is_claude_sdk_transient(exc)
+        or is_disk_full_error(exc)
+    )
 
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
