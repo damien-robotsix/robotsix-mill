@@ -5884,15 +5884,17 @@ def test_triage_prompt_graceful_on_repos_config_failure(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_no_change_needed_routes_to_ready_for_task_without_branch(
+def test_no_change_needed_routes_to_done_for_task_without_branch(
     ctx, service, monkeypatch
 ):
     """A TASK ticket whose refine agent returns ``no_change_needed=True``
-    must land in READY (for implement to verify), never DONE.
+    must land in DONE (skipping implement), since refine already determined
+    no code changes are needed.
 
-    This guards against the bug where a feature-request DRAFT can
-    auto-refine → DONE → CLOSED in one pass as a no-op without ever
-    being implemented.
+    This was historically guarded to READY for TASK tickets without a
+    branch, but the guard was wasting ~$0.13 and ~2286s across 2 tickets
+    by running implement on tickets refine already determined needed no
+    code change.
     """
     ticket = service.create("Add session close feature", "draft body")
     # Pre-condition: the ticket is DRAFT and has no branch.
@@ -5909,11 +5911,11 @@ def test_no_change_needed_routes_to_ready_for_task_without_branch(
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
     out = RefineStage().run(ticket, ctx)
-    # The no_change_path should route to READY, not DONE.
-    assert out.next_state == State.READY, (
-        f"Expected READY for no-op on TASK without branch, got {out.next_state}"
+    # The no_change_path should route to DONE, skipping implement.
+    assert out.next_state == State.DONE, (
+        f"Expected DONE for no-op on TASK without branch, got {out.next_state}"
     )
-    assert "routing to implement" in out.note.lower()
+    assert "no change needed" in out.note.lower()
 
 
 def test_reviewer_agreement_routes_to_ready_for_task_without_branch(

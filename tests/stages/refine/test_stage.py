@@ -2148,9 +2148,8 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
 
     - folds the rationale into the transition note (history) — v1
       moved agent conclusions out of comments;
-    - routes to READY (not DONE) for a TASK ticket without a branch,
-      so implement can verify the "no change needed" claim against
-      the live tree.
+    - routes to DONE, skipping implement, since refine already
+      determined no code changes are needed.
 
     This is the guard that catches the bug where a feature-request
     DRAFT was auto-closed as a no-op without ever being implemented."""
@@ -2179,10 +2178,10 @@ def test_no_change_needed_closes_to_done_with_rationale_comment(
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state is State.READY, (
-        f"Expected READY (no-op TASK without branch), got {out.next_state}"
+    assert out.next_state is State.DONE, (
+        f"Expected DONE (no-op TASK without branch), got {out.next_state}"
     )
-    assert "routing to implement" in out.note.lower()
+    assert "no change needed" in out.note.lower()
     assert "wired correctly" in (out.note or "")
     # No agent-authored comment.
     comments = ctx.service.list_comments(t.id)
@@ -2312,10 +2311,9 @@ def test_no_change_needed_no_branch_proceeds(
     monkeypatch,
 ):
     """A TASK ticket that has never been implemented (no branch set) must
-    route to READY via no_change_needed — the merge check is skipped
-    entirely for first-time refines, but DONE is blocked by the
-    implementation guard (the ticket needs a worker to verify the
-    "no change needed" claim against the live tree)."""
+    route to DONE via no_change_needed — refine already determined no
+    code changes are needed, so there is no need for implement to
+    re-verify."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx)
     # No branch set — this is a first-time refine.
@@ -2331,10 +2329,10 @@ def test_no_change_needed_no_branch_proceeds(
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state == State.READY, (
-        f"Expected READY for no-op TASK without branch, got {out.next_state}"
+    assert out.next_state == State.DONE, (
+        f"Expected DONE for no-op TASK without branch, got {out.next_state}"
     )
-    assert "routing to implement" in (out.note or "")
+    assert "no change needed" in (out.note or "")
 
 
 # ---------------------------------------------------------------------------
@@ -2407,14 +2405,13 @@ def test_no_change_external_fix_from_memory_shortcircuit_builds_spec(
     assert "## Acceptance criteria" in desc
 
 
-def test_no_change_false_positive_still_routes_to_implement(
+def test_no_change_false_positive_still_routes_to_done(
     ctx_factory,
     monkeypatch,
 ):
     """A detector-false-positive rationale ("the reported problem does not
-    exist") must NOT trip the external-fix gate — but as a TASK ticket
-    without a branch, it must still route to READY (not DONE) so
-    implement verifies the claim against the live tree."""
+    exist") must NOT trip the external-fix gate — and as a TASK ticket
+    without a branch, it must route to DONE (skipping implement)."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx)
 
@@ -2432,19 +2429,19 @@ def test_no_change_false_positive_still_routes_to_implement(
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state == State.READY, (
-        f"Expected READY for no-op TASK without branch, got {out.next_state}"
+    assert out.next_state == State.DONE, (
+        f"Expected DONE for no-op TASK without branch, got {out.next_state}"
     )
-    assert "routing to implement" in (out.note or "")
+    assert "no change needed" in (out.note or "")
 
 
-def test_no_change_info_only_still_routes_to_implement(
+def test_no_change_info_only_routes_to_done(
     ctx_factory,
     monkeypatch,
 ):
     """An information-only rationale ("post a comment documenting why no
-    change is needed") must NOT trip the external-fix gate — but as a
-    TASK ticket without a branch, it must route to READY (not DONE)."""
+    change is needed") must NOT trip the external-fix gate — and as a
+    TASK ticket without a branch, it must route to DONE (skipping implement)."""
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="false")
     t = _ticket(ctx)
 
@@ -2462,10 +2459,10 @@ def test_no_change_info_only_still_routes_to_implement(
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state == State.READY, (
-        f"Expected READY for no-op TASK without branch, got {out.next_state}"
+    assert out.next_state == State.DONE, (
+        f"Expected DONE for no-op TASK without branch, got {out.next_state}"
     )
-    assert "routing to implement" in (out.note or "")
+    assert "no change needed" in (out.note or "")
 
 
 @pytest.mark.parametrize(
