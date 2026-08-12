@@ -149,27 +149,22 @@ title_format = "## [{version}](https://github.com/damien-robotsix/robotsix-mill/
 # two-tool conflict at release time.
 
 [[tool.towncrier.type]]
-directory = "feature"
 name = "Features"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "bugfix"
 name = "Bug Fixes"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "doc"
 name = "Documentation"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "removal"
 name = "Removals"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "misc"
 name = "Miscellaneous"
 showcontent = false
 
