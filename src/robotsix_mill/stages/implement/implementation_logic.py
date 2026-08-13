@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -1115,9 +1116,10 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             # loss. Blocking those stranded 7 tickets across five boards
             # (observed 2026-08-02..08-07), five of them on this exact path.
             _target = target_branch_for(ctx.settings, ctx.repo_config)
+            _branch_changed = git_ops.changed_source_files(repo_dir, _target)
             _already_landed = short_circuit_verify.claimed_edits_already_on_branch(
                 new_messages=new_msgs,
-                branch_changed_files=git_ops.changed_source_files(repo_dir, _target),
+                branch_changed_files=_branch_changed,
             )
             if _already_landed and edit_tools_rs:
                 log.info(
@@ -1128,9 +1130,45 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                     ", ".join(edit_tools_rs),
                     _target,
                 )
+            # A branch that already carries committed work is not "lost work",
+            # even when one claimed path is missing from its diff.  The guard
+            # below asks whether EVERY claimed edit landed; a single stray path
+            # — a changelog fragment a later pass renamed away, a file the agent
+            # wrote and then reverted — flipped that to False and blocked the
+            # whole ticket.  Measured on 2026-08-13: four of the five tickets
+            # blocked on this path had 2-4 commits and 2-6 changed files sitting
+            # in their workspace, stranded (robotsix-chat a78d/a801/3f3e,
+            # robotsix-mill 8b2c).  The fifth (959e) had an empty branch, which
+            # is the shape the guard is actually for — so gate on that instead
+            # and let a branch with real commits flow on to CODE_REVIEW →
+            # deliver, exactly as the fall-through below already intends.
+            # ``changed_source_files`` returns [] on any git error, so an
+            # unreadable branch still blocks: the guard fails closed as before.
+            if edit_tools_rs and not _already_landed and _branch_changed:
+                # Name the paths that failed the all()-check, so the next
+                # reader sees which edit went missing rather than only that
+                # one did. ``detect_missing_claimed_files`` is deliberately
+                # narrower (it reports only files the summary asserts as
+                # landed), so it is the wrong lens for this log line.
+                _on_branch = {os.path.basename(f) for f in _branch_changed if f}
+                _absent = sorted(
+                    base
+                    for base in short_circuit_verify.run_claimed_edited_paths(new_msgs)
+                    if base not in _on_branch
+                )
+                log.warning(
+                    "%s: claimed edit(s) absent from the branch diff vs %s (%s), "
+                    "but the branch carries %d changed file(s) across real "
+                    "commits — proceeding to review rather than blocking",
+                    ticket.id,
+                    _target,
+                    ", ".join(_absent) or "none",
+                    len(_branch_changed),
+                )
             if (
                 edit_tools_rs
                 and not _already_landed
+                and not _branch_changed
                 and (cls._edits_formatter_reverted(repo_dir, new_msgs) is not True)
             ):
                 tool_list = ", ".join(edit_tools_rs)
