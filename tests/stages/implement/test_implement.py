@@ -4868,3 +4868,128 @@ def test_automatic_fingerprint_refusal_message_includes_force_retry_remedy(
     )
     assert "fingerprint" in out.note
     assert "spec unchanged" in out.note.lower()
+
+
+# ---------------------------------------------------------------------------
+# resume-with-ahead edit-claim guard: a branch that already carries committed
+# work is not "lost work", even when one claimed edit is missing from its diff.
+#
+# Measured 2026-08-13: four of the five tickets blocked on this path had 2-4
+# commits and 2-6 changed files sitting in their workspace, stranded
+# (robotsix-chat a78d/a801/3f3e, robotsix-mill 8b2c). The fifth (959e) had an
+# empty branch — the shape the guard is actually for.
+# ---------------------------------------------------------------------------
+
+
+def _edit_msgs(*paths: str) -> bytes:
+    """A new_messages payload claiming an ``edit_file`` call per path."""
+    import json as _json
+
+    parts: list[dict] = []
+    for p in paths:
+        parts.append(
+            {
+                "part_kind": "tool-call",
+                "tool_name": "edit_file",
+                "args": {"path": p},
+                "tool_call_id": f"call_{p}",
+            }
+        )
+    return _json.dumps([{"parts": parts}]).encode()
+
+
+def test_resume_with_ahead_missing_claimed_edit_does_not_block(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Branch has real commits; one claimed edit is absent → proceed, not BLOCK.
+
+    This is the stranded-work shape: prior passes committed the
+    implementation, the resume pass re-touched files and also claimed an
+    edit that is not in the branch diff (a changelog fragment renamed away,
+    a file written then reverted). Blocking discards committed work and
+    needs a human; the branch is intact, so it must flow on to review.
+    """
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="true"
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _run_first(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("implemented")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_first)
+    assert ImplementStage().run(t, ctx).next_state is State.CODE_REVIEW
+
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+
+    # Resume: no new working-tree changes, but the agent claims an edit to a
+    # file that never made it onto the branch.
+    def _run_resume(*, repo_dir, **_kwargs):
+        del repo_dir
+        return (
+            "Re-applied the change; also wrote a changelog fragment.",
+            [],
+            "",
+            None,
+            _edit_msgs("never_landed.md"),
+            False,
+            "",
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_resume)
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.CODE_REVIEW
+    assert "edit-claim contradiction" not in (out.note or "")
+
+
+def test_resume_empty_branch_missing_claimed_edit_still_blocks(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """No commits on the branch + a claimed edit that vanished → still BLOCK.
+
+    Keeps the guard's teeth where the evidence says it belongs: nothing was
+    committed, so an edit call that left no trace really is lost work.
+    """
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="true"
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    # First pass commits nothing — the branch stays level with origin/main.
+    def _run_noop(*, repo_dir, **_kwargs):
+        del repo_dir
+        return ("nothing yet", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_noop)
+    ImplementStage().run(t, ctx)
+
+    t = ctx.service.get(t.id)
+    ctx.service.set_review_rounds(t.id, 1)
+
+    def _run_resume(*, repo_dir, **_kwargs):
+        del repo_dir
+        return (
+            "Edited the file.",
+            [],
+            "",
+            None,
+            _edit_msgs("vanished.py"),
+            False,
+            "",
+        )
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run_resume)
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
