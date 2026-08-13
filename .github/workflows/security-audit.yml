@@ -191,8 +191,33 @@ jobs:
           persist-credentials: false
 
       - name: Lint workflow syntax (actionlint)
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          # SHA-256 of actionlint_1.7.12_linux_amd64.tar.gz, copied from the
+          # upstream release's checksums.txt. Verifying it here catches a
+          # truncated/corrupted download (run 31623903211 received a 107-byte
+          # non-gzip body) with a clear error instead of a cryptic
+          # `tar: stdin: not in gzip format`.
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
         run: |
-          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12
+          set -euo pipefail
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          # Download directly (no `bash <(curl …)` from a mutable ref) and
+          # verify the pinned checksum on every attempt. A flaky CDN response
+          # can return HTTP 200 with a short body that curl treats as success,
+          # so retry on checksum mismatch rather than feeding bad bytes to tar.
+          for attempt in 1 2 3; do
+            if curl --fail -sSL "$url" -o actionlint.tar.gz && \
+               echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c - >/dev/null 2>&1; then
+              break
+            fi
+            echo "actionlint download/verification failed (attempt ${attempt}/3); retrying…" >&2
+            sleep 5
+          done
+          # Final check outside the loop: if all retries failed, fail the step
+          # with an explicit checksum error rather than a tar backtrace.
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz actionlint
           ./actionlint -color
 
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
