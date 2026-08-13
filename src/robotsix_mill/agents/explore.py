@@ -436,13 +436,31 @@ async def run_explore(
         )
 
         try:
-            result = await _run_single_explore_attempt(
-                agent=agent,
-                prompt=current_prompt,
-                limits=limits,
-                settings=settings,
+            result = await asyncio.wait_for(
+                _run_single_explore_attempt(
+                    agent=agent,
+                    prompt=current_prompt,
+                    limits=limits,
+                    settings=settings,
+                ),
+                timeout=settings.explore_timeout_seconds,
             )
             return result
+        except TimeoutError:
+            last_error = TimeoutError(
+                f"explore timed out after {settings.explore_timeout_seconds:.0f}s"
+            )
+            log.warning(
+                "explore attempt %d/%d timed out after %.0fs",
+                attempt,
+                _EXPLORE_MAX_ATTEMPTS,
+                settings.explore_timeout_seconds,
+            )
+            if attempt < _EXPLORE_MAX_ATTEMPTS:
+                delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
+                delay += random.uniform(0, delay / 2)
+                await asyncio.sleep(delay)
+            # fall through to next attempt with simplified question
         except UsageLimitExceeded:
             # Budget cap exhausted even after no-tools retry —
             # don't loop, return the failure immediately.
@@ -499,13 +517,17 @@ def make_explore_tool(
     """
 
     async def explore(question: str, known_context: str | None = None) -> str:
-        """Ask a fresh, context-isolated sub-agent a complex, multi-step
-        question about the repository — questions that would require
-        navigating several files to answer. For simple, single-step
-        lookups (one file path, one symbol name), use read_file or
-        list_dir directly instead. Returns concise paths/symbols/
-        line-ranges, never whole files. Batch related questions into a
-        single call where possible.
+        """Ask a fresh, context-isolated sub-agent ONE focused question
+        about the repository. Keep each call to a single, self-contained
+        topic — a multi-part megaproject drags latency and cost for no
+        gain. When you genuinely need answers to several INDEPENDENT
+        questions at once, use ``parallel_explore`` instead, which
+        batches them efficiently.
+
+        For simple, single-step lookups (one file path, one symbol name),
+        use ``read_file`` or ``list_dir`` directly — this tool is for
+        questions that require navigating several files. Returns concise
+        paths/symbols/line-ranges, never whole files.
 
         Optionally pass ``known_context``: COMPACT facts you have ALREADY
         gathered (file paths you have read, symbol names, line ranges you

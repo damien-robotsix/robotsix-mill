@@ -1524,6 +1524,14 @@
           "title": "Explore Request Limit",
           "type": "integer"
         },
+        "explore_timeout_seconds": {
+          "advanced": true,
+          "default": 30.0,
+          "description": "Wall-clock timeout (seconds) for a single explore sub-agent call.",
+          "minimum": 1.0,
+          "title": "Explore Timeout Seconds",
+          "type": "number"
+        },
         "fetch_image": {
           "advanced": true,
           "default": "curlimages/curl:8.17.0",

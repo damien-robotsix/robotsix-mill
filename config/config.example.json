@@ -149,6 +149,7 @@
     "epic_dedup_lookback_days": 7,
     "explore_max_tokens": 4096,
     "explore_request_limit": 100,
+    "explore_timeout_seconds": 30.0,
     "fetch_image": "curlimages/curl:8.17.0",
     "forge_parity_interval_seconds": 604800,
     "forge_parity_periodic": true,

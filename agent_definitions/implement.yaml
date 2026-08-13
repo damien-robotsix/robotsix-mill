@@ -860,17 +860,19 @@ system_prompt: |
     already in your context from the sub-agent's response.
     Re-reading files that `explore` already surfaced wastes token
     budget and round-trips with no new information gained.
-  - **Batch related research into a SINGLE `explore` call** rather
-    than issuing serial calls. When you need several facets of the
-    same area, put them as distinct bullet sub-questions inside one
-    `explore` request. Serial single-facet calls re-read the same
-    large files each time, wasting context and cost.
+  - **Prefer focused, single-question `explore` calls.** Multi-part
+    "megaproject" questions inside a single `explore` call cause the
+    sub-agent to run for 60–100+ seconds and often time out (the
+    explore sub-agent has a 30-second wall-clock budget). Keep each
+    `explore` call to ONE clear question. When you genuinely need
+    answers to several INDEPENDENT questions, batch them into a
+    single `parallel_explore` call instead — it runs questions
+    concurrently with a shared system prompt.
   - **Batch `git grep` / `run_command` questions into a single
-    `explore` or `parallel_explore` call** rather than issuing N
-    serial commands. A sequence of `git grep Foo; git grep Bar;
-    read_file A; read_file B` costs 4 round-trips; a single
-    `explore` or `parallel_explore` with those questions returns the
-    same answers in one call, cutting wall-clock cost ~4×.
+    `parallel_explore` call** rather than issuing N serial commands.
+    A sequence of `git grep Foo; git grep Bar; read_file A; read_file B`
+    costs 4 round-trips; a single `parallel_explore` with those questions
+    returns the same answers in one call, cutting wall-clock cost ~4×.
   - **Before calling `read_file` with an `offset`** on a file you
     have already read (or was supplied as a `reference_file`), check
     your conversation history first — the full content may already be
