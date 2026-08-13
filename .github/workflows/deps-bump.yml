@@ -1,0 +1,32 @@
+# CRITICAL: This workflow pushes commits and creates PRs, so it MUST use a
+# caller-supplied credential that is NOT the default GITHUB_TOKEN.
+# GitHub deliberately suppresses workflow runs for events created by
+# GITHUB_TOKEN to prevent recursion — CI workflows will NOT fire on the
+# bump PR if you pass GITHUB_TOKEN.
+#
+# The reusable workflow mints an installation token from the shared
+# GitHub App (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation,
+# bot identity.
+
+name: Dependency Bump
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions: {}  # no workflow-level default; the job grants its own
+
+jobs:
+  bump:
+    name: Bump uv.lock
+    permissions:
+      contents: write       # push bump branch
+      pull-requests: write  # create/update PR
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml@2d57525b51c301fef15576f9d1e962e1c0f18055  # main
+    with:
+      packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"
+      app-id: ${{ vars.RELEASE_APP_ID }}
+      bump-branch: "deps/bump-uv-lock"
+    secrets:
+      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
