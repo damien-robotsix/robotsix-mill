@@ -21,12 +21,22 @@ import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
 from ..config import RepoConfig
 
 log = logging.getLogger(__name__)
+
+
+# Instrumentation context for the per-step usage recorder.  The stage
+# label and board id of the in-scope root span are set by
+# start_ticket_root_span so record_step_usage can stamp stage×model
+# attribution into every metric record without threading those values
+# through each run_agent / acall_with_retry call site.
+_current_stage_name: ContextVar[str] = ContextVar("mill.stage_name", default="")
+_current_board_id: ContextVar[str] = ContextVar("mill.board_id", default="")
 
 
 def _resolve_mill_langfuse() -> tuple[str, str, str, str, str] | None:
@@ -169,6 +179,25 @@ def current_ticket_id() -> str | None:
     if session and SESSION_SEP in session:
         return session.split(SESSION_SEP, 1)[1]
     return session
+
+
+def current_stage_name() -> str:
+    """Return the stage label in scope for the current root span, or ``""``.
+
+    Set by :func:`start_ticket_root_span` so the per-step usage recorder
+    can stamp stage×model attribution into each metric record without
+    threading the label through every ``run_agent`` call site.
+    """
+    return _current_stage_name.get()
+
+
+def current_board_id() -> str:
+    """Return the board id in scope for the current root span, or ``""``.
+
+    Set by :func:`start_ticket_root_span` from ``repo_config.board_id``;
+    empty for flows without a board (CLI commands, some periodic passes).
+    """
+    return _current_board_id.get()
 
 
 def _build_langfuse_url(
@@ -554,6 +583,17 @@ def start_ticket_root_span(
         stack.enter_context(_llmio_tracing.langfuse_session(session_id))
         if pk:
             stack.enter_context(_llmio_tracing.langfuse_project(pk))
+        # Instrumentation context so record_step_usage can attribute every
+        # per-call token metric to stage×model without call-site threading.
+        _stage_token = _current_stage_name.set(stage_name)
+        stack.callback(_current_stage_name.reset, _stage_token)
+        board_id = (
+            repo_config.board_id
+            if (repo_config is not None and repo_config.board_id)
+            else ""
+        )
+        _board_token = _current_board_id.set(board_id)
+        stack.callback(_current_board_id.reset, _board_token)
         tracer = trace.get_tracer("robotsix-mill")
         attrs: dict[str, str] = {"session.id": session_id}
         if extra_attributes:
@@ -596,18 +636,33 @@ def record_step_usage(
     is recorded so the cost-analyst can distinguish subscription
     (estimate-only) cost from real marginal cost.
 
+    The record also carries ``stage_name`` and ``timestamp``, plus
+    ``ticket_id`` / ``board_id`` when in scope, read from the
+    instrumentation context set by :func:`start_ticket_root_span`.  This
+    makes stage×model aggregates (call count, total/mean/p50/p95/max
+    input tokens per call) queryable from observation metadata alone —
+    no prompt payloads are stored or fetched.
+
     All parameters are keyword-only to keep call sites self-documenting.
     No-op when tracing is disabled or no span is recording.
     """
     import json as _json
 
     data: dict[str, Any] = {
-        "request_count": request_count,
+        "stage_name": current_stage_name(),
         "model_name": model_name,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "request_count": request_count,
         "retry_count": retry_count,
+        "timestamp": datetime.now(UTC).isoformat(),
     }
+    ticket_id = current_ticket_id()
+    if ticket_id:
+        data["ticket_id"] = ticket_id
+    board_id = current_board_id()
+    if board_id:
+        data["board_id"] = board_id
     if retry_reason:
         data["retry_reason"] = retry_reason
     if tool_calls:
