@@ -9,6 +9,7 @@ mill-specific surface that stays: the export-failure registry, the
 """
 
 import contextlib
+import json
 import os
 from datetime import UTC
 from datetime import datetime as _real_datetime
@@ -835,3 +836,142 @@ def test_set_current_span_attribute_noop_on_import_error(monkeypatch):
 
     # Should not raise.
     tracing_mod.set_current_span_attribute("test.key", "value")
+
+
+# --- stage×model instrumentation context --------------------------------
+
+
+def test_start_ticket_root_span_sets_instrumentation_context(monkeypatch):
+    """The root span sets current_stage_name / current_board_id for the
+    duration of the block and clears them afterwards."""
+    monkeypatch.setattr(tracing, "_ensure_tracing", lambda repo_config=None: None)
+    tracing._provider_ready = True
+    monkeypatch.setattr(
+        _llmio(), "langfuse_session", lambda sid: _record_cm([], "session", sid)
+    )
+    monkeypatch.setattr(
+        _llmio(), "langfuse_project", lambda pk: _record_cm([], "project", pk)
+    )
+    import opentelemetry.trace as otel_trace
+
+    monkeypatch.setattr(otel_trace, "get_tracer", lambda name: _FakeTracer())
+
+    rc = RepoConfig(
+        repo_id="r",
+        board_id="board-b",
+        langfuse_project_name="proj",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+    )
+    assert tracing.current_stage_name() == ""
+    assert tracing.current_board_id() == ""
+    with tracing.start_ticket_root_span("ticket-1", "implement", repo_config=rc):
+        assert tracing.current_stage_name() == "implement"
+        assert tracing.current_board_id() == "board-b"
+    assert tracing.current_stage_name() == ""
+    assert tracing.current_board_id() == ""
+
+
+def test_record_step_usage_embeds_stage_model_metric(monkeypatch):
+    """record_step_usage emits a compact JSON metric carrying stage_name,
+    model_name, token counts, timestamp, ticket and board id — no prompt
+    text."""
+    captured: dict = {}
+
+    class FakeSpan:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, key, value):
+            captured[key] = value
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", lambda: FakeSpan())
+    monkeypatch.setattr(
+        _llmio(), "current_session", lambda: "r · 20260814T123456Z-my-ticket-ab12"
+    )
+    stage_token = tracing._current_stage_name.set("implement")
+    board_token = tracing._current_board_id.set("board-b")
+    try:
+        tracing.record_step_usage(
+            request_count=3,
+            model_name="openrouter/deepseek/deepseek-v4-pro",
+            input_tokens=97_000,
+            output_tokens=1_200,
+            cache_read_input_tokens=40_000,
+            backend="openrouter",
+        )
+    finally:
+        tracing._current_stage_name.reset(stage_token)
+        tracing._current_board_id.reset(board_token)
+
+    payload = captured["langfuse.observation.metadata.mill.step_usage"]
+    metric = json.loads(payload)
+    assert metric["stage_name"] == "implement"
+    assert metric["model_name"] == "openrouter/deepseek/deepseek-v4-pro"
+    assert metric["input_tokens"] == 97_000
+    assert metric["output_tokens"] == 1_200
+    assert metric["cache_read_input_tokens"] == 40_000
+    assert metric["backend"] == "openrouter"
+    assert metric["ticket_id"] == "20260814T123456Z-my-ticket-ab12"
+    assert metric["board_id"] == "board-b"
+    assert metric["timestamp"]  # ISO-8601, present on every record
+    # The metric must be small and prompt-free.
+    assert len(payload) < 512
+    assert "prompt" not in payload.lower()
+
+
+def test_record_step_usage_aggregates_deepseek_by_stage(monkeypatch):
+    """Sample query: grouping emitted records by stage×model recovers
+    deepseek-v4-pro input-token totals per stage (the 24h-window query
+    just adds a timestamp filter on top of this grouping)."""
+    records: list[dict] = []
+
+    class FakeSpan:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, key, value):
+            if key == "langfuse.observation.metadata.mill.step_usage":
+                records.append(json.loads(value))
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", lambda: FakeSpan())
+    monkeypatch.setattr(
+        _llmio(), "current_session", lambda: "r · 20260814T123456Z-sample-ab12"
+    )
+
+    def emit(stage: str, model: str, tokens: int) -> None:
+        stage_token = tracing._current_stage_name.set(stage)
+        try:
+            tracing.record_step_usage(
+                request_count=1,
+                model_name=model,
+                input_tokens=tokens,
+                output_tokens=50,
+            )
+        finally:
+            tracing._current_stage_name.reset(stage_token)
+
+    # deepseek-v4-pro volume across two stages, plus a v4-flash call to
+    # prove the model dimension splits too.
+    emit("implement", "openrouter/deepseek/deepseek-v4-pro", 100_000)
+    emit("implement", "openrouter/deepseek/deepseek-v4-pro", 60_000)
+    emit("review", "openrouter/deepseek/deepseek-v4-pro", 40_000)
+    emit("implement", "openrouter/deepseek/deepseek-v4-flash", 30_000)
+
+    totals: dict[tuple[str, str], int] = {}
+    counts: dict[tuple[str, str], int] = {}
+    for rec in records:
+        key = (rec["stage_name"], rec["model_name"])
+        totals[key] = totals.get(key, 0) + rec["input_tokens"]
+        counts[key] = counts.get(key, 0) + 1
+
+    pro = "openrouter/deepseek/deepseek-v4-pro"
+    flash = "openrouter/deepseek/deepseek-v4-flash"
+    assert totals[("implement", pro)] == 160_000
+    assert counts[("implement", pro)] == 2
+    assert totals[("review", pro)] == 40_000
+    assert totals[("implement", flash)] == 30_000
+    # Per-call values are preserved so mean/p50/p95/max are derivable.
+    per_call = [r["input_tokens"] for r in records if r["model_name"] == pro]
+    assert max(per_call) == 100_000
+    assert sum(per_call) / len(per_call) == 200_000 / 3
