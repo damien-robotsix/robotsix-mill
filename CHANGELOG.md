@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.7.0...v0.8.0) (2026-08-14)
+
+
+### Features
+
+* Emit per-call LLM input-token metric tagged (stage_name, model) for cost attribution (20260814T213129Z-emit-per-call-llm-input-token-metric-tag-1e81) ([#2899](https://github.com/damien-robotsix/robotsix-mill/issues/2899)) ([8a926cb](https://github.com/damien-robotsix/robotsix-mill/commit/8a926cb87f93a24801223df8f73a07847e6cca00))
+
 ## [0.7.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.6.0...v0.7.0) (2026-08-14)
 
 
