@@ -40,22 +40,13 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         # -- Fields with no JSON entry (yet) — listed here so the
         #    invariant passes at HEAD; each should eventually gain a
         #    JSON entry or be explicitly documented as env-only --
-        "refine_delta_reuse_enabled",
         "trace_review_max_inspector_runs_per_pass",
-        "max_events_per_ticket",
-        "db_maintenance_periodic",
-        "db_maintenance_interval_seconds",
-        "ticket_state_cycle_limit",
-        "deliver_max_identical_blocks",
         # -- ci-fix agent timeout: default 1800 wraps the LLM agent call
         #    inside the ci-fix stage.  Committing a JSON default would
         #    be misleading because the live value SHOULD be smaller than
         #    the worker's stage_timeout_seconds and the operator tunes
         #    it per-deployment. --
         "ci_fix_agent_timeout_seconds",
-        # -- Periodic agent settings (presence-file driven; no JSON entry) --
-        "repo_description_sync_periodic",
-        "repo_description_sync_interval_seconds",
         # -- packaged resource dirs — defaults resolve via
         #    importlib.resources to machine-specific absolute paths, so a
         #    committed template value can only be wrong somewhere.  A
@@ -84,16 +75,8 @@ MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
     "sandbox_push_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "langfuse": "Langfuse config — canonical block at top-level langfuse:, not a flat SecretStr field",
     "repos": "Repos registry — not a flat setting field",
-    "refine_delta_reuse_enabled": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
     "trace_review_max_inspector_runs_per_pass": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
-    "max_events_per_ticket": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
-    "db_maintenance_periodic": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
-    "db_maintenance_interval_seconds": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
-    "ticket_state_cycle_limit": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
-    "deliver_max_identical_blocks": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
     "ci_fix_agent_timeout_seconds": "ci-fix agent timeout — default 1800 wraps the LLM agent call inside the ci-fix stage. Committing a JSON default would be misleading because the live value SHOULD be smaller than the worker's stage_timeout_seconds and the operator tunes it per-deployment",
-    "repo_description_sync_periodic": "Periodic agent setting — presence-file driven; no JSON entry",
-    "repo_description_sync_interval_seconds": "Periodic agent setting — presence-file driven; no JSON entry",
     "skills_dir": "Packaged resource dir — default resolves via importlib.resources to machine-specific absolute paths, so a committed template value can only be wrong somewhere",
     "language_instructions_dir": "Packaged resource dir — default resolves via importlib.resources to machine-specific absolute paths",
 }
