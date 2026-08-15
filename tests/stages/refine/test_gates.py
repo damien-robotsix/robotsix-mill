@@ -1393,6 +1393,118 @@ def test_workflow_portability_gate_no_match_returns_none(ctx_factory):
     assert out is None
 
 
+# ===========================================================================
+# Scope-triage repo-awareness gate
+# ===========================================================================
+
+
+def _make_repo(tmp_path: Path, files: dict[str, str]) -> Path:
+    """Create a single-commit git repo at ``tmp_path/repo``."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "t@example.com"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    for rel, content in files.items():
+        path = repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+    return repo
+
+
+def test_scope_triage_repo_awareness_rejects_ci_fix_misroute(ctx_factory, tmp_path):
+    """A mill stage name absent from the repo is rejected pre-implement."""
+    ctx = ctx_factory()
+    title = "cap ci_fix stage LLM input"
+    body = "cap ci_fix stage LLM input to bound token usage"
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert "ci_fix" in out.note
+    assert "wrong board" in out.note
+
+
+def test_scope_triage_repo_awareness_rejects_implement_stage_misroute(
+    ctx_factory, tmp_path
+):
+    """Generic-word stage names are flagged via the '<name> stage' phrase."""
+    ctx = ctx_factory()
+    title = "bound implement stage LLM input"
+    body = "bound implement stage LLM input to a per-call cap"
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert "implement stage" in out.note
+
+
+def test_scope_triage_repo_awareness_allows_generic_terms(ctx_factory, tmp_path):
+    """Generic words like fix/test/config never trigger the gate."""
+    ctx = ctx_factory()
+    title = "Fix login form"
+    body = (
+        "Fix the login form so the user can authenticate and update the "
+        "config file to point at the new endpoint."
+    )
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is None
+
+
+def test_scope_triage_repo_awareness_allows_term_present_in_repo(ctx_factory, tmp_path):
+    """A domain term that IS in the repo does not trigger a rejection."""
+    ctx = ctx_factory()
+    title = "cap ci_fix stage LLM input"
+    body = "cap ci_fix stage LLM input to bound token usage"
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(
+        tmp_path,
+        {
+            "src/game.py": "def ci_fix():\n    return 1\n",
+            "docs/pipeline.md": "The ci_fix stage runs after CI fails.",
+        },
+    )
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is None
+
+
+def test_scope_triage_repo_awareness_skips_without_repo(ctx_factory):
+    """With no repo to grep, the gate falls through to the LLM triage."""
+    ctx = ctx_factory()
+    title = "cap ci_fix stage LLM input"
+    body = "cap ci_fix stage LLM input to bound token usage"
+    t = _ticket(ctx, title=title, body=body)
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, None)
+    assert out is None
+
+
+def test_scope_triage_repo_awareness_skips_meta_board(ctx_factory, tmp_path):
+    """Meta-board tickets are cross-repo — the gate must not grep them."""
+    ctx = ctx_factory()
+    title = "cap ci_fix stage LLM input"
+    body = "cap ci_fix stage LLM input to bound token usage"
+    t = _ticket(ctx, title=title, body=body)
+    t.board_id = "meta"
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is None
+
+
 def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
     ctx = ctx_factory(auto_approve_enabled=True)
     body = "Update `docs/api.md` and fix `src/api.py` handler"
