@@ -12,7 +12,7 @@ def _no_sleep(_):  # never actually wait in tests
 def test_returns_passed_when_ci_green():
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: ("success", ""),
+        ci_status_fn=lambda attempt: ("success", ""),
         sleep=_no_sleep,
     )
     out = tool("mill/x")
@@ -22,7 +22,7 @@ def test_returns_passed_when_ci_green():
 def test_returns_failing_with_summary():
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: ("failure", "ruff format would reformat foo.py"),
+        ci_status_fn=lambda attempt: ("failure", "ruff format would reformat foo.py"),
         sleep=_no_sleep,
     )
     out = tool("mill/x")
@@ -31,10 +31,28 @@ def test_returns_failing_with_summary():
     assert "ruff format" in out
 
 
+def test_passes_attempt_number_to_status_fn():
+    seen: list[int] = []
+
+    def status(attempt):
+        seen.append(attempt)
+        return ("failure", f"attempt {attempt} still broken")
+
+    tool = build_ci_wait_tool(
+        branch="mill/x",
+        ci_status_fn=status,
+        max_iterations=3,
+        sleep=_no_sleep,
+    )
+    tool("mill/x")
+    tool("mill/x")
+    assert seen == [1, 2]
+
+
 def test_returns_gone_when_pr_missing():
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: ("gone", ""),
+        ci_status_fn=lambda attempt: ("gone", ""),
         sleep=_no_sleep,
     )
     assert tool("mill/x").startswith("CI_GONE")
@@ -43,7 +61,7 @@ def test_returns_gone_when_pr_missing():
 def test_branch_guardrail_rejects_foreign_branch():
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: ("success", ""),
+        ci_status_fn=lambda attempt: ("success", ""),
         sleep=_no_sleep,
     )
     out = tool("main")
@@ -55,7 +73,7 @@ def test_iteration_cap_reached_after_max_calls():
     # Always-failing CI: the agent keeps re-checking until the cap.
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: ("failure", "still broken"),
+        ci_status_fn=lambda attempt: ("failure", "still broken"),
         max_iterations=3,
         sleep=_no_sleep,
     )
@@ -78,7 +96,7 @@ def test_pending_polls_then_times_out():
 
     polls = {"n": 0}
 
-    def status():
+    def status(attempt):
         polls["n"] += 1
         return ("pending", "")
 
@@ -100,7 +118,7 @@ def test_pending_then_success_is_passed():
     seq = iter([("pending", ""), ("success", "")])
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: next(seq),
+        ci_status_fn=lambda attempt: next(seq),
         timeout_s=10_000.0,
         poll_interval_s=1.0,
         sleep=_no_sleep,
@@ -125,7 +143,7 @@ def test_wait_for_ci_emits_span(monkeypatch):
     monkeypatch.setattr(cwt, "trace_stage", fake_trace_stage)
     tool = build_ci_wait_tool(
         branch="mill/x",
-        ci_status_fn=lambda: ("success", ""),
+        ci_status_fn=lambda attempt: ("success", ""),
         sleep=lambda _: None,
     )
     result = tool("mill/x")

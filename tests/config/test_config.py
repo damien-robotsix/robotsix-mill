@@ -435,6 +435,20 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("doc_memory_path", "MILL_DOC_MEMORY_PATH", "/mem/doc.md", Path("/mem/doc.md")),
     # --- ci-fix request limit ---
     ("ci_fix_request_limit", "MILL_CI_FIX_REQUEST_LIMIT", "80", 80),
+    (
+        "ci_fix_log_context_max_chars",
+        "MILL_CI_FIX_LOG_CONTEXT_MAX_CHARS",
+        "8192",
+        8192,
+    ),
+    (
+        "ci_fix_iteration_summary_max_chars",
+        "MILL_CI_FIX_ITERATION_SUMMARY_MAX_CHARS",
+        "1500",
+        1500,
+    ),
+    ("ci_fix_max_annotations", "MILL_CI_FIX_MAX_ANNOTATIONS", "20", 20),
+    ("ci_fix_max_alerts", "MILL_CI_FIX_MAX_ALERTS", "20", 20),
     # --- pipeline limits ---
     ("max_events_per_ticket", "MILL_MAX_EVENTS_PER_TICKET", "100", 100),
     ("max_comments_per_ticket", "MILL_MAX_COMMENTS_PER_TICKET", "300", 300),

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from ..core.models import Ticket
     from .base import StageContext
 
+from ..core.text_utils import head_tail_keep
 from ..core.workspace import (
     read_counter as _read_counter,
 )
@@ -48,20 +49,72 @@ def _workspace_repo_dir(ctx: StageContext, ticket: Ticket) -> str | None:
     return str(repo)
 
 
-def _format_code_scanning_alerts(alerts: list[dict[str, Any]]) -> str:
+def _clip_text(text: str, max_chars: int) -> str:
+    """Clip *text* to *max_chars* characters, preferring a line boundary."""
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    cut = text.rfind("\n", 0, max_chars)
+    clipped = text[:cut] if cut != -1 else text[:max_chars]
+    omitted = len(text) - len(clipped)
+    return f"{clipped}\n[... {omitted} chars omitted]"
+
+
+def _bounded_multi_run_log_text(
+    run_blocks: list[tuple[str, str]],
+    max_chars: int,
+) -> str:
+    """Concatenate per-run ``(header, log_body)`` blocks under *max_chars*.
+
+    The forge already windows each job log on the FIRST failure marker, so
+    each run's body leads with its first-error window.  When the combined
+    text exceeds *max_chars* we give every run an equal budget and keep a
+    head+tail window of that run's body — preserving the first-error signal
+    of earlier runs instead of blind tail-keeping the whole concatenation
+    (which drops earlier runs entirely).  *max_chars* <= 0 returns the
+    concatenation uncapped.
+    """
+    if not run_blocks:
+        return ""
+    if max_chars <= 0:
+        return "\n".join(header + body for header, body in run_blocks)
+    total = sum(len(header) + len(body) for header, body in run_blocks)
+    if total <= max_chars:
+        return "\n".join(header + body for header, body in run_blocks)
+
+    per_run = max(500, max_chars // max(1, len(run_blocks)))
+    parts: list[str] = []
+    for header, body in run_blocks:
+        if len(body) > per_run:
+            body = head_tail_keep(body, per_run, label="job logs")
+        parts.append(header + body)
+    joined = "\n".join(parts)
+    if len(joined) > max_chars:
+        joined = head_tail_keep(joined, max_chars, label="job logs")
+    return joined
+
+
+def _format_code_scanning_alerts(
+    alerts: list[dict[str, Any]],
+    max_alerts: int = 40,
+) -> str:
     """Render open code-scanning (CodeQL) alerts as a markdown block. These
     come from the security/code-scanning API, NOT the workflow job logs, so
     without them the agent can't see what a CodeQL check actually flagged.
+
+    *max_alerts* caps the rendered lines; ``0`` disables the cap.
     """
     if not alerts:
         return ""
     lines = ["**Code-scanning alerts (CodeQL — these are NOT in the job logs):**"]
-    for a in alerts:
+    shown = alerts if max_alerts <= 0 else alerts[:max_alerts]
+    for a in shown:
         loc = a.get("path", "")
         if a.get("line"):
             loc += f":{a['line']}"
         sev = a.get("severity") or "?"
         lines.append(f"- [{sev}] `{a.get('rule', '')}` {loc}: {a.get('message', '')}")
+    if max_alerts > 0 and len(alerts) > max_alerts:
+        lines.append(f"- ... {len(alerts) - max_alerts} more alert(s) omitted")
     return "\n".join(lines)
 
 
@@ -110,12 +163,15 @@ def _format_alert_refs(alerts: list[dict[str, Any]]) -> str:
 
 
 def _format_labelled_alerts(
-    in_scope: list[dict[str, Any]], out_of_scope: list[dict[str, Any]]
+    in_scope: list[dict[str, Any]],
+    out_of_scope: list[dict[str, Any]],
+    max_alerts: int = 40,
 ) -> str:
     """Render code-scanning alerts split into in-diff / untouched sections.
 
     Each alert is explicitly marked so the agent (and any downstream fixer)
     sees which alerts it MUST fix in-scope versus which may be out of scope.
+    *max_alerts* caps each section independently; ``0`` disables the cap.
     """
     if not in_scope and not out_of_scope:
         return ""
@@ -126,25 +182,38 @@ def _format_labelled_alerts(
             "files and MUST be fixed in-scope — do NOT report OUT_OF_SCOPE for "
             "them:"
         )
-        for a in in_scope:
+        shown_in = in_scope if max_alerts <= 0 else in_scope[:max_alerts]
+        for a in shown_in:
             sev = a.get("severity") or "?"
             lines.append(
                 f"- [{sev}] `{a.get('rule', '')}` {_alert_loc(a)}: "
                 f"{a.get('message', '')} — IN THIS PR'S DIFF — must fix"
             )
+        if max_alerts > 0 and len(in_scope) > max_alerts:
+            lines.append(
+                f"- ... {len(in_scope) - max_alerts} more in-scope alert(s) omitted"
+            )
     if out_of_scope:
         lines.append("Alert(s) in untouched files (may be out of scope):")
-        for a in out_of_scope:
+        shown_out = out_of_scope if max_alerts <= 0 else out_of_scope[:max_alerts]
+        for a in shown_out:
             sev = a.get("severity") or "?"
             lines.append(
                 f"- [{sev}] `{a.get('rule', '')}` {_alert_loc(a)}: "
                 f"{a.get('message', '')} — untouched file (out-of-scope candidate)"
             )
+        if max_alerts > 0 and len(out_of_scope) > max_alerts:
+            lines.append(
+                f"- ... {len(out_of_scope) - max_alerts} more out-of-scope alert(s) omitted"
+            )
     return "\n".join(lines)
 
 
 def _format_alert_summary_block(
-    alerts: list[dict[str, Any]] | None, *, codeql_failing: bool = False
+    alerts: list[dict[str, Any]] | None,
+    *,
+    codeql_failing: bool = False,
+    max_alerts: int = 40,
 ) -> str:
     """Render a compact CodeQL alert summary for top-of-prompt injection.
 
@@ -155,6 +224,8 @@ def _format_alert_summary_block(
     When *codeql_failing* is True and *alerts* is empty/None, emits an
     explicit could-not-retrieve notice so the ci_fix worker escalates
     rather than blocking on an un-actionable empty summary.
+
+    *max_alerts* caps the rendered lines; ``0`` disables the cap.
     """
     if not alerts:
         if codeql_failing:
@@ -166,8 +237,11 @@ def _format_alert_summary_block(
     lines = [
         "**CodeQL alerts to fix (extracted for fast reference — rule ID and location):**"
     ]
-    for a in alerts:
+    shown = alerts if max_alerts <= 0 else alerts[:max_alerts]
+    for a in shown:
         lines.append(f"- `{a.get('rule', '?')}` @ {_alert_loc(a)}")
+    if max_alerts > 0 and len(alerts) > max_alerts:
+        lines.append(f"- ... {len(alerts) - max_alerts} more alert(s) omitted")
     lines.append("")
     return "\n".join(lines)
 
@@ -190,11 +264,87 @@ def _check_indicator(conclusion: str | None) -> str:
     return "✅ PASSED:"
 
 
+def _format_annotations(
+    anns: list[dict[str, Any]],
+    max_annotations: int,
+) -> list[str]:
+    """Render ``**Annotations:**`` lines, capped to *max_annotations* (0 = uncapped)."""
+    if not anns:
+        return []
+    shown = anns if max_annotations <= 0 else anns[:max_annotations]
+    lines: list[str] = ["\n**Annotations:**"]
+    for a in shown:
+        loc = f"{a['path']}"
+        if a.get("start_line"):
+            loc += f":{a['start_line']}"
+        lines.append(f"- [{a['level']}] {loc}: {a['message']}")
+    if max_annotations > 0 and len(anns) > max_annotations:
+        lines.append(f"- ... {len(anns) - max_annotations} more annotation(s) omitted")
+    return lines
+
+
+def _collect_annotation_lines(failing: list[dict[str, Any]]) -> list[str]:
+    """Collect ``- [level] path:line: message`` lines for all failing checks."""
+    lines: list[str] = []
+    for chk in failing:
+        for a in chk.get("annotations") or []:
+            loc = f"{a['path']}"
+            if a.get("start_line"):
+                loc += f":{a['start_line']}"
+            lines.append(f"- [{a.get('level', '?')}] {loc}: {a.get('message', '')}")
+    return lines
+
+
+def _collect_alert_lines(
+    alerts: list[dict[str, Any]] | None,
+    changed_paths: set[str] | None,
+) -> list[str]:
+    """Collect compact code-scanning alert lines for the compact summary."""
+    if not alerts:
+        return []
+    in_scope, out_of_scope = (
+        _partition_alerts_by_diff(alerts, changed_paths)
+        if changed_paths is not None
+        else (alerts, [])
+    )
+    lines: list[str] = []
+    for a in in_scope:
+        lines.append(
+            f"- [{a.get('severity', '?')}] `{a.get('rule', '')}` "
+            f"{_alert_loc(a)}: {a.get('message', '')}"
+        )
+    for a in out_of_scope:
+        lines.append(
+            f"- [{a.get('severity', '?')}] `{a.get('rule', '')}` "
+            f"{_alert_loc(a)}: {a.get('message', '')} (out-of-scope candidate)"
+        )
+    return lines
+
+
+def _render_bounded_signatures(
+    title: str,
+    lines: list[str],
+    limit: int,
+    noun: str,
+) -> list[str]:
+    """Render a bounded ``<title>`` + bullet-list section for the compact summary."""
+    if not lines:
+        return []
+    out: list[str] = [title]
+    out.extend(lines[:limit])
+    if len(lines) > limit:
+        out.append(f"- ... {len(lines) - limit} more {noun} omitted")
+    out.append("")
+    return out
+
+
 def _build_failing_summary(
     failing: list[dict[str, Any]],
     log_text: str = "",
     alerts: list[dict[str, Any]] | None = None,
     changed_paths: set[str] | None = None,
+    max_annotations: int = 40,
+    max_alerts: int = 40,
 ) -> str:
     """Build a markdown summary from the failing check list.
 
@@ -204,13 +354,21 @@ def _build_failing_summary(
     When *changed_paths* is provided, the alerts are partitioned against the
     PR's own diff and rendered with explicit in-scope / out-of-scope labels.
 
+    *max_annotations* / *max_alerts* bound the non-log portions (check
+    annotations and code-scanning alert lists) so a CodeQL-heavy failure
+    can't blow up the prompt; ``0`` disables the respective cap.
+
     A compact alert summary is injected at the **top** of the prompt so the
     agent can quickly identify what to fix without speculative reasoning.
     """
     parts = []
     # Inject compact alert summary at the very top for fast reference.
     codeql_failing = _only_codeql_failing(failing)
-    parts.append(_format_alert_summary_block(alerts, codeql_failing=codeql_failing))
+    parts.append(
+        _format_alert_summary_block(
+            alerts, codeql_failing=codeql_failing, max_alerts=max_alerts
+        )
+    )
     for chk in failing:
         parts.append(
             f"## {_check_indicator(chk.get('conclusion', 'failure'))} {chk['name']}"
@@ -220,19 +378,15 @@ def _build_failing_summary(
         if chk.get("text"):
             parts.append(f"\n**Details:**\n{chk['text']}")
         anns = chk.get("annotations") or []
-        if anns:
-            parts.append("\n**Annotations:**")
-            for a in anns:
-                loc = f"{a['path']}"
-                if a.get("start_line"):
-                    loc += f":{a['start_line']}"
-                parts.append(f"- [{a['level']}] {loc}: {a['message']}")
+        parts.extend(_format_annotations(anns, max_annotations))
         parts.append("")
     if changed_paths is None:
-        alert_block = _format_code_scanning_alerts(alerts or [])
+        alert_block = _format_code_scanning_alerts(alerts or [], max_alerts=max_alerts)
     else:
         in_scope, out_of_scope = _partition_alerts_by_diff(alerts or [], changed_paths)
-        alert_block = _format_labelled_alerts(in_scope, out_of_scope)
+        alert_block = _format_labelled_alerts(
+            in_scope, out_of_scope, max_alerts=max_alerts
+        )
     if alert_block:
         parts.append(alert_block)
         parts.append("")
@@ -243,6 +397,84 @@ def _build_failing_summary(
         parts.append("```")
         parts.append("")
     return "\n".join(parts)
+
+
+def _build_compact_failing_summary(
+    failing: list[dict[str, Any]],
+    log_text: str = "",
+    alerts: list[dict[str, Any]] | None = None,
+    changed_paths: set[str] | None = None,
+    max_chars: int = 2000,
+) -> str:
+    """Build a bounded, compact failure digest for late wait_for_ci iterations.
+
+    Unlike :func:`_build_failing_summary` — which inlines the full (capped)
+    log window plus every annotation and alert — this keeps only:
+
+      * the pass/fail check headers (so the agent can still compare scope),
+      * a short summary per failing check,
+      * a bounded "key error signatures" section (the first annotations and
+        alerts — the failure-relevant path:line hunks),
+      * a short first-error window of the job log.
+
+    The result is then clipped to *max_chars* so each late-iteration tool
+    result contributes O(1) context instead of re-sending a full summary on
+    every turn.  *max_chars* <= 0 falls back to the full summary (compacting
+    disabled).
+    """
+    if max_chars <= 0:
+        return _build_failing_summary(failing, log_text, alerts, changed_paths)
+
+    lines: list[str] = [
+        (
+            "**CI still failing — compact summary "
+            "(full logs available via fetch_ci_logs)**"
+        ),
+        "",
+    ]
+    for chk in failing:
+        indicator = _check_indicator(chk.get("conclusion", "failure"))
+        name = chk.get("name", "?")
+        lines.append(f"## {indicator} {name}")
+        if chk.get("summary"):
+            lines.append(f"Summary: {_clip_text(str(chk['summary']), 160)}")
+    lines.append("")
+
+    # Annotations are the failure-relevant hunks (path:line:message).
+    ann_lines = _collect_annotation_lines(failing)
+    lines.extend(
+        _render_bounded_signatures(
+            "**Key error signatures (annotations):**",
+            ann_lines,
+            10,
+            "annotation(s)",
+        )
+    )
+
+    alert_lines = _collect_alert_lines(alerts, changed_paths)
+    lines.extend(
+        _render_bounded_signatures(
+            "**Key error signatures (code-scanning alerts):**",
+            alert_lines,
+            10,
+            "alert(s)",
+        )
+    )
+
+    if log_text:
+        # The forge already windows each job log on the first failure
+        # marker, so the HEAD of the concatenated text carries the first
+        # error(s) — keep that and drop the bulk of the window.
+        lines.append("**First error window:**")
+        lines.append("```")
+        lines.append(_clip_text(log_text, 600))
+        lines.append("```")
+        lines.append("")
+
+    body = "\n".join(lines)
+    if len(body) > max_chars:
+        body = head_tail_keep(body, max_chars, label="failure summary")
+    return body
 
 
 def _only_codeql_failing(failing: list[dict[str, Any]]) -> bool:

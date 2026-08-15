@@ -171,13 +171,15 @@ system_prompt: |
        the same one if your fix was incomplete — read it fresh). Do NOT report
        DONE while your dispatched check(s) are still red.
 
-       When the summary includes truncated job logs and you need the full log,
-       call ``fetch_ci_logs`` with the ``run_url`` or ``run_id`` printed in the
-       ``CI_FAILING`` summary (the prefix line includes ``url: <url>`` and job
-       log headers include ``(run N, url: <url>)``).  **Never pass a placeholder
-       numeric id (e.g. ``0``) —** ``fetch_ci_logs`` will reject it.  If no run
-       URL or id is visible in the summary, re-run ``wait_for_ci`` first to
-       obtain one.
+       On the FIRST attempt the summary is the full failure detail; on later
+       attempts it is a COMPACT digest (failing check names + key error
+       signatures + a short first-error window) to keep your context bounded.
+       When the compact summary does not show enough, call ``fetch_ci_logs``
+       with the ``run_url`` or ``run_id`` printed in the ``CI_FAILING`` summary
+       (the prefix line includes ``url: <url>`` and job log headers include
+       ``(run N, url: <url>)``).  **Never pass a placeholder numeric id (e.g.
+       ``0``) —** ``fetch_ci_logs`` will reject it.  If no run URL or id is
+       visible in the summary, re-run ``wait_for_ci`` first to obtain one.
      - ``CI_STILL_PENDING`` → the run did not finish in the wait window. Call
        ``wait_for_ci("{branch}")`` again to keep waiting. Only report FAILED
        if it stays pending across several waits (CI looks stuck).
