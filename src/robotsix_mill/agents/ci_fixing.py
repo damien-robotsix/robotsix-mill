@@ -53,7 +53,7 @@ def run_ci_fix_agent(
     target: str = "main",
     remote_url: str | None = None,
     token: str | None = None,
-    ci_status_fn: Callable[[], tuple[str, str]] | None = None,
+    ci_status_fn: Callable[[int], tuple[str, str]] | None = None,
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
 ) -> CiFixResult:
     """Run the CI-fix agent, which OWNS the fix→push→verify loop.
@@ -67,7 +67,8 @@ def run_ci_fix_agent(
     finishes, then either reports DONE (green) or fixes the fresh failure and
     re-checks — up to ``settings.ci_fix_max_iterations`` waits. This replaces
     the old one-shot-per-cycle model. *ci_status_fn* is the host-side forge
-    probe returning ``(conclusion, failing_summary)``.
+    probe taking the 1-based attempt number and returning
+    ``(conclusion, failing_summary)``.
 
     When *ci_log_fetch_fn* is provided, the agent also gets the
     ``fetch_ci_logs`` tool: it can fetch the logs for any workflow run by

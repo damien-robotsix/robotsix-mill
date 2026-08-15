@@ -2013,8 +2013,9 @@ def test_make_ci_status_fn_includes_run_id_in_failure_prefix(tmp_path, monkeypat
 
 
 def test_failure_detail_caps_job_log_context(tmp_path, monkeypatch):
-    """_build_failure_detail caps the inline job-log tail so late
-    wait_for_ci iterations don't re-send unbounded log history."""
+    """_build_failure_detail caps the inline job-log context (head+tail
+    window) so late wait_for_ci iterations don't re-send unbounded log
+    history, while preserving the first-error window (head) and the tail."""
     import time as _time_mod
 
     ctx = _gh(tmp_path, ci_fix_log_context_max_chars=500)
@@ -2074,11 +2075,96 @@ def test_failure_detail_caps_job_log_context(tmp_path, monkeypatch):
     conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
     assert conclusion == "failure"
     assert "[... job logs truncated:" in summary
-    assert "TAIL_MARKER_XYZ" in summary
-    assert "HEAD_MARKER_XYZ" not in summary
+    assert "HEAD_MARKER_XYZ" in summary  # first-error window is preserved
+    assert "TAIL_MARKER_XYZ" in summary  # recent tail is preserved
 
 
-def test_branch_own_failure_goes_straight_to_agent(tmp_path, monkeypatch):
+def test_make_ci_status_fn_compacts_late_iterations(tmp_path, monkeypatch):
+    """On attempt >= 2 the status_fn returns a compact digest instead of the
+    full failure detail, bounding per-iteration transcript growth."""
+    import time as _time_mod
+
+    ctx = _gh(
+        tmp_path,
+        ci_fix_log_context_max_chars=16000,
+        ci_fix_iteration_summary_max_chars=1200,
+    )
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    branch = f"mill/{t.id}"
+    stage = CIFixStage()
+
+    _tick = [0]
+
+    def _fake_monotonic():
+        _tick[0] += 1000.0
+        return _tick[0]
+
+    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": "boom",
+                    "text": None,
+                    "annotations": [
+                        {
+                            "path": "src/foo.py",
+                            "start_line": 10,
+                            "level": "failure",
+                            "message": "unused import os",
+                        }
+                    ],
+                }
+            ],
+            "_sha": "abc123",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha, branch=None: [
+            {"id": 30399400001, "name": "CI", "conclusion": "failure"}
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, *, run_id, full_log=False: "some log output\n",
+    )
+
+    status_fn = stage._make_ci_status_fn(t, ctx, branch)
+
+    _, full = status_fn(1)
+    assert "**Job logs:**" in full  # attempt 1 keeps the full inline detail
+
+    _, compact = status_fn(2)
+    assert "compact summary" in compact
+    assert "**Job logs:**" not in compact
+    assert len(compact) <= 1200
+    assert "lint" in compact
+    assert "unused import os" in compact  # key error signature survives
+
     """A branch-own CI failure rebases onto main first, then runs the
     ci-fix agent on the first cycle — the rebase ensures a fresh CI run
     against current main so the failure fingerprint is never stale."""

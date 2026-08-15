@@ -26,7 +26,6 @@ from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
-from ..core.text_utils import tail_keep
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
@@ -45,6 +44,8 @@ from .ci_fix_helpers import (
     _CI_IDENTICAL_FAILURE_COUNT,
     _CI_REFRESH_COUNTER,
     _CODQL_CHECK_NAMES,
+    _bounded_multi_run_log_text,
+    _build_compact_failing_summary,
     _build_failing_summary,
     _check_upstream_ci_breakage,
     _ci_failure_fingerprint,
@@ -547,6 +548,7 @@ class CIFixStage(Stage):
         ctx: StageContext,
         branch: str,
         failing: list[dict[str, Any]],
+        compact: bool = False,
     ) -> tuple[str, list[dict[str, Any]], set[str], bool, str, list[int], list[str]]:
         """Enrich the failing-check list with job logs + code-scanning alerts.
 
@@ -556,39 +558,32 @@ class CIFixStage(Stage):
         were unreadable due to a 403 permission gap, include the branch HEAD
         SHA in the failure fingerprint, and pass a run_id or run_url to
         ``fetch_ci_logs``.
+
+        When *compact* is True the returned *failing_summary* is a bounded
+        digest (see ``_build_compact_failing_summary``) instead of the full
+        inline detail — used for the 2nd and later ``wait_for_ci`` iterations
+        so the pydantic-ai transcript stops growing with loop depth.
         """
         s = ctx.settings
 
-        # Fetch job logs + code-scanning alerts for richer context (only on
-        # failure, not on every PR poll — this stage runs infrequently).
-        log_text = ""
         alerts: list[dict[str, Any]] = []
         changed_paths: set[str] = set()
         alerts_unreadable = False
         head_sha = ""
         failing_run_ids: list[int] = []
         failing_run_urls: list[str] = []
+        run_blocks: list[tuple[str, str]] = []
+
         try:
             forge = get_forge(s, repo_config=ctx.repo_config)
-            alerts = forge.list_code_scanning_alerts(source_branch=branch)
-            changed_paths = _pr_changed_paths(forge, branch)
-            pr = forge.pr_status(source_branch=branch)
-            head_sha = (pr or {}).get("sha", "")
-            if head_sha:
-                runs = forge.list_workflow_runs(head_sha=head_sha)
-                for run in runs:
-                    if run.get("conclusion") == "failure":
-                        failing_run_ids.append(run["id"])
-                        run_url = run.get("html_url", "")
-                        if run_url:
-                            failing_run_urls.append(run_url)
-                        logs = forge.fetch_workflow_job_logs(run_id=run["id"])
-                        if logs:
-                            url_note = f", url: {run_url}" if run_url else ""
-                            log_text += (
-                                f"\n--- {run.get('name', 'workflow')} "
-                                f"(run {run['id']}{url_note}) ---\n{logs}"
-                            )
+            (
+                alerts,
+                changed_paths,
+                head_sha,
+                failing_run_ids,
+                failing_run_urls,
+                run_blocks,
+            ) = self._fetch_failure_sources(forge, branch)
         except CodeScanningAlertsUnavailable:
             log.warning(
                 "%s: code-scanning alerts unreadable (HTTP 403) — "
@@ -600,42 +595,123 @@ class CIFixStage(Stage):
             # log enrichment just because alerts are unreadable.
             try:
                 forge = get_forge(s, repo_config=ctx.repo_config)
-                changed_paths = _pr_changed_paths(forge, branch)
-                pr = forge.pr_status(source_branch=branch)
-                head_sha = (pr or {}).get("sha", "")
-                if head_sha:
-                    runs = forge.list_workflow_runs(head_sha=head_sha)
-                    for run in runs:
-                        if run.get("conclusion") == "failure":
-                            failing_run_ids.append(run["id"])
-                            run_url = run.get("html_url", "")
-                            if run_url:
-                                failing_run_urls.append(run_url)
-                            logs = forge.fetch_workflow_job_logs(run_id=run["id"])
-                            if logs:
-                                url_note = f", url: {run_url}" if run_url else ""
-                                log_text += (
-                                    f"\n--- {run.get('name', 'workflow')} "
-                                    f"(run {run['id']}{url_note}) ---\n{logs}"
-                                )
+                (
+                    alerts,
+                    changed_paths,
+                    head_sha,
+                    failing_run_ids,
+                    failing_run_urls,
+                    run_blocks,
+                ) = self._fetch_failure_sources(forge, branch, fetch_alerts=False)
             except Exception:
                 log.warning("%s: failed to fetch job logs", ticket.id)
         except Exception:
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
 
-        if s.ci_fix_log_context_max_chars and log_text:
-            log_text = tail_keep(
-                log_text, s.ci_fix_log_context_max_chars, label="job logs"
+        log_text = _bounded_multi_run_log_text(
+            run_blocks, s.ci_fix_log_context_max_chars
+        )
+
+        if compact and s.ci_fix_iteration_summary_max_chars > 0:
+            summary = _build_compact_failing_summary(
+                failing,
+                log_text,
+                alerts,
+                changed_paths,
+                s.ci_fix_iteration_summary_max_chars,
+            )
+        else:
+            summary = _build_failing_summary(
+                failing,
+                log_text,
+                alerts,
+                changed_paths,
+                max_annotations=s.ci_fix_max_annotations,
+                max_alerts=s.ci_fix_max_alerts,
             )
 
         return (
-            _build_failing_summary(failing, log_text, alerts, changed_paths),
+            summary,
             alerts,
             changed_paths,
             alerts_unreadable,
             head_sha,
             failing_run_ids,
             failing_run_urls,
+        )
+
+    def _fetch_failure_sources(
+        self,
+        forge: Any,
+        branch: str,
+        fetch_alerts: bool = True,
+    ) -> tuple[
+        list[dict[str, Any]],
+        set[str],
+        str,
+        list[int],
+        list[str],
+        list[tuple[str, str]],
+    ]:
+        """Fetch alerts, changed paths, PR head SHA, and per-run job logs.
+
+        Returns ``(alerts, changed_paths, head_sha, failing_run_ids,
+        failing_run_urls, run_blocks)`` where *run_blocks* is a list of
+        ``(header, log_body)`` pairs, one per failing workflow run.
+
+        *fetch_alerts* lets the 403-alerts fallback path skip the
+        code-scanning call (which would re-raise ``CodeScanningAlertsUnavailable``)
+        while still fetching changed paths and job logs.
+        """
+        alerts = (
+            forge.list_code_scanning_alerts(source_branch=branch)
+            if fetch_alerts
+            else []
+        )
+        changed_paths = _pr_changed_paths(forge, branch)
+        pr = forge.pr_status(source_branch=branch)
+        head_sha = (pr or {}).get("sha", "")
+        failing_run_ids: list[int] = []
+        failing_run_urls: list[str] = []
+        run_blocks: list[tuple[str, str]] = []
+        if head_sha:
+            try:
+                runs = forge.list_workflow_runs(head_sha=head_sha)
+            except Exception:
+                log.warning(
+                    "failed to list workflow runs for head %s — no run ids/logs",
+                    head_sha,
+                )
+                runs = []
+            for run in runs:
+                if run.get("conclusion") == "failure":
+                    failing_run_ids.append(run["id"])
+                    run_url = run.get("html_url", "")
+                    if run_url:
+                        failing_run_urls.append(run_url)
+                    try:
+                        logs = forge.fetch_workflow_job_logs(run_id=run["id"])
+                    except Exception:
+                        log.warning(
+                            "failed to fetch job logs for run %s",
+                            run["id"],
+                            exc_info=True,
+                        )
+                        logs = ""
+                    if logs:
+                        url_note = f", url: {run_url}" if run_url else ""
+                        header = (
+                            f"\n--- {run.get('name', 'workflow')} "
+                            f"(run {run['id']}{url_note}) ---\n"
+                        )
+                        run_blocks.append((header, logs))
+        return (
+            alerts,
+            changed_paths,
+            head_sha,
+            failing_run_ids,
+            failing_run_urls,
+            run_blocks,
         )
 
     def _write_failing_summary_artifact(
@@ -1102,16 +1178,19 @@ class CIFixStage(Stage):
 
     def _make_ci_status_fn(
         self, ticket: Ticket, ctx: StageContext, branch: str
-    ) -> Callable[[], tuple[str, str]]:
+    ) -> Callable[[int], tuple[str, str]]:
         """Build the host-side forge probe the agent's wait_for_ci tool calls.
 
         Returns a closure that fetches the branch's CI conclusion and returns
         ``(conclusion, failing_summary)`` where conclusion is one of
-        ``success`` / ``failure`` / ``pending`` / ``gone``. On a fresh failure
-        it builds the enriched failing summary (job logs + code-scanning
-        alerts) so the agent gets actionable detail for its next iteration.
-        Transient forge errors map to ``pending`` so the agent keeps waiting
-        rather than giving up on a blip.
+        ``success`` / ``failure`` / ``pending`` / ``gone``. The closure takes
+        the 1-based ``wait_for_ci`` attempt number: on a fresh failure it
+        builds the enriched failing summary (job logs + code-scanning
+        alerts) for attempt 1, and a compact digest for later attempts so
+        the agent gets actionable detail without the transcript re-sending a
+        full summary on every iteration. Transient forge errors map to
+        ``pending`` so the agent keeps waiting rather than giving up on a
+        blip.
 
         The closure includes a **120 s grace period** (measured from closure
         creation via ``time.monotonic()``).  During that window ANY
@@ -1127,7 +1206,7 @@ class CIFixStage(Stage):
         _created_at = time.monotonic()
         _grace_s = 120.0
 
-        def status_fn() -> tuple[str, str]:
+        def status_fn(attempt: int = 1) -> tuple[str, str]:
             in_grace = (time.monotonic() - _created_at) < _grace_s
 
             try:
@@ -1165,7 +1244,9 @@ class CIFixStage(Stage):
                     _head,
                     failing_run_ids,
                     failing_run_urls,
-                ) = self._build_failure_detail(ticket, ctx, branch, failing)
+                ) = self._build_failure_detail(
+                    ticket, ctx, branch, failing, compact=(attempt > 1)
+                )
                 if sha:
                     run_info_parts: list[str] = []
                     if failing_run_ids:

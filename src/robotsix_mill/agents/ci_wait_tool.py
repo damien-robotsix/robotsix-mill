@@ -28,7 +28,10 @@ from ..runtime.tracing import trace_stage
 #   "failure" — at least one check failed (failing_summary describes it)
 #   "pending" — checks not yet complete (keep waiting)
 #   "gone"    — the PR/branch is no longer visible on the forge
-CiStatusFn = Callable[[], "tuple[str, str]"]
+# The single int argument is the 1-based attempt number (how many times the
+# agent has called wait_for_ci), so the stage can return a compact summary on
+# later iterations instead of the full failure detail.
+CiStatusFn = Callable[[int], "tuple[str, str]"]
 
 
 def build_ci_wait_tool(
@@ -72,13 +75,16 @@ def build_ci_wait_tool(
         - ``CI_PASSED`` — every check is green. Report DONE.
         - ``CI_FAILING (attempt N/M): <summary>`` — CI is still red; the new
           failing summary follows, prefixed with ``[sha: ..., run: ..., url:
-          ...]`` when run identifiers are available.  If the prefix includes a
-          ``run:`` id or ``url:``, you can pass it directly to
+          ...]`` when run identifiers are available.  On the FIRST attempt the
+          summary is the full failure detail; on later attempts it is a
+          COMPACT digest (failing check names + key error signatures + a short
+          first-error window) to keep your context bounded.  If the prefix
+          includes a ``run:`` id or ``url:``, pass it directly to
           ``fetch_ci_logs`` to retrieve full job logs.  When no run identifier
-          is present, the inline job logs in the summary ("**Job logs:**"
-          section) contain enough detail — do NOT call ``fetch_ci_logs`` with
-          a placeholder id (0) in that case.  Fix it and push again, then call
-          wait_for_ci once more.
+          is present, the inline job logs in the summary ("**Job logs:**" /
+          "**First error window:**" section) contain enough detail — do NOT
+          call ``fetch_ci_logs`` with a placeholder id (0) in that case.  Fix
+          it and push again, then call wait_for_ci once more.
         - ``CI_STILL_PENDING`` — checks did not finish within the wait window.
           Call wait_for_ci again to keep waiting, or report FAILED if CI looks
           stuck.
@@ -113,7 +119,7 @@ def build_ci_wait_tool(
             attempt = state["calls"]
             deadline = monotonic() + timeout_s
             while True:
-                conclusion, summary = ci_status_fn()
+                conclusion, summary = ci_status_fn(attempt)
                 if conclusion == "success":
                     sha_note = f" ({summary})" if summary else ""
                     return f"CI_PASSED: all checks are green{sha_note} — report DONE."

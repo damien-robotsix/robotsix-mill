@@ -1303,13 +1303,50 @@ class _StagesSettings(BaseModel):
     # built for the ci-fix agent — applied to BOTH the initial prompt and
     # each ``wait_for_ci`` iteration's fresh failure detail.  The forge
     # already windows each job log on the first failure marker at
-    # ``ci_log_max_bytes``; this caps the TOTAL concatenated log tail so a
-    # hard ticket's late fix→verify iterations stop re-sending unbounded log
-    # history.  The agent can still expand on demand via
-    # ``fetch_ci_logs(full_log=True)``.  0 disables the cap.
+    # ``ci_log_max_bytes``; this caps the TOTAL concatenated log (each run's
+    # first-error window is kept, then a head+tail window of the whole
+    # concatenation) so a hard ticket's late fix→verify iterations stop
+    # re-sending unbounded log history.  The agent can still expand on
+    # demand via ``fetch_ci_logs(full_log=True)``.  0 disables the cap.
     ci_fix_log_context_max_chars: int = Field(
         description="Maximum characters of inline CI job-log context in the ci-fix failing summary. 0 disables.",
         default=16000,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
+    # Maximum characters of a COMPACT failure summary returned by
+    # ``wait_for_ci`` on the 2nd and later iterations of one ci-fix run.
+    # The first iteration (and the initial dispatch prompt) always receive
+    # the full, already-capped failure detail; later iterations receive a
+    # bounded digest (failing check names + first-error signatures + a
+    # short job-log window) so the pydantic-ai conversation transcript
+    # stops growing with loop depth — prior attempts' full logs and
+    # annotations are not re-sent verbatim on every turn.  The agent can
+    # still expand on demand via ``fetch_ci_logs``.  0 disables compacting
+    # (every iteration sends the full summary — the pre-existing behaviour).
+    ci_fix_iteration_summary_max_chars: int = Field(
+        description="Maximum characters of the compact wait_for_ci failure summary for iterations >= 2. 0 disables compacting.",
+        default=2000,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
+    # The non-log portions of a failing summary (check annotations and the
+    # code-scanning alert lists) are the other unbounded growth vector on
+    # CodeQL-heavy failures — a run with hundreds of alerts/annotations
+    # could otherwise blow up the prompt even with capped logs.  These two
+    # caps bound the rendered annotation and alert lines per summary.
+    # 0 disables the respective cap.
+    ci_fix_max_annotations: int = Field(
+        description="Maximum check annotations rendered per ci-fix failing summary. 0 disables.",
+        default=40,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+    ci_fix_max_alerts: int = Field(
+        description="Maximum code-scanning alert lines rendered per ci-fix failing summary. 0 disables.",
+        default=40,
         ge=0,
         json_schema_extra={"advanced": True},
     )
