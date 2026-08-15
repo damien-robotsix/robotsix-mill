@@ -21,6 +21,7 @@ from . import (
     _health,
     _passes,
     _repos,
+    _step_usage,
     _tickets,
     _tickets_ingest,
     _tickets_merge,
@@ -44,5 +45,6 @@ router.include_router(_board.router)
 router.include_router(_chat_skill.router)
 router.include_router(_diagnostic_events.router)
 router.include_router(_repos.router)
+router.include_router(_step_usage.router)
 router.include_router(_tickets_ingest.router)
 router.include_router(_config.router)

@@ -1,0 +1,1 @@
+Add a read-only `GET /metrics/step-usage` endpoint that aggregates per-call token usage (count, mean, p50, p95, max input/output tokens, cache-read share) per stage×model from a local SQLite mirror, without fetching prompt payloads from Langfuse.

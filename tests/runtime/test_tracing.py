@@ -975,3 +975,28 @@ def test_record_step_usage_aggregates_deepseek_by_stage(monkeypatch):
     per_call = [r["input_tokens"] for r in records if r["model_name"] == pro]
     assert max(per_call) == 100_000
     assert sum(per_call) / len(per_call) == 200_000 / 3
+
+
+def test_record_step_usage_mirrors_to_local_store(monkeypatch):
+    """record_step_usage also mirrors the compact dict into the local
+    SQLite store so /metrics/step-usage can aggregate without Langfuse."""
+    from robotsix_mill.runtime import step_usage_store
+
+    mirrored: list[dict] = []
+    monkeypatch.setattr(tracing, "set_current_span_attribute", lambda *a, **k: None)
+    monkeypatch.setattr(
+        step_usage_store, "record", lambda data, **kw: mirrored.append(data)
+    )
+
+    tracing.record_step_usage(
+        request_count=1,
+        model_name="deepseek-v4-pro",
+        input_tokens=123,
+        output_tokens=45,
+    )
+
+    assert len(mirrored) == 1
+    assert mirrored[0]["model_name"] == "deepseek-v4-pro"
+    assert mirrored[0]["input_tokens"] == 123
+    assert mirrored[0]["output_tokens"] == 45
+    assert "timestamp" in mirrored[0]

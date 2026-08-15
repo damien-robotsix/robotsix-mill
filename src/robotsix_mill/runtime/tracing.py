@@ -686,6 +686,17 @@ def record_step_usage(
         _json.dumps(data, default=str, ensure_ascii=False),
     )
 
+    # Mirror the record into the local SQLite store so the read-only
+    # /metrics/step-usage endpoint can aggregate stage×model statistics
+    # without fetching prompt payloads from Langfuse.  Best-effort and
+    # lazy-imported to preserve this module's no-heavy-imports surface.
+    try:
+        from .step_usage_store import record as _mirror_step_usage
+
+        _mirror_step_usage(data)
+    except Exception:
+        log.debug("record_step_usage: local mirror failed", exc_info=True)
+
 
 @contextmanager
 def trace_stage(
