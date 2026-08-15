@@ -2165,6 +2165,8 @@ def test_make_ci_status_fn_compacts_late_iterations(tmp_path, monkeypatch):
     assert "lint" in compact
     assert "unused import os" in compact  # key error signature survives
 
+
+def test_branch_own_failure_goes_straight_to_agent(tmp_path, monkeypatch):
     """A branch-own CI failure rebases onto main first, then runs the
     ci-fix agent on the first cycle — the rebase ensures a fresh CI run
     against current main so the failure fingerprint is never stale."""
