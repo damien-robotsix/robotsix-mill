@@ -1299,6 +1299,21 @@ class _StagesSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Maximum characters of inline job-log context in the failing summary
+    # built for the ci-fix agent — applied to BOTH the initial prompt and
+    # each ``wait_for_ci`` iteration's fresh failure detail.  The forge
+    # already windows each job log on the first failure marker at
+    # ``ci_log_max_bytes``; this caps the TOTAL concatenated log tail so a
+    # hard ticket's late fix→verify iterations stop re-sending unbounded log
+    # history.  The agent can still expand on demand via
+    # ``fetch_ci_logs(full_log=True)``.  0 disables the cap.
+    ci_fix_log_context_max_chars: int = Field(
+        description="Maximum characters of inline CI job-log context in the ci-fix failing summary. 0 disables.",
+        default=16000,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # Per-ticket ceiling on how many times the worker may re-dispatch the
     # SAME LLM-bearing pipeline stage within a single processing pass before
     # pausing the ticket to BLOCKED for human review. Guards against an

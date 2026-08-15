@@ -925,6 +925,14 @@
           "title": "Ci Fix Agent Timeout Seconds",
           "type": "integer"
         },
+        "ci_fix_log_context_max_chars": {
+          "advanced": true,
+          "default": 16000,
+          "description": "Maximum characters of inline CI job-log context in the ci-fix failing summary. 0 disables.",
+          "minimum": 0,
+          "title": "Ci Fix Log Context Max Chars",
+          "type": "integer"
+        },
         "ci_fix_max_attempts": {
           "advanced": true,
           "default": 2,

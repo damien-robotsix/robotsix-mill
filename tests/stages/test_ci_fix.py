@@ -2012,6 +2012,72 @@ def test_make_ci_status_fn_includes_run_id_in_failure_prefix(tmp_path, monkeypat
     assert "lint" in summary
 
 
+def test_failure_detail_caps_job_log_context(tmp_path, monkeypatch):
+    """_build_failure_detail caps the inline job-log tail so late
+    wait_for_ci iterations don't re-send unbounded log history."""
+    import time as _time_mod
+
+    ctx = _gh(tmp_path, ci_fix_log_context_max_chars=500)
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    branch = f"mill/{t.id}"
+    stage = CIFixStage()
+
+    _tick = [0]
+
+    def _fake_monotonic():
+        _tick[0] += 1000.0
+        return _tick[0]
+
+    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "boom", "text": None, "annotations": []}
+            ],
+            "_sha": "abc123",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha, branch=None: [
+            {"id": 30399400001, "name": "CI", "conclusion": "failure"}
+        ],
+    )
+    big_log = "HEAD_MARKER_XYZ\n" + ("filler line\n" * 400) + "TAIL_MARKER_XYZ\n"
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, *, run_id, full_log=False: big_log,
+    )
+
+    conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
+    assert conclusion == "failure"
+    assert "[... job logs truncated:" in summary
+    assert "TAIL_MARKER_XYZ" in summary
+    assert "HEAD_MARKER_XYZ" not in summary
+
+
 def test_branch_own_failure_goes_straight_to_agent(tmp_path, monkeypatch):
     """A branch-own CI failure rebases onto main first, then runs the
     ci-fix agent on the first cycle — the rebase ensures a fresh CI run

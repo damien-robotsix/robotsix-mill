@@ -26,6 +26,7 @@ from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
+from ..core.text_utils import tail_keep
 from ..forge import get_forge
 from ..forge.auth import _resolve_remote_url, github_push_token, github_token
 from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
@@ -621,6 +622,11 @@ class CIFixStage(Stage):
                 log.warning("%s: failed to fetch job logs", ticket.id)
         except Exception:
             log.warning("%s: failed to fetch job logs / alerts", ticket.id)
+
+        if s.ci_fix_log_context_max_chars and log_text:
+            log_text = tail_keep(
+                log_text, s.ci_fix_log_context_max_chars, label="job logs"
+            )
 
         return (
             _build_failing_summary(failing, log_text, alerts, changed_paths),
