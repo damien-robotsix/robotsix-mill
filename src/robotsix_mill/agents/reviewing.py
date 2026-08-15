@@ -21,8 +21,7 @@ from pydantic_ai.exceptions import UnexpectedModelBehavior
 from robotsix_mill._resources import agent_definitions_dir
 
 from ..config import Settings
-from .diff_utils import _split_diff_by_file
-from .diff_utils import changed_line_ranges_from_diff as changed_line_ranges_from_diff
+from .diff_utils import _split_diff_by_file, changed_line_ranges_from_diff
 
 log = logging.getLogger(__name__)
 
