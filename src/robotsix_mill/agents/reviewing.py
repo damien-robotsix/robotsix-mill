@@ -23,6 +23,8 @@ from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from .diff_utils import _split_diff_by_file, changed_line_ranges_from_diff
 
+__all__ = ["changed_line_ranges_from_diff"]
+
 log = logging.getLogger(__name__)
 
 _SYSPROMPT_PATH = agent_definitions_dir() / "review.yaml"
