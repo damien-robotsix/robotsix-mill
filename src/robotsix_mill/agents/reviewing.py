@@ -166,6 +166,7 @@ def _review_attempt(
     spec: str,
     prior_context: str | None,
     reference_files: list[str] | None,
+    changed_line_ranges: dict[str, list[tuple[int, int]]] | None = None,
     repo_dir: Path | None,
     screenshot_path: Path | None,
     agent: Any,
@@ -209,7 +210,18 @@ def _review_attempt(
         # the reviewer fetches anything else via read_file on demand.
         # When no file has excerptable ranges (e.g. a new-file-only diff)
         # the plain string prompt is used directly — no message_history.
-        line_ranges = changed_line_ranges_from_diff(diff_text)
+        # The excerpt ranges must be derived from the UNBOUNDED diff, not
+        # the (possibly middle-truncated) *diff_text*: head_tail_keep
+        # drops the middle, so a file whose hunks live entirely there
+        # would otherwise get neither diff content nor a preseed excerpt.
+        # The caller (review stage) computes ranges from the full diff and
+        # passes them in; when it doesn't (direct/test callers), fall back
+        # to deriving them from *diff_text*.
+        line_ranges = (
+            changed_line_ranges
+            if changed_line_ranges is not None
+            else changed_line_ranges_from_diff(diff_text)
+        )
         if line_ranges:
             preseed = build_preseed_history(
                 repo_dir,
@@ -287,6 +299,7 @@ def run_review_agent(
     prior_context: str | None = None,
     repo_dir: Path | None = None,
     reference_files: list[str] | None = None,
+    changed_line_ranges: dict[str, list[tuple[int, int]]] | None = None,
     screenshot_path: Path | None = None,
     extra_roots: list[Path] | None = None,
 ) -> ReviewVerdict:
@@ -381,6 +394,7 @@ def run_review_agent(
             spec=spec,
             prior_context=prior_context,
             reference_files=reference_files,
+            changed_line_ranges=changed_line_ranges,
             repo_dir=repo_dir,
             screenshot_path=screenshot_path,
             agent=agent,

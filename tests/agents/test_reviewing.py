@@ -1148,3 +1148,87 @@ def test_preseed_skips_new_files(tmp_path, monkeypatch):
     assert len(seen) == 1
     assert "message_history" not in seen[0]["kwargs"]
     assert isinstance(seen[0]["prompt"], str)
+
+
+def test_preseed_uses_provided_ranges_when_diff_is_truncated(tmp_path, monkeypatch):
+    """The preseed uses *changed_line_ranges* supplied by the caller even
+    when the *diff* passed in is middle-truncated and no longer carries
+    the file's hunks — a modified file dropped from the bounded diff still
+    gets a bounded excerpt (no review-coverage regression)."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "mod.py").write_text(
+        "".join(f"line{i}\n" for i in range(100)), encoding="utf-8"
+    )
+
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        review_preseed_context_lines="1",
+    )
+
+    # A truncated diff: mod.py's hunks are entirely absent (dropped from
+    # the middle by head_tail_keep), but the caller still knows its changed
+    # ranges because it derived them from the UNBOUNDED diff.
+    diff = (
+        "diff --git a/a.py b/a.py\n"
+        "--- a/a.py\n"
+        "+++ b/a.py\n"
+        "@@ -1 +1 @@\n"
+        "-a\n"
+        "+b\n"
+        "\n[... git-diff truncated: 1234 chars omitted from the middle ...]\n\n"
+        "diff --git a/z.py b/z.py\n"
+        "--- a/z.py\n"
+        "+++ b/z.py\n"
+        "@@ -1 +1 @@\n"
+        "-z\n"
+        "+y\n"
+    )
+    changed_line_ranges = {"mod.py": [(40, 43)]}
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        return _StubAgentRunResult(ReviewVerdict(verdict="APPROVE", comments="lgtm"))
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff=diff,
+        spec="Fix mod",
+        repo_dir=repo_dir,
+        reference_files=["mod.py"],
+        changed_line_ranges=changed_line_ranges,
+    )
+
+    assert verdict.verdict == "APPROVE"
+    assert len(seen) == 1
+
+    history = seen[0]["kwargs"]["message_history"]
+    assert len(history) == 3
+    calls_msg, returns_msg = history[1], history[2]
+    assert len(calls_msg.parts) == 1
+    assert len(returns_msg.parts) == 1
+
+    call_part = calls_msg.parts[0]
+    assert call_part.args_as_dict() == {
+        "path": "mod.py",
+        "offset": 39,
+        "limit": 6,
+    }
+
+    content = returns_msg.parts[0].content
+    assert "[preload excerpt: mod.py lines 39-44 of 100]" in content
+    assert "line38" in content
+    assert "line43" in content
+    assert "line37" not in content
+    assert "line44" not in content
+
