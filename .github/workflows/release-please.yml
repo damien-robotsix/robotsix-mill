@@ -3,6 +3,10 @@ name: release-please
 # Fleet-wide release automation per robotsix-standards release-please.md.
 # Opens/updates a release PR on every push to main; creates the tag and
 # GitHub Release when that release PR is merged.
+#
+# The mechanism — minting the App token, running release-please, syncing
+# uv.lock — lives in the shared workflow so a fix lands once for the fleet.
+# What stays here is what only this repo can decide: when to run.
 on:
   push:
     branches:
@@ -27,78 +31,18 @@ permissions: {}
 jobs:
   release-please:
     name: Release Please
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write       # create the release commit, tag and GitHub Release
-      pull-requests: write  # open and update the release PR
+    # Only act on a push, or on the merge of release-please's own release PR.
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&
        github.event.pull_request.merged == true &&
        github.event.pull_request.head.ref == 'release-please--branches--main')
-    steps:
-      # A release PR opened with GITHUB_TOKEN triggers no workflow runs, so its
-      # required checks never report and it can never merge. Mint an App token.
-      - name: Mint a GitHub App installation token
-        id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          # Scoped: without a permission-* input the token inherits the App's
-          # blanket installation permissions (zizmor github-app, high).
-          permission-contents: write        # release commit, tag, Release
-          permission-pull-requests: write   # open and update the release PR
-
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
-        id: release
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      # Only the lock-sync step below needs these; release-please itself needs
-      # neither a checkout nor uv.
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
-        with:
-          # No cache: this job has contents:write, and a poisoned cache in a
-          # write-privileged workflow is a supply-chain risk (zizmor
-          # cache-poisoning).
-          enable-cache: false
-
-      # uv.lock records the project's own version, so a release that bumps
-      # [project].version leaves it stale and `uv sync --locked` fails.
-      # release-please cannot maintain it: `extra-files` would need a jsonpath
-      # into an array whose index shifts with every dependency change.
-      - name: Sync uv.lock to the released version
-        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          BRANCH: release-please--branches--main
-        run: |
-          set -euo pipefail
-          # The release branch is deleted when its PR merges, yet a later
-          # run can still report an existing PR and satisfy this step's
-          # guard. A missing branch means there is nothing to sync — not a
-          # failure. Without this the job dies on `git checkout -B` with
-          # "not a commit", reddening main.
-          if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            echo "No $BRANCH on origin — nothing to sync."
-            exit 0
-          fi
-          git fetch --depth=1 origin "$BRANCH"
-          git checkout -B "$BRANCH" "origin/$BRANCH"
-          uv lock
-          if git diff --quiet -- uv.lock; then
-            echo "uv.lock already matches the released version."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: sync uv.lock to the released version" -- uv.lock
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+    permissions:
+      contents: write       # create the release commit, tag and GitHub Release
+      pull-requests: write  # open and update the release PR
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/release-please.yml@b2c5f36c25e318d81f89a2a0b24ae92872ba4606  # main
+    with:
+      app-id: ${{ vars.RELEASE_APP_ID }}
+    secrets:
+      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
