@@ -1231,4 +1231,3 @@ def test_preseed_uses_provided_ranges_when_diff_is_truncated(tmp_path, monkeypat
     assert "line43" in content
     assert "line37" not in content
     assert "line44" not in content
-
