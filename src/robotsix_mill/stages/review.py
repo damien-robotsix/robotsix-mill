@@ -919,9 +919,14 @@ class ReviewStage(Stage):
         # history) regardless of how few lines the intended change touches,
         # overflowing even a 1M-token model context. Middle-truncate so both
         # early and late files keep representation. 0 disables the cap.
-        from ..core.text_utils import head_tail_keep
+        from ..core.text_utils import head_tail_keep, limit_diff_context
 
-        diff = head_tail_keep(diff, s.review_diff_max_chars, label="git-diff")
+        if s.review_diff_max_chars > 0 and len(diff) > s.review_diff_max_chars:
+            # Over threshold: thin each hunk's context runs first (cheap,
+            # preserves every change line) and only then apply the hard
+            # head+tail cap so early and late files stay represented.
+            diff = limit_diff_context(diff, s.review_diff_context_lines)
+            diff = head_tail_keep(diff, s.review_diff_max_chars, label="git-diff")
 
         return _DiffMeta(
             diff=diff,

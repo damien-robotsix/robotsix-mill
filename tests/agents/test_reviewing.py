@@ -11,6 +11,7 @@ from robotsix_mill.agents.reviewing import (
     SYSTEM_PROMPT,
     ReviewAsk,
     ReviewVerdict,
+    changed_line_ranges_from_diff,
     run_review_agent,
 )
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
@@ -473,7 +474,13 @@ def test_token_limit_triggers_degraded_retry(tmp_path, monkeypatch):
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
-    big_diff = "diff --git a/x.py b/x.py\n" + ("+line\n" * 50_000)
+    big_diff = (
+        "diff --git a/x.py b/x.py\n"
+        "--- a/x.py\n"
+        "+++ b/x.py\n"
+        "@@ -1 +1,50001 @@\n"
+        "-print('x')\n" + ("+line\n" * 50_000)
+    )
     seen: list[dict] = []
 
     def fake_run_agent(agent, make_run, *, what, **kw):
@@ -578,7 +585,13 @@ def test_output_exhaustion_retries_with_higher_max_tokens(tmp_path, monkeypatch)
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
-    diff = "diff --git a/x.py b/x.py\n" + ("+line\n" * 500)
+    diff = (
+        "diff --git a/x.py b/x.py\n"
+        "--- a/x.py\n"
+        "+++ b/x.py\n"
+        "@@ -1 +1,501 @@\n"
+        "-print('x')\n" + ("+line\n" * 500)
+    )
     seen: list[dict] = []
 
     def fake_run_agent(agent, make_run, *, what, **kw):
@@ -948,3 +961,190 @@ def test_chunked_review_request_changes_floor(tmp_path, monkeypatch):
     assert any(a.title == "Fix the bug" for a in verdict.request_changes)
     assert verdict.auto_merge_eligible is False
     assert verdict.comments.startswith("[Chunked review: 2 files")
+
+
+# --- changed_line_ranges_from_diff (preseed excerpt inputs) ------------------
+
+
+def _modified_diff(
+    path: str, old_start: int, old_count: int, new_start: int, new_count: int
+) -> str:
+    return (
+        f"diff --git a/{path} b/{path}\n"
+        f"--- a/{path}\n"
+        f"+++ b/{path}\n"
+        f"@@ -{old_start},{old_count} +{new_start},{new_count} @@\n"
+        f" context\n"
+        f"-old\n"
+        f"+new\n"
+    )
+
+
+def test_changed_line_ranges_modified_files():
+    diff = _modified_diff("a.py", 10, 4, 20, 4)
+    assert changed_line_ranges_from_diff(diff) == {"a.py": [(20, 23)]}
+
+
+def test_changed_line_ranges_skips_new_and_deleted_files():
+    new_file = (
+        "diff --git a/new.py b/new.py\n"
+        "--- /dev/null\n"
+        "+++ b/new.py\n"
+        "@@ -0,0 +1,5 @@\n"
+        "+one\n"
+        "+two\n"
+    )
+    deleted = (
+        "diff --git a/gone.py b/gone.py\n"
+        "--- a/gone.py\n"
+        "+++ /dev/null\n"
+        "@@ -1,5 +0,0 @@\n"
+        "-one\n"
+        "-two\n"
+    )
+    modified = _modified_diff("mod.py", 1, 2, 1, 2)
+    ranges = changed_line_ranges_from_diff(new_file + deleted + modified)
+    assert ranges == {"mod.py": [(1, 2)]}
+
+
+def test_changed_line_ranges_multiple_hunks_same_file():
+    diff = (
+        "diff --git a/x.py b/x.py\n"
+        "--- a/x.py\n"
+        "+++ b/x.py\n"
+        "@@ -1,2 +1,2 @@\n"
+        " ctx\n"
+        "-a\n"
+        "+b\n"
+        "@@ -50,3 +60,3 @@\n"
+        " ctx\n"
+        "-c\n"
+        "+d\n"
+    )
+    assert changed_line_ranges_from_diff(diff) == {"x.py": [(1, 2), (60, 62)]}
+
+
+# --- Preseed excerpts (bounded review context) -------------------------------
+
+
+def test_preseed_preloads_excerpts_not_whole_file(tmp_path, monkeypatch):
+    """For a modified file, the review preseed carries only the changed
+    region plus ``review_preseed_context_lines`` of context — not the
+    whole file — and the read_file tool-call args reflect the excerpt
+    range so a later on-demand full read is still allowed."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "mod.py").write_text(
+        "".join(f"line{i}\n" for i in range(100)), encoding="utf-8"
+    )
+
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        review_preseed_context_lines="2",
+    )
+
+    diff = (
+        "diff --git a/mod.py b/mod.py\n"
+        "--- a/mod.py\n"
+        "+++ b/mod.py\n"
+        "@@ -40,2 +40,2 @@\n"
+        " line38\n"
+        "-line39\n"
+        "+line39x\n"
+        "-line40\n"
+        "+line40x\n"
+        " line41\n"
+    )
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        return _StubAgentRunResult(ReviewVerdict(verdict="APPROVE", comments="lgtm"))
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff=diff,
+        spec="Fix mod",
+        repo_dir=repo_dir,
+        reference_files=["mod.py"],
+    )
+
+    assert verdict.verdict == "APPROVE"
+    assert len(seen) == 1
+
+    history = seen[0]["kwargs"]["message_history"]
+    # history = [ModelRequest(prompt), ModelResponse(calls), ModelRequest(returns)]
+    assert len(history) == 3
+    calls_msg, returns_msg = history[1], history[2]
+
+    assert len(calls_msg.parts) == 1
+    assert len(returns_msg.parts) == 1
+
+    call_part = calls_msg.parts[0]
+    assert call_part.args_as_dict() == {
+        "path": "mod.py",
+        "offset": 38,
+        "limit": 6,
+    }
+
+    content = returns_msg.parts[0].content
+    assert "[preload excerpt: mod.py lines 38-43 of 100]" in content
+    assert "line37" in content
+    assert "line42" in content
+    assert "line0" not in content
+    assert "line99" not in content
+
+
+def test_preseed_skips_new_files(tmp_path, monkeypatch):
+    """A new file's full content is already in the diff, so it is NOT
+    preloaded again — the run keeps the plain string prompt and no
+    message_history is attached."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "new.py").write_text("one\ntwo\nthree\n", encoding="utf-8")
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    diff = (
+        "diff --git a/new.py b/new.py\n"
+        "--- /dev/null\n"
+        "+++ b/new.py\n"
+        "@@ -0,0 +1,3 @@\n"
+        "+one\n"
+        "+two\n"
+        "+three\n"
+    )
+
+    seen: list[dict] = []
+
+    def fake_run_agent(agent, make_run, *, what, **kw):
+        make_run(agent)
+        prompt, _limits, kwargs = agent.calls[-1]
+        seen.append({"prompt": prompt, "kwargs": kwargs})
+        return _StubAgentRunResult(ReviewVerdict(verdict="APPROVE", comments="lgtm"))
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    run_review_agent(
+        settings=s,
+        diff=diff,
+        spec="Add new",
+        repo_dir=repo_dir,
+        reference_files=["new.py"],
+    )
+
+    assert len(seen) == 1
+    assert "message_history" not in seen[0]["kwargs"]
+    assert isinstance(seen[0]["prompt"], str)

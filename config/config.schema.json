@@ -2435,6 +2435,14 @@
           "title": "Retrospect Spawn Drafts",
           "type": "boolean"
         },
+        "review_diff_context_lines": {
+          "advanced": true,
+          "default": 1,
+          "description": "Max surrounding context lines kept per hunk when the review diff exceeds review_diff_max_chars. 0 disables hunk thinning.",
+          "minimum": 0,
+          "title": "Review Diff Context Lines",
+          "type": "integer"
+        },
         "review_diff_max_chars": {
           "advanced": true,
           "default": 200000,
@@ -2469,6 +2477,14 @@
           "description": "Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
           "minimum": 0,
           "title": "Review Output Token Budget",
+          "type": "integer"
+        },
+        "review_preseed_context_lines": {
+          "advanced": true,
+          "default": 40,
+          "description": "Lines of file context around each changed region preloaded in the review preseed. 0 preloads only changed lines.",
+          "minimum": 0,
+          "title": "Review Preseed Context Lines",
           "type": "integer"
         },
         "review_prior_context_max_chars": {

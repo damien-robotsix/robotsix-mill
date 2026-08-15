@@ -3356,3 +3356,95 @@ class TestWriteBlockedPrefixes:
         result = tools["write_file"]("src/foo.py", "# test")
         assert "wrote" in result
         assert (root / "src" / "foo.py").exists()
+
+
+# ===================================================================
+# build_preseed_history — excerpt mode (line_ranges)
+# ===================================================================
+
+
+class TestBuildPreseedHistoryExcerpts:
+    """``build_preseed_history`` with ``line_ranges`` preloads bounded
+    excerpts around changed regions instead of whole files, merging
+    overlapping/adjacent ranges and skipping absent paths."""
+
+    def _make_lines(self, root, path, n):
+        body = "".join(f"line{i}\n" for i in range(n))
+        _make_file(root, path, body)
+        return body
+
+    def test_excerpt_emits_one_range_per_merged_region(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        self._make_lines(root, "x.py", 100)
+
+        history = build_preseed_history(
+            root,
+            ["x.py"],
+            line_ranges={"x.py": [(10, 12), (20, 22)]},
+            context_lines=2,
+        )
+        assert len(history) == 2
+        calls_msg, returns_msg = history
+        # (10..12)±2 → 8..14; (20..22)±2 → 18..24 — disjoint.
+        assert [p.args_as_dict() for p in calls_msg.parts] == [
+            {"path": "x.py", "offset": 8, "limit": 7},
+            {"path": "x.py", "offset": 18, "limit": 7},
+        ]
+        contents = [p.content for p in returns_msg.parts]
+        assert "[preload excerpt: x.py lines 8-14 of 100]" in contents[0]
+        assert "[preload excerpt: x.py lines 18-24 of 100]" in contents[1]
+
+    def test_excerpt_merges_adjacent_ranges(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        self._make_lines(root, "x.py", 100)
+
+        history = build_preseed_history(
+            root,
+            ["x.py"],
+            line_ranges={"x.py": [(10, 12), (13, 15)]},
+            context_lines=1,
+        )
+        _, returns_msg = history
+        # (10..12)±1 → 9..13 and (13..15)±1 → 12..16 are adjacent → merge.
+        assert len(returns_msg.parts) == 1
+        assert (
+            "[preload excerpt: x.py lines 9-16 of 100]" in returns_msg.parts[0].content
+        )
+
+    def test_excerpt_skips_paths_absent_from_ranges(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        self._make_lines(root, "a.py", 10)
+        self._make_lines(root, "b.py", 10)
+
+        history = build_preseed_history(
+            root,
+            ["a.py", "b.py"],
+            line_ranges={"a.py": [(2, 2)]},
+            context_lines=1,
+        )
+        assert len(history) == 2
+        _, returns_msg = history
+        assert len(returns_msg.parts) == 1
+        assert "a.py" in returns_msg.parts[0].content
+
+    def test_excerpt_full_file_range_signals_full_read(self, tmp_path):
+        root = tmp_path / "repo"
+        root.mkdir()
+        self._make_lines(root, "x.py", 5)
+
+        history = build_preseed_history(
+            root,
+            ["x.py"],
+            line_ranges={"x.py": [(1, 2)]},
+            context_lines=50,
+        )
+        calls_msg, _ = history
+        # Context expansion swallows the whole 5-line file → full read.
+        assert calls_msg.parts[0].args_as_dict() == {
+            "path": "x.py",
+            "offset": 1,
+            "limit": None,
+        }

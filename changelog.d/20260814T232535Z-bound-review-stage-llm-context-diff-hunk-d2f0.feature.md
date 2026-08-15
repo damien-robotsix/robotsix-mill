@@ -1,0 +1,1 @@
+The review stage now sends bounded diff hunks (context lines thinned when the diff exceeds the size cap) and preloads file excerpts around changed regions instead of whole modified files, cutting per-call input tokens while keeping read_file available for on-demand full regions.

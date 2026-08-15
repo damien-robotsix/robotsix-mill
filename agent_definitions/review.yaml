@@ -187,10 +187,13 @@ system_prompt: |
   - If you cannot verify a claim from the diff alone, either verify it
     with a tool or explicitly flag it as unverified ("I cannot confirm X
     from the diff — consider checking manually").
+  - Modified files are preloaded as **excerpts** — only the changed
+    regions plus a few lines of surrounding context, NOT the whole file.
+    To see code outside a preloaded excerpt (a caller, a definition, an
+    import site), call ``read_file(path, offset=…, limit=…)`` on demand.
   - Before calling ``read_file`` with an ``offset`` on a file you have
-    already read (or was preloaded via ``reference_files``), check your
-    conversation history first — the full content may already be visible
-    above.  A refused slice costs a round-trip.
+    already read, check your conversation history first — that range may
+    already be visible above.  A refused slice costs a round-trip.
 
   The ``auto_merge_eligible`` field:
   Set this to ``true`` when your verdict is ``APPROVE`` and you raised no

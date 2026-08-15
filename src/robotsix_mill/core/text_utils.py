@@ -88,6 +88,100 @@ def tail_keep(text: str, max_chars: int, *, label: str = "content") -> str:
     return f"[... {label} truncated: {omitted} chars omitted]\n\n{kept}"
 
 
+def _emit_context_run(
+    out: list[str],
+    run: list[str],
+    context_lines: int,
+    mode: str,
+) -> None:
+    """Emit a pending context run, trimming it to the given *mode*.
+
+    ``start`` keeps the tail (closest to the first change), ``end`` keeps
+    the head (closest to the last change), and ``middle`` keeps both ends
+    (closest to the changes on either side). *run* is emptied.
+    """
+    if not run:
+        return
+    n = len(run)
+    if mode == "start":
+        keep = min(context_lines, n)
+        if n > keep:
+            out.append(f"[... {n - keep} context lines omitted ...]\n")
+        out.extend(run[n - keep :])
+    elif mode == "end":
+        keep = min(context_lines, n)
+        out.extend(run[:keep])
+        if n > keep:
+            out.append(f"[... {n - keep} context lines omitted ...]\n")
+    else:  # middle
+        if n <= 2 * context_lines:
+            out.extend(run)
+        else:
+            omitted = n - 2 * context_lines
+            out.extend(run[:context_lines])
+            out.append(f"[... {omitted} context lines omitted ...]\n")
+            out.extend(run[-context_lines:])
+    run.clear()
+
+
+def limit_diff_context(diff: str, context_lines: int) -> str:
+    """Thin long context runs in a unified diff to *context_lines* per side.
+
+    Change lines (``+``/``-``), hunk headers (``@@``), file headers
+    (``--- ``/``+++ ``) and other structural lines are preserved verbatim.
+    Context lines (a single leading space) are capped to *context_lines*
+    before and after each change; when lines are dropped an explicit
+    ``[... N context lines omitted ...]`` marker is inserted. Hunk ``@@``
+    line numbers are left as-is — the result is LLM review context, not an
+    applicable patch.
+
+    *context_lines* <= 0 returns *diff* unchanged.
+    """
+    if context_lines <= 0:
+        return diff
+
+    out: list[str] = []
+    run: list[str] = []
+    in_hunk = False
+    seen_change = False
+
+    for line in diff.splitlines(keepends=True):
+        if line.startswith("@@"):
+            _emit_context_run(
+                out, run, context_lines, "end" if seen_change else "start"
+            )
+            seen_change = False
+            in_hunk = True
+            out.append(line)
+        elif line.startswith(" "):
+            run.append(line)
+        elif not in_hunk and line.startswith(("--- ", "+++ ")):
+            # File header (only valid outside a hunk). Inside a hunk a
+            # ``--- `` / ``+++ `` line is a change whose content begins
+            # with ``--`` / ``++``, so it falls through to the next branch.
+            _emit_context_run(
+                out, run, context_lines, "end" if seen_change else "start"
+            )
+            seen_change = False
+            out.append(line)
+        elif line.startswith(("+", "-", "\\")):
+            _emit_context_run(
+                out, run, context_lines, "middle" if seen_change else "start"
+            )
+            seen_change = True
+            out.append(line)
+        else:
+            # Structural line (diff --git, index, mode, rename, ...).
+            _emit_context_run(
+                out, run, context_lines, "end" if seen_change else "start"
+            )
+            seen_change = False
+            in_hunk = False
+            out.append(line)
+    _emit_context_run(out, run, context_lines, "end" if seen_change else "start")
+    return "".join(out)
+
+
 def head_tail_keep(text: str, max_chars: int, *, label: str = "content") -> str:
     """Keep a head slice and a tail slice of *text*, dropping the middle.
 

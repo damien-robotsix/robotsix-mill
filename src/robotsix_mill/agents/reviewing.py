@@ -203,14 +203,24 @@ def _review_attempt(
     if use_preseed and reference_files and repo_dir is not None:
         from .fs_tools import build_preseed_history
 
-        preseed = build_preseed_history(
-            repo_dir,
-            list(reference_files),
-            user_prompt=user_prompt,
-        )
-        if preseed:
-            run_kwargs["message_history"] = preseed
-            run_user_prompt = None
+        # Preload excerpts around each changed region instead of whole
+        # files. The diff already carries a new file's full content and
+        # a deleted file has none, so only modified files are excerpted;
+        # the reviewer fetches anything else via read_file on demand.
+        # When no file has excerptable ranges (e.g. a new-file-only diff)
+        # the plain string prompt is used directly — no message_history.
+        line_ranges = changed_line_ranges_from_diff(diff_text)
+        if line_ranges:
+            preseed = build_preseed_history(
+                repo_dir,
+                list(reference_files),
+                user_prompt=user_prompt,
+                line_ranges=line_ranges,
+                context_lines=settings.review_preseed_context_lines,
+            )
+            if preseed:
+                run_kwargs["message_history"] = preseed
+                run_user_prompt = None
     # Attach a board screenshot as a vision image ONLY when the
     # review agent is routed to the Claude SDK backend AND that
     # backend can actually view inline images (the capability gate
@@ -409,6 +419,35 @@ def _split_diff_by_file(diff: str) -> list[tuple[str, str]]:
             continue
         result.append((path, stripped))
     return result
+
+
+_HUNK_HEADER_RE = re.compile(
+    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? "
+    r"\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@",
+    re.MULTILINE,
+)
+
+
+def changed_line_ranges_from_diff(diff: str) -> dict[str, list[tuple[int, int]]]:
+    """Extract per-file changed line ranges from a unified diff.
+
+    Returns ``{path: [(start, end), …]}`` with 1-indexed inclusive
+    ranges taken from each hunk's new-side ``@@ -a,b +c,d @@`` header.
+    Only genuinely MODIFIED files are included — a new file (old side
+    ``-0,0``) already has its entire content in the diff, and a deletion
+    (new side ``+0,0``) has no content left to excerpt, so both are
+    skipped. Paths map to an empty list never appear.
+    """
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    for path, chunk_text in _split_diff_by_file(diff):
+        for m in _HUNK_HEADER_RE.finditer(chunk_text):
+            old_count = int(m.group("old_count") or 1)
+            new_count = int(m.group("new_count") or 1)
+            if old_count == 0 or new_count == 0:
+                continue
+            new_start = int(m.group("new_start"))
+            ranges.setdefault(path, []).append((new_start, new_start + new_count - 1))
+    return ranges
 
 
 def _synthesize_chunk_verdicts(

@@ -4,6 +4,7 @@ import pytest
 
 from robotsix_mill.core.text_utils import (
     head_tail_keep,
+    limit_diff_context,
     tail_keep,
     truncate_at_boundary,
 )
@@ -271,3 +272,66 @@ def test_truncate_omitted_count_accuracy() -> None:
     assert reported_omitted == actual_omitted, (
         f"Reported omitted {reported_omitted} != actual {actual_omitted}"
     )
+
+
+# --- limit_diff_context (hunk context thinning) ------------------------------
+
+
+def _diff_with_hunk(context_before: int, changes: int, context_after: int) -> str:
+    """Build a single-file diff with a long, change-free context run
+    sandwiched between two changed lines so the middle run is trimmed."""
+    lines = [
+        "diff --git a/x.py b/x.py",
+        "--- a/x.py",
+        "+++ b/x.py",
+        "@@ -1,20 +1,20 @@",
+    ]
+    lines += [" ctx-head"] * context_before
+    lines += ["+change-a"] * changes
+    lines += [" ctx-mid"] * 12
+    lines += ["-change-b"] * changes
+    lines += [" ctx-tail"] * context_after
+    return "\n".join(lines) + "\n"
+
+
+def test_limit_diff_context_disabled_returns_unchanged():
+    diff = _diff_with_hunk(5, 1, 5)
+    assert limit_diff_context(diff, 0) == diff
+
+
+def test_limit_diff_context_keeps_change_and_structural_lines():
+    diff = _diff_with_hunk(3, 2, 3)
+    result = limit_diff_context(diff, 1)
+    assert "diff --git a/x.py b/x.py" in result
+    assert "--- a/x.py" in result
+    assert "+++ b/x.py" in result
+    assert "@@ -1,20 +1,20 @@" in result
+    # Every change line survives; only the middle context run is thinned.
+    assert "+change-a" in result
+    assert "-change-b" in result
+
+
+def test_limit_diff_context_thins_long_middle_run():
+    diff = _diff_with_hunk(3, 1, 3)
+    result = limit_diff_context(diff, 1)
+    # The 12-line middle context run collapses to 1 line on each side.
+    assert "ctx-mid" in result
+    assert "[... 10 context lines omitted ...]" in result
+    assert result.count(" ctx-mid") == 2
+
+
+def test_limit_diff_context_short_runs_untouched():
+    diff = _diff_with_hunk(3, 1, 3)
+    # context_lines large enough to keep the whole 12-line run.
+    result = limit_diff_context(diff, 6)
+    assert "[... context lines omitted ...]" not in result
+    assert result.count(" ctx-mid") == 12
+
+
+def test_limit_diff_context_preserves_file_header_vs_removed_line():
+    """``--- a/foo`` is a file header, not a removed line."""
+    diff = "diff --git a/foo b/foo\n--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new\n"
+    result = limit_diff_context(diff, 1)
+    assert result.count("--- a/foo") == 1
+    assert "-old" in result
+    assert "+new" in result
