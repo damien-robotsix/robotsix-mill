@@ -101,6 +101,36 @@ def _bound_full_read(text: str, max_chars: int) -> str:
     return "".join(head_lines) + marker + "".join(tail_lines)
 
 
+def _expand_and_merge_ranges(
+    ranges: list[tuple[int, int]],
+    context_lines: int,
+    total_lines: int,
+) -> list[tuple[int, int]]:
+    """Expand each changed range by *context_lines* and merge overlaps.
+
+    Ranges are 1-indexed and inclusive; *total_lines* clamps the
+    expansion to the file's actual extent so a small file's single
+    excerpt collapses to the whole file (1..total_lines) rather than
+    spilling past EOF.
+    """
+    expanded: list[tuple[int, int]] = []
+    for start, end in ranges:
+        lo = max(1, start - context_lines)
+        hi = min(total_lines, end + context_lines)
+        if lo <= hi:
+            expanded.append((lo, hi))
+    if not expanded:
+        return []
+    expanded.sort()
+    merged: list[list[int]] = [[expanded[0][0], expanded[0][1]]]
+    for lo, hi in expanded[1:]:
+        if lo <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return [(lo, hi) for lo, hi in merged]
+
+
 def build_preseed_history(
     repo_dir: Path,
     paths: list[str],
@@ -108,6 +138,8 @@ def build_preseed_history(
     user_prompt: str | None = None,
     max_files: int = 20,
     max_total_bytes: int = 200_000,
+    line_ranges: dict[str, list[tuple[int, int]]] | None = None,
+    context_lines: int = 0,
 ) -> list[Any]:
     """Build a synthetic ``message_history`` that pre-loads *paths*
     under *repo_dir* into the agent's context.
@@ -133,6 +165,17 @@ def build_preseed_history(
     tool returns, so the Langfuse "Formatted" view hides it and the
     model sees its own request only AFTER the tool-call exchange.
 
+    When *line_ranges* is provided (mapping repo-relative path →
+    list of 1-indexed inclusive ``(start, end)`` changed ranges), each
+    file is preloaded as EXCERPTS instead of its whole contents: every
+    changed range is expanded by *context_lines* on each side, clamped
+    to the file's extent, and merged, then emitted as one read_file
+    call/return per merged range. Paths absent from *line_ranges* are
+    skipped (the caller knows their content is already represented —
+    e.g. a new file whose full body sits in the diff). This is the
+    review-stage shape: bounded excerpts plus on-demand ``read_file``
+    replace the old whole-file preload.
+
     Returns an empty list when *paths* is empty AND *user_prompt* is None.
 
     Defensive checks:
@@ -145,8 +188,8 @@ def build_preseed_history(
     Used by:
     - implement (``coordinating.py``) — preloads reference_files the
       refine agent curated.
-    - review (``reviewing.py``) — preloads every file the implement
-      stage actually modified.
+    - review (``reviewing.py``) — preloads excerpts around each file's
+      changed regions instead of the whole modified file.
     """
     if not paths and user_prompt is None:
         return []
@@ -172,6 +215,74 @@ def build_preseed_history(
             )
             break
         file_path = repo_dir / path
+
+        if line_ranges is not None:
+            ranges = line_ranges.get(path) or []
+            if not ranges:
+                continue
+            try:
+                if file_path.suffix.lower() == ".pdf":
+                    # Line-based excerpts don't apply to extracted PDF text.
+                    continue
+                text = file_path.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            except OSError:
+                log.warning(
+                    "build_preseed_history: %s not found on disk, skipping",
+                    path,
+                )
+                continue
+            lines = text.splitlines()
+            total_lines = len(lines)
+            if total_lines == 0:
+                continue
+            merged = _expand_and_merge_ranges(ranges, context_lines, total_lines)
+            hit_cap = False
+            for start, end in merged:
+                body = "\n".join(lines[start - 1 : end])
+                header = (
+                    f"[preload excerpt: {path} lines {start}-{end} of {total_lines}]\n"
+                )
+                content = header + body + "\n"
+                if total_bytes + len(content) > max_total_bytes:
+                    log.warning(
+                        "build_preseed_history: max_total_bytes=%d would be "
+                        "exceeded by %s (size %d, cumulative %d) — dropping "
+                        "this and remaining paths",
+                        max_total_bytes,
+                        path,
+                        len(content),
+                        total_bytes,
+                    )
+                    hit_cap = True
+                    break
+                total_bytes += len(content)
+                tc_id = f"preload_{path}_{start}_{end}"
+                is_full = start == 1 and end == total_lines
+                calls.append(
+                    ToolCallPart(
+                        tool_name="read_file",
+                        args={
+                            "path": path,
+                            "offset": start,
+                            "limit": None if is_full else end - start + 1,
+                        },
+                        tool_call_id=tc_id,
+                    )
+                )
+                returns.append(
+                    ToolReturnPart(
+                        tool_name="read_file",
+                        content=content,
+                        tool_call_id=tc_id,
+                    )
+                )
+            if hit_cap:
+                break
+            continue
+
         try:
             if file_path.suffix.lower() == ".pdf":
                 content = _extract_pdf_text(file_path)

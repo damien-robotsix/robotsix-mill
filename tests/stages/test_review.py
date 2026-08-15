@@ -104,6 +104,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -134,6 +135,7 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -171,6 +173,7 @@ def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -209,6 +212,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -247,6 +251,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -283,6 +288,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -330,6 +336,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -366,6 +373,7 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -402,6 +410,7 @@ def test_comment_multiline_collapse(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -436,6 +445,7 @@ def test_comment_truncation(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -475,6 +485,7 @@ def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -528,6 +539,7 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -570,6 +582,7 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -610,6 +623,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -643,6 +657,7 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -1221,6 +1236,49 @@ def test_oversized_diff_is_truncated_before_agent(ctx_factory, monkeypatch):
     assert set(captured["reference_files"]) >= {"big.txt", "feature.txt"}
 
 
+def test_preseed_ranges_derived_from_untruncated_diff(ctx_factory, monkeypatch):
+    """The stage derives the preseed excerpt ranges from the UNTRUNCATED
+    diff, so a *modified* file whose hunks fall in the dropped middle still
+    gets an excerpt — the reviewer never loses a referenced file."""
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL="file:///dummy",
+        review_enabled="true",
+        review_diff_max_chars="1500",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+
+    # Modify a tracked file (README.md from the seed) so it is a genuine
+    # *modified* file with changed-line ranges, and pad the diff with two
+    # large NEW files that sort around it alphabetically so README.md's
+    # hunks land in the dropped middle after head+tail truncation.
+    (repo_dir / "README.md").write_text(
+        "seed\nMODIFIED_LINE_IN_DROPPED_MIDDLE\n", encoding="utf-8"
+    )
+    (repo_dir / "0_aaa_pad.txt").write_text(
+        "".join(f"pad0-{i}\n" for i in range(400)), encoding="utf-8"
+    )
+    (repo_dir / "z_zzz_pad.txt").write_text(
+        "".join(f"padz-{i}\n" for i in range(400)), encoding="utf-8"
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "modify readme + pad diff")
+
+    captured = _capture_review(monkeypatch)
+    ReviewStage().run(t, ctx)
+
+    diff = captured["diff"]
+    assert "truncated:" in diff
+    # The modified file's content was dropped from the bounded diff…
+    assert "MODIFIED_LINE_IN_DROPPED_MIDDLE" not in diff
+    # …but its excerpt ranges survive, derived from the untruncated diff.
+    assert "README.md" in captured["changed_line_ranges"]
+    assert captured["changed_line_ranges"]["README.md"]
+    assert set(captured["reference_files"]) >= {"README.md", "feature.txt"}
+
+
 def test_small_diff_passes_through_unchanged(ctx_factory, monkeypatch):
     """A normal small diff (under the default cap) reaches the agent
     verbatim — no truncation marker."""
@@ -1751,6 +1809,7 @@ def test_review_cache_hit_skips_agent(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,
@@ -1796,6 +1855,7 @@ def test_review_cache_different_diff_miss(ctx_factory, monkeypatch):
         prior_context=None,
         repo_dir=None,
         reference_files=None,
+        changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
         level=None,

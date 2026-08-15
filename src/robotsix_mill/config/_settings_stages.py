@@ -589,6 +589,30 @@ class _StagesSettings(BaseModel):
         ge=0,
         json_schema_extra={"advanced": True},
     )
+    # When the combined diff exceeds ``review_diff_max_chars``, thin each
+    # hunk's context runs down to this many lines per side BEFORE the
+    # head+tail hard cap. ``git diff`` already emits 3 context lines, so a
+    # value of 1 removes the extra context lines that dominate large,
+    # scattered diffs while the preseed excerpts (below) still give the
+    # reviewer surrounding code. 0 keeps the full 3-line context and relies
+    # on head+tail truncation alone.
+    review_diff_context_lines: int = Field(
+        description="Max surrounding context lines kept per hunk when the review diff exceeds review_diff_max_chars. 0 disables hunk thinning.",
+        default=1,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+    # Lines of file context around each changed region preloaded in the
+    # review preseed. Replaces the old whole-file preload: for a modified
+    # file we now send only the changed lines plus this much surrounding
+    # context, and the reviewer calls read_file(path, offset, limit) for
+    # anything else it needs. 0 preloads only the changed lines themselves.
+    review_preseed_context_lines: int = Field(
+        description="Lines of file context around each changed region preloaded in the review preseed. 0 preloads only changed lines.",
+        default=40,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
     # Output token budget for the review agent retry when the primary
     # attempt exhausts its max_tokens before generating a response
     # (the reasoning model burns output tokens on internal reasoning).

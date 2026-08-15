@@ -17,7 +17,12 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from ..agents.reviewing import ReviewAsk, ReviewVerdict, run_review_agent
+from ..agents.reviewing import (
+    ReviewAsk,
+    ReviewVerdict,
+    changed_line_ranges_from_diff,
+    run_review_agent,
+)
 from ..config import target_branch_for
 from ..config.repos import get_repos_config
 from ..config.settings import Settings
@@ -687,6 +692,7 @@ class _DiffMeta:
 
     __slots__ = (
         "action_refs",
+        "changed_line_ranges",
         "diff",
         "gh_token",
         "head_sha",
@@ -704,6 +710,7 @@ class _DiffMeta:
         input_hash: str,
         repo_dir: Path,
         modified_paths: list[str],
+        changed_line_ranges: dict[str, list[tuple[int, int]]],
         workflow_refs: set[str],
         action_refs: list[tuple[str, str, str, str]],
         reusable_workflow_refs: list[tuple[str, str, str, str]],
@@ -714,6 +721,7 @@ class _DiffMeta:
         self.input_hash = input_hash
         self.repo_dir = repo_dir
         self.modified_paths = modified_paths
+        self.changed_line_ranges = changed_line_ranges
         self.workflow_refs = workflow_refs
         self.action_refs = action_refs
         self.reusable_workflow_refs = reusable_workflow_refs
@@ -774,6 +782,7 @@ class ReviewStage(Stage):
                 prior_context=prior_context,
                 repo_dir=dm.repo_dir,
                 reference_files=dm.modified_paths,
+                changed_line_ranges=dm.changed_line_ranges,
                 screenshot_path=screenshot_path,
                 extra_roots=extra_roots,
             )
@@ -892,13 +901,15 @@ class ReviewStage(Stage):
             )
             return cached
 
-        # Derive modified paths, workflow refs, AND action refs from the
-        # UNTRUNCATED diff so middle truncation (below) never drops a
-        # ``+++ b/<path>`` header or a ``uses:`` line and silently shrinks
-        # the preseed file set, the cross-repo clone set, or the action-ref
-        # validation. The agent receives the bounded diff; the preseed and
-        # extra_roots still cover every referenced file and repo.
+        # Derive modified paths, per-file changed line ranges, workflow
+        # refs, AND action refs from the UNTRUNCATED diff so middle
+        # truncation (below) never drops a ``+++ b/<path>`` header, a
+        # hunk, or a ``uses:`` line and silently shrinks the preseed
+        # file/excerpt set, the cross-repo clone set, or the action-ref
+        # validation. The agent receives the bounded diff; the preseed
+        # and extra_roots still cover every referenced file and repo.
         modified_paths = git_ops._paths_from_diff(diff)
+        changed_line_ranges = changed_line_ranges_from_diff(diff)
         workflow_refs = _workflow_refs_from_diff(diff)
         action_refs = _action_refs_from_diff(diff)
         reusable_workflow_refs = _reusable_workflow_sha_refs_from_diff(diff)
@@ -919,9 +930,14 @@ class ReviewStage(Stage):
         # history) regardless of how few lines the intended change touches,
         # overflowing even a 1M-token model context. Middle-truncate so both
         # early and late files keep representation. 0 disables the cap.
-        from ..core.text_utils import head_tail_keep
+        from ..core.text_utils import head_tail_keep, limit_diff_context
 
-        diff = head_tail_keep(diff, s.review_diff_max_chars, label="git-diff")
+        if s.review_diff_max_chars > 0 and len(diff) > s.review_diff_max_chars:
+            # Over threshold: thin each hunk's context runs first (cheap,
+            # preserves every change line) and only then apply the hard
+            # head+tail cap so early and late files stay represented.
+            diff = limit_diff_context(diff, s.review_diff_context_lines)
+            diff = head_tail_keep(diff, s.review_diff_max_chars, label="git-diff")
 
         return _DiffMeta(
             diff=diff,
@@ -929,6 +945,7 @@ class ReviewStage(Stage):
             input_hash=input_hash,
             repo_dir=repo_dir,
             modified_paths=modified_paths,
+            changed_line_ranges=changed_line_ranges,
             workflow_refs=workflow_refs,
             action_refs=action_refs,
             reusable_workflow_refs=reusable_workflow_refs,
