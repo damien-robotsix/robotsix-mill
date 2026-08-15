@@ -1645,6 +1645,22 @@
           "title": "Health Periodic",
           "type": "boolean"
         },
+        "implement_history_max_turns": {
+          "advanced": true,
+          "default": 8,
+          "description": "Last-N tool-call turns kept when compacting a resumed implement message_history. 0 disables compaction.",
+          "minimum": 0,
+          "title": "Implement History Max Turns",
+          "type": "integer"
+        },
+        "implement_history_summary_max_chars": {
+          "advanced": true,
+          "default": 3000,
+          "description": "Maximum characters of the rolling summary for dropped implement history turns.",
+          "minimum": 0,
+          "title": "Implement History Summary Max Chars",
+          "type": "integer"
+        },
         "implement_max_spawns_per_ticket": {
           "advanced": true,
           "default": 3,
@@ -1666,6 +1682,14 @@
           "default": null,
           "description": "Path to the implement agent's Markdown memory ledger. When unset, derives from data_dir/board/implement_memory.md.",
           "title": "Implement Memory Path"
+        },
+        "implement_preseed_context_lines": {
+          "advanced": true,
+          "default": 40,
+          "description": "Lines of file context around each changed region preloaded in the implement retry preseed. 0 preloads only changed lines.",
+          "minimum": 0,
+          "title": "Implement Preseed Context Lines",
+          "type": "integer"
         },
         "implement_stall_threshold": {
           "advanced": true,

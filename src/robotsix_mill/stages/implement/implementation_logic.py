@@ -332,6 +332,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         extra_roots: list[Path] | None,
         memory_board_id: str,
         ws=None,  # Workspace — needed for save_conversation_state on budget error
+        target_branch: str = "main",
     ) -> _AgentRunOutcome:
         """Invoke ``coding.run_implement_agent`` and capture caught errors.
 
@@ -360,6 +361,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 sandbox_image=ctx.repo_config.sandbox_image
                 if ctx.repo_config
                 else None,
+                target_branch=target_branch,
             )
         except AgentBudgetError as e:
             if e.conversation_state is not None and ws is not None:
@@ -1295,6 +1297,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             extra_roots,
             memory_board_id,
             ws,
+            target_branch=target,
         )
         if agent_result.failure is not None:
             return agent_result.failure

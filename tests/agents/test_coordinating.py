@@ -955,6 +955,105 @@ class TestRunCoordinator:
         # because the artifact is paths-only with no content key.
         assert tr.content == "original content"
 
+    def test_retry_excerpt_preloads_changed_regions(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """On a retry pass (feedback set, delta-context enabled) the
+        reference_files are excerpt-preloaded around the changed regions of
+        the current diff instead of re-sending whole files."""
+        import subprocess
+
+        repo = tmp_path
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@example.com"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "test"],
+            check=True,
+        )
+        lines = [f"L{i:03d}" for i in range(1, 201)]
+        (repo / "a.py").write_text("\n".join(lines) + "\n")
+        subprocess.run(["git", "-C", str(repo), "add", "a.py"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
+
+        # Uncommitted edit on line 50 → changed region (50, 50) once the
+        # hunk context is collapsed.
+        edited = lines[:]
+        edited[49] = "CHANGED"
+        (repo / "a.py").write_text("\n".join(edited) + "\n")
+
+        ref = [{"path": "a.py"}]
+        self._run(settings, repo, reference_files=ref, feedback="test_x failed")
+
+        mh = self.captured["message_history"]
+        assert isinstance(mh, list)
+        tr = mh[2].parts[0]
+        assert isinstance(tr, ToolReturnPart)
+        # Excerpt header proves the line_ranges path was taken.
+        assert "[preload excerpt: a.py lines " in tr.content
+        # Whole-file preload would include the untouched first line.
+        assert "L001\n" not in tr.content
+
+    def test_resume_message_history_compacted(
+        self,
+        settings,
+        tmp_path,
+    ):
+        """A resumed ``message_history`` is compacted to the last-N tool
+        turns plus a rolling summary, never orphaning a tool return."""
+        from pydantic_ai.messages import TextPart, UserPromptPart
+
+        history = [ModelRequest(parts=[UserPromptPart(content="initial prompt")])]
+        for i in range(10):
+            history.append(
+                ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            tool_name="read_file",
+                            args={"path": f"f{i}.py"},
+                            tool_call_id=f"call_{i}",
+                        )
+                    ]
+                )
+            )
+            history.append(
+                ModelRequest(
+                    parts=[
+                        ToolReturnPart(
+                            tool_name="read_file",
+                            content=f"content {i}",
+                            tool_call_id=f"call_{i}",
+                        )
+                    ]
+                )
+            )
+        history.append(ModelResponse(parts=[TextPart(content="done")]))
+
+        self._run(settings, tmp_path, message_history=history)
+
+        mh = self.captured["message_history"]
+        # First message is the rolling-summary user prompt.
+        first = mh[0]
+        assert isinstance(first, ModelRequest)
+        assert "summarized" in first.parts[0].content
+        # No kept tool return is orphaned from its tool call.
+        call_ids = {
+            p.tool_call_id
+            for m in mh
+            if isinstance(m, ModelResponse)
+            for p in m.parts
+            if isinstance(p, ToolCallPart)
+        }
+        for m in mh:
+            if isinstance(m, ModelRequest):
+                for p in m.parts:
+                    if isinstance(p, ToolReturnPart):
+                        assert p.tool_call_id in call_ids
+
 
 # ---------------------------------------------------------------------------
 # _call_with_timeout — watchdog timeout propagation

@@ -1466,3 +1466,32 @@ class _StagesSettings(BaseModel):
         alias="MILL_IMPLEMENT_PASS_TIMEOUT",
         json_schema_extra={"advanced": True},
     )
+    # Lines of file context around each changed region preloaded in the
+    # implement preseed. On a retry pass the prior attempt's edits are
+    # already on disk, so the reference_files excerpt-preload sends only
+    # the changed lines plus this much surrounding context (mirroring
+    # ``review_preseed_context_lines``) instead of re-sending whole files.
+    # 0 preloads only the changed lines themselves.
+    implement_preseed_context_lines: int = Field(
+        description="Lines of file context around each changed region preloaded in the implement retry preseed. 0 preloads only changed lines.",
+        default=40,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+    # Cap for the message_history replayed on a resumed implement pass:
+    # keep only the last N assistant tool-call rounds and summarise the
+    # older prefix. 0 disables compaction (full history is replayed).
+    implement_history_max_turns: int = Field(
+        description="Last-N tool-call turns kept when compacting a resumed implement message_history. 0 disables compaction.",
+        default=8,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+    # Maximum characters of the rolling summary that replaces the dropped
+    # older turns in a compacted implement message_history.
+    implement_history_summary_max_chars: int = Field(
+        description="Maximum characters of the rolling summary for dropped implement history turns.",
+        default=3000,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
