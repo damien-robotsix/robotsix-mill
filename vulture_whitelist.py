@@ -283,6 +283,9 @@ config_get
 config_put
 config_versions
 config_rollback
+# GET /metrics/step-usage handler — invoked via @router.get decorator, not
+# by direct Python call. Tested via HTTP TestClient.
+get_step_usage
 
 # -- meta --------------------------------------------------------------------
 todo_drafts_created
