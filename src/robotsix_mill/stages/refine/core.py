@@ -122,6 +122,20 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, wp_gate, ws, input_hash
             )
 
+        # Phase 2.165: scope-triage repo-awareness gate — deterministic
+        # check that rejects drafts whose mill-pipeline domain terms
+        # (stage names, config keys, module names) do not appear in the
+        # target repo.  Catches tickets filed against the wrong board
+        # before any refine/implement LLM budget is spent.  Runs before
+        # any LLM-invoking gate.
+        ra_gate = RefineStage._run_scope_triage_repo_awareness_gate(
+            ctx, ticket, draft, title, repo_dir
+        )
+        if ra_gate is not None:
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, ra_gate, ws, input_hash
+            )
+
         # Phase 2.17: standards gate — a single cheap LLM call that
         # discards agent-spawned drafts whose GOAL violates an explicit
         # robotsix-standards prohibition (fleet repos only).  Runs

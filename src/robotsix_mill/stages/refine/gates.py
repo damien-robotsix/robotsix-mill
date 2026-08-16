@@ -11,6 +11,7 @@ pure helpers from :mod:`.helpers` and the agent modules from
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,7 @@ from .helpers import (
     OBSOLESCENCE_GAP_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
+    SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX,
     STANDARDS_GATE_PREFIX,
     WORKFLOW_PORTABILITY_GATE_PREFIX,
     _advisory_candidate_id,
@@ -39,6 +41,68 @@ from .helpers import (
     _strip_advisory_block,
     log,
     verify_claim,
+)
+
+# Distinctive mill-pipeline tokens.  When one of these appears in a draft
+# but is absent from the target repo, the draft almost certainly targets
+# the mill itself and was filed against the wrong board.  These are
+# deliberately narrow — single generic English words ("fix", "test",
+# "config", "implement", "review", …) are handled separately via the
+# stage-phrase patterns below, never matched bare.
+_SCOPE_TRIAGE_DOMAIN_TOKENS: tuple[str, ...] = (
+    "ci_fix",
+    "ci_fix_codeql",
+    "ci_transient",
+    "dependency_fix",
+    "scope_triage",
+    "scope-triage",
+    "epic_breakdown",
+    "epic_status",
+    "doc_classifier",
+    "spec-review",
+    "codeql_fp_triage",
+    "review_revision",
+    "reviewer-agreement",
+    "meta_triage",
+    "robotsix_mill",
+    "robotsix-mill",
+    "file_map",
+    "max_memory_chars",
+    "coordinator_max_tool_calls",
+    "run_coordinator",
+    "agent_definitions",
+)
+
+# Mill stage names that are also ordinary English words.  These are only
+# flagged when used in the mill sense — "<name> stage" / "<name> agent" —
+# so a draft about "implementing a feature" or a "document update" is not
+# mistaken for a mill mis-route.
+_SCOPE_TRIAGE_STAGE_NAMES: tuple[str, ...] = (
+    "ci_fix",
+    "ci_fix_codeql",
+    "ci_transient",
+    "dependency_fix",
+    "scope_triage",
+    "scope-triage",
+    "epic_breakdown",
+    "epic_status",
+    "refine",
+    "triage",
+    "implement",
+    "review",
+    "document",
+    "deliver",
+    "answer",
+    "retrospect",
+    "merge",
+    "rebase",
+)
+
+_SCOPE_TRIAGE_STAGE_PHRASE_RE = re.compile(
+    r"\b("
+    + "|".join(re.escape(name) for name in _SCOPE_TRIAGE_STAGE_NAMES)
+    + r")\s+(?:stage|agent)\b",
+    re.IGNORECASE,
 )
 
 
@@ -882,6 +946,91 @@ class RefineGatesMixin:
                     "cannot be enabled on a managed repo via a "
                     ".robotsix-mill/periodic/ presence file",
                 )
+
+        return None
+
+    @staticmethod
+    def _run_scope_triage_repo_awareness_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        title: str,
+        repo_dir: Path | None,
+    ) -> Outcome | None:
+        """Deterministic repo-awareness gate — reject mis-routed drafts.
+
+        Extracts mill-pipeline domain terms from the spec (distinctive
+        tokens such as ``ci_fix`` and stage-name phrases such as
+        ``implement stage``) and greps the target repo for each one.
+        A term that appears in the spec but not anywhere in the repo
+        means the draft targets a mill construct the repo does not
+        contain — the ticket was almost certainly filed against the
+        wrong board, so it is short-circuited before any LLM budget is
+        spent.
+
+        Generic words ("fix", "test", "config", …) are never flagged;
+        only curated mill-specific tokens and ``<stage> stage`` /
+        ``<stage> agent`` phrases are checked, so a draft about adding
+        a new feature or fixing a bug passes through untouched.
+
+        Returns ``None`` when no domain term is detected, the repo
+        cannot be grepped, or every detected term is present in the
+        repo (fall through to normal refine).
+        """
+        # Meta-board tickets are cross-repo by design: the mill concepts
+        # they cite legitimately live in one of the OTHER cloned repos,
+        # so a single-repo grep cannot prove a mis-route.  Skip.
+        if ticket.board_id == "meta":
+            return None
+
+        text = f"{title}\n{draft}"
+
+        needles: list[str] = []
+        for token in _SCOPE_TRIAGE_DOMAIN_TOKENS:
+            if re.search(rf"\b{re.escape(token)}\b", text, re.IGNORECASE):
+                needles.append(token)
+        needles.extend(m.group(0) for m in _SCOPE_TRIAGE_STAGE_PHRASE_RE.finditer(text))
+
+        if not needles:
+            return None
+
+        # Cannot prove a mis-route without a repo to grep — fall through
+        # and let the triage classifier (which has explore/read_file
+        # tools) handle grounding verification.
+        if repo_dir is None or not (repo_dir / ".git").exists():
+            return None
+
+        for needle in needles:
+            result = subprocess.run(
+                ["git", "-C", str(repo_dir), "grep", "-q", "-I", "-i", "-e", needle],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                continue  # term exists in the repo — not a mis-route
+            if result.returncode == 1:
+                log.info(
+                    "%s: scope-triage repo-awareness gate — %r appears in "
+                    "the spec but not in the repo; rejecting as mis-routed",
+                    ticket.id,
+                    needle,
+                )
+                return Outcome(
+                    State.DONE,
+                    f"{SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX} {needle!r} is a "
+                    "mill pipeline concept that does not appear in this "
+                    "repository — the ticket was likely filed against the "
+                    "wrong board; rejecting before implement",
+                )
+            # Any other exit code is a git error (e.g. no commits yet) —
+            # treat as "cannot verify" and keep checking / fall through.
+            log.debug(
+                "%s: scope-triage repo-awareness grep for %r errored (%d) — "
+                "falling through",
+                ticket.id,
+                needle,
+                result.returncode,
+            )
 
         return None
 
