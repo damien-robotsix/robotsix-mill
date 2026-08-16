@@ -29,10 +29,7 @@ class JsonSettingsSource(PydanticBaseSettingsSource):
     """
 
     def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
-        """Return the field value for *field_name* from the JSON settings source.
-
-        Not used — ``__call__`` is overridden directly.
-        """
+        """Raise ``NotImplementedError`` — unused; ``__call__`` is overridden directly."""
         raise NotImplementedError
 
     def __call__(self) -> dict[str, Any]:

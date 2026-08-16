@@ -1,0 +1,1 @@
+Added Google-style docstrings to 7 public methods across 4 files (JsonSettingsSource, TZDateTime, RequestIDMiddleware, RequestIDLogFilter, RunRegistry). Removed 6 standalone D102 per-file-ignore entries and the orphaned ``# D102: …`` comment from pyproject.toml.
