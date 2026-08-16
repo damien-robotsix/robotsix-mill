@@ -70,6 +70,8 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         "openrouter_api_key",
         "forge_token",
         "forge_repo_create_token",
+        "fleet_notify_token",
+        "fleet_notify_url",
         "github_app_id",
         "github_app_private_key",
         "langfuse_base_url",

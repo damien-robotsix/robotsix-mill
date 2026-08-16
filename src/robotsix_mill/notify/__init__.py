@@ -1,25 +1,21 @@
-"""Best-effort ntfy notification on human-attention states.
+"""Best-effort notification on human-attention states.
 
-Fires a push notification when the worker transitions a ticket into one
-of the four human-attention states (``human_issue_approval``, ``human_mr_approval``,
-``blocked``, ``errored``).  Network errors / timeouts are caught and
-logged — the notification is fire-and-forget and never interferes with
-ticket processing.
+Dispatches to the fleet notification endpoint when the worker transitions
+a ticket into one of the four human-attention states (``human_issue_approval``,
+``human_mr_approval``, ``blocked``, ``errored``).  Network errors / timeouts
+are caught and logged — the notification is fire-and-forget and never
+interferes with ticket processing.
 """
 
 from __future__ import annotations
 
 import logging
 
-import httpx
-
 from ..config import Settings, get_secrets
 from ..core.models import Ticket
 from ..core.states import State
 
 log = logging.getLogger("robotsix_mill.notify")
-
-_TIMEOUT = httpx.Timeout(5.0, read=10.0)
 
 #: States whose worker-driven transitions trigger a notification.
 _TRIGGER_STATES: set[State] = {
@@ -36,13 +32,49 @@ def send_notification(
     note: str | None,
     settings: Settings,
 ) -> None:
+    """Post a fleet notification for a human-attention transition.
+
+    No-op when ``fleet_notify_url`` is unset / empty.  Falls back to the
+    legacy ntfy channel when fleet is not configured and ntfy is.
+    """
+    secrets = get_secrets()
+    fleet_url = secrets.fleet_notify_url
+    if fleet_url:
+        from .fleet import get_fleet_notifier
+
+        notifier = get_fleet_notifier(fleet_url, secrets.fleet_notify_token)
+        notifier.notify(ticket, dst, note, str(settings.api_url))
+        return
+
+    # Legacy ntfy fallback — kept for existing deployments that have
+    # ntfy configured but not yet the fleet endpoint.
+    ntfy_url = secrets.ntfy_url
+    if ntfy_url:
+        _send_ntfy(ticket, dst, note, settings, ntfy_url)
+        return
+
+    # Neither fleet nor ntfy configured — silent no-op.
+    log.debug("no notification channel configured for %s -> %s", ticket.id, dst.value)
+
+
+# ---------------------------------------------------------------------------
+# Legacy ntfy delivery (kept as fallback)
+# ---------------------------------------------------------------------------
+
+
+def _send_ntfy(
+    ticket: Ticket,
+    dst: State,
+    note: str | None,
+    settings: Settings,
+    ntfy_url: str,
+) -> None:
     """Post an ntfy notification for a human-attention transition.
 
-    No-op when ``settings.NTFY_URL`` is unset / empty.
+    Kept as a fallback for deployments that have ntfy configured but not
+    yet the fleet notification endpoint.
     """
-    url = get_secrets().ntfy_url
-    if not url:
-        return
+    import httpx
 
     # HTTP headers must be ASCII/latin-1; an em-dash (or any non-ASCII
     # in the ticket title) makes httpx raise UnicodeEncodeError and the
@@ -69,12 +101,15 @@ def send_notification(
     from ..agents.retry import call_with_retry
 
     def _post() -> None:
-        r = httpx.post(url, headers=headers, content=body, timeout=_TIMEOUT)
+        r = httpx.post(
+            ntfy_url,
+            headers=headers,
+            content=body,
+            timeout=httpx.Timeout(5.0, read=10.0),
+        )
         r.raise_for_status()
 
     try:
-        # bounded retry on transient (429/5xx/timeout); still fully
-        # best-effort — never raises out of here.
         call_with_retry(_post, what="ntfy")
         log.debug("ntfy notification sent for %s -> %s", ticket.id, dst.value)
     except Exception:

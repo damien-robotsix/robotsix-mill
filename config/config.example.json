@@ -10,6 +10,8 @@
     }
   },
   "secrets": {
+    "fleet_notify_token": "SECRET",
+    "fleet_notify_url": "SECRET",
     "forge_repo_create_token": "SECRET",
     "forge_token": "SECRET",
     "github_app_id": "SECRET",

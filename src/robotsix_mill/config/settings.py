@@ -105,13 +105,21 @@ class Settings(
         default=None,
         description="OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
     )
+    fleet_notify_url: SecretStr | None = Field(
+        default=None,
+        description="Fleet notification endpoint URL for dispatching alerts to robotsix-chat.",
+    )
+    fleet_notify_token: SecretStr | None = Field(
+        default=None,
+        description="Bearer token for the fleet notification endpoint.",
+    )
     ntfy_url: SecretStr | None = Field(
         default=None,
-        description="ntfy server URL for push notifications (https://ntfy.sh).",
+        description="ntfy server URL for push notifications (https://ntfy.sh).  Legacy fallback; prefer fleet_notify_url.",
     )
     ntfy_token: SecretStr | None = Field(
         default=None,
-        description="ntfy access token for authenticated push notifications.",
+        description="ntfy access token for authenticated push notifications.  Legacy fallback; prefer fleet_notify_token.",
     )
 
     # --- Repository registry ---
