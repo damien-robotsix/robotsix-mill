@@ -80,6 +80,7 @@ BOARD_HTML = """<!doctype html><html><head><meta charset="utf-8">
 <title>robotsix-mill</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/static/board.css?v={ASSET_VERSION}">
 <link rel="stylesheet" href="/static/mill/board-mill.css?v={ASSET_VERSION}">
+<link rel="stylesheet" href="/static/mill/robotsix-ui.css?v={ASSET_VERSION}">
 </head><body>
 <header><h1>robotsix-mill</h1>
 <span id="gates"></span>
@@ -134,9 +135,14 @@ margin-left:4px" title="Component-owned config (Settings panel)">
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 <div id="credit-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 {BOARD_SKELETON}
-<div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div></div>
+<div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div>
+<div id="settings-panel" style="display:none"></div></div>
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>
 {CONFIG_SCRIPT}
+<script type="module">
+  import { mountConfigPanel } from "/static/mill/robotsix-ui-vanilla.js?v={ASSET_VERSION}";
+  mountConfigPanel(document.getElementById("settings-panel"), { title: "Settings" });
+</script>
 <script src="/static/board.js?v={ASSET_VERSION}"></script>
 <script src="/static/mill/board-mill.js?v={ASSET_VERSION}"></script></body></html>"""
 

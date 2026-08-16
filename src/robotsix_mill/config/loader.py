@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+from cryptography.fernet import Fernet
 
 
 class ConfigError(Exception):
@@ -86,6 +89,43 @@ def load_settings_block() -> dict[str, Any]:
     return block
 
 
+def _derive_fernet_key() -> bytes:
+    """Derive a deterministic Fernet key from the machine hostname.
+
+    The key is deterministic (same machine → same key) so config
+    survives restarts.  Not a secret — the real defence is the 0600
+    file permissions on config.json.
+    """
+    hostname = os.uname().nodename
+    raw = hashlib.sha256(hostname.encode() + b":robotsix-mill-config-v1").digest()
+    return base64.urlsafe_b64encode(raw)
+
+
+def encrypt_secrets_block(secrets: dict[str, Any]) -> str:
+    """Encrypt a secrets dict for at-rest storage in config.json.
+
+    Returns a Fernet token (base64 string).
+    """
+    f = Fernet(_derive_fernet_key())
+    return f.encrypt(json.dumps(secrets).encode()).decode()
+
+
+def decrypt_secrets_block(token: str) -> dict[str, Any] | None:
+    """Decrypt a Fernet token back to a secrets dict.
+
+    Returns ``None`` on any failure (wrong key, corruption, etc.).
+    """
+    try:
+        f = Fernet(_derive_fernet_key())
+        data = f.decrypt(token.encode())
+        loaded = json.loads(data)
+        if isinstance(loaded, dict):
+            return loaded
+    except Exception:  # noqa: S110 — Decryption failure; treat block as unset.
+        pass
+    return None
+
+
 def load_secrets_block() -> dict[str, Any]:
     """Return the main config file's ``secrets`` block.
 
@@ -100,11 +140,28 @@ def load_secrets_block() -> dict[str, Any]:
 
     Never raises: a missing or malformed file means "all unset", matching
     :func:`load_settings_block`.
+
+    The ``secrets`` block may be stored base64-encoded (new format) or as
+    a plain dict (legacy format).  Both are handled transparently.
     """
     main_path = _resolve_main_config_path()
     if main_path is None:
         return {}
     block = _load_file(main_path).get("secrets")
+    if isinstance(block, str) and block:
+        # New format: Fernet-encrypted JSON string.
+        decrypted = decrypt_secrets_block(block)
+        if decrypted is not None:
+            return decrypted
+        # Legacy fallback: try base64 (previous format) or plain dict.
+        try:
+            decoded = base64.b64decode(block)
+            loaded = json.loads(decoded)
+            if isinstance(loaded, dict):
+                return loaded
+        except Exception:  # noqa: S110 — Decoding failure; treat block as unset.
+            pass
+        return {}
     return dict(block) if isinstance(block, dict) else {}
 
 

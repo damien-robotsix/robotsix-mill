@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from robotsix_mill.config.loader import decrypt_secrets_block
 from robotsix_mill.runtime.api import create_app
 
 
@@ -105,13 +106,57 @@ class TestPutConfig:
         raw = json.loads(tmp_config_file.read_text())
         assert raw["settings"]["auto_approve_enabled"] is True
 
-    def test_rejects_secret_key(self, config_client):
-        """PUT /config rejects updates to secret keys with 422."""
-        r = config_client.put("/config", json={"openrouter_api_key": "sk-evil"})
-        assert r.status_code == 422
-        data = r.json()
-        assert data["type"] == "urn:robotsix:error:config-validation"
-        assert "secret" in data["detail"].lower()
+    def test_secret_merge_on_write_blank_keeps_existing(
+        self, config_client, tmp_config_file
+    ):
+        """PUT /config with a blank or masked secret keeps the stored value."""
+        # Write a real secret value first
+        raw = json.loads(tmp_config_file.read_text())
+        raw["secrets"]["openrouter_api_key"] = "sk-real-secret"
+        tmp_config_file.write_text(json.dumps(raw, indent=2))
+
+        # Submit a masked value — should keep existing
+        r = config_client.put("/config", json={"openrouter_api_key": "**********"})
+        assert r.status_code == 200
+
+        raw = json.loads(tmp_config_file.read_text())
+        # Secrets block is Fernet-encrypted at rest.
+        secrets = decrypt_secrets_block(raw["secrets"])
+        assert secrets is not None
+        assert secrets["openrouter_api_key"] == "sk-real-secret"
+
+    def test_secret_merge_on_write_explicit_overwrites(
+        self, config_client, tmp_config_file
+    ):
+        """PUT /config with an explicit secret value overwrites the stored value."""
+        # Write a real secret value first
+        raw = json.loads(tmp_config_file.read_text())
+        raw["secrets"]["openrouter_api_key"] = "sk-old-secret"
+        tmp_config_file.write_text(json.dumps(raw, indent=2))
+
+        # Submit an explicit value — should overwrite
+        r = config_client.put("/config", json={"openrouter_api_key": "sk-new-secret"})
+        assert r.status_code == 200
+
+        raw = json.loads(tmp_config_file.read_text())
+        # Secrets block is Fernet-encrypted at rest.
+        secrets = decrypt_secrets_block(raw["secrets"])
+        assert secrets is not None
+        assert secrets["openrouter_api_key"] == "sk-new-secret"
+
+    def test_secret_written_to_secrets_block(self, config_client, tmp_config_file):
+        """PUT /config writes secret values to the secrets block."""
+        r = config_client.put("/config", json={"openrouter_api_key": "sk-test"})
+        assert r.status_code == 200
+
+        raw = json.loads(tmp_config_file.read_text())
+        assert "secrets" in raw
+        # Secrets block is Fernet-encrypted at rest.
+        secrets = decrypt_secrets_block(raw["secrets"])
+        assert secrets is not None
+        assert secrets["openrouter_api_key"] == "sk-test"
+        # Should NOT be in settings
+        assert "openrouter_api_key" not in raw.get("settings", {})
 
     def test_rejects_unknown_key(self, config_client):
         """PUT /config rejects keys not in the Settings model."""

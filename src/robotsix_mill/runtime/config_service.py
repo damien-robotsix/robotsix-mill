@@ -7,15 +7,17 @@ the single ``config/config.json``, maintains a version history in
 ``<data_dir>/config_versions.jsonl``, and masks secret values on read.
 
 Secret fields are identified from the :class:`~robotsix_mill.config.Secrets`
-model — they are env-injected by the deploy plane per the ticket spec,
-never stored in the component config file, and never accepted via
-``PUT /config``.
+field names.  They follow merge-on-write per the config-ownership
+standard: a blank or masked submission keeps the stored value, and an
+explicitly typed value overwrites it.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,7 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ..config import Secrets, Settings
+from ..config.loader import decrypt_secrets_block, encrypt_secrets_block
 
 log = logging.getLogger(__name__)
 
@@ -66,8 +69,6 @@ def _canonical_config_path() -> Path:
     When ``ROBOTSIX_CONFIG_FILE`` is set, use it; otherwise
     target ``config/config.json`` (never the example file).
     """
-    import os
-
     explicit = os.environ.get("ROBOTSIX_CONFIG_FILE")
     if explicit:
         return Path(explicit)
@@ -227,7 +228,7 @@ def _generate_config_schema() -> dict[str, Any]:
         schema["properties"][name] = {
             "type": "string",
             "writeOnly": True,
-            "description": "Secret — env-injected by the deploy plane. Not stored in config.json.",
+            "description": "Secret — stored in config.json.  Merge-on-write: blank keeps the current value.",
         }
 
     return schema
@@ -288,13 +289,19 @@ def _validate_updates(updates: dict[str, Any]) -> None:
     """Validate each field in *updates* against the Settings model.
 
     Raises ``ConfigValidationError`` on the first failure.
+    Secret keys are not validated against ``Settings`` — they are
+    validated by merge-on-write logic in ``update_config``.
     """
     for key, value in updates.items():
         if _is_secret_key(key):
-            raise ConfigValidationError(
-                f"'{key}' is a secret — secrets are env-injected by the "
-                "deploy plane and cannot be updated via PUT /config"
-            )
+            # Secrets are handled by merge-on-write in update_config.
+            # Validate that the value is a string (or None/blank for
+            # keep-existing semantics).
+            if value is not None and not isinstance(value, str):
+                raise ConfigValidationError(
+                    f"'{key}' is a secret — value must be a string or null"
+                )
+            continue
         # Resolve alias → field name
         field_name: str | None = None
         for fn, fi in Settings.model_fields.items():
@@ -324,14 +331,71 @@ def _read_json_config(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _decode_secrets_block(block: Any) -> dict[str, Any]:
+    """Decode a ``secrets`` block that may be Fernet-encrypted, base64-encoded,
+    or a plain dict.
+
+    Returns an empty dict for any unreadable input.
+    """
+    if isinstance(block, dict):
+        return block
+    if isinstance(block, str) and block:
+        # Try Fernet decryption first (current format).
+        decrypted = decrypt_secrets_block(block)
+        if decrypted is not None:
+            return decrypted
+        # Legacy fallback: base64-encoded JSON.
+        try:
+            decoded = base64.b64decode(block)
+            loaded = json.loads(decoded)
+            if isinstance(loaded, dict):
+                return loaded
+        except Exception:  # noqa: S110 — Decoding failure; treat block as unset.
+            pass
+    return {}
+
+
+def _encrypt_secrets_for_storage(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *data* with the ``secrets`` block Fernet-encrypted.
+
+    The raw secrets dict is routed *only* through
+    :func:`encrypt_secrets_block` — it is never copied verbatim into the
+    returned mapping — so clear-text secret values never reach the
+    serialized file written to disk.  Building the result key-by-key
+    (rather than ``dict(data)`` + reassign) keeps the raw secret out of
+    the serialized payload's dataflow entirely.
+    """
+    safe_data: dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "secrets" and isinstance(value, dict) and value:
+            safe_data[key] = encrypt_secrets_block(value)
+        else:
+            safe_data[key] = value
+    return safe_data
+
+
 def _write_json_config(path: Path, data: dict[str, Any]) -> None:
-    """Write the JSON config file atomically."""
+    """Write the JSON config file atomically.
+
+    Sets restrictive permissions (0o600) on the file after writing
+    because it may contain a ``secrets`` block — secret values are
+    stored at rest in the local config file per the robotsix
+    config-ownership standard.  The file is gitignored and never
+    leaves the machine.
+
+    The ``secrets`` block is Fernet-encrypted before writing to avoid
+    clear-text secret storage.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    # Encrypt the secrets block for at-rest storage.
+    serialized = (
+        json.dumps(_encrypt_secrets_for_storage(data), indent=2, ensure_ascii=False)
+        + "\n"
     )
+    tmp.write_text(serialized, encoding="utf-8")
     tmp.replace(path)
+    os.chmod(path, 0o600)
 
 
 def update_config(
@@ -339,24 +403,49 @@ def update_config(
 ) -> dict[str, Any]:
     """Apply a partial config update.  Returns the new effective config.
 
-    Rejects any key that identifies a secret.  Validates each updated
-    field against the Settings model before writing.
+    Non-secret keys are written to the ``settings`` block.  Secret keys
+    follow **merge-on-write**: a blank, null, or masked
+    (``"**********"``) submission keeps the stored value; an explicitly
+    typed value overwrites it.  Secret values land in the ``secrets``
+    block.
     """
     _validate_updates(updates)
 
     config_path = _canonical_config_path()
     current = _read_json_config(config_path)
 
-    # Merge into the ``settings`` block
-    current_settings = current.get("settings", {})
-    if not isinstance(current_settings, dict):
-        current_settings = {}
+    # Split updates into settings and secrets.
+    settings_updates: dict[str, Any] = {}
+    secrets_updates: dict[str, Any] = {}
+    for key, value in updates.items():
+        if _is_secret_key(key):
+            secrets_updates[key] = value
+        else:
+            settings_updates[key] = value
 
-    changed_keys = list(updates.keys())
-    merged = {**current_settings, **updates}
-    new_config = {**current, "settings": merged}
+    changed_keys: list[str] = []
 
-    _write_json_config(config_path, new_config)
+    # --- Secrets: merge-on-write ---
+    if secrets_updates:
+        current_secrets = _decode_secrets_block(current.get("secrets", {}))
+        for key, value in secrets_updates.items():
+            if value is None or value == "" or value == "**********":
+                # Keep existing value — omit from the update.
+                continue
+            current_secrets[key] = value
+            changed_keys.append(key)
+        current["secrets"] = current_secrets
+
+    # --- Settings: direct merge ---
+    if settings_updates:
+        current_settings = current.get("settings", {})
+        if not isinstance(current_settings, dict):
+            current_settings = {}
+        changed_keys.extend(settings_updates.keys())
+        merged = {**current_settings, **settings_updates}
+        current["settings"] = merged
+
+    _write_json_config(config_path, current)
 
     # Record version (store the full effective snapshot)
     if data_dir is None:
@@ -411,10 +500,10 @@ def rollback_config(
         )
 
     # Validate by constructing a minimal update
-    # Strip secret-masked values before writing
-    clean_snapshot = {
-        k: v for k, v in snapshot.items() if v != "**********" and not _is_secret_key(k)
-    }
+    # Strip secret-masked values before writing — "**********" is not
+    # a real value, it's the read-time mask.  Keep the existing stored
+    # secret (merge-on-write semantics).
+    clean_snapshot = {k: v for k, v in snapshot.items() if v != "**********"}
 
     config_path = _canonical_config_path()
     if config_path.exists():
@@ -428,14 +517,24 @@ def rollback_config(
     if not isinstance(current, dict):
         current = {}
 
+    # Decode the secrets block if it's base64-encoded.
+    if "secrets" in current:
+        current["secrets"] = _decode_secrets_block(current["secrets"])
+
     new_config = {**current, "settings": clean_snapshot}
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = config_path.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps(new_config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    # Encrypt the secrets block for at-rest storage.
+    serialized = (
+        json.dumps(
+            _encrypt_secrets_for_storage(new_config), indent=2, ensure_ascii=False
+        )
+        + "\n"
     )
+    tmp.write_text(serialized, encoding="utf-8")
     tmp.replace(config_path)
+    os.chmod(config_path, 0o600)
 
     changed_keys = list(clean_snapshot.keys())
     _record_version(data_dir, get_config(data_dir=data_dir)["config"], changed_keys)

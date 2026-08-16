@@ -2,7 +2,8 @@
 
 Provides ``GET /config``, ``PUT /config``, ``GET /config/versions``,
 and ``POST /config/rollback``.  Secret keys are masked on read and
-rejected on write — they remain env-injected by the deploy plane.
+follow merge-on-write on PUT: a blank or masked submission keeps the
+stored value, and an explicitly typed value overwrites it.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ def config_put(
     request: Request,
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse | dict[str, Any]:
-    """Apply a partial config update.  Secrets are rejected."""
+    """Apply a partial config update.  Secrets follow merge-on-write."""
     try:
         result: dict[str, Any] = update_config(updates, data_dir=settings.data_dir)
         return result
