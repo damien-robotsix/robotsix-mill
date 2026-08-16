@@ -17,8 +17,12 @@ from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import RefineStage
+from tests.agents.test_refine import _install_refine_spy, _single
 
-from tests.agents.test_refine import _install_refine_spy, _single, ctx  # noqa: F401
+
+@pytest.fixture
+def ctx(settings, service, repo_config):
+    return StageContext(settings=settings, service=service, repo_config=repo_config)
 
 
 @pytest.fixture(autouse=True)

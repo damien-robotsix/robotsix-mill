@@ -1099,6 +1099,4 @@ def __getattr__(name: str):
         from . import git_diff
 
         return getattr(git_diff, name)
-    raise AttributeError(
-        f"module {__name__!r} has no attribute {name!r}"
-    )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
