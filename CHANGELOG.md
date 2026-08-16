@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.8.0...v0.9.0) (2026-08-16)
+
+
+### Features
+
+* Scope-triage should reject tickets whose domain concepts don't exist in the repo (20260814T232305Z-scope-triage-should-reject-tickets-whose-36fa) ([#2901](https://github.com/damien-robotsix/robotsix-mill/issues/2901)) ([fe95d75](https://github.com/damien-robotsix/robotsix-mill/commit/fe95d757abbc490c1b04ba84838b3a099436de0b))
+
+
+### Documentation
+
+* document the LLM context-bounding config keys added by PRs [#2902](https://github.com/damien-robotsix/robotsix-mill/issues/2902)/[#2904](https://github.com/damien-robotsix/robotsix-mill/issues/2904)/[#2906](https://github.com/damien-robotsix/robotsix-mill/issues/2906) (20260816T003037Z-docs-document-the-llm-context-bounding-c-89b4) ([#2908](https://github.com/damien-robotsix/robotsix-mill/issues/2908)) ([a14b05f](https://github.com/damien-robotsix/robotsix-mill/commit/a14b05f637db6928f992b944f1ff7acc5479b3c4))
+
 ## [0.8.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.7.0...v0.8.0) (2026-08-14)
 
 
