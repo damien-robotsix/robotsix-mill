@@ -177,6 +177,37 @@ def test_endpoint_returns_aggregates_without_prompt_payloads(client, settings):
     assert "tool_calls" not in r.text
 
 
+def test_endpoint_treats_empty_filters_as_unset(client, settings):
+    """Empty ``stage``/``model`` query values filter nothing, like omission."""
+    now = datetime.now(UTC)
+    record(
+        _record(
+            stage="implement",
+            model="deepseek-v4-pro",
+            input_tokens=100,
+            output_tokens=10,
+            ts=now - timedelta(minutes=30),
+        ),
+        data_dir=settings.data_dir,
+    )
+    record(
+        _record(
+            stage="refine",
+            model="deepseek-v4-pro",
+            input_tokens=50,
+            output_tokens=5,
+            ts=now - timedelta(minutes=20),
+        ),
+        data_dir=settings.data_dir,
+    )
+
+    r = client.get("/metrics/step-usage", params={"stage": "", "model": ""})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["record_count"] == 2
+    assert len(body["groups"]) == 2
+
+
 def test_endpoint_defaults_to_24h_window(client, settings):
     """Omitting `since`/`until` aggregates the trailing 24 hours."""
     now = datetime.now(UTC)

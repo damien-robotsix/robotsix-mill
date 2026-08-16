@@ -64,10 +64,13 @@ def get_step_usage(
             status_code=400,
             detail="`since` must be earlier than `until`.",
         )
+    # An empty-string query value (e.g. ``?stage=&model=``) means "no
+    # filter", matching how empty ``since``/``until`` already fall back to
+    # their defaults above.
     return aggregate(
         data_dir=settings.data_dir,
         since=since_dt,
         until=until_dt,
-        stage=stage,
-        model=model,
+        stage=stage or None,
+        model=model or None,
     )
