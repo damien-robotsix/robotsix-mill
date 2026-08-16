@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.9.0...v0.10.0) (2026-08-16)
+
+
+### Features
+
+* Adopt the shared @robotsix/ui config panel; stop rejecting secrets on PUT /config (20260802T192012Z-adopt-the-shared-robotsix-ui-config-pane-aadb) ([#2824](https://github.com/damien-robotsix/robotsix-mill/issues/2824)) ([92844d8](https://github.com/damien-robotsix/robotsix-mill/commit/92844d88569601104e6c5c1804180f70e4081682))
+* Fleet-wide notification service with a robotsix-chat sink — mill's BLOCKED alerts have never fired (20260809T115025Z-fleet-wide-notification-service-with-a-r-444f) ([#2872](https://github.com/damien-robotsix/robotsix-mill/issues/2872)) ([63b8aae](https://github.com/damien-robotsix/robotsix-mill/commit/63b8aae9d147d7ae84ef6811b57039ca1fac9ec0))
+
 ## [0.9.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.8.0...v0.9.0) (2026-08-16)
 
 
