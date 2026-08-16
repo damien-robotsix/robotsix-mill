@@ -621,7 +621,23 @@ stage returns a `NEEDS_DISCUSSION` verdict with an explanatory comment
 rather than crashing — a human can review the PR directly or split the
 change into smaller diffs.
 
-### 11.3 Refine routing
+### 11.3 LLM context bounding
+
+These keys control the amount of conversational context (diff excerpts, preseed excerpts, history turns, CI-failure details) fed to LLM agents per stage. Setting them lower saves context-window budget at the cost of agent awareness of prior work; raising them gives the agent more visibility but risks overflow on large diffs or long-running tickets.
+
+| Key | Default | Stage | Description |
+|-----|---------|-------|-------------|
+| `review_diff_context_lines` | `1` | review | Max surrounding context lines kept per hunk when the review diff exceeds `review_diff_max_chars`. PR #2902. |
+| `review_preseed_context_lines` | `40` | review | Lines of file context around each changed region preloaded in the review preseed. PR #2902. |
+| `ci_fix_log_context_max_chars` | `16000` | ci_fix | Max characters of inline CI job-log context in the ci-fix failing summary (failing-log window). PR #2904. |
+| `ci_fix_iteration_summary_max_chars` | `2000` | ci_fix | Max characters of the compact failure summary on 2nd+ iterations (prior-iteration summary bound). PR #2904. |
+| `ci_fix_max_annotations` | `40` | ci_fix | Max check annotation lines rendered per ci-fix failing summary. PR #2904. |
+| `ci_fix_max_alerts` | `40` | ci_fix | Max code-scanning alert lines rendered per ci-fix failing summary. PR #2904. |
+| `implement_history_max_turns` | `8` | implement | Last-N tool-call turns kept when compacting a resumed implement `message_history`. PR #2906. |
+| `implement_history_summary_max_chars` | `3000` | implement | Maximum characters of the rolling summary replacing dropped older turns in a compacted implement `message_history`. PR #2906. |
+| `implement_preseed_context_lines` | `40` | implement | Lines of file context around each changed region preloaded in the implement retry preseed. PR #2906. |
+
+### 11.4 Refine routing
 
 These knobs control how the refine agent selects a model and when it
 routes to cheaper tiers. All values are applied at the start of each
