@@ -4,6 +4,10 @@
 # =============================================================================
 FROM node:22-alpine AS ui
 ARG ROBOTSIX_UI_VERSION=v0.1.6
+# `git` is only a build-time fetch tool for the @robotsix/ui git URL, and
+# that URL is already pinned to the ROBOTSIX_UI_VERSION tag below. Pinning
+# apk's git patch release and npm's git-URL install syntax adds nothing here.
+# hadolint ignore=DL3018,DL3016
 RUN apk add --no-cache git && \
     npm install --no-save "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}"
 
