@@ -166,6 +166,7 @@ roadmap_sync_interval_seconds
 pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
+token_metrics_aggregation_periodic
 changelog_autofill_periodic
 changelog_autofill_interval_seconds
 ci_debt_recheck_periodic

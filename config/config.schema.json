@@ -3133,6 +3133,26 @@
           "title": "Timeout Escalation Threshold Seconds",
           "type": "integer"
         },
+        "token_metrics_aggregation_interval_seconds": {
+          "advanced": true,
+          "default": 86400,
+          "description": "Seconds between token-metrics aggregation passes.",
+          "title": "Token Metrics Aggregation Interval Seconds",
+          "type": "integer"
+        },
+        "token_metrics_aggregation_periodic": {
+          "default": true,
+          "description": "When true, run periodic token-metrics aggregation (stage\u00d7model token percentiles).",
+          "title": "Token Metrics Aggregation Periodic",
+          "type": "boolean"
+        },
+        "token_metrics_aggregation_window_seconds": {
+          "advanced": true,
+          "default": 86400,
+          "description": "Lookback window (seconds) of Langfuse traces aggregated each pass.",
+          "title": "Token Metrics Aggregation Window Seconds",
+          "type": "integer"
+        },
         "trace_health_interval_seconds": {
           "advanced": true,
           "default": 86400,

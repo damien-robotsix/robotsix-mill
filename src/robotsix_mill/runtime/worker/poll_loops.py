@@ -459,6 +459,44 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("langfuse-cleanup poll failed")
             await asyncio.sleep(interval)
 
+    async def _token_metrics_aggregation_poll_loop(self) -> None:
+        """Periodic token-metrics aggregation: computes stage×model per-call
+        token percentiles from the shared Langfuse project and writes a
+        compact daily JSON snapshot.
+
+        Global pass (non-per-repo): all managed repos share one Langfuse
+        project, so one pass per interval is sufficient. Gated by
+        ``settings.token_metrics_aggregation_periodic`` via
+        ``_start_poll_loop_pass``. Pure HTTP + file I/O, no LLM.
+        """
+        settings = self.ctx.settings
+        interval = max(3600, settings.token_metrics_aggregation_interval_seconds)
+        initial = self._initial_delay("token-metrics-aggregation", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...agents.runners.token_metrics_runner import (
+                    run_token_metrics_aggregation,
+                )
+
+                result = await asyncio.to_thread(
+                    run_token_metrics_aggregation,
+                    settings=settings,
+                    window_seconds=settings.token_metrics_aggregation_window_seconds,
+                )
+                if result.written:
+                    log.info(
+                        "token-metrics: %d steps across %d traces -> %s",
+                        result.steps_seen,
+                        result.traces_seen,
+                        result.path,
+                    )
+                else:
+                    log.debug("token-metrics: pass produced no snapshot")
+            except Exception:
+                log.exception("token-metrics-aggregation poll failed")
+            await asyncio.sleep(interval)
+
     async def _timeout_escalation_poll_loop(self) -> None:
         """Periodic timeout-escalation: detects AWAITING_USER_REPLY tickets
         stuck beyond the threshold and escalates them to BLOCKED.

@@ -429,7 +429,10 @@ def test_cost_cache_key_consistent_between_blocking_and_cached(settings, monkeyp
 # ---------------------------------------------------------------------------
 
 
-from robotsix_mill.langfuse.client import trace_observation_summary
+from robotsix_mill.langfuse.client import (
+    trace_observation_summary,
+    trace_step_usage_records,
+)
 
 
 def test_trace_observation_summary_empty():
@@ -776,3 +779,81 @@ def test_trace_observation_summary_trace_metadata_no_override_generations():
     # because GENERATION observations don't carry a backend tag.
     assert s["backend"] == "openrouter"
     assert len(s["generations"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# trace_step_usage_records
+# ---------------------------------------------------------------------------
+
+
+def test_trace_step_usage_records_reads_observation_metadata():
+    """Per-observation mill.step_usage blobs are decoded into records."""
+    trace = {
+        "observations": [
+            {
+                "metadata": {
+                    "mill.step_usage": (
+                        '{"stage_name":"review","model_name":"m",'
+                        '"input_tokens":100,"output_tokens":50}'
+                    ),
+                },
+            },
+            {
+                "metadata": {
+                    "mill.step_usage": (
+                        '{"stage_name":"review","model_name":"m",'
+                        '"input_tokens":300,"output_tokens":150}'
+                    ),
+                },
+            },
+        ],
+    }
+    records = trace_step_usage_records(trace)
+    assert records == [
+        {
+            "stage_name": "review",
+            "model_name": "m",
+            "input_tokens": 100,
+            "output_tokens": 50,
+        },
+        {
+            "stage_name": "review",
+            "model_name": "m",
+            "input_tokens": 300,
+            "output_tokens": 150,
+        },
+    ]
+
+
+def test_trace_step_usage_records_trace_level_fallback():
+    """When no observation carries the attribute, trace.metadata is used."""
+    trace = {
+        "metadata": {
+            "mill.step_usage": (
+                '{"stage_name":"ci_fix","model_name":"m2",'
+                '"input_tokens":10,"output_tokens":5}'
+            ),
+        },
+    }
+    assert trace_step_usage_records(trace) == [
+        {
+            "stage_name": "ci_fix",
+            "model_name": "m2",
+            "input_tokens": 10,
+            "output_tokens": 5,
+        },
+    ]
+
+
+def test_trace_step_usage_records_skips_malformed_and_no_double_count():
+    """Malformed JSON is ignored; trace-level metadata is NOT used when an
+    observation already carried the attribute."""
+    trace = {
+        "observations": [
+            {"metadata": {"mill.step_usage": "not json"}},
+            {"metadata": {"mill.step_usage": '{"input_tokens":1,"output_tokens":2}'}},
+        ],
+        "metadata": {"mill.step_usage": '{"input_tokens":999,"output_tokens":999}'},
+    }
+    records = trace_step_usage_records(trace)
+    assert records == [{"input_tokens": 1, "output_tokens": 2}]
