@@ -355,6 +355,25 @@ def _decode_secrets_block(block: Any) -> dict[str, Any]:
     return {}
 
 
+def _encrypt_secrets_for_storage(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *data* with the ``secrets`` block Fernet-encrypted.
+
+    The raw secrets dict is routed *only* through
+    :func:`encrypt_secrets_block` — it is never copied verbatim into the
+    returned mapping — so clear-text secret values never reach the
+    serialized file written to disk.  Building the result key-by-key
+    (rather than ``dict(data)`` + reassign) keeps the raw secret out of
+    the serialized payload's dataflow entirely.
+    """
+    safe_data: dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "secrets" and isinstance(value, dict) and value:
+            safe_data[key] = encrypt_secrets_block(value)
+        else:
+            safe_data[key] = value
+    return safe_data
+
+
 def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     """Write the JSON config file atomically.
 
@@ -370,14 +389,10 @@ def _write_json_config(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     # Encrypt the secrets block for at-rest storage.
-    safe_data = dict(data)
-    secrets_block = safe_data.pop("secrets", None)
-    if isinstance(secrets_block, dict) and secrets_block:
-        safe_data["secrets"] = encrypt_secrets_block(secrets_block)
-    elif secrets_block is not None:
-        safe_data["secrets"] = secrets_block
-    serialized = json.dumps(safe_data, indent=2, ensure_ascii=False) + "\n"
-    # lgtm[py/clear-text-storage-sensitive-data]
+    serialized = (
+        json.dumps(_encrypt_secrets_for_storage(data), indent=2, ensure_ascii=False)
+        + "\n"
+    )
     tmp.write_text(serialized, encoding="utf-8")
     tmp.replace(path)
     os.chmod(path, 0o600)
@@ -458,7 +473,7 @@ def get_versions(data_dir: Path | None = None) -> dict[str, Any]:
     }
 
 
-def rollback_config(  # noqa: C901
+def rollback_config(
     target_version: int, data_dir: Path | None = None
 ) -> dict[str, Any]:
     """Rollback to a previous config version.  Creates a new version."""
@@ -511,14 +526,12 @@ def rollback_config(  # noqa: C901
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = config_path.with_suffix(".tmp")
     # Encrypt the secrets block for at-rest storage.
-    safe_data = dict(new_config)
-    secrets_block = safe_data.pop("secrets", None)
-    if isinstance(secrets_block, dict) and secrets_block:
-        safe_data["secrets"] = encrypt_secrets_block(secrets_block)
-    elif secrets_block is not None:
-        safe_data["secrets"] = secrets_block
-    serialized = json.dumps(safe_data, indent=2, ensure_ascii=False) + "\n"
-    # lgtm[py/clear-text-storage-sensitive-data]
+    serialized = (
+        json.dumps(
+            _encrypt_secrets_for_storage(new_config), indent=2, ensure_ascii=False
+        )
+        + "\n"
+    )
     tmp.write_text(serialized, encoding="utf-8")
     tmp.replace(config_path)
     os.chmod(config_path, 0o600)
