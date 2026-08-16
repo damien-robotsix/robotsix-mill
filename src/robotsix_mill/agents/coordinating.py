@@ -335,6 +335,42 @@ def _call_with_progress_watchdog[T](
         executor.shutdown(wait=False)
 
 
+def _collect_implement_diff(repo_dir: Path, target_branch: str) -> str:
+    """Return the current branch + working-tree diff text for excerpting.
+
+    Combines ``git diff origin/<target>...HEAD`` (committed branch-introduced
+    changes) and ``git diff HEAD`` (uncommitted working-tree edits from prior
+    retry passes).  This is the lightweight local equivalent of
+    :func:`robotsix_mill.vcs.git_ops.diff_base` — it never fetches, so it is
+    safe to call on every retry pass.  Returns ``""`` when the repo has no
+    resolvable target ref or no changes.
+    """
+    from ..vcs import git_ops
+
+    parts: list[str] = []
+    try:
+        committed = git_ops._git(repo_dir, "diff", f"origin/{target_branch}...HEAD")
+        if committed:
+            parts.append(committed)
+    except Exception:
+        log.debug(
+            "_collect_implement_diff: origin/%s ref not resolvable in %s — "
+            "treating as no branch-introduced diff available",
+            target_branch,
+            repo_dir,
+        )
+    try:
+        working = git_ops._git(repo_dir, "diff", "HEAD")
+        if working:
+            parts.append(working)
+    except Exception:
+        log.debug(
+            "_collect_implement_diff: working-tree diff unavailable in %s",
+            repo_dir,
+        )
+    return "\n".join(parts)
+
+
 def run_coordinator(
     *,
     settings: Settings,
@@ -353,6 +389,7 @@ def run_coordinator(
     extra_roots: list[Path] | None = None,
     sandbox_image: str | None = None,
     stage_name: str = "implement",
+    target_branch: str = "main",
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -621,21 +658,48 @@ def run_coordinator(
         if reference_files and message_history is None:
             from .fs_tools import build_preseed_history
 
+            # On a retry pass (feedback set, delta-context enabled) the
+            # agent already saw the reference_files on the first pass and
+            # its own prior edits are on disk. Re-sending whole files
+            # re-pays up to ~50k tokens per pass with no marginal value;
+            # instead derive changed-region ranges from the current diff and
+            # excerpt-preload only those regions (mirroring the review
+            # preseed). On the first pass there is no diff yet, so
+            # line_ranges stays None and the bounded whole-file preload is
+            # used as before.
+            line_ranges: dict[str, list[tuple[int, int]]] | None = None
+            if feedback and settings.delta_context_retry_enabled:
+                full_diff = _collect_implement_diff(repo_dir, target_branch)
+                if full_diff.strip():
+                    from .diff_utils import changed_line_ranges_from_diff
+
+                    line_ranges = changed_line_ranges_from_diff(full_diff)
+
             final_message_history = build_preseed_history(
                 repo_dir,
                 [rf["path"] for rf in reference_files],
                 user_prompt=user_prompt,
+                line_ranges=line_ranges,
+                context_lines=settings.implement_preseed_context_lines,
             )
             if final_message_history:
                 # Prompt is already in the history; pass None so
                 # pydantic-ai doesn't append a duplicate.
                 run_user_prompt = None
 
-        # History is passed through verbatim — NO compression. Dropping messages
-        # from the front orphans a tool_call/tool_return pair or leaves a pending
-        # tool-result the model must continue from without its reasoning_content
-        # — both 400 on the DeepSeek capable tier. pydantic-ai round-trips
-        # reasoning natively when the history is left intact.
+        # Resume passes replay the prior full transcript, which grows with
+        # every tool turn (file dumps, git-diff output). Cap it to the last
+        # N tool turns plus a rolling summary of older exchanges — cutting
+        # WHOLE turns only so a tool_call is never orphaned from its return
+        # (a 400 failure mode on the DeepSeek capable tier).
+        if message_history is not None and settings.implement_history_max_turns > 0:
+            from ..core.delta_context import compact_message_history
+
+            final_message_history = compact_message_history(
+                message_history,
+                max_turns=settings.implement_history_max_turns,
+                summary_max_chars=settings.implement_history_summary_max_chars,
+            )
 
         from .structured_output_guard import reprompt_if_unstructured
 
