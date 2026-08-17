@@ -119,6 +119,7 @@ def run_implement_agent(
     from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     from .coordinating import run_coordinator
+    from .reviewing import _is_finish_reason_error
 
     def _run_primary():
         return run_coordinator(
@@ -146,10 +147,24 @@ def run_implement_agent(
     except UsageLimitExceeded as e:
         raise AgentBudgetError(str(e), []) from e
     except UnexpectedModelBehavior as e:
-        log.warning(
-            "implement: output retries exhausted on primary model, "
-            "falling back to level-1 (deepseek flash)",
-        )
+        if _is_finish_reason_error(e):
+            # finish_reason='error' is the provider (OpenRouter upstream
+            # 5xx / rate limit), NOT output-token exhaustion on our
+            # prompt — a flash fallback may hit the same outage. Log it
+            # distinctly so the trace shows the real cause; the fallback
+            # still runs because a different provider may be healthy.
+            log.warning(
+                "implement: provider error on primary model "
+                "(finish_reason='error') (%s) — not output-token "
+                "exhaustion; falling back to level-1 (deepseek flash), "
+                "which may also fail",
+                e,
+            )
+        else:
+            log.warning(
+                "implement: output retries exhausted on primary model, "
+                "falling back to level-1 (deepseek flash)",
+            )
         # Capture partial progress: the pro model may have written valid
         # edits before its structured output was rejected.  Tell the flash
         # model what's already on disk so it doesn't redo the work.

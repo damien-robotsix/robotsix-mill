@@ -5,12 +5,16 @@ the configurable request-limit plumbing (MILL_REVIEW_REQUEST_LIMIT).
 """
 
 import pytest
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.usage import UsageLimits
 
 from robotsix_mill.agents.reviewing import (
     SYSTEM_PROMPT,
     ReviewAsk,
     ReviewVerdict,
+    _is_finish_reason_error,
+    _is_output_token_exhaustion,
+    _is_token_limit_error,
     changed_line_ranges_from_diff,
     run_review_agent,
 )
@@ -460,6 +464,106 @@ _TOKEN_LIMIT_MSG = (
 _OUTPUT_EXHAUSTION_MSG = (
     "Model token limit (8192) exceeded before any response was generated."
 )
+
+# A body OpenRouter sends back on a provider failure: the upstream 5xx'd
+# or rate-limited, surfaced as finish_reason='error' rather than a token
+# or content signal. pydantic-ai wraps the raw response JSON in
+# UnexpectedModelBehavior.body.
+_FINISH_REASON_ERROR_BODY = (
+    '{"choices": [{"finish_reason": "error", '
+    '"message": {"content": "maximum context length exceeded"}}]}'
+)
+
+
+def test_is_finish_reason_error_true_for_unexpected_model_behavior_body():
+    """finish_reason='error' in the wrapped response body is detected."""
+    exc = UnexpectedModelBehavior(
+        "Exceeded maximum output retries (4)",
+        body=_FINISH_REASON_ERROR_BODY,
+    )
+    assert _is_finish_reason_error(exc) is True
+
+
+def test_is_finish_reason_error_true_for_message_only():
+    """finish_reason='error' in the exception message alone is detected.
+
+    Regression guard: a future pydantic-ai update may map
+    finish_reason='error' to a different exception type WITHOUT a
+    ``body`` attribute — the message-based check must still classify it
+    so the handlers keep skipping the retry tiers.
+    """
+    exc = RuntimeError("OpenRouter provider failure: finish_reason='error'")
+    assert _is_finish_reason_error(exc) is True
+
+
+def test_is_finish_reason_error_false_for_other_finish_reasons():
+    """A normal finish reason (or none) is not a provider error."""
+    exc = UnexpectedModelBehavior(
+        "Exceeded maximum output retries (4)",
+        body='{"choices": [{"finish_reason": "length"}]}',
+    )
+    assert _is_finish_reason_error(exc) is False
+    assert _is_finish_reason_error(RuntimeError("some unrelated boom")) is False
+
+
+def test_finish_reason_error_not_classified_as_token_limit_or_exhaustion():
+    """A provider finish_reason='error' is NOT a token-limit /
+    output-exhaustion signal — even when the wrapped body echoes
+    context-length phrases that would otherwise match."""
+    exc = UnexpectedModelBehavior(
+        "Model token limit 1048576 exceeded: maximum context length is 1048576.",
+        body=_FINISH_REASON_ERROR_BODY,
+    )
+    assert _is_finish_reason_error(exc) is True
+    assert _is_token_limit_error(exc) is False
+    assert _is_output_token_exhaustion(exc) is False
+
+
+def test_token_limit_classifiers_still_work_without_finish_reason_error():
+    """The finish_reason guard must not degrade existing classification."""
+    exc = UnexpectedModelBehavior(
+        _TOKEN_LIMIT_MSG,
+        body='{"choices": [{"finish_reason": "length", '
+        '"message": {"content": "maximum context length exceeded"}}]}',
+    )
+    assert _is_finish_reason_error(exc) is False
+    assert _is_token_limit_error(exc) is True
+
+
+def test_finish_reason_error_skips_degraded_retry(tmp_path, monkeypatch):
+    """finish_reason='error' on the first review pass is surfaced as
+    NEEDS_DISCUSSION immediately — no output-exhaustion retry, no
+    chunked review, no degraded single-pass burns model budget on a
+    provider outage."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    calls: list[str] = []
+
+    def fake_run_agent(agent, make_run, *, what, **kw):
+        calls.append(what)
+        raise UnexpectedModelBehavior(
+            "Exceeded maximum output retries (4)",
+            body=_FINISH_REASON_ERROR_BODY,
+        )
+
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff="diff --git a/x b/x\n" + ("+x\n" * 100),
+        spec="Fix x",
+    )
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert verdict.verdict == "NEEDS_DISCUSSION"
+    assert verdict.auto_merge_eligible is False
+    assert "finish_reason='error'" in verdict.comments
+    # Exactly one attempt — the provider failure is never retried
+    # within this attempt.
+    assert len(calls) == 1
 
 
 def test_token_limit_triggers_degraded_retry(tmp_path, monkeypatch):
