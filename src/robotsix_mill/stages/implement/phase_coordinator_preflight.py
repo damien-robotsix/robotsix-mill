@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from datetime import UTC, datetime
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -113,6 +114,7 @@ def run_preflight_checks(
             # Append the tail of the last implement summary so the
             # operator sees the genuine failure cause instead of only
             # the generic limit message.
+            summary_tail_appended = False
             summary_path = ws.artifacts_dir / "implement_summary.md"
             if summary_path.exists():
                 try:
@@ -123,6 +125,31 @@ def run_preflight_checks(
                     tail = summary_text[-500:].strip()
                     if tail:
                         note += f"\n\nLast attempt summary tail:\n{tail}"
+                        summary_tail_appended = True
+            # When no implement summary tail was appended, the spawns
+            # likely aborted before any LLM work (e.g. a mill restart
+            # burned the slot pre-trace).  Surface the durable spawn-
+            # consumption breadcrumbs so the block note and the
+            # SPAWN_LIMIT_EXHAUSTED diagnostic never lack evidence.
+            if not summary_tail_appended:
+                breadcrumbs_path = (
+                    ws.artifacts_dir / "implement_spawn_breadcrumbs.log"
+                )
+                try:
+                    breadcrumbs_text = breadcrumbs_path.read_text(
+                        encoding="utf-8"
+                    )
+                except (OSError, UnicodeDecodeError):  # fmt: skip
+                    breadcrumbs_text = ""
+                if breadcrumbs_text:
+                    crumb_tail = breadcrumbs_text[-800:].strip()
+                    if crumb_tail:
+                        note += (
+                            "\n\nSpawn-consumption breadcrumbs (no "
+                            "implement summary was produced — spawns "
+                            "likely aborted before doing work):\n"
+                            + crumb_tail
+                        )
             # Emit a structured diagnostic event so agents
             # (including the periodic diagnostic agent) can
             # discover the exhaustion programmatically and
@@ -381,6 +408,26 @@ def run_preflight_checks(
         except OSError:
             log.warning(
                 "%s: failed to write implement_spawn_count",
+                ticket.id,
+                exc_info=True,
+            )
+        # Durable breadcrumb: record that this spawn slot was
+        # consumed so a spawn that aborts before any LLM work (e.g.
+        # a mill restart) still leaves evidence for the eventual
+        # SPAWN_LIMIT_EXHAUSTED block note.  Best-effort only — it
+        # must never change control flow or raise.
+        breadcrumb_path = ws.artifacts_dir / "implement_spawn_breadcrumbs.log"
+        try:
+            stamp = datetime.now(UTC).isoformat()
+            with breadcrumb_path.open("a", encoding="utf-8") as fh:
+                fh.write(
+                    f"{stamp} {ticket.id} spawn slot "
+                    f"{spawn_count}/{spawn_limit} consumed — "
+                    "trace about to open\n"
+                )
+        except OSError:
+            log.warning(
+                "%s: failed to append implement_spawn_breadcrumbs",
                 ticket.id,
                 exc_info=True,
             )
