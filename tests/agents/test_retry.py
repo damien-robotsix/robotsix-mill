@@ -3,6 +3,8 @@
 import asyncio
 import json
 import sqlite3
+import threading
+import time
 
 import httpx
 import pytest
@@ -10,6 +12,7 @@ from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
 
 from robotsix_mill.agents.retry import (
     call_with_retry,
+    closing_scratch_loop,
     is_rate_limited,
     is_transient,
     run_agent,
@@ -610,3 +613,81 @@ def test_permanent_guard_is_the_library_predicate():
     from robotsix_mill.agents.retry import _is_permanent_api_error
 
     assert _is_permanent_api_error is is_claude_sdk_permanent_api_error
+
+
+class TestClosingScratchLoop:
+    """The pydantic-ai scratch event loop must not be stranded on a thread.
+
+    ``Agent.run_sync`` installs a loop via ``pydantic_ai._utils.get_event_loop``
+    and never closes it.  An unclosed loop keeps its default executor alive, so
+    its ``asyncio_N`` threads park in ``futex_wait`` forever — the leak that
+    grew the mill container into its memory cap and got it OOM-killed.
+    """
+
+    @staticmethod
+    def _pydantic_ai_pattern() -> None:
+        """Mirror ``pydantic_ai._utils.get_event_loop`` + a ``run_in_executor``."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        async def _work() -> None:
+            await asyncio.get_running_loop().run_in_executor(None, lambda: None)
+
+        loop.run_until_complete(_work())
+
+    @staticmethod
+    def _leaked_loop_threads() -> int:
+        return sum(1 for t in threading.enumerate() if t.name.startswith("asyncio_"))
+
+    def test_leaks_without_the_guard(self) -> None:
+        """Sanity-check the reproduction: unguarded, the executor thread survives."""
+        done = threading.Event()
+
+        def _run() -> None:
+            self._pydantic_ai_pattern()
+            done.set()
+
+        # A long-lived thread, like the pooled ``asyncio.to_thread`` workers
+        # that mill runs stages on.
+        before = self._leaked_loop_threads()
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        done.wait(timeout=10)
+        assert self._leaked_loop_threads() > before
+
+    def test_guard_closes_the_loop(self) -> None:
+        """With the guard the loop is closed and its executor thread exits."""
+        before = self._leaked_loop_threads()
+        finished = threading.Event()
+
+        def _run() -> None:
+            with closing_scratch_loop():
+                self._pydantic_ai_pattern()
+            finished.set()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        finished.wait(timeout=10)
+        t.join(timeout=10)
+
+        # The executor thread is signalled on close; give it a moment to exit.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and self._leaked_loop_threads() > before:
+            time.sleep(0.05)
+        assert self._leaked_loop_threads() == before
+
+    def test_leaves_a_preexisting_loop_alone(self) -> None:
+        """A loop the caller already owns must survive the block untouched."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            with closing_scratch_loop():
+                pass
+            assert not loop.is_closed()
+            assert asyncio.get_event_loop() is loop
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
