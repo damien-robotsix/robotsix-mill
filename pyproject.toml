@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robotsix-mill"
-version = "0.10.0"
+version = "0.10.1"
 description = "Self-contained LLM-driven ticket solver. SQLite-backed management plane + file workspaces, event-driven worker, delivers merge requests to GitHub/GitLab."
 readme = "README.md"
 requires-python = ">=3.14"

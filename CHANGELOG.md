@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.10.0...v0.10.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* close the pydantic-ai scratch event loop after agent runs ([#2917](https://github.com/damien-robotsix/robotsix-mill/issues/2917)) ([fe52e7c](https://github.com/damien-robotsix/robotsix-mill/commit/fe52e7c51aa6f9f8df1b450f1f94b4d0418d7c49))
+* Handle OpenRouter finish_reason='error' as non-retriable provider fault in all pipeline stages (20260816T154125Z-handle-openrouter-finish-reason-error-as-2d2a) ([#2915](https://github.com/damien-robotsix/robotsix-mill/issues/2915)) ([cafb726](https://github.com/damien-robotsix/robotsix-mill/commit/cafb726d1aa3a327d4e93aa7822dc40b41afe820))
+* Ingest dedup always fails open: dedup.yaml prompt directives (read_file/list_dir) trip the prompt/tool guard when repo_dir=None (20260816T211944Z-ingest-dedup-always-fails-open-dedup-yam-fea8) ([#2912](https://github.com/damien-robotsix/robotsix-mill/issues/2912)) ([5bfdd4b](https://github.com/damien-robotsix/robotsix-mill/commit/5bfdd4bd805154931cc367f4a783515535b9bfc6))
+
 ## [0.10.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.9.0...v0.10.0) (2026-08-16)
 
 
