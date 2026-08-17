@@ -4,18 +4,20 @@
 # =============================================================================
 FROM node:22-alpine AS ui
 ARG ROBOTSIX_UI_VERSION=v0.1.6
-# `git` is only a build-time fetch tool for the @robotsix/ui git URL, and
-# that URL is already pinned to the ROBOTSIX_UI_VERSION tag below. Pinning
-# apk's git patch release and npm's git-URL install syntax adds nothing here.
-#
 # WORKDIR matters: with no working directory the install ran in `/`, which
 # newer npm refuses with `npm error Tracker "idealTree" already exists`.
 # Nothing in this repo changed to trigger that — `node:22-alpine` is a
 # floating tag, so a base-image refresh (npm 10.9.8) broke a static
 # Dockerfile and every `Release` run from 2026-08-16 onward failed, leaving
 # mill unable to publish an image at all.
-# hadolint ignore=DL3018,DL3016
 WORKDIR /ui
+# `git` is only a build-time fetch tool for the @robotsix/ui git URL, and
+# that URL is already pinned to the ROBOTSIX_UI_VERSION tag below. Pinning
+# apk's git patch release and npm's git-URL install syntax adds nothing here.
+#
+# The ignore directive must stay immediately above its RUN — anything in
+# between (a WORKDIR, say) silently detaches it and DL3018/DL3016 fire.
+# hadolint ignore=DL3018,DL3016
 RUN apk add --no-cache git && \
     npm install --no-save "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}"
 
