@@ -3,6 +3,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from robotsix_mill.agents import coding
 from robotsix_mill.agents.fs_tools import build_fs_tools
 from robotsix_mill.core.models import TicketKind
@@ -4256,6 +4258,256 @@ def test_spawn_limit_exhausted_emits_diagnostic_event(
     assert spawn_events[0].ticket_id == t.id
     assert "spawn limit reached" in spawn_events[0].reason.lower()
     assert spawn_events[0].normalized_key.startswith("spawn_limit_exhausted:")
+
+
+# --- pre-LLM spawn abort visibility (process-death kill recovery) --------
+
+
+def test_killed_inflight_spawn_is_absorbed_not_counted(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A stale in-flight marker (previous attempt killed by process
+    shutdown) is absorbed before the limit check: the killed attempt
+    does NOT burn a spawn slot, so a counter at the limit proceeds."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Killed spawn", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    # Stale marker: attempt #1 was killed mid-flight.
+    (ws.artifacts_dir / "implement_spawn_state.json").write_text(
+        '{"state": "in_flight", "started_at": "2026-08-16T20:42:00+00:00", '
+        '"spawn_count": 1, "counted": true}',
+        encoding="utf-8",
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    # The killed attempt was absorbed: counter went 1 -> 0, so the
+    # limit check passes and preflight proceeds (no block).
+    assert out is None, f"killed spawn should not consume a slot: {out}"
+
+    counter = (
+        (ws.artifacts_dir / "implement_spawn_count").read_text(encoding="utf-8").strip()
+    )
+    # Proceeding preflight re-increments: absorbed kill (-1) then new
+    # attempt (+1) → back to 1, but the BLOCK did not fire.
+    assert counter == "1"
+
+    # The abort was recorded durably.
+    aborts = (ws.artifacts_dir / "implement_spawn_aborts.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert "2026-08-16T20:42:00+00:00" in aborts
+    assert '"counted": true' in aborts
+
+
+def test_killed_inflight_spawn_block_note_carries_evidence(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the limit fires despite kill absorption (counter still at
+    limit after decrement), the block note carries the kill evidence —
+    spawn-limit blocks are never evidence-free."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Killed spawn block", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    # Two counted attempts, one of which was killed mid-flight.
+    (ws.artifacts_dir / "implement_spawn_count").write_text("2", encoding="utf-8")
+    (ws.artifacts_dir / "implement_spawn_state.json").write_text(
+        '{"state": "in_flight", "started_at": "2026-08-16T20:42:00+00:00", '
+        '"spawn_count": 2, "counted": true}',
+        encoding="utf-8",
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spawn limit reached" in out.note.lower()
+    # The block note must include the kill evidence.
+    assert "killed by process shutdown" in out.note
+    assert "2026-08-16T20:42:00+00:00" in out.note
+
+
+def test_uncounted_killed_spawn_does_not_decrement_counter(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A killed in-flight marker for an UNCCOUNTED retry (retry_attempt
+    > 0) logs the abort but must NOT decrement the spawn counter."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="3",
+    )
+    t = _ticket(ctx, title="Uncounted kill", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    (ws.artifacts_dir / "implement_spawn_state.json").write_text(
+        '{"state": "in_flight", "started_at": "2026-08-16T20:42:00+00:00", '
+        '"spawn_count": 1, "counted": false}',
+        encoding="utf-8",
+    )
+    # Simulate a transient retry dispatch (retry_attempt > 0): preflight
+    # must not increment the counter on this pass.
+    ctx.service.set_retry_state(
+        t.id,
+        retry_attempt=1,
+        last_transient_error="sandbox EOF",
+        next_retry_at=None,
+    )
+    t = ctx.service.get(t.id)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is None, f"counter below limit should proceed: {out}"
+    # Counter untouched — the killed retry was not counted.
+    assert (ws.artifacts_dir / "implement_spawn_count").read_text(
+        encoding="utf-8"
+    ).strip() == "1"
+    # But the abort is still logged.
+    aborts = (ws.artifacts_dir / "implement_spawn_aborts.jsonl").read_text(
+        encoding="utf-8"
+    )
+    assert '"counted": false' in aborts
+
+
+def test_inflight_marker_cleared_after_run_completes(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """After a successful implement run, the in-flight spawn marker is
+    cleared so the next preflight doesn't misread a completed attempt
+    as a process-death kill."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="3",
+    )
+    t = _ticket(ctx, title="Marker cleared", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    def _agent(*, repo_dir, spec, **kwargs):
+        (Path(repo_dir) / "feature.txt").write_text("done")
+        return ("done", ["feature.txt"], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _agent)
+
+    ws = ctx.service.workspace(t)
+
+    pre = ImplementStage().preflight(t, ctx)
+    assert pre is None
+    # Marker written by preflight.
+    assert (ws.artifacts_dir / "implement_spawn_state.json").exists()
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+
+    # Marker cleared by the run() completion hook.
+    assert not (ws.artifacts_dir / "implement_spawn_state.json").exists()
+
+
+def test_inflight_marker_cleared_after_run_raises(ctx_factory, tmp_path, monkeypatch):
+    """When implement run raises (worker records the error durably),
+    the marker is still cleared — the attempt reached a recorded
+    terminal state and must not be misread as a silent kill."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="3",
+    )
+    t = _ticket(ctx, title="Marker cleared on raise", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    ws = ctx.service.workspace(t)
+
+    pre = ImplementStage().preflight(t, ctx)
+    assert pre is None
+    assert (ws.artifacts_dir / "implement_spawn_state.json").exists()
+
+    def _boom(*a, **kw):
+        raise RuntimeError("agent exploded")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _boom)
+
+    with pytest.raises(RuntimeError, match="agent exploded"):
+        ImplementStage().run(t, ctx)
+
+    # Marker cleared even on raise — the worker's error handler records
+    # the failure, so the attempt is not silent.
+    assert not (ws.artifacts_dir / "implement_spawn_state.json").exists()
+
+
+def test_resume_blocked_clears_spawn_state_and_aborts(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """resume-blocked at the spawn limit clears the spawn counter AND
+    the spawn-state ledger (in-flight marker + abort log) so the
+    operator's intervention grants a clean budget."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Resume clears ledger", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    (ws.artifacts_dir / "implement_spawn_state.json").write_text(
+        '{"state": "in_flight", "started_at": "2026-08-16T20:42:00+00:00", '
+        '"spawn_count": 1, "counted": true}',
+        encoding="utf-8",
+    )
+    (ws.artifacts_dir / "implement_spawn_aborts.jsonl").write_text(
+        '{"started_at": "2026-08-16T20:42:00+00:00", "spawn_count": 1, '
+        '"detected_at": "2026-08-16T20:43:00+00:00", "counted": true}\n',
+        encoding="utf-8",
+    )
+
+    # Block the ticket from READY (spawn limit) then resume it.
+    ctx.service.transition(t.id, State.BLOCKED, "implement spawn limit reached")
+    resumed = ctx.service.resume_blocked(t.id, note="operator retry")
+    assert resumed.state is State.READY
+
+    assert not (ws.artifacts_dir / "implement_spawn_count").exists()
+    assert not (ws.artifacts_dir / "implement_spawn_state.json").exists()
+    assert not (ws.artifacts_dir / "implement_spawn_aborts.jsonl").exists()
 
 
 # --- epic context in preflight spec check --------------------------------
