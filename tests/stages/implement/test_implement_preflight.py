@@ -1669,3 +1669,146 @@ def test_stale_respawn_guard_fires_when_override_mismatches(
     assert out is not None, "must block when override doesn't match fingerprint"
     assert out.next_state is State.BLOCKED
     assert "spec unchanged" in out.note.lower()
+
+
+# ------------------------------------------------------------------
+# zero-diff early-abort guard
+# ------------------------------------------------------------------
+
+
+def test_zero_diff_abort_guard_fires_at_threshold(ctx_factory, tmp_path, monkeypatch):
+    """When the consecutive-zero-diff counter reaches the threshold,
+    preflight pauses with AWAITING_USER_REPLY instead of BLOCKED."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="5",
+        implement_zero_diff_abort_threshold="2",
+    )
+    t = _ticket(ctx, title="Zero-diff ticket", body="Add a file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    # Seed the zero-diff counter at the threshold.
+    (ws.artifacts_dir / "implement_zero_diff_count").write_text("2", encoding="utf-8")
+
+    # Also seed implement_spawn_count so the spawn-limit guard (2)
+    # doesn't fire before ours (spawn_count < 5).
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None, "guard must fire"
+    assert out.next_state is State.AWAITING_USER_REPLY, (
+        "must pause with ask_user, not BLOCKED"
+    )
+    assert "zero-diff early-abort" in out.note.lower()
+
+    # The pause marker must be written so the operator's reply is
+    # recognised on the next preflight.
+    assert (ws.artifacts_dir / "implement_zero_diff_paused").exists()
+
+
+def test_zero_diff_abort_guard_resets_on_marker(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When the counter is at threshold but the pause marker exists
+    (operator replied), the guard resets the counter and proceeds."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="5",
+        implement_zero_diff_abort_threshold="2",
+    )
+    t = _ticket(ctx, title="Resume ticket", body="Add a file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    # Seed the zero-diff counter AND a pause marker.
+    (ws.artifacts_dir / "implement_zero_diff_count").write_text("2", encoding="utf-8")
+    (ws.artifacts_dir / "implement_zero_diff_paused").touch()
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is None, "must proceed (counter reset) when operator replied"
+    # Counter must be reset to 0 and marker cleared.
+    assert (ws.artifacts_dir / "implement_zero_diff_count").read_text(
+        encoding="utf-8"
+    ).strip() == "0"
+    assert not (ws.artifacts_dir / "implement_zero_diff_paused").exists()
+
+
+def test_zero_diff_abort_guard_below_threshold(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When the zero-diff counter is below the threshold, the guard does
+    not fire."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="5",
+        implement_zero_diff_abort_threshold="3",
+    )
+    t = _ticket(ctx, title="Below threshold", body="Add a file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_zero_diff_count").write_text("2", encoding="utf-8")
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is None, "must proceed when counter is below threshold"
+
+
+def test_zero_diff_abort_guard_disabled_by_zero_threshold(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """When the threshold is 0 (disabled), the guard never fires."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="5",
+        implement_zero_diff_abort_threshold="0",
+    )
+    t = _ticket(ctx, title="Disabled guard", body="Add a file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_zero_diff_count").write_text("5", encoding="utf-8")
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is None, "must proceed when threshold is 0 (disabled)"

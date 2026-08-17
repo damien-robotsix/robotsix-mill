@@ -1759,6 +1759,14 @@
           "title": "Implement Stall Threshold",
           "type": "integer"
         },
+        "implement_zero_diff_abort_threshold": {
+          "advanced": true,
+          "default": 2,
+          "description": "Consecutive zero-diff implement passes before pausing with ask_user. 0 disables.",
+          "minimum": 0,
+          "title": "Implement Zero Diff Abort Threshold",
+          "type": "integer"
+        },
         "langfuse": {
           "anyOf": [
             {

@@ -173,6 +173,7 @@
     "implement_pass_timeout": 300,
     "implement_preseed_context_lines": 40,
     "implement_stall_threshold": 2,
+    "implement_zero_diff_abort_threshold": 2,
     "langfuse_cleanup_interval_seconds": 86400,
     "langfuse_cleanup_max_traces": 5000,
     "langfuse_cleanup_periodic": true,

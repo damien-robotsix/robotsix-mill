@@ -1074,6 +1074,57 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             summary = stall_note + "\n\n" + summary
         # --- end stall detection -----------------------------------------
 
+        # --- zero-diff tracking (cross-spawn early-abort guard) ----------
+        # Update the consecutive-zero-diff counter: a pass that produces
+        # at least one file diff resets the counter; a pass with no diff
+        # (and which is not a transient / env failure) increments it.
+        # Persisted to ``implement_zero_diff_count``; the preflight guard
+        # (guard 4.7) reads it before consuming a spawn attempt.
+        from ._shared import (
+            ZERO_DIFF_PAUSE_FILENAME,
+            read_zero_diff_count,
+            write_zero_diff_count,
+        )
+
+        zd_threshold = getattr(ctx.settings, "implement_zero_diff_abort_threshold", 2)
+        if zd_threshold > 0:
+            try:
+                _has_changes = git_ops.has_changes(repo_dir)
+                _branch_ahead = git_ops.branch_is_ahead_of_main(repo_dir)
+                _has_diff = _has_changes or _branch_ahead
+            except Exception:
+                _has_changes = True
+                _has_diff = True
+                _branch_ahead = True
+            if extra_roots:
+                for _rp in extra_roots:
+                    if _rp == repo_dir:
+                        continue
+                    try:
+                        if git_ops.has_changes(_rp) or git_ops.branch_is_ahead_of_main(
+                            _rp
+                        ):
+                            _has_diff = True
+                            break
+                    except Exception:
+                        _has_diff = True
+
+            if not _has_diff:
+                # No file diff produced — increment the counter.
+                _prev_zd = read_zero_diff_count(ws.artifacts_dir)
+                write_zero_diff_count(ws.artifacts_dir, _prev_zd + 1)
+            else:
+                # Productive pass — reset the counter.
+                write_zero_diff_count(ws.artifacts_dir, 0)
+            # Clear any stale pause marker left from a prior zero-diff
+            # guard firing, now that a real pass has completed.
+            _zd_marker_path = ws.artifacts_dir / ZERO_DIFF_PAUSE_FILENAME
+            import contextlib
+
+            with contextlib.suppress(OSError):
+                _zd_marker_path.unlink(missing_ok=True)
+        # --- end zero-diff tracking -------------------------------------
+
         if transient:
             # Transient/environmental abort — do NOT persist a spec
             # fingerprint.  Writing one would poison the next pass

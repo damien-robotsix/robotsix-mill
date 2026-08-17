@@ -988,3 +988,40 @@ def read_spawn_aborts_tail(artifacts_dir: Path) -> str | None:
         c = "counted" if e.get("counted") else "not counted"
         note += f"\n- started {st}, spawn #{sc}, {c}"
     return note
+
+
+# ---------------------------------------------------------------------------
+# Zero-diff tracking (cross-spawn early-abort guard)
+# ---------------------------------------------------------------------------
+
+ZERO_DIFF_COUNT_FILENAME = "implement_zero_diff_count"
+ZERO_DIFF_PAUSE_FILENAME = "implement_zero_diff_paused"
+
+
+def read_zero_diff_count(artifacts_dir: Path) -> int:
+    """Return the current consecutive-zero-diff count, or 0."""
+    count_path = artifacts_dir / ZERO_DIFF_COUNT_FILENAME
+    if not count_path.exists():
+        return 0
+    try:
+        return int(count_path.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):  # fmt: skip
+        log.warning(
+            "failed to read %s — treating as 0",
+            count_path,
+            exc_info=True,
+        )
+        return 0
+
+
+def write_zero_diff_count(artifacts_dir: Path, count: int) -> None:
+    """Persist *count* to the zero-diff counter file."""
+    count_path = artifacts_dir / ZERO_DIFF_COUNT_FILENAME
+    try:
+        count_path.write_text(str(count), encoding="utf-8")
+    except OSError:
+        log.warning(
+            "failed to write %s",
+            count_path,
+            exc_info=True,
+        )

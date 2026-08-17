@@ -546,6 +546,19 @@ class _StagesSettings(BaseModel):
         ge=0,
         json_schema_extra={"advanced": True},
     )
+    # Consecutive zero-diff implement passes before the early-abort guard
+    # pauses the ticket via ask_user instead of consuming further spawn
+    # attempts.  A pass that produces at least one file edit resets the
+    # counter.  Default 2 catches the no-op thrash pattern without
+    # penalising legitimate multi-pass fixes.  0 disables the guard.
+    # Configured via ``implement_zero_diff_abort_threshold`` in the
+    # YAML config.
+    implement_zero_diff_abort_threshold: int = Field(
+        description="Consecutive zero-diff implement passes before pausing with ask_user. 0 disables.",
+        default=2,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
     # 20 (original) then 40 each routinely BLOCKED medium PRs with
