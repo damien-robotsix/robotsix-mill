@@ -20,24 +20,23 @@ enterprise process. These are hard rules, learned the hard way.
 
 ## Repository layout
 
-First-party packages live under the `src/<pkg>/` namespace:
+`src/robotsix_mill/` is the only first-party package left in this
+repo — the mill pipeline itself (agents, stages, core, runtime,
+config). The former first-party packages (`robotsix_llmio`,
+`robotsix-board`, `robotsix-config`) were extracted to standalone
+dependencies (see `pyproject.toml`) and are imported by namespace,
+not resolved from `src/`.
 
-- `src/robotsix_mill/` — the mill pipeline itself (agents, stages,
-  core, runtime, config).
-- `src/robotsix_llmio/` — the LLM I/O library (core utilities,
-  config, sqlite helpers).
-- Other first-party packages follow the same `src/<pkg>/` convention.
-
-**Agents must probe `src/<pkg>/` before concluding a path is absent.**
-The repo root is NOT a flat namespace — packages like `robotsix_llmio`
-and `config` live under `src/`, so a bare existence check on e.g.
-`robotsix_llmio/core` or `config/` at the repo root will miss. Always
-try the `src/`-prefixed form when a literal file/directory probe
-returns "not found". The `read_file` and `list_dir` tools already
-apply this fallback transparently, but agents performing their own
-existence reasoning (e.g. scope analysis, draft-routing checks) must
-apply the same rule — never assume only `src/robotsix_mill/` exists
-under `src/`.
+**Agents must probe `src/robotsix_mill/` before concluding a path is
+absent.** The repo root is NOT a flat namespace — the mill package
+lives under `src/`, so a bare existence check on e.g.
+`robotsix_mill/core` at the repo root will miss. Always try the
+`src/`-prefixed form when a literal file/directory probe returns
+"not found". The `read_file` and `list_dir` tools already apply this
+fallback transparently, but agents performing their own existence
+reasoning (e.g. scope analysis, draft-routing checks) must apply the
+same rule — and must not probe `src/robotsix_llmio/` (or any other
+extracted package): no such in-repo copy exists.
 
 ## The test gate is sacred and must stay hermetic
 
