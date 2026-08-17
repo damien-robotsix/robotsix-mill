@@ -30,6 +30,7 @@ from ..config import RepoConfig, Settings
 # New code should import these from ``refine_triage`` directly.
 from . import refine_triage as _refine_triage
 from .prompt_blocks import section
+from .prompt_tool_consistency import strip_disabled_tool_directives
 
 AutoApproveResult = _refine_triage.AutoApproveResult
 ReviewerAgreementResult = _refine_triage.ReviewerAgreementResult
@@ -49,7 +50,7 @@ def _strip_explore_call_directives(
     include_explore: bool,
     include_parallel_explore: bool,
 ) -> str:
-    r"""Remove markdown bullet items that issue a ``\\`tool(...)\\`` call
+    r"""Remove prompt lines that issue a ``\\`tool(...)\\`` call
     directive for an explore sub-agent tool that is gated OFF.
 
     When triage rules a ticket ``simple`` the ``explore`` /
@@ -59,9 +60,12 @@ def _strip_explore_call_directives(
     build-time prompt/tool-consistency guard in
     :func:`build_agent_from_definition`
     (``Prompt contains call directives to unavailable tools``). Stripping
-    the offending bullets keeps the guard satisfied and stops the agent
+    the offending lines keeps the guard satisfied and stops the agent
     being told to call a tool it no longer has. A bare backtick mention
     (no trailing ``(``) is left intact — only call directives matter.
+
+    Thin wrapper around :func:`~robotsix_mill.agents.prompt_tool_consistency.strip_disabled_tool_directives`
+    with the two explore sub-agent names fixed.
     """
     disabled: set[str] = set()
     if not include_explore:
@@ -70,38 +74,7 @@ def _strip_explore_call_directives(
         disabled.add("parallel_explore")
     if not disabled:
         return prompt
-    directive = re.compile(
-        r"`+(?:" + "|".join(re.escape(t) for t in sorted(disabled)) + r")\s*\("
-    )
-    lines = prompt.split("\n")
-    out: list[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.lstrip()
-        if stripped.startswith(("* ", "- ")):
-            indent = len(line) - len(stripped)
-            block = [line]
-            j = i + 1
-            # Gather continuation lines: deeper-indented, non-blank, and
-            # not themselves a sibling/parent bullet.
-            while j < len(lines):
-                nxt = lines[j]
-                nstr = nxt.lstrip()
-                nindent = len(nxt) - len(nstr)
-                if nstr == "" or nindent <= indent or nstr.startswith(("* ", "- ")):
-                    break
-                block.append(nxt)
-                j += 1
-            if directive.search("\n".join(block)):
-                i = j
-                continue
-            out.extend(block)
-            i = j
-            continue
-        out.append(line)
-        i += 1
-    return "\n".join(out)
+    return strip_disabled_tool_directives(prompt, disabled_tools=disabled)
 
 
 # Triggers for "pytest warnings / filterwarnings hardening" tickets — the spec

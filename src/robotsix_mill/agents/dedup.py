@@ -23,6 +23,7 @@ from robotsix_mill._resources import agent_definitions_dir
 from ..config import Settings
 from ..core.models import Ticket
 from .prompt_blocks import section
+from .prompt_tool_consistency import strip_disabled_tool_directives
 
 
 class DedupResult(BaseModel):
@@ -156,12 +157,42 @@ def run_dedup_check(
         fs = build_fs_tools(repo_dir, settings)
         tools = [t for t in fs if t.__name__ in ("read_file", "list_dir")]
 
+    # The static dedup prompt tells the agent to *call* read_file and
+    # list_dir (verification directives), but with no repo checkout those
+    # tools are not wired in — and build_agent_from_definition's
+    # prompt/tool-consistency guard then raises ValueError at build time,
+    # before any LLM call. The ingest route always runs with
+    # repo_dir=None, so the guard fired deterministically on every
+    # ingest and the fail-open except swallowed it: ingest dedup was
+    # structurally dead. Strip the dangling call directives when the
+    # tools aren't available (same guard-vs-static-prompt conflict
+    # refine solved for its cost-gated explore sub-agents).
+    overrides: dict[str, Any] = {}
+    if repo_dir is None:
+        overrides["system_prompt"] = strip_disabled_tool_directives(
+            definition.system_prompt, disabled_tools={"read_file", "list_dir"}
+        )
+
     log.info("dedup check using level: %s", definition.level)
-    agent = build_agent_from_definition(
-        settings,
-        definition,
-        tools=tools,
-    )
+    try:
+        agent = build_agent_from_definition(
+            settings,
+            definition,
+            tools=tools,
+            **overrides,
+        )
+    except ValueError as exc:
+        # A deterministic build-time failure (prompt/tool guard, missing
+        # module for output_type, ...) is a config/code bug — not a
+        # transient LLM failure. Fail open (dedup never blocks the
+        # pipeline) but signal it loudly and with a distinct reason so a
+        # structural kill isn't logged as an LLM hiccup.
+        log.error("dedup agent build failed (fail-open): %s", exc)
+        return {
+            "duplicate_of": None,
+            "already_done": None,
+            "reason": "dedup check configuration error",
+        }
     # request_limit must be passed via usage_limits=UsageLimits(...),
     # NOT as a bare run_sync kwarg — the bare kwarg raises
     # UserError("Unknown keyword arguments: request_limit"), which made
