@@ -15,8 +15,10 @@ import graph is a strict acyclic DAG.
 
 from __future__ import annotations
 
+from ...core.models import Ticket
 from ...core.states import State
-from ..base import Stage
+from ..base import Outcome, Stage, StageContext
+from ._shared import clear_spawn_in_flight
 from .file_operations import FileOperationsMixin
 from .implementation_logic import ImplementationLogicMixin
 from .phase_coordinator import PhaseCoordinatorMixin
@@ -34,3 +36,20 @@ class ImplementStage(
 
     name = "implement"
     input_state = State.READY
+
+    def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
+        """Run the mixin's implementation loop, then clear the
+        in-flight spawn marker.
+
+        The marker is written at the end of preflight so the NEXT
+        preflight can detect a process death / SIGTERM that killed the
+        attempt mid-flight.  Clearing it here — whether the run
+        succeeds, blocks, or raises (the worker records raised errors
+        durably, so they are never silent) — marks this attempt as
+        having reached a recorded terminal state.
+        """
+        try:
+            return super().run(ticket, ctx)
+        finally:
+            ws = ctx.service.workspace(ticket)
+            clear_spawn_in_flight(ws.artifacts_dir)

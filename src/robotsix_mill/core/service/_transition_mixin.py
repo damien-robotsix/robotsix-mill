@@ -66,6 +66,15 @@ def _reset_implement_spawn_counter(ws: Workspace) -> None:
     """
     with contextlib.suppress(OSError):
         (ws.artifacts_dir / "implement_spawn_count").unlink(missing_ok=True)
+    # Also clear the in-flight spawn marker and abort log so a
+    # resumed ticket starts with a clean spawn-state ledger — a stale
+    # in-flight marker would otherwise be absorbed as a "killed by
+    # shutdown" abort on the next preflight even though the operator
+    # deliberately reset the budget.
+    with contextlib.suppress(OSError):
+        (ws.artifacts_dir / "implement_spawn_state.json").unlink(missing_ok=True)
+    with contextlib.suppress(OSError):
+        (ws.artifacts_dir / "implement_spawn_aborts.jsonl").unlink(missing_ok=True)
 
 
 def _reset_tripped_ci_fix_guards(ws: Workspace, settings: Settings) -> list[str]:
@@ -742,6 +751,17 @@ class _TransitionMixin(_ServiceBase):
                     counter_path.unlink()
                 except FileNotFoundError:
                     pass  # best-effort; file may already be gone
+                # The resume grants a fresh spawn budget — clear the
+                # spawn-state ledger (in-flight marker + abort log)
+                # with it so stale kill evidence doesn't outlive the
+                # operator's intervention.
+                _ws = self.workspace(ticket)
+                for _fname in (
+                    "implement_spawn_state.json",
+                    "implement_spawn_aborts.jsonl",
+                ):
+                    with contextlib.suppress(FileNotFoundError):
+                        (_ws.artifacts_dir / _fname).unlink()
             if self._on_transition is not None:
                 self._on_transition(ticket, old_state)
             return ticket

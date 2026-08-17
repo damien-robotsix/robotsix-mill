@@ -27,7 +27,12 @@ from ...core.states import State
 from ...deploy import check_deploy_freshness
 from ..base import Outcome, StageContext
 from ..pause import clear_conversation_state
-from ._shared import log
+from ._shared import (
+    detect_and_absorb_killed_spawn,
+    log,
+    read_spawn_aborts_tail,
+    write_spawn_in_flight,
+)
 
 
 def run_preflight_checks(
@@ -82,6 +87,19 @@ def run_preflight_checks(
                 "empty or missing specification — cannot implement without a spec",
             )
 
+    # 1.5. Spawn-kill recovery: detect a stale in-flight marker from
+    #      a previous process lifetime BEFORE the spawn-limit check.
+    #      Process death / SIGTERM kills the implement thread mid-
+    #      flight, leaving the spawn counter incremented but no
+    #      outcome recorded.  Absorb the killed attempt (decrement
+    #      counter, log the abort) so it doesn't silently burn the
+    #      ticket's spawn budget.
+    spawn_limit = s.implement_max_spawns_per_ticket
+    counter_path = ws.artifacts_dir / "implement_spawn_count"
+    kill_note: str | None = None
+    if spawn_limit > 0:
+        kill_note = detect_and_absorb_killed_spawn(ws.artifacts_dir, counter_path)
+
     # 2. Implement spawn counter: LIMIT CHECK ONLY.
     #    Cap the total number of implement-stage invocations per
     #    ticket so that a ticket stuck in a BLOCKED→READY→BLOCKED
@@ -93,8 +111,6 @@ def run_preflight_checks(
     #    workspace integrity) never consume a spawn slot.  A block
     #    from any of those guards should be free; only a successful
     #    preflight (about to open a trace and do real work) counts.
-    spawn_limit = s.implement_max_spawns_per_ticket
-    counter_path = ws.artifacts_dir / "implement_spawn_count"
     if spawn_limit > 0:
         spawn_count = 0
         if counter_path.exists():
@@ -123,6 +139,14 @@ def run_preflight_checks(
                     tail = summary_text[-500:].strip()
                     if tail:
                         note += f"\n\nLast attempt summary tail:\n{tail}"
+            # Append kill-recovery evidence (stale in-flight marker
+            # from a process death / SIGTERM) so spawn-limit blocks
+            # are never evidence-free.
+            if kill_note:
+                note += f"\n\n{kill_note}"
+            aborts_tail = read_spawn_aborts_tail(ws.artifacts_dir)
+            if aborts_tail:
+                note += f"\n\n{aborts_tail}"
             # Emit a structured diagnostic event so agents
             # (including the periodic diagnostic agent) can
             # discover the exhaustion programmatically and
@@ -374,16 +398,22 @@ def run_preflight_checks(
     # --- All preflight guards passed: increment the spawn counter ---
     # Only genuine re-spawns (retry_attempt == 0) count; transient
     # infrastructure retries must not burn the ticket's spawn budget.
-    if spawn_limit > 0 and ticket.retry_attempt == 0:
-        spawn_count += 1
-        try:
-            counter_path.write_text(str(spawn_count), encoding="utf-8")
-        except OSError:
-            log.warning(
-                "%s: failed to write implement_spawn_count",
-                ticket.id,
-                exc_info=True,
-            )
+    # Write a durable in-flight marker so a process death / SIGTERM
+    # after this point is detectable by the next preflight.
+    if spawn_limit > 0:
+        if ticket.retry_attempt == 0:
+            spawn_count += 1
+            try:
+                counter_path.write_text(str(spawn_count), encoding="utf-8")
+            except OSError:
+                log.warning(
+                    "%s: failed to write implement_spawn_count",
+                    ticket.id,
+                    exc_info=True,
+                )
+            write_spawn_in_flight(ws.artifacts_dir, spawn_count, counted=True)
+        else:
+            write_spawn_in_flight(ws.artifacts_dir, spawn_count, counted=False)
 
     return None
 

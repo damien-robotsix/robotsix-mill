@@ -19,6 +19,7 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -805,3 +806,185 @@ class _AgentRunOutcome:
 # ---------------------------------------------------------------------------
 # Stage
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Spawn-state tracking (pre-LLM abort detection)
+# ---------------------------------------------------------------------------
+
+SPAWN_STATE_FILENAME = "implement_spawn_state.json"
+SPAWN_ABORTS_FILENAME = "implement_spawn_aborts.jsonl"
+
+
+def write_spawn_in_flight(
+    artifacts_dir: Path,
+    spawn_count: int,
+    *,
+    counted: bool,
+) -> None:
+    """Persist an *in-flight* marker so the next preflight can detect a
+    process-death / SIGTERM kill that happened before the stage produced
+    any outcome.
+    """
+    import json
+    from datetime import datetime
+
+    try:
+        (artifacts_dir / SPAWN_STATE_FILENAME).write_text(
+            json.dumps(
+                {
+                    "state": "in_flight",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "spawn_count": spawn_count,
+                    "counted": counted,
+                }
+            ),
+            encoding="utf-8",
+        )
+    except OSError:
+        log.warning(
+            "failed to write %s",
+            artifacts_dir / SPAWN_STATE_FILENAME,
+            exc_info=True,
+        )
+
+
+def clear_spawn_in_flight(artifacts_dir: Path) -> None:
+    """Remove the in-flight marker after a completed implement attempt."""
+    import contextlib
+
+    with contextlib.suppress(OSError):
+        (artifacts_dir / SPAWN_STATE_FILENAME).unlink(missing_ok=True)
+
+
+def detect_and_absorb_killed_spawn(
+    artifacts_dir: Path,
+    counter_path: Path,
+) -> str | None:
+    """Detect a stale in-flight marker from a previous process lifetime.
+
+    When the marker exists with ``state == "in_flight"`` the previous
+    implement attempt died mid-flight (SIGTERM / crash) without
+    recording any outcome.  This function:
+
+    * Records the kill to ``implement_spawn_aborts.jsonl``.
+    * When the killed attempt was *counted* (it consumed a spawn slot),
+      decrements ``implement_spawn_count`` by one so process-death
+      kills don't silently burn the ticket's spawn budget.
+    * Removes the in-flight marker so it's not re-absorbed.
+
+    Returns a one-line diagnostic string suitable for a block note when
+    a killed spawn was detected, or ``None`` when the marker is absent
+    or already cleared.
+    """
+    import json
+    from datetime import datetime
+
+    state_path = artifacts_dir / SPAWN_STATE_FILENAME
+    if not state_path.exists():
+        return None
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):  # fmt: skip
+        # Corrupt / unreadable — clear it and move on.
+        clear_spawn_in_flight(artifacts_dir)
+        return None
+
+    if state.get("state") != "in_flight":
+        clear_spawn_in_flight(artifacts_dir)
+        return None
+
+    spawn_count: int = state.get("spawn_count", 0)
+    counted: bool = state.get("counted", False)
+    started_at: str = state.get("started_at", "unknown")
+
+    # Absorb: decrement counter so process-death kills don't burn
+    # the ticket's spawn budget.
+    if counted:
+        try:
+            current = int(counter_path.read_text(encoding="utf-8").strip())
+        except (ValueError, OSError):  # fmt: skip
+            current = 0
+        corrected = max(current - 1, 0)
+        try:
+            counter_path.write_text(str(corrected), encoding="utf-8")
+        except OSError:
+            log.warning(
+                "failed to write spawn counter after absorbing killed spawn",
+                exc_info=True,
+            )
+
+    # Record the kill durably so spawn-limit blocks carry evidence.
+    try:
+        aborts_path = artifacts_dir / SPAWN_ABORTS_FILENAME
+        with open(aborts_path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "started_at": started_at,
+                        "spawn_count": spawn_count,
+                        "detected_at": datetime.now(UTC).isoformat(),
+                        "counted": counted,
+                    }
+                )
+                + "\n"
+            )
+    except OSError:
+        log.warning(
+            "failed to append to spawn aborts log",
+            exc_info=True,
+        )
+
+    clear_spawn_in_flight(artifacts_dir)
+
+    return (
+        (
+            f"Previous spawn attempt (started at {started_at}, "
+            f"spawn #{spawn_count}) was killed by process shutdown/restart "
+            f"before recording an outcome — {spawn_count} was "
+            f"not consumed."
+        )
+        if counted
+        else (
+            f"Previous spawn attempt (started at {started_at}) was killed "
+            f"by process shutdown/restart before recording an outcome "
+            f"(retry, not counted)."
+        )
+    )
+
+
+def read_spawn_aborts_tail(artifacts_dir: Path) -> str | None:
+    """Return the tail of the spawn-aborts log for inclusion in a block
+    note, or ``None`` when the log is absent or empty.
+    """
+    import json
+
+    aborts_path = artifacts_dir / SPAWN_ABORTS_FILENAME
+    if not aborts_path.exists():
+        return None
+
+    try:
+        lines = aborts_path.read_text(encoding="utf-8").rstrip().splitlines()
+    except OSError:
+        return None
+
+    if not lines:
+        return None
+
+    tail = lines[-5:]  # last 5 entries only
+    entries = []
+    for line in tail:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            entry = {"_raw": line}
+        entries.append(entry)
+
+    note = "Spawn abort log (most recent first):"
+    for e in reversed(entries):
+        st = e.get("started_at", "unknown")
+        sc = e.get("spawn_count", "?")
+        c = "counted" if e.get("counted") else "not counted"
+        note += f"\n- started {st}, spawn #{sc}, {c}"
+    return note
