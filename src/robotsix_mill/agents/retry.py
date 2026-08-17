@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import logging
 import random
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from typing import Any, TypeVar
 
 from robotsix_llmio.claude_sdk.transient import (
@@ -198,10 +199,56 @@ def _try_record_step_usage(
 __all__ = [
     "acall_with_retry",
     "call_with_retry",
+    "closing_scratch_loop",
     "is_rate_limited",
     "is_transient",
     "run_agent",
 ]
+
+
+@contextlib.contextmanager
+def closing_scratch_loop() -> Iterator[None]:
+    """Close the event loop ``pydantic_ai`` leaves installed on this thread.
+
+    ``Agent.run_sync`` funnels through ``pydantic_ai._utils.get_event_loop``,
+    which does ``asyncio.new_event_loop()`` + ``asyncio.set_event_loop()`` and
+    never closes the loop.  ``BaseEventLoop.close()`` is what shuts a loop's
+    default executor down, so an unclosed loop strands that executor's
+    ``asyncio_N`` threads in ``futex_wait`` for the life of the process — each
+    one costing an 8 MB stack reservation and its own glibc malloc arena.  On a
+    long-lived worker thread (mill runs stages via ``asyncio.to_thread``) the
+    loops accumulate until the container hits its memory cap and is OOM-killed,
+    which kills in-flight sandboxes and silently burns implement spawn attempts.
+
+    Only a loop this block is responsible for is closed: if a loop was already
+    installed on the thread on entry it is left exactly as found, and a running
+    loop is never touched.  Agents are built and closed per call (see
+    ``agents.base``), so nothing loop-affine outlives the block.
+    """
+    before = _current_event_loop()
+    try:
+        yield
+    finally:
+        after = _current_event_loop()
+        if after is not None and after is not before and not after.is_running():
+            with contextlib.suppress(Exception):
+                after.close()
+            # Drop the thread-local reference so the next ``run_sync`` on this
+            # thread installs a fresh loop rather than reusing a closed one.
+            with contextlib.suppress(Exception):
+                asyncio.set_event_loop(None)
+
+
+def _current_event_loop() -> asyncio.AbstractEventLoop | None:
+    """The event loop installed on this thread, or ``None`` if there is none.
+
+    On Python >=3.14 ``asyncio.get_event_loop()`` raises rather than creating a
+    loop as a side effect, so this is a pure read.
+    """
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        return None
 
 
 def call_with_retry[T](
@@ -221,14 +268,17 @@ def call_with_retry[T](
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        # No running loop — safe to use asyncio.run() directly.
-        return _lib_call_with_retry(
-            fn,
-            what=what,
-            sleep=sleep,
-            fallback_fn=fallback_fn,
-            is_transient_fn=is_transient,
-        )
+        # No running loop — safe to use asyncio.run() directly.  This runs on
+        # the caller's (often pooled, long-lived) thread, so any scratch loop
+        # pydantic-ai installs here must be closed rather than stranded.
+        with closing_scratch_loop():
+            return _lib_call_with_retry(
+                fn,
+                what=what,
+                sleep=sleep,
+                fallback_fn=fallback_fn,
+                is_transient_fn=is_transient,
+            )
 
     # Running loop detected — delegate to a thread.
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -396,15 +446,19 @@ def run_agent[T](
                 is_transient_fn=is_transient,
             )
 
+    def _call_closing() -> T:
+        with closing_scratch_loop():
+            return _call()
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         # No running loop — safe to run on this thread.
-        result = _call()
+        result = _call_closing()
     else:
         # Running loop detected — delegate to a thread.
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            result = ex.submit(_call).result()
+            result = ex.submit(_call_closing).result()
 
     # Record per-step usage as a span attribute when the result is a
     # pydantic-ai AgentRunResult (has .usage() and .all_messages()).

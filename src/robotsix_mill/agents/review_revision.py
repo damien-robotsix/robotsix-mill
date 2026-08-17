@@ -55,6 +55,7 @@ def run_review_revision_agent(
 
     from .base import _safe_close, build_agent_from_definition
     from .fs_tools import build_fs_tools
+    from .retry import closing_scratch_loop
     from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "review_revision.yaml")
@@ -83,7 +84,10 @@ def run_review_revision_agent(
     limits = UsageLimits(request_limit=100)
 
     try:
-        result = agent.run_sync(user_prompt, usage_limits=limits)
+        # This is a direct ``run_sync`` (it does not go through ``run_agent``),
+        # so it needs its own scratch-loop cleanup — see ``closing_scratch_loop``.
+        with closing_scratch_loop():
+            result = agent.run_sync(user_prompt, usage_limits=limits)
     finally:
         _safe_close(agent)
 
