@@ -65,3 +65,61 @@ def unregistered_call_directives(
         catalog = set(known_tools)
         named = {n for n in named if n in catalog}
     return {n for n in named if n not in resolved}
+
+
+def strip_disabled_tool_directives(prompt: str, disabled_tools: Iterable[str]) -> str:
+    r"""Remove prompt lines that issue a ``\`tool(...)\`` call directive
+    for any tool in *disabled_tools*.
+
+    Companion to :func:`unregistered_call_directives`: when a tool is
+    deliberately dropped from an agent's resolved tool set (refine's
+    cost-gated explore sub-agents, the dedup check without a repo
+    checkout) but the static prompt still tells the agent to *call* it,
+    the build-time consistency guard raises ``ValueError``. Stripping the
+    offending lines keeps the guard satisfied and stops the agent being
+    told to call a tool it no longer has.
+
+    A markdown bullet item whose block contains such a directive is
+    removed wholesale (so a stripped bullet doesn't leave a dangling
+    continuation); any other line containing a directive is removed too.
+    A bare backtick mention (no trailing ``(``) is left intact — only
+    call directives matter.
+    """
+    disabled = {t for t in disabled_tools if t}
+    if not disabled:
+        return prompt
+    directive = re.compile(
+        r"`+(?:" + "|".join(re.escape(t) for t in sorted(disabled)) + r")\s*\("
+    )
+    lines = prompt.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.lstrip()
+        if stripped.startswith(("* ", "- ")):
+            indent = len(line) - len(stripped)
+            block = [line]
+            j = i + 1
+            # Gather continuation lines: deeper-indented, non-blank, and
+            # not themselves a sibling/parent bullet.
+            while j < len(lines):
+                nxt = lines[j]
+                nstr = nxt.lstrip()
+                nindent = len(nxt) - len(nstr)
+                if nstr == "" or nindent <= indent or nstr.startswith(("* ", "- ")):
+                    break
+                block.append(nxt)
+                j += 1
+            if directive.search("\n".join(block)):
+                i = j
+                continue
+            out.extend(block)
+            i = j
+            continue
+        if directive.search(line):
+            i += 1
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)

@@ -151,6 +151,120 @@ def test_fs_tools_passed_when_repo_dir_provided(settings, monkeypatch):
     assert captured_tools == []
 
 
+def test_no_repo_dir_strips_dangling_fs_call_directives(settings, monkeypatch):
+    """Regression: with repo_dir=None the dedup agent gets no fs tools,
+    but dedup.yaml's static prompt still tells it to *call* read_file
+    and list_dir — so build_agent_from_definition's prompt/tool
+    consistency guard raised ValueError at build time on every ingest
+    call, and the fail-open except swallowed it (dedup structurally
+    dead on the ingest path). run_dedup_check must strip those call
+    directives so the build completes and a real (mock-LLM) check runs.
+    """
+    from robotsix_mill.agents.base import compose_prompt
+    from robotsix_mill.agents.prompt_tool_consistency import (
+        unregistered_call_directives,
+    )
+    from robotsix_mill.agents.tool_registry import ToolRegistry
+
+    captured: dict = {}
+
+    def _guarded_fake(
+        *a,
+        system_prompt=None,
+        skills=None,
+        modules=False,
+        workflows=False,
+        tools=None,
+        **k,
+    ):
+        # Replay the REAL build-time guard on the prompt dedup hands us
+        # (tests can't build a real provider handle, so build_agent is
+        # faked — but the guard must still fire if the prompt references
+        # tools absent from the resolved set). The fs ToolInfos are
+        # registered by build_fs_tools inside a worker process, not at
+        # import time, so add them explicitly to mirror the live
+        # catalog state that tripped the bug.
+        captured["prompt"] = system_prompt
+        composed = compose_prompt(
+            settings, system_prompt, skills=skills, modules=modules, workflows=workflows
+        )
+        resolved = {
+            getattr(t, "name", None) or getattr(t, "__name__", "")
+            for t in (tools or [])
+        }
+        known = {t.name for t in ToolRegistry.list_tools()} | {"read_file", "list_dir"}
+        unreg = unregistered_call_directives(
+            composed,
+            resolved_tools=resolved,
+            known_tools=known,
+        )
+        if unreg:
+            raise ValueError(
+                "Prompt contains call directives to unavailable tools: "
+                + ", ".join(sorted(unreg))
+            )
+        return _FakeAgent()
+
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", _guarded_fake)
+
+    out = dedup.run_dedup_check(
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
+        candidates_json="[]",
+        repo_dir=None,
+    )
+    # Real verdict, not the fail-open path.
+    assert out["duplicate_of"] == "T-1"
+    assert out["reason"] == "dup"
+    # The dangling call directives are gone from the prompt dedup built.
+    assert "read_file(" not in captured["prompt"]
+    assert "list_dir(" not in captured["prompt"]
+
+
+def test_repo_dir_keeps_fs_verification_directives(settings, monkeypatch):
+    """With a repo checkout the fs tools ARE wired in, so the prompt's
+    read_file/list_dir verification directives must survive stripping."""
+
+    def _read_file(*a, **k):
+        pass
+
+    _read_file.__name__ = "read_file"
+
+    def _list_dir(*a, **k):
+        pass
+
+    _list_dir.__name__ = "list_dir"
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.fs_tools.build_fs_tools",
+        lambda root, s: [_read_file, _list_dir],
+    )
+
+    captured: dict = {}
+
+    def _capture_prompt(*a, system_prompt=None, tools=None, **k):
+        captured["prompt"] = system_prompt
+        captured["tools"] = tools
+        return _FakeAgent()
+
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", _capture_prompt)
+
+    from pathlib import Path
+
+    out = dedup.run_dedup_check(
+        settings=settings,
+        draft_title="t",
+        draft_body="b",
+        candidates_json="[]",
+        repo_dir=Path("/fake/repo"),
+    )
+    assert out["duplicate_of"] == "T-1"
+    assert {t.__name__ for t in captured["tools"]} == {"read_file", "list_dir"}
+    assert "read_file(path)" in captured["prompt"]
+    assert "list_dir(dir)" in captured["prompt"]
+
+
 # ---------------------------------------------------------------------------
 # rank_candidates_by_similarity unit tests
 # ---------------------------------------------------------------------------
