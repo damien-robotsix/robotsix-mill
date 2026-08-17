@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -418,7 +418,7 @@ def run_preflight_checks(
         # must never change control flow or raise.
         breadcrumb_path = ws.artifacts_dir / "implement_spawn_breadcrumbs.log"
         try:
-            stamp = datetime.now(timezone.utc).isoformat()
+            stamp = datetime.now(UTC).isoformat()
             with breadcrumb_path.open("a", encoding="utf-8") as fh:
                 fh.write(
                     f"{stamp} {ticket.id} spawn slot "
