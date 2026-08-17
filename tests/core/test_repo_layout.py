@@ -12,8 +12,8 @@ class TestSrcPathCandidates:
 
     def test_plain_relative_returns_token_then_src_prefixed(self):
         """A plain relative token returns [token, src/token]."""
-        result = src_path_candidates("robotsix_llmio/core")
-        assert result == ["robotsix_llmio/core", "src/robotsix_llmio/core"]
+        result = src_path_candidates("robotsix_mill/core")
+        assert result == ["robotsix_mill/core", "src/robotsix_mill/core"]
 
     def test_already_src_prefixed_returns_single(self):
         """A token already under src/ is not double-prefixed."""
@@ -32,8 +32,8 @@ class TestSrcPathCandidates:
 
     def test_leading_dot_slash_normalised(self):
         """A leading ./ is stripped before candidate generation."""
-        result = src_path_candidates("./robotsix_llmio/core")
-        assert result == ["robotsix_llmio/core", "src/robotsix_llmio/core"]
+        result = src_path_candidates("./robotsix_mill/core")
+        assert result == ["robotsix_mill/core", "src/robotsix_mill/core"]
 
     def test_empty_token(self):
         """Empty string returns [token, src/token]."""
@@ -53,7 +53,7 @@ class TestSrcPathCandidates:
             "./config",
             "/absolute/path",
             "SRC/FOO/BAR",
-            "robotsix_llmio/core/sqlite_util.py",
+            "robotsix_mill/core/sqlite_util.py",
         ]
         for token in tokens:
             candidates = src_path_candidates(token)
@@ -73,11 +73,11 @@ class TestResolveUnderSrc:
         """A token that exists only at src/<token> returns that path."""
         repo = tmp_path / "repo"
         repo.mkdir()
-        (repo / "src" / "robotsix_llmio" / "core").mkdir(parents=True)
-        (repo / "src" / "robotsix_llmio" / "core" / "models.py").write_text("")
+        (repo / "src" / "robotsix_mill" / "core").mkdir(parents=True)
+        (repo / "src" / "robotsix_mill" / "core" / "models.py").write_text("")
 
-        result = resolve_under_src(repo, "robotsix_llmio/core/models.py")
-        assert result == repo / "src" / "robotsix_llmio" / "core" / "models.py"
+        result = resolve_under_src(repo, "robotsix_mill/core/models.py")
+        assert result == repo / "src" / "robotsix_mill" / "core" / "models.py"
 
     def test_token_at_repo_root_preferred(self, tmp_path):
         """A token that exists at repo root returns the root path
@@ -125,10 +125,10 @@ class TestResolveUnderSrc:
         """A directory that exists only under src/ resolves correctly."""
         repo = tmp_path / "repo"
         repo.mkdir()
-        (repo / "src" / "robotsix_llmio" / "config").mkdir(parents=True)
+        (repo / "src" / "robotsix_mill" / "config").mkdir(parents=True)
 
-        result = resolve_under_src(repo, "robotsix_llmio/config")
-        assert result == repo / "src" / "robotsix_llmio" / "config"
+        result = resolve_under_src(repo, "robotsix_mill/config")
+        assert result == repo / "src" / "robotsix_mill" / "config"
 
     def test_defensive_no_raise_on_bytes_in_token(self, tmp_path):
         """A pathological token must not raise — returns None."""
@@ -164,8 +164,8 @@ class TestResolveUnderSrc:
         """./<token> is normalised to <token> and resolves."""
         repo = tmp_path / "repo"
         repo.mkdir()
-        (repo / "src" / "robotsix_llmio" / "core").mkdir(parents=True)
-        (repo / "src" / "robotsix_llmio" / "core" / "util.py").write_text("")
+        (repo / "src" / "robotsix_mill" / "core").mkdir(parents=True)
+        (repo / "src" / "robotsix_mill" / "core" / "util.py").write_text("")
 
-        result = resolve_under_src(repo, "./robotsix_llmio/core/util.py")
-        assert result == repo / "src" / "robotsix_llmio" / "core" / "util.py"
+        result = resolve_under_src(repo, "./robotsix_mill/core/util.py")
+        assert result == repo / "src" / "robotsix_mill" / "core" / "util.py"

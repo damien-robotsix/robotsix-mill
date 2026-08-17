@@ -186,7 +186,7 @@ For each finding, output four fields:
   early-return guard before line M". The implement agent should be
   able to act on this directly.
 - ``target_files``: the repo-relative file paths cited in
-  ``proposed_solution`` (e.g. ``["src/robotsix_llmio/claude_sdk/wrapper.py"]``).
+  ``proposed_solution`` (e.g. ``["src/robotsix_mill/agents/trace_inspector.py"]``).
   Used by the trace-review runner's pre-filing dedup check to detect
   recurring findings against the same code locus. Empty list is
   acceptable when the finding has no code locus.

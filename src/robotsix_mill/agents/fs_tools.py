@@ -836,8 +836,10 @@ def build_fs_tools(
                 return f"error: {path!r} is a directory, not a file"
             # Path does not exist at all — try src/ fallback before
             # returning the "does not exist" error.  This catches the
-            # common agent mistake of probing e.g. "robotsix_llmio/core"
-            # when the package actually lives under src/robotsix_llmio/core/.
+            # common agent mistake of probing e.g. "robotsix_mill/core"
+            # when the package actually lives under src/robotsix_mill/core/.
+            # (robotsix_llmio is an external dependency — it has no
+            # in-repo src/ copy for this fallback to resolve.)
             candidates = src_path_candidates(path)
             # Candidate 0 is the literal path — already tried above.
             for cand in candidates[1:]:
@@ -1149,8 +1151,9 @@ def build_fs_tools(
                     # Path does not exist — try src/ fallback before
                     # letting iterdir() raise FileNotFoundError.  Same
                     # root-cause as the read_file fallback: agents probe
-                    # e.g. "robotsix_llmio/core" when the package lives
-                    # under src/robotsix_llmio/core/.
+                    # e.g. "robotsix_mill/core" when the package lives
+                    # under src/robotsix_mill/core/ (robotsix_llmio is an
+                    # external dependency with no in-repo src/ copy).
                     candidates = src_path_candidates(path)
                     for cand in candidates[1:]:
                         try:

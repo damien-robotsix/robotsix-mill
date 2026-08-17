@@ -3,12 +3,14 @@ their ``src/<pkg>/`` namespace when the literal token does not exist.
 
 The mill pipeline's agent tools and deterministic gates construct
 existence checks using paths relative to the repo root (e.g.
-``robotsix_llmio/core``, ``config/``, ``core/``) for packages that
-actually live under the ``src/`` namespace (e.g.
-``src/robotsix_llmio/core/``, ``src/robotsix_llmio/config/``).  A
-literal probe misses, producing false "absent" results.  This module
-provides a single shared resolution step consumed everywhere those
-checks happen — agents, gates, and the draft-routing heuristic.
+``robotsix_mill/core``, ``core/``) for packages that actually live
+under the ``src/`` namespace (e.g. ``src/robotsix_mill/core/``).  A
+literal probe misses, producing false "absent" results.  Extracted
+packages such as ``robotsix_llmio`` are external dependencies with no
+in-repo ``src/`` copy, so this fallback cannot resolve them — probe
+their import namespace instead.  This module provides a single shared
+resolution step consumed everywhere those checks happen — agents,
+gates, and the draft-routing heuristic.
 
 Imports are deliberately minimal (``pathlib`` only) so the module is
 safe to import from ``core/``, ``agents/``, and ``stages/`` without
@@ -34,8 +36,8 @@ def src_path_candidates(token: str) -> list[str]:
       so callers never produce ``src/src/...``.
     - An absolute path (``/`` or ``\\``) is returned as-is — absolute
       paths are never rewritten.
-    - A leading ``./`` is normalised away so ``./robotsix_llmio`` and
-      ``robotsix_llmio`` behave identically.
+    - A leading ``./`` is normalised away so ``./robotsix_mill`` and
+      ``robotsix_mill`` behave identically.
     """
     # Normalise leading ./ if present.
     normalised = token
