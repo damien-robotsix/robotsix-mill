@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -135,9 +136,38 @@ _TOKEN_LIMIT_SIGNALS = (
 
 _OUTPUT_TOKEN_EXHAUSTION_SIGNALS = ("before any response was generated",)
 
+_FINISH_REASON_ERROR_RE = re.compile(
+    r"""finish_reason['"]?\s*[:=]\s*['"]error['"]""",
+    re.IGNORECASE,
+)
+
+
+def _is_finish_reason_error(exc: BaseException) -> bool:
+    """True when *exc* signals OpenRouter's ``finish_reason='error'``.
+
+    OpenRouter returns ``finish_reason: 'error'`` when the upstream
+    provider 5xx'd / rate-limited / otherwise failed transiently.
+    pydantic-ai surfaces this as :class:`UnexpectedModelBehavior`
+    with the raw response JSON in ``body``.  Retrying within the same
+    attempt is wasted — the provider is down, not this prompt.
+
+    Checks the exception message AND a ``body`` attribute (when
+    present) so the check survives a future pydantic-ai update
+    mapping the failure to a different exception type.
+    """
+    if _FINISH_REASON_ERROR_RE.search(str(exc)):
+        return True
+    body = getattr(exc, "body", None)
+    return bool(isinstance(body, str) and _FINISH_REASON_ERROR_RE.search(body))
+
 
 def _is_token_limit_error(exc: BaseException) -> bool:
     """True when *exc*'s message matches a known token-limit signal."""
+    # A provider finish_reason='error' is a transient provider failure,
+    # NOT a token-limit condition — even when the provider's error text
+    # echoes a context-length phrase. Never classify it as token-limit.
+    if _is_finish_reason_error(exc):
+        return False
     msg = str(exc).lower()
     if any(sig in msg for sig in _TOKEN_LIMIT_SIGNALS):
         return True
@@ -150,6 +180,10 @@ def _is_token_limit_error(exc: BaseException) -> bool:
 
 def _is_output_token_exhaustion(exc: BaseException) -> bool:
     """True when *exc* indicates output-token exhaustion."""
+    # Same guard as _is_token_limit_error: a finish_reason='error'
+    # provider failure is not an output-token exhaustion.
+    if _is_finish_reason_error(exc):
+        return False
     msg = str(exc).lower()
     if any(sig in msg for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS):
         return True
@@ -157,6 +191,36 @@ def _is_output_token_exhaustion(exc: BaseException) -> bool:
         body_lower = exc.body.lower()
         return any(sig in body_lower for sig in _OUTPUT_TOKEN_EXHAUSTION_SIGNALS)
     return False
+
+
+def _provider_failure_verdict_or_raise(exc: BaseException) -> ReviewVerdict:
+    """Surface a ``finish_reason='error'`` provider failure as a
+    NEEDS_DISCUSSION verdict; re-raise anything else.
+
+    OpenRouter returns ``finish_reason: 'error'`` when the upstream
+    provider 5xx'd / rate-limited — every in-attempt retry re-hits the
+    same outage, so the failure lands in the review verdict instead of
+    burning the degraded-retry tiers.  Non-provider errors propagate
+    unchanged.
+    """
+    if _is_finish_reason_error(exc):
+        log.warning(
+            "review: provider failure (finish_reason='error') (%s); "
+            "skipping retry and surfacing as NEEDS_DISCUSSION",
+            exc,
+        )
+        return ReviewVerdict(
+            verdict="NEEDS_DISCUSSION",
+            comments=(
+                "The review model's provider returned "
+                "finish_reason='error' — an upstream 5xx / rate-limit / "
+                "transient provider failure, not a problem with this "
+                "diff. No automated verdict was produced; re-run the "
+                "review once the provider recovers."
+            ),
+            auto_merge_eligible=False,
+        )
+    raise exc
 
 
 def _review_attempt(
@@ -580,15 +644,22 @@ def _run_with_degraded_retry(
         On token-limit error: return best-effort ``NEEDS_DISCUSSION``.
         On success: return verdict (unchanged).
 
-    Non token-limit exceptions propagate unchanged, so ``run_agent``'s
-    transient retry and the caller's handling apply exactly as before.
+    A provider ``finish_reason='error'`` failure surfaces immediately
+    as a ``NEEDS_DISCUSSION`` verdict — the upstream provider is down,
+    so none of the retry tiers would succeed.  Other non token-limit
+    exceptions propagate unchanged, so ``run_agent``'s transient retry
+    and the caller's handling apply exactly as before.
     """
     # Tier 1: full diff + preseed -------------------------------------------
     try:
         return attempt(diff_text=diff, use_preseed=True, note=None)
     except Exception as exc:
         if not _is_token_limit_error(exc):
-            raise
+            # Not a token-limit error. A finish_reason='error' provider
+            # failure surfaces as a NEEDS_DISCUSSION verdict (skipping
+            # the retry tiers — the upstream provider is down, so every
+            # retry re-hits the same outage); anything else propagates.
+            return _provider_failure_verdict_or_raise(exc)
         # Output-token exhaustion: the model burned its entire max_tokens
         # budget on reasoning before emitting a verdict.  Retry with
         # increased max_tokens (same untruncated diff, same preseed).

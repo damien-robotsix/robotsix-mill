@@ -9,6 +9,8 @@ these exceptions (covered by ``tests/stages/test_implement.py``).
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from robotsix_mill.agents.coding import (
@@ -233,6 +235,79 @@ def test_unexpected_model_behavior_fallback_success(
 
     # Returns normally
     assert out[0] == "fallback ok"
+
+
+def test_finish_reason_error_logs_provider_warning_before_fallback(
+    settings,
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    """finish_reason='error' on the primary model logs a distinct
+    provider-error warning (not the generic output-retries message)
+    and still attempts the level-1 fallback."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    fallback_calls: list[dict] = []
+    result = _make_result(summary="fallback ok")
+
+    def _fake_run_coordinator(**kw):
+        if kw.get("level") is None:
+            raise UnexpectedModelBehavior(
+                "Exceeded maximum output retries (4)",
+                body='{"choices": [{"finish_reason": "error"}]}',
+            )
+        fallback_calls.append(kw)
+        return result
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        _fake_run_coordinator,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.coding"):
+        out = _call(settings, tmp_path)
+
+    # Fallback still runs (a different provider may be healthy).
+    assert out[0] == "fallback ok"
+    assert len(fallback_calls) == 1
+    assert fallback_calls[0].get("level") == 1
+
+    # The distinct provider-error warning was logged.
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("provider error" in m and "finish_reason='error'" in m for m in messages)
+    # The generic output-retries warning must NOT be logged for this case.
+    assert not any("output retries exhausted on primary model" in m for m in messages)
+
+
+def test_output_retries_warning_unchanged_without_finish_reason_error(
+    settings,
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    """A plain UnexpectedModelBehavior (no finish_reason='error') keeps
+    logging the generic output-retries warning."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    result = _make_result(summary="fallback ok")
+
+    def _fake_run_coordinator(**kw):
+        if kw.get("level") is None:
+            raise UnexpectedModelBehavior("output retries exhausted")
+        return result
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        _fake_run_coordinator,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.coding"):
+        _call(settings, tmp_path)
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("output retries exhausted on primary model" in m for m in messages)
+    assert not any("provider error" in m for m in messages)
 
 
 # ------------------------------------------------------------------
