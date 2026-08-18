@@ -54,9 +54,16 @@ def run_agent_check_agent(
     Args:
         settings: Application configuration.
         repo_dir: Optional path to the local repository clone.
+        definition_override: Optional per-repo merged agent definition
+            (resolved from ``.robotsix-mill/periodic/<name>.yaml``)
+            to pass through to the agent callable.
         memory_dir: Optional extra root passed to ``build_fs_tools``.
         memory: The agent's memory ledger.
         recent_proposals: Prior proposals from the pass runner.
+        verified_proposals: Ephemeral verified-state table (rendered
+            Markdown) recomputed from the ticket DB every pass and
+            injected into the prompt. Empty string means no prior
+            proposals to verify.
 
     Returns:
         An ``AgentCheckResult`` with findings, draft titles, bodies,
