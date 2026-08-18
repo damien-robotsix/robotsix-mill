@@ -1,11 +1,11 @@
 repos:
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.4.1
+    rev: b494c556437473519f8ab69020c7256ba84714c1  # frozen: v4.4.1
     hooks:
       - id: commitizen
         stages: [commit-msg]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+    rev: cb8c523fd4835aba42af70f4cad5568db4df0b6c  # frozen: v0.16.0
     hooks:
       - id: ruff
         args: [--fix]
@@ -59,14 +59,14 @@ repos:
     hooks:
       - id: actionlint
   - repo: https://github.com/lycheeverse/lychee
-    rev: v0.18.1
+    rev: 2aa22f8b7a6473075e3fc8b8960fd9ea498949cb  # frozen: v0.18.1
     hooks:
       - id: lychee
         args: ["--config", "lychee.toml", "--no-progress"]
         files: ^docs/.*\.md$
         types: [markdown]
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
     hooks:
       - id: shellcheck
         args: [--severity=warning]
