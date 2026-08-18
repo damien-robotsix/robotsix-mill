@@ -84,6 +84,23 @@
       "title": "LangfuseProjectCredentials",
       "type": "object"
     },
+    "OpenrouterKeys": {
+      "description": "Canonical OpenRouter provider key map per the robotsix-standards\ncomponent standard.\n\nMaps function aliases to their provider API keys.  Only\nfunction-funding keys belong here \u2014 the management/provisioning key\nand per-repo overrides are separate fields (see\n``openrouter_management_key`` and ``RepoConfig.openrouter_api_key``),\nsince only function-funding keys participate in cost-monitor\nreconciliation.",
+      "properties": {
+        "keys": {
+          "additionalProperties": {
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "description": "Mapping of function alias to its OpenRouter API key. Only function-funding keys participate in cost-monitor reconciliation.",
+          "title": "Keys",
+          "type": "object"
+        }
+      },
+      "title": "OpenrouterKeys",
+      "type": "object"
+    },
     "RepoConfig": {
       "description": "Configuration for a single repository \u2014 its board identity,\nLangfuse observability project credentials, and per-repo CI\nmonitor settings.",
       "properties": {
@@ -328,6 +345,23 @@
         "projects"
       ],
       "title": "LangfuseConfig",
+      "type": "object"
+    },
+    "openrouter": {
+      "description": "Canonical OpenRouter provider key map per the robotsix-standards\ncomponent standard.\n\nMaps function aliases to their provider API keys.  Only\nfunction-funding keys belong here \u2014 the management/provisioning key\nand per-repo overrides are separate fields (see\n``openrouter_management_key`` and ``RepoConfig.openrouter_api_key``),\nsince only function-funding keys participate in cost-monitor\nreconciliation.",
+      "properties": {
+        "keys": {
+          "additionalProperties": {
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "description": "Mapping of function alias to its OpenRouter API key. Only function-funding keys participate in cost-monitor reconciliation.",
+          "title": "Keys",
+          "type": "object"
+        }
+      },
+      "title": "OpenrouterKeys",
       "type": "object"
     },
     "repos": {
@@ -752,7 +786,7 @@
             }
           ],
           "default": null,
-          "description": "OpenRouter API key used for LLM backend calls. Per-agent models resolve from each agent definition's level via llmio tier defaults.",
+          "description": "DEPRECATED flat OpenRouter API key for LLM backend calls. Migrated into the canonical openrouter.keys['robotsix-mill'] map; prefer that canonical source. Retained for backward-compat with existing deployed configs.",
           "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {
@@ -2113,6 +2147,18 @@
           "minimum": 1,
           "title": "Obsolescence Request Limit",
           "type": "integer"
+        },
+        "openrouter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenrouterKeys"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenRouter provider key map (one entry per LLM function). Only function-funding keys belong here \u2014 the management key and per-repo overrides are separate fields."
         },
         "openrouter_management_key": {
           "anyOf": [

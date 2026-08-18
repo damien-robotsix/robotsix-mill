@@ -74,6 +74,24 @@ class LangfuseConfig(BaseModel):
     )
 
 
+class OpenrouterKeys(BaseModel):
+    """Canonical OpenRouter provider key map per the robotsix-standards
+    component standard.
+
+    Maps function aliases to their provider API keys.  Only
+    function-funding keys belong here — the management/provisioning key
+    and per-repo overrides are separate fields (see
+    ``openrouter_management_key`` and ``RepoConfig.openrouter_api_key``),
+    since only function-funding keys participate in cost-monitor
+    reconciliation.
+    """
+
+    keys: dict[str, SecretStr] = Field(
+        default_factory=dict,
+        description="Mapping of function alias to its OpenRouter API key. Only function-funding keys participate in cost-monitor reconciliation.",
+    )
+
+
 # Seconds the ci_fix stage wrapper is kept above the agent's own timeout,
 # covering clone, guard checks and finalization.  Its only job is to keep
 # the two ordered so the agent's diagnostic block note always wins the
@@ -111,6 +129,10 @@ class Settings(
     langfuse: LangfuseConfig | None = Field(
         default=None,
         description="Langfuse configuration for mill's own LLM tracing (host + one project entry). Per-repo credentials live on RepoConfig and are NOT registered here.",
+    )
+    openrouter: OpenrouterKeys | None = Field(
+        default=None,
+        description="OpenRouter provider key map (one entry per LLM function). Only function-funding keys belong here — the management key and per-repo overrides are separate fields.",
     )
     openrouter_management_key: SecretStr | None = Field(
         default=None,
@@ -181,6 +203,28 @@ class Settings(
             file_secret_settings,
             JsonSettingsSource(settings_cls),
         )
+
+    @model_validator(mode="after")
+    def _migrate_openrouter_api_key(self) -> Settings:
+        """Backward-compat migration for the flat ``openrouter_api_key``.
+
+        Configs carrying the deprecated flat field load it into the
+        canonical ``openrouter.keys["robotsix-mill"]`` alias so the
+        deployment engine and cost-monitor reconciliation see the same
+        key the main LLM function actually uses.
+        """
+        if self.openrouter_api_key is None:
+            return self
+        key_value = self.openrouter_api_key.get_secret_value()
+        if not key_value:
+            return self
+        if self.openrouter is None:
+            self.openrouter = OpenrouterKeys(
+                keys={"robotsix-mill": self.openrouter_api_key}
+            )
+        elif "robotsix-mill" not in self.openrouter.keys:
+            self.openrouter.keys["robotsix-mill"] = self.openrouter_api_key
+        return self
 
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. *board_id* is required —

@@ -199,6 +199,39 @@ def test_load_secrets_empty_file(tmp_path):
 
 
 # ===========================================================================
+#  openrouter_api_key — canonical fallback
+# ===========================================================================
+
+
+def test_openrouter_api_key_falls_back_to_canonical(tmp_path, monkeypatch):
+    """When the flat field is None, get_secrets().openrouter_api_key
+    falls back to Settings().openrouter.keys['robotsix-mill']."""
+    import json
+
+    from robotsix_mill.config.settings import Settings
+
+    # Simulate a config that has the canonical top-level block but no
+    # flat openrouter_api_key in secrets.
+    cfg = {
+        "settings": {"data_dir": str(tmp_path), "api_port": 8077},
+        "openrouter": {"keys": {"robotsix-mill": "sk-from-top-level"}},
+    }
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps(cfg))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg_path))
+    _reset_secrets()
+
+    # The Settings model should pick up the canonical block
+    s = Settings()
+    assert s.openrouter is not None
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-top-level"
+
+    # get_secrets() should fall back to the canonical source.
+    secrets = get_secrets()
+    assert secrets.openrouter_api_key == "sk-from-top-level"
+
+
+# ===========================================================================
 #  SECRET sentinel handling
 # ===========================================================================
 

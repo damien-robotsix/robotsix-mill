@@ -917,3 +917,58 @@ def test_unknown_keys_in_the_file_do_not_break_extra_forbid(tmp_path, monkeypatc
 def test_missing_config_file_falls_back_to_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(tmp_path / "nope.json"))
     assert Settings().api_port == 8077
+
+
+# ===========================================================================
+#  openrouter keys — canonical block migration
+# ===========================================================================
+
+
+def test_openrouter_keys_canonical_source():
+    """The canonical ``openrouter.keys`` map is the source of truth."""
+    from pydantic import SecretStr
+
+    from robotsix_mill.config.settings import OpenrouterKeys
+
+    key = SecretStr("sk-canon")
+    s = Settings(openrouter=OpenrouterKeys(keys={"robotsix-mill": key}))
+    assert s.openrouter is not None
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
+
+
+def test_flat_openrouter_api_key_migrates_to_canonical():
+    """Configs with the deprecated flat field load it into the canonical map."""
+    from pydantic import SecretStr
+
+    s = Settings(openrouter_api_key=SecretStr("sk-legacy"))
+    assert s.openrouter is not None
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"
+    # The old field is still accessible for backward compat.
+    assert s.openrouter_api_key.get_secret_value() == "sk-legacy"
+
+
+def test_canonical_wins_when_both_set():
+    """When both the flat field and canonical map are set, canonical wins."""
+    from pydantic import SecretStr
+
+    from robotsix_mill.config.settings import OpenrouterKeys
+
+    s = Settings(
+        openrouter_api_key=SecretStr("sk-flat"),
+        openrouter=OpenrouterKeys(keys={"robotsix-mill": SecretStr("sk-canon")}),
+    )
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
+
+
+def test_openrouter_keys_coexist_with_other_aliases():
+    """The flat key populates 'robotsix-mill' alongside existing aliases."""
+    from pydantic import SecretStr
+
+    from robotsix_mill.config.settings import OpenrouterKeys
+
+    s = Settings(
+        openrouter_api_key=SecretStr("sk-legacy"),
+        openrouter=OpenrouterKeys(keys={"other-func": SecretStr("sk-other")}),
+    )
+    assert s.openrouter.keys["other-func"].get_secret_value() == "sk-other"
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"

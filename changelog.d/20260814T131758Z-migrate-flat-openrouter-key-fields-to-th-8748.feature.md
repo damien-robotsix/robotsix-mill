@@ -1,0 +1,1 @@
+Introduce canonical `openrouter.keys` map for function-funding provider keys, with backward-compat migration from the deprecated flat `openrouter_api_key` field. The management key and per-repo overrides remain separate fields. Schema regenerated.
