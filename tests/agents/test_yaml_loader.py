@@ -718,7 +718,7 @@ def test_flag_skill_implication(monkeypatch):
     import warnings
 
     READ_TICKET_EXCEPTIONS = {"implement"}
-    REPORT_ISSUE_EXCEPTIONS = {"ci_fix"}
+    REPORT_ISSUE_EXCEPTIONS: set[str] = set()
 
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
         monkeypatch.setenv(var, "mock/model")
