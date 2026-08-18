@@ -1313,6 +1313,91 @@ class TestVerifySummaryClaims:
         # changed → should be flagged.
         assert missing == ["README.md"]
 
+    # -- false-positive guards (real blocked-ticket regressions) --------
+
+    def test_backticked_command_is_not_a_path(self, tmp_path):
+        """An inline command span ends in `.json` but is not a file claim."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "the SBOM must be generated natively from uv.lock via "
+            "`uv export --frozen --format cyclonedx1.5 -o sbom.cdx.json`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_backticked_http_route_is_not_a_path(self, tmp_path):
+        """`GET /wallet/value` is a route, not a file that must exist."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "Added `GET /wallet/value` and `GET /wallet/history` endpoints",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_hyphenated_compound_is_not_a_trigger_verb(self, tmp_path):
+        """'glibc-generated lockfile' describes an existing artifact; the
+        backticked path two clauses later is not its object."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "npm re-resolves esbuild instead of using the repo's "
+            "glibc-generated lockfile; the build emits `dist/vanilla.js`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_claim_does_not_bind_across_a_sentence_boundary(self, tmp_path):
+        """A verb must not reach a path in the following sentence."""
+        repo_dir = self._repo(tmp_path)
+        missing = _verify_summary_claims(
+            "created `src/a.py`. No discrepancy: `sbom.cdx.json` is the "
+            "documented CI output filename, not a committed file",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == ["src/a.py"]
+
+    def test_gitignored_claimed_path_is_skipped(self, tmp_path, monkeypatch):
+        """A gitignored path can never appear in a diff, so claiming it
+        must not be treated as a hallucination."""
+        from robotsix_mill.stages.implement import implementation_logic as il
+
+        repo_dir = self._repo(tmp_path, files=["static/vendor/vanilla.js"])
+        monkeypatch.setattr(
+            il.git_ops, "ignored_paths", lambda repo, paths: list(paths)
+        )
+        missing = _verify_summary_claims(
+            "wrote `static/vendor/vanilla.js`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_existing_directory_claim_skips_diff_check(self, tmp_path):
+        """A directory is never named in --name-only output, so existing on
+        disk is all the diff cross-check can establish."""
+        repo_dir = self._repo(tmp_path, files=["agent_definitions/periodic/x.yaml"])
+        missing = _verify_summary_claims(
+            "registered the agent in `agent_definitions/periodic/`",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
+    def test_deleted_changelog_fragment_not_flagged(self, tmp_path):
+        """A fragment the summary reports deleting is not claimed to exist."""
+        repo_dir = self._repo(tmp_path, files=["changelog.d/ticket-1.removal.md"])
+        missing = _verify_summary_claims(
+            "Wrote `changelog.d/ticket-1.removal.md`, the correctly named "
+            "fragment.\nDeleted the previous pass's mis-named fragment "
+            "`changelog.d/20260811T142428Z-old-name-bc04.removal.md`.",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == []
+
 
 class TestRunSummaryVerification:
     def test_passes_when_no_claims(self, tmp_path):

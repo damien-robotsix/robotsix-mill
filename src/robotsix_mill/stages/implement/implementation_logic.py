@@ -47,10 +47,15 @@ from .implementation_editing import _ImplementationEditingMixin
 # Verbs the implement agent's free-text summary uses when it claims to have
 # produced a file.  Only path-shaped tokens are extracted, so phrases like
 # "added a test" or "created a helper" never match.
+# The verb must not be the tail of a hyphenated compound: "glibc-generated
+# lockfile" and "CI-generated artifact" describe something that already
+# exists, not a claim to have produced it.  The gap between verb and path
+# must not cross a clause boundary (``.``/``;``/em dash) either — without
+# that, a verb binds to a path in an unrelated sentence 80 characters away.
 _CLAIM_PATH_RE = re.compile(
     r"""
-    \b(?:created|registered|added|wrote|written|generated)\b
-    [^\n`]{0,80}?
+    (?<![-\w])(?:created|registered|added|wrote|written|generated)\b
+    (?:(?!\.\s)[^\n`;\u2014]){0,80}?
     (?P<path>`[^`\n]+`|[\w./-]+\.(?:md|py|yaml|yml|toml|json|js|css|ts|sh|txt)|Dockerfile|Makefile)
     """,
     re.IGNORECASE | re.VERBOSE,
@@ -62,8 +67,8 @@ _CLAIM_PATH_RE = re.compile(
 # to `.pre-commit-config.yaml`".
 _CLAIM_X_TO_Y_RE = re.compile(
     r"""
-    \b(?:added|registered)\b                         # trigger verb
-    [^\n]{0,80}?                                     # descriptive noun phrase (may include backtick-delimited tokens)
+    (?<![-\w])(?:added|registered)\b                 # trigger verb
+    (?:(?!\.\s)[^\n;\u2014]){0,80}?                   # descriptive noun phrase (may include backtick-delimited tokens)
     \b(?:to|in|into|under)\s+                        # preposition
     (?P<path>`[^`\n]+`|[\w./-]+\.\w+|Dockerfile|Makefile)  # the actual path
     """,
@@ -87,6 +92,14 @@ _CHANGELOG_CLAIM_BEFORE_RE = re.compile(
 # Explicit ``changelog.d/<file>`` mentions in the summary.
 _CHANGELOG_D_PATH_RE = re.compile(r"\bchangelog\.d/[\w./-]+")
 
+# A fragment the summary reports *removing* (typically a mis-named one from
+# an earlier pass) is not a claim that it exists — matching it flags the
+# tidy-up itself as a hallucinated file.
+_FRAGMENT_REMOVAL_RE = re.compile(
+    r"(?<![-\w])(?:deleted|removed|renamed|replaced)\b[^\n]{0,80}?$",
+    re.IGNORECASE,
+)
+
 # Conventional towncrier fragment directories.  ``changelog.d`` is the
 # default used by ``add_changelog_fragment``; the other two are the
 # alternates accepted by ``_changelog_validate``.
@@ -107,6 +120,11 @@ _COMMON_EXTLESS_PATHS: frozenset[str] = frozenset(
 
 def _looks_like_path(token: str) -> bool:
     """Return True when *token* is a plausible repo-relative file path."""
+    # A backtick span holding whitespace is an inline command or a route,
+    # not a path: `uv export --format cyclonedx1.5 -o sbom.cdx.json` and
+    # `GET /wallet/value` both otherwise pass the checks below.
+    if token != token.strip() or any(c.isspace() for c in token):
+        return False
     if "/" in token or "\\" in token:
         return True
     if bool(re.search(r"\.\w{1,8}$", token)):
@@ -146,8 +164,10 @@ def _verify_summary_claims(
         if path not in missing and not (repo_dir / path).exists():
             missing.append(path)
 
-    for raw in _CHANGELOG_D_PATH_RE.findall(summary or ""):
-        add_missing(raw.rstrip(".,;:)'\""))
+    for match in _CHANGELOG_D_PATH_RE.finditer(summary or ""):
+        if _FRAGMENT_REMOVAL_RE.search(summary[: match.start()].rpartition("\n")[2]):
+            continue
+        add_missing(match.group(0).rstrip(".,;:)'\""))
 
     if _CHANGELOG_CLAIM_AFTER_RE.search(
         summary or ""
@@ -176,12 +196,24 @@ def _verify_summary_claims(
         if raw not in claimed_paths:
             claimed_paths.append(raw)
 
+    # A gitignored path can never show up in a diff, so the cross-check
+    # below would flag every claim touching one (vendored trees, build
+    # output, a `.gitignore` entry named in the summary).  Drop them.
+    if claimed_paths:
+        ignored = set(git_ops.ignored_paths(repo_dir, claimed_paths))
+        claimed_paths = [p for p in claimed_paths if p not in ignored]
+
     # Check each claimed path against the filesystem and git diff.
     changed_files: set[str] | None = None
     for raw in claimed_paths:
         file_path = repo_dir / raw
         if not file_path.exists():
             missing.append(raw)
+        elif file_path.is_dir():
+            # A directory is never named in ``--name-only`` output, so the
+            # diff cross-check cannot say anything about it.  Existing on
+            # disk is all we can verify.
+            continue
         else:
             # Existing file claimed as modified — verify it actually
             # has a working-tree or branch diff.  When the git diff is
