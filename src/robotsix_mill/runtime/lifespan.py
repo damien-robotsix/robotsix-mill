@@ -304,7 +304,10 @@ def create_lifespan(
             if heartbeat_task is not None:
                 heartbeat_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await heartbeat_task
+                    # Wait for the cancelled task to reach its terminal state
+                    # before teardown proceeds; the result is None and
+                    # deliberately discarded (hence the `_` target).
+                    _ = await heartbeat_task
             heartbeat.mark_clean_shutdown(settings.data_dir)
 
     return lifespan
