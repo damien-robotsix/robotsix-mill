@@ -386,8 +386,6 @@ convention = "google"
 "src/robotsix_mill/agents/ci_log_fetch_tool.py" = ["E402", "B021"]
 "src/robotsix_mill/agents/ci_wait_tool.py" = ["E402"]
 "src/robotsix_mill/agents/testing.py" = ["S108"]
-"_check_advanced.py" = ["S101"]
-
 # --- expanded lint rules: new C901 regressions from auto-fixes ------------
 # Collapsible-if, nested-with flattening, and other simplifications can
 # nudge previously-passing functions over the C901 threshold.  List each
@@ -430,10 +428,6 @@ convention = "google"
 "tests/agents/test_testing.py" = ["TRY401", "TRY002"]
 # DTZ005 (no-tz) — pre-existing naive-datetime test fixtures.
 "tests/core/test_core_dedup.py" = ["DTZ005"]
-# EXE001 — _gen_schema.py at repo root has a shebang but is run via
-# `python _gen_schema.py`, not executed directly.
-"_gen_schema.py" = ["EXE001"]
-
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's Depends/Body/File/Query default-argument pattern is deliberate;
 # B008 (function-call-in-default) is a false positive for these.
