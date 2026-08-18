@@ -8,6 +8,7 @@ suitable for ``FastAPI(lifespan=...)``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 from collections.abc import Callable
@@ -23,7 +24,7 @@ from ..core import db
 from ..core.event_notifier import EventNotifier
 from ..core.service import TicketService
 from ..stages import StageContext
-from . import tracing
+from . import heartbeat, tracing
 from .broadcaster import BoardBroadcaster
 from .run_registry import RunRegistry
 from .worker import Worker
@@ -221,6 +222,33 @@ def create_lifespan(
         app.state.run_registries = run_registries
         tracing.install_signal_handlers()
 
+        # ── crash-diagnostic heartbeat ──────────────────────────────
+        # Before writing a fresh marker, check how the previous process
+        # ended.  A marker left in "running" state means the process
+        # never reached graceful teardown — log a prominent warning so
+        # the operator can distinguish an OOM / SIGKILL crash from a
+        # clean restart without examining container logs.
+        death_note = heartbeat.check_previous_death(settings.data_dir)
+        if death_note is not None:
+            logging.getLogger(__name__).warning(death_note)
+
+        # Write the first heartbeat *now* so the marker covers the full
+        # process lifetime from earliest possible point (before slow
+        # startup steps like sandbox reaping and deploy wiring).
+        heartbeat.write_heartbeat(settings.data_dir)
+
+        # Background task that refreshes the heartbeat every
+        # ``HEARTBEAT_INTERVAL`` seconds so ``last_beat`` stays fresh.
+        HEARTBEAT_INTERVAL = 30.0
+        heartbeat_task: asyncio.Task[None] | None = None
+
+        async def _heartbeat_loop() -> None:
+            while True:
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+                heartbeat.write_heartbeat(settings.data_dir)
+
+        heartbeat_task = asyncio.create_task(_heartbeat_loop())
+
         # Reap any sandbox containers orphaned by a previous crash/restart
         # before doing anything else. At startup no sandbox is running yet,
         # so every mill-sbx-*/mill-fetch-* present is an orphan from before
@@ -273,5 +301,16 @@ def create_lifespan(
             yield
         finally:
             await worker.stop()
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    # Wait for the cancelled task to reach its terminal state
+                    # before teardown proceeds. `gather` returns a real list
+                    # value (not None), so binding it to `_` keeps mypy happy
+                    # (no func-returns-value) while turning this into an
+                    # assignment statement so CodeQL doesn't flag a discarded
+                    # `await` as an ineffectual statement.
+                    _ = await asyncio.gather(heartbeat_task)
+            heartbeat.mark_clean_shutdown(settings.data_dir)
 
     return lifespan

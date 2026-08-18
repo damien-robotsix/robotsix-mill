@@ -189,6 +189,7 @@ modules:
       - src/robotsix_mill/runtime/api.py
       - src/robotsix_mill/runtime/errors.py
       - src/robotsix_mill/runtime/exception_handlers.py
+      - src/robotsix_mill/runtime/heartbeat.py
       - src/robotsix_mill/runtime/routes/**/*.py
       - src/robotsix_mill/runtime/worker/*.py
       - src/robotsix_mill/runtime/deps.py
@@ -216,6 +217,7 @@ modules:
       - tests/runtime/test_deps.py
       - tests/runtime/test_errors.py
       - tests/runtime/test_exception_handlers.py
+      - tests/runtime/test_heartbeat.py
       - tests/runtime/test_lifespan.py
       - tests/runtime/test_recent_traces.py
       - tests/runtime/test_run_registry.py

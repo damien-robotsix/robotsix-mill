@@ -170,6 +170,15 @@ def lifespan_mocks(monkeypatch):
         mock_install_signals,
     )
 
+    # Patch the crash-diagnostic heartbeat so lifespan tests stay
+    # hermetic (no real heartbeat.json in the settings data dir).
+    mock_heartbeat = MagicMock()
+    mock_heartbeat.check_previous_death.return_value = None
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.lifespan.heartbeat",
+        mock_heartbeat,
+    )
+
     return {
         "init_db": mock_init_db,
         "worker": mock_worker,
@@ -177,6 +186,7 @@ def lifespan_mocks(monkeypatch):
         "rr_instance": mock_rr_instance,
         "rr_class": mock_rr_class,
         "install_signals": mock_install_signals,
+        "heartbeat": mock_heartbeat,
     }
 
 
@@ -339,3 +349,48 @@ async def test_create_lifespan_zero_repos(settings, lifespan_mocks):
     # Worker still starts and requeues.
     lifespan_mocks["worker"].start.assert_called_once()
     lifespan_mocks["worker"].requeue_unfinished.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Crash-diagnostic heartbeat wiring
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_lifespan_writes_and_clears_heartbeat(
+    settings, repos_registry, lifespan_mocks
+):
+    """Startup checks for a previous death, writes a fresh heartbeat, and
+    graceful shutdown flips it to "stopped"."""
+    lifespan = create_lifespan(settings, repos_registry)
+    app = FastAPI()
+
+    async with lifespan(app):
+        pass
+
+    hb = lifespan_mocks["heartbeat"]
+    hb.check_previous_death.assert_called_once_with(settings.data_dir)
+    hb.write_heartbeat.assert_any_call(settings.data_dir)
+    hb.mark_clean_shutdown.assert_called_once_with(settings.data_dir)
+
+
+@pytest.mark.asyncio
+async def test_lifespan_logs_warning_on_previous_abrupt_death(
+    settings, repos_registry, lifespan_mocks, caplog
+):
+    """A non-None death note from check_previous_death is logged at WARNING."""
+    lifespan_mocks[
+        "heartbeat"
+    ].check_previous_death.return_value = (
+        "previous process (PID 42) died abruptly at or after 2026-08-16T21:02:32Z"
+    )
+    lifespan = create_lifespan(settings, repos_registry)
+    app = FastAPI()
+
+    with caplog.at_level(logging.WARNING):
+        async with lifespan(app):
+            pass
+
+    assert any("died abruptly" in r.message for r in caplog.records), (
+        "abrupt-death warning should be logged"
+    )

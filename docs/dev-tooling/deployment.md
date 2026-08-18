@@ -127,6 +127,28 @@ subprocesses with their own pipes.
 These limits are baked into the production compose file. Override them
 in `docker-compose.override.yml` if your host has differing capacity.
 
+### OOM pressure under large-context implement work
+
+The mill process itself (not the sandbox containers, which each get their
+own `sandbox_memory` limit) can be OOM-killed at the `mem_limit: 4g`
+ceiling during concurrent implement work with large-context LLM
+streaming — prompts of ~139k tokens were observed in flight at crash
+time (2026-08-16 incident). The failure mode is abrupt: kernel SIGKILL
+with no Python traceback and no uvicorn shutdown lines, followed by
+Docker auto-restart that kills in-flight sandbox spawns.
+
+Two mitigations:
+
+- **Raise `mem_limit`** (e.g. `6g`–`8g`) and/or add a `mem_reservation`
+  when the board regularly runs large-context implement passes. The
+  mill worker is single-process, so the ceiling must cover the LLM
+  streaming buffers *plus* the worker pool and any subprocesses.
+- **Diagnose, don't guess**: the mill persists a crash-diagnostic
+  heartbeat (`heartbeat.json` in the data dir) and logs
+  `previous process ... died abruptly ... suspected OOM kill` at
+  startup when the previous run never reached graceful shutdown, and
+  reads the cgroup `oom_kill` counter where available.
+
 ## Enable GitHub Pages (one-time setup)
 
 The `.github/workflows/docs.yml` workflow builds the MkDocs site and
