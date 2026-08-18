@@ -64,6 +64,24 @@ class _CoreSettings(BaseModel):
         ),
         json_schema_extra={"advanced": True},
     )
+    # Maximum stagger window (seconds) for cross-repo fan-out ticket
+    # creation. When a single programmatic source (periodic pass,
+    # audit, survey) enqueues tickets across N repos, the N
+    # invocations are spread evenly across this window so the
+    # resulting pipeline activation is smoothed instead of hitting
+    # the LLM provider as one concentrated spike.  Set to 0 to
+    # disable staggering entirely (fan-out creates all tickets at
+    # once, the historical behaviour).
+    # Override with MILL_FAN_OUT_STAGGER_SECONDS.
+    fan_out_stagger_seconds: int = Field(
+        default=300,
+        ge=0,
+        description=(
+            "Maximum stagger window (seconds) for cross-repo fan-out "
+            "ticket creation. 0 disables staggering."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # Capability gate for inline-image (vision) input on the Claude SDK
     # transport. Default False: the installed robotsix-llmio claude_sdk
     # bridge silently mishandles ``BinaryContent`` image parts (it

@@ -1602,6 +1602,14 @@
           "title": "Explore Timeout Seconds",
           "type": "number"
         },
+        "fan_out_stagger_seconds": {
+          "advanced": true,
+          "default": 300,
+          "description": "Maximum stagger window (seconds) for cross-repo fan-out ticket creation. 0 disables staggering.",
+          "minimum": 0,
+          "title": "Fan Out Stagger Seconds",
+          "type": "integer"
+        },
         "fetch_image": {
           "advanced": true,
           "default": "curlimages/curl:8.17.0",

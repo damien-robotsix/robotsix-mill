@@ -769,13 +769,14 @@ class _FakeRepos:
 
 
 class _FakeAppState:
-    def __init__(self, repos: _FakeRepos):
+    def __init__(self, repos: _FakeRepos, settings=None):
         self.repos = repos
+        self.settings = settings
 
 
 class _FakeRequest:
-    def __init__(self, repos: _FakeRepos):
-        self.app = type("_App", (), {"state": _FakeAppState(repos)})()
+    def __init__(self, repos: _FakeRepos, settings=None):
+        self.app = type("_App", (), {"state": _FakeAppState(repos, settings)})()
 
 
 def _wait_for_thread(thread: threading.Thread, timeout: float = 5.0) -> None:
@@ -998,6 +999,126 @@ def test_factory_error_path():
     assert len(registry.starts) >= 1
     assert len(registry.errors) >= 1
     assert "simulated crash" in registry.errors[0][1]
+
+
+def test_factory_fan_out_stagger(monkeypatch):
+    """A multi-repo fan-out spreads repo invocations over the configured
+    stagger window (time.sleep between repos), while a disabled window
+    (0) does not sleep."""
+    import sys
+    import time as _time_mod
+    import types
+
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    class _FakeResult:
+        drafts_created: list = []
+
+    def _fake_runner(repo_config=None):
+        return _FakeResult()
+
+    fake_mod = type("_FakeMod", (), {"run_stagger_pass": staticmethod(_fake_runner)})()
+    sys.modules["robotsix_mill.agents.runners.test_stagger_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="stagger",
+        runner_module="robotsix_mill.agents.runners.test_stagger_runner",
+        runner_func="run_stagger_pass",
+        docstring="Stagger.",
+        uses_tracing=False,
+    )
+
+    repos = types.SimpleNamespace(
+        repos={
+            "r1": types.SimpleNamespace(repo_id="r1", board_id="b1"),
+            "r2": types.SimpleNamespace(repo_id="r2", board_id="b2"),
+            "r3": types.SimpleNamespace(repo_id="r3", board_id="b3"),
+        }
+    )
+    settings = types.SimpleNamespace(fan_out_stagger_seconds=30)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(_time_mod, "sleep", sleeps.append)
+
+    registry = _FakeRegistry()
+    resp = handler(
+        repo_id=None,
+        request=_FakeRequest(repos, settings=settings),
+        registry=registry,
+    )
+    assert resp == {"status": "started"}
+
+    # Join the daemon thread by name so the stagger sleeps have fully
+    # executed before we assert on the recorded sleeps.
+    for t in threading.enumerate():
+        if t.name == "stagger-pass":
+            t.join(timeout=5.0)
+            break
+
+    stagger_sleeps = [s for s in sleeps if s >= 1.0]
+    # 3 repos → 2 inter-repo sleeps of 30 / 3 = 10 s each.
+    assert stagger_sleeps == [10.0, 10.0], (
+        f"expected [10.0, 10.0] stagger sleeps, got {stagger_sleeps} (all: {sleeps})"
+    )
+    assert len(registry.starts) == 3
+
+
+def test_factory_fan_out_stagger_disabled(monkeypatch):
+    """With fan_out_stagger_seconds=0, a multi-repo fan-out does not sleep
+    (manual/normal flow unchanged)."""
+    import sys
+    import time as _time_mod
+    import types
+
+    from robotsix_mill.runtime.routes._passes import _make_background_pass
+
+    class _FakeResult:
+        drafts_created: list = []
+
+    def _fake_runner(repo_config=None):
+        return _FakeResult()
+
+    fake_mod = type(
+        "_FakeMod", (), {"run_nostagger_pass": staticmethod(_fake_runner)}
+    )()
+    sys.modules["robotsix_mill.agents.runners.test_nostagger_runner"] = fake_mod
+
+    handler = _make_background_pass(
+        kind="nostagger",
+        runner_module="robotsix_mill.agents.runners.test_nostagger_runner",
+        runner_func="run_nostagger_pass",
+        docstring="No stagger.",
+        uses_tracing=False,
+    )
+
+    repos = types.SimpleNamespace(
+        repos={
+            "r1": types.SimpleNamespace(repo_id="r1", board_id="b1"),
+            "r2": types.SimpleNamespace(repo_id="r2", board_id="b2"),
+        }
+    )
+    settings = types.SimpleNamespace(fan_out_stagger_seconds=0)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(_time_mod, "sleep", sleeps.append)
+
+    registry = _FakeRegistry()
+    handler(
+        repo_id=None,
+        request=_FakeRequest(repos, settings=settings),
+        registry=registry,
+    )
+
+    for t in threading.enumerate():
+        if t.name == "nostagger-pass":
+            t.join(timeout=5.0)
+            break
+
+    stagger_sleeps = [s for s in sleeps if s >= 1.0]
+    assert stagger_sleeps == [], (
+        f"expected no stagger sleeps, got {stagger_sleeps} (all: {sleeps})"
+    )
+    assert len(registry.starts) == 2
 
 
 def test_factory_thread_is_daemon():
