@@ -492,9 +492,7 @@ def test_resume_blocked_recurring_spawn_no_reset_parented_ticket(service):
 
     from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
 
-    epic = service.create(
-        "parent epic", "epic description body", kind=TicketKind.EPIC
-    )
+    epic = service.create("parent epic", "epic description body", kind=TicketKind.EPIC)
     t = service.create(
         "epic child recurrence test",
         "do the recurring child thing",
