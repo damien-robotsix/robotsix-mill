@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -4280,6 +4281,88 @@ def test_spawn_limit_exhausted_emits_diagnostic_event(
     assert spawn_events[0].ticket_id == t.id
     assert "spawn limit reached" in spawn_events[0].reason.lower()
     assert spawn_events[0].normalized_key.startswith("spawn_limit_exhausted:")
+
+
+def test_recurring_spawn_exhaustion_emits_recurring_event(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spawn limit is reached for the second consecutive time
+    with an UNCHANGED spec, a RECURRING_SPAWN_EXHAUSTION diagnostic
+    event is emitted instead of the plain SPAWN_LIMIT_EXHAUSTED."""
+    from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
+    from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Recurring spawn", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    # Counter at limit.
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    # Pre-seed the marker as if the ticket already exhausted once
+    # on the same spec fingerprint.  The effective fingerprint for
+    # a non-epic ticket is sha256(description)[:16].
+    effective_desc = "Add a feature.txt file"
+    fp = hashlib.sha256(effective_desc.encode("utf-8")).hexdigest()[:16]
+    record_spawn_exhaustion_marker(ws, fp, 1)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    events = list_diagnostic_events(ctx.settings, "test-board")
+    recurring_events = [e for e in events if e.category == "RECURRING_SPAWN_EXHAUSTION"]
+    assert len(recurring_events) == 1
+    assert recurring_events[0].ticket_id == t.id
+    assert "unchanged spec" in recurring_events[0].reason.lower()
+    assert recurring_events[0].normalized_key.startswith("spawn_limit_exhausted:")
+    # Verify no plain event also emitted.
+    spawn_events = [e for e in events if e.category == "SPAWN_LIMIT_EXHAUSTED"]
+    assert len(spawn_events) == 0
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "counter will not be auto-reset" in out.note.lower()
+
+
+def test_first_spawn_exhaustion_emits_plain_event(ctx_factory, tmp_path, monkeypatch):
+    """When the spawn limit is reached for the first time, a plain
+    SPAWN_LIMIT_EXHAUSTED event is emitted (not RECURRING) and the
+    block note still mentions auto-reset."""
+    from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="First spawn", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    # No marker pre-seeded — first exhaustion.
+
+    out = ImplementStage().preflight(t, ctx)
+
+    events = list_diagnostic_events(ctx.settings, "test-board")
+    spawn_events = [e for e in events if e.category == "SPAWN_LIMIT_EXHAUSTED"]
+    assert len(spawn_events) == 1
+    recurring_events = [e for e in events if e.category == "RECURRING_SPAWN_EXHAUSTION"]
+    assert len(recurring_events) == 0
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "resume-blocked to retry" in out.note.lower()
+    assert "clears the counter automatically" in out.note.lower()
 
 
 # --- pre-LLM spawn abort visibility (process-death kill recovery) --------

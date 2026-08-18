@@ -84,6 +84,9 @@ class _ServiceBase:
         def get_epic_context(self, ticket: Ticket) -> str:
             pass
 
+        def _compute_spec_fingerprint(self, ticket: Ticket) -> str:
+            pass
+
         def close_tracker(self, ticket_id: str, note: str = ...) -> Ticket:
             pass
 

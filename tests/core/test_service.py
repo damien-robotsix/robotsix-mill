@@ -440,7 +440,126 @@ def test_resume_blocked_spawn_limit_reset_recorded_in_history(service):
     assert "spawn counter reset via resume-blocked" in last_note
 
 
-def test_resume_blocked_after_retrospect_failure(service):
+def test_resume_blocked_recurring_spawn_no_reset_without_note(service):
+    """A ticket that has exhausted its spawn budget at least twice on
+    the same spec fingerprint and is resumed WITHOUT a note does NOT
+    get the counter auto-reset — it must bounce back to BLOCKED on the
+    next preflight.  Only a spec change or an explicit note grants a
+    fresh budget."""
+    import hashlib
+
+    from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
+
+    t = service.create("recurring exhaustion test", "do the recurring thing")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="implement spawn limit reached")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
+
+    # Pre-seed the recovery marker: twice-exhausted on the current
+    # spec fingerprint.  _compute_spec_fingerprint uses the
+    # description only (no parent epic), truncated to 16 hex.
+    fp = hashlib.sha256(b"do the recurring thing").hexdigest()[:16]
+    record_spawn_exhaustion_marker(ws, fp, 2)
+
+    resumed = service.resume_blocked(t.id)  # no note
+    assert resumed.state is State.READY
+    # Counter must survive — the resume was a no-change recurrence.
+    assert spawn_counter.exists()
+    assert spawn_counter.read_text(encoding="utf-8").strip() == "3"
+
+    hist = service.history(t.id)
+    last_note = hist[-1].note or ""
+    assert "counter NOT reset" in last_note
+    assert "spec unchanged" in last_note.lower()
+    assert "spawn counter reset" not in last_note
+
+
+def test_resume_blocked_recurring_spawn_resets_with_note(service):
+    """When a twice-exhausted ticket is resumed WITH an explicit note,
+    the counter IS reset — the note is the required human override."""
+    import hashlib
+
+    from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
+
+    t = service.create("recurring with note test", "do the note thing")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="implement spawn limit reached")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
+
+    fp = hashlib.sha256(b"do the note thing").hexdigest()[:16]
+    record_spawn_exhaustion_marker(ws, fp, 2)
+
+    resumed = service.resume_blocked(t.id, note="operator override — try again")
+    assert resumed.state is State.READY
+    assert not spawn_counter.exists()
+
+    hist = service.history(t.id)
+    last_note = hist[-1].note or ""
+    assert "spawn counter reset via resume-blocked" in last_note
+    assert "counter NOT reset" not in last_note
+
+
+def test_resume_blocked_recurring_spawn_resets_when_spec_changed(service):
+    """When the spec fingerprint has changed since the last exhaustion,
+    the resume resets the counter even without a note — a spec change
+    is considered a legitimate intervening change."""
+    import hashlib
+
+    from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
+
+    t = service.create("recurring spec-change test", "original spec body")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="implement spawn limit reached")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
+
+    # Marker stores a DIFFERENT fingerprint than the current spec.
+    old_fp = hashlib.sha256(b"old spec body").hexdigest()[:16]
+    record_spawn_exhaustion_marker(ws, old_fp, 2)
+
+    resumed = service.resume_blocked(t.id)  # no note
+    assert resumed.state is State.READY
+    assert not spawn_counter.exists()
+
+    hist = service.history(t.id)
+    last_note = hist[-1].note or ""
+    assert "spawn counter reset via resume-blocked" in last_note
+
+
+def test_resume_blocked_recurring_spawn_no_hold_below_count_2(service):
+    """A ticket that exhausted its budget only ONCE (marker count == 1)
+    still gets the counter reset on a no-note resume — the hold only
+    applies on the second-or-later consecutive exhaustion."""
+    import hashlib
+
+    from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
+
+    t = service.create("once exhausted test", "just one exhaustion")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="implement spawn limit reached")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
+
+    fp = hashlib.sha256(b"just one exhaustion").hexdigest()[:16]
+    record_spawn_exhaustion_marker(ws, fp, 1)
+
+    resumed = service.resume_blocked(t.id)  # no note
+    assert resumed.state is State.READY
+    assert not spawn_counter.exists()
+
+    hist = service.history(t.id)
+    last_note = hist[-1].note or ""
+    assert "spawn counter reset via resume-blocked" in last_note
     """Full scenario: DONE → BLOCKED → resume → DONE → CLOSED.
     This simulates a retrospect failure and proves the ticket can be
     recovered without re-running implement or refine."""
