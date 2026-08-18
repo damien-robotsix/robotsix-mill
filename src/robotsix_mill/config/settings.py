@@ -46,9 +46,15 @@ class LangfuseProjectCredentials(BaseModel):
     The canonical block shape per robotsix-standards#189.
     """
 
-    public_key: str
-    secret_key: str
-    project_id: str
+    public_key: str = Field(
+        description="Public key for this Langfuse project, from the Langfuse project settings.",
+    )
+    secret_key: str = Field(
+        description="Secret key for this Langfuse project, from the Langfuse project settings.",
+    )
+    project_id: str = Field(
+        description="Langfuse project identifier this credential block belongs to.",
+    )
 
 
 class LangfuseConfig(BaseModel):
@@ -59,8 +65,13 @@ class LangfuseConfig(BaseModel):
     ``RepoConfig`` and are NOT registered here.
     """
 
-    host: str = "https://langfuse.robotsix.net"
-    projects: dict[str, LangfuseProjectCredentials]
+    host: str = Field(
+        default="https://langfuse.robotsix.net",
+        description="Base URL of the Langfuse instance.",
+    )
+    projects: dict[str, LangfuseProjectCredentials] = Field(
+        description="Mapping of project name to per-project Langfuse credentials for the component's own LLM function.",
+    )
 
 
 # Seconds the ci_fix stage wrapper is kept above the agent's own timeout,
