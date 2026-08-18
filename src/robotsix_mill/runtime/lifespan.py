@@ -305,8 +305,12 @@ def create_lifespan(
                 heartbeat_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     # Wait for the cancelled task to reach its terminal state
-                    # before teardown proceeds.
-                    await asyncio.gather(heartbeat_task)
+                    # before teardown proceeds. `gather` returns a real list
+                    # value (not None), so binding it to `_` keeps mypy happy
+                    # (no func-returns-value) while turning this into an
+                    # assignment statement so CodeQL doesn't flag a discarded
+                    # `await` as an ineffectual statement.
+                    _ = await asyncio.gather(heartbeat_task)
             heartbeat.mark_clean_shutdown(settings.data_dir)
 
     return lifespan
