@@ -38,6 +38,7 @@
       "properties": {
         "host": {
           "default": "https://langfuse.robotsix.net",
+          "description": "Base URL of the Langfuse instance.",
           "title": "Host",
           "type": "string"
         },
@@ -45,6 +46,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/LangfuseProjectCredentials"
           },
+          "description": "Mapping of project name to per-project Langfuse credentials for the component's own LLM function.",
           "title": "Projects",
           "type": "object"
         }
@@ -59,14 +61,17 @@
       "description": "Credentials for a single Langfuse project.\n\nThe canonical block shape per robotsix-standards#189.",
       "properties": {
         "project_id": {
+          "description": "Langfuse project identifier this credential block belongs to.",
           "title": "Project Id",
           "type": "string"
         },
         "public_key": {
+          "description": "Public key for this Langfuse project, from the Langfuse project settings.",
           "title": "Public Key",
           "type": "string"
         },
         "secret_key": {
+          "description": "Secret key for this Langfuse project, from the Langfuse project settings.",
           "title": "Secret Key",
           "type": "string"
         }
@@ -306,6 +311,7 @@
       "properties": {
         "host": {
           "default": "https://langfuse.robotsix.net",
+          "description": "Base URL of the Langfuse instance.",
           "title": "Host",
           "type": "string"
         },
@@ -313,6 +319,7 @@
           "additionalProperties": {
             "$ref": "#/$defs/LangfuseProjectCredentials"
           },
+          "description": "Mapping of project name to per-project Langfuse credentials for the component's own LLM function.",
           "title": "Projects",
           "type": "object"
         }
@@ -745,6 +752,7 @@
             }
           ],
           "default": null,
+          "description": "OpenRouter API key used for LLM backend calls. Per-agent models resolve from each agent definition's level via llmio tier defaults.",
           "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {

@@ -29,6 +29,7 @@ class _CoreSettings(BaseModel):
     openrouter_api_key: SecretStr | None = Field(
         default=None,
         alias="OPENROUTER_API_KEY",
+        description="OpenRouter API key used for LLM backend calls. Per-agent models resolve from each agent definition's level via llmio tier defaults.",
     )
 
     # Process-wide cap on how many Claude Agent SDK runs may execute at once.
