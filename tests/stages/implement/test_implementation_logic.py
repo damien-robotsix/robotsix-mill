@@ -760,6 +760,90 @@ class TestEvaluateTestResults:
         assert result.outcome.next_state is State.BLOCKED
         assert "edit-claim contradiction" in result.outcome.note.lower()
 
+    def test_spec_mandate_blocks_no_change_needed_done(self, monkeypatch):
+        """no_change_needed + spec demanding a non-empty diff → BLOCKED."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        result = self._call(
+            monkeypatch,
+            ic=_ic(
+                spec=(
+                    "## Acceptance criteria\n\n"
+                    "- The implementation must produce a non-empty diff.\n"
+                    "- The ticket must not be closed without changes."
+                )
+            ),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert "spec demands code change" in result.outcome.note
+
+    def test_spec_mandate_blocks_fresh_run_empty_diff_done(self, monkeypatch):
+        """Empty diff on a fresh run + spec demanding a diff → BLOCKED."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        result = self._call(
+            monkeypatch,
+            ic=_ic(spec="This ticket must produce a non-empty diff."),
+            no_change_needed=False,
+            no_change_rationale="",
+            resuming=False,
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert "spec demands code change" in result.outcome.note
+
+    def test_spec_mandate_blocks_resume_empty_diff_done(self, monkeypatch):
+        """Empty diff on a resuming run + spec demanding a diff → BLOCKED."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        result = self._call(
+            monkeypatch,
+            ic=_ic(spec="The fix must create the following files."),
+            no_change_needed=False,
+            no_change_rationale="",
+            resuming=True,
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert "spec demands code change" in result.outcome.note
+
+    def test_spec_without_mandate_keeps_no_change_done(self, monkeypatch):
+        """Spec with a bare 'must' but no mandate phrase → DONE unchanged."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        result = self._call(
+            monkeypatch,
+            ic=_ic(spec="The agent must follow the repo style guide when fixing."),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.DONE
+        assert result.outcome.note.startswith("no change needed")
+
     def test_multi_repo_introduced_files_resolves_per_repo_target(
         self, monkeypatch, tmp_path
     ):

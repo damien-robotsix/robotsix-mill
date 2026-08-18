@@ -18,6 +18,7 @@ from ...config import Settings, target_branch_for
 from ...config.repo_settings import load_repo_smoke_command
 from ...core.models import Ticket
 from ...core.states import State
+from ...core.text_noop import spec_demands_code_change
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
@@ -652,6 +653,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 branch,
                 settings,
                 summary,
+                ic.spec or "",
                 ref_files,
                 new_msgs,
                 no_change_needed,
@@ -829,6 +831,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         branch: str,
         settings: Settings,
         summary: str,
+        spec_text: str,
         ref_files: list[str] | None,
         new_msgs: bytes | None,
         no_change_needed: bool,
@@ -898,6 +901,34 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                                 "edit-claim contradiction (empty diff after edit calls)",
                             ),
                         )
+                # Guard: spec demands a non-empty diff — closing DONE
+                # would contradict the spec.
+                if spec_demands_code_change(spec_text):
+                    diag = (
+                        f"{no_change_rationale.strip()}\n\n"
+                        "[Diagnostic] The spec explicitly mandates a non-empty diff "
+                        "but the agent concluded no_change_needed with an empty diff. "
+                        "The spec demands code changes that do not exist at HEAD; "
+                        "closing as DONE would be a false positive."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "spec demands code change but diff is empty "
+                            "(no_change_needed)",
+                        ),
+                    )
                 # No contradiction — close DONE.
                 rationale = no_change_rationale.strip()
                 short = rationale[:400] + ("…" if len(rationale) > 400 else "")
@@ -1005,6 +1036,33 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                             "edit-claim contradiction (empty diff after edit calls)",
                         ),
                     )
+                # Guard: spec demands a non-empty diff — closing DONE
+                # would contradict the spec.
+                if spec_demands_code_change(spec_text):
+                    diag = (
+                        f"{no_change_summary}\n\n"
+                        "[Diagnostic] The spec explicitly mandates a non-empty diff, "
+                        "but implement produced an empty diff on a fresh run with no "
+                        "lost-work evidence. The spec demands code changes that do "
+                        "not exist at HEAD; closing as DONE would be a false positive."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "spec demands code change but diff is empty (fresh run)",
+                        ),
+                    )
                 # Genuine no-op: clean working tree, no commits beyond the
                 # base, no gitignored writes, no lost edits. The spec is
                 # already satisfied — terminate DONE instead of looping.
@@ -1069,6 +1127,33 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                             State.BLOCKED,
                             "edit-claim contradiction "
                             "(empty diff after edit calls on resume)",
+                        ),
+                    )
+                # Guard: spec demands a non-empty diff — closing DONE
+                # would contradict the spec.
+                if spec_demands_code_change(spec_text):
+                    diag = (
+                        f"{summary or 'Agent found no work to do.'}\n\n"
+                        "[Diagnostic] The spec explicitly mandates a non-empty diff, "
+                        "but implement produced an empty diff on a resuming run. "
+                        "The spec demands code changes that do not exist at HEAD; "
+                        "closing as DONE would be a false positive."
+                    )
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        diag,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=extra_roots,
+                    )
+                    return _SinglePassResult(
+                        next_action="return",
+                        outcome=Outcome(
+                            State.BLOCKED,
+                            "spec demands code change but diff is empty (resume)",
                         ),
                     )
                 resume_done_note = (

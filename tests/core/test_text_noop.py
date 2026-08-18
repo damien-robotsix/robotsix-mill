@@ -3,6 +3,7 @@
 import pytest
 
 from robotsix_mill.core.text_noop import (
+    CODE_CHANGE_MANDATE_PHRASES,
     COMPLETION_ANNOUNCEMENT_MARKERS,
     NOOP_MARKERS,
     PLACEHOLDER_BODY_PHRASES,
@@ -10,6 +11,7 @@ from robotsix_mill.core.text_noop import (
     is_completion_announcement,
     is_degenerate_body,
     is_noop_report,
+    spec_demands_code_change,
 )
 
 
@@ -166,3 +168,35 @@ def test_every_placeholder_phrase_is_tested():
         reason = degenerate_body_reason(phrase)
         assert reason is not None
         assert phrase in reason
+
+
+# -- spec_demands_code_change ------------------------------------------------
+
+
+@pytest.mark.parametrize("phrase", CODE_CHANGE_MANDATE_PHRASES)
+def test_each_code_change_mandate_phrase_detected(phrase):
+    """Every CODE_CHANGE_MANDATE_PHRASES entry is detected."""
+    assert spec_demands_code_change(
+        f"## Acceptance criteria\n\nThe implementation {phrase}."
+    ), f"phrase {phrase!r} not detected"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The agent must investigate the failure.",
+        "Document the findings in a comment.",
+        "This ticket is information-only.",
+        "No code changes are required.",
+        "The existing logic already handles this.",
+        "Remove dead code from helpers.py.",
+    ],
+)
+def test_non_mandate_text_not_flagged(text):
+    """Text without a mandate phrase must NOT be flagged."""
+    assert not spec_demands_code_change(text), f"text {text!r} wrongly flagged"
+
+
+def test_spec_demands_code_change_empty_or_none():
+    assert not spec_demands_code_change("")
+    assert not spec_demands_code_change(None)

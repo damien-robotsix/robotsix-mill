@@ -405,6 +405,28 @@ def test_no_changes_terminates_done_when_already_satisfied(
     assert "already satisfied" in out.note.lower()
 
 
+def test_spec_mandate_blocks_empty_diff_done(ctx_factory, tmp_path, monkeypatch):
+    """An empty diff on a fresh run must NOT terminate DONE when the spec
+    explicitly mandates a non-empty diff — BLOCK for inspection instead
+    (regression for the empty-draft fast-path false positive)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+    )
+    monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
+    t = _ticket(
+        ctx,
+        "Wire real tinyauth mobile token exchange",
+        "## Acceptance criteria\n\n"
+        "- The implementation must produce a non-empty diff.\n"
+        "- The ticket must not be closed without changes.",
+    )
+    _write_file_map(ctx, t, "dummy.txt")
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "spec demands code change" in out.note
+
+
 def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     """The stage owns a bounded fix loop: it re-invokes the coordinator
     on each test-gate failure, feeding the diagnosis back, and escalates

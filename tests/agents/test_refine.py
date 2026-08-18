@@ -5918,6 +5918,37 @@ def test_no_change_needed_routes_to_done_for_task_without_branch(
     assert "no change needed" in out.note.lower()
 
 
+def test_no_change_blocked_when_draft_demands_code_change(ctx, service, monkeypatch):
+    """When the draft explicitly mandates a non-empty diff, refine must
+    NOT close as DONE via the no_change path — it must degrade to the
+    normal refine path (→ READY for implement) instead."""
+    ticket = service.create(
+        "Wire real token exchange",
+        "## Acceptance criteria\n\n"
+        "- The implementation must produce a non-empty diff.\n"
+        "- The ticket must not be closed without changes.",
+    )
+    assert ticket.state == State.DRAFT
+    assert ticket.branch is None
+
+    def spy_refine(*, settings, title, draft, **kwargs):
+        return RefineResult(
+            split=False,
+            no_change_needed=True,
+            no_change_rationale="The feature is already implemented.",
+        )
+
+    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
+
+    out = RefineStage().run(ticket, ctx)
+    # Must NOT be DONE — the draft mandates a non-empty diff, so the
+    # no_change conclusion is contradictory.
+    assert out.next_state != State.DONE, (
+        f"Expected non-DONE outcome when draft demands code change, "
+        f"got {out.next_state} — {out.note}"
+    )
+
+
 def test_reviewer_agreement_routes_to_ready_for_task_without_branch(
     ctx, service, monkeypatch
 ):

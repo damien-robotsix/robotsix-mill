@@ -37,6 +37,40 @@ COMPLETION_ANNOUNCEMENT_MARKERS: tuple[str, ...] = (
     "refinement complete",
 )
 
+# Lower-case phrases that indicate a spec or draft explicitly mandates a
+# non-empty diff — the ticket MUST produce file changes, so an empty-diff
+# DONE or "no change needed" conclusion is a false close.  Mirrors the
+# ``_rationale_claims_external_fix`` idiom in the refine stage: cheap,
+# deterministic, low false-positive.
+CODE_CHANGE_MANDATE_PHRASES: tuple[str, ...] = (
+    "non-empty diff",
+    "nonempty diff",
+    "non-empty change",
+    "must produce a diff",
+    "must produce a non-empty",
+    "must produce changes",
+    "must make changes",
+    "must change at least one file",
+    "must modify at least one file",
+    "must not produce an empty diff",
+    "must not result in an empty diff",
+    "must not close without",
+    "must not be closed without",
+    "must not mark as no-change",
+    "must not conclude no change",
+    "must not conclude 'already satisfied'",
+    "must result in a non-empty diff",
+    "empty diff is not acceptable",
+    "an empty diff is not acceptable",
+    "forbidden to close without changes",
+    "required artifacts",
+    "required files",
+    "required deliverables",
+    "must create the following",
+    "must create a file",
+    "must add the following files",
+)
+
 
 def is_completion_announcement(title: str | None) -> bool:
     """True if *title* is a completion-announcement no-op."""
@@ -52,6 +86,26 @@ def is_noop_report(title: str | None) -> bool:
     if not t:
         return True
     return any(m in t for m in NOOP_MARKERS)
+
+
+def spec_demands_code_change(text: str | None) -> bool:
+    """Return True when *text* explicitly forbids an empty-diff conclusion.
+
+    Detects spec/draft language that mandates a non-empty diff or the
+    creation of required artifacts (files, endpoints, deliverables).  When
+    this fires, an empty-diff DONE (implement fast-path) or a refine
+    ``no_change_needed`` close would contradict the spec, so the caller
+    must route the ticket to a real implement pass or block it for
+    inspection instead of silently closing.
+
+    Bias is toward NOT firing: only unambiguous mandate phrases match, so
+    legitimate no-change subclasses (information-only deliverables,
+    detector false-positives, sibling-ticket cleanups) keep closing.
+    """
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    return any(phrase in t for phrase in CODE_CHANGE_MANDATE_PHRASES)
 
 
 # Lower-case substrings that mark a BODY as a placeholder pointer rather
