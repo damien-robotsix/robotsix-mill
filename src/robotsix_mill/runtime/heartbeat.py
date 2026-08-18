@@ -95,7 +95,7 @@ def read_heartbeat(data_dir: Path) -> dict[str, object] | None:
     marker = _marker_path(data_dir)
     try:
         data = json.loads(marker.read_text(encoding="utf-8"))
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return None
     if not isinstance(data, dict):
         return None
@@ -118,7 +118,7 @@ def _oom_kill_count() -> int | None:
         if line.startswith("oom_kill "):
             try:
                 return int(line.split()[1])
-            except ValueError, IndexError:
+            except (ValueError, IndexError):
                 return None
     return None
 
