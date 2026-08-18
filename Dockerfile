@@ -3,7 +3,7 @@
 # The package is distributed from git; alpine has no git so install it.
 # =============================================================================
 FROM node:22-alpine AS ui
-ARG ROBOTSIX_UI_VERSION=v0.1.6
+ARG ROBOTSIX_UI_VERSION=289f5a06f7025f2726b414c0fe9d75edf1bbcf97  # tag v0.1.6
 # WORKDIR matters: with no working directory the install ran in `/`, which
 # newer npm refuses with `npm error Tracker "idealTree" already exists`.
 # Nothing in this repo changed to trigger that — `node:22-alpine` is a
@@ -12,7 +12,8 @@ ARG ROBOTSIX_UI_VERSION=v0.1.6
 # mill unable to publish an image at all.
 WORKDIR /ui
 # `git` is only a build-time fetch tool for the @robotsix/ui git URL, and
-# that URL is already pinned to the ROBOTSIX_UI_VERSION tag below. Pinning
+# that URL is already pinned to a full commit SHA below (tag v0.1.6
+# resolved to a SHA — git tags are mutable, commit SHAs are not). Pinning
 # apk's git patch release and npm's git-URL install syntax adds nothing here.
 #
 # The ignore directive must stay immediately above its RUN — anything in
