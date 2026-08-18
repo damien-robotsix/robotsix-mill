@@ -183,9 +183,6 @@ showcontent = false
 [tool.ruff]
 target-version = "py314"
 line-length = 88
-# Vendored third-party library source (tests/forge/_vendor) keeps its own
-# upstream style/config; don't lint or reformat it here.
-extend-exclude = ["tests/forge/_vendor"]
 
 [tool.ruff.lint]
 extend-select = [
@@ -448,10 +445,7 @@ extend-immutable-calls = [
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
-# Vendored third-party library source (tests/forge/_vendor) keeps its own
-# upstream style/config and is copied verbatim from the pinned robotsix-github-auth
-# rev — exclude it from import analysis just as it is excluded from ruff.
-extend_exclude = ["_llmio_check/", "tests/forge/_vendor"]
+extend_exclude = ["_llmio_check/"]
 
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.
