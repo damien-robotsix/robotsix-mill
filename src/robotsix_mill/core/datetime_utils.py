@@ -52,6 +52,11 @@ class TZDateTime(TypeDecorator[datetime]):
     cache_ok = True
 
     def process_bind_param(self, value: datetime | None, dialect):
+        """Convert *value* to naive UTC for SQLite storage.
+
+        Raises:
+            TypeError: If *value* is timezone-naive.
+        """
         if value is not None:
             if value.tzinfo is None:
                 raise TypeError(
@@ -62,6 +67,11 @@ class TZDateTime(TypeDecorator[datetime]):
         return value
 
     def process_result_value(self, value: datetime | None, dialect):
+        """Re-attach ``timezone.utc`` to *value* on read-back from SQLite.
+
+        Returns:
+            ``value`` with ``tzinfo=UTC``, or ``None`` if *value* was ``None``.
+        """
         if value is not None:
             value = value.replace(tzinfo=UTC)
         return value

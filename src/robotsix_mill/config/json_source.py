@@ -29,10 +29,14 @@ class JsonSettingsSource(PydanticBaseSettingsSource):
     """
 
     def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
-        # Not used — __call__ is overridden directly.
+        """Raise ``NotImplementedError`` — unused; ``__call__`` is overridden directly."""
         raise NotImplementedError
 
     def __call__(self) -> dict[str, Any]:
+        """Return a flat dict of settings values keyed by field alias.
+
+        Only keys matching a model field (by alias or by name) are returned.
+        """
         from .loader import load_settings_block
 
         settings_data = load_settings_block()
