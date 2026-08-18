@@ -24,6 +24,8 @@ tools:
   - fetch_ci_logs
 
 report_issue: true
+skills:
+  - board-report
 output_type: CiFixResult
 retries: 2
 module: ci_fixing
