@@ -459,9 +459,61 @@ def test_resume_blocked_recurring_spawn_no_reset_without_note(service):
     spawn_counter.write_text("3", encoding="utf-8")
 
     # Pre-seed the recovery marker: twice-exhausted on the current
-    # spec fingerprint.  _compute_spec_fingerprint uses the
-    # description only (no parent epic), truncated to 16 hex.
+    # spec fingerprint.  For a ticket WITHOUT a parent epic the
+    # effective spec is just the description — truncated SHA-256 to
+    # 16 hex.  (When a parent epic exists the fingerprint includes
+    # the epic-context block too — see the parented-ticket test.)
     fp = hashlib.sha256(b"do the recurring thing").hexdigest()[:16]
+    record_spawn_exhaustion_marker(ws, fp, 2)
+
+    resumed = service.resume_blocked(t.id)  # no note
+    assert resumed.state is State.READY
+    # Counter must survive — the resume was a no-change recurrence.
+    assert spawn_counter.exists()
+    assert spawn_counter.read_text(encoding="utf-8").strip() == "3"
+
+    hist = service.history(t.id)
+    last_note = hist[-1].note or ""
+    assert "counter NOT reset" in last_note
+    assert "spec unchanged" in last_note.lower()
+    assert "spawn counter reset" not in last_note
+
+
+def test_resume_blocked_recurring_spawn_no_reset_parented_ticket(service):
+    """A parented ticket (epic child) that exhausted its spawn budget at
+    least twice on the same EFFECTIVE spec fingerprint — epic-context
+    block + description, exactly as the preflight writes the marker —
+    also does NOT get the counter auto-reset on a no-note resume.
+
+    The preflight hashes (epic_ctx + "\\n\\n" + description); the
+    resume-blocked hold check must compute the identical fingerprint
+    for the hold to fire on epic children."""
+    import hashlib
+
+    from robotsix_mill.core.workspace import record_spawn_exhaustion_marker
+
+    epic = service.create(
+        "parent epic", "epic description body", kind=TicketKind.EPIC
+    )
+    t = service.create(
+        "epic child recurrence test",
+        "do the recurring child thing",
+        parent_id=epic.id,
+    )
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="implement spawn limit reached")
+
+    ws = service.workspace(t)
+    spawn_counter = ws.artifacts_dir / "implement_spawn_count"
+    spawn_counter.write_text("3", encoding="utf-8")
+
+    # Effective fingerprint = SHA-256(epic-context block + "\n\n" +
+    # description), truncated to 16 hex — the same composition the
+    # preflight uses when writing the marker.
+    epic_ctx = service.get_epic_context(t)
+    assert epic_ctx, "sanity: a child of an epic must have epic context"
+    effective = epic_ctx + "\n\n" + "do the recurring child thing"
+    fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
     record_spawn_exhaustion_marker(ws, fp, 2)
 
     resumed = service.resume_blocked(t.id)  # no note
