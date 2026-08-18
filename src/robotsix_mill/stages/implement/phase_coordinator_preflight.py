@@ -24,6 +24,10 @@ from ...config import effective_target_branch
 from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import Comment, Ticket, TicketKind
 from ...core.states import State
+from ...core.workspace import (
+    read_spawn_exhaustion_marker,
+    record_spawn_exhaustion_marker,
+)
 from ...deploy import check_deploy_freshness
 from ..base import Outcome, StageContext
 from ..pause import clear_conversation_state
@@ -122,13 +126,50 @@ def run_preflight_checks(
             except (ValueError, OSError):  # fmt: skip
                 spawn_count = 0
         if spawn_count >= spawn_limit:
-            note = (
-                f"implement spawn limit reached "
-                f"({spawn_count}/{spawn_limit}) — "
-                "escalating to BLOCKED for human inspection.  "
-                "Resume-blocked to retry: it clears the counter "
-                "automatically (no workspace surgery needed)."
-            )
+            # Determine whether this exhaustion is a recurrence
+            # (same effective spec fingerprint) — if so, emit a
+            # distinct RECURRING_SPAWN_EXHAUSTION event and adjust
+            # the block note so the operator knows a plain resume
+            # will no longer auto-grant a fresh budget.
+            effective = spec or ""
+            if ticket.parent_id:
+                epic_ctx_fp = ctx.service.get_epic_context(ticket)
+                if epic_ctx_fp:
+                    effective = epic_ctx_fp + "\n\n" + effective
+            spec_fp = hashlib.sha256(effective.encode("utf-8")).hexdigest()[:16]
+            marker = read_spawn_exhaustion_marker(ws)
+            if marker is not None and marker[0] == spec_fp:
+                exhaustion_count = marker[1] + 1
+                recurring = True
+            else:
+                exhaustion_count = 1
+                recurring = False
+            try:
+                record_spawn_exhaustion_marker(ws, spec_fp, exhaustion_count)
+            except OSError:
+                log.warning(
+                    "%s: failed to write spawn exhaustion marker",
+                    ticket.id,
+                )
+
+            if recurring:
+                note = (
+                    f"implement spawn limit reached "
+                    f"({spawn_count}/{spawn_limit}) for the "
+                    f"{exhaustion_count}th consecutive time with an "
+                    "unchanged spec — recurring spawn exhaustion.  "
+                    "Counter will NOT be auto-reset by resume-blocked "
+                    "unless the resume includes an explicit "
+                    "justification note or the spec has changed."
+                )
+            else:
+                note = (
+                    f"implement spawn limit reached "
+                    f"({spawn_count}/{spawn_limit}) — "
+                    "escalating to BLOCKED for human inspection.  "
+                    "Resume-blocked to retry: it clears the counter "
+                    "automatically (no workspace surgery needed)."
+                )
             # Append the tail of the last implement summary so the
             # operator sees the genuine failure cause instead of only
             # the generic limit message.
@@ -155,26 +196,30 @@ def run_preflight_checks(
             # discover the exhaustion programmatically and
             # decide whether to request a counter reset or
             # file a deeper bug ticket.
+            category = (
+                "RECURRING_SPAWN_EXHAUSTION" if recurring else "SPAWN_LIMIT_EXHAUSTED"
+            )
             try:
                 board_id = ctx.memory_board_id(ticket)
                 normalized_key = (
                     "spawn_limit_exhausted:"
                     + hashlib.sha256(
-                        f"{ticket.id}:{spawn_count}:{spawn_limit}".encode()
+                        f"{ticket.id}:{spawn_count}:{spawn_limit}:{exhaustion_count}".encode()
                     ).hexdigest()[:16]
                 )
                 emit_diagnostic_event(
                     ctx.settings,
                     board_id,
-                    category="SPAWN_LIMIT_EXHAUSTED",
+                    category=category,
                     ticket_id=ticket.id,
                     reason=note,
                     normalized_key=normalized_key,
                 )
             except Exception:
                 log.exception(
-                    "%s: failed to emit SPAWN_LIMIT_EXHAUSTED event",
+                    "%s: failed to emit %s event",
                     ticket.id,
+                    category,
                 )
             # Discard any stale conversation state so a
             # resume-blocked restart begins a fresh agent

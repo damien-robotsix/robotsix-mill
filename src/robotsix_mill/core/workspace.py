@@ -7,7 +7,9 @@ and a content hash so the management plane can detect external edits.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -110,6 +112,59 @@ def write_counter(path: Path, value: int) -> None:
     """Write *value* to *path*, creating parent directories as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(value), encoding="utf-8")
+
+
+# --- spawn-exhaustion recurrence marker --------------------------------
+# Persists ``{spec_fp, count}`` in the ticket's artifacts dir so the
+# implement preflight and the resume-blocked transition can agree on
+# whether this ticket has ALREADY exhausted its spawn budget on the
+# current spec fingerprint.  ``spec_fp`` is the same 16-hex effective
+# spec fingerprint used by the stale-re-spawn guard (SHA-256 of epic
+# context + description, truncated).  The marker survives counter
+# resets — it is cleared only on a spec change (preflight rewrites
+# it), on productive implement progress, or on an explicit operator
+# rework request (`_reset_implement_spawn_counter`).
+
+SPAWN_EXHAUSTION_MARKER = "implement_spawn_exhausted.json"
+
+
+def read_spawn_exhaustion_marker(ws: Workspace) -> tuple[str, int] | None:
+    """Return ``(spec_fp, count)`` from the spawn-exhaustion marker.
+
+    Returns ``None`` when the marker is absent, malformed, or carries
+    an empty fingerprint / non-positive count.
+    """
+    path = ws.artifacts_dir / SPAWN_EXHAUSTION_MARKER
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        spec_fp = str(data.get("spec_fp", "")).strip()
+        count = int(data.get("count", 0))
+    except OSError, ValueError, TypeError, json.JSONDecodeError:
+        return None
+    if not spec_fp or count < 1:
+        return None
+    return spec_fp, count
+
+
+def record_spawn_exhaustion_marker(ws: Workspace, spec_fp: str, count: int) -> None:
+    """Write the spawn-exhaustion marker with the given fingerprint and count.
+
+    Creates the artifacts dir as needed.  An ``OSError`` propagates —
+    callers treat marker writes as best-effort (the event emission is
+    already fail-safe).
+    """
+    path = ws.artifacts_dir / SPAWN_EXHAUSTION_MARKER
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"spec_fp": spec_fp, "count": count}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def clear_spawn_exhaustion_marker(ws: Workspace) -> None:
+    """Delete the spawn-exhaustion marker; silent when absent."""
+    with contextlib.suppress(OSError):
+        (ws.artifacts_dir / SPAWN_EXHAUSTION_MARKER).unlink(missing_ok=True)
 
 
 def prune_clone(workspace: Workspace) -> None:

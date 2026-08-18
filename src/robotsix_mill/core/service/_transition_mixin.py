@@ -16,7 +16,12 @@ from ..models import (
     Ticket,
 )
 from ..states import State, can_transition
-from ..workspace import Workspace, read_counter
+from ..workspace import (
+    Workspace,
+    clear_spawn_exhaustion_marker,
+    read_counter,
+    read_spawn_exhaustion_marker,
+)
 from ._base import _ServiceBase
 from ._comments import _sanitize_log_value
 from ._helpers import (
@@ -66,6 +71,11 @@ def _reset_implement_spawn_counter(ws: Workspace) -> None:
     """
     with contextlib.suppress(OSError):
         (ws.artifacts_dir / "implement_spawn_count").unlink(missing_ok=True)
+    # Also clear the recurrence marker — a reset granted by genuine
+    # implement progress (or an explicit operator rework request)
+    # forgets the repeat-exhaustion history so the next exhaustion
+    # starts a fresh first-exhaustion cycle.
+    clear_spawn_exhaustion_marker(ws)
     # Also clear the in-flight spawn marker and abort log so a
     # resumed ticket starts with a clean spawn-state ledger — a stale
     # in-flight marker would otherwise be absorbed as a "killed by
@@ -684,6 +694,7 @@ class _TransitionMixin(_ServiceBase):
             # for other reasons keep their counter so the state is
             # faithfully preserved across the resume.
             spawn_reset = False
+            spawn_hold = False  # recurring exhaustion — see below
             counter_path = None
             if dst is State.READY and self.settings.implement_max_spawns_per_ticket > 0:
                 counter_path = (
@@ -699,6 +710,28 @@ class _TransitionMixin(_ServiceBase):
                     except ValueError, OSError:
                         spawn_count = 0
                 spawn_reset = spawn_count >= spawn_limit
+                if spawn_reset:
+                    # Recurring-exhaustion hold: when this ticket has
+                    # ALREADY exhausted its spawn budget at least twice
+                    # on the CURRENT spec fingerprint and the resume
+                    # carries neither a spec change nor an explicit
+                    # justification note, do NOT auto-grant another
+                    # full budget.  The ticket returns to READY but the
+                    # counter stays at/above the limit — the next
+                    # preflight re-blocks it free of charge (no trace,
+                    # no spawn slot) and the RECURRING_SPAWN_EXHAUSTION
+                    # diagnostic stays visible until a human changes
+                    # the spec or resumes with a note.
+                    marker = read_spawn_exhaustion_marker(self.workspace(ticket))
+                    current_fp = self._compute_spec_fingerprint(ticket)
+                    if (
+                        marker is not None
+                        and marker[1] >= 2
+                        and marker[0] == current_fp
+                        and not note.strip()
+                    ):
+                        spawn_reset = False
+                        spawn_hold = True
             # Same rule on the merge side: a ci_fix guard counter that has
             # reached its ceiling is terminal until something clears it,
             # and the resume is that something.  Applies to every dst —
@@ -712,6 +745,12 @@ class _TransitionMixin(_ServiceBase):
                 event_note += f"; override: {note}"
             if spawn_reset:
                 event_note += "; spawn counter reset via resume-blocked"
+            if spawn_hold:
+                event_note += (
+                    "; recurring spawn exhaustion — counter NOT reset "
+                    "(spec unchanged and no resume note); change the "
+                    "spec or resume with a note to grant a fresh budget"
+                )
             if ci_guards_reset:
                 event_note += (
                     f"; ci_fix guard(s) reset via resume-blocked: "
