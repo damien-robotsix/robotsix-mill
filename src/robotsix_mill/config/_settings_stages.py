@@ -1461,6 +1461,25 @@ class _StagesSettings(BaseModel):
         default=5000,
         json_schema_extra={"advanced": True},
     )
+    # --- token-metrics aggregation (daily stage×model token percentiles) ---
+    # A global, no-LLM pass that reads per-step mill.step_usage metadata
+    # from the shared Langfuse project's list endpoint and writes a compact
+    # per-call token histogram snapshot to <data_dir>/token_metrics/. Default
+    # True (enabled out of the box), like langfuse_cleanup.
+    token_metrics_aggregation_periodic: bool = Field(
+        description="When true, run periodic token-metrics aggregation (stage×model token percentiles).",
+        default=True,
+    )
+    token_metrics_aggregation_interval_seconds: int = Field(
+        description="Seconds between token-metrics aggregation passes.",
+        default=86400,
+        json_schema_extra={"advanced": True},
+    )
+    token_metrics_aggregation_window_seconds: int = Field(
+        description="Lookback window (seconds) of Langfuse traces aggregated each pass.",
+        default=86400,
+        json_schema_extra={"advanced": True},
+    )
     sandbox_op_timeout: int = Field(
         description="Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
         default=300,

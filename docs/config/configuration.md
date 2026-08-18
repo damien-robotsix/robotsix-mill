@@ -672,7 +672,7 @@ Each periodic agent shares this pattern:
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
 `completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `mypy_baseline`, `orphaned_pr_check`, `pin_bump`,
-`copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
+`copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `token_metrics_aggregation`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
 > ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
@@ -714,6 +714,9 @@ Additional fields:
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |
 | `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](../agents/diagnostic-agent.md) |
 | `periodic.langfuse_cleanup.max_traces` | `MILL_LANGFUSE_CLEANUP_MAX_TRACES` | `5000` | Max traces retained in the shared workspace Langfuse project when `langfuse_cleanup_periodic` is enabled; oldest traces are deleted to stay under this cap. Centralized (global-only) — one pass per interval, not per-repo. |
+| `periodic.token_metrics_aggregation.interval_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_INTERVAL_SECONDS` | `86400` | Seconds between token-metrics aggregation passes. Centralized (global-only) — one pass per interval, not per-repo. |
+| `periodic.token_metrics_aggregation.window_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_WINDOW_SECONDS` | `86400` | Lookback window of Langfuse traces aggregated each token-metrics pass; per-call stage×model input/output-token percentiles (p50/p95/max) are written to `<data_dir>/token_metrics/<YYYY-MM-DD>.json`. |
+| `periodic.token_metrics_aggregation.enabled` | `MILL_TOKEN_METRICS_AGGREGATION_PERIODIC` | `true` | Enable the daily token-metrics aggregation pass. |
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
 | `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board. |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |

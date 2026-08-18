@@ -166,6 +166,7 @@ roadmap_sync_interval_seconds
 pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
+token_metrics_aggregation_periodic
 changelog_autofill_periodic
 changelog_autofill_interval_seconds
 ci_debt_recheck_periodic
@@ -449,6 +450,7 @@ _survey_task
 _config_sync_task
 _data_dir_gc_task
 _langfuse_cleanup_task
+_token_metrics_aggregation_task
 _timeout_escalation_task
 _config_pin_drift_task
 _meta_task

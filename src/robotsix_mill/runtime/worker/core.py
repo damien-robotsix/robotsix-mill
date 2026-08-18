@@ -242,6 +242,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._config_sync_task: asyncio.Task[Any] | None = None
         self._data_dir_gc_task: asyncio.Task[Any] | None = None
         self._langfuse_cleanup_task: asyncio.Task[Any] | None = None
+        self._token_metrics_aggregation_task: asyncio.Task[Any] | None = None
         self._timeout_escalation_task: asyncio.Task[Any] | None = None
         self._config_pin_drift_task: asyncio.Task[None] | None = None
         self._meta_task: asyncio.Task[Any] | None = None
@@ -949,6 +950,16 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ),
         )
         self._start_poll_loop_pass(
+            "token-metrics-aggregation",
+            self._token_metrics_aggregation_poll_loop,
+            "_token_metrics_aggregation_task",
+            log_msg="Periodic token-metrics aggregation enabled: interval %ds, window %ds",
+            log_args=(
+                self.ctx.settings.token_metrics_aggregation_interval_seconds,
+                self.ctx.settings.token_metrics_aggregation_window_seconds,
+            ),
+        )
+        self._start_poll_loop_pass(
             "timeout-escalation",
             self._timeout_escalation_poll_loop,
             "_timeout_escalation_task",
@@ -1169,6 +1180,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_config_sync_task",
             "_data_dir_gc_task",
             "_langfuse_cleanup_task",
+            "_token_metrics_aggregation_task",
             "_timeout_escalation_task",
             "_config_pin_drift_task",
             "_meta_task",

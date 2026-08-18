@@ -716,6 +716,52 @@ def trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def trace_step_usage_records(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract per-step ``mill.step_usage`` records from a list-endpoint trace.
+
+    Each record is the decoded JSON blob stamped by
+    :func:`robotsix_mill.runtime.tracing.record_step_usage` — one per model
+    invocation — carrying ``stage_name``, ``model_name``,
+    ``input_tokens``, ``output_tokens``, ``request_count``, ``retry_count``,
+    ``backend`` and ``timestamp`` (plus ``ticket_id`` / ``board_id`` when set).
+
+    Reads observation metadata first (the list endpoint's per-span
+    ``metadata["mill.step_usage"]``), then falls back to trace-level
+    ``metadata["mill.step_usage"]`` only when no observation carried the
+    attribute.  Never fetches trace detail, so no prompt payloads are
+    transferred — this is what makes server-side aggregation cheap.
+    """
+    records: list[dict[str, Any]] = []
+
+    def _parse(raw: object) -> dict[str, Any] | None:
+        if not isinstance(raw, str):
+            return None
+        try:
+            su = _json.loads(raw)
+        except _json.JSONDecodeError, TypeError:
+            return None
+        return su if isinstance(su, dict) else None
+
+    seen_observation_usage = False
+    for obs in trace.get("observations") or []:
+        metadata = obs.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        su = _parse(metadata.get("mill.step_usage"))
+        if su is not None:
+            seen_observation_usage = True
+            records.append(su)
+
+    if not seen_observation_usage:
+        trace_meta = trace.get("metadata")
+        if isinstance(trace_meta, dict):
+            su = _parse(trace_meta.get("mill.step_usage"))
+            if su is not None:
+                records.append(su)
+
+    return records
+
+
 def list_all_traces_since(
     settings: Settings,
     from_timestamp: str,
