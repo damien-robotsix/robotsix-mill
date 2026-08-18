@@ -16,7 +16,7 @@ from ...agents import refining
 from ...config.settings import Settings
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
-from ...core.text_noop import degenerate_body_reason
+from ...core.text_noop import degenerate_body_reason, spec_demands_code_change
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from .helpers import (
@@ -266,6 +266,19 @@ def no_change_path(
             "routed to implement for live re-check",
             source=ticket.source,
         )
+
+    # Guard: draft explicitly demands a non-empty diff — the
+    # no_change_needed conclusion contradicts the spec.  Degrade to
+    # the normal refine path instead of closing DONE, so the ticket
+    # goes through implement where real work can happen (or a fresh
+    # empty-diff implement pass will fire its own spec-mandate guard).
+    if spec_demands_code_change(draft):
+        log.warning(
+            "%s: no_change_needed conclusion contradicts draft that "
+            "mandates a non-empty diff — degrading to normal path",
+            ticket.id,
+        )
+        return None
 
     short = rationale[:400] + ("…" if len(rationale) > 400 else "")
 

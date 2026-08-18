@@ -631,10 +631,65 @@ class TestNoChangePath:
         assert outcome.next_state == State.DONE
         assert "no change needed" in outcome.note
 
+    def test_draft_demanding_code_change_degrades_to_normal_path(
+        self, ctx_factory, monkeypatch
+    ):
+        """Draft explicitly mandates a non-empty diff → no-change path
+        must NOT close DONE; degrade to the normal refine path."""
+        ctx = ctx_factory()
+        t = _ticket(ctx)
+        ws = ctx.service.workspace(t)
 
-# ===========================================================================
-# promote_to_epic_path
-# ===========================================================================
+        result = RefineResult(
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+
+        monkeypatch.setattr(
+            _result_paths, "_rationale_claims_external_fix", lambda r: False
+        )
+
+        outcome = _result_paths.no_change_path(
+            ctx,
+            t,
+            "## Acceptance criteria\n\n"
+            "- The implementation must produce a non-empty diff.",
+            None,
+            "Wire real token exchange",
+            ws,
+            result,
+        )
+
+        assert outcome is None
+
+    def test_draft_with_bare_must_keeps_done(self, ctx_factory, monkeypatch):
+        """Draft containing 'must' without a mandate phrase → DONE unchanged."""
+        ctx = ctx_factory()
+        t = _ticket(ctx, kind=TicketKind.TASK)
+        ws = ctx.service.workspace(t)
+
+        result = RefineResult(
+            no_change_needed=True,
+            no_change_rationale="The condition is handled by existing logic.",
+        )
+
+        monkeypatch.setattr(
+            _result_paths, "_rationale_claims_external_fix", lambda r: False
+        )
+
+        outcome = _result_paths.no_change_path(
+            ctx,
+            t,
+            "The agent must investigate before concluding.",
+            None,
+            "Add feature",
+            ws,
+            result,
+        )
+
+        assert outcome is not None
+        assert outcome.next_state == State.DONE
+        assert "no change needed" in outcome.note
 
 
 class TestPromoteToEpicPath:
