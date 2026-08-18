@@ -596,7 +596,7 @@ def trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
             if isinstance(raw_step, str):
                 try:
                     su = _json.loads(raw_step)
-                except (_json.JSONDecodeError, TypeError):
+                except _json.JSONDecodeError, TypeError:
                     su = None
                 if isinstance(su, dict):
                     step_usage_seen = True
@@ -641,7 +641,7 @@ def trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
             if isinstance(trace_step, str):
                 try:
                     su = _json.loads(trace_step)
-                except (_json.JSONDecodeError, TypeError):
+                except _json.JSONDecodeError, TypeError:
                     su = None
                 if isinstance(su, dict):
                     step_usage_seen = True
@@ -738,7 +738,7 @@ def trace_step_usage_records(trace: dict[str, Any]) -> list[dict[str, Any]]:
             return None
         try:
             su = _json.loads(raw)
-        except (_json.JSONDecodeError, TypeError):
+        except _json.JSONDecodeError, TypeError:
             return None
         return su if isinstance(su, dict) else None
 

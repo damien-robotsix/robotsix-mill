@@ -80,11 +80,11 @@ def aggregate_step_usage(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             entry = buckets.setdefault(key, {"input": [], "output": []})
             try:
                 entry["input"].append(int(su.get("input_tokens") or 0))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 entry["input"].append(0)
             try:
                 entry["output"].append(int(su.get("output_tokens") or 0))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 entry["output"].append(0)
 
     out: list[dict[str, Any]] = []

@@ -160,7 +160,7 @@ def list_diagnostic_events(
                     normalized_key=str(obj["normalized_key"]),
                     timestamp=str(obj.get("timestamp", "")),
                 )
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 log.warning("diagnostic_events: skipping invalid entry in %s", path)
                 continue
             if category is not None and ev.category != category:
