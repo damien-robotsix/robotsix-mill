@@ -21,3 +21,10 @@ def test_review_doctests() -> None:
 
     results = doctest.testmod(robotsix_mill.stages.review)
     assert results.failed == 0, f"{results.failed} doctest failure(s)"
+
+
+def test_review_helpers_doctests() -> None:
+    import robotsix_mill.stages._review_helpers
+
+    results = doctest.testmod(robotsix_mill.stages._review_helpers)
+    assert results.failed == 0, f"{results.failed} doctest failure(s)"

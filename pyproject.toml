@@ -294,6 +294,7 @@ convention = "google"
 "src/robotsix_mill/stages/refine/*.py" = ["C901", "S603", "S607", "SIM108"]
 "src/robotsix_mill/stages/retrospect.py" = ["F821", "C901", "S112"]
 "src/robotsix_mill/stages/review.py" = ["C901", "SIM103", "S607", "S603"]
+"src/robotsix_mill/stages/_review_helpers.py" = ["SIM103", "S607", "S603"]
 "src/robotsix_mill/stages/document.py" = ["C901"]
 "src/robotsix_mill/stages/deliver.py" = ["C901", "SIM105", "S607", "F821"]
 "src/robotsix_mill/stages/code_reviewing.py" = ["C901"]
