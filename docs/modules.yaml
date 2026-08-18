@@ -589,9 +589,6 @@ modules:
       - changelog.d/*.md
       - release-please-config.json
       - .release-please-manifest.json
-      - doc-agent-ledger.md
-      - .doc_memory_ledger.md
-      - doc_agent_output.json
       - LICENSE
       - SECURITY.md
       - AGENT.md

@@ -37,6 +37,10 @@ docker-compose.override.yml
 =8
 # actionlint binary downloaded by security-audit.yml at runtime
 actionlint
+# Stray doc-agent scratch artifacts — the real ledger is runtime-managed
+# via settings.memory_file_for("doc", board_id). These are one-off commits.
+/doc_agent_output.json
+/.doc_memory_ledger.md
 # Sandbox workspace clones of external repos
 .work/
 # lychee link-checker cache
