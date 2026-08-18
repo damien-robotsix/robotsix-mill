@@ -101,6 +101,15 @@ extracted package): no such in-repo copy exists.
   **and** a note in `CONTRIBUTING.md`'s "CI overview"). A check that
   does neither must be removed — consult
   [docs/dev-tooling/ci-policy.md](docs/dev-tooling/ci-policy.md) before adding any CI step.
+- **Check shared-workflow pin bumps for silent gate additions.** A
+  pin bump to a shared reusable workflow (e.g.
+  `robotsix-github-workflows/.../python-ci.yml`) can silently add new
+  pre-test checks (such as `uv audit`). Before merging such a bump,
+  confirm the consolidated `ci / Tests` job still honors the existing
+  advisory/CVE-ignore policy — the `audit-ignore` set in `ci.yml`
+  must mirror the `--ignore` set in `security-audit.yml`, and any
+  newly-introduced gating check must be reconciled per the "every new
+  CI check must gate or be removed" rule.
 - Don't reintroduce a regression a test or this file already guards.
 
 ## CLI
