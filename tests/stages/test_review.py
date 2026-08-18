@@ -1057,7 +1057,7 @@ def test_gaps_already_addressed_verify_claim_false_moves_to_pending(
 
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
     monkeypatch.setattr(
-        "robotsix_mill.stages.review.verify_claim",
+        "robotsix_mill.stages._review_helpers.verify_claim",
         lambda claim_text, target_files, repo_dir: False,
     )
 
