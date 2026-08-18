@@ -20,7 +20,11 @@ WORKDIR /ui
 # between (a WORKDIR, say) silently detaches it and DL3018/DL3016 fire.
 # hadolint ignore=DL3018,DL3016
 RUN apk add --no-cache git && \
-    npm install --no-save "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}"
+    npm install --no-save --ignore-scripts "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}" && \
+    cd node_modules/@robotsix/ui && \
+    rm -f package-lock.json && \
+    npm install --ignore-scripts && \
+    npm run build
 
 # =============================================================================
 # Stage 1: builder — temporary stage for build-time tooling and artifact
