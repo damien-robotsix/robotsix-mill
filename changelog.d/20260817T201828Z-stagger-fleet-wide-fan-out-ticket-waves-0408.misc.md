@@ -1,1 +1,1 @@
-Add cross-repo fan-out ticket-creation staggering via ``MILL_FAN_OUT_STAGGER_SECONDS`` (default 300 s). When a single programmatic source enqueues tickets across N repos, the N invocations are spread evenly across the window so pipeline activation is smoothed instead of hitting the LLM provider as one synchronized spike. Manual and single-repo flow is unchanged.
+Stagger fleet-wide fan-out ticket waves to smooth the OpenRouter credit burn (real-cash cost lever)
