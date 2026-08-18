@@ -1482,6 +1482,165 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
     assert captured_repo_config.get("value") is fake_repo
 
 
+async def test_periodic_pass_per_repo_staggers_fan_out(ctx, monkeypatch):
+    """A multi-repo fan-out fires due repos staggered across
+    ``fan_out_stagger_seconds`` instead of all at once, while a zero
+    window fires them back-to-back (no stagger sleep)."""
+    import contextlib
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime import tracing as tr
+    from robotsix_mill.runtime.worker import Worker
+
+    fake_repos = {
+        f"r{i}": RepoConfig(
+            repo_id=f"r{i}",
+            board_id=f"b{i}",
+            langfuse_project_name="p",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+        for i in range(3)
+    }
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.periodic_passes.get_repos_config",
+        lambda: ReposRegistry(repos=fake_repos),
+    )
+    # No per-repo YAML override → fall back to Settings (enabled=True).
+    monkeypatch.setattr(
+        "robotsix_mill.agents.yaml_loader.load_periodic_agent_definition",
+        lambda *a, **k: None,
+    )
+
+    @contextlib.contextmanager
+    def fake_root(sid, name=None, repo_config=None, **kwargs):
+        yield tr._NoopRootIO()
+
+    monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
+
+    ctx.settings.fan_out_stagger_seconds = 30
+
+    fired: list[str] = []
+
+    def fake_runner(session_id=None, repo_config=None):
+        fired.append(repo_config.repo_id if repo_config else "")
+        from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
+
+        return PeriodicPassResult(
+            updated_memory="",
+            drafts_created=[],
+            session_id=session_id or "",
+        )
+
+    sleep_durations: list[float] = []
+    _real_sleep = asyncio.sleep
+    tick = 0
+
+    async def counting_sleep(delay: float) -> None:
+        nonlocal tick
+        tick += 1
+        sleep_durations.append(delay)
+        # Cancel after first tick + 2 stagger sleeps + the following tick.
+        if tick >= 4:
+            raise asyncio.CancelledError
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", counting_sleep)
+
+    w = Worker(ctx)
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_periodic_pass_per_repo(
+            "audit",
+            fake_runner,
+            settings_interval_attr="audit_interval_seconds",
+        )
+
+    assert fired == ["r0", "r1", "r2"], f"all three due repos must fire, got {fired}"
+    # sleep[0] = first-tick settling delay; sleeps[1:3] are the two
+    # inter-repo stagger delays of 30 / 3 = 10 s each.
+    assert sleep_durations[1:3] == [10.0, 10.0], (
+        f"expected staggered [10.0, 10.0] sleeps, got {sleep_durations[1:3]}"
+    )
+
+
+async def test_periodic_pass_per_repo_fan_out_zero_stagger_no_sleep(ctx, monkeypatch):
+    """With fan_out_stagger_seconds=0 a multi-repo fan-out does not add
+    inter-repo sleeps (manual/normal flow unchanged)."""
+    import contextlib
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+    from robotsix_mill.runtime import tracing as tr
+    from robotsix_mill.runtime.worker import Worker
+
+    fake_repos = {
+        f"r{i}": RepoConfig(
+            repo_id=f"r{i}",
+            board_id=f"b{i}",
+            langfuse_project_name="p",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+        for i in range(3)
+    }
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.periodic_passes.get_repos_config",
+        lambda: ReposRegistry(repos=fake_repos),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.yaml_loader.load_periodic_agent_definition",
+        lambda *a, **k: None,
+    )
+
+    @contextlib.contextmanager
+    def fake_root(sid, name=None, repo_config=None, **kwargs):
+        yield tr._NoopRootIO()
+
+    monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
+
+    ctx.settings.fan_out_stagger_seconds = 0
+
+    fired: list[str] = []
+
+    def fake_runner(session_id=None, repo_config=None):
+        fired.append(repo_config.repo_id if repo_config else "")
+        from robotsix_mill.agents.runners.periodic_runner import PeriodicPassResult
+
+        return PeriodicPassResult(
+            updated_memory="",
+            drafts_created=[],
+            session_id=session_id or "",
+        )
+
+    sleep_durations: list[float] = []
+    _real_sleep = asyncio.sleep
+    tick = 0
+
+    async def counting_sleep(delay: float) -> None:
+        nonlocal tick
+        tick += 1
+        sleep_durations.append(delay)
+        if tick >= 2:  # first tick + next tick → cancel
+            raise asyncio.CancelledError
+        await _real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", counting_sleep)
+
+    w = Worker(ctx)
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_periodic_pass_per_repo(
+            "audit",
+            fake_runner,
+            settings_interval_attr="audit_interval_seconds",
+        )
+
+    assert fired == ["r0", "r1", "r2"], f"all three due repos must fire, got {fired}"
+    # Only the first-tick settling delay and the next-tick poll sleep
+    # were recorded — no stagger sleeps in between.
+    assert len(sleep_durations) == 2, (
+        f"expected no stagger sleeps, got {sleep_durations}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Graceful shutdown — periodic passes finish before stop()
 # ---------------------------------------------------------------------------

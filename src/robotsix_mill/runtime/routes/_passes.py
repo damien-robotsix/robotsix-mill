@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -105,7 +106,7 @@ def _make_background_pass(
         request: Request = None,  # type: ignore[assignment]
         registry=Depends(get_run_registry),
     ) -> dict[str, Any]:
-        def _run() -> None:
+        def _run(stagger_seconds: int = 0) -> None:
             # Lazy-import the runner so that monkeypatch.setattr in tests
             # can intercept it before the background thread starts.
             mod = importlib.import_module(runner_module)
@@ -120,7 +121,21 @@ def _make_background_pass(
                 extra_runner_kwargs(request) if extra_runner_kwargs else {}
             )
 
-            for rc in repo_configs:
+            # Stagger cross-repo fan-out ticket creation: when this pass
+            # targets N repos (N > 1), spread the N invocations evenly
+            # across *stagger_seconds* so the resulting ticket activations
+            # don't land as one synchronized spike against a shared LLM
+            # credit pool. A single-repo run (len == 1, the common
+            # per-repo case) skips the sleep entirely.
+            stagger_delay = (
+                stagger_seconds / len(repo_configs)
+                if stagger_seconds > 0 and len(repo_configs) > 1
+                else 0.0
+            )
+
+            for i, rc in enumerate(repo_configs):
+                if i > 0 and stagger_delay > 0:
+                    time.sleep(stagger_delay)
                 run_id = None
                 try:
                     repo_key = rc.repo_id if rc else ""
@@ -149,7 +164,17 @@ def _make_background_pass(
                     if run_id:
                         registry.finish_error(run_id, str(e))
 
-        threading.Thread(target=_run, name=f"{kind}-pass", daemon=True).start()
+        # Capture the stagger window before spawning the thread — the
+        # Request may be closed by the time the background pass runs.
+        settings = getattr(request.app.state, "settings", None)
+        stagger_seconds = getattr(settings, "fan_out_stagger_seconds", 0)
+
+        threading.Thread(
+            target=_run,
+            kwargs={"stagger_seconds": stagger_seconds},
+            name=f"{kind}-pass",
+            daemon=True,
+        ).start()
         return {"status": "started"}
 
     handler.__doc__ = docstring

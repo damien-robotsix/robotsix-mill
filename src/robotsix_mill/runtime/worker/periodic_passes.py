@@ -308,6 +308,11 @@ class PeriodicPassesMixin(_WorkerBase):
                         if rc is None or getattr(rc, per_repo_flag, False)
                     ]
 
+                # Collect the repos that are DUE this tick first, so a
+                # cross-repo fan-out (N repos reaching their interval in
+                # the same tick) can be staggered instead of firing all N
+                # passes at once against a shared LLM credit pool.
+                due_repos: list[tuple[str, RepoConfig | None]] = []
                 for repo_config in repo_configs:
                     board_id = repo_config.repo_id if repo_config else ""
                     # Presence wins over flag: if the repo ships a
@@ -331,13 +336,23 @@ class PeriodicPassesMixin(_WorkerBase):
                         last = last.replace(tzinfo=UTC)
                     if (now - last).total_seconds() < interval:
                         continue
+                    due_repos.append((board_id, repo_config))
 
+                stagger_seconds = self.ctx.settings.fan_out_stagger_seconds
+                stagger_delay = (
+                    stagger_seconds / len(due_repos)
+                    if stagger_seconds > 0 and len(due_repos) > 1
+                    else 0.0
+                )
+                for i, (due_board, due_repo) in enumerate(due_repos):
+                    if i > 0 and stagger_delay > 0:
+                        await asyncio.sleep(stagger_delay)
                     await self._fire_periodic_pass(
                         label,
                         runner_fn,
-                        repo_config,
+                        due_repo,
                     )
-                    last_run_by_board[board_id] = datetime.now(UTC)
+                    last_run_by_board[due_board] = datetime.now(UTC)
             except Exception:
                 log.exception("%s scheduler tick failed", label)
 
