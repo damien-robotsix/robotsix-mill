@@ -104,9 +104,10 @@ jobs:
       - name: Generate SBOM
         if: always()
         run: |
-          uv audit --frozen \
-            --output-format json \
-            > sbom.json || true
+          uv export \
+            --frozen \
+            --format cyclonedx1.5 \
+            --output-file sbom.json
 
       - name: Upload SBOM artifact
         if: always()
