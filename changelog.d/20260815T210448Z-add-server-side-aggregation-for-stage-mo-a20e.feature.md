@@ -1,1 +1,0 @@
-Add a daily token-metrics aggregation pass that reads per-step stage×model token usage from Langfuse's list-endpoint metadata (no prompt payloads) and writes compact per-call p50/p95/max snapshots to `<data_dir>/token_metrics/`.
