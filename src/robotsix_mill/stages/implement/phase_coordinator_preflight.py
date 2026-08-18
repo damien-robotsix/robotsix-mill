@@ -28,10 +28,13 @@ from ...deploy import check_deploy_freshness
 from ..base import Outcome, StageContext
 from ..pause import clear_conversation_state
 from ._shared import (
+    ZERO_DIFF_PAUSE_FILENAME,
     detect_and_absorb_killed_spawn,
     log,
     read_spawn_aborts_tail,
+    read_zero_diff_count,
     write_spawn_in_flight,
+    write_zero_diff_count,
 )
 
 
@@ -329,6 +332,75 @@ def run_preflight_checks(
     if _changelog_guard is not None:
         clear_conversation_state(ws, "implement")
         return _changelog_guard
+
+    # 4.7. Zero-diff early-abort guard: when the N most recent
+    #      implement passes all produced no working-tree diff, pause
+    #      the ticket with a concrete ask_user prompt instead of
+    #      consuming further spawn attempts.  A pass that produces at
+    #      least one file change resets the counter.  The zero-diff
+    #      count is recorded by ``_finalize`` at each terminal pass,
+    #      so its value reflects actual implement attempts (not
+    #      preflight blocks).
+    zd_threshold = getattr(s, "implement_zero_diff_abort_threshold", 2)
+    if zd_threshold > 0:
+        zd_count = read_zero_diff_count(ws.artifacts_dir)
+        if zd_count >= zd_threshold:
+            pause_marker_path = ws.artifacts_dir / ZERO_DIFF_PAUSE_FILENAME
+            if pause_marker_path.exists():
+                # Operator replied to the zero-diff pause — clear the
+                # marker, reset the counter, and allow ONE fresh
+                # attempt.
+                import contextlib as _ctxlib
+
+                with _ctxlib.suppress(OSError):
+                    pause_marker_path.unlink(missing_ok=True)
+                write_zero_diff_count(ws.artifacts_dir, 0)
+            else:
+                # No marker → this is a genuine consecutive-zero-diff
+                # streak.  Pause with a concrete prompt so the
+                # operator sees the diagnostic before spawn budget is
+                # exhausted.
+                _note = (
+                    f"zero-diff early-abort — {zd_count} consecutive "
+                    "implement passes produced no file changes.  "
+                    "The task may be a no-op, ambiguous, or require "
+                    "external data — please clarify or narrow scope, "
+                    "then reply to resume (the reply grants one "
+                    "fresh implement attempt with a reset counter)."
+                )
+                # Write the pause marker so the operator's reply is
+                # recognised on the next preflight.
+                try:
+                    pause_marker_path.touch(exist_ok=True)
+                except OSError:
+                    log.warning(
+                        "%s: failed to write zero-diff pause marker",
+                        ticket.id,
+                        exc_info=True,
+                    )
+                # Transition to AWAITING_USER_REPLY.
+                ctx.service.transition(
+                    ticket.id,
+                    State.AWAITING_USER_REPLY,
+                    note=_note,
+                )
+                updated = ctx.service.get(ticket.id)
+                if updated:
+                    from ...notify import send_notification
+
+                    send_notification(
+                        updated,
+                        State.AWAITING_USER_REPLY,
+                        "zero-diff early-abort — awaiting operator reply",
+                        ctx.settings,
+                    )
+                log.info(
+                    "%s: zero-diff early-abort — %d consecutive no-diff "
+                    "passes; pausing with ask_user",
+                    ticket.id,
+                    zd_count,
+                )
+                return Outcome(State.AWAITING_USER_REPLY, _note)
 
     # 5. Agent tool-definition integrity: the assembled tool list
     #    must be non-empty before we open a trace.  Load the agent-
