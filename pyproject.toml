@@ -448,7 +448,10 @@ extend-immutable-calls = [
 
 [tool.deptry]
 known_first_party = ["robotsix_mill"]
-extend_exclude = ["_llmio_check/"]
+# Vendored third-party library source (tests/forge/_vendor) keeps its own
+# upstream style/config and is copied verbatim from the pinned robotsix-github-auth
+# rev — exclude it from import analysis just as it is excluded from ruff.
+extend_exclude = ["_llmio_check/", "tests/forge/_vendor"]
 
 [tool.deptry.per_rule_ignores]
 # CLI-only dev/lint/docs tools that are never imported at runtime.
