@@ -57,7 +57,15 @@ def run_module_curator_agent(
             (``module_curator_model``), retry parameters, and tool paths.
         memory: The agent's memory ledger as a Markdown string.
             Defaults to ``""`` (the agent starts a fresh ledger).
+        recent_proposals: Prior proposals from the pass runner.
+        verified_proposals: Ephemeral verified-state table (rendered
+            Markdown) recomputed from the ticket DB every pass and
+            injected into the prompt. Empty string means no prior
+            proposals to verify.
         repo_dir: Optional path to the local repository clone.
+        definition_override: Optional per-repo merged agent definition
+            (resolved from ``.robotsix-mill/periodic/<name>.yaml``)
+            to pass through to the agent callable.
 
     Returns:
         A ``ModuleCuratorResult`` with draft titles, bodies, and gap IDs

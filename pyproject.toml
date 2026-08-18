@@ -343,12 +343,6 @@ convention = "google"
 "src/robotsix_mill/meta/agent.py" = ["S603", "S607"]
 "src/robotsix_mill/meta/todo_scan.py" = ["S603", "S607"]
 
-# --- src/ D rules pending docstring coverage (FIXME) --------------------------
-# D417: missing argument descriptions — add Args: sections.
-"src/robotsix_mill/agents/agent_check.py" = ["D417"]
-"src/robotsix_mill/agents/module_curator.py" = ["D417"]
-"src/robotsix_mill/agents/runners/periodic_runner.py" = ["D417"]
-
 # --- expanded lint rules: pre-existing violations ---------------------------
 # SIM102 (collapsible-if), SIM105 (suppressible-exception), SIM108
 # (if-else-block-instead-of-if-exp) — remaining non-auto-fixable
