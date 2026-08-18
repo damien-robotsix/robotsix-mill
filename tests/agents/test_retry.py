@@ -166,6 +166,22 @@ def test_is_transient_walks_wrapped_timeout():
     assert is_transient(APITimeoutError("deadline exceeded")) is True
 
 
+def test_is_transient_disk_full():
+    """sqlite3.OperationalError with 'database or disk is full' must be
+    classified as transient.  Also walks the cause chain so a wrapped
+    version is still recognised."""
+    inner = sqlite3.OperationalError("database or disk is full")
+    assert is_transient(inner) is True
+
+    wrapped = RuntimeError("stage run failed")
+    wrapped.__cause__ = inner
+    assert is_transient(wrapped) is True
+
+    ctx_wrapped = RuntimeError("stage run failed")
+    ctx_wrapped.__context__ = sqlite3.OperationalError("database or disk is full")
+    assert is_transient(ctx_wrapped) is True
+
+
 # --- retry behaviour (injected sleep, no real waiting) ------------------
 
 
