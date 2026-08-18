@@ -713,11 +713,11 @@ def test_flag_skill_implication(monkeypatch):
     - ``report_issue: true`` → ``board-report`` MUST be in ``skills:``
 
     Soft-gated via ``KNOWN_EXCEPTIONS`` so the test can land while
-    known gaps (ci_fix, implement) are still being addressed.
+    known gaps are still being addressed.
     """
     import warnings
 
-    READ_TICKET_EXCEPTIONS = {"implement"}
+    READ_TICKET_EXCEPTIONS: set[str] = set()
     REPORT_ISSUE_EXCEPTIONS: set[str] = set()
 
     for var in _ENV_VAR_TO_SETTINGS_ALIAS:
