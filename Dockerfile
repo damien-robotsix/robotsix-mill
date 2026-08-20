@@ -23,7 +23,7 @@ RUN apk add --no-cache git && \
     npm install --no-save --ignore-scripts "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}" && \
     cd node_modules/@robotsix/ui && \
     rm -f package-lock.json && \
-    npm install --ignore-scripts && \
+    npm install && \
     npm run build
 
 # =============================================================================
