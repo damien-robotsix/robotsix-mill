@@ -112,10 +112,10 @@ def test_clone_token_returns_none_on_http_error(monkeypatch):
 def test_clone_token_logs_warning_on_app_not_installed(monkeypatch, caplog):
     """_clone_token logs a warning when the GitHub App is not installed,
     then returns None (instead of raising)."""
-    from robotsix_mill.forge.auth import GitHubAppNotInstalledError
+    import robotsix_github_auth as rga
 
     def fake_github_token(settings, repo_config=None):
-        raise GitHubAppNotInstalledError("owner", "repo")
+        raise rga.TokenMintError("GitHub App not installed on owner/repo")
 
     monkeypatch.setattr(
         "robotsix_mill.agents.runners.periodic_runner.github_token", fake_github_token
@@ -123,7 +123,7 @@ def test_clone_token_logs_warning_on_app_not_installed(monkeypatch, caplog):
 
     result = _clone_token(Settings(), _test_repo_config())
     assert result is None
-    assert "GitHub App not installed" in caplog.text
+    assert "Clone token unavailable" in caplog.text
 
 
 def _gitlab_repo_config():

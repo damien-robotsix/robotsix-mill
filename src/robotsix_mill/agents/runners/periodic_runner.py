@@ -75,17 +75,18 @@ def _clone_token(settings, repo_config) -> str | None:
         except RuntimeError:
             return None
 
-    from ...forge.auth import GitHubAppNotInstalledError
+    import robotsix_github_auth as rga
 
     try:
         return github_token(settings, repo_config=repo_config)
-    except GitHubAppNotInstalledError:
+    except rga.TokenMintError:
         import logging
 
         _log = logging.getLogger(__name__)
         _log.warning(
-            "Clone token unavailable for %s: GitHub App not installed",
+            "Clone token unavailable for %s: %s",
             repo_config.repo_id if repo_config else "default",
+            "GitHub App not installed or token minting failed",
         )
         return None
     except Exception:
