@@ -26,7 +26,6 @@ import time
 import robotsix_github_auth as rga
 
 from ..config import RepoConfig, Settings, get_secrets
-from .github import _parse_owner_repo  # lazy: avoid import cycle
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +176,8 @@ def github_push_token(settings: Settings, repo_config: RepoConfig | None = None)
         )
 
     remote_url = _resolve_remote_url(settings, repo_config)
+    from .github import _parse_owner_repo  # lazy: avoid import cycle
+
     owner, repo = _parse_owner_repo(remote_url)
 
     return rga.github_push_token(
@@ -211,6 +212,8 @@ def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> s
         )
 
     remote_url = _resolve_remote_url(settings, repo_config)
+    from .github import _parse_owner_repo  # lazy: avoid import cycle
+
     owner, repo = _parse_owner_repo(remote_url)
 
     return rga.github_token(
