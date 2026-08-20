@@ -1,5 +1,3 @@
-import time
-
 import pytest
 import robotsix_github_auth as rga
 
@@ -100,17 +98,13 @@ def test_classify_token_error_identifies_token_mint_error():
 def test_classify_missing_config_is_permanent():
     """RuntimeError about missing GitHub App config → permanent."""
     assert (
-        auth.classify_token_error(RuntimeError("GITHUB_APP_ID not set"))
-        == "permanent"
+        auth.classify_token_error(RuntimeError("GITHUB_APP_ID not set")) == "permanent"
     )
 
 
 def test_classify_missing_forge_token_is_permanent():
     """RuntimeError about missing FORGE_TOKEN → permanent."""
-    assert (
-        auth.classify_token_error(RuntimeError("FORGE_TOKEN not set"))
-        == "permanent"
-    )
+    assert auth.classify_token_error(RuntimeError("FORGE_TOKEN not set")) == "permanent"
 
 
 def test_classify_connection_error_is_transient():
@@ -118,9 +112,7 @@ def test_classify_connection_error_is_transient():
     import httpx
 
     assert (
-        auth.classify_token_error(
-            httpx.ConnectError("connection refused")
-        )
+        auth.classify_token_error(httpx.ConnectError("connection refused"))
         == "transient"
     )
 
@@ -129,10 +121,7 @@ def test_classify_timeout_is_transient():
     """httpx.TimeoutException → transient."""
     import httpx
 
-    assert (
-        auth.classify_token_error(httpx.TimeoutException("timed out"))
-        == "transient"
-    )
+    assert auth.classify_token_error(httpx.TimeoutException("timed out")) == "transient"
 
 
 def test_classify_http_500_is_transient():
@@ -140,7 +129,9 @@ def test_classify_http_500_is_transient():
     import httpx
 
     resp = httpx.Response(502)
-    exc = httpx.HTTPStatusError("Bad Gateway", request=httpx.Request("GET", "/"), response=resp)
+    exc = httpx.HTTPStatusError(
+        "Bad Gateway", request=httpx.Request("GET", "/"), response=resp
+    )
     assert auth.classify_token_error(exc) == "transient"
 
 
@@ -149,26 +140,23 @@ def test_classify_http_400_is_permanent():
     import httpx
 
     resp = httpx.Response(400)
-    exc = httpx.HTTPStatusError("Bad Request", request=httpx.Request("GET", "/"), response=resp)
+    exc = httpx.HTTPStatusError(
+        "Bad Request", request=httpx.Request("GET", "/"), response=resp
+    )
     assert auth.classify_token_error(exc) == "permanent"
 
 
 def test_classify_jwt_error_is_permanent():
     """Exception with 'jwt' in message → permanent (bad key)."""
     assert (
-        auth.classify_token_error(
-            ValueError("jwt decode error: invalid signature")
-        )
+        auth.classify_token_error(ValueError("jwt decode error: invalid signature"))
         == "permanent"
     )
 
 
 def test_classify_unknown_exception_is_permanent():
     """Unknown exception type → permanent (conservative)."""
-    assert (
-        auth.classify_token_error(ValueError("something unexpected"))
-        == "permanent"
-    )
+    assert auth.classify_token_error(ValueError("something unexpected")) == "permanent"
 
 
 # ---------------------------------------------------------------------------
