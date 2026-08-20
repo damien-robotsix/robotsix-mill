@@ -11,18 +11,32 @@ ARG ROBOTSIX_UI_VERSION=289f5a06f7025f2726b414c0fe9d75edf1bbcf97  # tag v0.1.6
 # Dockerfile and every `Release` run from 2026-08-16 onward failed, leaving
 # mill unable to publish an image at all.
 WORKDIR /ui
-# `git` is only a build-time fetch tool for the @robotsix/ui git URL, and
-# that URL is already pinned to a full commit SHA below (tag v0.1.6
-# resolved to a SHA — git tags are mutable, commit SHAs are not). Pinning
-# apk's git patch release and npm's git-URL install syntax adds nothing here.
+# Build @robotsix/ui from a source checkout rather than via npm's git-URL
+# install.  That install cannot work here: the package declares
+# `files: ["dist"]` and builds `dist` in its `prepare` script, so
+# `--ignore-scripts` skips the build and npm then packs only the declared
+# files — yielding a node_modules entry containing LICENSE and README and
+# nothing else.  The follow-up `npm run build` therefore ran vite with no
+# `vite.config.ts` and no `src/`, fell back to application mode, and failed
+# with `Could not resolve entry module "index.html"` after transforming 0
+# modules.  Dropping `--ignore-scripts` would not fix it either — it would
+# just move the same failure into `prepare`.
 #
-# The ignore directive must stay immediately above its RUN — anything in
-# between (a WORKDIR, say) silently detaches it and DL3018/DL3016 fire.
-# hadolint ignore=DL3018,DL3016,DL3003
+# Cloning at the pinned SHA sidesteps npm's packing rules entirely and is
+# what actually gets the sources on disk.  Immutability is unchanged: the
+# ref below is a full commit SHA (tag v0.1.6 resolved), not a mutable tag.
+# `npm install` runs `prepare` (= `npm run build`), and the explicit build
+# after it is a cheap, idempotent guarantee the artefacts exist.
+#
+# `git` is a build-time fetch tool only; pinning its apk patch release adds
+# nothing. The ignore directive must stay immediately above its RUN —
+# anything in between (a WORKDIR, say) silently detaches it and DL3018 fires.
+# hadolint ignore=DL3018
 RUN apk add --no-cache git && \
-    npm install --no-save --ignore-scripts "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}" && \
-    cd node_modules/@robotsix/ui && \
-    rm -f package-lock.json && \
+    git init -q . && \
+    git remote add origin https://github.com/damien-robotsix/robotsix-ui.git && \
+    git fetch -q --depth 1 origin "${ROBOTSIX_UI_VERSION}" && \
+    git checkout -q FETCH_HEAD && \
     npm install && \
     npm run build
 
@@ -179,9 +193,9 @@ COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/pytho
 # Vendored @robotsix/ui config panel (vanilla JS + CSS).  Lands in the
 # same static directory served at /static/mill/ so board_html.py can link
 # them with a plain <script type="module">.
-COPY --from=ui /ui/node_modules/@robotsix/ui/dist/vanilla.js \
+COPY --from=ui /ui/dist/vanilla.js \
      /usr/local/lib/python3.14/site-packages/robotsix_mill/runtime/static/robotsix-ui-vanilla.js
-COPY --from=ui /ui/node_modules/@robotsix/ui/dist/style.css \
+COPY --from=ui /ui/dist/style.css \
      /usr/local/lib/python3.14/site-packages/robotsix_mill/runtime/static/robotsix-ui.css
 COPY --from=builder /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=builder /usr/local/bin/robotsix-mill /usr/local/bin/robotsix-mill
@@ -249,9 +263,9 @@ COPY . /app
 
 # Vendored @robotsix/ui config panel — also land in the source-tree static
 # directory so the editable-install StaticFiles mount finds them.
-COPY --from=ui /ui/node_modules/@robotsix/ui/dist/vanilla.js \
+COPY --from=ui /ui/dist/vanilla.js \
      /app/src/robotsix_mill/runtime/static/robotsix-ui-vanilla.js
-COPY --from=ui /ui/node_modules/@robotsix/ui/dist/style.css \
+COPY --from=ui /ui/dist/style.css \
      /app/src/robotsix_mill/runtime/static/robotsix-ui.css
 
 # Layer dev tooling (pytest, mypy, ruff, bandit, robotsix-modules) on top of
