@@ -89,16 +89,69 @@ def load_settings_block() -> dict[str, Any]:
     return block
 
 
-def _derive_fernet_key() -> bytes:
-    """Derive a deterministic Fernet key from the machine hostname.
+#: Key file kept beside the main config, on the same volume.
+_KEY_FILENAME = ".secrets.key"
 
-    The key is deterministic (same machine → same key) so config
-    survives restarts.  Not a secret — the real defence is the 0600
-    file permissions on config.json.
+
+def _derive_fernet_key() -> bytes:
+    """Derive a Fernet key from the machine hostname — **legacy only**.
+
+    Kept solely so a config encrypted before :func:`_persistent_fernet_key`
+    existed can still be read once and migrated.  Never use it to encrypt.
+
+    In a container ``os.uname().nodename`` is the container ID, so this is
+    stable across a *restart* but not across a *recreate* — and every image
+    update recreates.  That silently orphaned the secrets block on update:
+    the file was intact and readable, but undecryptable, so mill came up
+    with no OpenRouter key and no GitHub App and every ticket blocked.
     """
     hostname = os.uname().nodename
     raw = hashlib.sha256(hostname.encode() + b":robotsix-mill-config-v1").digest()
     return base64.urlsafe_b64encode(raw)
+
+
+def _key_file_path() -> Path | None:
+    """Path of the persisted key file, or ``None`` if config has no home."""
+    main_path = _resolve_main_config_path()
+    return None if main_path is None else main_path.parent / _KEY_FILENAME
+
+
+def _persistent_fernet_key(*, create: bool) -> bytes | None:
+    """Return the key stored beside the config, creating it when asked.
+
+    Lives on the same volume as ``config.json``, so it survives container
+    recreation.  Returns ``None`` when there is no config path or the
+    directory is not writable — callers then fall back to the legacy
+    hostname key so read-only and test environments keep working.
+    """
+    path = _key_file_path()
+    if path is None:
+        return None
+    try:
+        if path.exists():
+            key = path.read_bytes().strip()
+            if key:
+                return key
+    except OSError:
+        return None
+    if not create:
+        return None
+    key = Fernet.generate_key()
+    try:
+        # Create 0600 from the start — never briefly world-readable.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(fd, key)
+        finally:
+            os.close(fd)
+    except FileExistsError:
+        try:
+            return path.read_bytes().strip() or None
+        except OSError:
+            return None
+    except OSError:
+        return None
+    return key
 
 
 def encrypt_secrets_block(secrets: dict[str, Any]) -> str:
@@ -106,24 +159,61 @@ def encrypt_secrets_block(secrets: dict[str, Any]) -> str:
 
     Returns a Fernet token (base64 string).
     """
-    f = Fernet(_derive_fernet_key())
+    key = _persistent_fernet_key(create=True) or _derive_fernet_key()
+    f = Fernet(key)
     return f.encrypt(json.dumps(secrets).encode()).decode()
+
+
+def _decrypt_with(token: str, key: bytes) -> dict[str, Any] | None:
+    try:
+        loaded = json.loads(Fernet(key).decrypt(token.encode()))
+    except Exception:
+        # Decryption failure (wrong key, corruption) — treat block as unset.
+        return None
+    return loaded if isinstance(loaded, dict) else None
 
 
 def decrypt_secrets_block(token: str) -> dict[str, Any] | None:
     """Decrypt a Fernet token back to a secrets dict.
 
+    Tries the persisted key first, then the legacy hostname-derived key.
     Returns ``None`` on any failure (wrong key, corruption, etc.).
     """
+    key = _persistent_fernet_key(create=False)
+    if key is not None:
+        decrypted = _decrypt_with(token, key)
+        if decrypted is not None:
+            return decrypted
+    return _decrypt_with(token, _derive_fernet_key())
+
+
+def _migrate_secrets_to_persistent_key(secrets: dict[str, Any]) -> None:
+    """Re-encrypt *secrets* under the persisted key and rewrite the config.
+
+    Called when a block only decrypted under the legacy hostname key.  The
+    migration has to happen while that hostname is still current: once the
+    container is recreated the old key is gone for good.  Best-effort and
+    silent — a failure here leaves the config exactly as it was.
+    """
+    main_path = _resolve_main_config_path()
+    if main_path is None or _persistent_fernet_key(create=False) is not None:
+        return
+    if _persistent_fernet_key(create=True) is None:
+        return
     try:
-        f = Fernet(_derive_fernet_key())
-        data = f.decrypt(token.encode())
-        loaded = json.loads(data)
-        if isinstance(loaded, dict):
-            return loaded
-    except Exception:  # noqa: S110 — Decryption failure; treat block as unset.
-        pass
-    return None
+        data = _load_file(main_path)
+        if not data:
+            return
+        data["secrets"] = encrypt_secrets_block(secrets)
+        tmp = main_path.with_name(main_path.name + ".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, json.dumps(data, indent=2).encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.replace(tmp, main_path)
+    except OSError:
+        return
 
 
 def load_secrets_block() -> dict[str, Any]:
@@ -152,6 +242,7 @@ def load_secrets_block() -> dict[str, Any]:
         # New format: Fernet-encrypted JSON string.
         decrypted = decrypt_secrets_block(block)
         if decrypted is not None:
+            _migrate_secrets_to_persistent_key(decrypted)
             return decrypted
         # Legacy fallback: try base64 (previous format) or plain dict.
         try:
