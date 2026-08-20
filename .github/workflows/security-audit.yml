@@ -33,6 +33,9 @@ jobs:
           python-version: "3.14"
           version: "0.12.0"
 
+      - name: Check .trivyignore expiry dates
+        run: python scripts/check_trivyignore_expiry.py
+
       - name: Audit dependencies
         run: |
           # PYSEC-2025-183 (pyjwt): "weak encryption" advisory disputed
