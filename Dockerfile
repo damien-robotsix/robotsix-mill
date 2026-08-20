@@ -18,7 +18,7 @@ WORKDIR /ui
 #
 # The ignore directive must stay immediately above its RUN — anything in
 # between (a WORKDIR, say) silently detaches it and DL3018/DL3016 fire.
-# hadolint ignore=DL3018,DL3016
+# hadolint ignore=DL3018,DL3016,DL3003
 RUN apk add --no-cache git && \
     npm install --no-save --ignore-scripts "github:damien-robotsix/robotsix-ui#${ROBOTSIX_UI_VERSION}" && \
     cd node_modules/@robotsix/ui && \
