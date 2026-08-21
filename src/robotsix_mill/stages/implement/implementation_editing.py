@@ -234,6 +234,60 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         return None
 
     @classmethod
+    def _finish_deterministic_change(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        settings: Settings,
+        ic: _ImplementContext,
+        summary: str,
+        ref_files: list[str],
+        extra_roots: list[Path] | None,
+    ) -> _SinglePassResult:
+        """Shared guardrail + test-evaluation dispatch for deterministic handlers.
+
+        Runs the scope guardrail via
+        :meth:`_persist_artifacts_and_run_guardrail`, returns
+        immediately when the guardrail short-circuits, and otherwise
+        routes to test evaluation (which will skip via
+        :func:`_should_skip_test_gate`).
+        """
+        guardrail_result = cls._persist_artifacts_and_run_guardrail(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            summary,
+            ref_files,
+        )
+        if isinstance(guardrail_result, _SinglePassResult):
+            return guardrail_result
+
+        # Route to test evaluation (which will skip via _should_skip_test_gate).
+        return cls._evaluate_test_results(  # type: ignore[no-any-return]
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            settings,
+            ic,
+            guardrail_result,
+            summary,
+            ref_files,
+            None,  # new_msgs
+            False,  # no_change_needed
+            "",  # no_change_rationale
+            False,  # resuming
+            1,  # attempt
+            max(1, settings.max_fix_iterations),  # max_iters
+            extra_roots,
+        )
+
+    @classmethod
     def _handle_trivial_config_change(
         cls,
         ctx: StageContext,
@@ -295,7 +349,7 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         )
 
         ref_files = all_changed
-        guardrail_result = cls._persist_artifacts_and_run_guardrail(
+        return cls._finish_deterministic_change(
             ctx,
             ticket,
             repo_dir,
@@ -304,28 +358,6 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             ic,
             summary,
             ref_files,
-        )
-        if isinstance(guardrail_result, _SinglePassResult):
-            return guardrail_result
-        new_ic = guardrail_result
-
-        # Route to test evaluation (which will skip via _should_skip_test_gate).
-        return cls._evaluate_test_results(  # type: ignore[no-any-return]
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            settings,
-            ic,
-            new_ic,
-            summary,
-            ref_files,
-            None,  # new_msgs
-            False,  # no_change_needed
-            "",  # no_change_rationale
-            False,  # resuming
-            1,  # attempt
-            max(1, settings.max_fix_iterations),  # max_iters
             extra_roots,
         )
 
@@ -391,7 +423,7 @@ class _ImplementationEditingMixin(_ImplementStageBase):
         )
 
         ref_files = all_changed
-        guardrail_result = cls._persist_artifacts_and_run_guardrail(
+        return cls._finish_deterministic_change(
             ctx,
             ticket,
             repo_dir,
@@ -400,28 +432,6 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             ic,
             summary,
             ref_files,
-        )
-        if isinstance(guardrail_result, _SinglePassResult):
-            return guardrail_result
-        new_ic = guardrail_result
-
-        # Route to test evaluation (which will skip via _should_skip_test_gate).
-        return cls._evaluate_test_results(  # type: ignore[no-any-return]
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            settings,
-            ic,
-            new_ic,
-            summary,
-            ref_files,
-            None,  # new_msgs
-            False,  # no_change_needed
-            "",  # no_change_rationale
-            False,  # resuming
-            1,  # attempt
-            max(1, settings.max_fix_iterations),  # max_iters
             extra_roots,
         )
 
@@ -641,7 +651,7 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             summary += f" ({len(failed)} block(s) skipped)"
 
         ref_files = sorted(changed_files)
-        guardrail_result = cls._persist_artifacts_and_run_guardrail(
+        return cls._finish_deterministic_change(
             ctx,
             ticket,
             repo_dir,
@@ -650,28 +660,6 @@ class _ImplementationEditingMixin(_ImplementStageBase):
             ic,
             summary,
             ref_files,
-        )
-        if isinstance(guardrail_result, _SinglePassResult):
-            return guardrail_result
-        new_ic = guardrail_result
-
-        # Route to test evaluation.
-        return cls._evaluate_test_results(  # type: ignore[no-any-return]
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            settings,
-            ic,
-            new_ic,
-            summary,
-            ref_files,
-            None,  # new_msgs
-            False,  # no_change_needed
-            "",  # no_change_rationale
-            False,  # resuming
-            1,  # attempt
-            max(1, settings.max_fix_iterations),  # max_iters
             extra_roots,
         )
 
