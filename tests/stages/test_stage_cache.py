@@ -331,9 +331,9 @@ def test_review_input_hash_differs_on_repo_conventions(tmp_path):
 
 def test_reviewer_fingerprint_is_empty_when_it_cannot_be_computed(monkeypatch):
     """An unfingerprintable reviewer must not disable caching entirely."""
-    from robotsix_mill.stages import _stage_cache as cache_mod
-
     import builtins
+
+    from robotsix_mill.stages import _stage_cache as cache_mod
 
     real_import = builtins.__import__
 
