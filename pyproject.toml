@@ -453,7 +453,6 @@ extend_exclude = ["_llmio_check/"]
 # CLI-only dev/lint/docs tools that are never imported at runtime.
 DEP002 = [
     "robotsix-config",  # staging dep until 33bf imports it
-    "robotsix-github-auth",  # staging dep until forge/auth.py migrates (part 2)
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
