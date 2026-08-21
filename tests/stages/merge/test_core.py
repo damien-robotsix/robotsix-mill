@@ -1598,6 +1598,14 @@ def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.changed_source_files",
         lambda repo, target_branch="main", ref="HEAD": ["src/mod.py"],
     )
+    # check_rebase_diff_integrity lives in git_diff (split from git_ops)
+    # and calls changed_source_files / file_blobs from its own module
+    # namespace — bypassing the git_ops re-exports patched above.  Mock
+    # it directly (the test isn't exercising integrity checking).
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
+        lambda *a, **k: (True, [], []),
+    )
 
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
