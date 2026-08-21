@@ -128,6 +128,7 @@ modules:
       Thin wrapper around the git CLI via subprocess.  No dependencies on
       any other robotsix-mill module.
     paths:
+      - src/robotsix_mill/vcs/git_diff.py
       - src/robotsix_mill/vcs/git_ops.py
       - src/robotsix_mill/vcs/__init__.py
       - tests/vcs/__init__.py

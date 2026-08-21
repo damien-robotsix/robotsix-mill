@@ -1367,6 +1367,7 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
         pre_rebase_blobs=None,
         exempt_paths=None,
         target_pre_blobs=None,
+        previously_dropped_files=None,
     ):
         seen_exempt.append(exempt_paths)
         return (False, ["src/dropped.py"], [])
@@ -1449,6 +1450,7 @@ def test_rebase_sibling_modified_produces_targeted_blocked_message(
         pre_rebase_blobs=None,
         exempt_paths=None,
         target_pre_blobs=None,
+        previously_dropped_files=None,
     ):
         return (False, [], ["src/sibling_modified.py"])
 
