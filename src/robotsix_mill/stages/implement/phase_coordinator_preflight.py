@@ -53,7 +53,7 @@ _TOOL_OUTPUT_CAPTURE_COUNT = 10
 
 
 def _capture_tool_outputs_from_conversation_state(
-    ws: "Workspace", max_outputs: int = _TOOL_OUTPUT_CAPTURE_COUNT
+    ws: Workspace, max_outputs: int = _TOOL_OUTPUT_CAPTURE_COUNT
 ) -> str | None:
     """Extract the last *max_outputs* tool-return outputs from the
     implement conversation state and write them to a durable artifact
