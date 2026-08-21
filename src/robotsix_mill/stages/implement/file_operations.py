@@ -13,11 +13,12 @@ from ...config import (
     get_repo_config,
     target_branch_for,
 )
+from ...core.models import Ticket
 from ...core.states import State
 from ...forge.auth import _resolve_remote_url, github_token
 from ...vcs import git_ops
 from .. import short_circuit_verify
-from ..base import Outcome
+from ..base import Outcome, StageContext
 from ._base import _ImplementStageBase
 from ._shared import (
     log,
@@ -300,7 +301,18 @@ class FileOperationsMixin(_ImplementStageBase):
             return []
 
     @classmethod
-    def _clone_and_branch(cls, ctx, ticket, settings):
+    def _clone_and_branch(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        settings: Settings,
+    ) -> Outcome | tuple[Path, str, bool] | None:
+        repo_config = ctx.repo_config
+        if repo_config is None:
+            return Outcome(
+                State.BLOCKED,
+                "repo_config required for clone_and_branch",
+            )
         ws = ctx.service.workspace(ticket)
         repo_dir = ws.dir / "repo"
         branch = f"{settings.branch_prefix}{ticket.id}"
@@ -310,13 +322,13 @@ class FileOperationsMixin(_ImplementStageBase):
         # managed repo's.  File-existence checks, config analysis, and
         # scope decisions then correctly target the repo that will
         # receive the PR.
-        cross = ctx.repo_config.cross_repo_target
+        cross = repo_config.cross_repo_target
         if cross:
             remote_url = cross.fork_remote_url
             target = cross.base_branch
         else:
-            remote_url = _resolve_remote_url(settings, ctx.repo_config)
-            target = effective_target_branch(settings, ctx.repo_config)
+            remote_url = _resolve_remote_url(settings, repo_config)
+            target = effective_target_branch(settings, repo_config)
 
         # Resume iff a prior run left this ticket's clone + branch behind.
         resuming = (repo_dir / ".git").exists() and git_ops.branch_exists(
@@ -349,7 +361,7 @@ class FileOperationsMixin(_ImplementStageBase):
             try:
                 token_error: str | None = None
                 try:
-                    token = github_token(settings, repo_config=ctx.repo_config)
+                    token = github_token(settings, repo_config=repo_config)
                 except RuntimeError as exc:
                     token = None
                     token_error = str(exc)
@@ -358,7 +370,7 @@ class FileOperationsMixin(_ImplementStageBase):
                     repo_dir,
                     target,
                     token,
-                    repo_id=ctx.repo_config.repo_id,
+                    repo_id=repo_config.repo_id,
                 )
             except subprocess.CalledProcessError as e:
                 # When no auth token is available the clone will always
@@ -396,7 +408,7 @@ class FileOperationsMixin(_ImplementStageBase):
         try:
             _rebase_token = github_token(
                 settings,
-                repo_config=ctx.repo_config,
+                repo_config=repo_config,
             )
         except Exception:
             _rebase_token = None
@@ -423,7 +435,7 @@ class FileOperationsMixin(_ImplementStageBase):
             try:
                 token_error2: str | None = None
                 try:
-                    token = github_token(settings, repo_config=ctx.repo_config)
+                    token = github_token(settings, repo_config=repo_config)
                 except RuntimeError as exc:
                     token = None
                     token_error2 = str(exc)
@@ -432,7 +444,7 @@ class FileOperationsMixin(_ImplementStageBase):
                     repo_dir,
                     target,
                     token,
-                    repo_id=ctx.repo_config.repo_id,
+                    repo_id=repo_config.repo_id,
                 )
                 git_ops.create_branch(repo_dir, branch)
             except subprocess.CalledProcessError as e:
