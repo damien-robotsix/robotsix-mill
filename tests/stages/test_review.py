@@ -257,7 +257,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
-        raise RuntimeError("model unavailable")
+        raise RuntimeError("review agent internal failure")
 
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
