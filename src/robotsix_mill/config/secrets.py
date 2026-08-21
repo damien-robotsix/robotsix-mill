@@ -218,8 +218,25 @@ class Secrets:
 
     @property
     def openrouter_api_key(self) -> str | None:
-        """Return the OpenRouter API key."""
-        return self._openrouter_api_key  # type: ignore[no-any-return]
+        """Return the OpenRouter API key.
+
+        Backward-compat: when the deprecated flat ``secrets`` field is
+        unset, falls back to the canonical ``openrouter.keys`` source so
+        migrated configs keep existing callers working.
+        """
+        key = self._openrouter_api_key
+        if key is None:
+            from .settings import Settings
+
+            try:
+                settings = Settings()
+                if settings.openrouter and settings.openrouter.keys:
+                    entry = settings.openrouter.keys.get("robotsix-mill")
+                    if entry is not None:
+                        key = entry.get_secret_value()
+            except Exception:
+                key = None
+        return key  # type: ignore[no-any-return]
 
     @property
     def forge_token(self) -> str | None:

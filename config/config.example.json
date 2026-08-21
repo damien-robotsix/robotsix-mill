@@ -412,6 +412,11 @@
         "project_id": "SECRET"
       }
     }
+  },
+  "openrouter": {
+    "keys": {
+      "robotsix-mill": "SECRET"
+    }
   }
 }
 

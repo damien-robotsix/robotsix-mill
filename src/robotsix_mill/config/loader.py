@@ -79,13 +79,28 @@ def load_settings_block() -> dict[str, Any]:
         block = {
             k: v
             for k, v in data.items()
-            if k not in ("secrets", "repos", "core", "langfuse")
+            if k not in ("secrets", "repos", "core", "langfuse", "openrouter")
         }
     # Lift the top-level langfuse block into settings so
     # Settings.langfuse is populated from the canonical top-level key
     # (robotsix-standards#189).
     if "langfuse" in data and isinstance(data["langfuse"], dict):
         block["langfuse"] = data["langfuse"]
+    # Lift the top-level openrouter block into settings so
+    # Settings.openrouter is populated from the canonical top-level key
+    # (robotsix-standards component standard).
+    if "openrouter" in data and isinstance(data["openrouter"], dict):
+        block["openrouter"] = data["openrouter"]
+    # Lift openrouter_api_key from the secrets block (if present and
+    # decrypted) into settings so the _migrate_openrouter_api_key model
+    # validator populates the canonical openrouter.keys map.  This handles
+    # Fernet-encrypted deployed configs where the key lives only in the
+    # secrets block, not in settings.
+    if "openrouter_api_key" not in block:
+        secrets_block = load_secrets_block()
+        flat_key = secrets_block.get("openrouter_api_key")
+        if flat_key:
+            block["openrouter_api_key"] = flat_key
     return block
 
 

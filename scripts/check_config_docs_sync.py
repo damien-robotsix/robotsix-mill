@@ -150,6 +150,11 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         #    documented in the "Secrets reference" table, not the
         #    numbered settings tables.  Default is None.
         "subscriber_shared_secret",
+        # -- openrouter is a structured block (OpenrouterKeys) with nested
+        #    keys, documented via the OpenRouter docs, not the numbered
+        #    settings tables.  Its shape is too complex for a single
+        #    settings-table row.
+        "openrouter",
         # -- langfuse is a structured block (LangfuseConfig) with nested
         #    projects, documented in the "Secrets reference" section and
         #    via the observability docs, not the numbered settings tables.

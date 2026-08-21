@@ -917,3 +917,96 @@ def test_unknown_keys_in_the_file_do_not_break_extra_forbid(tmp_path, monkeypatc
 def test_missing_config_file_falls_back_to_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(tmp_path / "nope.json"))
     assert Settings().api_port == 8077
+
+
+# ===========================================================================
+#  openrouter keys — canonical block migration
+# ===========================================================================
+
+
+def test_openrouter_keys_canonical_source():
+    """The canonical ``openrouter.keys`` map is the source of truth."""
+    from pydantic import SecretStr
+
+    from robotsix_mill.config.settings import OpenrouterKeys
+
+    key = SecretStr("sk-canon")
+    s = Settings(openrouter=OpenrouterKeys(keys={"robotsix-mill": key}))
+    assert s.openrouter is not None
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
+
+
+def test_flat_openrouter_api_key_migrates_to_canonical():
+    """Configs with the deprecated flat field load it into the canonical map."""
+    from pydantic import SecretStr
+
+    s = Settings(openrouter_api_key=SecretStr("sk-legacy"))
+    assert s.openrouter is not None
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"
+    # The old field is still accessible for backward compat.
+    assert s.openrouter_api_key.get_secret_value() == "sk-legacy"
+
+
+def test_canonical_wins_when_both_set():
+    """When both the flat field and canonical map are set, canonical wins."""
+    from pydantic import SecretStr
+
+    from robotsix_mill.config.settings import OpenrouterKeys
+
+    s = Settings(
+        openrouter_api_key=SecretStr("sk-flat"),
+        openrouter=OpenrouterKeys(keys={"robotsix-mill": SecretStr("sk-canon")}),
+    )
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
+
+
+def test_openrouter_keys_coexist_with_other_aliases():
+    """The flat key populates 'robotsix-mill' alongside existing aliases."""
+    from pydantic import SecretStr
+
+    from robotsix_mill.config.settings import OpenrouterKeys
+
+    s = Settings(
+        openrouter_api_key=SecretStr("sk-legacy"),
+        openrouter=OpenrouterKeys(keys={"other-func": SecretStr("sk-other")}),
+    )
+    assert s.openrouter.keys["other-func"].get_secret_value() == "sk-other"
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"
+
+
+def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
+    """When openrouter_api_key lives ONLY in the Fernet-encrypted secrets
+    block, load_settings_block lifts it into settings so the
+    _migrate_openrouter_api_key validator populates the canonical
+    openrouter.keys map."""
+    import json
+
+    from robotsix_mill.config import _reset_secrets
+    from robotsix_mill.config.loader import encrypt_secrets_block
+
+    _reset_secrets()
+
+    # Point ROBOTSIX_CONFIG_FILE at our temp config BEFORE encrypting so
+    # the persistent Fernet key lands next to the config file we'll read.
+    cfg_path = tmp_path / "config.json"
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg_path))
+
+    # Build a Fernet-encrypted secrets block containing only the flat key.
+    secrets = {"openrouter_api_key": "sk-from-fernet"}
+    encrypted = encrypt_secrets_block(secrets)
+
+    cfg = {
+        "settings": {"data_dir": str(tmp_path), "api_port": 8077},
+        "secrets": encrypted,
+    }
+    cfg_path.write_text(json.dumps(cfg))
+
+    # Settings() should now have the canonical key populated.
+    s = Settings()
+    assert s.openrouter is not None
+    assert s.openrouter.keys.get("robotsix-mill") is not None
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
+
+    # The flat field is still populated (original value preserved).
+    assert s.openrouter_api_key is not None
+    assert s.openrouter_api_key.get_secret_value() == "sk-from-fernet"
