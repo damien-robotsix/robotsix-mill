@@ -303,6 +303,7 @@ convention = "google"
 "src/robotsix_mill/runtime/routes/_tickets_merge.py" = ["C901", "S110", "SIM105"]
 "src/robotsix_mill/runtime/routes/_traces.py" = ["C901"]
 "src/robotsix_mill/runtime/worker/*.py" = ["C901", "S110", "S603", "S607", "RUF012"]
+"src/robotsix_mill/sandbox/**" = ["C901", "S108", "S603", "S607"]
 "src/robotsix_mill/stages/implement/*.py" = ["C901", "S603", "S607", "SIM102", "SIM105"]
 "src/robotsix_mill/stages/refine/*.py" = ["C901", "S603", "S607", "SIM108"]
 "src/robotsix_mill/stages/retrospect.py" = ["F821", "C901", "S112"]
