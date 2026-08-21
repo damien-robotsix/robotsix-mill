@@ -4365,6 +4365,105 @@ def test_first_spawn_exhaustion_emits_plain_event(ctx_factory, tmp_path, monkeyp
     assert "clears the counter automatically" in out.note.lower()
 
 
+def test_spawn_exhaustion_captures_tool_outputs_before_clearing_state(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spawn limit is reached and a conversation state exists
+    with tool-return parts, the tool outputs are captured to a durable
+    artifact BEFORE the conversation state is cleared, and the block
+    note includes a tail of those outputs."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="Tool capture", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    # Write a conversation state JSON with tool-return parts.
+    conv_state = ws.artifacts_dir / "implement_conversation_state.json"
+    messages = [
+        {
+            "parts": [
+                {
+                    "part_kind": "tool-return",
+                    "tool_call_id": "call_1",
+                    "content": "exit=1\nruff failed: E501 line too long",
+                },
+                {
+                    "part_kind": "tool-return",
+                    "tool_call_id": "call_2",
+                    "content": "module-registration: 2 files unclassified",
+                },
+                {
+                    "part_kind": "tool-return",
+                    "tool_call_id": "call_3",
+                    "content": "No changes detected in working tree.",
+                },
+            ]
+        }
+    ]
+    conv_state.write_text(json.dumps(messages), encoding="utf-8")
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+
+    # The conversation state must be cleared (file deleted).
+    assert not conv_state.exists(), "conversation state should be cleared"
+
+    # The durable tool-output artifact must exist.
+    artifact = ws.artifacts_dir / "implement_tool_outputs.md"
+    assert artifact.exists(), "tool outputs artifact should exist"
+    artifact_text = artifact.read_text(encoding="utf-8")
+    assert "ruff failed" in artifact_text
+    assert "module-registration" in artifact_text
+    assert "No changes detected" in artifact_text
+
+    # The block note must reference the tool outputs.
+    assert "Last attempt tool outputs:" in out.note
+    assert "ruff failed" in out.note or "module-registration" in out.note
+
+
+def test_spawn_exhaustion_no_conversation_state_is_harmless(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spawn limit is reached but no conversation state file
+    exists, the exhaustion path proceeds without error and no tool
+    output artifact is created."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        FORGE_REMOTE_URL=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="1",
+    )
+    t = _ticket(ctx, title="No conv state", body="Add a feature.txt file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+    # No conversation state file — simulate a case where it was
+    # already cleared or never created.
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "spawn limit reached" in out.note.lower()
+    # No tool output artifact should be created.
+    artifact = ws.artifacts_dir / "implement_tool_outputs.md"
+    assert not artifact.exists()
+
+
 # --- pre-LLM spawn abort visibility (process-death kill recovery) --------
 
 

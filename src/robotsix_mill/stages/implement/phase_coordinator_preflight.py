@@ -25,6 +25,7 @@ from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import Comment, Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import (
+    Workspace,
     read_spawn_exhaustion_marker,
     record_spawn_exhaustion_marker,
 )
@@ -40,6 +41,90 @@ from ._shared import (
     write_spawn_in_flight,
     write_zero_diff_count,
 )
+
+# ── tool-output capture on spawn-limit exhaustion ──────────────────────
+
+# Number of tool-return outputs to capture from the conversation state
+# before it is discarded on spawn-limit exhaustion.  These are written
+# to a durable artifact so the operator can see raw tool errors (ruff,
+# module-registration, audit) instead of only the model's self-reported
+# summary tail.
+_TOOL_OUTPUT_CAPTURE_COUNT = 10
+
+
+def _capture_tool_outputs_from_conversation_state(
+    ws: "Workspace", max_outputs: int = _TOOL_OUTPUT_CAPTURE_COUNT
+) -> str | None:
+    """Extract the last *max_outputs* tool-return outputs from the
+    implement conversation state and write them to a durable artifact
+    (``artifacts/implement_tool_outputs.md``).
+
+    Returns a short tail string for the block note (last 3 outputs,
+    capped at 800 chars), or ``None`` if no conversation state existed
+    or contained no tool outputs.
+    """
+    state_path = ws.artifacts_dir / "implement_conversation_state.json"
+    if not state_path.exists():
+        return None
+
+    try:
+        raw = state_path.read_bytes()
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError):  # fmt: skip
+        log.warning(
+            "Failed to read implement conversation state for tool-output capture"
+        )
+        return None
+
+    # Normalize to a list of message dicts.  The pydantic-ai format is a
+    # top-level list; some tests write a {"messages": [...]} envelope.
+    if isinstance(data, dict):
+        messages = data.get("messages", [])
+    elif isinstance(data, list):
+        messages = data
+    else:
+        return None
+
+    # Collect all tool-return parts across all messages.
+    tool_outputs: list[str] = []
+    for msg in messages:
+        for part in msg.get("parts", []):
+            if part.get("part_kind") == "tool-return":
+                content = part.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    tool_outputs.append(content.strip())
+                elif isinstance(content, list):
+                    # Content-parts list (e.g. pydantic-ai >=0.0.50) —
+                    # extract text portions.
+                    text_parts: list[str] = []
+                    for cp in content:
+                        if isinstance(cp, dict) and cp.get("type") == "text":
+                            text_parts.append(cp.get("text", ""))
+                    combined = "".join(text_parts).strip()
+                    if combined:
+                        tool_outputs.append(combined)
+
+    if not tool_outputs:
+        return None
+
+    # Take the last *max_outputs*.
+    last_outputs = tool_outputs[-max_outputs:]
+
+    # Write to durable artifact so the operator can inspect raw errors.
+    artifact_path = ws.artifacts_dir / "implement_tool_outputs.md"
+    lines: list[str] = ["# Implement tool outputs (last attempt)\n"]
+    for i, output in enumerate(last_outputs, 1):
+        lines.append(f"## Output {i}\n\n```\n{output}\n```\n")
+    try:
+        artifact_path.write_text("\n".join(lines), encoding="utf-8")
+    except OSError:
+        log.warning("Failed to write implement tool outputs artifact")
+
+    # Return a brief tail for the block note — last 3 outputs,
+    # capped so the note doesn't overflow the ticket comment limit.
+    tail_lines = last_outputs[-3:]
+    tail = "\n\n".join(tail_lines)
+    return tail[-800:]
 
 
 def run_preflight_checks(
@@ -221,6 +306,14 @@ def run_preflight_checks(
                     ticket.id,
                     category,
                 )
+            # Capture raw tool outputs from the conversation state BEFORE
+            # clearing it, so the operator can see the actual failing tool
+            # errors (ruff, module-registration, audit) instead of only the
+            # model's self-reported summary tail.
+            tool_output_tail = _capture_tool_outputs_from_conversation_state(ws)
+            if tool_output_tail:
+                note += f"\n\nLast attempt tool outputs:\n\n{tool_output_tail}"
+
             # Discard any stale conversation state so a
             # resume-blocked restart begins a fresh agent
             # conversation instead of replaying the prior
