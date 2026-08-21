@@ -3989,3 +3989,39 @@ async def test_disk_admission_gate_parks_before_dispatch(ctx, service, monkeypat
     assert r.retry_attempt == 1, "retry budget must not be consumed"
     assert r.next_retry_at is not None
     assert "below" in (r.last_transient_error or "")
+
+
+async def test_retrospect_stage_timeout_closes_instead_of_blocking(
+    ctx, service, monkeypatch
+):
+    """A retrospect deadline must not un-ship an already-merged ticket.
+
+    retrospect runs on DONE — the PR is merged and the change has landed.
+    Its only product is follow-up learning tickets, so a timeout there says
+    nothing about the delivered work. Blocking put two finished chat
+    tickets (358d, 6462) back on the human queue minutes after their PRs
+    merged, and the re-run timed out again, so a retry is not the answer.
+    """
+    import time
+
+    ctx.settings.stage_timeout_overrides = {"retrospect": 1}
+
+    class SlowRetrospect(Stage):
+        name = "retrospect"
+        input_state = State.DONE
+
+        def run(self, _t, _c):
+            time.sleep(5)
+            return Outcome(State.CLOSED, "should never reach here")
+
+    monkeypatch.setitem(registry.STAGES, "retrospect", SlowRetrospect())
+    t = service.create("shipped")
+    service.transition(t.id, State.DONE, note="merged")
+
+    await process_ticket(t.id, ctx)
+
+    reloaded = service.get(t.id)
+    assert reloaded.state is State.CLOSED, "a merged ticket must not be blocked"
+    note = service.history(t.id)[-1].note
+    assert "timed out" in note
+    assert "retrospect" in note

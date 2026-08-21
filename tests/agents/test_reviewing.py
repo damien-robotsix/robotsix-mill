@@ -1335,3 +1335,45 @@ def test_preseed_uses_provided_ranges_when_diff_is_truncated(tmp_path, monkeypat
     assert "line43" in content
     assert "line37" not in content
     assert "line44" not in content
+
+
+# ------------------------------------------------------------------
+# _repo_conventions — release-please repos have no changelog fragment
+# ------------------------------------------------------------------
+
+
+class TestRepoConventions:
+    """The reviewer must not demand a fragment mill itself deletes.
+
+    On a release-please repo the implement stage folds the fragment's kind
+    into the commit subject and then deletes the file (``drop_fragments``),
+    so it is never in the diff. Reviewers kept reporting that absence as an
+    unmet deliverable, implement kept re-creating the file, and the pair
+    span until the 10/10 implement-review ceiling — the block that held
+    auto-mail 590f and central-deploy de52.
+    """
+
+    def test_none_repo_dir_yields_no_conventions(self):
+        from robotsix_mill.agents.reviewing import _repo_conventions
+
+        assert _repo_conventions(None) == ""
+
+    def test_towncrier_repo_yields_no_conventions(self, tmp_path):
+        from robotsix_mill.agents.reviewing import _repo_conventions
+
+        (tmp_path / "pyproject.toml").write_text("[tool.towncrier]\n")
+        assert _repo_conventions(tmp_path) == ""
+
+    def test_release_please_repo_tells_reviewer_to_expect_no_fragment(
+        self, tmp_path
+    ):
+        from robotsix_mill.agents.reviewing import _repo_conventions
+
+        (tmp_path / "release-please-config.json").write_text("{}")
+        text = _repo_conventions(tmp_path)
+
+        assert "release-please" in text
+        assert "changelog fragment" in text
+        # The instruction must survive a stale spec that still asks for one.
+        assert "ticket-spec" in text
+        assert "Do NOT report" in text

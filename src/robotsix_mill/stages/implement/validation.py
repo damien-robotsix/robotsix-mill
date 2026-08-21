@@ -43,6 +43,18 @@ _STANDARD_CONFIG_FILES: frozenset[str] = frozenset(
 )
 
 
+def _spec_names_path(spec: str, path: str) -> bool:
+    """True when the ticket *spec* mentions *path* by name.
+
+    A plain substring test is the right strength here: these paths are
+    distinctive filenames, and the only decision it drives is whether to
+    skip an auto-revert and let the normal scope-triage LLM judge the file
+    instead.  A false positive therefore costs one scope-triage call; a
+    false negative silently deletes the ticket's deliverable.
+    """
+    return bool(spec) and path in spec
+
+
 def classify_baseline_verdict(
     ci_conclusion: str
     | None,  # forge commit_ci_conclusion(...)["conclusion"], or None when unavailable
@@ -190,7 +202,14 @@ class ValidationMixin(_ImplementStageBase):
         # the ticket's scope.  Revert them to origin/<target> so they
         # don't block deliver or downstream CI footprint checks.
         out_of_scope, stdcfg_skip = cls._revert_standard_configs(
-            ctx, ticket, repo_dir, target, out_of_scope, file_map, current_feedback
+            ctx,
+            ticket,
+            repo_dir,
+            target,
+            out_of_scope,
+            file_map,
+            current_feedback,
+            spec,
         )
         if stdcfg_skip is not None:
             return stdcfg_skip
@@ -462,6 +481,7 @@ class ValidationMixin(_ImplementStageBase):
         out_of_scope: list[str],
         file_map: set[str] | None,
         current_feedback: str | None,
+        spec: str = "",
     ) -> tuple[list[str], _ScopeGuardrailResult | None]:
         """Auto-revert known standard config files when they appear out-of-scope.
 
@@ -472,6 +492,17 @@ class ValidationMixin(_ImplementStageBase):
         conventions or system-prompt rules about those files — not by
         deliberate ticket work.
 
+        A file the ticket's own *spec* names is exempt: it is the
+        deliverable, not scaffolding drift.  Without that carve-out a
+        ticket whose entire job is to edit one of these files can never
+        land — implement writes it, this revert undoes it, review reports
+        it as never written, and the pass repeats until the cycle ceiling
+        blocks the ticket.  Observed live on two tickets whose sole
+        deliverable was ``docker-compose.yml`` (hexarchy e5c4, blocked
+        across five attempts from 2026-08-10; file-hub de52).  ``file_map``
+        cannot serve here: *out_of_scope* is already ``changed - file_map``,
+        so its membership test can never fire.
+
         Reverts tracked files to ``origin/<target>`` and removes
         untracked copies, logging each reverted file.  Returns
         ``(remaining, None)`` when text files remain for further
@@ -481,7 +512,7 @@ class ValidationMixin(_ImplementStageBase):
         standard_hits: list[str] = []
         remaining: list[str] = []
         for f in out_of_scope:
-            if f in _STANDARD_CONFIG_FILES and (not file_map or f not in file_map):
+            if f in _STANDARD_CONFIG_FILES and not _spec_names_path(spec, f):
                 standard_hits.append(f)
             else:
                 remaining.append(f)

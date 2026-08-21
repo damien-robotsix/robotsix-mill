@@ -2870,3 +2870,64 @@ def test_without_blob_snapshot_behaviour_is_unchanged(tmp_path):
 
     assert ok is False
     assert dropped == ["Dockerfile"]
+
+
+def test_renamed_file_is_not_reported_as_dropped(tmp_path):
+    """A file git resolves as a RENAME is still on the branch.
+
+    Rename detection is on by default, so an extract/split refactor whose
+    new file resembles a sibling the target has since gained flips from
+    `A` to `R` after the rebase. Filtering `R` out of the post-rebase file
+    list made the guard report a file the branch plainly carries as
+    silently dropped — live on auto-mail 945c, whose
+    `_archive_action_mixin.py` scored R096 against the file it was
+    extracted from.
+    """
+    repo, run = _init_repo_with_target(tmp_path)
+    body = "\n".join(f"def f{i}():\n    return {i}\n" for i in range(40))
+    (repo / "old_mixin.py").write_text(body)
+    run("add", "-A")
+    run("commit", "-qm", "add the mixin")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+
+    # The branch renames it (with a small edit, so similarity < 100%).
+    run("mv", "old_mixin.py", "new_mixin.py")
+    (repo / "new_mixin.py").write_text(body + "\ndef extra():\n    return 99\n")
+    run("add", "-A")
+    run("commit", "-qm", "extract into its own module")
+
+    assert git_ops._git(repo, "diff", "--name-status", "origin/main...HEAD").startswith(
+        "R"
+    ), "precondition: git must classify this as a rename"
+
+    post = git_ops.changed_source_files(repo, "main")
+    assert "new_mixin.py" in post
+
+    ok, dropped, sibling = git_ops.check_rebase_diff_integrity(
+        repo, "main", ["new_mixin.py"], git_ops.file_blobs(repo, ["new_mixin.py"])
+    )
+    assert ok is True
+    assert dropped == []
+    assert sibling == []
+
+
+def test_uv_lock_is_exempt_from_the_drop_guard(tmp_path):
+    """uv.lock is re-derived from the whole dependency graph.
+
+    A dependency a sibling PR already landed collapses this branch's lock
+    delta to nothing, which the blob-equality excuse cannot clear — mill
+    0020 blocked on exactly that, as part 2/3 of a migration whose
+    dependency had merged in part 1/3.
+    """
+    repo, run = _init_repo_with_target(tmp_path)
+    (repo / "uv.lock").write_text("version = 1\n")
+    run("add", "-A")
+    run("commit", "-qm", "lock")
+
+    ok, dropped, sibling = git_ops.check_rebase_diff_integrity(
+        repo, "main", ["uv.lock"], {}
+    )
+    assert ok is True
+    assert dropped == []
+    assert sibling == []
+    assert "uv.lock" in git_ops.DEFAULT_REBASE_DROP_EXEMPT_PATHS
