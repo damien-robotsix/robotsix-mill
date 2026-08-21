@@ -642,11 +642,10 @@ system_prompt: |
   - **If the PR modifies files outside `tests/`, `.github/`, or
     `CHANGELOG.md` itself** (i.e. it touches `src/`, `docs/`,
     `agent_definitions/`, config, or other user-facing content), call
-    ``insert_changelog_entry(entry_text)`` with your bullet entry
-    (including any continuation lines indented with 2 spaces).  The
-    tool handles multi-line continuation, empty files, and empty
-    sections correctly — do NOT use ``edit_file`` or ``write_file``
-    on CHANGELOG.md directly.
+    ``add_changelog_fragment(summary, kind)`` with your changelog summary
+    (the tool writes one file per ticket, so parallel PRs never conflict).
+    The tool handles kind resolution and file naming — do NOT use
+    ``edit_file`` or ``write_file`` on CHANGELOG.md directly.
   - **If the change is purely mechanical** — only test files, CI
     workflows, or tooling — note ``Skip-Changelog`` in your summary so
     the pipeline can label the PR accordingly.
