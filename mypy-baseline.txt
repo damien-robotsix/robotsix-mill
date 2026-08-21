@@ -278,6 +278,7 @@ src/robotsix_mill/stages/implement/phase_coordinator.py:0: error: Function is mi
 src/robotsix_mill/stages/implement/phase_coordinator.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/robotsix_mill/stages/implement/phase_coordinator.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/implement/phase_coordinator.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
+src/robotsix_mill/stages/implement/file_operations.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/robotsix_mill/stages/refine/gates.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/merge/core.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]

@@ -118,7 +118,7 @@ class RebaseMixin(_MergeStageBase):
 
         if isinstance(run, Outcome):
             return run  # e.g. BLOCKED on a diverged PR branch
-        ok, detail, pre_rebase_files, pre_rebase_blobs, target_pre_blobs, _previously_dropped = run
+        ok, detail, pre_rebase_files, pre_rebase_blobs, target_pre_blobs = run
         if ok:
             return self._handle_rebase_success(
                 ticket,
@@ -131,7 +131,6 @@ class RebaseMixin(_MergeStageBase):
                 pre_rebase_files,
                 pre_rebase_blobs,
                 target_pre_blobs,
-                previously_dropped=_previously_dropped,
             )
         return self._handle_rebase_failure(
             ticket, repo_dir, counter_path, attempt, max_attempts, detail
@@ -171,7 +170,7 @@ class RebaseMixin(_MergeStageBase):
         target: str,
         attempt: int,
         previously_dropped_files: list[str] | None = None,
-    ) -> tuple[bool, str, list[str], dict[str, str], dict[str, str], list[str] | None] | Outcome:
+    ) -> tuple[bool, str, list[str], dict[str, str], dict[str, str]] | Outcome:
         """Invoke the rebase agent with bridged git tools.
 
         The agent now drives its own fetch + rebase + push via the
@@ -242,7 +241,6 @@ class RebaseMixin(_MergeStageBase):
                     pre_rebase_files,
                     pre_rebase_blobs,
                     {},
-                    previously_dropped_files,
                 )
             except Exception as push_err:
                 log.warning(
@@ -320,7 +318,7 @@ class RebaseMixin(_MergeStageBase):
             log.exception("%s: rebase attempt failed: %s", ticket.id, e)
             ok = False
             detail = f"rebase agent crashed: {e}"
-        return (ok, detail, pre_rebase_files, pre_rebase_blobs, target_pre_blobs, previously_dropped_files)
+        return (ok, detail, pre_rebase_files, pre_rebase_blobs, target_pre_blobs)
 
     def _handle_rebase_success(
         self,
@@ -334,7 +332,6 @@ class RebaseMixin(_MergeStageBase):
         pre_rebase_files: list[str] | None = None,
         pre_rebase_blobs: dict[str, str] | None = None,
         target_pre_blobs: dict[str, str] | None = None,
-        previously_dropped: list[str] | None = None,
     ) -> Outcome:
         """Post-check after the agent-driven rebase+push.
 
@@ -387,7 +384,6 @@ class RebaseMixin(_MergeStageBase):
                         pre_rebase_blobs,
                         exempt_paths=s.rebase_drop_exempt_paths,
                         target_pre_blobs=target_pre_blobs,
-                        previously_dropped_files=previously_dropped,
                     )
                 )
                 if not ok:
