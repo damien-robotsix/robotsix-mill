@@ -64,6 +64,11 @@ DEGRADATION_SIGNALS: tuple[str, ...] = (
     "no drafts created",
     "0 draft",
     "0 draft(s)",
+    # Infrastructure anomalies — surface distinctly so the run-health
+    # agent can separate them from genuine content failures.
+    "model unavailable",
+    "model outage",
+    "model_outage",
 )
 
 

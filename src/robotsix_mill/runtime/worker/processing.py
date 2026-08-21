@@ -136,8 +136,10 @@ async def _handle_stage_error(
     log.error("%s: %s failed", stage_name, ticket_id)
     from ..stage_retry import compute_retry_delay
     from ..transient_errors import (
+        MODEL_OUTAGE_MARKER,
         classify_stage_error,
         is_disk_full_error,
+        is_model_unavailable_error,
         is_network_down_error,
         network_available,
     )
@@ -261,6 +263,62 @@ async def _handle_stage_error(
                 ctx.settings.data_dir,
                 ctx.settings.disk_min_free_mb,
                 disk_delay,
+            )
+            _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+            return
+        # LLM-provider model outage ("model unavailable" / overloaded /
+        # 503): same shape as the network/disk parks above. A model that
+        # is down fails every stage that touches it identically; bounded
+        # retries burn the budget in seconds and then block FATALLY,
+        # mixing an infrastructure anomaly with genuine content failures.
+        # Park WITHOUT consuming a retry attempt — the ticket re-polls
+        # every model_outage_retry_seconds until the model recovers.
+        #
+        # Unlike the network/disk parks (which park indefinitely — DNS
+        # always comes back; an operator always frees space), a model
+        # outage may be permanent (bad model id, decommissioned model).
+        # Track consecutive parks via retry_attempt (normally untouched
+        # during parking); escalate to BLOCKED with an infra-framed note
+        # when model_outage_max_parks is exceeded.
+        if is_model_unavailable_error(error):
+            park_count = ticket.retry_attempt + 1
+            if park_count > ctx.settings.model_outage_max_parks:
+                note = (
+                    f"Infrastructure: LLM model outage ({MODEL_OUTAGE_MARKER}) "
+                    f"persisted after {park_count - 1} park(s) — "
+                    f"may be a permanent condition (bad model id?): "
+                    f"{type(error).__name__}: {error}"
+                )[:200]
+                tracing.set_current_span_attribute("retry.model_outage_exhausted", True)
+                tracing.set_current_span_attribute("retry.attempt", park_count)
+                await _block_ticket_and_notify(
+                    ticket_id, ctx, stage_name, note, trace_id
+                )
+                return
+            outage_delay = ctx.settings.model_outage_retry_seconds
+            next_at_dt = datetime.fromtimestamp(
+                datetime.now(UTC).timestamp() + outage_delay,
+                tz=UTC,
+            )
+            ctx.service.set_retry_state(
+                ticket_id,
+                retry_attempt=park_count,
+                last_transient_error=(
+                    f"model outage ({MODEL_OUTAGE_MARKER}, park {park_count}/"
+                    f"{ctx.settings.model_outage_max_parks}, "
+                    f"retry budget untouched): " + repr(error)
+                )[:200],
+                next_retry_at=next_at_dt,
+            )
+            tracing.set_current_span_attribute("retry.model_outage", True)
+            tracing.set_current_span_attribute("retry.attempt", park_count)
+            log.warning(
+                "%s: %s model outage (park %d/%d) — parked, re-checking in %ds",
+                stage_name,
+                ticket_id,
+                park_count,
+                ctx.settings.model_outage_max_parks,
+                outage_delay,
             )
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return

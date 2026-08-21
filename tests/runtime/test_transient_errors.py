@@ -597,6 +597,99 @@ def test_sandbox_error_transient_in_cause_chain():
 
 
 # ---------------------------------------------------------------------------
+# Model-outage detection (is_model_unavailable_error)
+# ---------------------------------------------------------------------------
+
+
+def test_is_model_unavailable_error_503_body_match():
+    """httpx 503 with "model unavailable" → model outage detected."""
+    from robotsix_mill.runtime.transient_errors import is_model_unavailable_error
+
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(
+            503, text='{"error":{"message":"model currently unavailable"}}'
+        ),
+    )
+    assert is_model_unavailable_error(exc)
+
+
+def test_is_model_unavailable_error_no_healthy_endpoint():
+    """httpx 503 with "no healthy endpoint" → model outage detected."""
+    from robotsix_mill.runtime.transient_errors import is_model_unavailable_error
+
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(
+            503, text='{"error":{"message":"no healthy endpoint available"}}'
+        ),
+    )
+    assert is_model_unavailable_error(exc)
+
+
+def test_is_model_unavailable_error_overloaded():
+    """String "provider overloaded" → model outage detected."""
+    from robotsix_mill.runtime.transient_errors import is_model_unavailable_error
+
+    exc = RuntimeError("provider is currently overloaded, try again later")
+    assert is_model_unavailable_error(exc)
+
+
+def test_is_model_unavailable_error_rejects_generic_503():
+    """A bare 503 without outage signal is NOT a model outage."""
+    from robotsix_mill.runtime.transient_errors import is_model_unavailable_error
+
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(503, text="Service Unavailable"),
+    )
+    assert not is_model_unavailable_error(exc)
+
+
+def test_is_model_unavailable_error_rejects_unrelated():
+    """Plain errors are not model outages."""
+    from robotsix_mill.runtime.transient_errors import is_model_unavailable_error
+
+    assert not is_model_unavailable_error(RuntimeError("plain failure"))
+    assert not is_model_unavailable_error(ValueError("something broke"))
+
+
+def test_is_model_unavailable_error_in_cause_chain():
+    """Outage signal in the cause chain still matches."""
+    from robotsix_mill.runtime.transient_errors import is_model_unavailable_error
+
+    inner = RuntimeError("the model deepseek-chat is currently unavailable")
+    outer = RuntimeError("wrapped")
+    outer.__cause__ = inner
+    assert is_model_unavailable_error(outer)
+
+
+def test_model_unavailable_classifies_transient():
+    """Model-unavailable errors are classified as transient (park branch lives there)."""
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+
+    exc = httpx.HTTPStatusError(
+        "boom",
+        request=_httpx_request,
+        response=_throttle_response(
+            503, text='{"error":{"message":"model unavailable"}}'
+        ),
+    )
+    assert classify_stage_error(exc) == "transient"
+
+
+def test_model_outage_marker_is_stable():
+    """MODEL_OUTAGE_MARKER is a plain string constant for use in notes."""
+    from robotsix_mill.runtime.transient_errors import MODEL_OUTAGE_MARKER
+
+    assert MODEL_OUTAGE_MARKER == "model_outage"
+    assert isinstance(MODEL_OUTAGE_MARKER, str)
+
+
+# ---------------------------------------------------------------------------
 # Disk-exhaustion detection (is_disk_full_error / disk_space_available)
 # ---------------------------------------------------------------------------
 

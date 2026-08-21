@@ -403,6 +403,28 @@ class _CoreSettings(BaseModel):
             "(the container root backs the sandbox overlay)."
         ),
     )
+    # LLM-provider model-outage parking — the "model unavailable" / 503 /
+    # overloaded analogue of the network/disk parks. A transient model
+    # outage (provider-side 503, model unavailable, overloaded) fails
+    # every stage that touches that model identically; bounded retries
+    # burn the budget and then block FATALLY, mixing an infrastructure
+    # anomaly with genuine content-level failures. Park instead: the
+    # ticket re-polls every model_outage_retry_seconds, retry budget
+    # untouched, and resumes by itself once the model recovers. A
+    # model_outage_max_parks ceiling prevents infinite parking when the
+    # "outage" is actually permanent (bad model id, decommissioned model).
+    model_outage_retry_seconds: int = Field(
+        default=120,
+        ge=1,
+        description="Seconds between re-poll attempts during a detected LLM model outage.",
+        json_schema_extra={"advanced": True},
+    )
+    model_outage_max_parks: int = Field(
+        default=20,
+        ge=1,
+        description="Maximum consecutive model-outage parks before escalating to BLOCKED.",
+        json_schema_extra={"advanced": True},
+    )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the

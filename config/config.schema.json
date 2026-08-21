@@ -1527,6 +1527,22 @@
           "title": "Disk Min Free Mb",
           "type": "integer"
         },
+        "model_outage_max_parks": {
+          "advanced": true,
+          "default": 20,
+          "description": "Maximum consecutive model-outage parks before escalating to BLOCKED.",
+          "minimum": 1,
+          "title": "Model Outage Max Parks",
+          "type": "integer"
+        },
+        "model_outage_retry_seconds": {
+          "advanced": true,
+          "default": 120,
+          "description": "Seconds between re-poll attempts during a detected LLM model outage.",
+          "minimum": 1,
+          "title": "Model Outage Retry Seconds",
+          "type": "integer"
+        },
         "doc_classifier_diff_max_chars": {
           "advanced": true,
           "default": 6000,

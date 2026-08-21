@@ -142,6 +142,8 @@
     ],
     "disk_full_retry_seconds": 600,
     "disk_min_free_mb": 5120,
+    "model_outage_max_parks": 20,
+    "model_outage_retry_seconds": 120,
     "doc_classifier_diff_max_chars": 6000,
     "doc_classifier_request_limit": 3,
     "doc_memory_path": null,
