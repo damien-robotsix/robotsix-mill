@@ -368,9 +368,9 @@ class _CommentMixin(_ServiceBase):
             # unchanged fingerprint — the operator's answer IS the
             # new input.  Best-effort (silently no-ops when
             # implement.md is absent).
-            from ._transition_mixin import _persist_spec_fingerprint_override
+            from ._transition_mixin import _clear_stale_implement_guard
 
-            _persist_spec_fingerprint_override(self.workspace(ticket))
+            _clear_stale_implement_guard(self.workspace(ticket))
             log.info(
                 "%s: auto-resumed from AWAITING_USER_REPLY → %s "
                 "(all %d ask_user threads closed)",
