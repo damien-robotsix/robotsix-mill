@@ -241,7 +241,10 @@ def _persist_stall_state_from_implement_md(
 
     With *reset_count* the counter is zeroed while the fingerprint is
     kept — the operator override path, which wants a fresh attempt but
-    still wants an identical re-run caught immediately.
+    still wants an identical re-run caught immediately.  The override
+    also records that fingerprint as ``resume_fingerprint`` so the next
+    stall can tell whether it survived a refresh (byte-identical to the
+    summary present at resume time) or is a first-time stall.
 
     Best-effort — silently no-ops when ``implement.md`` is absent or
     unreadable.  The JSON file provides stall-detection continuity
@@ -283,13 +286,29 @@ def _persist_stall_state_from_implement_md(
                 stall_count = int(line.split("stall-count: ", 1)[1].strip())
             except ValueError:
                 stall_count = 0
+    # A non-reset re-persist must not launder away a refresh marker a
+    # prior resume recorded in the JSON — carry it forward unless this
+    # is itself a resume (which re-marks the current fingerprint).
+    resume_fp = ""
+    if reset_count:
+        resume_fp = summary_fp
+    elif state_path.exists():
+        try:
+            _prev_state = json.loads(state_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError, OSError:  # fmt: skip
+            _prev_state = {}
+        resume_fp = _prev_state.get("resume_fingerprint", "")
     if reset_count:
         stall_count = 0
     if summary_fp or stall_count or reset_count:
         with contextlib.suppress(OSError):
             state_path.write_text(
                 json.dumps(
-                    {"summary_fingerprint": summary_fp, "stall_count": stall_count}
+                    {
+                        "summary_fingerprint": summary_fp,
+                        "stall_count": stall_count,
+                        "resume_fingerprint": resume_fp,
+                    }
                 ),
                 encoding="utf-8",
             )
