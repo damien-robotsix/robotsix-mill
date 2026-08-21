@@ -1805,6 +1805,65 @@ def test_finalize_stall_state_reads_from_json_when_md_absent(
     )
 
 
+def test_finalize_stall_note_distinguishes_refresh_survived(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A stall that re-trips after an operator resume-blocked refresh —
+    i.e. with a summary byte-identical to the one present at resume
+    time — produces a distinct note telling the operator a bare refresh
+    will not help, while a first-time stall keeps the generic
+    convergence note."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _FakeGitOps(changed=set())
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    summary = "agent could not complete — blocked on missing dependency"
+
+    # Three identical BLOCKED cycles trip the first stall.
+    for _ in range(3):
+        ImplementStage._finalize(
+            ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+        )
+    first = (ws.artifacts_dir / "implement_summary.md").read_text()
+    assert first.startswith("STALL DETECTED")
+    assert "survived a resume-blocked refresh" not in first
+    assert "re-scoping or splitting" in first
+
+    # Operator refreshes via resume-blocked (with note).  The counter
+    # is zeroed and the resume-time fingerprint is persisted.
+    ctx.service.transition(t.id, State.BLOCKED, note="stall guard")
+    resumed = ctx.service.resume_blocked(t.id, note="operator refresh")
+    assert resumed.state is State.READY
+    assert not (ws.artifacts_dir / "implement.md").exists()
+
+    ss = json.loads(
+        (ws.artifacts_dir / "implement_stall_state.json").read_text(encoding="utf-8")
+    )
+    assert ss["stall_count"] == 0
+    assert ss["resume_fingerprint"] == ss["summary_fingerprint"]
+    assert ss["resume_fingerprint"]  # non-empty
+
+    # Two more identical cycles re-accumulate from zero and re-trip.
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    second = (ws.artifacts_dir / "implement_summary.md").read_text()
+    assert second == summary  # stall_count 1 < threshold — no diagnostic yet
+
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", summary, ok=False, reference_files=None
+    )
+    third = (ws.artifacts_dir / "implement_summary.md").read_text()
+    assert third.startswith("STALL DETECTED")
+    assert "survived a resume-blocked refresh" in third
+    assert "bare refresh" in third
+    assert "will not help" in third
+
+
 def test_preflight_stall_guard_reads_json_fallback(ctx_factory, tmp_path, monkeypatch):
     """When implement.md is absent but implement_stall_state.json
     records a stall-count at or above the threshold, the preflight

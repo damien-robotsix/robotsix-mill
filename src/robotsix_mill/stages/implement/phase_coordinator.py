@@ -1014,22 +1014,36 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 _stall = {}
             old_summary_fp = _stall.get("summary_fingerprint", "")
             old_stall_count = _stall.get("stall_count", 0)
+        # The resume-time fingerprint lives only in the JSON — it is
+        # written by the operator resume path, which also deletes
+        # implement.md — so read it regardless of whether implement.md
+        # still exists.
+        old_resume_fp = ""
+        if stall_state_path.exists():
+            try:
+                _stall_state = json.loads(stall_state_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError, OSError:  # fmt: skip
+                _stall_state = {}
+            old_resume_fp = _stall_state.get("resume_fingerprint", "")
 
         new_summary_fp = hashlib.sha256(summary.encode("utf-8")).hexdigest()[:16]
 
         # Manage stall counter: increment on no-progress BLOCKED cycles,
         # reset on progress or success, leave untouched for transient errors.
         stall_count = old_stall_count
+        resume_fp = old_resume_fp
         if transient:
             pass  # don't touch — transient env errors aren't agent failures
         elif ok:
             stall_count = 0
+            resume_fp = ""  # progress clears the refresh marker
         else:
             # BLOCKED — resumable: compare with previous attempt
             if old_summary_fp and old_summary_fp == new_summary_fp:
                 stall_count += 1
             else:
                 stall_count = 0
+                resume_fp = ""  # summary changed: refresh is no longer in play
 
         # Check against threshold and build stall diagnostic when tripped.
         stall_threshold = getattr(ctx.settings, "implement_stall_threshold", 2)
@@ -1055,22 +1069,42 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     exc_info=True,
                 )
 
-            stall_note = (
-                f"STALL DETECTED — {stall_count} consecutive implement "
-                "cycles produced no meaningful change (identical summary, "
-                "no new diff). "
-            )
-            if review_ids:
-                stall_note += (
-                    "Unaddressed review comment(s): "
-                    + ", ".join(f"#{rid}" for rid in review_ids)
-                    + ". "
+            survived_refresh = bool(resume_fp) and resume_fp == new_summary_fp
+            if survived_refresh:
+                stall_note = (
+                    f"STALL DETECTED — {stall_count} consecutive implement "
+                    "cycles produced no meaningful change (identical summary, "
+                    "no new diff), and this stall survived a resume-blocked "
+                    "refresh: the summary is byte-identical to the one "
+                    "present when the ticket was last refreshed. "
                 )
-            stall_note += (
-                "The implement agent is not making progress despite "
-                "corrective feedback.  Consider re-scoping or splitting "
-                "the ticket, or hand-applying the fix."
-            )
+                if review_ids:
+                    stall_note += (
+                        "Unaddressed review comment(s): "
+                        + ", ".join(f"#{rid}" for rid in review_ids)
+                        + ". "
+                    )
+                stall_note += (
+                    "A bare refresh (resume-blocked) will not help — "
+                    "re-scope or split the ticket, or hand-apply the fix."
+                )
+            else:
+                stall_note = (
+                    f"STALL DETECTED — {stall_count} consecutive implement "
+                    "cycles produced no meaningful change (identical summary, "
+                    "no new diff). "
+                )
+                if review_ids:
+                    stall_note += (
+                        "Unaddressed review comment(s): "
+                        + ", ".join(f"#{rid}" for rid in review_ids)
+                        + ". "
+                    )
+                stall_note += (
+                    "The implement agent is not making progress despite "
+                    "corrective feedback.  Consider re-scoping or splitting "
+                    "the ticket, or hand-applying the fix."
+                )
             summary = stall_note + "\n\n" + summary
         # --- end stall detection -----------------------------------------
 
@@ -1156,6 +1190,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     {
                         "summary_fingerprint": new_summary_fp,
                         "stall_count": stall_count,
+                        "resume_fingerprint": resume_fp,
                     }
                 ),
                 encoding="utf-8",
