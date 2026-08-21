@@ -1005,9 +1005,7 @@ def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
     s = Settings()
     assert s.openrouter is not None
     assert s.openrouter.keys.get("robotsix-mill") is not None
-    assert (
-        s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
-    )
+    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
 
     # The flat field is still populated (original value preserved).
     assert s.openrouter_api_key is not None
