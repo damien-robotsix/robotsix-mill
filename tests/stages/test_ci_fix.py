@@ -641,7 +641,7 @@ def test_ci_fix_stage_fetches_job_logs_on_failure(tmp_path, monkeypatch):
 
 
 def test_build_failing_summary_includes_codeql_alerts():
-    from robotsix_mill.stages.ci_fix import _build_failing_summary
+    from robotsix_mill.stages.ci_fix_helpers import _build_failing_summary
 
     out = _build_failing_summary(
         failing=[{"name": "CodeQL"}],

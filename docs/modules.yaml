@@ -255,6 +255,7 @@ modules:
       - src/robotsix_mill/stages/implement/phase_coordinator_preflight.py
       - src/robotsix_mill/stages/implement/validation.py
       - src/robotsix_mill/stages/implement/implementation_logic.py
+      - src/robotsix_mill/stages/implement/_no_change.py
       - src/robotsix_mill/stages/implement/implementation_editing.py
       - src/robotsix_mill/stages/implement/file_operations.py
       - src/robotsix_mill/stages/deliver.py
@@ -263,6 +264,7 @@ modules:
       - src/robotsix_mill/stages/refine/__init__.py
       - src/robotsix_mill/stages/refine/core.py
       - src/robotsix_mill/stages/refine/gates.py
+      - src/robotsix_mill/stages/refine/_gates_dedup.py
       - src/robotsix_mill/stages/refine/orchestration.py
       - src/robotsix_mill/stages/refine/_checkpoint.py
       - src/robotsix_mill/stages/refine/_reconcile.py
@@ -281,6 +283,7 @@ modules:
       - src/robotsix_mill/stages/merge/rebase.py
       - src/robotsix_mill/stages/merge/review_revision.py
       - src/robotsix_mill/stages/ci_fix.py
+      - src/robotsix_mill/stages/ci_fix_analysis.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
       - src/robotsix_mill/stages/ci_fix_codeql.py
       - src/robotsix_mill/stages/ci_transient.py
