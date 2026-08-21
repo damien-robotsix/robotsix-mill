@@ -287,3 +287,60 @@ def test_review_input_hash_differs_on_description_change(tmp_path):
     ws.write_description("desc B")
     h2 = review_input_hash(ws, "diff")
     assert h1 != h2
+
+
+def test_review_input_hash_differs_when_the_reviewer_changes(tmp_path, monkeypatch):
+    """A change to mill's own reviewer must invalidate cached verdicts.
+
+    Without this the cache keys only what the reviewer reads, never who it
+    is, so a reviewer-side fix cannot reach any workspace holding a cached
+    outcome — the stale verdict replays and the ticket keeps failing for a
+    reason already fixed. Live: central-deploy de52 replayed an 04:06
+    REQUEST_CHANGES past the a34839e3 deploy and burned its implement/review
+    ceiling a second time without the new reviewer running once.
+    """
+    from robotsix_mill.agents import reviewing
+
+    ws = Workspace(tmp_path, "T-1")
+    ws.write_description("desc")
+
+    monkeypatch.setattr(reviewing, "SYSTEM_PROMPT", "reviewer v1", raising=False)
+    h1 = review_input_hash(ws, "diff")
+
+    monkeypatch.setattr(reviewing, "SYSTEM_PROMPT", "reviewer v2", raising=False)
+    h2 = review_input_hash(ws, "diff")
+
+    assert h1 != h2, "a changed review prompt must miss the cache"
+
+
+def test_review_input_hash_differs_on_repo_conventions(tmp_path):
+    """The release-please conventions block is part of the reviewer's input."""
+    ws = Workspace(tmp_path, "T-1")
+    ws.write_description("desc")
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    release_please = tmp_path / "rp"
+    release_please.mkdir()
+    (release_please / "release-please-config.json").write_text("{}")
+
+    assert review_input_hash(ws, "diff", "", plain) != review_input_hash(
+        ws, "diff", "", release_please
+    )
+
+
+def test_reviewer_fingerprint_is_empty_when_it_cannot_be_computed(monkeypatch):
+    """An unfingerprintable reviewer must not disable caching entirely."""
+    import builtins
+
+    from robotsix_mill.stages import _stage_cache as cache_mod
+
+    real_import = builtins.__import__
+
+    def boom(name, *a, **kw):
+        if "reviewing" in name:
+            raise RuntimeError("no reviewer")
+        return real_import(name, *a, **kw)
+
+    monkeypatch.setattr(builtins, "__import__", boom)
+    assert cache_mod.reviewer_fingerprint(None) == ""

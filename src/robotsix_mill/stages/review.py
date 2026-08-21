@@ -267,7 +267,7 @@ class ReviewStage(Stage):
         # --- stage-outcome cache: short-circuit when input is unchanged ---
         from ._stage_cache import _check, review_input_hash
 
-        input_hash = review_input_hash(ws, diff, head_sha)
+        input_hash = review_input_hash(ws, diff, head_sha, Path(repo_dir))
         cached = _check(ws, ReviewStage.name, input_hash)
         if cached is not None:
             log.info(

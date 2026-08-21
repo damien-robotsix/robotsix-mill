@@ -178,18 +178,56 @@ def refine_input_hash(ws: Workspace) -> str:
     return h.hexdigest()
 
 
-def review_input_hash(ws: Workspace, diff: str, head_sha: str = "") -> str:
+def reviewer_fingerprint(repo_dir: Path | None = None) -> str:
+    """Identify the reviewer that would run, not just what it would read.
+
+    Everything the review agent is *told* — its system prompt and any
+    repo-specific conventions injected alongside the diff — is an input to
+    its verdict just as much as the diff is. Leaving it out of the cache key
+    means a fix to mill's own reviewer is invisible to every workspace
+    holding a cached outcome: the stale verdict replays forever and the
+    ticket keeps failing for a reason that has already been fixed.
+
+    Live, that deadlocked central-deploy de52. Its reviewer kept asking for a
+    changelog fragment that implement deletes by design on a release-please
+    repo. The reviewer-side fix shipped in a34839e3 and deployed, but the
+    workspace replayed a 04:06 REQUEST_CHANGES on every pass — the diff and
+    HEAD had not moved, so the cache hit — and the ticket burned its
+    implement/review ceiling a second time without the new reviewer ever
+    running once.
+
+    Returns "" on any failure: a fingerprint we cannot compute must not stop
+    the review from being cached at all.
+    """
+    try:
+        from ..agents.reviewing import SYSTEM_PROMPT, _repo_conventions
+
+        h = hashlib.sha256()
+        h.update(SYSTEM_PROMPT.encode("utf-8", errors="replace"))
+        h.update(_repo_conventions(repo_dir).encode("utf-8", errors="replace"))
+        return h.hexdigest()
+    except Exception:
+        log.debug("Failed to fingerprint the reviewer", exc_info=True)
+        return ""
+
+
+def review_input_hash(
+    ws: Workspace, diff: str, head_sha: str = "", repo_dir: Path | None = None
+) -> str:
     """Compute the input hash for the review stage.
 
     Based on the ticket description (the spec), the implementation
-    diff, and the branch-tip HEAD SHA — the three inputs the review
-    agent sees.  Including *head_sha* ensures that after a rebase or
+    diff, the branch-tip HEAD SHA, and a fingerprint of the reviewer
+    itself.  Including *head_sha* ensures that after a rebase or
     force-push (new HEAD SHA) the cache misses even when the diff
     text is unchanged, forcing a fresh review against the current
-    branch tip.
+    branch tip.  Including the reviewer fingerprint does the same when
+    mill's own review prompt or a repo's conventions change — see
+    :func:`reviewer_fingerprint` for why that matters.
     """
     h = hashlib.sha256()
     h.update(ws.read_description().encode("utf-8", errors="replace"))
     h.update(diff.encode("utf-8", errors="replace"))
     h.update(head_sha.encode("utf-8", errors="replace"))
+    h.update(reviewer_fingerprint(repo_dir).encode("utf-8", errors="replace"))
     return h.hexdigest()
