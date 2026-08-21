@@ -1,6 +1,5 @@
-import time
-
 import pytest
+import robotsix_github_auth as rga
 
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.forge import auth
@@ -57,14 +56,15 @@ def test_app_mode_requires_app_config(tmp_path):
 
 
 def test_app_mode_mints_and_caches(tmp_path, monkeypatch):
-    auth._cache.clear()
+    """github_token delegates to the library's github_token for app mode."""
+    rga.clear_token_cache()
     calls = {"n": 0}
 
-    def fake_mint(settings, repo_config=None):
+    def fake_github_token(**kwargs):
         calls["n"] += 1
-        return "ghs_minted", time.time() + 3000
+        return "ghs_minted"
 
-    monkeypatch.setattr(auth, "_mint_installation_token", fake_mint)
+    monkeypatch.setattr(rga, "github_token", fake_github_token)
     s = S(
         tmp_path,
         FORGE_AUTH="app",
@@ -73,8 +73,9 @@ def test_app_mode_mints_and_caches(tmp_path, monkeypatch):
         FORGE_REMOTE_URL="https://github.com/o/r.git",
     )
     assert auth.github_token(s) == "ghs_minted"
-    assert auth.github_token(s) == "ghs_minted"  # served from cache
-    assert calls["n"] == 1  # minted once, not twice
+    # Caching is handled by the library internally; the mill layer
+    # delegates every call through to the library.
+    assert calls["n"] == 1
 
 
 def test_private_key_from_path(tmp_path):
@@ -85,35 +86,77 @@ def test_private_key_from_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# GitHubAppNotInstalledError
+# TokenMintError in classify_token_error
 # ---------------------------------------------------------------------------
 
 
-def test_mint_installation_token_raises_on_404(tmp_path, monkeypatch):
-    """_mint_installation_token raises GitHubAppNotInstalledError when
-    the /installation endpoint returns 404 (App not installed)."""
-    import httpx
-    import jwt as jwt_module
+def test_classify_token_error_identifies_token_mint_error():
+    """TokenMintError is classified as permanent."""
+    assert auth.classify_token_error(rga.TokenMintError("test")) == "permanent"
 
-    def fake_get(self, url, **kwargs):
-        return httpx.Response(404, json={"message": "Not Found"})
 
-    monkeypatch.setattr(httpx.Client, "get", fake_get)
-    monkeypatch.setattr(auth, "_private_key", lambda: "fake-key")
-    # Bypass JWT encode — we only care about the HTTP response handling.
-    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
-    # _parse_owner_repo needs a valid remote
-    s = S(
-        tmp_path,
-        FORGE_AUTH="app",
-        GITHUB_APP_ID="123",
-        GITHUB_APP_PRIVATE_KEY="KEY",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+def test_classify_missing_config_is_permanent():
+    """RuntimeError about missing GitHub App config → permanent."""
+    assert (
+        auth.classify_token_error(RuntimeError("GITHUB_APP_ID not set")) == "permanent"
     )
-    with pytest.raises(auth.GitHubAppNotInstalledError) as exc:
-        auth._mint_installation_token(s)
-    assert exc.value.owner == "o"
-    assert exc.value.repo == "r"
+
+
+def test_classify_missing_forge_token_is_permanent():
+    """RuntimeError about missing FORGE_TOKEN → permanent."""
+    assert auth.classify_token_error(RuntimeError("FORGE_TOKEN not set")) == "permanent"
+
+
+def test_classify_connection_error_is_transient():
+    """httpx.ConnectError → transient (network blip)."""
+    import httpx
+
+    assert (
+        auth.classify_token_error(httpx.ConnectError("connection refused"))
+        == "transient"
+    )
+
+
+def test_classify_timeout_is_transient():
+    """httpx.TimeoutException → transient."""
+    import httpx
+
+    assert auth.classify_token_error(httpx.TimeoutException("timed out")) == "transient"
+
+
+def test_classify_http_500_is_transient():
+    """HTTP 500 → transient (server-side degradation)."""
+    import httpx
+
+    resp = httpx.Response(502)
+    exc = httpx.HTTPStatusError(
+        "Bad Gateway", request=httpx.Request("GET", "/"), response=resp
+    )
+    assert auth.classify_token_error(exc) == "transient"
+
+
+def test_classify_http_400_is_permanent():
+    """HTTP 400 → permanent (client error won't fix itself)."""
+    import httpx
+
+    resp = httpx.Response(400)
+    exc = httpx.HTTPStatusError(
+        "Bad Request", request=httpx.Request("GET", "/"), response=resp
+    )
+    assert auth.classify_token_error(exc) == "permanent"
+
+
+def test_classify_jwt_error_is_permanent():
+    """Exception with 'jwt' in message → permanent (bad key)."""
+    assert (
+        auth.classify_token_error(ValueError("jwt decode error: invalid signature"))
+        == "permanent"
+    )
+
+
+def test_classify_unknown_exception_is_permanent():
+    """Unknown exception type → permanent (conservative)."""
+    assert auth.classify_token_error(ValueError("something unexpected")) == "permanent"
 
 
 # ---------------------------------------------------------------------------
@@ -121,52 +164,24 @@ def test_mint_installation_token_raises_on_404(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_invalidate_github_token_removes_correct_entry(tmp_path, monkeypatch):
-    """Populate cache with two entries, invalidate one, verify the other
-    survives."""
-    auth._cache.clear()
-    mint_calls = []
+def test_invalidate_github_token_clears_cache(tmp_path, monkeypatch):
+    """invalidate_github_token calls clear_token_cache on the library."""
+    clear_calls = []
 
-    def fake_mint(settings, repo_config=None):
-        mint_calls.append(1)
-        return f"tok_{len(mint_calls)}", time.time() + 3000
+    def fake_clear():
+        clear_calls.append(1)
 
-    monkeypatch.setattr(auth, "_mint_installation_token", fake_mint)
+    monkeypatch.setattr(rga, "clear_token_cache", fake_clear)
 
-    # Two settings that share the same github_app_id (global secrets
-    # singleton) but differ in remote_url — so the cache-key
-    # namespace (app_id:remote_url) yields two distinct entries.
-    s1 = S(
+    s = S(
         tmp_path,
         FORGE_AUTH="app",
         GITHUB_APP_ID="111",
         GITHUB_APP_PRIVATE_KEY="K1",
         FORGE_REMOTE_URL="https://github.com/o1/r1.git",
     )
-    s2 = S(
-        tmp_path,
-        FORGE_AUTH="app",
-        GITHUB_APP_ID="111",
-        GITHUB_APP_PRIVATE_KEY="K1",
-        FORGE_REMOTE_URL="https://github.com/o2/r2.git",
-    )
-
-    # Populate two distinct cache entries.
-    assert auth.github_token(s1) == "tok_1"
-    assert auth.github_token(s2) == "tok_2"
-    assert len(auth._cache) == 2
-
-    # Invalidate s1; s2's entry must remain.
-    auth.invalidate_github_token(s1)
-    assert len(auth._cache) == 1
-    # s2 entry still present
-    ck2 = "111:https://github.com/o2/r2.git"
-    assert ck2 in auth._cache
-
-    # Next call for s1 mints a fresh token (cache miss → mint again).
-    tok3 = auth.github_token(s1)
-    assert tok3 == "tok_3"  # fresh mint
-    assert len(auth._cache) == 2
+    auth.invalidate_github_token(s)
+    assert len(clear_calls) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -196,223 +211,3 @@ def test_gitlab_token_raises_when_not_set(tmp_path):
 def test_push_token_pat_fallback(tmp_path):
     """When forge_auth != 'app', github_push_token falls back to the PAT."""
     assert auth.github_push_token(S(tmp_path, FORGE_TOKEN="pat123")) == "pat123"
-
-
-# ---------------------------------------------------------------------------
-# classify_token_error
-# ---------------------------------------------------------------------------
-
-
-def test_classify_missing_config_is_permanent():
-    """RuntimeError about missing GITHUB_APP_ID is a permanent config error."""
-    assert (
-        auth.classify_token_error(RuntimeError("FORGE_AUTH=app needs GITHUB_APP_ID"))
-        == "permanent"
-    )
-
-
-def test_classify_missing_forge_token_is_permanent():
-    """RuntimeError about FORGE_TOKEN is permanent."""
-    assert auth.classify_token_error(RuntimeError("FORGE_TOKEN not set")) == "permanent"
-
-
-def test_classify_app_not_installed_is_permanent():
-    """GitHubAppNotInstalledError must be fixed by an operator."""
-    assert (
-        auth.classify_token_error(auth.GitHubAppNotInstalledError("o", "r"))
-        == "permanent"
-    )
-
-
-def test_classify_connection_error_is_transient():
-    """httpx.ConnectError is a network blip — safe to retry."""
-    import httpx
-
-    assert (
-        auth.classify_token_error(httpx.ConnectError("connection refused"))
-        == "transient"
-    )
-
-
-def test_classify_timeout_is_transient():
-    """httpx.TimeoutException means GitHub didn't respond in time."""
-    import httpx
-
-    assert auth.classify_token_error(httpx.TimeoutException("timed out")) == "transient"
-
-
-def test_classify_http_500_is_transient():
-    """GitHub returning 5xx is a transient server-side issue."""
-    import httpx
-
-    assert (
-        auth.classify_token_error(
-            httpx.HTTPStatusError(
-                "server error",
-                request=httpx.Request("GET", "https://api.github.com"),
-                response=httpx.Response(503),
-            )
-        )
-        == "transient"
-    )
-
-
-def test_classify_http_400_is_permanent():
-    """4xx (other than 401's auto-retry) is a permanent request error."""
-    import httpx
-
-    assert (
-        auth.classify_token_error(
-            httpx.HTTPStatusError(
-                "bad request",
-                request=httpx.Request("GET", "https://api.github.com"),
-                response=httpx.Response(400),
-            )
-        )
-        == "permanent"
-    )
-
-
-def test_classify_jwt_error_is_permanent():
-    """A JWT/crypto error means the private key is invalid — don't retry."""
-    try:
-        import jwt
-
-        exc = jwt.exceptions.PyJWTError("invalid key")
-        assert auth.classify_token_error(exc) == "permanent"
-    except ImportError:
-        # jwt may not be importable — synthesize an exception whose
-        # message contains the module name.
-        class FakeJWTHttpError(Exception):
-            pass
-
-        exc = FakeJWTHttpError("pyjwt decode error: invalid key format")
-        assert auth.classify_token_error(exc) == "permanent"
-
-
-def test_classify_unknown_exception_is_permanent():
-    """Conservative default: unknown errors are permanent to avoid livelock."""
-    assert auth.classify_token_error(ValueError("unexpected")) == "permanent"
-
-
-def test_push_token_app_mode_mints_fresh_with_contents_write(tmp_path, monkeypatch):
-    """github_push_token mints a fresh token with contents:write permission
-    and does NOT cache — each call issues a fresh mint."""
-    import httpx
-    import jwt as jwt_module
-
-    auth._cache.clear()
-    mint_calls = []
-
-    class FakeClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, **kwargs):
-            mint_calls.append(("get", url))
-            return httpx.Response(200, json={"id": 42})
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            mint_calls.append(("post", url, json))
-            return httpx.Response(
-                201,
-                json={"token": "ghs_push_minted", "expires_at": "..."},
-                request=httpx.Request("POST", url),
-            )
-
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    monkeypatch.setattr(auth, "_private_key", lambda: "fake-key")
-    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
-
-    s = S(
-        tmp_path,
-        FORGE_AUTH="app",
-        GITHUB_APP_ID="123",
-        GITHUB_APP_PRIVATE_KEY="KEY",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
-    )
-
-    # Two calls → two mints (no caching).
-    t1 = auth.github_push_token(s)
-    t2 = auth.github_push_token(s)
-    assert t1 == "ghs_push_minted"
-    assert t2 == "ghs_push_minted"
-    assert len(mint_calls) == 4  # 2 × (GET installation + POST access_token)
-
-    # Verify the POST body includes contents:write, workflows:write + repos.
-    post_bodies = [m[2] for m in mint_calls if m[0] == "post"]
-    assert len(post_bodies) == 2
-    for body in post_bodies:
-        assert body == {
-            "permissions": {"contents": "write", "workflows": "write"},
-            "repositories": ["r"],
-        }
-
-
-def test_push_token_not_installed_raises(tmp_path, monkeypatch):
-    """github_push_token raises GitHubAppNotInstalledError when the App
-    is not installed on the target repo (404 from /installation)."""
-    import httpx
-    import jwt as jwt_module
-
-    class FakeClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, **kwargs):
-            return httpx.Response(404, json={"message": "Not Found"})
-
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    monkeypatch.setattr(auth, "_private_key", lambda: "fake-key")
-    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
-
-    s = S(
-        tmp_path,
-        FORGE_AUTH="app",
-        GITHUB_APP_ID="123",
-        GITHUB_APP_PRIVATE_KEY="KEY",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
-    )
-    with pytest.raises(auth.GitHubAppNotInstalledError) as exc:
-        auth.github_push_token(s)
-    assert exc.value.owner == "o"
-    assert exc.value.repo == "r"
-
-
-def test_push_token_requires_app_config(tmp_path):
-    """github_push_token raises RuntimeError when FORGE_AUTH=app but
-    no GitHub App credentials are configured."""
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError, match="FORGE_AUTH=app requires"):
-        auth.github_push_token(S(tmp_path, FORGE_AUTH="app"))
-
-
-def test_build_app_jwt_returns_valid_jwt(tmp_path, monkeypatch):
-    """_build_app_jwt returns a JWT string with the app id as issuer."""
-    import jwt as jwt_module
-
-    S(
-        tmp_path,
-        GITHUB_APP_ID="456",
-        GITHUB_APP_PRIVATE_KEY="test-key",
-    )
-
-    # Let _build_app_jwt run for real — need a real key to sign.
-    # Since we don't have a real RSA key, monkeypatch jwt.encode
-    # to return a predictable token.
-    monkeypatch.setattr(jwt_module, "encode", lambda *a, **kw: "fake-jwt")
-    token = auth._build_app_jwt(S(tmp_path))
-    assert token == "fake-jwt"

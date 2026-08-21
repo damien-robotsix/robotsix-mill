@@ -113,6 +113,9 @@ MODEL_FIELDS_NOT_IN_JSON
 MODEL_FIELDS_NOT_IN_JSON_RATIONALES
 SETTINGS_KEYS_NOT_IN_MODEL
 SECRETS_NOT_IN_EXAMPLE
+# Settings field consumed only dynamically via _ApiClient's api_attr string;
+# vulture (60% confidence) cannot trace getattr-based reads on BaseModel fields.
+github_api_url
 gitlab_api_url
 audit_periodic
 audit_interval_seconds

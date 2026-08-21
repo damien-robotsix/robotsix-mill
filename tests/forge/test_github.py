@@ -2934,19 +2934,19 @@ def _app_settings(tmp_path, **kw):
 
 def test_create_pr_401_retry_then_201_success(tmp_path, monkeypatch):
     """First POST returns 401, retry returns 201 — PR opens successfully.
-    ``_mint_installation_token`` is called exactly twice (initial + retry)."""
+    The library's github_token is called exactly twice (initial + retry)."""
     import time as _time
 
-    from robotsix_mill.forge import auth as forge_auth
+    import robotsix_github_auth as rga
 
-    forge_auth._cache.clear()
+    rga.clear_token_cache()
     mint_calls = []
 
-    def fake_mint(settings, repo_config=None):
+    def fake_github_token(**kwargs):
         mint_calls.append(_time.time())
-        return f"ghs_{len(mint_calls)}", _time.time() + 3000
+        return f"ghs_{len(mint_calls)}"
 
-    monkeypatch.setattr(forge_auth, "_mint_installation_token", fake_mint)
+    monkeypatch.setattr(rga, "github_token", fake_github_token)
     monkeypatch.setattr(_time, "sleep", lambda s: None)  # skip backoff
 
     # Stateful mock: first POST → 401, second POST → 201.
@@ -2981,19 +2981,19 @@ def test_create_pr_401_retry_then_201_success(tmp_path, monkeypatch):
 
 def test_create_pr_401_retry_then_401_failure(tmp_path, monkeypatch):
     """Both POST attempts return 401 — error is surfaced (not swallowed).
-    ``_mint_installation_token`` is called exactly twice (initial + retry)."""
+    The library's github_token is called exactly twice (initial + retry)."""
     import time as _time
 
-    from robotsix_mill.forge import auth as forge_auth
+    import robotsix_github_auth as rga
 
-    forge_auth._cache.clear()
+    rga.clear_token_cache()
     mint_calls = []
 
-    def fake_mint(settings, repo_config=None):
+    def fake_github_token(**kwargs):
         mint_calls.append(_time.time())
-        return f"ghs_{len(mint_calls)}", _time.time() + 3000
+        return f"ghs_{len(mint_calls)}"
 
-    monkeypatch.setattr(forge_auth, "_mint_installation_token", fake_mint)
+    monkeypatch.setattr(rga, "github_token", fake_github_token)
     monkeypatch.setattr(_time, "sleep", lambda s: None)
 
     class Always401Client:
