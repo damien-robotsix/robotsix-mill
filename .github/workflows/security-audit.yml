@@ -107,7 +107,7 @@ jobs:
       - name: Generate SBOM (CycloneDX)
         if: always()
         run: |
-          uv export --frozen --format cyclonedx1.6+json \
+          uv export --frozen --format cyclonedx1.5 \
             --no-emit-project -o sbom.cdx.json
 
       - name: Generate audit report
