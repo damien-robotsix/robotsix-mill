@@ -1440,3 +1440,80 @@ def test_baseline_check_passes_write_spec_fingerprint_false(tmp_path, monkeypatc
         f"_run_baseline_check must pass write_spec_fingerprint=False, "
         f"got: {finalize_kw}"
     )
+
+
+# ---------------------------------------------------------------------------
+# _revert_standard_configs — the spec carve-out
+# ---------------------------------------------------------------------------
+
+
+class TestStandardConfigSpecCarveOut:
+    """A standard config file the spec names is the deliverable, not drift."""
+
+    @staticmethod
+    def _repo(tmp_path: Path) -> Path:
+        repo = tmp_path / "r"
+        repo.mkdir()
+
+        def run(*a: str) -> None:
+            subprocess.run(
+                ["git", "-C", str(repo), *a], check=True, capture_output=True
+            )
+
+        run("init", "-q", "-b", "main")
+        run("config", "user.email", "t@t")
+        run("config", "user.name", "t")
+        (repo / "docker-compose.yml").write_text("services:\n  app: {}\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        # The ticket's actual work.
+        (repo / "docker-compose.yml").write_text(
+            "services:\n  app:\n    healthcheck:\n      test: [CMD, true]\n"
+        )
+        return repo
+
+    def _run(self, tmp_path, spec):
+        repo = self._repo(tmp_path)
+        events: list[str] = []
+        ctx = SimpleNamespace(
+            service=SimpleNamespace(add_step_event=lambda _tid, msg: events.append(msg))
+        )
+        ticket = SimpleNamespace(id="t1")
+        remaining, skip = ValidationMixin._revert_standard_configs(
+            ctx,
+            ticket,
+            repo,
+            "main",
+            ["docker-compose.yml"],
+            {"src/app.py"},
+            None,
+            spec,
+        )
+        content = (repo / "docker-compose.yml").read_text()
+        return remaining, skip, events, content
+
+    def test_spec_named_compose_survives_and_reaches_scope_triage(self, tmp_path):
+        """The whole deliverable must not be reverted out from under the ticket.
+
+        Live: hexarchy e5c4 ("Add service-level healthcheck stanza to root
+        docker-compose.yml") burned five attempts across eight days because
+        every pass reverted the one file it existed to change.
+        """
+        spec = "Add a healthcheck stanza to docker-compose.yml for local dev."
+        remaining, skip, events, content = self._run(tmp_path, spec)
+
+        assert remaining == ["docker-compose.yml"], "must fall through to triage"
+        assert skip is None
+        assert events == [], "no auto-revert event"
+        assert "healthcheck" in content, "the ticket's edit must survive"
+
+    def test_unnamed_compose_is_still_auto_reverted(self, tmp_path):
+        """Incidental scaffolding regeneration keeps its cheap auto-revert."""
+        spec = "Rename the archive handler in src/app.py."
+        remaining, skip, events, content = self._run(tmp_path, spec)
+
+        assert remaining == []
+        assert skip is not None and skip.action == "skip_iteration"
+        assert len(events) == 1 and "auto-REVERT" in events[0]
+        assert "healthcheck" not in content, "scaffolding drift must be undone"

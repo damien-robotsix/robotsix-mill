@@ -223,6 +223,39 @@ def _provider_failure_verdict_or_raise(exc: BaseException) -> ReviewVerdict:
     raise exc
 
 
+#: Facts about the repo that the reviewer cannot read off the diff and would
+#: otherwise mis-report as gaps.
+_RELEASE_PLEASE_CONVENTION = (
+    "This repo releases via release-please: the changelog is generated from "
+    "conventional-commit subjects, NOT from towncrier fragments. The implement "
+    "stage folds the fragment's kind into the commit subject and then DELETES "
+    "the fragment from the branch on purpose (see drop_fragments), so a "
+    "changelog fragment is never present in the diff you are reviewing.\n"
+    "Do NOT report a missing or absent changelog fragment as an unmet "
+    "deliverable, and do NOT ask for one to be added — even when the "
+    "ticket-spec lists one as an acceptance criterion. That criterion is "
+    "stale on this repo and the fragment would be deleted again on the next "
+    "pass. Reporting it deadlocks the ticket: implement writes the fragment, "
+    "mill deletes it, you report it missing, and the cycle repeats until the "
+    "implement/review ceiling blocks the ticket (live: auto-mail 590f and "
+    "central-deploy de52, both blocked at 10/10 on exactly this loop)."
+)
+
+
+def _repo_conventions(repo_dir: Path | None) -> str:
+    """Return repo-specific review conventions, or "" when there are none."""
+    if repo_dir is None:
+        return ""
+    from robotsix_mill.stages._changelog_validate import uses_release_please
+
+    try:
+        if uses_release_please(repo_dir):
+            return _RELEASE_PLEASE_CONVENTION
+    except OSError:
+        return ""
+    return ""
+
+
 def _review_attempt(
     *,
     diff_text: str,
@@ -258,6 +291,9 @@ def _review_attempt(
     user_prompt += (
         section("ticket-spec", spec) + "\n\n" + section("git-diff", diff_text)
     )
+    conventions = _repo_conventions(repo_dir)
+    if conventions:
+        user_prompt += "\n\n" + section("repo-conventions", conventions)
     run_kwargs: dict[str, Any] = {"usage_limits": limits}
     if max_tokens_override is not None:
         from pydantic_ai.settings import ModelSettings

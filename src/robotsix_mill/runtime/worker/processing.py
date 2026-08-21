@@ -695,6 +695,45 @@ async def _process_ticket_inner(
                     if root_io is not None:
                         root_io.set_attribute("error.subtype", "stall")
                     return
+                # --- retrospect: the work already shipped ---
+                # retrospect runs on a ticket that is already DONE — the PR
+                # is merged. It is a best-effort learning pass whose only
+                # output is follow-up tickets, so its deadline says nothing
+                # about the delivered change. Blocking here un-ships a
+                # finished ticket into the human queue and leaves it there
+                # (live: chat 358d and 6462, both merged, both dragged back
+                # to BLOCKED minutes later by this timeout). Close it out
+                # instead and record that the pass was skipped; a retry is
+                # pointless, both of those timed out again on the re-run.
+                if stage_name == "retrospect":
+                    log.error(
+                        "%s: retrospect timed out after %ds — closing "
+                        "(the PR is already merged; skipping the pass)",
+                        ticket_id,
+                        _stage_timeout,
+                    )
+                    note = (
+                        f"retrospect timed out after {_stage_timeout}s — "
+                        "skipped. The PR is merged and the ticket is "
+                        "complete; only the follow-up-learning pass was lost."
+                    )
+                    if root_io is not None:
+                        root_io.set_attribute("error.classification", "timeout")
+                        root_io.set_attribute(
+                            "error.timeout_seconds", str(_stage_timeout)
+                        )
+                        root_io.set_output(
+                            {
+                                "error": (
+                                    f"stage {stage_name} timed out after "
+                                    f"{_stage_timeout}s"
+                                ),
+                                "next_state": "CLOSED",
+                            }
+                        )
+                    _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+                    ctx.service.transition(ticket_id, State.CLOSED, note=note[:200])
+                    return
                 # --- all other stages: hard block ---
                 log.error(
                     "%s: %s timed out after %ds — escalating to BLOCKED",
