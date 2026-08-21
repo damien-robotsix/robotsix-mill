@@ -105,6 +105,10 @@ def test_catchall_sanitises_unexpected_exception(caplog: LogCaptureFixture) -> N
     assert "kaboom" not in resp.text
     # ...but the full exception is logged for operator forensics.
     assert any("Unhandled exception" in r.message for r in caplog.records)
+    # The traceback must be attached via exc_info so it lands in the
+    # structured logging pipeline, not just on stderr.
+    caught = [r for r in caplog.records if "Unhandled exception" in r.message]
+    assert all(r.exc_info is not None for r in caught)
 
 
 def test_request_validation_error_maps_to_422() -> None:
