@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -410,3 +411,61 @@ def test_ingest_fingerprint_no_false_match(client, service):
     # there is some token overlap ("ingester", "service").
     assert mock_dedup.call_count >= 1
     assert r.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# Concurrent-ingest race guard
+# ---------------------------------------------------------------------------
+def test_ingest_concurrent_identical_reports_create_one_ticket(client, service):
+    """Two identical reports overlapping in time must yield ONE ticket.
+
+    Regression guard for the duplicate-ticket incident: a retried
+    ``POST /tickets/ingest`` had both attempts read the board before
+    either created, so both missed the fingerprint and both created.
+    The barrier below reproduces exactly that interleaving — each
+    request is held inside the (slow) LLM dedup step until the other
+    has also finished listing candidates.
+    """
+    # Seed an unrelated ticket that shares tokens, so both requests take
+    # the LLM path rather than short-circuiting on "no candidates".
+    service.create(
+        "Something about deployment",
+        "anomaly detection system",
+        source=SourceKind.USER,
+        kind=TicketKind.TASK,
+        board_id="test-board",
+    )
+
+    barrier = threading.Barrier(2, timeout=10)
+
+    def _slow_dedup(**_kwargs) -> dict:
+        # Both requests are now past their candidate listing.
+        barrier.wait()
+        return {"duplicate_of": None, "already_done": None, "reason": "distinct"}
+
+    payload = _ingest_payload(title="Wallet value shows cash, not equity")
+    results: list = [None, None]
+
+    def _post(index: int) -> None:
+        results[index] = client.post("/tickets/ingest", json=payload)
+
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+        side_effect=_slow_dedup,
+    ):
+        threads = [threading.Thread(target=_post, args=(i,)) for i in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=20)
+
+    statuses = sorted(r.status_code for r in results)
+    assert statuses == [200, 201], f"expected one create + one dedup, got {statuses}"
+
+    ticket_ids = {r.json()["ticket_id"] for r in results}
+    assert len(ticket_ids) == 1, "both requests must resolve to the same ticket"
+
+    matching = [
+        t for t in service.list() if t.title == "Wallet value shows cash, not equity"
+    ]
+    assert len(matching) == 1

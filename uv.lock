@@ -14,7 +14,7 @@ exclude-newer-span = "P7D"
 pypdf = "2026-08-07T00:00:00Z"
 
 [manifest]
-overrides = [{ name = "robotsix-http", git = "https://github.com/damien-robotsix/robotsix-http.git?rev=ba90d55ea2bcbd02f605f392e837cea7b485d73d" }]
+overrides = [{ name = "robotsix-http", git = "https://github.com/damien-robotsix/robotsix-http.git?rev=13e6e9ab330f9be3b8b1e7bc2694210f7d9e5848" }]
 
 [[package]]
 name = "alembic"
@@ -1683,8 +1683,8 @@ dependencies = [
 
 [[package]]
 name = "robotsix-http"
-version = "0.1.dev38+gba90d55ea"
-source = { git = "https://github.com/damien-robotsix/robotsix-http.git?rev=ba90d55ea2bcbd02f605f392e837cea7b485d73d#ba90d55ea2bcbd02f605f392e837cea7b485d73d" }
+version = "0.3.1"
+source = { git = "https://github.com/damien-robotsix/robotsix-http.git?rev=13e6e9ab330f9be3b8b1e7bc2694210f7d9e5848#13e6e9ab330f9be3b8b1e7bc2694210f7d9e5848" }
 dependencies = [
     { name = "httpx" },
 ]

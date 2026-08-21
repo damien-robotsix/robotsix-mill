@@ -72,10 +72,13 @@ exclude-newer = "7d"
 exclude-newer-package = { pypdf = "2026-08-07T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
-# otherwise irreconcilable; 4cf79993 is an ancestor of ba90d55ea, so
-# unifying on ba90d55ea is safe.  The override replaces every robotsix-http
-# requirement in the graph with this one source.
-override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@ba90d55ea2bcbd02f605f392e837cea7b485d73d"]
+# otherwise irreconcilable; both are ancestors of 13e6e9ab, so unifying on
+# it is safe.  The override replaces every robotsix-http requirement in the
+# graph with this one source.  13e6e9ab carries the POST-retry fix; it is a
+# no-op for this graph (github-auth and llmio use call_with_retry, not the
+# method-gated RetryClient the fix touches) and is pinned here to keep the
+# fleet on one rev.
+override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@13e6e9ab330f9be3b8b1e7bc2694210f7d9e5848"]
 
 [tool.uv.sources]
 robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "002bccd6658b4eef47e77c80eefdc156657914c0" }

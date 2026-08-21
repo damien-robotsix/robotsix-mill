@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -124,6 +125,66 @@ def _fingerprint_match(
     return None
 
 
+# --- creation-time race guard ---------------------------------------------
+#
+# The dedup pass above is a check-then-create sequence, and the checks in
+# between (candidate listing, token prefilter, LLM dedup) can take minutes
+# under load.  Two identical reports that arrive inside that window both
+# read a board without the ticket, both miss the fingerprint, and both
+# create — which is how a single retried ``POST /tickets/ingest`` produced
+# three copies of the same ticket.  Re-running the (cheap, deterministic)
+# fingerprint check against freshly-listed candidates while holding a
+# per-board lock closes the window without serialising the LLM call.
+
+_BOARD_LOCKS: dict[str, threading.Lock] = {}
+_BOARD_LOCKS_GUARD = threading.Lock()
+
+
+def _board_lock(board_id: str) -> threading.Lock:
+    """Return the process-wide ingest lock for *board_id*, creating it once."""
+    with _BOARD_LOCKS_GUARD:
+        lock = _BOARD_LOCKS.get(board_id)
+        if lock is None:
+            lock = threading.Lock()
+            _BOARD_LOCKS[board_id] = lock
+        return lock
+
+
+def _create_ticket_guarded(
+    body: TicketIngest,
+    board_id: str,
+    board_svc: TicketService,
+    worker: Worker,
+    settings: Settings,
+) -> JSONResponse:
+    """Create the ticket, re-checking the title fingerprint under a lock.
+
+    Every path that decided "this is not a duplicate" funnels through
+    here.  Holding the board lock across the final re-check and the
+    create makes concurrent identical ingests resolve to one ticket plus
+    N-1 dedup hits, whatever the slower checks upstream concluded.
+    """
+    with _board_lock(board_id):
+        fresh = [
+            t
+            for t in board_svc.list()
+            if t.board_id == board_id and t.state not in {State.CLOSED, State.ERRORED}
+        ]
+        dup_id = _fingerprint_match(body.title, fresh)
+        if dup_id is not None:
+            board_svc.add_history_note(
+                dup_id,
+                f"re-reported by {body.source_tag} on {date.today().isoformat()} "
+                "(fingerprint match, concurrent ingest)",
+            )
+            logger.info("ingest fingerprint match found on create-time re-check")
+            return JSONResponse(
+                status_code=200,
+                content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
+            )
+        return _create_ticket(body, board_id, board_svc, worker, settings)
+
+
 def _check_repo_workable(
     repo_config: RepoConfig,
     repo_id: str,
@@ -207,7 +268,7 @@ def ingest_ticket(
     ]
 
     if not candidates:
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
 
     # 3. Normalized-title fingerprint dedup — fast, deterministic,
     #    catches same-symptom reports across runs (e.g. "mail-ingester
@@ -239,7 +300,7 @@ def ingest_ticket(
         draft_body=body.body,
         candidates_texts=candidate_texts,
     ):
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
 
     # 5. LLM dedup.
     dup_id = _run_llm_dedup(body, candidates, board_svc, worker, settings)
@@ -254,7 +315,7 @@ def ingest_ticket(
         )
 
     # already_done is deliberately not acted on — fall through to create.
-    return _create_ticket(body, board_id, board_svc, worker, settings)
+    return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
 
 
 def _run_llm_dedup(
