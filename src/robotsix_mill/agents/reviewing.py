@@ -223,7 +223,6 @@ def _provider_failure_verdict_or_raise(exc: BaseException) -> ReviewVerdict:
     raise exc
 
 
-
 #: Facts about the repo that the reviewer cannot read off the diff and would
 #: otherwise mis-report as gaps.
 _RELEASE_PLEASE_CONVENTION = (

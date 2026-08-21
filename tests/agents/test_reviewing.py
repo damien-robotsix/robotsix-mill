@@ -1364,9 +1364,7 @@ class TestRepoConventions:
         (tmp_path / "pyproject.toml").write_text("[tool.towncrier]\n")
         assert _repo_conventions(tmp_path) == ""
 
-    def test_release_please_repo_tells_reviewer_to_expect_no_fragment(
-        self, tmp_path
-    ):
+    def test_release_please_repo_tells_reviewer_to_expect_no_fragment(self, tmp_path):
         from robotsix_mill.agents.reviewing import _repo_conventions
 
         (tmp_path / "release-please-config.json").write_text("{}")

@@ -1477,9 +1477,7 @@ class TestStandardConfigSpecCarveOut:
         repo = self._repo(tmp_path)
         events: list[str] = []
         ctx = SimpleNamespace(
-            service=SimpleNamespace(
-                add_step_event=lambda _tid, msg: events.append(msg)
-            )
+            service=SimpleNamespace(add_step_event=lambda _tid, msg: events.append(msg))
         )
         ticket = SimpleNamespace(id="t1")
         remaining, skip = ValidationMixin._revert_standard_configs(
