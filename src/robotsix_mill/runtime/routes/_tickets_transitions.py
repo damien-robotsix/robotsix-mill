@@ -304,18 +304,6 @@ def answer_pending_question(
     except ValueError as e:
         raise HTTPException(409, str(e)) from None
 
-    # Clear the stale implement spec-fingerprint guard so the ticket
-    # can resume without immediately re-blocking on "spec unchanged".
-    # The service layer already persists an implement_spec_override
-    # marker via _maybe_resume_awaiting_user_reply; deleting the
-    # implement.md itself is an additional safety measure — if the
-    # guard's implement.md read is somehow stale, removing the file
-    # ensures the guard doesn't enter its blocking branch at all.
-    ws = svc.workspace(ticket)
-    implement_md = ws.artifacts_dir / "implement.md"
-    with contextlib.suppress(OSError):
-        implement_md.unlink(missing_ok=True)
-
     ticket = svc.get(ticket_id_u)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
