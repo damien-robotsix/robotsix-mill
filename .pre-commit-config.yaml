@@ -122,6 +122,14 @@ repos:
         pass_filenames: false
   - repo: local
     hooks:
+      - id: check-trivyignore-expiry
+        name: Validate Trivy ignore entries have expiry dates
+        entry: python scripts/check_trivyignore_expiry.py
+        language: python
+        files: ^\.trivyignore$
+        pass_filenames: false
+  - repo: local
+    hooks:
       - id: vulture
         name: Vulture (dead code)
         entry: vulture --ignore-decorators "@field_validator,@model_validator" src/ vulture_whitelist.py
