@@ -104,20 +104,25 @@ jobs:
             --ignore GHSA-fp3f-mc75-235c \
             --ignore GHSA-fwg2-594c-jp42
 
-      - name: Generate SBOM
+      - name: Generate SBOM (CycloneDX)
         if: always()
         run: |
-          uv export \
-            --frozen \
-            --format cyclonedx1.5 \
-            --output-file sbom.json
+          uv export --frozen --format cyclonedx1.5 \
+            --no-emit-project -o sbom.cdx.json
+
+      - name: Generate audit report
+        if: always()
+        run: |
+          uv audit --frozen \
+            --output-format json \
+            > audit-report.json || true
 
       - name: Upload SBOM artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom
-          path: sbom.json
+          path: sbom.cdx.json
           if-no-files-found: error
 
   license-audit:
