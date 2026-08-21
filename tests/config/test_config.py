@@ -972,3 +972,43 @@ def test_openrouter_keys_coexist_with_other_aliases():
     )
     assert s.openrouter.keys["other-func"].get_secret_value() == "sk-other"
     assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"
+
+
+def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
+    """When openrouter_api_key lives ONLY in the Fernet-encrypted secrets
+    block, load_settings_block lifts it into settings so the
+    _migrate_openrouter_api_key validator populates the canonical
+    openrouter.keys map."""
+    import json
+
+    from robotsix_mill.config import _reset_secrets
+    from robotsix_mill.config.loader import encrypt_secrets_block
+
+    _reset_secrets()
+
+    # Point ROBOTSIX_CONFIG_FILE at our temp config BEFORE encrypting so
+    # the persistent Fernet key lands next to the config file we'll read.
+    cfg_path = tmp_path / "config.json"
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg_path))
+
+    # Build a Fernet-encrypted secrets block containing only the flat key.
+    secrets = {"openrouter_api_key": "sk-from-fernet"}
+    encrypted = encrypt_secrets_block(secrets)
+
+    cfg = {
+        "settings": {"data_dir": str(tmp_path), "api_port": 8077},
+        "secrets": encrypted,
+    }
+    cfg_path.write_text(json.dumps(cfg))
+
+    # Settings() should now have the canonical key populated.
+    s = Settings()
+    assert s.openrouter is not None
+    assert s.openrouter.keys.get("robotsix-mill") is not None
+    assert (
+        s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
+    )
+
+    # The flat field is still populated (original value preserved).
+    assert s.openrouter_api_key is not None
+    assert s.openrouter_api_key.get_secret_value() == "sk-from-fernet"
