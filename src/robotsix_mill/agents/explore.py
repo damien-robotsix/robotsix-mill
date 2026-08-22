@@ -383,6 +383,14 @@ async def run_explore(
     if not repo_dir.exists():
         return "explore unavailable: workspace repo directory does not exist — the repository has not been cloned yet"
 
+    # Trivial-question guard: an empty or near-empty question cannot
+    # meaningfully be explored and wastes a 30s scout pass.
+    if len(question.strip()) < 10:
+        return (
+            "explore skipped: question is too short or empty "
+            "(< 10 chars). Provide a specific, focused question."
+        )
+
     # lazy: keep core import-light / the suite hermetic
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings

@@ -417,7 +417,7 @@ def test_explore_subagent_is_read_only_and_uses_flash_model(tmp_path, monkeypatc
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     _patch_explore_model(monkeypatch, cap)
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "answer"
     # level-1 (flash) DeepSeek model — resolved from llmio's tier defaults.
     assert cap["model"] == "deepseek/deepseek-v4-flash"
@@ -649,7 +649,7 @@ def test_explore_retries_once_with_stricter_prompt(tmp_path, monkeypatch):
     )
     _patch_explore_model(monkeypatch, {})
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "retry-answer"
     assert len(primary_agent_calls) == 1
     assert len(retry_agent_calls) == 1
@@ -688,7 +688,7 @@ def test_explore_sentinel_set_on_double_failure(tmp_path, monkeypatch):
 
     # Reset sentinel before test
     explore.reset_explore_budget_exhausted()
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert "explore failed" in out
     assert explore.is_explore_budget_exhausted() is True
     # Reset after test
@@ -748,7 +748,7 @@ def test_trace_stage_explore_nests_under_parent(tmp_path, monkeypatch):
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     (tmp_path / "a.txt").write_text("hi")
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "answer"
     assert spans == ["explore"]
 
@@ -825,7 +825,7 @@ def test_continuation_passes_message_history_on_length(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     _patch_explore_model(monkeypatch, {})
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "first truncated\ncontinuation answer"
     assert len(cap["runs"]) == 2
     # The continuation call must have received message_history
@@ -867,7 +867,7 @@ def test_continuation_falls_back_when_all_messages_unavailable(tmp_path, monkeyp
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     _patch_explore_model(monkeypatch, {})
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "first truncated\ncontinuation answer"
     assert len(cap["runs"]) == 2
     # The continuation call must NOT have received message_history (graceful fallback)
@@ -899,7 +899,7 @@ def test_no_continuation_when_finish_reason_is_not_length(tmp_path, monkeypatch)
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     _patch_explore_model(monkeypatch, {})
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "complete answer"
     # Only one run — no continuation
     assert len(cap["runs"]) == 1
@@ -930,6 +930,6 @@ def test_no_continuation_when_response_is_none(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     _patch_explore_model(monkeypatch, {})
 
-    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="q"))
+    out = asyncio.run(explore.run_explore(settings=s, repo_dir=tmp_path, question="a test question long enough"))
     assert out == "answer without response"
     assert len(cap["runs"]) == 1
