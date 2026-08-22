@@ -350,8 +350,15 @@ class CIPollMixin(_MergeStageBase):
         # A ci_fix dependency ticket EXISTS to repair that debt, so
         # blocking it on the debt is a deadlock: the repair for red main
         # is refused because main is red, and only a human merging by
-        # hand breaks the cycle.
-        is_ci_fix = ticket.source == SourceKind.CI_FIX_DEPENDENCY
+        # hand breaks the cycle.  A ``ci``-sourced ticket ("CI failure:
+        # <workflow> on main") is filed by the CI monitor for exactly the
+        # same reason and deadlocks the same way — robotsix-ui #56 fixed
+        # main's lint and typecheck and was refused because main's lint
+        # and typecheck were red, stranding two sibling tickets behind it.
+        is_ci_fix = ticket.source in (
+            SourceKind.CI_FIX_DEPENDENCY,
+            SourceKind.CI,
+        )
         if s.auto_merge_main_debt_detection_enabled and not is_ci_fix:
             debt = self._main_branch_ci_debt(
                 forge=get_forge(s, repo_config=ctx.repo_config),

@@ -2340,6 +2340,28 @@ def test_migrate_prunes_repo_clone_and_baseline_cache(settings, migrate_env):
     assert (dst_ws / "artifacts" / "draft-original.md").read_text() == "keep me"
 
 
+def test_migrate_clears_the_implement_spawn_budget(settings, migrate_env):
+    """A spawn budget burned against the old repo must not follow the ticket.
+
+    Every counted spawn was spent on the wrong repo — usually the reason
+    the ticket is being migrated at all — so carrying the counter over
+    re-blocks it on arrival before the new board attempts anything.
+    """
+    service, _ = migrate_env
+    t = service.create("Exhausted elsewhere", "body")
+    ws = service.workspace(t)
+    (ws.artifacts_dir / "implement_spawn_count").write_text("3")
+    (ws.artifacts_dir / "implement_spawn_exhausted.json").write_text(
+        '{"spec_fp": "deadbeef", "count": 2}'
+    )
+
+    service.migrate(t.id, "other-board")
+
+    dst_artifacts = settings.workspaces_dir_for("other-board") / t.id / "artifacts"
+    assert not (dst_artifacts / "implement_spawn_count").exists()
+    assert not (dst_artifacts / "implement_spawn_exhausted.json").exists()
+
+
 def test_migrate_rejects_bad_targets_and_states(migrate_env):
     service, _ = migrate_env
     t = service.create("t", "b")

@@ -550,16 +550,32 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             "but does not exist on disk — fix and retry."
         )
         if (ic.feedback or "").startswith("[VERIFY]"):
+            # Only a path that is absent from the worktree entirely proves a
+            # hallucinated completion.  A path that exists but carries no
+            # branch diff is usually the summary *naming* a file it did not
+            # need to touch — "created the actions that bump.yml references",
+            # "registered release-please-config.json in docs/modules.yaml" —
+            # and blocking on that strands a ticket whose work did land.
+            # Re-prompt once (above), then accept with a warning.
+            absent = [p for p in missing if not (repo_dir / p).exists()]
+            if not absent:
+                log.warning(
+                    "%s: summary names %s without a branch diff, but every "
+                    "claimed path exists on disk — accepting the pass",
+                    ticket.id,
+                    missing_text,
+                )
+                return None
             log.warning(
                 "%s: summary verification failed again — %s; blocking",
                 ticket.id,
-                missing_text,
+                ", ".join(absent),
             )
             return _SinglePassResult(
                 next_action="return",
                 outcome=Outcome(
                     State.BLOCKED,
-                    f"summary verification failed after retry: {missing_text}",
+                    f"summary verification failed after retry: {', '.join(absent)}",
                 ),
             )
 

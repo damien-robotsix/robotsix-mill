@@ -1449,6 +1449,40 @@ class TestRunSummaryVerification:
         assert result.next_action == "return"
         assert result.outcome.next_state == State.BLOCKED
 
+    def test_accepts_second_failure_when_claimed_path_exists(
+        self, tmp_path, monkeypatch
+    ):
+        """A named-but-undiffed existing file is not a hallucinated claim.
+
+        ``Created ... the actions that .github/workflows/bump.yml
+        references`` names a file the pass deliberately left alone.  The
+        first pass re-prompts; the second must accept rather than strand
+        the ticket, because the file is right there on disk.
+        """
+        from robotsix_mill.stages.implement import implementation_logic as mod
+
+        repo_dir = tmp_path / "repo"
+        (repo_dir / ".github" / "workflows").mkdir(parents=True)
+        (repo_dir / ".github" / "workflows" / "bump.yml").write_text("on: push\n")
+        monkeypatch.setattr(mod, "_collect_changed_files", lambda *a, **k: {"other.py"})
+        summary = (
+            "Created the two missing composite actions that "
+            ".github/workflows/bump.yml references."
+        )
+        assert mod._verify_summary_claims(summary, repo_dir, "ticket-1") == [
+            ".github/workflows/bump.yml"
+        ]
+        result = _Stage._run_summary_verification(
+            ticket=FakeTicket(),
+            repo_dir=repo_dir,
+            summary=summary,
+            ic=_ic(feedback="[VERIFY] Verification failed: x was claimed ..."),
+            updated_ref_files=None,
+            updated_prev_summary=None,
+            new_msgs=None,
+        )
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # 7. _find_insertion_point
