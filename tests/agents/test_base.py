@@ -119,7 +119,7 @@ def test_safe_close_swallows_exceptions_from_close():
 
 def test_default_tier_config_maps_levels():
     """Each capability level maps to its baked (provider, model) via
-    llmio's default_tier_config: L1 → DeepSeek flash, L2 → Xiaomi Mimo pro, L3 → Claude SDK opus."""
+    llmio's default_tier_config: L1 → DeepSeek flash, L2 → DeepSeek v4 pro, L3 → Claude SDK opus."""
     from robotsix_llmio.core.factory import default_tier_config
     from robotsix_llmio.core.identifier import parse_model_identifier
 
@@ -129,7 +129,7 @@ def test_default_tier_config_maps_levels():
 
     parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
     assert parsed2.provider == "openrouter"
-    assert parsed2.model_name == "xiaomi/mimo-v2.5-pro"
+    assert parsed2.model_name == "deepseek/deepseek-v4-pro"
 
     parsed3 = parse_model_identifier(default_tier_config().for_level(3).model)
     assert parsed3.provider == "claudeSDK"
@@ -328,7 +328,7 @@ def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
         tools=[],
     )
 
-    assert captured_kwargs[0]["effective_model"] == "xiaomi/mimo-v2.5-pro"
+    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-pro"
 
 
 def test_build_agent_injects_report_issue_tool_by_default(monkeypatch, settings):
