@@ -3,8 +3,6 @@ pydantic-ai call (request_limit passed as a bare run_sync kwarg ->
 UserError every time -> dedup silently dead). These lock the contract.
 """
 
-import pytest
-
 from robotsix_mill.agents import dedup
 from robotsix_mill.agents.dedup import (
     DedupResult,
@@ -12,14 +10,6 @@ from robotsix_mill.agents.dedup import (
     rank_candidates_by_similarity,
 )
 from robotsix_mill.core.models import Ticket
-
-
-@pytest.fixture(autouse=True)
-def _dedup_clean():
-    """Override the conftest autouse fixture — the conftest version
-    patches run_dedup_check to a no-op for all other test modules.
-    Tests in this file need the real run_dedup_check, so this
-    fixture is intentionally a no-op."""
 
 
 class _Result:
