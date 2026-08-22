@@ -19,6 +19,7 @@ from ..models import (
     TicketKind,
 )
 from ..states import State
+from ..workspace import SPAWN_EXHAUSTION_MARKER
 from ._base import _ServiceBase
 from ._helpers import (
     _get_ticket,
@@ -146,6 +147,13 @@ class _MigrateMixin(_ServiceBase):
             shutil.rmtree(dst_ws / "repo", ignore_errors=True)
             shutil.rmtree(dst_ws / "repos", ignore_errors=True)
             (dst_ws / "artifacts" / "baseline_check.json").unlink(missing_ok=True)
+            # The implement spawn budget is repo-specific too: every
+            # spawn it counts was burned against the OLD repo, which is
+            # usually *why* the ticket is being migrated.  Carrying the
+            # counter over re-blocks the ticket on arrival, before the
+            # new board has had a single attempt.
+            (dst_ws / "artifacts" / "implement_spawn_count").unlink(missing_ok=True)
+            (dst_ws / "artifacts" / SPAWN_EXHAUSTION_MARKER).unlink(missing_ok=True)
             ws_moves.append((src_ws, dst_ws, moved))
 
         # 5. Insert every ticket into the target DB (parent-before-child).
@@ -257,9 +265,9 @@ class _MigrateMixin(_ServiceBase):
         its refine stage re-triages it with the right repo context.
         Repo-specific baggage is reset: ``branch``, retry state,
         ``review_rounds``, ``blocked_from``/``paused_from``, the
-        ``repo/``/``repos/`` clones, and the cached
+        ``repo/``/``repos/`` clones, the cached
         ``baseline_check.json`` (stale verdicts from the old repo must
-        not replay on the new one). The history hash chain is preserved
+        not replay on the new one), and the implement spawn budget. The history hash chain is preserved
         verbatim and extended with a migration event.
 
         *target_board* accepts a board id or a repo id (``"meta"``
@@ -355,6 +363,13 @@ class _MigrateMixin(_ServiceBase):
         shutil.rmtree(dst_ws / "repo", ignore_errors=True)
         shutil.rmtree(dst_ws / "repos", ignore_errors=True)
         (dst_ws / "artifacts" / "baseline_check.json").unlink(missing_ok=True)
+        # The implement spawn budget is repo-specific too: every spawn it
+        # counts was burned against the OLD repo, which is usually *why*
+        # the ticket is being migrated.  Carrying the counter over
+        # re-blocks the ticket on arrival, before the new board has had a
+        # single attempt.
+        (dst_ws / "artifacts" / "implement_spawn_count").unlink(missing_ok=True)
+        (dst_ws / "artifacts" / SPAWN_EXHAUSTION_MARKER).unlink(missing_ok=True)
 
         migration_note = f"migrated from board {src_board!r} to {dst_board!r}"
         if state is not State.DRAFT:
