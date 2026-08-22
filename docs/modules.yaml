@@ -381,7 +381,7 @@ modules:
       - tests/agents/*.py
       - tests/agents/runners/**/*.py
       - docs/agents/**/*
-      - docs/runners/**/*
+      - docs/agents/runners/**/*
     dependencies: [config, core, sandbox, langfuse, forge, vcs]
 
   # -------------------------------------------------------------------

@@ -59,8 +59,8 @@ nav:
       - Ticket provenance: core/ticket-provenance.md
       - VCS (git) module: vcs/README.md
       - Workspace cleanup: core/workspace-cleanup.md
-      - Orphaned-PR check: runners/orphaned-pr-check.md
-      - Pin bump: runners/pin-bump.md
+      - Orphaned-PR check: agents/runners/orphaned-pr-check.md
+      - Pin bump: agents/runners/pin-bump.md
       - Attaching screenshots: core/screenshots.md
   - Design:
       - Cost indicators: design/cost-indicators.md
