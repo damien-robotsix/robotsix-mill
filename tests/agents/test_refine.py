@@ -463,6 +463,7 @@ def test_system_prompt_forbids_re_exploring_already_read_files():
         f"context ({sentinel!r}); found no match."
     )
 
+
 def test_strip_explore_call_directives_satisfies_consistency_guard():
     """When triage gates exploration off for a 'simple' ticket the
     explore/parallel_explore tools are dropped from the resolved set, so
@@ -515,12 +516,15 @@ def test_strip_explore_call_directives_noop_when_enabled():
         )
         == SYSTEM_PROMPT
     )
+
+
 def test_draft_to_closed_transition_is_legal():
     """DRAFT → CLOSED is a valid transition in the state machine."""
     from robotsix_mill.core.states import State as S
     from robotsix_mill.core.states import can_transition
 
     assert can_transition(S.DRAFT, S.CLOSED) is True
+
 
 # --- freshness gate tests ---
 
