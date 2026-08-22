@@ -1466,6 +1466,24 @@ def test_main_debt_does_not_block_a_ci_fix_ticket(tmp_path, monkeypatch):
     assert out.next_state is State.FIXING_CI
 
 
+def test_main_debt_does_not_block_a_ci_sourced_ticket(tmp_path, monkeypatch):
+    """A ``ci``-sourced ticket is exempt for the same reason.
+
+    The CI monitor files "CI failure: <workflow> on main" tickets whose
+    whole purpose is to turn the target branch green again.  Blocking one
+    on the very debt it repairs stalls every sibling behind it —
+    robotsix-ui #56 fixed main's lint and typecheck and was refused
+    because main's lint and typecheck were red.
+    """
+    ctx = _debt_ctx(tmp_path, monkeypatch)
+    t = _implement_complete_with_source(ctx, SourceKind.CI)
+
+    out = MergeStage().run(t, ctx)
+
+    assert out.next_state is not State.BLOCKED
+    assert out.next_state is State.FIXING_CI
+
+
 # === Branch refresh before CI evaluation ===================================
 
 
