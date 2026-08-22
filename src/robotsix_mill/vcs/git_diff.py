@@ -233,7 +233,6 @@ def check_rebase_diff_integrity(
     pre_rebase_blobs: dict[str, str] | None = None,
     exempt_paths: Sequence[str] | None = None,
     target_pre_blobs: dict[str, str] | None = None,
-    previously_dropped_files: list[str] | None = None,
 ) -> tuple[bool, list[str], list[str]]:
     """Check that every source file from the pre-rebase diff survived the rebase.
 
@@ -268,16 +267,8 @@ def check_rebase_diff_integrity(
     *before* the agent ran) to distinguish that scenario from a genuine
     drop. Files whose target content changed during the rebase window
     are reported in *sibling_likely* rather than *dropped*.
-
-    Paths in *previously_dropped_files* (the union of *dropped* and
-    *sibling_likely* from a prior rebase attempt, as recorded in the
-    ``rebase_dropped_files.txt`` artifact) are unconditionally excluded
-    from the candidate set on a re-run — the same conflict the agent
-    already resolved by discarding the PR's delta will reproduce the
-    same post-rebase diff, so re-reporting them as dropped just
-    oscillates the ticket.
     """
-    post_files = _git_ops.changed_source_files(repo, target_branch)
+    post_files = changed_source_files(repo, target_branch)
     if not pre_rebase_files:
         return (True, [], [])
 
@@ -293,13 +284,10 @@ def check_rebase_diff_integrity(
     }
     post_set = set(post_files)
     candidates = sorted(pre_set - post_set)
-    if previously_dropped_files:
-        previously_dropped_set = set(previously_dropped_files)
-        candidates = [f for f in candidates if f not in previously_dropped_set]
     if not pre_rebase_blobs:
         return (len(candidates) == 0, candidates, [])
 
-    target_blobs = _git_ops.file_blobs(repo, candidates, ref=f"origin/{target_branch}")
+    target_blobs = file_blobs(repo, candidates, ref=f"origin/{target_branch}")
     dropped: list[str] = []
     sibling_likely: list[str] = []
     for f in candidates:
