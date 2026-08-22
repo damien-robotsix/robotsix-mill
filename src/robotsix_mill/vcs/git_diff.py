@@ -13,7 +13,18 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from . import git_ops as _git_ops
+_git_ops: object | None = None
+
+
+def _get_git_ops():
+    """Lazy import to break cyclic dependency with git_ops."""
+    global _git_ops
+    if _git_ops is None:
+        from . import git_ops as _go
+
+        _git_ops = _go
+    return _git_ops
+
 
 log = logging.getLogger("robotsix_mill.vcs.git_diff")
 
@@ -59,8 +70,12 @@ def branch_is_ahead_of_main(repo: Path, target_branch: str = "main") -> bool:
     would rather hit the forge API than block a real change.
     """
     try:
-        _git_ops._git(
-            repo, "fetch", "origin", target_branch, timeout=_git_ops.NETWORK_GIT_TIMEOUT
+        _get_git_ops()._git(
+            repo,
+            "fetch",
+            "origin",
+            target_branch,
+            timeout=_get_git_ops().NETWORK_GIT_TIMEOUT,
         )
     except subprocess.CalledProcessError:
         # fetch failed — assume ahead so we don't block a real change
@@ -111,8 +126,12 @@ def branch_has_net_diff(
     would rather hit the forge API than silently DONE a real change.
     """
     try:
-        _git_ops._git(
-            repo, "fetch", "origin", target_branch, timeout=_git_ops.NETWORK_GIT_TIMEOUT
+        _get_git_ops()._git(
+            repo,
+            "fetch",
+            "origin",
+            target_branch,
+            timeout=_get_git_ops().NETWORK_GIT_TIMEOUT,
         )
     except subprocess.CalledProcessError:
         return True
@@ -153,8 +172,10 @@ def changed_source_files(
     the integrity check than block on a git plumbing failure).
     """
     try:
-        merge_base = _git_ops._git(repo, "merge-base", f"origin/{target_branch}", ref)
-        out = _git_ops._git(
+        merge_base = _get_git_ops()._git(
+            repo, "merge-base", f"origin/{target_branch}", ref
+        )
+        out = _get_git_ops()._git(
             repo,
             "diff",
             "--name-only",
@@ -178,7 +199,7 @@ def tracked_paths_at(repo: Path, ref: str) -> set[str]:
     membership test built on it.
     """
     try:
-        out = _git_ops._git(repo, "ls-tree", "-r", "--name-only", ref)
+        out = _get_git_ops()._git(repo, "ls-tree", "-r", "--name-only", ref)
     except subprocess.CalledProcessError:
         return set()
     return {line for line in out.split("\n") if line} if out else set()
@@ -194,7 +215,7 @@ def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str
     blobs: dict[str, str] = {}
     for path in paths:
         try:
-            sha = _git_ops._git(repo, "rev-parse", f"{ref}:{path}")
+            sha = _get_git_ops()._git(repo, "rev-parse", f"{ref}:{path}")
         except subprocess.CalledProcessError:
             continue
         if sha:
@@ -330,8 +351,12 @@ def branch_is_behind_main(repo: Path, target_branch: str = "main") -> bool:
     transient git error; the genuine-failure path (ci_fix) runs instead.
     """
     try:
-        _git_ops._git(
-            repo, "fetch", "origin", target_branch, timeout=_git_ops.NETWORK_GIT_TIMEOUT
+        _get_git_ops()._git(
+            repo,
+            "fetch",
+            "origin",
+            target_branch,
+            timeout=_get_git_ops().NETWORK_GIT_TIMEOUT,
         )
     except subprocess.CalledProcessError:
         return False
@@ -375,7 +400,9 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
     seen: list[str] = []
     seen_set: set[str] = set()
     try:
-        diff_out = _git_ops._git(repo, "diff", "--name-only", f"origin/{target_branch}")
+        diff_out = _get_git_ops()._git(
+            repo, "diff", "--name-only", f"origin/{target_branch}"
+        )
     except subprocess.CalledProcessError:
         log.warning(
             "changed_files: origin/%s ref not resolvable in %s — "
@@ -389,7 +416,9 @@ def changed_files(repo: Path, target_branch: str) -> list[str]:
             if f and f not in seen_set:
                 seen_set.add(f)
                 seen.append(f)
-    untracked_out = _git_ops._git(repo, "ls-files", "--others", "--exclude-standard")
+    untracked_out = _get_git_ops()._git(
+        repo, "ls-files", "--others", "--exclude-standard"
+    )
     if untracked_out:
         for f in untracked_out.split("\n"):
             if f and f not in seen_set:
@@ -423,7 +452,7 @@ def introduced_files(repo: Path, target_branch: str) -> list[str]:
     seen: list[str] = []
     seen_set: set[str] = set()
     try:
-        committed_out = _git_ops._git(
+        committed_out = _get_git_ops()._git(
             repo, "diff", "--name-only", f"origin/{target_branch}...HEAD"
         )
     except subprocess.CalledProcessError:
@@ -436,10 +465,12 @@ def introduced_files(repo: Path, target_branch: str) -> list[str]:
         committed_out = ""
     if committed_out:
         _collect(committed_out)
-    working_out = _git_ops._git(repo, "diff", "--name-only", "HEAD")
+    working_out = _get_git_ops()._git(repo, "diff", "--name-only", "HEAD")
     if working_out:
         _collect(working_out)
-    untracked_out = _git_ops._git(repo, "ls-files", "--others", "--exclude-standard")
+    untracked_out = _get_git_ops()._git(
+        repo, "ls-files", "--others", "--exclude-standard"
+    )
     if untracked_out:
         _collect(untracked_out)
     return seen
@@ -455,7 +486,7 @@ def added_files(repo: Path, target_branch: str) -> list[str]:
     do NOT appear — only brand-new files the branch itself introduces.
     Modified / deleted / renamed paths are excluded.
     """
-    out = _git_ops._git(
+    out = _get_git_ops()._git(
         repo,
         "diff",
         "--name-status",
@@ -480,7 +511,7 @@ def conflicted_files(repo: Path) -> list[str]:
     any git error degrades to ``[]`` so failure reporting never crashes.
     """
     try:
-        out = _git_ops._git(repo, "diff", "--name-only", "--diff-filter=U")
+        out = _get_git_ops()._git(repo, "diff", "--name-only", "--diff-filter=U")
     except Exception:
         return []
     return [line for line in out.split("\n") if line] if out else []
@@ -536,6 +567,7 @@ def restore_paths(repo: Path, target_branch: str, paths: list[str]) -> None:
             if file_path.exists():
                 file_path.unlink()
         except OSError:
+            # Best-effort cleanup; ignore transient filesystem errors.
             pass
 
 
@@ -607,15 +639,19 @@ def diff_base(
     repos and for tests that set up a local bare repo as origin).
     """
     if remote_url is not None and token is not None:
-        _git_ops._git(
+        _get_git_ops()._git(
             repo,
             "fetch",
-            _git_ops._authed_url(remote_url, token),
+            _get_git_ops()._authed_url(remote_url, token),
             f"+refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
         )
     else:
-        _git_ops._git(
-            repo, "fetch", "origin", target_branch, timeout=_git_ops.NETWORK_GIT_TIMEOUT
+        _get_git_ops()._git(
+            repo,
+            "fetch",
+            "origin",
+            target_branch,
+            timeout=_get_git_ops().NETWORK_GIT_TIMEOUT,
         )
     return subprocess.run(
         ["git", "-C", str(repo), "diff", f"origin/{target_branch}...HEAD"],
