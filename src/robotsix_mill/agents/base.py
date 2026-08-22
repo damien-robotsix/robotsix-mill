@@ -465,7 +465,7 @@ def build_agent(
     """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4).
 
     The level resolves to ``(transport, model)`` via llmio's baked tier
-    defaults: L1 → DeepSeek flash, L2 → DeepSeek pro, L3 → Claude SDK opus,
+    defaults: L1 → DeepSeek flash, L2 → Xiaomi Mimo pro, L3 → Claude SDK opus,
     L4 → Claude SDK fable-5.
     The transport is what selects the backend — there is no separate toggle.
 
@@ -575,7 +575,7 @@ def build_agent(
             f"{', '.join(sorted(unreg))}"
         )
     # llmio levels are the single source of provider+model: the baked
-    # tier config maps L1 → DeepSeek flash, L2 → DeepSeek pro,
+    # tier config maps L1 → DeepSeek flash, L2 → Xiaomi Mimo pro,
     # L3 → Claude SDK opus.  The tier config is read from llmio — mill
     # no longer re-implements it.
     from robotsix_llmio import get_provider_for_level
