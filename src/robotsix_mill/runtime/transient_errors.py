@@ -81,6 +81,24 @@ _NETWORK_DOWN_RE = re.compile(
     r"|Network is unreachable)"
 )
 
+# LLM-provider model-outage signatures: a specific model or the whole
+# provider is returning 503 / overloaded / unavailable. Distinct from a
+# generic upstream 5xx (which bounded retries handle) — this is a
+# persistent condition where every stage touching that model fails
+# identically, so the worker parks rather than burning the retry budget.
+# Matched against httpx response bodies and exception text anywhere in
+# the cause chain.
+_MODEL_UNAVAILABLE_RE = re.compile(
+    r"(model\b.*\b(?:unavailable|not available|currently unavailable)"
+    r"|no healthy endpoint"
+    r"|no available endpoint"
+    r"|all endpoints unavailable"
+    r"|provider\b.*\boverloaded"
+    r"|overloaded.*try again"
+    r"|the model .* is currently at capacity)",
+    re.IGNORECASE,
+)
+
 # Message-string fallback patterns for transient errors not caught by
 # exception-type checks.  These match against ``str(exc)`` anywhere in
 # the cause chain when no type-based classifier fires.
@@ -207,6 +225,38 @@ def _matches_network_down(exc: BaseException) -> bool:
     return bool(_NETWORK_DOWN_RE.search(str(exc)))
 
 
+def _matches_model_unavailable(exc: BaseException) -> bool:
+    """Return True when *exc* looks like an LLM provider reporting
+    "model unavailable", "overloaded", or similar outage signal.
+
+    Checks the response body/JSON on a 503, and the string
+    representation anywhere else. A 503 with no body match is left to
+    the generic transient classifiers (bounded retries); this function
+    only fires when the provider explicitly signals a model outage.
+    """
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 503:
+        try:
+            body = exc.response.text
+        except Exception:
+            body = ""
+        if body and _MODEL_UNAVAILABLE_RE.search(body):
+            return True
+        # Also check JSON error field (OpenRouter-style).
+        try:
+            js = exc.response.json()
+            err = str(js.get("error", {}).get("message", ""))
+            if _MODEL_UNAVAILABLE_RE.search(err):
+                return True
+        except Exception:
+            pass
+    if openai is not None and isinstance(
+        exc,
+        (openai.InternalServerError, openai.APIConnectionError),
+    ):
+        return bool(_MODEL_UNAVAILABLE_RE.search(str(exc)))
+    return bool(_MODEL_UNAVAILABLE_RE.search(str(exc)))
+
+
 def _matches_disk_full(exc: BaseException) -> bool:
     if isinstance(exc, OSError) and exc.errno in (errno.ENOSPC, errno.EDQUOT):
         return True
@@ -308,6 +358,40 @@ def is_network_down_error(exc: BaseException) -> bool:
             break
         seen.add(id(current))
         if _matches_network_down(current):
+            return True
+        if current.__cause__ is not None and id(current.__cause__) not in seen:
+            current = current.__cause__
+        elif current.__context__ is not None and id(current.__context__) not in seen:
+            current = current.__context__
+        else:
+            break
+    return False
+
+
+# Stable marker constant so the run-health digest and notification
+# system can recognise model-outage events distinctly from work blockers.
+MODEL_OUTAGE_MARKER: str = "model_outage"
+
+
+def is_model_unavailable_error(exc: BaseException) -> bool:
+    """Return True when *exc* looks like an LLM provider model outage.
+
+    Distinct from plain "transient": a 503 with no body match is
+    upstream endpoint trouble worth bounded retries, but a "model
+    unavailable" / "overloaded" / "no healthy endpoint" signal means
+    every stage touching that model is about to fail the same way. The
+    worker pairs this with a park branch (mirroring the network/disk
+    parks) so the ticket re-polls without consuming its retry budget.
+
+    Walks the cause chain like :func:`classify_stage_error`.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    for _ in range(_MAX_CHAIN_WALK):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        if _matches_model_unavailable(current):
             return True
         if current.__cause__ is not None and id(current.__cause__) not in seen:
             current = current.__cause__
@@ -501,6 +585,12 @@ def _check_one_transient(exc: BaseException) -> bool:
     # also what lets the disk-full PARK in the worker fire at all — that
     # branch lives inside the transient path.
     if _matches_disk_full(exc):
+        return True
+    # A model-unavailable / provider-overloaded signal is infrastructure,
+    # not a defect: the same stage succeeds once the model recovers.
+    # Reaching "transient" here is what lets the model-outage PARK in the
+    # worker fire — that branch lives inside the transient path.
+    if _matches_model_unavailable(exc):
         return True
     return bool(_is_transient_message(exc))
 

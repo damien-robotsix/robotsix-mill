@@ -256,6 +256,13 @@ class TestHandleStageError:
         )
         return mock
 
+    @staticmethod
+    def _patch_model_outage(monkeypatch, is_outage=False):
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.transient_errors.is_model_unavailable_error",
+            lambda e: is_outage,
+        )
+
     # -- tests -------------------------------------------------------
 
     @pytest.mark.asyncio
@@ -404,6 +411,113 @@ class TestHandleStageError:
 
         kwargs = ctx.service.set_retry_state.call_args[1]
         assert kwargs["retry_attempt"] == 3  # preserved, not reset
+
+    @pytest.mark.asyncio
+    async def test_model_outage_parks_without_consuming_retry(self, ctx, monkeypatch):
+        """Model outage → parked (park count tracked via retry_attempt)."""
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=True)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        t = _fake_ticket(retry_attempt=0)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        await _handle_stage_error(
+            "ticket-1", ctx, "refine", RuntimeError("model unavailable"), "tr-1"
+        )
+
+        ctx.service.set_retry_state.assert_called_once()
+        kwargs = ctx.service.set_retry_state.call_args[1]
+        # Park count = 1 (retry_attempt 0 → 1)
+        assert kwargs["retry_attempt"] == 1
+        assert "model outage" in kwargs["last_transient_error"]
+        assert "model_outage" in kwargs["last_transient_error"]
+        assert kwargs["next_retry_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_model_outage_increments_park_count(self, ctx, monkeypatch):
+        """Model outage with existing retry_attempt → park count increments."""
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=True)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        t = _fake_ticket(retry_attempt=3)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        await _handle_stage_error(
+            "ticket-1", ctx, "refine", RuntimeError("model unavailable"), "tr-1"
+        )
+
+        kwargs = ctx.service.set_retry_state.call_args[1]
+        # Park count increments: 3 → 4
+        assert kwargs["retry_attempt"] == 4
+        assert "model outage" in kwargs["last_transient_error"]
+
+    @pytest.mark.asyncio
+    async def test_model_outage_exceeds_max_parks_blocks(self, ctx, monkeypatch):
+        """When park count exceeds model_outage_max_parks → BLOCKED."""
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=True)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        block_mock = self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        # model_outage_max_parks default is 20, so retry_attempt=20
+        # means the next park would be 21 > 20 → blocks.
+        t = _fake_ticket(retry_attempt=20)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        await _handle_stage_error(
+            "ticket-1", ctx, "refine", RuntimeError("model unavailable"), "tr-1"
+        )
+
+        # Must NOT park — must block.
+        ctx.service.set_retry_state.assert_not_called()
+        block_mock.assert_called_once()
+        call_args = block_mock.call_args
+        assert "Infrastructure:" in call_args[0][3]
+        assert "model_outage" in call_args[0][3]
+
+    @pytest.mark.asyncio
+    async def test_model_outage_not_triggered_on_generic_503(self, ctx, monkeypatch):
+        """A generic transient error (not model outage) → normal retry path."""
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=False)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        t = _fake_ticket(retry_attempt=0)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        await _handle_stage_error(
+            "ticket-1", ctx, "refine", RuntimeError("generic transient"), "tr-1"
+        )
+
+        kwargs = ctx.service.set_retry_state.call_args[1]
+        # Normal retry: attempt increments to 1, "model outage" absent.
+        assert kwargs["retry_attempt"] == 1
+        assert "model outage" not in kwargs["last_transient_error"]
 
     @pytest.mark.asyncio
     async def test_implement_transient_clears_fingerprint_guard(self, ctx, monkeypatch):

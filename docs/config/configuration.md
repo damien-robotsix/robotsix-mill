@@ -439,6 +439,8 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.network_outage_retry_seconds` | `MILL_NETWORK_OUTAGE_RETRY_SECONDS` | `120` | Seconds between re-polls during a detected network outage |
 | `core.limits.disk_min_free_mb` | `MILL_DISK_MIN_FREE_MB` | `5120` | Free-space floor on the data volume. Below it a stage is parked BEFORE dispatch rather than dying partway through and leaving a half-written workspace consuming the space it ran out of. 0 disables the check. |
 | `core.limits.disk_full_retry_seconds` | `MILL_DISK_FULL_RETRY_SECONDS` | `600` | Seconds between re-polls while the data volume is full. Like the network-outage park, an ENOSPC failure re-polls without consuming a retry attempt. |
+| `core.limits.model_outage_retry_seconds` | `MILL_MODEL_OUTAGE_RETRY_SECONDS` | `120` | Seconds between re-polls during a detected LLM model outage ("model unavailable" / overloaded / 503). Like the network/disk parks, a model outage re-polls without consuming a retry attempt. |
+| `core.limits.model_outage_max_parks` | `MILL_MODEL_OUTAGE_MAX_PARKS` | `20` | Maximum consecutive model-outage parks before escalating to BLOCKED (guards against a permanently bad model id). |
 | `core.limits.refine_dynamic_limit_multiplier` | `MILL_REFINE_DYNAMIC_LIMIT_MULTIPLIER` | `1.5` | Dynamic request_limit multiplier applied when draft exceeds `refine_dynamic_limit_spec_chars` chars; must be > 1.0 |
 | `core.limits.refine_dynamic_limit_min` | `MILL_REFINE_DYNAMIC_LIMIT_MIN` | `12` | Floor for dynamic request_limit (never lower than this even if base × multiplier is lower) |
 | `core.limits.refine_dynamic_limit_spec_chars` | `MILL_REFINE_DYNAMIC_LIMIT_SPEC_CHARS` | `3000` | Draft character threshold above which the dynamic limit fires |
