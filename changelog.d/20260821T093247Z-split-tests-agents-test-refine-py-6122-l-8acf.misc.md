@@ -1,1 +1,1 @@
-Split ~880 lines of dedup-related tests from tests/agents/test_refine.py into tests/agents/test_refine_dedup.py. Shared fixtures moved to tests/agents/conftest.py. 201 tests collected before and after — no change.
+Split dedup-related tests out of tests/agents/test_refine.py (176 tests remaining) into tests/agents/test_refine_dedup.py (25 tests). Shared fixtures/functions now live in tests/agents/conftest.py rather than being duplicated. Total collected test count unchanged at 201 (176 + 25).
