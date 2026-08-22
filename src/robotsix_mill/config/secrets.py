@@ -145,7 +145,7 @@ class Secrets:
     def model_json_schema(cls) -> dict[str, Any]:
         """Return a JSON Schema for the secrets block.
 
-        Used by ``emit_config_schema.py`` and ``_check_advanced.py``.
+        Used by ``emit_config_schema.py``.
         """
         return _build_secrets_schema()
 
