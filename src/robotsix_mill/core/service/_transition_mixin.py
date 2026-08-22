@@ -671,6 +671,13 @@ class _TransitionMixin(_ServiceBase):
         via resume-blocked". Tickets blocked from READY for other
         reasons keep their counter intact.
 
+        The ticket-lifetime implement↔review cap
+        (``ticket.implement_cycles`` ≥ ``max_implement_review_cycles``)
+        follows the same rule: it is checked in implement's preflight
+        before any work runs, so a ticket at the ceiling would otherwise
+        re-block on the next poll having done nothing, making resume a
+        silent no-op.
+
         The merge-side ci_fix guard counters follow the same rule via
         :func:`_reset_tripped_ci_fix_guards` — one that has reached its
         ceiling is cleared (and recorded in the event note), one below
@@ -715,6 +722,23 @@ class _TransitionMixin(_ServiceBase):
             spawn_reset = False
             spawn_hold = False  # recurring exhaustion — see below
             counter_path = None
+            # The ticket-lifetime implement↔review cap is checked in
+            # implement's preflight, BEFORE any work happens, so a ticket
+            # sitting at the ceiling re-blocks on the very next poll having
+            # done nothing: no implement, no review, no artifacts. Without
+            # clearing it here "resume-blocked" is a silent no-op and the
+            # ticket is terminal, even though its block note invites a human
+            # to inspect and resume. Live, auto-mail 590f and central-deploy
+            # de52 each absorbed two operator resumes that way.
+            #
+            # Same rule as the spawn counter and the ci_fix guards: reset it
+            # only when it is actually AT the ceiling, so a ticket blocked
+            # for some other reason keeps its count faithfully.
+            cycles_reset = False
+            if dst is State.READY and self.settings.max_implement_review_cycles > 0:
+                cycles_reset = (
+                    ticket.implement_cycles >= self.settings.max_implement_review_cycles
+                )
             if dst is State.READY and self.settings.implement_max_spawns_per_ticket > 0:
                 counter_path = (
                     self.workspace(ticket).artifacts_dir / "implement_spawn_count"
@@ -759,6 +783,9 @@ class _TransitionMixin(_ServiceBase):
             ci_guards_reset = _reset_tripped_ci_fix_guards(
                 self.workspace(ticket), self.settings
             )
+            if cycles_reset:
+                ticket.implement_cycles = 0
+                s.add(ticket)
             event_note = f"resumed from blocked (was blocked from {dst.value})"
             if note:
                 event_note += f"; override: {note}"
@@ -769,6 +796,12 @@ class _TransitionMixin(_ServiceBase):
                     "; recurring spawn exhaustion — counter NOT reset "
                     "(spec unchanged and no resume note); change the "
                     "spec or resume with a note to grant a fresh budget"
+                )
+            if cycles_reset:
+                event_note += (
+                    "; implement-review cycle counter reset via resume-blocked "
+                    "(was at the ceiling, which blocks in preflight before any "
+                    "work runs)"
                 )
             if ci_guards_reset:
                 event_note += (
