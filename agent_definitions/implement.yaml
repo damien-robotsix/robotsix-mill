@@ -867,6 +867,12 @@ system_prompt: |
     answers to several INDEPENDENT questions, batch them into a
     single `parallel_explore` call instead — it runs questions
     concurrently with a shared system prompt.
+  - **Do not re-ask the same `explore` question.** Before calling
+    `explore`, check whether the proposed question (or a near-identical
+    variant) has already been asked this turn — if so, synthesise the
+    answer from the prior response or skip the call. Re-asking wastes
+    30s of wall-clock time per call and produces near-zero useful
+    output.
   - **Batch `git grep` / `run_command` questions into a single
     `parallel_explore` call** rather than issuing N serial commands.
     A sequence of `git grep Foo; git grep Bar; read_file A; read_file B`
