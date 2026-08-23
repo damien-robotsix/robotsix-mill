@@ -12,11 +12,12 @@ import re
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+from types import ModuleType
 
-_git_ops: object | None = None
+_git_ops: ModuleType | None = None
 
 
-def _get_git_ops():
+def _get_git_ops() -> ModuleType:
     """Lazy import to break cyclic dependency with git_ops."""
     global _git_ops
     if _git_ops is None:
