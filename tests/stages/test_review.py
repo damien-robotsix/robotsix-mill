@@ -1880,3 +1880,79 @@ def test_review_cache_different_diff_miss(ctx_factory, monkeypatch):
     out2 = ReviewStage().run(t, ctx)
     assert out2.next_state is State.DOCUMENTING
     assert len(agent_calls) == 2  # agent called again
+
+
+def test_request_changes_cache_does_not_replay_across_rounds(ctx_factory, monkeypatch):
+    """A cached REQUEST_CHANGES verdict from round 0 MUST NOT hit in
+    round 1 even when the diff is unchanged — the review must re-run.
+
+    Regression test for the stale-verdict-replay deadlock: without
+    round-aware caching, a REQUEST_CHANGES verdict persists forever
+    and the ticket burns the implement/review ceiling on a loop.
+    """
+    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    t = _ticket(ctx, body="Add feature.txt")
+
+    agent_calls = []
+
+    # Produce different findings each round so convergence detection
+    # doesn't fire — the point of this test is the cache, not convergence.
+    round_num = [0]
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+        changed_line_ranges=None,
+        screenshot_path=None,
+        extra_roots=None,
+        level=None,
+    ):
+        agent_calls.append(1)
+        round_num[0] += 1
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments=f"issue from round {round_num[0]}",
+            request_changes=[
+                ReviewAsk(
+                    title=f"Fix thing in round {round_num[0]}",
+                    description=f"Different issue each round ({round_num[0]}).",
+                    files_touched=["file.txt"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    # Round 0: first review → REQUEST_CHANGES → agent called.
+    out1 = ReviewStage().run(t, ctx)
+    assert out1.next_state is State.READY
+    assert len(agent_calls) == 1
+
+    # Refresh the ticket — _handle_request_changes incremented
+    # review_rounds to 1 and the stage-cache stored the verdict keyed
+    # on review_rounds=0.
+    t = ctx.service.get(t.id)
+    assert t.review_rounds == 1
+
+    # Simulate what the pipeline does between the review stage returning
+    # READY and the next CODE_REVIEW entry: transition to READY (where
+    # implement would run), then back to CODE_REVIEW. The implement
+    # stage would run in between but we skip it (diff unchanged).
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.CODE_REVIEW)
+    t = ctx.service.get(t.id)
+
+    # Round 1: same diff, but review_rounds=1 → different input_hash
+    # → cache miss → agent runs again (fresh review).
+    out2 = ReviewStage().run(t, ctx)
+    assert out2.next_state is State.READY
+    assert len(agent_calls) == 2, (
+        "agent must be called again in round 1 — "
+        "the cached round-0 verdict must not replay"
+    )
