@@ -329,6 +329,69 @@ def test_review_input_hash_differs_on_repo_conventions(tmp_path):
     )
 
 
+def test_review_input_hash_differs_on_review_rounds(tmp_path):
+    """A different review round (when > 0) must change the cache key.
+
+    Without this a cached REQUEST_CHANGES verdict from round N replays
+    in round N+1 even though the reviewer might produce a different
+    verdict on the same diff — the implement/review cycle loops until
+    the ceiling blocks the ticket.
+
+    Round zero is excluded (see next test) so the reconcile sweep's
+    repeated polls over the same un-reviewed state still benefit from
+    the cache.
+    """
+    ws = Workspace(tmp_path, "T-1")
+    ws.write_description("desc")
+    diff = "--- a/file\n+++ b/file\n@@ -1 +1 @@\n-hello\n+world\n"
+
+    h1 = review_input_hash(ws, diff, review_rounds=1)
+    h2 = review_input_hash(ws, diff, review_rounds=2)
+    assert h1 != h2, "different review rounds must produce different hashes"
+
+
+def test_review_input_hash_unchanged_when_rounds_zero(tmp_path):
+    """Round zero must not affect the hash — backwards compatibility."""
+    ws = Workspace(tmp_path, "T-1")
+    ws.write_description("desc")
+    diff = "--- a/file\n+++ b/file\n@@ -1 +1 @@\n-hello\n+world\n"
+
+    h_no_rounds = review_input_hash(ws, diff)
+    h_rounds_zero = review_input_hash(ws, diff, review_rounds=0)
+    assert h_no_rounds == h_rounds_zero, (
+        "review_rounds=0 must produce the same hash as the default (no rounds arg)"
+    )
+
+
+def test_cached_request_changes_does_not_replay_across_rounds(tmp_path):
+    """A cached REQUEST_CHANGES verdict must not hit when the round changes.
+
+    Regression test for the stale-verdict-replay deadlock.
+
+    Scenario:
+    1. Round 0: review runs, cache stores READY outcome (REQUEST_CHANGES)
+    2. Ticket resumes into round 1 (review_rounds=1 after implement)
+    3. Same diff → the cache key now includes review_rounds=1 → miss
+    4. Fresh review runs instead of replaying the stale verdict
+    """
+    ws = Workspace(tmp_path, "T-1")
+    ws.write_description("desc")
+    diff = "--- a/file\n+++ b/file\n@@ -1 +1 @@\n-hello\n+world\n"
+
+    # Round 0: simulate a fresh review → REQUEST_CHANGES → cache READY.
+    hash_r0 = review_input_hash(ws, diff, review_rounds=0)
+    _update(ws, "review", hash_r0, Outcome(next_state=State.READY, note="fix pls"))
+
+    # Round 1: same diff, but review_rounds=1 → different hash → miss.
+    hash_r1 = review_input_hash(ws, diff, review_rounds=1)
+    assert hash_r1 != hash_r0
+
+    cached = _check(ws, "review", hash_r1)
+    assert cached is None, (
+        "cached verdict from round 0 must not hit in round 1 — the review must re-run"
+    )
+
+
 def test_reviewer_fingerprint_is_empty_when_it_cannot_be_computed(monkeypatch):
     """An unfingerprintable reviewer must not disable caching entirely."""
     import builtins

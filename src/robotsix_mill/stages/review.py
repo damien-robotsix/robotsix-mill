@@ -267,7 +267,9 @@ class ReviewStage(Stage):
         # --- stage-outcome cache: short-circuit when input is unchanged ---
         from ._stage_cache import _check, review_input_hash
 
-        input_hash = review_input_hash(ws, diff, head_sha, Path(repo_dir))
+        input_hash = review_input_hash(
+            ws, diff, head_sha, Path(repo_dir), review_rounds=ticket.review_rounds
+        )
         cached = _check(ws, ReviewStage.name, input_hash)
         if cached is not None:
             log.info(
@@ -588,6 +590,31 @@ class ReviewStage(Stage):
 
         # Round-cap exhaustion.
         if rounds >= s.review_max_rounds:
+            # Emit a diagnostic event so the periodic diagnostic checker
+            # can flag tickets that exhausted the review round cap with
+            # a potentially stale verdict — this signals a stuck
+            # implement/review loop that warrants human inspection.
+            try:
+                from ..agents.runners.diagnostic_events import emit_diagnostic_event
+
+                emit_diagnostic_event(
+                    s,
+                    getattr(ticket, "board_id", "") or "",
+                    "STALE_REVIEW_VERDICT",
+                    ticket.id,
+                    (
+                        f"Review round cap exhausted at {rounds}/{s.review_max_rounds} "
+                        f"REQUEST_CHANGES rounds. Diff may be unchanged across "
+                        f"cycles — suspected stale-verdict replay."
+                    ),
+                    f"{ticket.id}:review-round-cap-exhausted",
+                )
+            except Exception:
+                log.debug(
+                    "%s: failed to emit STALE_REVIEW_VERDICT diagnostic event",
+                    ticket.id,
+                    exc_info=True,
+                )
             ctx.service.add_comment(
                 ticket.id,
                 f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "

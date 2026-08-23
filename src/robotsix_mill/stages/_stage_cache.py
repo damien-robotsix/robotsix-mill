@@ -196,13 +196,30 @@ def reviewer_fingerprint(repo_dir: Path | None = None) -> str:
     implement/review ceiling a second time without the new reviewer ever
     running once.
 
+    Hashes the review YAML file from disk (not the in-memory constant) so a
+    deploy-time change to the reviewer prompt invalidates cached verdicts
+    without requiring a mill restart.  Also hashes the in-memory
+    ``SYSTEM_PROMPT`` so tests can monkeypatch it and observe a hash change.
+
     Returns "" on any failure: a fingerprint we cannot compute must not stop
     the review from being cached at all.
     """
     try:
-        from ..agents.reviewing import SYSTEM_PROMPT, _repo_conventions
+        from ..agents.reviewing import (
+            _SYSPROMPT_PATH,
+            SYSTEM_PROMPT,
+            _repo_conventions,
+        )
 
         h = hashlib.sha256()
+        # Hash the YAML file from disk so a deployed reviewer change
+        # invalidates the cache even before the mill restarts.
+        try:
+            h.update(_SYSPROMPT_PATH.read_bytes())
+        except OSError:
+            log.debug("Failed to read review YAML for fingerprint", exc_info=True)
+        # Also hash the in-memory SYSTEM_PROMPT so tests can monkeypatch
+        # it and observe a hash change without touching the filesystem.
         h.update(SYSTEM_PROMPT.encode("utf-8", errors="replace"))
         h.update(_repo_conventions(repo_dir).encode("utf-8", errors="replace"))
         return h.hexdigest()
@@ -212,22 +229,38 @@ def reviewer_fingerprint(repo_dir: Path | None = None) -> str:
 
 
 def review_input_hash(
-    ws: Workspace, diff: str, head_sha: str = "", repo_dir: Path | None = None
+    ws: Workspace,
+    diff: str,
+    head_sha: str = "",
+    repo_dir: Path | None = None,
+    review_rounds: int = 0,
 ) -> str:
     """Compute the input hash for the review stage.
 
     Based on the ticket description (the spec), the implementation
-    diff, the branch-tip HEAD SHA, and a fingerprint of the reviewer
-    itself.  Including *head_sha* ensures that after a rebase or
-    force-push (new HEAD SHA) the cache misses even when the diff
-    text is unchanged, forcing a fresh review against the current
-    branch tip.  Including the reviewer fingerprint does the same when
-    mill's own review prompt or a repo's conventions change — see
-    :func:`reviewer_fingerprint` for why that matters.
+    diff, the branch-tip HEAD SHA, the current review round, and a
+    fingerprint of the reviewer itself.  Including *head_sha* ensures
+    that after a rebase or force-push (new HEAD SHA) the cache misses
+    even when the diff text is unchanged, forcing a fresh review
+    against the current branch tip.  Including the reviewer fingerprint
+    does the same when mill's own review prompt or a repo's conventions
+    change — see :func:`reviewer_fingerprint` for why that matters.
+
+    *review_rounds* is included in the hash when it is greater than
+    zero.  This ensures that after a REQUEST_CHANGES verdict (which
+    increments the round counter), the next review pass computes a
+    different hash and therefore cannot replay a cached verdict from
+    an earlier round — even when the implementation diff and HEAD
+    have not moved.  Round zero (the initial review, or a ticket
+    whose round counter was reset on APPROVE) is excluded so that
+    the reconcile sweep's repeated polls over the same un-reviewed
+    state still benefit from the cache.
     """
     h = hashlib.sha256()
     h.update(ws.read_description().encode("utf-8", errors="replace"))
     h.update(diff.encode("utf-8", errors="replace"))
     h.update(head_sha.encode("utf-8", errors="replace"))
     h.update(reviewer_fingerprint(repo_dir).encode("utf-8", errors="replace"))
+    if review_rounds > 0:
+        h.update(str(review_rounds).encode("utf-8", errors="replace"))
     return h.hexdigest()
