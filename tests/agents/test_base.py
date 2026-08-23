@@ -328,7 +328,7 @@ def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
         tools=[],
     )
 
-    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-pro"
+    assert captured_kwargs[0]["effective_model"] == "xiaomi/mimo-v2.5-pro"
 
 
 def test_build_agent_injects_report_issue_tool_by_default(monkeypatch, settings):
