@@ -65,7 +65,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         settings=s, repo_dir=tmp_path, spec="build a thing"
     )
     assert out.summary == "did it"
-    # implement.yaml declares level 2 → Xiaomi Mimo pro via llmio tier defaults.
+    # implement.yaml declares level 2 → MiMo v2.5 pro via llmio tier defaults.
     assert fake_ai["model"] == "xiaomi/mimo-v2.5-pro"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
@@ -450,7 +450,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
-    # run_tests.yaml declares level 2 → Xiaomi Mimo pro via llmio tier defaults.
+    # run_tests.yaml declares level 2 → MiMo v2.5 pro via llmio tier defaults.
     assert cap["model"] == "xiaomi/mimo-v2.5-pro"
     assert cap["got_output"]
     assert cap["name"] == "run_tests"

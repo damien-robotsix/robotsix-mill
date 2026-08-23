@@ -119,7 +119,7 @@ def test_safe_close_swallows_exceptions_from_close():
 
 def test_default_tier_config_maps_levels():
     """Each capability level maps to its baked (provider, model) via
-    llmio's default_tier_config: L1 → DeepSeek flash, L2 → Xiaomi Mimo pro, L3 → Claude SDK opus."""
+    llmio's default_tier_config: L1 → DeepSeek flash, L2 → Xiaomi MiMo v2.5 pro, L3 → Claude SDK opus."""
     from robotsix_llmio.core.factory import default_tier_config
     from robotsix_llmio.core.identifier import parse_model_identifier
 
