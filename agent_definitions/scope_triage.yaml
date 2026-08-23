@@ -45,13 +45,30 @@ system_prompt: |
     the new/changed artifact (e.g. `docs/modules.yaml`, an `__all__`
     export list, an API index, a table-of-contents). If the diff merely
     registers/describes what the ticket already changed, EXPAND it.
-  - For `docs/modules.yaml` specifically: a diff that only RE-PATHS
-    entries whose target files the ticket already moved/changed
-    (the paths appear elsewhere in this diff / file_map) is EXPAND.
-    But a diff that REGISTERS A NEW module entry whose paths are NOT
-    part of the ticket's changes is NOT a free accompanying-doc
-    update — judge it like any other out-of-scope addition (REJECT
-    if it is unrelated work, ESCALATE if genuinely ambiguous).
+  - For `docs/modules.yaml` specifically:
+    - A diff that RE-PATHS entries whose target files the ticket already
+      moved/changed (the paths appear elsewhere in this diff / file_map)
+      is EXPAND.
+    - A diff that REGISTERS a new file path under an EXISTING module
+      (adding a ``- path`` line to an existing module's ``paths`` list,
+      without creating a new ``- id:`` stanza) is EXPAND when the new
+      file itself is part of the ticket's in-scope changes. The
+      module-registration check (`robotsix-modules check-registration`)
+      requires every new file to be listed in `docs/modules.yaml` — the
+      agent has no choice but to edit it. Registering the file is a
+      DIRECT MECHANICAL CONSEQUENCE of adding it, not scope creep.
+    - A diff that REGISTERS A NEW module entry (a new ``- id:`` /
+      ``description:`` / ``paths:`` / ``dependencies:`` stanza) whose
+      paths are NOT part of the ticket's changes is NOT a free
+      accompanying-doc update — judge it like any other out-of-scope
+      addition (REJECT if it is unrelated work, ESCALATE if genuinely
+      ambiguous).
+  - For `changelog.d/*.md` fragments specifically: these are towncrier
+    changelog fragments that the implement agent is REQUIRED to produce
+    for user-visible changes. They are a mandatory compliance gate, not
+    scope creep — the agent has no choice but to write one. A
+    `changelog.d/*.md` fragment whose summary describes ONLY the change
+    named in the spec is always EXPAND.
   - A one-line import added to an adjacent module.
   - **A NEW module that extracts code OUT of an in-scope file**, when the
     ticket is a refactor / split / extraction / "break up god module"
@@ -145,6 +162,8 @@ system_prompt: |
 
   | File pattern | Justification |
   |---|---|
+  | ``docs/modules.yaml`` (new path under existing module) | Module-registration compliance requires every new file to be listed in `docs/modules.yaml`. Registering the new file is a direct mechanical consequence of adding it — the agent has no choice but to edit this file. Not scope creep. |
+  | ``changelog.d/*.md`` | Towncrier changelog fragment required by the changelog policy for every user-visible change. The agent must produce one; writing it is a mandatory compliance gate, not scope creep. |
   | ``CHANGELOG.md`` | The CHANGELOG.md update is legitimate accompanying documentation that records the change made in the ticket. Keeping the changelog in sync with the work performed is not scope creep. |
   | ``pyproject.toml`` / ``uv.lock`` | Mechanical dependency pin bump to a new revision that includes [the feature/fix]. Required for the import to resolve. |
   | ``tests/conftest.py`` | A mock conforming to the real signature is required so tests don't crash. This is a mechanical compatibility fix — an expected test-infrastructure consequence of [the change]. |
@@ -155,8 +174,8 @@ system_prompt: |
 
   A file is **in-scope** (legitimate expansion) when:
   - It is explicitly named in the ticket spec (even if under a slightly different path)
-  - It is a mechanical consequence of the spec change (dependency pin, test fixture, re-export)
-  - It is an accompanying documentation update (CHANGELOG.md, docstrings)
+  - It is a mechanical consequence of the spec change (dependency pin, test fixture, re-export, module-registration entry, changelog fragment)
+  - It is an accompanying documentation update (CHANGELOG.md, docstrings, changelog.d/*.md fragments)
 
   A file is **out-of-scope** (scope creep) when:
   - It introduces unrelated changes not required by the spec
