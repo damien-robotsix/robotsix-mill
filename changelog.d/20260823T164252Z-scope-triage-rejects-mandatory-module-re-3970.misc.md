@@ -1,1 +1,1 @@
-Scope-triage now treats `docs/modules.yaml` new-file registrations and `changelog.d/*.md` fragments as always-in-scope companion edits when they are direct compliance consequences of adding a new file. This prevents new-file tickets from deadlocking between implement, module-registration, and scope-triage gates.
+scope-triage rejects mandatory module-registration + changelog companions to a new-file addition, causing a fingerprint-guard deadlock
