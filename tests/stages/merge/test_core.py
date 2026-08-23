@@ -1598,6 +1598,10 @@ def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
         "robotsix_mill.stages.merge.git_ops.changed_source_files",
         lambda repo, target_branch="main", ref="HEAD": ["src/mod.py"],
     )
+    monkeypatch.setattr(
+        "robotsix_mill.vcs.git_diff.changed_source_files",
+        lambda repo, target_branch="main", ref="HEAD": ["src/mod.py"],
+    )
 
     t = _in_rebasing(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
