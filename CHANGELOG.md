@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.11.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.10.1...v0.11.0) (2026-08-24)
+
+
+### Features
+
+* Implement stage: zero-diff early-abort guard to stop spawn-limit thrash (real-cash cost lever) (20260817T201807Z-implement-stage-zero-diff-early-abort-gu-5896) ([#2922](https://github.com/damien-robotsix/robotsix-mill/issues/2922)) ([6a48870](https://github.com/damien-robotsix/robotsix-mill/commit/6a48870f7d1edd3275f815a2eecee892366d7a97))
+* Monitor auto-pauses repeatedly despite user refresh requests (20260809T222914Z-monitor-auto-pauses-repeatedly-despite-u-ded9) ([#2958](https://github.com/damien-robotsix/robotsix-mill/issues/2958)) ([26eee82](https://github.com/damien-robotsix/robotsix-mill/commit/26eee82bdbcce9a5739206918926c4aac861ae5c))
+* Remove dead root-level helper scripts `_gen_schema.py` and `_check_advanced.py` (20260816T111424Z-remove-dead-root-level-helper-scripts-ge-d107) ([#2937](https://github.com/damien-robotsix/robotsix-mill/issues/2937)) ([a7ab17c](https://github.com/damien-robotsix/robotsix-mill/commit/a7ab17ccb8b3ab8fcc2ce1e8740f3437885a7df7))
+* Remove stray committed doc-agent artifacts (`doc-agent-ledger.md`, `.doc_memory_ledger.md`, `doc_agent_output.json`) (20260816T144516Z-remove-stray-committed-doc-agent-artifac-8874) ([#2939](https://github.com/damien-robotsix/robotsix-mill/issues/2939)) ([505f685](https://github.com/damien-robotsix/robotsix-mill/commit/505f6856c29300c37afa9788ba4ba639a388af6c))
+
+
+### Bug Fixes
+
+* agent_limitation — Auto-approve deepseek-v4-flash model consistently returns an `artifacts` JSON field not pr (20260809T015500Z-agent-limitation-auto-approve-deepseek-v-74fd) ([#2930](https://github.com/damien-robotsix/robotsix-mill/issues/2930)) ([a7489c7](https://github.com/damien-robotsix/robotsix-mill/commit/a7489c77ec2bdaa7e701300f5efd761422aa9965))
+* ci_fix: report_issue: true but no board-report skill in skills list (20260817T075707Z-ci-fix-report-issue-true-but-no-board-re-b5b6) ([#2941](https://github.com/damien-robotsix/robotsix-mill/issues/2941)) ([91e0eb0](https://github.com/damien-robotsix/robotsix-mill/commit/91e0eb08aed8634f353b2184714dc55507b045cd))
+* **config:** persist the secrets key so it survives container recreation ([#2946](https://github.com/damien-robotsix/robotsix-mill/issues/2946)) ([2f6b594](https://github.com/damien-robotsix/robotsix-mill/commit/2f6b594645bcac1a0fe2e95265489c045fc483e8))
+* **docker:** build @robotsix/ui from source so Release can publish again ([#2950](https://github.com/damien-robotsix/robotsix-mill/issues/2950)) ([8c49864](https://github.com/damien-robotsix/robotsix-mill/commit/8c498647a96fbb1f13ac9c2475bdf1102508cba4))
+* Fix `security-audit.yml` SBOM step: `uv audit --output-format json` is a vulnerability report, not an SBOM (20260816T062920Z-fix-security-audit-yml-sbom-step-uv-audi-6464) ([#2936](https://github.com/damien-robotsix/robotsix-mill/issues/2936)) ([cd1af1e](https://github.com/damien-robotsix/robotsix-mill/commit/cd1af1eea96037353942c2297764267912d52570))
+* give the Dockerfile UI stage a WORKDIR ([#2919](https://github.com/damien-robotsix/robotsix-mill/issues/2919)) ([2c402bc](https://github.com/damien-robotsix/robotsix-mill/commit/2c402bc597345350cf40eb81fb1cd6b57e18b490))
+* **guards:** stop two guards from permanently stranding tickets ([#2971](https://github.com/damien-robotsix/robotsix-mill/issues/2971)) ([38d98f2](https://github.com/damien-robotsix/robotsix-mill/commit/38d98f28ce0e2a890a3d48d9a0cd5c8ebaea6db7))
+* Implement stage: verify changelog.d/ towncrier fragment exists on disk before reporting it as a completed deliverable (20260821T072859Z-implement-stage-verify-changelog-d-townc-10fa) ([#2955](https://github.com/damien-robotsix/robotsix-mill/issues/2955)) ([e41f56b](https://github.com/damien-robotsix/robotsix-mill/commit/e41f56b375a3dea877b8ad9e074187e9352ebe94))
+* Implement-stage spawns abort silently pre-LLM: no Langfuse trace, no cost, no recorded error — widespread SPAWN_LIMIT_EXHAUSTED with empty block notes (20260816T140259Z-implement-stage-spawns-abort-silently-pr-59c7) ([#2918](https://github.com/damien-robotsix/robotsix-mill/issues/2918)) ([6923436](https://github.com/damien-robotsix/robotsix-mill/commit/692343697a269e8a8fb476fb1f13cc1b13bb1e27))
+* Implement/draft fast-path falsely concludes 'already satisfied' (empty diff) on tickets requiring new code — 2 confirmed occurrences (20260816T072353Z-implement-draft-fast-path-falsely-conclu-2c7b) ([#2924](https://github.com/damien-robotsix/robotsix-mill/issues/2924)) ([dfd9a88](https://github.com/damien-robotsix/robotsix-mill/commit/dfd9a88b53cfaff983109d1ae6829335d3ddc268))
+* **implement:** stop summary verification flagging non-file claims ([#2932](https://github.com/damien-robotsix/robotsix-mill/issues/2932)) ([e35cbcc](https://github.com/damien-robotsix/robotsix-mill/commit/e35cbcc42b43722f4145ec7916c4920b4e80d2ea))
+* **ingest:** close the dedup check-then-create race ([#2951](https://github.com/damien-robotsix/robotsix-mill/issues/2951)) ([95395f9](https://github.com/damien-robotsix/robotsix-mill/commit/95395f900422bef82a7174c332079632be6e73c7))
+* reattach the UI stage hadolint ignore to its RUN ([#2921](https://github.com/damien-robotsix/robotsix-mill/issues/2921)) ([d1b2fce](https://github.com/damien-robotsix/robotsix-mill/commit/d1b2fce70f7af177d1834cd0f07855aeea34d1f3))
+* **resume:** clear a tripped implement-review cycle cap on resume-blocked ([#2963](https://github.com/damien-robotsix/robotsix-mill/issues/2963)) ([3dae827](https://github.com/damien-robotsix/robotsix-mill/commit/3dae827009acac7c3ef904b580d5ecd0ec92c2f1))
+* Review stage replays a stale cached 'request changes' verdict, trapping tickets in the implement/review cycle ceiling (20260822T235513Z-review-stage-replays-a-stale-cached-requ-6abc) [WIP] ([#2976](https://github.com/damien-robotsix/robotsix-mill/issues/2976)) ([6c34e7e](https://github.com/damien-robotsix/robotsix-mill/commit/6c34e7e26f33005b91944eaa66c701e697c84017))
+* **review:** key the outcome cache on the reviewer, not just its inputs ([#2957](https://github.com/damien-robotsix/robotsix-mill/issues/2957)) ([b0e0eda](https://github.com/damien-robotsix/robotsix-mill/commit/b0e0eda9e9528ee0b1f9e65a2521e6a75f6d9e76))
+* **stages:** stop five self-inflicted causes of blocked tickets ([#2956](https://github.com/damien-robotsix/robotsix-mill/issues/2956)) ([a34839e](https://github.com/damien-robotsix/robotsix-mill/commit/a34839e3df66dc032d57923e767509ff9e80e976))
+
+
+### Documentation
+
+* Remove stale `_check_advanced.py` reference from `secrets.py` docstring (20260821T180450Z-remove-stale-check-advanced-py-reference-b1d5) ([#2967](https://github.com/damien-robotsix/robotsix-mill/issues/2967)) ([97117bc](https://github.com/damien-robotsix/robotsix-mill/commit/97117bcafeacdeccf71e7256a3937c1e8a80d128))
+
 ## [0.10.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.10.0...v0.10.1) (2026-08-17)
 
 
