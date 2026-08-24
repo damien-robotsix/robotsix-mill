@@ -9,4 +9,4 @@
 # the krb5 libraries are only present as transitive system deps that are
 # never invoked. Trivy classifies as CRITICAL despite CVSS=medium; safe
 # to suppress in our deployment model.
-CVE-2026-40355  # expires: 2026-08-24
+CVE-2026-40355  # expires: 2026-11-24
