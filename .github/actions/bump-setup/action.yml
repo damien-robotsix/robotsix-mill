@@ -1,0 +1,79 @@
+name: Bump setup
+description: >-
+  Mint a GitHub App installation token, check out the caller repo,
+  install uv, and configure git identity for the dependency-bump workflow.
+
+inputs:
+  app-id:
+    description: GitHub App ID for token minting
+    required: true
+  app-private-key:
+    description: GitHub App private key for token minting
+    required: true
+  uv-version:
+    description: uv version to install
+    default: "0.8.15"
+  checkout-token:
+    description: Whether to use the minted token for checkout (enables push)
+    default: "true"
+  checkout-repository:
+    description: Repository to check out (empty = caller repo)
+    default: ""
+  checkout-path:
+    description: Path for the checkout step
+    default: ""
+  repositories:
+    description: Comma-separated list of repos the token may access
+    default: ""
+  permission-contents:
+    description: Content permission level for the token
+    default: "write"
+  permission-pull-requests:
+    description: Pull-request permission level for the token
+    default: "write"
+
+outputs:
+  token:
+    description: Minted GitHub App installation token
+    value: ${{ steps.token.outputs.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create GitHub App token
+      id: token
+      uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+        permission-contents: ${{ inputs.permission-contents }}
+        permission-pull-requests: ${{ inputs.permission-pull-requests }}
+        repositories: ${{ inputs.repositories }}
+
+    - name: Check out repository
+      if: inputs.checkout-token == 'true'
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      with:
+        token: ${{ steps.token.outputs.token }}
+        persist-credentials: true
+        repository: ${{ inputs.checkout-repository || '' }}
+        path: ${{ inputs.checkout-path || '' }}
+
+    - name: Check out repository (no token)
+      if: inputs.checkout-token != 'true'
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      with:
+        persist-credentials: false
+        repository: ${{ inputs.checkout-repository || '' }}
+        path: ${{ inputs.checkout-path || '' }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+      with:
+        version: ${{ inputs.uv-version }}
+
+    - name: Set git identity
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"

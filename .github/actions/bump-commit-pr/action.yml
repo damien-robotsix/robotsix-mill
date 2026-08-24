@@ -1,0 +1,101 @@
+name: Bump commit and PR
+description: >-
+  Commit changed lockfiles and open (or reuse) a bump PR.
+  Skips everything when none of the tracked files changed.
+
+inputs:
+  token:
+    description: Token with contents:write and pull-requests:write
+    required: true
+  bump-branch:
+    description: Branch to force-push the bump commit to
+    required: true
+  default-branch:
+    description: Base branch for the PR
+    default: main
+  diff-files:
+    description: Space-separated files to check for changes
+    required: true
+  add-files:
+    description: Space-separated files to git add before committing
+    required: true
+  commit-message:
+    description: Commit message
+    required: true
+  pr-title:
+    description: PR title
+    required: true
+  pr-body:
+    description: PR body (backticks must be shell-escaped)
+    required: true
+
+outputs:
+  changed:
+    description: "'true' if any diff-files changed, 'false' otherwise"
+    value: ${{ steps.diff.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect changes
+      id: diff
+      shell: bash
+      env:
+        DIFF_FILES: ${{ inputs.diff-files }}
+      run: |
+        changed=false
+        for f in $DIFF_FILES; do
+          if ! git diff --quiet -- "$f"; then
+            changed=true
+            break
+          fi
+        done
+        echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+    - name: Check out bump branch
+      if: steps.diff.outputs.changed == 'true'
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      with:
+        ref: ${{ inputs.bump-branch }}
+        token: ${{ inputs.token }}
+        persist-credentials: true
+        fetch-depth: 1
+
+    - name: Commit and push
+      if: steps.diff.outputs.changed == 'true'
+      shell: bash
+      env:
+        BUMP_BRANCH: ${{ inputs.bump-branch }}
+        ADD_FILES: ${{ inputs.add-files }}
+        COMMIT_MSG: ${{ inputs.commit-message }}
+      run: |
+        git checkout --detach HEAD
+        git checkout -B "$BUMP_BRANCH"
+        git add $ADD_FILES
+        git commit -m "$COMMIT_MSG"
+        git push --force origin "$BUMP_BRANCH"
+
+    - name: Create or reuse PR
+      if: steps.diff.outputs.changed == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        BUMP_BRANCH: ${{ inputs.bump-branch }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
+        PR_TITLE: ${{ inputs.pr-title }}
+        PR_BODY: ${{ inputs.pr-body }}
+      run: |
+        existing=$(gh pr list \
+          --head "$BUMP_BRANCH" \
+          --base "$DEFAULT_BRANCH" \
+          --json number \
+          --jq '.[0].number // empty')
+        if [ -n "$existing" ]; then
+          echo "PR #$existing already exists — updated by force-push."
+        else
+          gh pr create \
+            --head "$BUMP_BRANCH" \
+            --base "$DEFAULT_BRANCH" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"
+        fi
