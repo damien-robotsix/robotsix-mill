@@ -371,6 +371,36 @@ def set_current_span_attribute(key: str, value) -> None:
     span.set_attribute(key, value)
 
 
+def record_exception(error: BaseException) -> None:
+    """Record *error* as an exception event on the current active OTel span.
+
+    ``set_current_span_attribute`` puts the classification and type into span
+    *attributes*, which Langfuse does not read for its error message — so
+    every failed stage rendered as ``[ERROR] None`` in trace summaries. The
+    message comes from the exception event plus the span status, which is
+    what this records.
+
+    No-op when tracing is disabled or no span is currently recording, mirroring
+    the guard in :func:`set_current_span_attribute`.
+    """
+    try:
+        from opentelemetry import trace
+        from opentelemetry.trace import Status, StatusCode
+    except ImportError:
+        return
+    span = trace.get_current_span()
+    if span is None:
+        return
+    if not span.is_recording():
+        return
+    span.record_exception(error)
+    # Truncated to match the retry.reason attribute — Langfuse renders the
+    # status description as the error message.
+    span.set_status(
+        Status(StatusCode.ERROR, f"{type(error).__name__}: {error!s}"[:300])
+    )
+
+
 def get_current_trace_id() -> str | None:
     """Return the active OTel trace id as a 32-char hex string, or None.
 

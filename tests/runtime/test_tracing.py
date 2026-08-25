@@ -1000,3 +1000,92 @@ def test_record_step_usage_mirrors_to_local_store(monkeypatch):
     assert mirrored[0]["input_tokens"] == 123
     assert mirrored[0]["output_tokens"] == 45
     assert "timestamp" in mirrored[0]
+
+
+# ===========================================================================
+# record_exception tests
+# ===========================================================================
+
+
+def test_record_exception_noop_when_no_span(monkeypatch):
+    """record_exception is a no-op when no span is recording."""
+    from robotsix_mill.runtime.tracing import record_exception
+
+    # No active span — must not raise.
+    record_exception(RuntimeError("boom"))
+
+
+def test_record_exception_records_event_and_error_status(monkeypatch):
+    """The exception event AND the status description are both set.
+
+    Langfuse renders the status description as the error message; without it
+    every failed stage showed as "[ERROR] None".
+    """
+    from robotsix_mill.runtime.tracing import record_exception
+
+    captured: dict = {}
+
+    class FakeSpan:
+        def is_recording(self):
+            return True
+
+        def record_exception(self, exc):
+            captured["exc"] = exc
+
+        def set_status(self, status):
+            captured["status"] = status
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", lambda: FakeSpan())
+
+    err = ValueError("spec was empty")
+    record_exception(err)
+
+    assert captured["exc"] is err
+    from opentelemetry.trace import StatusCode
+
+    assert captured["status"].status_code is StatusCode.ERROR
+    assert captured["status"].description == "ValueError: spec was empty"
+
+
+def test_record_exception_truncates_long_messages(monkeypatch):
+    """The status description is capped, matching the retry.reason attribute."""
+    from robotsix_mill.runtime.tracing import record_exception
+
+    captured: dict = {}
+
+    class FakeSpan:
+        def is_recording(self):
+            return True
+
+        def record_exception(self, exc):
+            pass
+
+        def set_status(self, status):
+            captured["status"] = status
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", lambda: FakeSpan())
+
+    record_exception(RuntimeError("x" * 5000))
+    assert len(captured["status"].description) == 300
+
+
+def test_record_exception_skips_non_recording_span(monkeypatch):
+    """Nothing is recorded on a span that is not recording."""
+    from robotsix_mill.runtime.tracing import record_exception
+
+    captured: dict = {}
+
+    class FakeSpan:
+        def is_recording(self):
+            return False
+
+        def record_exception(self, exc):  # pragma: no cover - must not run
+            captured["exc"] = exc
+
+        def set_status(self, status):  # pragma: no cover - must not run
+            captured["status"] = status
+
+    monkeypatch.setattr("opentelemetry.trace.get_current_span", lambda: FakeSpan())
+
+    record_exception(RuntimeError("boom"))
+    assert captured == {}
