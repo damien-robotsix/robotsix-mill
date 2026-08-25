@@ -1948,6 +1948,89 @@ class TestReconcileWithRemotePr:
         result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
         assert result is git_ops.ReconcileResult.SYNCED
 
+    def test_diverged_but_remote_commit_is_mills_github_app_returns_synced(
+        self, tmp_path
+    ):
+        """The mill pushes under TWO identities and both must count as its own.
+
+        Local git commits are ``mill@robotsix.local``, but everything pushed
+        through the GitHub App — every ci_fix push — is authored by
+        ``<id>+robotsix-mill[bot]@users.noreply.github.com``. Matching only the
+        former made the mill hard-block on its own App commits with "a human
+        likely pushed" (live on central-deploy #801 / ticket …f472).
+        """
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "local.txt").write_text("rebased local work")
+        git_ops.commit_all(dest, "local rebase commit")
+
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(
+            pusher,
+            "config",
+            "user.email",
+            "285582353+robotsix-mill[bot]@users.noreply.github.com",
+        )
+        _git(pusher, "config", "user.name", "robotsix-mill[bot]")
+        _git(pusher, "checkout", "-b", "feature")
+        (pusher / "cifix.txt").write_text("mill's own ci_fix push\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "ci fix push via the GitHub App")
+        _git(pusher, "push", "origin", "feature")
+
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.SYNCED
+
+    def test_diverged_mixed_human_and_bot_still_diverged(self, tmp_path):
+        """One human commit among automation commits must still bail.
+
+        Broadening to automation identities must not weaken the guard the
+        check exists for.
+        """
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "local.txt").write_text("rebased local work")
+        git_ops.commit_all(dest, "local rebase commit")
+
+        pusher = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(pusher)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(pusher, "checkout", "-b", "feature")
+        _git(
+            pusher,
+            "config",
+            "user.email",
+            "285582353+robotsix-mill[bot]@users.noreply.github.com",
+        )
+        _git(pusher, "config", "user.name", "robotsix-mill[bot]")
+        (pusher / "cifix.txt").write_text("bot work\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "bot commit")
+        # ...then a real person pushes on top.
+        _git(pusher, "config", "user.email", "damien@example.com")
+        _git(pusher, "config", "user.name", "Damien")
+        (pusher / "human.txt").write_text("hand-written fix\n")
+        _git(pusher, "add", "-A")
+        _git(pusher, "commit", "-q", "-m", "human commit")
+        _git(pusher, "push", "origin", "feature")
+
+        result = git_ops.reconcile_with_remote_pr(dest, remote, "feature", token=None)
+        assert result is git_ops.ReconcileResult.DIVERGED
+
     def test_local_ahead_of_remote_noop(self, tmp_path):
         """When local is ahead of remote (normal case after local commits,
         before push) → returns True, no change."""
