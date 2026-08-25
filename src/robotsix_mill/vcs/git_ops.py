@@ -834,16 +834,25 @@ def reconcile_with_remote_pr(
         # commits the remote carries that the local rebase does not
         # (``local..remote``). That is only unsafe when one of those discarded
         # commits is FOREIGN (a human pushed to the PR branch). When every
-        # discarded commit is mill-authored, the "foreign" commit is just the
-        # mill's OWN prior force-push from an earlier rebase cycle — safe to
+        # discarded commit is automation-authored, the "foreign" commit is
+        # just the mill's OWN prior push from an earlier cycle — safe to
         # overwrite. Distinguishing the two stops the false "diverged" bail
         # that otherwise forces a manual reconcile after every mill rebase.
+        #
+        # Must use :func:`_is_automation_identity`, not ``_MILL_EMAILS``:
+        # the mill pushes under two identities. Local git commits are
+        # ``mill@robotsix.local``, but anything pushed through the GitHub App
+        # (every ci_fix push) is authored by
+        # ``<id>+robotsix-mill[bot]@users.noreply.github.com``. Matching only
+        # the former made the mill block on its OWN App commits with "a human
+        # likely pushed" — the same identity gap fixed in #2663 for
+        # post_push_check, which this site did not inherit.
         discarded = _range_commit_emails(repo, local_sha, remote_sha)
         if (
             discarded is not None
             and discarded
             and all(
-                author in _MILL_EMAILS and committer in _MILL_EMAILS
+                _is_automation_identity(author) and _is_automation_identity(committer)
                 for author, committer in discarded
             )
         ):
