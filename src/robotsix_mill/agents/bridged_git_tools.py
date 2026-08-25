@@ -3,8 +3,8 @@
 These tool closures execute HOST-SIDE — the mill's own process shells
 out to ``git`` directly with the per-repo token and remote URL.  The
 agent stays inside its ``--network none`` sandbox and never sees
-credentials; the token is captured in the closure at build time and
-never appears in tool args or the system prompt.
+credentials; the token is resolved via a provider callable at each
+operation and never appears in tool args or the system prompt.
 
 Every tool is guardrailed to operate ONLY on the ticket's own branch
 and target — arbitrary branch/remote arguments are rejected.
@@ -13,6 +13,7 @@ and target — arbitrary branch/remote arguments are rejected.
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -21,6 +22,8 @@ from typing import Any
 from ..runtime.tracing import trace_stage
 from ..vcs import git_ops
 
+log = logging.getLogger(__name__)
+
 
 def build_bridged_git_tools(
     *,
@@ -28,20 +31,39 @@ def build_bridged_git_tools(
     branch: str,
     target: str,
     remote_url: str,
-    token: str | None,
+    token: str | None = None,
+    token_provider: Callable[[], str | None] | None = None,
+    token_cache_clear: Callable[[], None] | None = None,
 ) -> list[Callable[..., Any]]:
     """Build the four bridged git tool closures.
 
     Each tool is a plain callable with type hints + docstring so
     pydantic-ai can derive its JSON schema.  They share the captured
-    *repo_dir*, *branch*, *target*, *remote_url*, and *token*.
+    *repo_dir*, *branch*, *target*, *remote_url*, and token provider.
 
     Guardrails:
     - ``git_fetch`` only fetches *target* (the base branch, e.g. ``main``).
     - ``git_remote_sha`` / ``git_push_with_lease`` / ``git_branch_ancestry``
       only operate on *branch* (the ticket's PR branch).
     - The token is never returned in any tool output.
+
+    Token resolution:
+    - When *token_provider* is given, each operation calls it to obtain
+      a fresh token.  This prevents stale-token failures on long-running
+      agent sessions where the GitHub App installation token may expire.
+    - When only *token* is given (backward compatibility), it is wrapped
+      in a constant provider.
+    - *token_cache_clear* is called before retrying a push that failed
+      with an auth error, forcing the provider to mint a fresh token.
     """
+    # Resolve the token provider: prefer the explicit callable, fall back
+    # to wrapping the static token string.
+    if token_provider is not None:
+        _get_token = token_provider
+    elif token is not None:
+        _get_token = lambda: token
+    else:
+        _get_token = lambda: None
 
     def git_fetch(target_branch: str) -> str:
         """Fetch ``origin/<target_branch>`` to refresh the local
@@ -61,7 +83,7 @@ def build_bridged_git_tools(
                 git_ops.fetch(
                     repo_dir,
                     remote_url=remote_url,
-                    token=token,
+                    token=_get_token(),
                     branch=target_branch,
                 )
             except subprocess.CalledProcessError as e:
@@ -85,7 +107,7 @@ def build_bridged_git_tools(
                 git_ops.fetch(
                     repo_dir,
                     remote_url=remote_url,
-                    token=token,
+                    token=_get_token(),
                     branch=branch_name,
                 )
             except subprocess.CalledProcessError as e:
@@ -112,6 +134,11 @@ def build_bridged_git_tools(
           diagnostic rather than a code defect.
         - ``PUSH_ERROR: ...`` — some other error (network, etc.).
 
+        On an auth failure, the token cache is cleared and the push is
+        retried once with a freshly minted token.  This handles the
+        common case where a long-running agent session outlives the
+        GitHub App installation token's 1-hour TTL.
+
         Guardrailed: only the ticket's own branch is accepted.
         """
         with trace_stage("git_push_with_lease"):
@@ -120,13 +147,16 @@ def build_bridged_git_tools(
                     f"error: git_push_with_lease is guardrailed to ticket branch "
                     f"'{branch}' — '{branch_name}' rejected"
                 )
+
+            push_token = _get_token()
+
             # Fresh lease: fetch the remote branch so the tracking ref is
             # current at call time.
             try:
                 git_ops.fetch(
                     repo_dir,
                     remote_url=remote_url,
-                    token=token,
+                    token=push_token,
                     branch=branch_name,
                 )
             except subprocess.CalledProcessError as e:
@@ -142,7 +172,7 @@ def build_bridged_git_tools(
                     return f"PUSH_ERROR: fetch before push failed: {git_ops.redact_credentials(str(e))}"
                 # else: remote branch absent — fall through to push_with_lease
             try:
-                git_ops.push_with_lease(repo_dir, branch_name, remote_url, token)
+                git_ops.push_with_lease(repo_dir, branch_name, remote_url, push_token)
                 return "PUSH_OK"
             except subprocess.CalledProcessError as e:
                 stderr = (
@@ -157,6 +187,39 @@ def build_bridged_git_tools(
                 # from a code defect.
                 classification = git_ops.classify_push_error(stderr)
                 if classification == "auth":
+                    # Retry once with a fresh token: clear the cache so the
+                    # provider mints a new installation token, then re-fetch
+                    # and re-push.  This handles the common case where the
+                    # token expired between agent start and push time.
+                    if token_cache_clear is not None:
+                        log.info(
+                            "git_push_with_lease: auth failure — "
+                            "clearing token cache and retrying"
+                        )
+                        token_cache_clear()
+                    fresh_token = _get_token()
+                    if fresh_token != push_token:
+                        try:
+                            git_ops.fetch(
+                                repo_dir,
+                                remote_url=remote_url,
+                                token=fresh_token,
+                                branch=branch_name,
+                            )
+                            git_ops.push_with_lease(
+                                repo_dir,
+                                branch_name,
+                                remote_url,
+                                fresh_token,
+                            )
+                            return "PUSH_OK"
+                        except subprocess.CalledProcessError as retry_e:
+                            retry_stderr = (
+                                retry_e.stderr.decode("utf-8", errors="replace")
+                                if isinstance(retry_e.stderr, bytes)
+                                else str(retry_e.stderr or "")
+                            )
+                            return f"PUSH_AUTH_ERROR: {git_ops.redact_credentials(retry_stderr)}"
                     return f"PUSH_AUTH_ERROR: {git_ops.redact_credentials(stderr)}"
                 return f"PUSH_ERROR: {git_ops.redact_credentials(str(e))}"
 
@@ -187,13 +250,13 @@ def build_bridged_git_tools(
                 git_ops.fetch(
                     repo_dir,
                     remote_url=remote_url,
-                    token=token,
+                    token=_get_token(),
                     branch=branch_name,
                 )
                 git_ops.fetch(
                     repo_dir,
                     remote_url=remote_url,
-                    token=token,
+                    token=_get_token(),
                     branch=target_branch,
                 )
             except subprocess.CalledProcessError as e:

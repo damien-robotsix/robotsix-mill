@@ -275,6 +275,13 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     return blocked
 
                 mem_path = s.memory_file_for("ci_fix", rc.board_id)
+
+                def _tp() -> str | None:
+                    return _facade.github_push_token(s, repo_config=rc)
+
+                def _tcc() -> None:
+                    _facade.invalidate_github_token(s, repo_config=rc)
+
                 result = _facade.run_ci_fix_agent(
                     settings=s,
                     repo_dir=str(repo_dir),
@@ -285,7 +292,8 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                     board_id=rc.board_id,
                     target=target_branch_for(s, rc),
                     remote_url=remote_url,
-                    token=token,
+                    token_provider=_tp,
+                    token_cache_clear=_tcc,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:

@@ -15,6 +15,7 @@ its own prior rebase push (no foreign commits).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -41,6 +42,8 @@ def run_rebase_agent(
     memory: str = "",
     remote_url: str | None = None,
     token: str | None = None,
+    token_provider: Callable[[], str | None] | None = None,
+    token_cache_clear: Callable[[], None] | None = None,
     pre_rebase_files: list[str] | None = None,
     previously_dropped_files: list[str] | None = None,
 ) -> RebaseResult:
@@ -78,6 +81,8 @@ def run_rebase_agent(
             target=target,
             remote_url=remote_url or "",
             token=token,
+            token_provider=token_provider,
+            token_cache_clear=token_cache_clear,
         )
     )
 

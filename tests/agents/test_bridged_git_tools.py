@@ -309,6 +309,210 @@ class TestTokenNeverLeaked:
         assert result.startswith("error: fetch before ancestry failed:")
 
 
+# ---------------------------------------------------------------------------
+# Token-refresh-on-auth-failure tests
+# ---------------------------------------------------------------------------
+
+
+class TestTokenRefreshOnAuthFailure:
+    """When a push fails with an auth error, the tool should clear the
+    token cache, obtain a fresh token, and retry once."""
+
+    STALE_TOKEN = "ghs_stale_expired"
+    FRESH_TOKEN = "ghs_fresh_new_token"
+
+    def test_push_auth_retry_succeeds_with_fresh_token(self, tmp_path):
+        """Auth failure on first push → cache clear → fresh token → retry succeeds."""
+        call_count = 0
+        tokens_used: list[str] = []
+
+        def token_provider() -> str | None:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 1:
+                return self.STALE_TOKEN
+            return self.FRESH_TOKEN
+
+        cache_cleared = False
+
+        def cache_clear() -> None:
+            nonlocal cache_cleared
+            cache_cleared = True
+
+        auth_exc = subprocess.CalledProcessError(
+            128,
+            ["git", "push", "..."],
+            output="",
+            stderr=b"remote: Invalid username or token.\n",
+        )
+
+        def tracking_push(repo, branch, remote_url, token, **kw):
+            tokens_used.append(token)
+            if token == self.STALE_TOKEN:
+                raise auth_exc
+
+        _, _, git_push_with_lease, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/t-1",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token_provider=token_provider,
+            token_cache_clear=cache_clear,
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+                side_effect=tracking_push,
+            ),
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result == "PUSH_OK"
+        assert cache_cleared
+        assert tokens_used == [self.STALE_TOKEN, self.FRESH_TOKEN]
+
+    def test_push_auth_retry_still_fails_returns_auth_error(self, tmp_path):
+        """Auth failure on first push → cache clear → fresh token → still fails → PUSH_AUTH_ERROR."""
+        call_count = 0
+
+        def token_provider() -> str | None:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 1:
+                return self.STALE_TOKEN
+            return self.FRESH_TOKEN
+
+        def cache_clear() -> None:
+            pass
+
+        auth_exc = subprocess.CalledProcessError(
+            128,
+            ["git", "push", "..."],
+            output="",
+            stderr=b"remote: Invalid username or token.\n",
+        )
+
+        _, _, git_push_with_lease, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/t-1",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token_provider=token_provider,
+            token_cache_clear=cache_clear,
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+                side_effect=auth_exc,
+            ),
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result.startswith("PUSH_AUTH_ERROR:")
+        assert "Invalid username or token" in result
+
+    def test_push_auth_no_retry_when_same_token(self, tmp_path):
+        """When the provider returns the same token after cache clear,
+        no retry is attempted (the token won't change)."""
+
+        def token_provider() -> str | None:
+            return self.STALE_TOKEN
+
+        def cache_clear() -> None:
+            pass
+
+        auth_exc = subprocess.CalledProcessError(
+            128,
+            ["git", "push", "..."],
+            output="",
+            stderr=b"remote: Invalid username or token.\n",
+        )
+
+        push_calls: list[str] = []
+
+        def tracking_push(repo, branch, remote_url, token, **kw):
+            push_calls.append(token)
+            raise auth_exc
+
+        _, _, git_push_with_lease, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/t-1",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token_provider=token_provider,
+            token_cache_clear=cache_clear,
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+                side_effect=tracking_push,
+            ),
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result.startswith("PUSH_AUTH_ERROR:")
+        # Only one push attempt — no retry since token didn't change.
+        assert len(push_calls) == 1
+
+    def test_push_auth_no_cache_clear_callback(self, tmp_path):
+        """When token_cache_clear is not provided, auth failure still
+        returns PUSH_AUTH_ERROR (graceful degradation)."""
+
+        def token_provider() -> str | None:
+            return self.STALE_TOKEN
+
+        auth_exc = subprocess.CalledProcessError(
+            128,
+            ["git", "push", "..."],
+            output="",
+            stderr=b"remote: Invalid username or token.\n",
+        )
+
+        _, _, git_push_with_lease, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/t-1",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token_provider=token_provider,
+            # No token_cache_clear
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+                side_effect=auth_exc,
+            ),
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result.startswith("PUSH_AUTH_ERROR:")
+
+    def test_backward_compat_static_token(self, tmp_path):
+        """Static token kwarg still works (backward compatibility)."""
+        _, _, git_push_with_lease, _ = build_bridged_git_tools(
+            repo_dir=tmp_path,
+            branch="mill/t-1",
+            target="main",
+            remote_url="https://github.com/o/r.git",
+            token="ghs_static_token",
+        )
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease"),
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result == "PUSH_OK"
+
+
 # --- trace_stage child-span tests ----------------------------------------
 
 

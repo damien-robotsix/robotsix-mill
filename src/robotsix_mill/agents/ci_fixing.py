@@ -53,6 +53,8 @@ def run_ci_fix_agent(
     target: str = "main",
     remote_url: str | None = None,
     token: str | None = None,
+    token_provider: Callable[[], str | None] | None = None,
+    token_cache_clear: Callable[[], None] | None = None,
     ci_status_fn: Callable[[int], tuple[str, str]] | None = None,
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
 ) -> CiFixResult:
@@ -128,6 +130,8 @@ def run_ci_fix_agent(
             target=target,
             remote_url=remote_url or "",
             token=token,
+            token_provider=token_provider,
+            token_cache_clear=token_cache_clear,
         )
     )
 

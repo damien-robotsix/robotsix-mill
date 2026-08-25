@@ -273,6 +273,13 @@ class MultiRepoMixin(_MergeStageBase):
                     branch=target,
                 )
                 mem_path = s.memory_file_for("rebase", rc.board_id)
+
+                def _tp() -> str | None:
+                    return _facade.github_push_token(s, repo_config=rc)
+
+                def _tcc() -> None:
+                    _facade.invalidate_github_token(s, repo_config=rc)
+
                 result = _facade.run_rebase_agent(
                     settings=s,
                     repo_dir=str(repo_dir),
@@ -280,7 +287,8 @@ class MultiRepoMixin(_MergeStageBase):
                     target=target,
                     memory=_facade.load_memory(mem_path),
                     remote_url=remote_url,
-                    token=token,
+                    token_provider=_tp,
+                    token_cache_clear=_tcc,
                 )
                 ok = result.status == "DONE"
                 if result.updated_memory:
