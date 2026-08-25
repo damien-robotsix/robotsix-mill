@@ -213,6 +213,9 @@ modules:
       - src/robotsix_mill/runtime/static/*
       - docs/runtime/**/*
       - tests/runtime/test_api.py
+      - tests/runtime/test_api_cumulative_cost.py
+      - tests/runtime/test_api_depends_on.py
+      - tests/runtime/test_api_epic.py
       - tests/runtime/test_broadcaster.py
       - tests/runtime/test_cost_warm.py
       - tests/runtime/test_credential_status.py
