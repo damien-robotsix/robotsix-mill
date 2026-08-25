@@ -287,9 +287,9 @@ class RebaseMixin(_MergeStageBase):
             with stack:
                 # The agent now drives fetch + rebase + push via bridged
                 # git tools — pass the per-repo remote_url and token so
-                # the tool closures can execute host-side. The token is
-                # captured in the closure and NEVER exposed to the
-                # sandbox or the agent's prompt.
+                # the tool closures can execute host-side. The token
+                # provider is called at each git operation so a long-
+                # running agent session always gets a fresh token.
                 rebase_memory_path = s.memory_file_for(
                     "rebase",
                     (repo_config.board_id if repo_config else "")
@@ -297,6 +297,13 @@ class RebaseMixin(_MergeStageBase):
                     or ticket.board_id,
                 )
                 memory_text = _facade.load_memory(rebase_memory_path)
+
+                def _tp() -> str | None:
+                    return _facade.github_push_token(s, repo_config=repo_config)
+
+                def _tcc() -> None:
+                    _facade.invalidate_github_token(s, repo_config=repo_config)
+
                 result = _facade.run_rebase_agent(
                     settings=s,
                     repo_dir=repo_dir,
@@ -304,7 +311,8 @@ class RebaseMixin(_MergeStageBase):
                     target=target,
                     memory=memory_text,
                     remote_url=remote_url,
-                    token=token,
+                    token_provider=_tp,
+                    token_cache_clear=_tcc,
                     pre_rebase_files=pre_rebase_files or None,
                     previously_dropped_files=(
                         previously_dropped_files if previously_dropped_files else None

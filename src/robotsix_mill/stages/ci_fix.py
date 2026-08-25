@@ -27,7 +27,12 @@ from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
 from ..forge import get_forge
-from ..forge.auth import _resolve_remote_url, github_push_token, github_token
+from ..forge.auth import (
+    _resolve_remote_url,
+    github_push_token,
+    github_token,
+    invalidate_github_token,
+)
 from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
@@ -903,11 +908,16 @@ class CIFixStage(Stage):
 
                 # Pass the per-repo remote_url and token so the agent's
                 # bridged git tools can drive fetch + push host-side.
-                # The token is captured in the closure and NEVER exposed
-                # to the sandbox or the agent's prompt.
+                # The token provider is called at each git operation so
+                # a long-running agent session always gets a fresh token.
                 remote_url = _resolve_remote_url(s, ctx.repo_config)
-                token = github_push_token(s, repo_config=ctx.repo_config)
                 target = target_branch_for(s, ctx.repo_config)
+
+                def _token_provider() -> str | None:
+                    return github_push_token(s, repo_config=ctx.repo_config)
+
+                def _token_cache_clear() -> None:
+                    invalidate_github_token(s, repo_config=ctx.repo_config)
 
                 def _run() -> CiFixResult:
                     return run_ci_fix_agent(
@@ -920,7 +930,8 @@ class CIFixStage(Stage):
                         board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                         target=target,
                         remote_url=remote_url,
-                        token=token,
+                        token_provider=_token_provider,
+                        token_cache_clear=_token_cache_clear,
                         ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
                         ci_log_fetch_fn=self._make_ci_log_fetch_fn(ctx, branch),
                     )

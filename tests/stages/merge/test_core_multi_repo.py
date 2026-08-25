@@ -444,6 +444,8 @@ def test_multi_repo_conflicting_with_clone_runs_rebase(tmp_path, monkeypatch):
         memory,
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
