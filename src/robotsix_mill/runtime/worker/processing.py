@@ -145,6 +145,9 @@ async def _handle_stage_error(
     )
 
     classification = classify_stage_error(error)
+    # Populates Langfuse's error message. Without it the span carries only
+    # attributes and every failed stage reads as "[ERROR] None".
+    tracing.record_exception(error)
     tracing.set_current_span_attribute("error.classification", classification)
     tracing.set_current_span_attribute("error.type", type(error).__name__)
     tracing.set_current_span_attribute(

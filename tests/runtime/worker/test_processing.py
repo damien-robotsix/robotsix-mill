@@ -288,6 +288,39 @@ class TestHandleStageError:
         # timeout → sets error.subtype span attribute; reaped count also stamped
 
     @pytest.mark.asyncio
+    async def test_stage_error_records_the_exception_for_langfuse(
+        self, ctx, monkeypatch
+    ):
+        """The raised error reaches tracing.record_exception.
+
+        Span *attributes* alone left every failed stage rendering as
+        "[ERROR] None" in Langfuse trace summaries — the message comes from
+        the recorded exception.
+        """
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_retry(monkeypatch, delay=10.0)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        recorded: list = []
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing.tracing.record_exception",
+            recorded.append,
+        )
+
+        t = _fake_ticket(retry_attempt=1)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        err = RuntimeError("transient glitch")
+        await _handle_stage_error("ticket-1", ctx, "refine", err, "tr-1")
+
+        assert recorded == [err]
+
+    @pytest.mark.asyncio
     async def test_transient_retry_remaining_increments_attempt(self, ctx, monkeypatch):
         """Transient with retry budget left → set_retry_state with attempt+1."""
         self._patch_classify(monkeypatch, "transient")
