@@ -1,0 +1,1 @@
+Drop the stale `trace_review_max_inspector_runs_per_pass` config-sync exemption — no Settings field has ever had that name, and the real field (`trace_review_max_inspections_per_run`) already has a `config.example.json` entry.

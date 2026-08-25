@@ -44,7 +44,6 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         # -- Fields with no JSON entry (yet) — listed here so the
         #    invariant passes at HEAD; each should eventually gain a
         #    JSON entry or be explicitly documented as env-only --
-        "trace_review_max_inspector_runs_per_pass",
         # -- ci-fix agent timeout: default 1800 wraps the LLM agent call
         #    inside the ci-fix stage.  Committing a JSON default would
         #    be misleading because the live value SHOULD be smaller than
@@ -81,7 +80,6 @@ MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
     "langfuse": "Langfuse config — canonical block at top-level langfuse:, not a flat SecretStr field",
     "openrouter": "OpenRouter config — canonical block at top-level openrouter:, not a flat SecretStr field",
     "repos": "Repos registry — not a flat setting field",
-    "trace_review_max_inspector_runs_per_pass": "Field with no JSON entry yet — should eventually gain a JSON entry or be explicitly documented as env-only",
     "ci_fix_agent_timeout_seconds": "ci-fix agent timeout — default 1800 wraps the LLM agent call inside the ci-fix stage. Committing a JSON default would be misleading because the live value SHOULD be smaller than the worker's stage_timeout_seconds and the operator tunes it per-deployment",
     "skills_dir": "Packaged resource dir — default resolves via importlib.resources to machine-specific absolute paths, so a committed template value can only be wrong somewhere",
     "language_instructions_dir": "Packaged resource dir — default resolves via importlib.resources to machine-specific absolute paths",
