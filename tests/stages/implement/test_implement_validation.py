@@ -936,6 +936,150 @@ def test_vendored_dep_roots_single_dist_info_not_enough(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# _run_scope_guardrail — EXPAND cap (split proposal)
+# ---------------------------------------------------------------------------
+
+
+def test_scope_guardrail_expand_cap_blocks_and_splits(monkeypatch):
+    """After 2 prior EXPAND events, the 3rd triggers a split proposal."""
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+    monkeypatch.setattr(
+        validation_mod.git_ops,
+        "introduced_files",
+        lambda *a: ["in_scope.py", "new_module.py"],
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: None),
+        raising=False,
+    )
+    monkeypatch.setattr(validation_mod.git_ops, "tracked_paths_at", lambda *a: set())
+
+    # Two prior EXPAND events in history.
+    prior_events = [
+        SimpleNamespace(note="scope-triage EXPAND: added `foo.py` (added: foo.py)"),
+        SimpleNamespace(note="scope-triage EXPAND: added `bar.py` (added: bar.py)"),
+    ]
+    created_tickets: list[dict] = []
+    transitioned: list[tuple] = []
+
+    def _fake_create(title, desc, **kw):
+        created_tickets.append({"title": title, "desc": desc, **kw})
+        return SimpleNamespace(id=f"child-{len(created_tickets)}")
+
+    def _fake_transition(tid, state, note=""):
+        transitioned.append((tid, state, note))
+
+    ctx = SimpleNamespace(
+        repo_config=SimpleNamespace(),
+        service=SimpleNamespace(
+            add_step_event=lambda *a, **kw: None,
+            history=lambda tid: prior_events,
+            create=_fake_create,
+            transition=_fake_transition,
+        ),
+    )
+
+    def _expand_triage(*a, **kw):
+        return ScopeTriageVerdict(
+            action="EXPAND",
+            justification="legitimate expansion",
+            expand_files=["new_module.py"],
+        )
+
+    from robotsix_mill.agents import scope_triage as st
+
+    monkeypatch.setattr(st, "run_scope_triage_agent", _expand_triage)
+
+    res = ValidationMixin._run_scope_guardrail(
+        ctx,
+        SimpleNamespace(id="T-1", board_id=None, priority=False),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        _scope_settings(scope_triage_enabled=True, scope_triage_max_files=0),
+        "spec",
+        None,
+    )
+    assert res.action == "return"
+    assert res.outcome is not None
+    assert res.outcome.next_state is State.BLOCKED
+    assert "EXPAND cap reached" in res.outcome.note
+    assert "child-1" in res.outcome.note
+    assert len(created_tickets) == 1
+    assert "new_module.py" in created_tickets[0]["desc"]
+    assert transitioned[0][1] is State.DRAFT
+
+
+def test_scope_guardrail_expand_under_cap_proceeds(monkeypatch):
+    """With fewer than 2 prior EXPAND events, expansion proceeds normally."""
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+    monkeypatch.setattr(
+        validation_mod.git_ops,
+        "introduced_files",
+        lambda *a: ["in_scope.py", "other.py"],
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: None),
+        raising=False,
+    )
+    monkeypatch.setattr(validation_mod.git_ops, "tracked_paths_at", lambda *a: set())
+
+    # Only one prior EXPAND event — under the cap.
+    prior_events = [
+        SimpleNamespace(note="scope-triage EXPAND: added `foo.py` (added: foo.py)"),
+    ]
+
+    ctx = SimpleNamespace(
+        repo_config=SimpleNamespace(),
+        service=SimpleNamespace(
+            add_step_event=lambda *a, **kw: None,
+            history=lambda tid: prior_events,
+        ),
+    )
+
+    def _expand_triage(*a, **kw):
+        return ScopeTriageVerdict(
+            action="EXPAND",
+            justification="legitimate expansion",
+            expand_files=["new_module.py"],
+        )
+
+    from robotsix_mill.agents import scope_triage as st
+
+    monkeypatch.setattr(st, "run_scope_triage_agent", _expand_triage)
+
+    res = ValidationMixin._run_scope_guardrail(
+        ctx,
+        SimpleNamespace(id="T-1"),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        _scope_settings(scope_triage_enabled=True, scope_triage_max_files=0),
+        "spec",
+        None,
+    )
+    # Under cap → normal EXPAND flow (continue to re-run agent).
+    assert res.action == "continue"
+    assert "new_module.py" in res.file_map
+
+
+# ---------------------------------------------------------------------------
 # _run_scope_guardrail — vendored-dep filtering (guardrail-level)
 # ---------------------------------------------------------------------------
 
