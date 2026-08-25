@@ -1,7 +1,10 @@
 """Tests for the target-branch CI monitor poll loop."""
 
+import asyncio
 import contextlib
 import json
+import random
+import re
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -70,17 +73,22 @@ def _ctx(tmp_path, repo_config=None, **env):
     )
 
 
-def _make_fake_forge(monkeypatch, runs=None, logs="", raise_on_logs=False):
+def _make_fake_forge(
+    monkeypatch, runs=None, logs="", raise_on_logs=False, raise_on_list=None
+):
     class FakeForge:
         """Controllable fake forge for CI monitor tests."""
 
-        def __init__(self, runs=None, logs="", raise_on_logs=False):
+        def __init__(self, runs=None, logs="", raise_on_logs=False, raise_on_list=None):
             self.runs = runs or []
             self.logs = logs
             self.raise_on_logs = raise_on_logs
+            self.raise_on_list = raise_on_list
             self.logs_call_count = 0
 
         def list_workflow_runs(self, *, branch=None, head_sha=None):
+            if self.raise_on_list is not None:
+                raise self.raise_on_list
             return self.runs
 
         def fetch_workflow_job_logs(self, *, run_id):
@@ -89,7 +97,9 @@ def _make_fake_forge(monkeypatch, runs=None, logs="", raise_on_logs=False):
                 raise ConnectionError("simulated ConnectError")
             return self.logs
 
-    forge = FakeForge(runs=runs, logs=logs, raise_on_logs=raise_on_logs)
+    forge = FakeForge(
+        runs=runs, logs=logs, raise_on_logs=raise_on_logs, raise_on_list=raise_on_list
+    )
 
     def _fake_get_forge(settings, repo_config=None):
         return forge
@@ -1249,3 +1259,293 @@ def test_ci_monitor_polls_repo_when_no_config_clone(tmp_path, monkeypatch):
     # A CI ticket should have been filed (normal behaviour — no clone = no skip).
     ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
     assert len(ci_tickets) == 1
+
+
+# === transient / network-down resilience ==================================
+
+
+def test_list_fetch_outage_is_clean_skip(tmp_path, monkeypatch, caplog):
+    """When list_workflow_runs raises a network-down error, the cycle is
+    skipped cleanly: no ticket filed, state file unchanged, WARNING logged."""
+    import logging
+
+    import httpx
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[],
+        raise_on_list=httpx.ConnectError("DNS resolution failed"),
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.worker"):
+        _run_one_cycle(worker, monkeypatch)
+
+    # No ticket filed.
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 0
+
+    # State file was NOT written (cycle aborted before persist).
+    assert not state_path.exists()
+
+    # WARNING logged with connectivity/outage wording.
+    assert any(
+        "connectivity" in r.message or "outage" in r.message
+        for r in caplog.records
+        if r.levelno >= logging.WARNING
+    )
+
+
+def test_transient_log_fetch_does_not_consume_deferral_budget(tmp_path, monkeypatch):
+    """When fetch_workflow_job_logs raises a network-down error, the deferral
+    budget is never consumed — even after many poll cycles."""
+    import httpx
+
+    from robotsix_mill.runtime.worker import poll_loops
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 7,
+                "name": "Docs",
+                "workflow_id": 300,
+                "head_sha": "deadbeef",
+                "conclusion": "failure",
+                "html_url": "http://run/7",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+    )
+    # Make log fetch raise a network-down error.
+    forge.raise_on_logs = True
+
+    # Override fetch_workflow_job_logs to raise httpx.ConnectError.
+    def _raise_connect(*, run_id):
+        forge.logs_call_count += 1
+        raise httpx.ConnectError("Could not resolve host")
+
+    forge.fetch_workflow_job_logs = _raise_connect
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    # Run more cycles than the deferral budget — none should consume it.
+    total_cycles = poll_loops._CI_LOG_FETCH_MAX_DEFERRALS + 2
+    for _ in range(total_cycles):
+        _run_ci_poll_cycle(worker, ctx, monkeypatch)
+
+    # No draft ever filed.
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 0
+
+    # Deferral counter never incremented.
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "300:deadbeef" not in state.get("deferred", {})
+    assert "300:deadbeef" not in state.get("seen", {})
+
+    # Each cycle attempted exactly one fetch (no retries for network-down).
+    assert forge.logs_call_count == total_cycles
+
+
+def test_recovery_re_verifies_live(tmp_path, monkeypatch):
+    """After a network-down cycle, when connectivity returns and the run
+    still shows conclusion==failure, a draft IS filed from fresh data."""
+    import httpx
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 7,
+                "name": "Docs",
+                "workflow_id": 300,
+                "head_sha": "deadbeef",
+                "conclusion": "failure",
+                "html_url": "http://run/7",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs="real build error\n",
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    # Cycle 1: list fetch fails with network-down → clean skip.
+    forge.raise_on_list = httpx.ConnectError("DNS resolution failed")
+    _run_one_cycle(worker, monkeypatch)
+    assert [t for t in ctx.service.list() if t.source == "ci"] == []
+
+    # Cycle 2: connectivity restored, run still failing.
+    forge.raise_on_list = None
+    _run_ci_poll_cycle(worker, ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    body = ctx.service.workspace(ci_tickets[0]).read_description() or ""
+    assert "real build error" in body
+
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "300:deadbeef" in state["seen"]
+
+
+def test_backoff_is_jittered_and_capped(tmp_path, monkeypatch):
+    """In-poll retry sleeps use jittered exponential backoff capped at
+    _CI_LOG_FETCH_BACKOFF_CAP_SECONDS."""
+    from robotsix_mill.runtime.worker import poll_loops
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    # Use a genuine (non-network) error so retries happen.
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 7,
+                "name": "Docs",
+                "workflow_id": 300,
+                "head_sha": "deadbeef",
+                "conclusion": "failure",
+                "html_url": "http://run/7",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+    )
+
+    # Raise a genuine (non-network) error.
+    def _raise_genuine(*, run_id):
+        forge.logs_call_count += 1
+        raise RuntimeError("genuine server error")
+
+    forge.fetch_workflow_job_logs = _raise_genuine
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    sleep_durations: list[float] = []
+
+    async def _capture_sleep(s):
+        sleep_durations.append(s)
+
+    monkeypatch.setattr(asyncio, "sleep", _capture_sleep)
+
+    # Also patch random.uniform to return a known value for determinism.
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.75)
+
+    # Drive the cycle directly so our sleep capture is not overridden.
+    settings = ctx.settings
+    rc = ctx.repo_config
+    target = target_branch_for(settings, rc)
+    ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(
+        worker._poll_one_repo_ci(rc, target, time.time(), 30 * 86400, ansi_re)
+    )
+    loop.close()
+
+    # _CI_LOG_FETCH_ATTEMPTS = 3, so 2 sleeps (attempt 1 and 2).
+    assert len(sleep_durations) == poll_loops._CI_LOG_FETCH_ATTEMPTS - 1
+
+    cap = poll_loops._CI_LOG_FETCH_BACKOFF_CAP_SECONDS
+    base = poll_loops._CI_LOG_FETCH_BACKOFF_SECONDS
+
+    # Attempt 1: min(cap, base * 2^0) * 0.75 = min(30, 2) * 0.75 = 1.5
+    expected_1 = min(cap, base * (2**0)) * 0.75
+    assert abs(sleep_durations[0] - expected_1) < 0.01
+
+    # Attempt 2: min(cap, base * 2^1) * 0.75 = min(30, 4) * 0.75 = 3.0
+    expected_2 = min(cap, base * (2**1)) * 0.75
+    assert abs(sleep_durations[1] - expected_2) < 0.01
+
+    # All sleeps must be <= cap.
+    assert all(s <= cap for s in sleep_durations)
+
+
+def test_is_network_down_error_called_from_monitor(tmp_path, monkeypatch):
+    """Verify is_network_down_error is exercised when list_workflow_runs
+    raises a network-down error (integration-level check)."""
+    import httpx
+
+    from robotsix_mill.runtime.worker import poll_loops as pl_mod
+
+    ctx = _ctx(
+        tmp_path,
+        FORGE_KIND="github",
+        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[],
+        raise_on_list=httpx.ConnectError("Could not resolve host"),
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    calls: list[bool] = []
+    _real = pl_mod.is_network_down_error
+
+    def _spy(exc):
+        result = _real(exc)
+        calls.append(result)
+        return result
+
+    monkeypatch.setattr(pl_mod, "is_network_down_error", _spy)
+
+    _run_one_cycle(worker, monkeypatch)
+
+    # is_network_down_error was called and returned True.
+    assert len(calls) >= 1
+    assert calls[0] is True

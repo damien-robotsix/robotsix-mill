@@ -477,7 +477,12 @@ class TestFetchRunLogsWithDeferral:
         mixin = _make_mixin()
         deferred = {}
         now = time.time()
-        logs, error, deferred_flag = await mixin._fetch_run_logs_with_deferral(
+        (
+            logs,
+            error,
+            deferred_flag,
+            network_down,
+        ) = await mixin._fetch_run_logs_with_deferral(
             forge,
             42,
             "key1",
@@ -489,6 +494,7 @@ class TestFetchRunLogsWithDeferral:
         assert logs == "job output"
         assert error == ""
         assert deferred_flag is False
+        assert network_down is False
         assert forge.fetch_calls == 1
 
     @pytest.mark.asyncio
@@ -500,7 +506,12 @@ class TestFetchRunLogsWithDeferral:
         with patch(
             "robotsix_mill.runtime.worker.poll_loops.asyncio.sleep", return_value=None
         ):
-            logs, error, deferred_flag = await mixin._fetch_run_logs_with_deferral(
+            (
+                logs,
+                error,
+                deferred_flag,
+                network_down,
+            ) = await mixin._fetch_run_logs_with_deferral(
                 forge,
                 42,
                 "key1",
@@ -512,6 +523,7 @@ class TestFetchRunLogsWithDeferral:
         assert logs == "eventual output"
         assert error == ""
         assert deferred_flag is False
+        assert network_down is False
         assert forge.fetch_calls == 2
 
     @pytest.mark.asyncio
@@ -523,7 +535,12 @@ class TestFetchRunLogsWithDeferral:
         with patch(
             "robotsix_mill.runtime.worker.poll_loops.asyncio.sleep", return_value=None
         ):
-            logs, error, deferred_flag = await mixin._fetch_run_logs_with_deferral(
+            (
+                logs,
+                error,
+                deferred_flag,
+                network_down,
+            ) = await mixin._fetch_run_logs_with_deferral(
                 forge,
                 42,
                 "key1",
@@ -535,6 +552,7 @@ class TestFetchRunLogsWithDeferral:
         assert logs == ""
         assert "ConnectError" in error
         assert deferred_flag is True
+        assert network_down is False
         assert deferred == {"key1": {"n": 1, "ts": now}}
         assert forge.fetch_calls == 3
 
@@ -548,7 +566,12 @@ class TestFetchRunLogsWithDeferral:
         with patch(
             "robotsix_mill.runtime.worker.poll_loops.asyncio.sleep", return_value=None
         ):
-            logs, error, deferred_flag = await mixin._fetch_run_logs_with_deferral(
+            (
+                logs,
+                error,
+                deferred_flag,
+                network_down,
+            ) = await mixin._fetch_run_logs_with_deferral(
                 forge,
                 42,
                 "key1",
@@ -560,6 +583,7 @@ class TestFetchRunLogsWithDeferral:
         assert logs == ""
         assert "ConnectError" in error
         assert deferred_flag is False
+        assert network_down is False
         assert "key1" not in deferred
         assert forge.fetch_calls == 3
 
