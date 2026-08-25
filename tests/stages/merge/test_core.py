@@ -1108,6 +1108,8 @@ def test_fetch_called_before_rebase_agent(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1158,6 +1160,8 @@ def test_fetch_failure_does_not_invoke_agent(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):

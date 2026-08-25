@@ -103,6 +103,8 @@ def test_rebasing_clean_rebase_returns_to_implement_complete(tmp_path, monkeypat
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -443,6 +445,8 @@ def test_rebase_clears_stale_review_artifact_and_cache(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -533,6 +537,8 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -618,6 +624,8 @@ def test_rebase_sibling_modified_produces_targeted_blocked_message(
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -706,6 +714,8 @@ def test_rebase_drop_messages_do_not_advise_a_retry(tmp_path, monkeypatch):
             memory="",
             remote_url=None,
             token=None,
+            token_provider=None,
+            token_cache_clear=None,
             pre_rebase_files=None,
             previously_dropped_files=None,
         ):
@@ -771,6 +781,8 @@ def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -851,6 +863,8 @@ def test_rebase_success_no_pre_rebase_files_passes_integrity(tmp_path, monkeypat
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -920,7 +934,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.stages.merge.run_rebase_agent",
-        lambda *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None, pre_rebase_files=None, previously_dropped_files=None: (
+        lambda *, settings, repo_dir, branch, target, memory="", remote_url=None, token=None, token_provider=None, token_cache_clear=None, pre_rebase_files=None, previously_dropped_files=None: (
             RebaseResult(status="DONE", summary="ok")
         ),
     )
@@ -972,6 +986,8 @@ def test_rebasing_success_no_pr_routes_to_ready(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1131,6 +1147,8 @@ def test_rebasing_retry_stays_rebasing(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1173,6 +1191,8 @@ def test_rebasing_exhausted_blocks(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1272,6 +1292,8 @@ def test_implement_complete_to_rebasing_and_back(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1357,6 +1379,8 @@ def test_rebase_failure_exhausts_attempts_then_blocks(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1430,6 +1454,8 @@ def test_no_force_push_on_rebase_failure(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1476,6 +1502,8 @@ def test_push_failure_after_rebase_success_blocks(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1523,6 +1551,8 @@ def test_rebase_counter_resets_only_when_pr_becomes_mergeable(tmp_path, monkeypa
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
@@ -1609,6 +1639,8 @@ def test_force_push_refspec_is_ticket_branch_only(tmp_path, monkeypatch):
         memory="",
         remote_url=None,
         token=None,
+        token_provider=None,
+        token_cache_clear=None,
         pre_rebase_files=None,
         previously_dropped_files=None,
     ):
