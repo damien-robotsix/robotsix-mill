@@ -801,7 +801,6 @@ def test_tracked_file_map_reaches_ready(ctx_factory, monkeypatch):
 def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="false",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Implement the thing")
@@ -823,7 +822,6 @@ def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatc
 def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Add a docstring to utils.py")
@@ -858,7 +856,6 @@ def test_auto_approve_test_gap_source_short_circuits_to_ready(
     rubber-stamped."""
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = ctx.service.create(
@@ -908,7 +905,6 @@ def test_auto_approve_audit_source_also_short_circuits(
     ):
         ctx = ctx_factory(
             require_approval="true",
-            auto_approve_enabled="true",
             refine_triage_enabled="false",
         )
         t = ctx.service.create(
@@ -951,7 +947,6 @@ def test_auto_approve_audit_source_also_short_circuits(
 def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Redesign the auth module")
@@ -978,7 +973,6 @@ def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
 def test_auto_approve_triage_failure_falls_back_to_human(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Update config defaults")
@@ -1672,7 +1666,6 @@ def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
 def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="false",
         refine_triage_enabled="false",
     )
     epic = ctx.service.create("Epic", "Original epic goal", kind=TicketKind.EPIC)

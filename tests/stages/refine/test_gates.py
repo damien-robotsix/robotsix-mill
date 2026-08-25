@@ -1262,18 +1262,22 @@ def test_advisory_dedup_draft_without_leading_blank_line_after_block(
 # ===========================================================================
 
 
-def test_doc_only_gate_disabled_when_auto_approve_off(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=False)
+def test_doc_only_gate_skip_without_require_approval(ctx_factory):
+    """When require_approval is false, doc-only gate still triggers (auto-approve
+    is always-on) but the approval context doesn't need the gate."""
+    ctx = ctx_factory(require_approval=False)
     body = "Update `docs/guide.md` with setup instructions"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)
 
     out = RefineStage._run_doc_only_gate(ctx, t, body, t.title, ws, ctx.settings)
-    assert out is None
+    # Auto-approve is always-on, so doc-only gate still returns READY.
+    assert out is not None
+    assert out.next_state is State.READY
 
 
 def test_doc_only_gate_docs_only_returns_ready(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     body = "Update `docs/guide.md` with setup instructions"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)
@@ -1285,7 +1289,7 @@ def test_doc_only_gate_docs_only_returns_ready(ctx_factory):
 
 
 def test_doc_only_gate_code_file_returns_none(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     body = "Fix `src/robotsix_mill/core.py` import"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)
@@ -1295,7 +1299,7 @@ def test_doc_only_gate_code_file_returns_none(ctx_factory):
 
 
 def test_doc_only_gate_no_file_paths_returns_none(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     body = "Fix the widget loader retry logic"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)
@@ -1305,7 +1309,7 @@ def test_doc_only_gate_no_file_paths_returns_none(ctx_factory):
 
 
 def test_doc_only_gate_changelog_is_doc_only(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     body = "Update `CHANGELOG.md` with the 0.1.0 release notes"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)
@@ -1316,7 +1320,7 @@ def test_doc_only_gate_changelog_is_doc_only(ctx_factory):
 
 
 def test_doc_only_gate_writes_artifacts(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     body = "Fix typo in `README.md`"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)
@@ -1506,7 +1510,7 @@ def test_scope_triage_repo_awareness_skips_meta_board(ctx_factory, tmp_path):
 
 
 def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     body = "Update `docs/api.md` and fix `src/api.py` handler"
     t = _ticket(ctx, body=body)
     ws = ctx.service.workspace(t)

@@ -502,7 +502,6 @@ def test_auto_approve_approve_skips_human_gate(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -541,7 +540,6 @@ def test_auto_approve_needs_approval_goes_to_human(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -572,7 +570,6 @@ def test_auto_approve_failure_falls_back_to_human(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -586,7 +583,7 @@ def test_auto_approve_failure_falls_back_to_human(
 def test_auto_approve_flag_off_never_called(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):
-    """When auto_approve_enabled=false, triage_auto_approve is never called
+    """When require_approval=false, triage_auto_approve is never called
     and the ticket follows normal gated behaviour."""
     spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
 
@@ -605,7 +602,6 @@ def test_auto_approve_flag_off_never_called(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="false",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -646,7 +642,6 @@ def test_auto_approve_precise_multifile_feature_approved(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -680,7 +675,6 @@ def test_auto_approve_ambiguous_spec_needs_approval(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -721,7 +715,6 @@ def test_auto_approve_architecture_decision_needs_approval(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -736,13 +729,12 @@ def test_auto_approve_architecture_decision_needs_approval(
 # ---------------------------------------------------------------------------
 
 
-def _ctx(require_approval=True, auto_approve_enabled=False):
+def _ctx(require_approval=True):
     from types import SimpleNamespace
 
     return SimpleNamespace(
         settings=SimpleNamespace(
             require_approval=require_approval,
-            auto_approve_enabled=auto_approve_enabled,
         )
     )
 
@@ -888,7 +880,7 @@ def test_auto_approve_criteria_approve_routine(label, spec, monkeypatch):
         ),
     )
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         spec,
         "t1",
     )
@@ -908,7 +900,7 @@ def test_auto_approve_criteria_needs_approval_high_risk(label, spec, monkeypatch
         ),
     )
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         spec,
         "t1",
     )

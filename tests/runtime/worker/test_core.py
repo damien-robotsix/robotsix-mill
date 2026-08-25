@@ -1470,7 +1470,6 @@ async def test_periodic_pass_per_repo_forwards_repo_config_to_span(ctx, monkeypa
             "audit",
             fake_runner,
             settings_interval_attr="audit_interval_seconds",
-            settings_enabled_attr="audit_periodic",
         )
 
     assert seen.get("root_opened") is True

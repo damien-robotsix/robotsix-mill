@@ -4576,7 +4576,6 @@ def test_auto_approve_receives_summarized_spec(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
-        auto_approve_enabled="true",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 

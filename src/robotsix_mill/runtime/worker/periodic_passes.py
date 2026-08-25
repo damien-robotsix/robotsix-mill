@@ -223,8 +223,6 @@ class PeriodicPassesMixin(_WorkerBase):
         label: str,
         runner_fn,
         settings_interval_attr: str,
-        per_repo_flag: str | None = None,
-        settings_enabled_attr: str | None = None,
     ) -> None:
         """Shared per-repo periodic pass loop.
 
@@ -235,6 +233,8 @@ class PeriodicPassesMixin(_WorkerBase):
         ``<clone>/.robotsix-mill/agents/<name>.yaml``) and the
         Settings field of the matching name as a fallback.
 
+        A job is disabled when its ``interval_seconds`` is 0.
+
         Args:
             label: Pass identifier (``"audit"``, ``"agent_check"``).
                 Also used as the YAML filename after hyphens →
@@ -244,13 +244,6 @@ class PeriodicPassesMixin(_WorkerBase):
                 ``drafts_created`` field.
             settings_interval_attr: Settings field name used as the
                 interval fallback (e.g. ``"audit_interval_seconds"``).
-            per_repo_flag: Name of the RepoConfig bool field that
-                gates this agent for each repo (e.g.
-                ``"audit_periodic"``). Repos whose flag is False are
-                skipped entirely.
-            settings_enabled_attr: Settings field name used as the
-                ``enabled`` fallback (e.g. ``"audit_periodic"``).
-                ``None`` → assume enabled.
         """
         last_run_by_board: dict[str, datetime] = {}
         # Unseeded boards default to epoch so the first tick fires
@@ -296,17 +289,10 @@ class PeriodicPassesMixin(_WorkerBase):
                 if not repo_configs:
                     # Single-repo / no repos.yaml: tick the default.
                     repo_configs = [None]  # type: ignore[list-item]
-                if per_repo_flag:
-                    repo_configs = [
-                        rc
-                        for rc in repo_configs
-                        # Opt-in (9cc9): a registered repo runs this agent only
-                        # if its per-repo flag is set. ``rc is None`` is the
-                        # single-repo / no-repos.yaml mode, which has no
-                        # per-repo config to opt in with, so it still ticks
-                        # (governed by the Settings-level master switch).
-                        if rc is None or getattr(rc, per_repo_flag, False)
-                    ]
+                # Per-repo flag filtering was removed along with the
+                # ``*_periodic`` Settings booleans. All registered repos
+                # are eligible; the interval value (0 = disabled) governs
+                # individual pass activation.
 
                 # Collect the repos that are DUE this tick first, so a
                 # cross-repo fan-out (N repos reaching their interval in
@@ -325,7 +311,6 @@ class PeriodicPassesMixin(_WorkerBase):
                         label,
                         repo_config,
                         settings_interval_attr,
-                        settings_enabled_attr,
                     )
                     if not enabled:
                         continue
@@ -920,7 +905,7 @@ class PeriodicPassesMixin(_WorkerBase):
           and ``schedule_only`` kinds are scheduled here; brand-new ``bespoke`` workflows
           via this dir are deferred to the legacy bespoke path below.
         - ``<clone>/.robotsix-mill/agents/<name>.yaml`` (legacy bespoke path,
-          gated on ``settings.bespoke_periodic``): brand-new repo agents.
+          gated on ``settings.bespoke_discovery_interval_seconds > 0``): brand-new repo agents.
 
         Reconcile semantics per file: appear -> spawn a loop on its interval;
         disappear -> cancel; body change -> cancel + respawn (so the new
@@ -1051,7 +1036,7 @@ class PeriodicPassesMixin(_WorkerBase):
                     # the last cycle. Poll-cycle content-hash only (no
                     # inotify/webhook). Best-effort — never crash the loop.
                     try:
-                        if settings.member_sync_periodic:
+                        if settings.member_sync_interval_seconds > 0:
                             current_hash = _hash_repos_yaml(clone_dir)
                             stored_hash = _load_repos_yaml_hash(
                                 settings, repo_config.repo_id
@@ -1109,7 +1094,8 @@ class PeriodicPassesMixin(_WorkerBase):
                             continue
                         if wf.kind in ("llm_agent", "schedule_only", "mill_only"):
                             # Global per-agent kill-switch (fleet-wide off).
-                            if not getattr(settings, f"{wf.name}_periodic", True):
+                            # interval_seconds <= 0 disables the agent.
+                            if getattr(settings, f"{wf.name}_interval_seconds", 0) <= 0:
                                 continue
                             key = f"periodic:{wf.name}"
                             desired[key] = (
@@ -1133,7 +1119,7 @@ class PeriodicPassesMixin(_WorkerBase):
                                 wf.name,
                             )
                     # (b) Legacy bespoke definitions (gated on the master switch).
-                    if settings.bespoke_periodic:
+                    if settings.bespoke_discovery_interval_seconds > 0:
                         for defn in load_bespoke_definitions(clone_dir):
                             key = f"bespoke:{defn.name}"
                             desired[key] = (

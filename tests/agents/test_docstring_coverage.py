@@ -338,16 +338,12 @@ def test_docstring_coverage_pass_result_structure(tmp_path, monkeypatch):
 def test_docstring_coverage_config_defaults():
     """Docstring-coverage config has correct defaults."""
     s = Settings()
-    assert s.docstring_coverage_periodic is True
     assert s.docstring_coverage_interval_seconds == 604800
 
 
 def test_docstring_coverage_periodic_config():
-    """Docstring-coverage periodic can be enabled."""
-    s = Settings(
-        docstring_coverage_periodic="true", docstring_coverage_interval_seconds="43200"
-    )
-    assert s.docstring_coverage_periodic is True
+    """Docstring-coverage interval can be configured."""
+    s = Settings(docstring_coverage_interval_seconds="43200")
     assert s.docstring_coverage_interval_seconds == 43200
 
 

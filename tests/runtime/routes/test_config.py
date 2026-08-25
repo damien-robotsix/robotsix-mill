@@ -22,7 +22,7 @@ def tmp_config_file(tmp_path, monkeypatch):
         "settings": {
             "api_port": 8077,
             "data_dir": str(tmp_path / "data"),
-            "auto_approve_enabled": False,
+            "require_approval": True,
             "review_enabled": False,
         },
         "secrets": {
@@ -71,7 +71,7 @@ class TestGetConfig:
         assert r.status_code == 200
         data = r.json()
         assert data["config"]["api_port"] == 8077
-        assert data["config"]["auto_approve_enabled"] is False
+        assert data["config"]["require_approval"] is False
 
     def test_masks_secret_fields(self, config_client):
         """GET /config masks secret values as '**********'."""
@@ -96,15 +96,15 @@ class TestGetConfig:
 class TestPutConfig:
     def test_updates_non_secret_field(self, config_client, tmp_config_file):
         """PUT /config updates a non-secret field and returns new config."""
-        r = config_client.put("/config", json={"auto_approve_enabled": True})
+        r = config_client.put("/config", json={"require_approval": True})
         assert r.status_code == 200
         data = r.json()
-        assert data["config"]["auto_approve_enabled"] is True
+        assert data["config"]["require_approval"] is True
         assert data["version"] > 0
 
         # Verify the file was updated
         raw = json.loads(tmp_config_file.read_text())
-        assert raw["settings"]["auto_approve_enabled"] is True
+        assert raw["settings"]["require_approval"] is True
 
     def test_secret_merge_on_write_blank_keeps_existing(
         self, config_client, tmp_config_file
@@ -174,12 +174,12 @@ class TestPutConfig:
 
     def test_partial_update_preserves_other_keys(self, config_client, tmp_config_file):
         """PUT /config only changes the submitted keys."""
-        r = config_client.put("/config", json={"auto_approve_enabled": True})
+        r = config_client.put("/config", json={"require_approval": True})
         assert r.status_code == 200
 
         raw = json.loads(tmp_config_file.read_text())
         assert raw["settings"]["api_port"] == 8077  # unchanged
-        assert raw["settings"]["auto_approve_enabled"] is True  # changed
+        assert raw["settings"]["require_approval"] is True  # changed
         assert raw["settings"]["review_enabled"] is False  # unchanged
 
     def test_update_with_langfuse_block(self, tmp_path, monkeypatch):
@@ -236,7 +236,7 @@ class TestGetConfigVersions:
     def test_returns_versions_after_update(self, config_client):
         """GET /config/versions lists versions after a config update."""
         # Make an update to create a version
-        config_client.put("/config", json={"auto_approve_enabled": True})
+        config_client.put("/config", json={"require_approval": True})
         config_client.put("/config", json={"review_enabled": True})
 
         r = config_client.get("/config/versions")
@@ -255,11 +255,11 @@ class TestPostConfigRollback:
     def test_rollback_creates_new_version(self, config_client):
         """POST /config/rollback restores a previous version and creates a new one."""
         # Make an initial update
-        r1 = config_client.put("/config", json={"auto_approve_enabled": True})
+        r1 = config_client.put("/config", json={"require_approval": True})
         v1 = r1.json()["version"]
 
         # Make another update
-        r2 = config_client.put("/config", json={"auto_approve_enabled": False})
+        r2 = config_client.put("/config", json={"require_approval": False})
         v2 = r2.json()["version"]
         assert v2 > v1
 
@@ -268,7 +268,7 @@ class TestPostConfigRollback:
         assert r3.status_code == 200
         data = r3.json()
         assert data["version"] > v2  # rollback creates a new version
-        assert data["config"]["auto_approve_enabled"] is True
+        assert data["config"]["require_approval"] is True
 
     def test_rollback_invalid_version(self, config_client):
         """POST /config/rollback with nonexistent version returns 422."""

@@ -164,8 +164,7 @@ async def test_per_repo_cleanup_deletes_only_eligible(
     from robotsix_mill.stages import StageContext
 
     ctx = StageContext(settings=settings, service=None, repo_config=repo_config)
-    # Enable the cleanup and set a branch prefix
-    settings.stale_branch_cleanup_periodic = True
+    # Enable the cleanup
     settings.stale_branch_cleanup_interval_seconds = 3600
     settings.stale_branch_max_age_days = 30
     settings.stale_branch_cleanup_prefix_only = True
@@ -236,7 +235,6 @@ async def test_forge_exception_does_not_crash_loop(settings, repo_config, monkey
     from robotsix_mill.stages import StageContext
 
     ctx = StageContext(settings=settings, service=None, repo_config=repo_config)
-    settings.stale_branch_cleanup_periodic = True
     settings.stale_branch_cleanup_interval_seconds = 3600
 
     class RaisingForge:

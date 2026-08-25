@@ -313,14 +313,12 @@ def test_run_bc_check_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 def test_bc_check_config_defaults():
     """BC-check config has correct defaults."""
     s = Settings()
-    assert s.bc_check_periodic is True
     assert s.bc_check_interval_seconds == 604800
 
 
-def test_bc_check_periodic_config():
-    """BC-check periodic can be enabled."""
-    s = Settings(bc_check_periodic="true", bc_check_interval_seconds="43200")
-    assert s.bc_check_periodic is True
+def test_bc_check_interval_config():
+    """BC-check interval can be configured."""
+    s = Settings(bc_check_interval_seconds="43200")
     assert s.bc_check_interval_seconds == 43200
 
 

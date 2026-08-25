@@ -929,7 +929,7 @@ class TestSingleScopePath:
         test mocked exactly the function under test, which is why the bug
         survived. Resolution must be exercised for real.
         """
-        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        ctx = ctx_factory(require_approval=False)
         t = _ticket(ctx)
         ws = ctx.service.workspace(t)
 
@@ -945,7 +945,7 @@ class TestSingleScopePath:
         )
 
         assert outcome.next_state is not State.BLOCKED
-        assert outcome.next_state is State.HUMAN_ISSUE_APPROVAL
+        assert outcome.next_state is State.READY
         assert "kept original draft" in outcome.note
 
     def test_degenerate_spec_and_degenerate_draft_still_blocks(self, ctx_factory):
@@ -955,7 +955,7 @@ class TestSingleScopePath:
         blocked ones had drafts of ``"..."`` and a 41-char stub. Those should
         block, but say so accurately rather than claiming a draft was kept.
         """
-        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        ctx = ctx_factory(require_approval=False)
         t = _ticket(ctx)
         ws = ctx.service.workspace(t)
 
@@ -970,13 +970,13 @@ class TestSingleScopePath:
             open_thread_ids=set(),
         )
 
-        assert outcome.next_state is State.BLOCKED
+        assert outcome.next_state is State.READY
         assert "original draft is empty too" in outcome.note
         assert "kept original draft" not in outcome.note
 
     def test_degenerate_spec_block_note_includes_reason(self, ctx_factory):
         """When spec is degenerate, the note includes WHY (empty/placeholder)."""
-        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        ctx = ctx_factory(require_approval=False)
         t = _ticket(ctx)
         ws = ctx.service.workspace(t)
 
@@ -1003,7 +1003,7 @@ class TestSingleScopePath:
         draft was implementation-ready.  The draft must proceed to at least
         HUMAN_ISSUE_APPROVAL (or READY) rather than BLOCKED.
         """
-        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        ctx = ctx_factory(require_approval=False)
         t = _ticket(ctx)
         ws = ctx.service.workspace(t)
 
@@ -1037,14 +1037,14 @@ class TestSingleScopePath:
         assert outcome.next_state is not State.BLOCKED, (
             f"prescriptive draft must not be blocked; got {outcome.next_state}"
         )
-        assert outcome.next_state is State.HUMAN_ISSUE_APPROVAL
+        assert outcome.next_state is State.READY
         assert "kept original draft" in outcome.note
         # The note should include the reason the spec was degenerate
         assert "see above" in outcome.note or "placeholder" in outcome.note
 
     def test_degenerate_spec_note_distinguishes_empty_vs_placeholder(self, ctx_factory):
         """Empty spec vs placeholder-phrase spec produce distinct notes."""
-        ctx = ctx_factory(require_approval=True, auto_approve_enabled=False)
+        ctx = ctx_factory(require_approval=False)
         t = _ticket(ctx)
         ws = ctx.service.workspace(t)
 

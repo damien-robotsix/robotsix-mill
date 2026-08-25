@@ -1011,7 +1011,7 @@ def test_mechanical_draft_fast_path_skips_refine_agent(
     """When a mill-internal automated ticket passes triage with REFINE but
     auto-approve confirms it is purely mechanical, the expensive refine
     agent is skipped entirely and the draft passes through as the spec."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="test_gap")
     calls = _spy_refine(
         monkeypatch,
@@ -1054,7 +1054,7 @@ def test_mechanical_draft_fast_path_triggered_for_user_tickets(
     """Human-written tickets with mechanical drafts now take the
     mechanical fast-path when auto-approve confirms no design
     decisions — the expensive refine agent is skipped."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="user")
     calls = _spy_refine(
         monkeypatch,
@@ -1088,7 +1088,7 @@ def test_mechanical_draft_fast_path_not_triggered_for_ci_tickets(
     ctx_factory, monkeypatch, tmp_path
 ):
     """CI-failure tickets never take the mechanical fast-path."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="ci")
     calls = _spy_refine(
         monkeypatch,
@@ -1106,11 +1106,11 @@ def test_mechanical_draft_fast_path_not_triggered_for_ci_tickets(
     assert len(calls) == 1  # full refine agent WAS invoked
 
 
-def test_mechanical_draft_fast_path_not_triggered_when_auto_approve_disabled(
+def test_mechanical_draft_fast_path_triggers_regardless_of_require_approval(
     ctx_factory, monkeypatch, tmp_path
 ):
-    """The fast-path is gated on auto_approve_enabled=True."""
-    ctx = ctx_factory(auto_approve_enabled=False)
+    """The fast-path is now always active (auto-approve is always-on)."""
+    ctx = ctx_factory(require_approval=False)
     t = _ticket(ctx, source="test_gap")
     calls = _spy_refine(
         monkeypatch,
@@ -1124,8 +1124,8 @@ def test_mechanical_draft_fast_path_not_triggered_when_auto_approve_disabled(
         draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
     )
 
-    assert not out.note.startswith("mechanical draft fast-path")
-    assert len(calls) == 1  # full refine agent WAS invoked
+    assert out.note.startswith("mechanical draft fast-path")
+    assert len(calls) == 0  # full refine agent NOT invoked
 
 
 def test_mechanical_draft_fast_path_short_circuits_on_needs_approval(
@@ -1135,7 +1135,7 @@ def test_mechanical_draft_fast_path_short_circuits_on_needs_approval(
     still short-circuits — the draft is preserved as-is and the expensive
     refine agent is skipped.  The ticket routes to HUMAN_ISSUE_APPROVAL
     via _resolved_outcome so the human reviewer sees why."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="periodic")
     calls = _spy_refine(
         monkeypatch,
@@ -1172,7 +1172,7 @@ def test_mechanical_draft_fast_path_falls_through_on_auto_approve_error(
     ctx_factory, monkeypatch, tmp_path
 ):
     """When the auto-approve call raises, fall through gracefully."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="periodic")
     calls = _spy_refine(
         monkeypatch,
@@ -1202,7 +1202,7 @@ def test_mechanical_draft_fast_path_falls_through_on_empty_draft(
     even when auto-approve is enabled.  Otherwise an empty draft gets
     auto-approved → refine produces empty body → fast-path approves
     again → infinite loop."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="periodic")
     calls = _spy_refine(
         monkeypatch,
@@ -1219,7 +1219,7 @@ def test_mechanical_draft_fast_path_falls_through_on_empty_draft_user_source(
     ctx_factory, monkeypatch, tmp_path
 ):
     """Same guard for user-source tickets — empty drafts never fast-path."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="user")
     calls = _spy_refine(
         monkeypatch,
@@ -2993,7 +2993,7 @@ def test_mechanical_fast_path_deterministic_source_skips_llm(
     """A ticket whose source is in _AUTO_APPROVE_SOURCES (e.g. "audit")
     short-circuits both triage_auto_approve and run_refine_agent, returning
     READY with a "deterministic source" / "skipped refine LLM" note."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="audit")
     calls = _spy_refine(monkeypatch)
 
@@ -3037,7 +3037,7 @@ def test_mechanical_fast_path_non_deterministic_calls_bounded_triage(
     """A non-deterministic-source mill-internal ticket calls triage_auto_approve
     with the *bounded* summary (truncated via _summarize_spec_for_auto_approve),
     not the full raw draft."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="retrospect")
     calls = _spy_refine(monkeypatch)
 
@@ -3074,7 +3074,7 @@ def test_mechanical_fast_path_exception_falls_through(
 ):
     """When triage_auto_approve raises inside the mechanical fast-path,
     the exception is caught and the full refine agent runs (fall-through)."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="retrospect")
 
     def _boom(**kw):
@@ -3103,7 +3103,7 @@ def test_ci_source_complete_spec_admitted_to_fast_path(
     ## Scope) is admitted to the mechanical draft fast-path: the full
     refine agent is NOT called, and the outcome routes via the bounded
     auto-approve branch."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source=SourceKind.CI)
     calls = _spy_refine(monkeypatch)
 
@@ -3150,7 +3150,7 @@ def test_ci_source_incomplete_draft_falls_through_to_refine(
     """A source="ci" ticket whose draft has no ## Scope heading (and is
     NOT an internal toolchain failure — so the _short_circuit_for_internal_failure
     path doesn't intercept it) falls through to the full refine agent."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source=SourceKind.CI)
     calls = _spy_refine(monkeypatch)
 
@@ -3183,7 +3183,7 @@ def test_user_source_with_complete_spec_admitted_to_fast_path(
 ):
     """A source="user" ticket with a complete spec is now admitted to
     the mechanical fast-path; the full refine agent is skipped."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="user")
     calls = _spy_refine(monkeypatch)
 
@@ -3285,7 +3285,6 @@ def test_delta_reuse_preserves_auto_approve_routing(ctx_factory, monkeypatch, tm
     and produces a valid next state (READY or HUMAN_ISSUE_APPROVAL)."""
     ctx = ctx_factory(
         refine_delta_reuse_enabled=True,
-        auto_approve_enabled=True,
     )
     t = _setup_sendback_ticket(ctx)
 
@@ -3303,8 +3302,7 @@ def test_delta_reuse_preserves_auto_approve_routing(ctx_factory, monkeypatch, tm
     out = _run_agent(ctx, t, tmp_path)
 
     # The auto-approve gate runs inside _resolve_next_state after the
-    # refine agent completes.  Only fires when require_approval=True
-    # AND auto_approve_enabled=True.
+    # refine agent completes.  Only fires when require_approval=True.
     assert out.next_state is State.READY
     assert len(auto_approve_called) == 1
 
@@ -3382,7 +3380,7 @@ def test_fast_path_blocked_by_empty_draft(ctx_factory, monkeypatch, tmp_path):
     """A ticket with an empty description must never reach auto-approve
     via the mechanical fast-path.  The fast-path is blocked and the full
     refine agent runs instead."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="test_gap")
     calls = _spy_refine(
         monkeypatch,
@@ -3400,7 +3398,7 @@ def test_fast_path_blocked_by_empty_draft(ctx_factory, monkeypatch, tmp_path):
 def test_fast_path_blocked_by_near_empty_draft(ctx_factory, monkeypatch, tmp_path):
     """A ticket with a trivially short (< 50 chars) description must not
     reach auto-approve via the mechanical fast-path."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="test_gap")
     calls = _spy_refine(
         monkeypatch,
@@ -3417,7 +3415,7 @@ def test_fast_path_blocked_by_near_empty_draft(ctx_factory, monkeypatch, tmp_pat
 def test_fast_path_blocked_by_oversized_scope(ctx_factory, monkeypatch, tmp_path):
     """A ticket whose draft mentions > 7 distinct file paths must not be
     auto-approved by the fast-path — route to full refine instead."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="test_gap")
     calls = _spy_refine(
         monkeypatch,
@@ -3443,7 +3441,7 @@ def test_well_formed_mechanical_draft_still_fast_paths(
 ):
     """Existing well-formed mechanical drafts still fast-path as before
     (no regression on the happy path)."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="test_gap")
     calls = _spy_refine(
         monkeypatch,
@@ -3484,7 +3482,7 @@ def test_well_formed_mechanical_draft_still_fast_paths(
 
 def test_fast_path_checks_recorded_in_triage_note(ctx_factory, monkeypatch, tmp_path):
     """The triage note records which fast-path checks ran and their outcomes."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="audit")  # deterministic source
     calls = _spy_refine(monkeypatch)
 
@@ -3506,7 +3504,7 @@ def test_refine_produced_no_spec_routes_to_blocked(ctx_factory, monkeypatch, tmp
     """When the refine output is degenerate (empty/placeholder), the ticket
     must go to BLOCKED with a 'refine produced no spec' note, not to the
     approval gate."""
-    ctx = ctx_factory(require_approval=True, auto_approve_enabled=True)
+    ctx = ctx_factory(require_approval=True)
     t = _ticket(ctx, source="user")
 
     # Use a near-empty draft so the mechanical fast-path is blocked,

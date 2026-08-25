@@ -6,7 +6,7 @@ agents actually enabled for that repo, which mirrors the worker's
 ``_periodic_supervisor`` resolution: a periodic workflow runs for a repo
 iff the repo ships ``.robotsix-mill/periodic/<name>.yaml`` (presence =
 enabled, unless the YAML sets ``enabled: false``) AND the fleet-wide
-``Settings.<name>_periodic`` kill-switch is not ``False``.
+``Settings.<name>_interval_seconds`` is > 0 (0 = disabled).
 
 This route is read-only and side-effect free — it never starts an agent.
 """
@@ -55,7 +55,8 @@ def list_enabled_agents(
         if not wf.enabled:
             continue
         # Fleet-wide kill-switch (matches worker._periodic_supervisor).
-        if getattr(settings, f"{wf.name}_periodic", True) is False:
+        interval_attr = f"{wf.name}_interval_seconds"
+        if getattr(settings, interval_attr, 0) <= 0:
             continue
         enabled.append(wf.name)
     return enabled

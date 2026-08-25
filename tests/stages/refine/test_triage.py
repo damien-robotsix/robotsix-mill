@@ -831,7 +831,7 @@ def test_triage_skip_skip_decision(ctx_factory, tmp_path):
 
 def test_triage_skip_mechanical_fast_path_deterministic_source(ctx_factory, tmp_path):
     """Deterministic source (e.g. audit) skips auto-approve LLM."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="audit")
     ws = ctx.service.workspace(t)
     draft = "Edit `src/foo.py` and `tests/test_foo.py` for this audit finding regarding dead code removal."
@@ -862,7 +862,7 @@ def test_triage_skip_mechanical_fast_path_deterministic_source(ctx_factory, tmp_
 
 def test_triage_skip_mechanical_fast_path_auto_approve_approve(ctx_factory, tmp_path):
     """Non-deterministic source with auto-approve APPROVE skips refine."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="retrospect")
     ws = ctx.service.workspace(t)
 
@@ -904,7 +904,7 @@ def test_triage_skip_mechanical_fast_path_auto_approve_needs_approval(
     ctx_factory, tmp_path
 ):
     """Non-deterministic source with auto-approve NEEDS_APPROVAL skips refine."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="retrospect")
     ws = ctx.service.workspace(t)
 
@@ -950,7 +950,7 @@ def test_triage_skip_mechanical_fast_path_auto_approve_exception_falls_through(
     ctx_factory, tmp_path
 ):
     """When auto-approve raises, fall through to full refine."""
-    ctx = ctx_factory(auto_approve_enabled=True)
+    ctx = ctx_factory()
     t = _ticket(ctx, source="retrospect")
     ws = ctx.service.workspace(t)
 
@@ -1002,7 +1002,7 @@ def test_triage_skip_refine_decision_returns_none(ctx_factory, tmp_path):
             ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
         )
 
-    # With auto_approve_enabled=False and REFINE, falls through
+    # With REFINE decision, falls through to full agent
     assert result is None
 
 

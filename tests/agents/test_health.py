@@ -389,14 +389,12 @@ def test_run_health_pass_skips_empty_title_or_body(tmp_path, monkeypatch):
 def test_health_config_defaults():
     """Health config has correct defaults."""
     s = Settings()
-    assert s.health_periodic is True
     assert s.health_interval_seconds == 604800
 
 
-def test_health_periodic_config():
-    """Health periodic can be enabled."""
-    s = Settings(health_periodic="true", health_interval_seconds="43200")
-    assert s.health_periodic is True
+def test_health_interval_config():
+    """Health interval can be configured."""
+    s = Settings(health_interval_seconds="43200")
     assert s.health_interval_seconds == 43200
 
 

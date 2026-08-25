@@ -404,7 +404,6 @@ def gates(settings=Depends(get_settings)) -> dict[str, Any]:
     operator always sees which behavioural gates are active.
     """
     return {
-        "auto_approve": settings.auto_approve_enabled,
         "review": settings.review_enabled,
         "auto_merge": settings.auto_merge_enabled,
         "require_approval": settings.require_approval,

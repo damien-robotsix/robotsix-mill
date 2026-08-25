@@ -203,7 +203,7 @@ class TestMemberSyncTrigger:
         clone = _make_clone(tmp_path)
         (clone / "repos.yaml").write_text("repositories: {}\n", encoding="utf-8")
         monkeypatch.setattr(
-            worker.ctx.settings, "member_sync_periodic", False, raising=False
+            worker.ctx.settings, "member_sync_interval_seconds", 0, raising=False
         )
 
         fired: list[str] = []

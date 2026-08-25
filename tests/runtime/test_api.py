@@ -161,7 +161,6 @@ def test_gates(client, settings):
     assert r.status_code == 200
     body = r.json()
     assert body == {
-        "auto_approve": settings.auto_approve_enabled,
         "review": settings.review_enabled,
         "auto_merge": settings.auto_merge_enabled,
         "require_approval": settings.require_approval,
@@ -493,11 +492,10 @@ def test_board_renders_gate_pill_wiring(client):
     assert "gate-pill" in js
     assert "gate-on" in js
     assert "gate-off" in js
-    # All four labels must appear.
-    for label in ("auto-approve", "review", "auto-merge", "require-approval"):
+    # All three labels must appear.
+    for label in ("review", "auto-merge", "require-approval"):
         assert label in js, f"gate label '{label}' missing from board-mill.js"
     # The YAML paths (from the tooltip) should also appear.
-    assert "gates.auto_approve_enabled" in js
     assert "gates.review_enabled" in js
     assert "gates.auto_merge_enabled" in js
     assert "gates.require_approval" in js
@@ -1897,7 +1895,7 @@ def test_agents_respects_disabled_yaml_and_kill_switch(client, settings):
     _seed_periodic_clone(
         settings, "test-repo", ["audit", "health", "survey"], disabled=["survey"]
     )
-    settings.health_periodic = False  # fleet-wide kill-switch off
+    settings.health_interval_seconds = 0  # fleet-wide kill-switch off
     r = client.get("/agents?repo_id=test-repo")
     assert r.status_code == 200
     # survey skipped (enabled: false), health skipped (kill-switch False).

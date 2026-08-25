@@ -33,8 +33,8 @@ def _test_repo_config():
 def _make_settings(tmp_path, **overrides):
     """Create Settings with data_dir pointing to tmp_path."""
     overrides.setdefault("data_dir", str(tmp_path / "data"))
-    # Default survey_periodic to false so the negative test is clean
-    overrides.setdefault("survey_periodic", False)
+    # Default survey_interval_seconds to 0 (disabled) so the negative test is clean
+    overrides.setdefault("survey_interval_seconds", 0)
     s = Settings(**overrides)
     db.reset_engine()
     db.init_db(s, board_id="test-board")
@@ -412,14 +412,12 @@ def test_run_survey_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
 def test_survey_config_defaults():
     """Survey config has correct defaults."""
     s = Settings()
-    assert s.survey_periodic is True
     assert s.survey_interval_seconds == 1209600
 
 
-def test_survey_periodic_config():
-    """Survey periodic can be enabled."""
-    s = Settings(survey_periodic="true", survey_interval_seconds="43200")
-    assert s.survey_periodic is True
+def test_survey_interval_config():
+    """Survey interval can be configured."""
+    s = Settings(survey_interval_seconds="43200")
     assert s.survey_interval_seconds == 43200
 
 

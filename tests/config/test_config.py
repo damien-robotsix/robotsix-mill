@@ -384,29 +384,22 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         1800,
     ),
     # --- periodic agent toggles ---
-    ("survey_periodic", "MILL_SURVEY_PERIODIC", "0", False),
     ("survey_interval_seconds", "MILL_SURVEY_INTERVAL_SECONDS", "43200", 43200),
-    ("audit_periodic", "MILL_AUDIT_PERIODIC", "1", True),
     ("audit_interval_seconds", "MILL_AUDIT_INTERVAL_SECONDS", "43200", 43200),
-    ("trace_health_periodic", "MILL_TRACE_HEALTH_PERIODIC", "1", True),
     (
         "trace_health_interval_seconds",
         "MILL_TRACE_HEALTH_INTERVAL_SECONDS",
         "43200",
         43200,
     ),
-    ("health_periodic", "MILL_HEALTH_PERIODIC", "1", True),
     ("health_interval_seconds", "MILL_HEALTH_INTERVAL_SECONDS", "43200", 43200),
-    ("test_gap_periodic", "MILL_TEST_GAP_PERIODIC", "1", True),
     ("test_gap_interval_seconds", "MILL_TEST_GAP_INTERVAL_SECONDS", "43200", 43200),
-    ("agent_check_periodic", "MILL_AGENT_CHECK_PERIODIC", "1", True),
     (
         "agent_check_interval_seconds",
         "MILL_AGENT_CHECK_INTERVAL_SECONDS",
         "43200",
         43200,
     ),
-    ("diagnostic_periodic", "MILL_DIAGNOSTIC_PERIODIC", "1", True),
     ("diagnostic_interval_seconds", "MILL_DIAGNOSTIC_INTERVAL_SECONDS", "43200", 43200),
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
     (
@@ -513,10 +506,8 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- scope_triage_max_files ---
     ("scope_triage_max_files", "MILL_SCOPE_TRIAGE_MAX_FILES", "25", 25),
     # --- periodic bc_check ---
-    ("bc_check_periodic", "MILL_BC_CHECK_PERIODIC", "0", False),
     ("bc_check_interval_seconds", "MILL_BC_CHECK_INTERVAL_SECONDS", "43200", 43200),
     # --- periodic changelog_autofill ---
-    ("changelog_autofill_periodic", "MILL_CHANGELOG_AUTOFILL_PERIODIC", "0", False),
     (
         "changelog_autofill_interval_seconds",
         "MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS",
@@ -524,7 +515,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- periodic completeness_check ---
-    ("completeness_check_periodic", "MILL_COMPLETENESS_CHECK_PERIODIC", "0", False),
     (
         "completeness_check_interval_seconds",
         "MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS",
@@ -538,14 +528,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         50,
     ),
     # --- periodic state-sync ---
-    ("state_sync_periodic", "MILL_STATE_SYNC_PERIODIC", "0", False),
     ("state_sync_interval_seconds", "MILL_STATE_SYNC_INTERVAL_SECONDS", "43200", 43200),
     # --- repo visibility default ---
     ("repo_visibility_default", "MILL_REPO_VISIBILITY_DEFAULT", "private", "private"),
     # --- enable_repo_creation ---
     ("enable_repo_creation", "MILL_ENABLE_REPO_CREATION", "1", True),
     # --- meta_periodic + meta_interval_seconds ---
-    ("meta_periodic", "MILL_META_PERIODIC", "1", True),
     ("meta_interval_seconds", "MILL_META_INTERVAL_SECONDS", "43200", 43200),
     # --- web_knowledge_* ---
     ("web_knowledge_stale_days", "MILL_WEB_KNOWLEDGE_STALE_DAYS", "15", 15),
@@ -557,7 +545,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "deepseek/deepseek-v4-pro",
     ),
     # --- data_dir_gc ---
-    ("data_dir_gc_periodic", "MILL_DATA_DIR_GC_PERIODIC", "0", False),
     (
         "data_dir_gc_interval_seconds",
         "MILL_DATA_DIR_GC_INTERVAL_SECONDS",
@@ -565,10 +552,8 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- copy_paste ---
-    ("copy_paste_periodic", "MILL_COPY_PASTE_PERIODIC", "0", False),
     ("copy_paste_interval_seconds", "MILL_COPY_PASTE_INTERVAL_SECONDS", "43200", 43200),
     # --- forge_parity ---
-    ("forge_parity_periodic", "MILL_FORGE_PARITY_PERIODIC", "0", False),
     (
         "forge_parity_interval_seconds",
         "MILL_FORGE_PARITY_INTERVAL_SECONDS",
@@ -576,7 +561,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- module_curator ---
-    ("module_curator_periodic", "MILL_MODULE_CURATOR_PERIODIC", "0", False),
     (
         "module_curator_interval_seconds",
         "MILL_MODULE_CURATOR_INTERVAL_SECONDS",
@@ -584,7 +568,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- stale_branch_cleanup ---
-    ("stale_branch_cleanup_periodic", "MILL_STALE_BRANCH_CLEANUP_PERIODIC", "0", False),
     (
         "stale_branch_cleanup_interval_seconds",
         "MILL_STALE_BRANCH_CLEANUP_INTERVAL_SECONDS",
@@ -592,7 +575,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- sandbox_reaper ---
-    ("sandbox_reaper_periodic", "MILL_SANDBOX_REAPER_PERIODIC", "0", False),
     (
         "sandbox_reaper_interval_seconds",
         "MILL_SANDBOX_REAPER_INTERVAL_SECONDS",
@@ -600,7 +582,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         1800,
     ),
     # --- run_health ---
-    ("run_health_periodic", "MILL_RUN_HEALTH_PERIODIC", "0", False),
     ("run_health_interval_seconds", "MILL_RUN_HEALTH_INTERVAL_SECONDS", "43200", 43200),
     (
         "run_health_memory_path",
@@ -616,7 +597,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "my-board",
     ),
     # --- config_sync ---
-    ("config_sync_periodic", "MILL_CONFIG_SYNC_PERIODIC", "0", False),
     (
         "config_sync_interval_seconds",
         "MILL_CONFIG_SYNC_INTERVAL_SECONDS",
@@ -624,7 +604,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- dependabot_ingest ---
-    ("dependabot_ingest_periodic", "MILL_DEPENDABOT_INGEST_PERIODIC", "0", False),
     (
         "dependabot_ingest_interval_seconds",
         "MILL_DEPENDABOT_INGEST_INTERVAL_SECONDS",
@@ -632,7 +611,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         43200,
     ),
     # --- timeout_escalation ---
-    ("timeout_escalation_periodic", "MILL_TIMEOUT_ESCALATION_PERIODIC", "0", False),
     (
         "timeout_escalation_interval_seconds",
         "MILL_TIMEOUT_ESCALATION_INTERVAL_SECONDS",
@@ -646,7 +624,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         86400,
     ),
     # --- langfuse_cleanup ---
-    ("langfuse_cleanup_periodic", "MILL_LANGFUSE_CLEANUP_PERIODIC", "0", False),
     (
         "langfuse_cleanup_interval_seconds",
         "MILL_LANGFUSE_CLEANUP_INTERVAL_SECONDS",
@@ -881,12 +858,12 @@ def test_env_overrides_the_json_config_file(tmp_path, monkeypatch):
 def test_settings_rereads_the_file_each_construction(tmp_path, monkeypatch):
     """PUT /config rewrites the file; the next read must see it."""
     cfg = tmp_path / "config.json"
-    _write_config(cfg, {"auto_approve_enabled": False})
+    _write_config(cfg, {"require_approval": False})
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
-    assert Settings().auto_approve_enabled is False
+    assert Settings().require_approval is False
 
-    _write_config(cfg, {"auto_approve_enabled": True})
-    assert Settings().auto_approve_enabled is True
+    _write_config(cfg, {"require_approval": True})
+    assert Settings().require_approval is True
 
 
 def test_unknown_keys_in_the_file_do_not_break_extra_forbid(tmp_path, monkeypatch):

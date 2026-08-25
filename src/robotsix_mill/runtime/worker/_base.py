@@ -62,7 +62,6 @@ class _WorkerBase:
             label: str,
             repo_config: object,
             settings_interval_attr: str,
-            settings_enabled_attr: str | None = ...,
         ) -> tuple[bool, int]: ...
 
         async def _fire_periodic_pass(

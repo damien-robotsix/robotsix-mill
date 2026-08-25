@@ -636,13 +636,9 @@ def triage_skip(
         # create an infinite loop (approve → refine produces empty
         # body → fast-path approves again).  Fall through to the
         # full refine agent instead.
-        if (
-            s.auto_approve_enabled
-            and draft.strip()
-            and (
-                ticket.source != "ci"
-                or (ticket.source == "ci" and _draft_has_complete_spec(draft))
-            )
+        if draft.strip() and (
+            ticket.source != "ci"
+            or (ticket.source == "ci" and _draft_has_complete_spec(draft))
         ):
             # --- fast-path pre-checks: emptiness + scope ---
             scope_checks = _fast_path_scope_checks(draft)

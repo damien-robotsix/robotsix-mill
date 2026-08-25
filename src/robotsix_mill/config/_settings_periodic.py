@@ -527,6 +527,7 @@ class _PeriodicSettings(BaseModel):
     # falls back to the single `diagnostic_target_repo_id` for backward
     # compatibility. Add/remove repos here — no code change required.
     # --- config pin-drift check -------------------------------------------
+    config_pin_drift_interval_seconds: int = Field(
         default=86_400,
         ge=60,
         description="Seconds between config pin-drift passes.",

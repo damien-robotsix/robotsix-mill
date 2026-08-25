@@ -823,8 +823,7 @@ def _resolve_next_state(
     """Return (next_state, auto_approve_note_or_None).
 
     Encapsulates the decision: if approval is not required → READY;
-    if auto-approve is disabled → HUMAN_ISSUE_APPROVAL; otherwise run
-    the auto-approve triage on the spec → READY on APPROVE (no design
+    auto-approve runs the triage on the spec → READY on APPROVE (no design
     decision found), HUMAN_ISSUE_APPROVAL otherwise (or on error).
     Empty/whitespace specs skip the triage entirely and go to
     HUMAN_ISSUE_APPROVAL when gated, mirroring the original behaviour.
@@ -847,8 +846,8 @@ def _resolve_next_state(
         return State.READY, None
     if _spec_is_degenerate(spec):
         return State.BLOCKED, "refine produced no spec"
-    if not ctx.settings.auto_approve_enabled:
-        return State.HUMAN_ISSUE_APPROVAL, None
+    # Auto-approve is always-on: a cheap LLM triage call inspects the
+    # refined spec and skips the human gate for obviously-safe changes.
     # Deterministic auto-approve for sources whose drafts are
     # internal-only by construction: they're proposed by mill's own
     # periodic agents (audit, agent_check, bc_check, …) whose scope
