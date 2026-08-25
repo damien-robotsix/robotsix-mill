@@ -24,6 +24,7 @@ from ...core.dedup import _ci_draft_fingerprint, find_prior_matching_ticket
 from ...core.models import Comment, SourceKind, Ticket
 from ...core.states import State
 from ..run_registry import RunRegistry
+from ..transient_errors import _TRANSIENT_HTTPX_EXCEPTIONS, is_network_down_error
 
 if TYPE_CHECKING:
     from ...core.service import TicketService
@@ -44,6 +45,7 @@ log = logging.getLogger("robotsix_mill.worker")
 # actionable rather than silently empty.
 _CI_LOG_FETCH_ATTEMPTS = 3
 _CI_LOG_FETCH_BACKOFF_SECONDS = 2.0
+_CI_LOG_FETCH_BACKOFF_CAP_SECONDS = 30.0
 _CI_LOG_FETCH_MAX_DEFERRALS = 3
 
 
@@ -698,17 +700,22 @@ class PollLoopsMixin(_WorkerBase):
         now: float,
         repo_label: str,
         wf_name: str,
-    ) -> tuple[str, str, bool]:
+    ) -> tuple[str, str, bool, bool]:
         """Fetch job logs for *run_id_val* with retry/backoff.
 
-        Returns ``(logs, fetch_error, deferred_flag)``.  When
-        *deferred_flag* is ``True`` the caller must ``continue`` to
-        the next iteration — the failure has been booked for a later
-        poll cycle.  When ``False`` the caller proceeds to file a
-        draft (with or without logs).
+        Returns ``(logs, fetch_error, deferred_flag, network_down)``.
+
+        * ``network_down`` is ``True`` when every attempt failed with a
+          transient / network-down error — the caller must ``continue``
+          **without** consuming the deferral budget.
+        * ``deferred_flag`` is ``True`` when a genuine fetch failure has
+          been booked for a later poll cycle.
+        * When both are ``False`` the caller proceeds to file a draft
+          (with or without logs).
         """
         logs = ""
         fetch_error = ""
+        network_down = False
         for attempt in range(1, _CI_LOG_FETCH_ATTEMPTS + 1):
             try:
                 logs = await asyncio.to_thread(
@@ -718,6 +725,20 @@ class PollLoopsMixin(_WorkerBase):
                 break
             except Exception as exc:
                 fetch_error = f"{type(exc).__name__}: {exc}"
+                if is_network_down_error(exc) or isinstance(
+                    exc, _TRANSIENT_HTTPX_EXCEPTIONS
+                ):
+                    network_down = True
+                    log.warning(
+                        "CI monitor (%s): log fetch for %s (run %s) hit "
+                        "transient/network-down error — skipping without "
+                        "consuming deferral budget: %s",
+                        repo_label,
+                        wf_name,
+                        run_id_val,
+                        fetch_error,
+                    )
+                    break
                 log.warning(
                     "CI monitor: failed to fetch logs for run %s (attempt %d/%d): %s",
                     run_id_val,
@@ -726,7 +747,14 @@ class PollLoopsMixin(_WorkerBase):
                     fetch_error,
                 )
                 if attempt < _CI_LOG_FETCH_ATTEMPTS:
-                    await asyncio.sleep(_CI_LOG_FETCH_BACKOFF_SECONDS * attempt)
+                    backoff = min(
+                        _CI_LOG_FETCH_BACKOFF_CAP_SECONDS,
+                        _CI_LOG_FETCH_BACKOFF_SECONDS * (2 ** (attempt - 1)),
+                    )
+                    await asyncio.sleep(backoff * random.uniform(0.5, 1.0))
+
+        if network_down:
+            return "", fetch_error, False, True
 
         if not logs and fetch_error:
             record = deferred.get(key)
@@ -744,7 +772,7 @@ class PollLoopsMixin(_WorkerBase):
                     _CI_LOG_FETCH_MAX_DEFERRALS,
                     fetch_error or "no logs returned",
                 )
-                return "", fetch_error, True
+                return "", fetch_error, True, False
             log.warning(
                 "CI monitor (%s): log fetch still failing for %s (run %s) "
                 "after %d deferrals — filing draft without logs",
@@ -755,7 +783,7 @@ class PollLoopsMixin(_WorkerBase):
             )
             deferred.pop(key, None)
 
-        return logs, fetch_error, False
+        return logs, fetch_error, False, False
 
     # ------------------------------------------------------------------
     # _poll_one_repo_ci — coordinator
@@ -789,7 +817,20 @@ class PollLoopsMixin(_WorkerBase):
 
         # 2. Latest run per workflow on the target branch.
         forge = get_forge(settings, repo_config=rc)
-        latest_by_wf = await self._latest_runs_by_workflow(forge, target)
+        try:
+            latest_by_wf = await self._latest_runs_by_workflow(forge, target)
+        except Exception as exc:
+            if is_network_down_error(exc) or isinstance(
+                exc, _TRANSIENT_HTTPX_EXCEPTIONS
+            ):
+                log.warning(
+                    "CI monitor (%s): skipping cycle — could not reach "
+                    "forge (connectivity/outage): %s",
+                    repo_label,
+                    exc,
+                )
+                return
+            raise
 
         existing = service.list()
 
@@ -853,7 +894,12 @@ class PollLoopsMixin(_WorkerBase):
             )
 
             # 4. Fetch job logs with retry/backoff + deferral.
-            logs, fetch_error, deferred_flag = await self._fetch_run_logs_with_deferral(
+            (
+                logs,
+                fetch_error,
+                deferred_flag,
+                network_down,
+            ) = await self._fetch_run_logs_with_deferral(
                 forge,
                 run_id_val,
                 key,
@@ -862,6 +908,10 @@ class PollLoopsMixin(_WorkerBase):
                 repo_label,
                 wf_name,
             )
+            if network_down:
+                # Transient / network-down — do NOT consume deferral budget
+                # and do NOT mark seen: next poll retries this commit.
+                continue
             if deferred_flag:
                 # Do NOT mark seen: the next poll retries this commit.
                 continue
