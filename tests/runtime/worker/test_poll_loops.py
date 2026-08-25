@@ -477,7 +477,12 @@ class TestFetchRunLogsWithDeferral:
         mixin = _make_mixin()
         deferred = {}
         now = time.time()
-        logs, error, deferred_flag, network_down = await mixin._fetch_run_logs_with_deferral(
+        (
+            logs,
+            error,
+            deferred_flag,
+            network_down,
+        ) = await mixin._fetch_run_logs_with_deferral(
             forge,
             42,
             "key1",
@@ -501,7 +506,12 @@ class TestFetchRunLogsWithDeferral:
         with patch(
             "robotsix_mill.runtime.worker.poll_loops.asyncio.sleep", return_value=None
         ):
-            logs, error, deferred_flag, network_down = await mixin._fetch_run_logs_with_deferral(
+            (
+                logs,
+                error,
+                deferred_flag,
+                network_down,
+            ) = await mixin._fetch_run_logs_with_deferral(
                 forge,
                 42,
                 "key1",
@@ -525,7 +535,12 @@ class TestFetchRunLogsWithDeferral:
         with patch(
             "robotsix_mill.runtime.worker.poll_loops.asyncio.sleep", return_value=None
         ):
-            logs, error, deferred_flag, network_down = await mixin._fetch_run_logs_with_deferral(
+            (
+                logs,
+                error,
+                deferred_flag,
+                network_down,
+            ) = await mixin._fetch_run_logs_with_deferral(
                 forge,
                 42,
                 "key1",
@@ -551,7 +566,12 @@ class TestFetchRunLogsWithDeferral:
         with patch(
             "robotsix_mill.runtime.worker.poll_loops.asyncio.sleep", return_value=None
         ):
-            logs, error, deferred_flag, network_down = await mixin._fetch_run_logs_with_deferral(
+            (
+                logs,
+                error,
+                deferred_flag,
+                network_down,
+            ) = await mixin._fetch_run_logs_with_deferral(
                 forge,
                 42,
                 "key1",
