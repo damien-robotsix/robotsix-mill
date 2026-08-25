@@ -149,7 +149,7 @@ class _CoreSettings(BaseModel):
     # tier-1 flash model; override to route this agent to a different
     # model without changing the global tier defaults.
     web_knowledge_model: str = Field(
-        default="deepseek/deepseek-v4-flash",
+        default="deepseek/deepseek-v4-flash-latest",
         description="Model alias for the web-knowledge gateway sub-agent.",
         json_schema_extra={"advanced": True},
     )
