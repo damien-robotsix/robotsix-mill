@@ -595,6 +595,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `pipeline.max_comments_per_ticket` | `MILL_MAX_COMMENTS_PER_TICKET` | `500` | Max Comment rows retained per non-terminal ticket; OPEN threads are never pruned. 0 disables comment capping. |
 | `pipeline.auto_fix_max_cycles` | `MILL_AUTO_FIX_MAX_CYCLES` | `6` | Cross-stage ceiling on combined REBASING+FIXING_CI dispatches without CI turning green. Reset only when CI is observed green. Set to 0 to disable. |
 | `pipeline.ping_pong_max_alternations` | `MILL_PING_PONG_MAX_ALTERNATIONS` | `3` | Ceiling on REBASING↔FIXING_CI alternations before escalating to BLOCKED. Reset when CI is observed green. Set to 0 to disable. |
+| `pipeline.green_unpromotable_max_polls` | `MILL_GREEN_UNPROMOTABLE_MAX_POLLS` | `10` | Ceiling on consecutive merge polls where every reported check is green but the forge still refuses to promote the PR — permanent when branch protection requires a status context no workflow on the PR produces. Reset whenever a check is still pending. Set to 0 to disable. |
 | — | `MILL_TICKET_STATE_CYCLE_LIMIT` | `3` | Ceiling on re-dispatches of the same LLM-bearing stage within a single pass before BLOCKED. Set to 0 to disable. |
 
 ### 11.2 Stages tuning
