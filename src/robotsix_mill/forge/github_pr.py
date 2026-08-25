@@ -452,6 +452,33 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._get_pr_labels(owner=owner, repo=repo, pr_number=pr_number)
 
+    def _required_status_contexts(
+        self, *, owner: str, repo: str, branch: str
+    ) -> list[str]:
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            resp = c.get(
+                f"{api}/repos/{owner}/{repo}/branches/{branch}/protection"
+                "/required_status_checks",
+                headers=headers,
+            )
+            if resp.status_code == 401:
+                continue
+            # 404 = unprotected branch or no required checks configured;
+            # 403 = token cannot read protection. Both mean "unknown".
+            if resp.status_code in (403, 404):
+                return []
+            resp.raise_for_status()
+            body = resp.json()
+            checks = body.get("checks")
+            if isinstance(checks, list):
+                return [
+                    ctx
+                    for ctx in (chk.get("context") for chk in checks)
+                    if isinstance(ctx, str)
+                ]
+            return [ctx for ctx in body.get("contexts", []) if isinstance(ctx, str)]
+        return []
+
     def _get_pr_labels(self, *, owner: str, repo: str, pr_number: int) -> list[str]:
         return _paginated_get(
             self._http,  # type: ignore[attr-defined]
@@ -459,6 +486,21 @@ class GitHubForgePRMixin:
             item_fn=lambda label: label["name"],
             fallback=[],
         )
+
+    def required_status_contexts(self, *, target_branch: str) -> list[str]:
+        """Return the status contexts branch protection requires on *target_branch*.
+
+        Returns ``[]`` when the branch is unprotected, when the token lacks
+        ``administration: read`` (403), or on any other API failure — callers
+        must read ``[]`` as "unknown", never as "nothing is required".
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        try:
+            return self._required_status_contexts(
+                owner=owner, repo=repo, branch=target_branch
+            )
+        except Exception:
+            return []
 
     def get_authenticated_user_login(self) -> str:
         """Return the login of the GitHub user/app associated with the current token.

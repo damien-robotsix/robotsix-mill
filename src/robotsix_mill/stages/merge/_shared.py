@@ -150,6 +150,9 @@ _REV_REV_COUNTER = "review_revision_attempts.txt"
 _AUTO_FIX_CYCLES = "auto_fix_cycles.txt"
 _LAST_AUTO_FIX_STAGE = "last_auto_fix_stage.txt"
 _PING_PONG_COUNT = "ping_pong_count.txt"
+# Consecutive merge polls that saw fully-green CI but a PR the forge still
+# refuses to promote. Bounded by ``green_unpromotable_max_polls``.
+_GREEN_UNPROMOTABLE_COUNT = "green_unpromotable_polls.txt"
 # Bounded retries for a *retryable* forge merge rejection (see
 # ``_merge_rejection_outcome``). Small on purpose: the case it exists for
 # resolves within a minute or two, so anything that survives this many

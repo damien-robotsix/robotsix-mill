@@ -444,6 +444,17 @@ class Forge(ABC):
         """
         return False
 
+    def required_status_contexts(self, *, target_branch: str) -> list[str]:
+        """Status-check contexts *target_branch* protection requires.
+
+        Used to explain an unpromotable-but-green PR: a required context
+        missing from what the PR actually reports can never arrive, so
+        waiting is pointless. Returns ``[]`` when protection is unreadable,
+        absent, or the forge has no equivalent — callers must treat ``[]``
+        as "unknown", not "nothing required". Must NEVER raise.
+        """
+        return []
+
     def list_branches(self) -> list[BranchInfo]:
         """List all remote branches with last-commit timestamp and
         protection flag. Returns [] on any failure. Must NEVER raise.

@@ -2823,3 +2823,138 @@ def test_stale_changes_requested_dismissed_with_feedback_enabled(tmp_path, monke
     assert out.next_state is State.DONE
     # The stale review must have been dismissed.
     assert dismissed_ids == [42]
+
+
+# ============================================================
+# Green-but-unpromotable ceiling (renamed required check)
+# ============================================================
+
+
+def _green_unpromotable_ctx(tmp_path, monkeypatch, **extra):
+    """Forge stubs for "every reported check passed, forge still won't promote"."""
+    ctx = _gh(tmp_path, **extra)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://forge/pr/1",
+            "mergeable": True,
+            # Protection is waiting on a context nothing reports, so the PR
+            # never leaves "blocked" no matter how long the mill polls.
+            "mergeable_state": "blocked",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+            "jobs": [{"name": "Lint", "conclusion": "success"}],
+        },
+    )
+    return ctx
+
+
+def test_green_unpromotable_re_polls_below_the_ceiling(tmp_path, monkeypatch):
+    """Settling is normal: the first polls must keep waiting, not block."""
+    ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(ctx.settings.green_unpromotable_max_polls - 1):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_green_unpromotable_blocks_at_the_ceiling_naming_the_missing_context(
+    tmp_path, monkeypatch
+):
+    """Green CI + a permanently unpromotable PR escalates with an actionable note."""
+    ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "required_status_contexts",
+        lambda self, *, target_branch: ["lint", "typecheck"],
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    outs = [stage.run(t, ctx) for _ in range(ctx.settings.green_unpromotable_max_polls)]
+
+    assert [o.next_state for o in outs[:-1]] == [State.IMPLEMENT_COMPLETE] * (
+        len(outs) - 1
+    )
+    final = outs[-1]
+    assert final.next_state is State.BLOCKED
+    # The two required contexts the PR never reports must be named; the one
+    # it does report ("Lint") must not be.
+    assert "'lint'" in final.note
+    assert "'typecheck'" in final.note
+    assert "https://forge/pr/1" in final.note
+
+
+def test_green_unpromotable_falls_back_when_protection_is_unreadable(
+    tmp_path, monkeypatch
+):
+    """No protection data (403/unprotected) still blocks, with a vaguer note."""
+    ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "required_status_contexts",
+        lambda self, *, target_branch: [],
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(ctx.settings.green_unpromotable_max_polls - 1):
+        stage.run(t, ctx)
+    final = stage.run(t, ctx)
+    assert final.next_state is State.BLOCKED
+    assert "mergeable_state='blocked'" in final.note
+
+
+def test_green_unpromotable_counter_resets_while_a_check_is_pending(
+    tmp_path, monkeypatch
+):
+    """A pending check is genuine settling and must not consume the budget."""
+    ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(ctx.settings.green_unpromotable_max_polls - 1):
+        assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+    # One poll where CI is still running clears the accumulated count...
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "pending",
+            "failing": [],
+            "pending": ["Test"],
+            "jobs": [],
+        },
+    )
+    assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+    # ...so the next green-but-stuck poll starts the budget over.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+            "jobs": [{"name": "Lint", "conclusion": "success"}],
+        },
+    )
+    assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_green_unpromotable_guard_disabled_by_zero(tmp_path, monkeypatch):
+    """green_unpromotable_max_polls=0 restores the old unbounded re-poll."""
+    ctx = _green_unpromotable_ctx(tmp_path, monkeypatch, green_unpromotable_max_polls=0)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(12):
+        assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE

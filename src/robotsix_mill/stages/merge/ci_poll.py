@@ -27,6 +27,7 @@ from ._shared import (
     _APPROVED_DIFF_HASH,
     _AUTO_FIX_CYCLES,
     _CI_POLL_REFRESH_SHA,
+    _GREEN_UNPROMOTABLE_COUNT,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
     _REBASE_COUNTER,
@@ -681,7 +682,117 @@ class CIPollMixin(_MergeStageBase):
             ms,
             pending_detail,
         )
+
+        stuck = self._check_green_unpromotable(
+            ticket, ctx, pr, branch, conclusion, ms, pending_checks
+        )
+        if stuck is not None:
+            return stuck
+
         return Outcome(State.IMPLEMENT_COMPLETE)
+
+    def _check_green_unpromotable(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        pr: dict[str, Any],
+        branch: str,
+        conclusion: str | None,
+        mergeable_state: str | None,
+        pending_checks: list[str],
+    ) -> Outcome | None:
+        """Bound the "CI green but the forge won't promote" re-poll.
+
+        Every check the PR reports has finished and passed, yet
+        ``mergeable_state`` is still un-promotable. That is normally a few
+        seconds of settling — but it is *permanent* when branch protection
+        requires a context no workflow on this PR produces (a renamed job,
+        a workflow that no longer runs on ``pull_request``, a required
+        context left over from a since-deleted check). Nothing the mill does
+        can dislodge it, so re-polling only burns the worker's stage budget
+        and the ticket eventually blocks with "stage merge timed out after
+        Ns" — a note that names neither the PR nor the missing check.
+
+        Returns a BLOCKED ``Outcome`` naming the unsatisfiable contexts once
+        the ceiling is reached, else ``None`` (keep polling).
+        """
+        s = ctx.settings
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        counter_path = artifacts_dir / _GREEN_UNPROMOTABLE_COUNT
+
+        # Only "everything reported is green, nothing outstanding" counts.
+        # A pending check, or CI that is not success, is genuine settling.
+        if conclusion != "success" or pending_checks:
+            _write_counter(counter_path, 0)
+            return None
+
+        if s.green_unpromotable_max_polls <= 0:
+            return None
+
+        polls = _read_counter(counter_path) + 1
+        _write_counter(counter_path, polls)
+        if polls < s.green_unpromotable_max_polls:
+            return None
+
+        _write_counter(counter_path, 0)
+
+        target = target_branch_for(s, ctx.repo_config)
+        missing = self._unsatisfiable_required_contexts(ctx, branch, target)
+        if missing:
+            detail = (
+                f"branch protection on {target} requires the status "
+                f"context(s) {sorted(missing)}, which are not among the "
+                f"checks this PR reports — the job producing each was most "
+                f"likely renamed or is no longer triggered. Align the check "
+                f"name with the required context (or update the protection "
+                f"rule), then resume."
+            )
+        else:
+            detail = (
+                f"the forge reports mergeable_state={mergeable_state!r} with "
+                f"no check outstanding. Check {target}'s protection rules "
+                f"against the checks this PR reports."
+            )
+        log.warning(
+            "%s: CI green but PR unpromotable for %d consecutive polls "
+            "— escalating to BLOCKED (%s)",
+            ticket.id,
+            polls,
+            detail,
+        )
+        return Outcome(
+            State.BLOCKED,
+            f"CI is green but {pr.get('url') or branch} cannot be merged: "
+            f"{detail} Resume-blocked to retry from implement_complete.",
+        )
+
+    def _unsatisfiable_required_contexts(
+        self, ctx: StageContext, branch: str, target: str
+    ) -> set[str]:
+        """Required contexts on *target* that this PR's checks cannot satisfy.
+
+        Best-effort, and used only to word the block note — never to decide
+        it. An empty result means either "nothing missing" or "protection
+        could not be read". The reported set comes from ``check_status``'s
+        ``jobs``, which carries check-run names and falls back to commit
+        statuses only when there are no check runs at all, so on a repo using
+        both a status-satisfied context can show up here spuriously.
+        """
+        try:
+            forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+            required = set(forge.required_status_contexts(target_branch=target))
+            if not required:
+                return set()
+            status = forge.check_status(source_branch=branch) or {}
+            reported = {
+                name
+                for name in (job.get("name") for job in status.get("jobs", []) or [])
+                if isinstance(name, str)
+            }
+            return required - reported
+        except Exception as e:  # diagnosis only — never mask the real block
+            log.warning("could not diff required contexts for %s: %s", branch, e)
+            return set()
 
     def _check_ping_pong(
         self,
