@@ -16,15 +16,15 @@ def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
     repo_auto_merge_enabled = env.pop("repo_auto_merge_enabled", False)
-    s = Settings(**env)
     # Mirror forge_token into Secrets so get_secrets() works
-    ft = env.get("FORGE_TOKEN")
+    ft = env.pop("FORGE_TOKEN", None)
     if ft is not None:
         import robotsix_mill.config as _cfg
         from robotsix_mill.config import Secrets, _reset_secrets
 
         _reset_secrets()
         _cfg._secrets = Secrets(forge_token=ft)
+    s = Settings(**env)
     db.init_db(s, board_id="test-board")
     from robotsix_mill.config import RepoConfig
 

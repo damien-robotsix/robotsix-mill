@@ -28,10 +28,12 @@ def S(tmp_path, **e):
             secrets_kw[key] = val
     if secrets_kw:
         _set_secrets(**secrets_kw)
-    # FORGE_TOKEN and GITHUB_APP_PRIVATE_KEY are now Secrets-only fields;
-    # pop before Settings()
+    # FORGE_TOKEN, GITHUB_APP_ID, and GITHUB_APP_PRIVATE_KEY are now
+    # Secrets-only fields; pop before Settings()
     e.pop("FORGE_TOKEN", None)
+    e.pop("GITHUB_APP_ID", None)
     e.pop("GITHUB_APP_PRIVATE_KEY", None)
+    e.pop("GITHUB_APP_PRIVATE_KEY_PATH", None)
     s = Settings(**e)
     return s
 

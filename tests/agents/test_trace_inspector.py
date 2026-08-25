@@ -28,7 +28,7 @@ def _set_secrets(**kw):
 def _settings_with_api_key(api_key="sk-test", **kw):
     """Return a Settings and set the matching secret."""
     _set_secrets(openrouter_api_key=api_key)
-    return Settings(openrouter_api_key=api_key, **kw)
+    return Settings(**kw)
 
 
 # ---------------------------------------------------------------------------

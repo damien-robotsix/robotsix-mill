@@ -245,7 +245,6 @@ class _ReviewGateSettings(BaseModel):
     scope_triage_enabled: bool = Field(
         description="When true, a cheap scope-triage LLM inspects out-of-scope file changes before blocking.",
         default=True,
-        alias="MILL_SCOPE_TRIAGE_ENABLED",
     )
     # When True, the deliver stage generates a structured PR body
     # (Summary / Changes / Test Plan) from the implementation diff
@@ -253,7 +252,6 @@ class _ReviewGateSettings(BaseModel):
     pr_summary_enabled: bool = Field(
         description="When true, the deliver stage generates a structured PR body from the diff.",
         default=False,
-        alias="MILL_PR_SUMMARY_ENABLED",
     )
     # When True, Forge.create_repo() is permitted to create repositories
     # via the forge API. Default False (opt-in) — the operator must
@@ -268,7 +266,6 @@ class _ReviewGateSettings(BaseModel):
     # "private" — repos are private unless the caller specifies private=False.
     repo_visibility_default: Literal["public", "private"] = Field(
         default="public",
-        alias="MILL_REPO_VISIBILITY_DEFAULT",
         description="Default visibility for newly created repositories: public or private.",
     )
     # When True, the merge stage deletes the per-ticket head branch on the
@@ -479,7 +476,6 @@ class _ReviewGateSettings(BaseModel):
         description="Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
         default=50,
         ge=0,
-        alias="MILL_SCOPE_TRIAGE_MAX_FILES",
         json_schema_extra={"advanced": True},
     )
     # Per-call cap for pre-refine triage agent (main call + tool calls).

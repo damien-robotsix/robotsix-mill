@@ -625,80 +625,6 @@
           "title": "Forge Target Branch",
           "type": "string"
         },
-        "FORGE_TOKEN": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Forge Token"
-        },
-        "GITHUB_APP_ID": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "GitHub App ID for App-based authentication.",
-          "title": "Github App Id"
-        },
-        "GITHUB_APP_PRIVATE_KEY": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Github App Private Key"
-        },
-        "GITHUB_APP_PRIVATE_KEY_PATH": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Path to GitHub App private key PEM file.",
-          "title": "Github App Private Key Path"
-        },
-        "MILL_CLAUDE_MAX_CONCURRENCY": {
-          "advanced": true,
-          "default": 4,
-          "description": "Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
-          "minimum": 1,
-          "title": "Mill Claude Max Concurrency",
-          "type": "integer"
-        },
-        "MILL_COORDINATOR_TIMEOUT_SECONDS": {
-          "advanced": true,
-          "default": 600,
-          "description": "Wall-clock timeout (seconds) for a single implement agent pass.",
-          "minimum": 60,
-          "title": "Mill Coordinator Timeout Seconds",
-          "type": "integer"
-        },
         "MILL_IMPLEMENT_PASS_TIMEOUT": {
           "advanced": true,
           "default": 300,
@@ -707,51 +633,6 @@
           "title": "Mill Implement Pass Timeout",
           "type": "integer"
         },
-        "MILL_LINT_ON_EDIT": {
-          "default": true,
-          "description": "When true, pre-write Python syntax check on write_file/edit_file calls.",
-          "title": "Mill Lint On Edit",
-          "type": "boolean"
-        },
-        "MILL_MAX_GLOBAL_CONCURRENCY": {
-          "advanced": true,
-          "default": 12,
-          "description": "Host-level cap on total concurrently-running stages across ALL boards, and on live sandbox containers.",
-          "minimum": 1,
-          "title": "Mill Max Global Concurrency",
-          "type": "integer"
-        },
-        "MILL_PER_PASS_REQUEST_BUDGET": {
-          "advanced": true,
-          "default": 500,
-          "description": "Per-pass request budget for the implement (coordinator) agent. Default 500.",
-          "maximum": 5000,
-          "minimum": 1,
-          "title": "Mill Per Pass Request Budget",
-          "type": "integer"
-        },
-        "MILL_PR_SUMMARY_ENABLED": {
-          "default": false,
-          "description": "When true, the deliver stage generates a structured PR body from the diff.",
-          "title": "Mill Pr Summary Enabled",
-          "type": "boolean"
-        },
-        "MILL_REPO_VISIBILITY_DEFAULT": {
-          "default": "public",
-          "description": "Default visibility for newly created repositories: public or private.",
-          "enum": [
-            "public",
-            "private"
-          ],
-          "title": "Mill Repo Visibility Default",
-          "type": "string"
-        },
-        "MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS": {
-          "default": true,
-          "description": "When true, retrospect files draft tickets for AGENT.md proposals.",
-          "title": "Mill Retrospect Spawn Agented Proposals",
-          "type": "boolean"
-        },
         "MILL_SANDBOX_OP_TIMEOUT": {
           "advanced": true,
           "default": 300,
@@ -759,35 +640,6 @@
           "minimum": 0,
           "title": "Mill Sandbox Op Timeout",
           "type": "integer"
-        },
-        "MILL_SCOPE_TRIAGE_ENABLED": {
-          "default": true,
-          "description": "When true, a cheap scope-triage LLM inspects out-of-scope file changes before blocking.",
-          "title": "Mill Scope Triage Enabled",
-          "type": "boolean"
-        },
-        "MILL_SCOPE_TRIAGE_MAX_FILES": {
-          "advanced": true,
-          "default": 50,
-          "description": "Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
-          "minimum": 0,
-          "title": "Mill Scope Triage Max Files",
-          "type": "integer"
-        },
-        "OPENROUTER_API_KEY": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "DEPRECATED flat OpenRouter API key for LLM backend calls. Migrated into the canonical openrouter.keys['robotsix-mill'] map; prefer that canonical source. Retained for backward-compat with existing deployed configs.",
-          "title": "Openrouter Api Key"
         },
         "agent_check_interval_seconds": {
           "advanced": true,
@@ -1128,6 +980,14 @@
           "title": "Ci Transient Max Retries",
           "type": "integer"
         },
+        "claude_max_concurrency": {
+          "advanced": true,
+          "default": 4,
+          "description": "Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
+          "minimum": 1,
+          "title": "Claude Max Concurrency",
+          "type": "integer"
+        },
         "claude_sdk_vision_enabled": {
           "advanced": true,
           "default": false,
@@ -1227,6 +1087,15 @@
           "title": "Coordinator Max Tool Calls",
           "type": "integer"
         },
+        "coordinator_request_limit": {
+          "advanced": true,
+          "default": 500,
+          "description": "Per-pass request budget for the implement (coordinator) agent. Default 500.",
+          "maximum": 5000,
+          "minimum": 1,
+          "title": "Coordinator Request Limit",
+          "type": "integer"
+        },
         "coordinator_timeout_overrides": {
           "additionalProperties": {
             "type": "integer"
@@ -1235,6 +1104,14 @@
           "description": "Per-stage coordinator timeout overrides (dict). Keys are stage names, values are seconds.",
           "title": "Coordinator Timeout Overrides",
           "type": "object"
+        },
+        "coordinator_timeout_seconds": {
+          "advanced": true,
+          "default": 600,
+          "description": "Wall-clock timeout (seconds) for a single implement agent pass.",
+          "minimum": 60,
+          "title": "Coordinator Timeout Seconds",
+          "type": "integer"
         },
         "copy_paste_interval_seconds": {
           "advanced": true,
@@ -1863,6 +1740,12 @@
           "title": "Language Instructions Dir",
           "type": "string"
         },
+        "lint_on_edit": {
+          "default": true,
+          "description": "When true, pre-write Python syntax check on write_file/edit_file calls.",
+          "title": "Lint On Edit",
+          "type": "boolean"
+        },
         "low_credit_poll_enabled": {
           "default": true,
           "description": "Enable proactive OpenRouter credit-balance polling. The reactive 402 path still fires when disabled.",
@@ -1914,6 +1797,14 @@
           "description": "Maximum implement\u2192test fix iterations before the ticket is BLOCKED.",
           "minimum": 0,
           "title": "Max Fix Iterations",
+          "type": "integer"
+        },
+        "max_global_concurrency": {
+          "advanced": true,
+          "default": 12,
+          "description": "Host-level cap on total concurrently-running stages across ALL boards, and on live sandbox containers.",
+          "minimum": 1,
+          "title": "Max Global Concurrency",
           "type": "integer"
         },
         "max_implement_review_cycles": {
@@ -2128,36 +2019,6 @@
           "title": "Network Probe Host",
           "type": "string"
         },
-        "ntfy_token": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "ntfy access token for authenticated push notifications.  Legacy fallback; prefer fleet_notify_token.",
-          "title": "Ntfy Token"
-        },
-        "ntfy_url": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "ntfy server URL for push notifications (https://ntfy.sh).  Legacy fallback; prefer fleet_notify_url.",
-          "title": "Ntfy Url"
-        },
         "obsolescence_gate_enabled": {
           "default": false,
           "description": "When true, an LLM pre-refine gate re-evaluates whether a cited gap still exists on HEAD.",
@@ -2300,6 +2161,12 @@
           "minimum": 0,
           "title": "Ping Pong Max Alternations",
           "type": "integer"
+        },
+        "pr_summary_enabled": {
+          "default": false,
+          "description": "When true, the deliver stage generates a structured PR body from the diff.",
+          "title": "Pr Summary Enabled",
+          "type": "boolean"
         },
         "prerequisite_gate_enabled": {
           "default": true,
@@ -2568,6 +2435,16 @@
           "title": "Repo Description Sync Periodic",
           "type": "boolean"
         },
+        "repo_visibility_default": {
+          "default": "public",
+          "description": "Default visibility for newly created repositories: public or private.",
+          "enum": [
+            "public",
+            "private"
+          ],
+          "title": "Repo Visibility Default",
+          "type": "string"
+        },
         "repos": {
           "anyOf": [
             {
@@ -2638,6 +2515,12 @@
           "default": null,
           "description": "Path to the retrospect agent's Markdown memory ledger.",
           "title": "Retrospect Memory Path"
+        },
+        "retrospect_spawn_agented_proposals": {
+          "default": true,
+          "description": "When true, retrospect files draft tickets for AGENT.md proposals.",
+          "title": "Retrospect Spawn Agented Proposals",
+          "type": "boolean"
         },
         "retrospect_spawn_drafts": {
           "default": true,
@@ -2926,12 +2809,26 @@
           "title": "Scanner Rollup",
           "type": "boolean"
         },
+        "scope_triage_enabled": {
+          "default": true,
+          "description": "When true, a cheap scope-triage LLM inspects out-of-scope file changes before blocking.",
+          "title": "Scope Triage Enabled",
+          "type": "boolean"
+        },
         "scope_triage_hard_max_files": {
           "advanced": true,
           "default": 500,
           "description": "Absolute cap on out-of-scope text files before the scope-triage LLM is skipped, regardless of whether they are newly added.",
           "minimum": 0,
           "title": "Scope Triage Hard Max Files",
+          "type": "integer"
+        },
+        "scope_triage_max_files": {
+          "advanced": true,
+          "default": 50,
+          "description": "Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
+          "minimum": 0,
+          "title": "Scope Triage Max Files",
           "type": "integer"
         },
         "shutdown_grace_seconds": {

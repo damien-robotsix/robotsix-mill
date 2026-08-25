@@ -1622,12 +1622,12 @@ def test_agented_proposals_second_run_files_distinct_ticket(ctx_factory, monkeyp
 
 
 def test_agented_proposals_gated_by_setting(ctx_factory, monkeypatch):
-    """When MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS=false, proposals
+    """When retrospect_spawn_agented_proposals=false, proposals
     are not written even if present."""
     from robotsix_mill.agents.runners import pass_runner
     from robotsix_mill.langfuse import client as langfuse_client
 
-    ctx = ctx_factory(MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS="false")
+    ctx = ctx_factory(retrospect_spawn_agented_proposals="false")
 
     monkeypatch.setattr(
         retrospecting,
@@ -1770,7 +1770,7 @@ def test_agented_proposals_file_tickets_on_enable(ctx_factory, monkeypatch):
 def test_agented_proposal_tickets_gated_by_setting(ctx_factory, monkeypatch):
     """When retrospect_spawn_agented_proposals is disabled, no proposal
     tickets are filed (and no candidates file is written)."""
-    ctx = ctx_factory(MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS="false")
+    ctx = ctx_factory(retrospect_spawn_agented_proposals="false")
     _agented_seams(monkeypatch)
 
     monkeypatch.setattr(
@@ -2021,7 +2021,6 @@ def _multirepo_forge_env() -> dict:
     return {
         "FORGE_KIND": "github",
         "FORGE_REMOTE_URL": "https://github.com/o/global.git",
-        "FORGE_TOKEN": "t",
     }
 
 

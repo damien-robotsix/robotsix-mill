@@ -23,13 +23,14 @@ def _ctx(tmp_path, **env):
     env.setdefault("FORGE_KIND", "github")
     env.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
     env.setdefault("FORGE_TOKEN", "tok")
-    s = Settings(**env)
+    ft = env.pop("FORGE_TOKEN", None)
 
     import robotsix_mill.config as _cfg
     from robotsix_mill.config import Secrets, _reset_secrets
 
     _reset_secrets()
-    _cfg._secrets = Secrets(forge_token="tok")
+    _cfg._secrets = Secrets(forge_token=ft or "tok")
+    s = Settings(**env)
     db.init_db(s, board_id="test-board")
 
     repo_config = RepoConfig(
