@@ -9,7 +9,7 @@ from pathlib import Path
 from ...agents import prerequisite
 from ...agents.testing import is_network_dependent_failure
 from ...config import Settings, target_branch_for
-from ...core.models import SourceKind, Ticket
+from ...core.models import SourceKind, Ticket, TicketEvent, TicketKind
 from ...core.states import State
 from ...forge.base import get_forge
 from ...vcs import git_ops
@@ -53,6 +53,58 @@ def _spec_names_path(spec: str, path: str) -> bool:
     false negative silently deletes the ticket's deliverable.
     """
     return bool(spec) and path in spec
+
+
+def _spawn_scope_split_tickets(
+    ctx: StageContext,
+    parent: Ticket,
+    expand_files: list[str],
+    justification: str,
+) -> list[str]:
+    """Create child tickets for files that exceeded the EXPAND cap.
+
+    Each child ticket is a draft describing the scope expansion that
+    the parent's scope-triage agent approved but that hit the
+    per-ticket EXPAND ceiling.  The refine pass on each child will
+    produce a proper spec.
+
+    Returns the ids of the created child tickets.
+    """
+    board_id = parent.board_id or None
+    file_list = ", ".join(f"`{f}`" for f in expand_files)
+    title = (
+        f"scope split from {parent.id}: "
+        + ", ".join(expand_files[:3])
+        + ("…" if len(expand_files) > 3 else "")
+    )[:120]
+    description = (
+        "## Scope split\n\n"
+        f"Parent ticket `{parent.id}` hit the scope-triage EXPAND cap. "
+        "The following out-of-scope files were approved for expansion "
+        "but the parent's implement loop was parked to prevent churn.\n\n"
+        f"**Files:** {file_list}\n\n"
+        f"**Scope-triage justification:** {justification}\n\n"
+        f"(Spawned from parent `{parent.id}`.)"
+    )
+    child = ctx.service.create(
+        title,
+        description,
+        source="agent",
+        kind=TicketKind.TASK,
+        board_id=board_id,
+        priority=parent.priority,
+    )
+    child_id = child.id
+    ctx.service.transition(
+        child_id, State.DRAFT, note="Auto-created by scope-triage EXPAND cap"
+    )
+    log.info(
+        "%s: spawned scope-split child %s for %d file(s)",
+        parent.id,
+        child_id,
+        len(expand_files),
+    )
+    return [child_id]
 
 
 def classify_baseline_verdict(
@@ -668,6 +720,45 @@ class ValidationMixin(_ImplementStageBase):
                     file_map=file_map,
                     feedback=None,
                 )
+
+            # --- EXPAND cap: force a split proposal after N expansions ---
+            # Repeated EXPAND verdicts widen the scope and trigger another
+            # implement pass, which is the costliest churn pattern.  Cap
+            # the number of EXPAND events per ticket; on hitting the cap,
+            # emit child tickets for the would-be-expanded files and park
+            # the parent instead of re-queuing.
+            _MAX_SCOPE_TRIAGE_EXPANDS = 2
+            prior_expands: list[TicketEvent] = [
+                ev
+                for ev in ctx.service.history(ticket.id)  # type: ignore[attr-defined]
+                if ev.note and ev.note.startswith("scope-triage EXPAND")
+            ]
+            if len(prior_expands) >= _MAX_SCOPE_TRIAGE_EXPANDS:
+                child_ids = _spawn_scope_split_tickets(
+                    ctx, ticket, new_files, verdict.justification
+                )
+                child_list = ", ".join(f"`{c}`" for c in child_ids)
+                reason = (
+                    f"scope-triage EXPAND cap reached "
+                    f"({len(prior_expands)} prior EXPAND events) — "
+                    f"split into child ticket(s): {child_list}"
+                )
+                log.warning("%s: %s", ticket.id, reason)
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    reason,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=None,
+                )
+                return _ScopeGuardrailResult(
+                    action="return",
+                    outcome=Outcome(State.BLOCKED, reason),
+                )
+
             for f in new_files:
                 file_map.add(f)
             log.info(
