@@ -22,16 +22,10 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
     {
         # -- Secrets / credentials — sourced from the config.json
         #    ``secrets:`` block (Secrets model) or env vars --
-        "openrouter_api_key",
-        "forge_token",
         "forge_repo_create_token",
         "fleet_notify_token",
         "fleet_notify_url",
-        "github_app_id",
-        "github_app_private_key",
         "openrouter_management_key",
-        "ntfy_url",
-        "ntfy_token",
         "sandbox_push_token",
         # -- Langfuse config — canonical block at top-level ``langfuse:``,
         #    not a flat SecretStr field --
@@ -66,16 +60,10 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
 # Used by the periodic agent to explain *why* a field was previously
 # judged intentional, so a reviewer can reassess.
 MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
-    "openrouter_api_key": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
-    "forge_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "forge_repo_create_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "fleet_notify_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "fleet_notify_url": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
-    "github_app_id": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
-    "github_app_private_key": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "openrouter_management_key": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
-    "ntfy_url": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
-    "ntfy_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "sandbox_push_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "langfuse": "Langfuse config — canonical block at top-level langfuse:, not a flat SecretStr field",
     "openrouter": "OpenRouter config — canonical block at top-level openrouter:, not a flat SecretStr field",

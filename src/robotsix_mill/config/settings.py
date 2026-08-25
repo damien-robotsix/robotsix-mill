@@ -150,14 +150,6 @@ class Settings(
         default=None,
         description="Bearer token for the fleet notification endpoint.",
     )
-    ntfy_url: SecretStr | None = Field(
-        default=None,
-        description="ntfy server URL for push notifications (https://ntfy.sh).  Legacy fallback; prefer fleet_notify_url.",
-    )
-    ntfy_token: SecretStr | None = Field(
-        default=None,
-        description="ntfy access token for authenticated push notifications.  Legacy fallback; prefer fleet_notify_token.",
-    )
 
     # --- Repository registry ---
     repos: ReposRegistry | None = Field(
@@ -207,28 +199,6 @@ class Settings(
             file_secret_settings,
             JsonSettingsSource(settings_cls),
         )
-
-    @model_validator(mode="after")
-    def _migrate_openrouter_api_key(self) -> Settings:
-        """Backward-compat migration for the flat ``openrouter_api_key``.
-
-        Configs carrying the deprecated flat field load it into the
-        canonical ``openrouter.keys["robotsix-mill"]`` alias so the
-        deployment engine and cost-monitor reconciliation see the same
-        key the main LLM function actually uses.
-        """
-        if self.openrouter_api_key is None:
-            return self
-        key_value = self.openrouter_api_key.get_secret_value()
-        if not key_value:
-            return self
-        if self.openrouter is None:
-            self.openrouter = OpenrouterKeys(
-                keys={"robotsix-mill": self.openrouter_api_key}
-            )
-        elif "robotsix-mill" not in self.openrouter.keys:
-            self.openrouter.keys["robotsix-mill"] = self.openrouter_api_key
-        return self
 
     def workspaces_dir_for(self, board_id: str) -> Path:
         """Per-repo workspaces directory. *board_id* is required —
@@ -464,19 +434,17 @@ class Settings(
                 "use FORGE_AUTH=token and set FORGE_TOKEN to a GitLab PAT"
             )
 
-        # forge_auth=app requires GitHub App credentials
+        # forge_auth=app requires GitHub App credentials (from secrets block)
         if self.forge_auth == "app":
-            has_app_id = (
-                self.github_app_id is not None and self.github_app_id.get_secret_value()
-            )
-            has_key_path = (
-                self.github_app_private_key_path is not None
-                and self.github_app_private_key_path.get_secret_value()
-            )
+            from . import get_secrets
+
+            secrets = get_secrets()
+            has_app_id = bool(secrets.github_app_id)
+            has_key_path = bool(secrets.github_app_private_key_path)
             if not has_app_id and not has_key_path:
                 raise ValueError(
                     "FORGE_AUTH=app requires at least one of github_app_id "
-                    "or github_app_private_key_path to be set"
+                    "or github_app_private_key_path to be set in secrets"
                 )
 
         # forge_kind needs forge_remote_url (auto-detection also needs a URL)

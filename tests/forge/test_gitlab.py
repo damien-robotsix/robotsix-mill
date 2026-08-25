@@ -2121,7 +2121,7 @@ def test_create_repo_respects_private_default_config(tmp_path, monkeypatch):
     forge = _forge(
         tmp_path,
         enable_repo_creation=True,
-        MILL_REPO_VISIBILITY_DEFAULT="private",
+        repo_visibility_default="private",
     )
     forge.create_repo(name="proj", owner="ns", description="d")
 
@@ -2149,7 +2149,7 @@ def test_create_repo_explicit_private_overrides_config(tmp_path, monkeypatch):
     forge = _forge(
         tmp_path,
         enable_repo_creation=True,
-        MILL_REPO_VISIBILITY_DEFAULT="private",
+        repo_visibility_default="private",
     )
     forge.create_repo(name="proj", owner="ns", private=False, description="d")
 

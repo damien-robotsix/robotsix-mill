@@ -2170,7 +2170,7 @@ def test_create_repo_respects_private_default_config(tmp_path, monkeypatch):
     forge = _forge(
         tmp_path,
         enable_repo_creation=True,
-        MILL_REPO_VISIBILITY_DEFAULT="private",
+        repo_visibility_default="private",
     )
     forge.create_repo(name="b", owner="o", description="d")
 
@@ -2205,7 +2205,7 @@ def test_create_repo_explicit_private_overrides_config(tmp_path, monkeypatch):
     forge = _forge(
         tmp_path,
         enable_repo_creation=True,
-        MILL_REPO_VISIBILITY_DEFAULT="private",
+        repo_visibility_default="private",
     )
     forge.create_repo(name="b", owner="o", private=False, description="d")
 
@@ -2924,10 +2924,9 @@ def _app_settings(tmp_path, **kw):
     kw.setdefault("FORGE_KIND", "github")
     kw.setdefault("FORGE_AUTH", "app")
     kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
-    # Settings model itself holds github_app_id (not github_app_private_key,
-    # which lives only in Secrets).
-    kw.setdefault("GITHUB_APP_ID", "123")
-    # GITHUB_APP_PRIVATE_KEY is now a Secrets-only field; pop before Settings()
+    # github_app_id and github_app_private_key are now Secrets-only fields;
+    # pop before Settings()
+    kw.pop("GITHUB_APP_ID", None)
     kw.pop("GITHUB_APP_PRIVATE_KEY", None)
     return Settings(**kw)
 

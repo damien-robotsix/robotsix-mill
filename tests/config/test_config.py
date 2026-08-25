@@ -36,18 +36,12 @@ def _clean_env() -> Generator[None]:
     stash = {k: os.environ.pop(k) for k in to_clear}
     # Also clear FORGE_* vars that alias to Settings fields
     for k in list(os.environ):
-        if k.startswith("FORGE_") or k in (
-            "OPENROUTER_API_KEY",
-            "GITHUB_APP_ID",
-            "GITHUB_APP_PRIVATE_KEY_PATH",
-            "NTFY_URL",
-            "NTFY_TOKEN",
-        ):
+        if k.startswith("FORGE_"):
             stash[k] = os.environ.pop(k)
-    # Explicitly clear the new alias so test_default_coordinator_request_limit
+    # Explicitly clear the new env var so test_default_coordinator_request_limit
     # can assert the model's static default even if the outer environment
     # has a stray value.
-    os.environ.pop("MILL_PER_PASS_REQUEST_BUDGET", None)
+    os.environ.pop("MILL_COORDINATOR_REQUEST_LIMIT", None)
     yield
     os.environ.update(stash)
 
@@ -79,14 +73,14 @@ def test_default_coordinator_request_limit():
     s = Settings()
     assert s.coordinator_request_limit == 500
     # Also verify the hard upper bound is enforced at the model level.
-    # 5001 exceeds le=5000 — must pass via alias (field has alias set)
+    # 5001 exceeds le=5000 — must pass via field name
     try:
-        _CoreSettings(MILL_PER_PASS_REQUEST_BUDGET=5001)
+        _CoreSettings(coordinator_request_limit=5001)
         raise AssertionError("expected ValidationError")
     except ValidationError:
         pass
     # boundary: 5000 is ok
-    cs = _CoreSettings(MILL_PER_PASS_REQUEST_BUDGET=5000)
+    cs = _CoreSettings(coordinator_request_limit=5000)
     assert cs.coordinator_request_limit == 5000
 
 
@@ -273,7 +267,7 @@ def test_default_language_instructions_dir():
 
 ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- request limits ---
-    ("coordinator_request_limit", "MILL_PER_PASS_REQUEST_BUDGET", "42", 42),
+    ("coordinator_request_limit", "MILL_COORDINATOR_REQUEST_LIMIT", "42", 42),
     ("refine_request_limit", "MILL_REFINE_REQUEST_LIMIT", "42", 42),
     ("test_request_limit", "MILL_TEST_REQUEST_LIMIT", "15", 15),
     ("max_fix_iterations", "MILL_MAX_FIX_ITERATIONS", "6", 6),
@@ -865,19 +859,19 @@ def _write_config(path: Path, settings_block: dict) -> None:
 
 def test_settings_reads_the_json_config_file(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
-    _write_config(cfg, {"api_port": 9123, "MILL_MAX_GLOBAL_CONCURRENCY": 7})
+    _write_config(cfg, {"api_port": 9123, "max_global_concurrency": 7})
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
 
     s = Settings()
     assert s.api_port == 9123
-    # Aliased fields are keyed by their alias in the file.
+    # Fields are keyed by their field name in the file.
     assert s.max_global_concurrency == 7
 
 
 def test_env_overrides_the_json_config_file(tmp_path, monkeypatch):
     """The file sits below os.environ, never above it."""
     cfg = tmp_path / "config.json"
-    _write_config(cfg, {"MILL_MAX_GLOBAL_CONCURRENCY": 7})
+    _write_config(cfg, {"max_global_concurrency": 7})
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
     monkeypatch.setenv("MILL_MAX_GLOBAL_CONCURRENCY", "2")
 
@@ -936,48 +930,9 @@ def test_openrouter_keys_canonical_source():
     assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
 
 
-def test_flat_openrouter_api_key_migrates_to_canonical():
-    """Configs with the deprecated flat field load it into the canonical map."""
-    from pydantic import SecretStr
-
-    s = Settings(openrouter_api_key=SecretStr("sk-legacy"))
-    assert s.openrouter is not None
-    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"
-    # The old field is still accessible for backward compat.
-    assert s.openrouter_api_key.get_secret_value() == "sk-legacy"
-
-
-def test_canonical_wins_when_both_set():
-    """When both the flat field and canonical map are set, canonical wins."""
-    from pydantic import SecretStr
-
-    from robotsix_mill.config.settings import OpenrouterKeys
-
-    s = Settings(
-        openrouter_api_key=SecretStr("sk-flat"),
-        openrouter=OpenrouterKeys(keys={"robotsix-mill": SecretStr("sk-canon")}),
-    )
-    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
-
-
-def test_openrouter_keys_coexist_with_other_aliases():
-    """The flat key populates 'robotsix-mill' alongside existing aliases."""
-    from pydantic import SecretStr
-
-    from robotsix_mill.config.settings import OpenrouterKeys
-
-    s = Settings(
-        openrouter_api_key=SecretStr("sk-legacy"),
-        openrouter=OpenrouterKeys(keys={"other-func": SecretStr("sk-other")}),
-    )
-    assert s.openrouter.keys["other-func"].get_secret_value() == "sk-other"
-    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-legacy"
-
-
 def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
     """When openrouter_api_key lives ONLY in the Fernet-encrypted secrets
-    block, load_settings_block lifts it into settings so the
-    _migrate_openrouter_api_key validator populates the canonical
+    block, load_settings_block lifts it into the canonical
     openrouter.keys map."""
     import json
 
@@ -1006,7 +961,3 @@ def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
     assert s.openrouter is not None
     assert s.openrouter.keys.get("robotsix-mill") is not None
     assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
-
-    # The flat field is still populated (original value preserved).
-    assert s.openrouter_api_key is not None
-    assert s.openrouter_api_key.get_secret_value() == "sk-from-fernet"

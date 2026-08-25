@@ -378,7 +378,7 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `core.limits.coordinator_requests` | `MILL_PER_PASS_REQUEST_BUDGET` | `500` | Per-pass request budget for the implement (coordinator) agent. Resets each pass; normal tickets fit in one pass. Hard upper bound 5000 |
+| `core.limits.coordinator_requests` | `MILL_COORDINATOR_REQUEST_LIMIT` | `500` | Per-pass request budget for the implement (coordinator) agent. Resets each pass; normal tickets fit in one pass. Hard upper bound 5000 |
 | `core.limits.subtask_request_limit` | `MILL_SUBTASK_REQUEST_LIMIT` | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | `MILL_EXPLORE_MAX_TOKENS` | `4096` | Output token cap for explore sub-agent responses |
@@ -517,7 +517,6 @@ the `claude` CLI in the container). These knobs govern that path:
 | `forge.auth_mode` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App). Under `app` mode, `github_push_token()` mints a fresh `contents: write`-scoped installation token per push — no PAT is stored or reused for git push operations. |
 | `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
 | `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
-| `forge.github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | `None` | Host path to GitHub App private-key `.pem` file |
 | `core.enable_repo_creation` | `MILL_ENABLE_REPO_CREATION` | `false` | Allow the new-repo meta flow to create repositories via the forge API |
 | `core.repo_visibility_default` | `MILL_REPO_VISIBILITY_DEFAULT` | `public` | Default visibility for newly created repositories. `public` — repos are public unless the caller specifies private=True. `private` — repos are private unless the caller specifies private=False. |
 

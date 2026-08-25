@@ -135,7 +135,6 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
         data_dir=str(tmp_path),
         FORGE_KIND="github",
         FORGE_REMOTE_URL="https://github.com/o/r.git",
-        FORGE_TOKEN="tok",
     )
     url = github.GitHubForge(s).open_merge_request(
         source_branch="mill/x", title="T", body="B"

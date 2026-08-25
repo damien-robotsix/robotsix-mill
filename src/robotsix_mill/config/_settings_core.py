@@ -26,12 +26,6 @@ class _CoreSettings(BaseModel):
     # L2 DeepSeek pro, L3 Claude Opus, L4 Claude fable-5). There is no
     # global backend toggle.
     #
-    openrouter_api_key: SecretStr | None = Field(
-        default=None,
-        alias="OPENROUTER_API_KEY",
-        description="DEPRECATED flat OpenRouter API key for LLM backend calls. Migrated into the canonical openrouter.keys['robotsix-mill'] map; prefer that canonical source. Retained for backward-compat with existing deployed configs.",
-    )
-
     # Process-wide cap on how many Claude Agent SDK runs may execute at once.
     # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
     # (worker startup contention) can stall a run. A global semaphore (see
@@ -39,7 +33,6 @@ class _CoreSettings(BaseModel):
     # storm. Applies to level-3 (Claude SDK) agents. Must be ≥ 1.
     claude_max_concurrency: int = Field(
         default=4,
-        alias="MILL_CLAUDE_MAX_CONCURRENCY",
         ge=1,
         description="Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
         json_schema_extra={"advanced": True},
@@ -56,7 +49,6 @@ class _CoreSettings(BaseModel):
     # it, so the live count ran well above the cap.
     max_global_concurrency: int = Field(
         default=12,
-        alias="MILL_MAX_GLOBAL_CONCURRENCY",
         ge=1,
         description=(
             "Host-level cap on total concurrently-running stages across ALL "
@@ -173,7 +165,6 @@ class _CoreSettings(BaseModel):
         default=500,
         ge=1,
         le=5000,
-        alias="MILL_PER_PASS_REQUEST_BUDGET",
         description="Per-pass request budget for the implement (coordinator) agent. Default 500.",
         json_schema_extra={"advanced": True},
     )
@@ -197,7 +188,6 @@ class _CoreSettings(BaseModel):
     coordinator_timeout_seconds: int = Field(
         default=600,
         ge=60,
-        alias="MILL_COORDINATOR_TIMEOUT_SECONDS",
         description="Wall-clock timeout (seconds) for a single implement agent pass.",
         json_schema_extra={"advanced": True},
     )
@@ -778,31 +768,13 @@ class _CoreSettings(BaseModel):
         alias="FORGE_TARGET_BRANCH",
         description="Default target branch for PRs.",
     )
-    forge_token: SecretStr | None = Field(
-        default=None,
-        alias="FORGE_TOKEN",
-    )
-    # token  = use FORGE_TOKEN (PAT) directly.
+    # token  = use forge_token from secrets block (PAT) directly.
     # app    = mint a short-lived GitHub App installation token so the
     #          bot identity (<app-slug>[bot]) authors the PR.
     forge_auth: Literal["token", "app"] = Field(
         default="token",
         alias="FORGE_AUTH",
         description="Forge authentication method: token (PAT) or app (GitHub App installation token).",
-    )
-    github_app_id: SecretStr | None = Field(
-        default=None,
-        alias="GITHUB_APP_ID",
-        description="GitHub App ID for App-based authentication.",
-    )
-    github_app_private_key: SecretStr | None = Field(
-        default=None,
-        alias="GITHUB_APP_PRIVATE_KEY",
-    )
-    github_app_private_key_path: SecretStr | None = Field(
-        default=None,
-        alias="GITHUB_APP_PRIVATE_KEY_PATH",
-        description="Path to GitHub App private key PEM file.",
     )
     # GitHub API base (override for GitHub Enterprise).
     github_api_url: str = Field(

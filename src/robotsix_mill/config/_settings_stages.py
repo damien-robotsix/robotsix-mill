@@ -146,7 +146,6 @@ class _StagesSettings(BaseModel):
     lint_on_edit: bool = Field(
         description="When true, pre-write Python syntax check on write_file/edit_file calls.",
         default=True,
-        alias="MILL_LINT_ON_EDIT",
     )
     # Character cap on an *implicit full* ``read_file`` (offset=1,
     # limit=None) payload, applied by ``fs_tools._bound_full_read``.
@@ -215,7 +214,6 @@ class _StagesSettings(BaseModel):
     retrospect_spawn_agented_proposals: bool = Field(
         description="When true, retrospect files draft tickets for AGENT.md proposals.",
         default=True,
-        alias="MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS",
     )
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical

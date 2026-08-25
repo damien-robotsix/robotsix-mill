@@ -21,6 +21,8 @@ def _s(tmp_path, **kw):
 
         _reset_secrets()
         _cfg._secrets = Secrets(openrouter_api_key=key)
+    # OPENROUTER_API_KEY is now a Secrets-only field; pop before Settings()
+    kw.pop("OPENROUTER_API_KEY", None)
     return Settings(**kw)
 
 
