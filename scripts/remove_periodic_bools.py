@@ -38,7 +38,7 @@ for start, end in reversed(remove_ranges):
     s = start
     while s > 0:
         prev = lines[s - 1].strip()
-        if prev == "" or prev.startswith("#") and not prev.startswith("# ---"):
+        if prev == "" or (prev.startswith("#") and not prev.startswith("# ---")):
             s -= 1
         else:
             break
@@ -62,7 +62,9 @@ for start, end in reversed(remove_ranges):
                         old_text = m.group(1)
                         if not old_text.rstrip(".").endswith("0 = disabled"):
                             new_text = old_text.rstrip(".") + ". 0 = disabled."
-                            lines[k] = desc.replace(f'description="{old_text}"', f'description="{new_text}"')
+                            lines[k] = desc.replace(
+                                f'description="{old_text}"', f'description="{new_text}"'
+                            )
             break
 
 new_content = "\n".join(lines)
