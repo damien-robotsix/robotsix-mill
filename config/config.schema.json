@@ -1742,6 +1742,14 @@
           "title": "Gitlab Api Url",
           "type": "string"
         },
+        "green_unpromotable_max_polls": {
+          "advanced": true,
+          "default": 10,
+          "description": "Ceiling on consecutive polls with green CI but an unpromotable PR before escalating. 0 disables.",
+          "minimum": 0,
+          "title": "Green Unpromotable Max Polls",
+          "type": "integer"
+        },
         "health_interval_seconds": {
           "advanced": true,
           "default": 604800,

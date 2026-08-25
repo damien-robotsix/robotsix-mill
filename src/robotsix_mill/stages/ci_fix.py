@@ -253,6 +253,19 @@ class CIFixStage(Stage):
         if identical_outcome is not None:
             return identical_outcome
 
+        # --- Conflicting-PR backstop (before LLM agent) ---
+        # A PR that conflicts with its target gets ZERO check runs from the
+        # forge: GitHub cannot build a merge commit, so no `pull_request`
+        # workflow fires. The ci-fix agent would then fix, push, and wait on
+        # CI that is never going to report, spending its whole iteration
+        # budget before the stage hard-blocks with "could not turn CI green
+        # within its iteration budget" — a note that points at the tests
+        # instead of at the conflict. Route to REBASING so the branch is
+        # caught up first; CI resumes on its own once the PR is mergeable.
+        conflict_outcome = self._reroute_when_pr_conflicting(ticket, ctx, branch)
+        if conflict_outcome is not None:
+            return conflict_outcome
+
         # --- Duplicate changelog fragment recovery (before LLM agent) ---
         dedup_outcome = self._try_dedup_changelog_fragments(
             ticket, ctx, repo_dir, branch
@@ -1168,6 +1181,42 @@ class CIFixStage(Stage):
                 # update_branch failed (PR not found / HTTP error) — fall
                 # through to the normal spawn path so we don't get stuck.
         return None
+
+    def _reroute_when_pr_conflicting(
+        self, ticket: Ticket, ctx: StageContext, branch: str
+    ) -> Outcome | None:
+        """Route a conflicting PR to REBASING instead of spawning the agent.
+
+        The forge reports ``mergeable is False`` only once it has actually
+        tried to build the merge commit, so this is a definite answer, not
+        the ``None`` "not computed yet" state — which is left alone.
+
+        Returns ``Outcome(State.REBASING)`` when the PR conflicts, else
+        ``None`` (caller proceeds to the agent).
+        """
+        try:
+            pr = get_forge(ctx.settings, repo_config=ctx.repo_config).pr_status(
+                source_branch=branch
+            )
+        except Exception as e:
+            # Never let a status blip divert the stage — fall through and
+            # let the agent run as before.
+            log.warning("%s: mergeability probe failed: %s", ticket.id, e)
+            return None
+
+        if (pr or {}).get("mergeable") is not False:
+            return None
+
+        log.info(
+            "%s: PR conflicts with its target — no CI can run; "
+            "routing FIXING_CI to REBASING",
+            ticket.id,
+        )
+        return Outcome(
+            State.REBASING,
+            "PR conflicts with its target branch, so the forge runs no "
+            "checks on it — rebasing before any CI fix is attempted.",
+        )
 
     def _retry_transient_ci_failure(
         self,

@@ -3587,3 +3587,96 @@ def test_no_merge_conflict_falls_through(tmp_path, monkeypatch):
         stage._check_merge_conflict(ticket, ctx, repo_dir, ticket.branch or "", "main")
         is None
     )
+
+
+# ---------------------------------------------------------------------------
+# Conflicting-PR backstop: a conflicting PR gets zero check runs, so the
+# ci-fix agent has nothing to iterate against.
+# ---------------------------------------------------------------------------
+
+
+def _conflicting_ci_fix_ctx(tmp_path, monkeypatch, mergeable):
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": "err", "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "sha": "abc123",
+            "mergeable": mergeable,
+        },
+    )
+
+    def _no_agent(**k):  # pragma: no cover - asserted not to run
+        raise AssertionError("ci-fix agent must not run against a conflicting PR")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _no_agent)
+    return ctx
+
+
+def test_ci_fix_reroutes_conflicting_pr_to_rebasing(tmp_path, monkeypatch):
+    """mergeable=False → REBASING without spending an agent iteration."""
+    ctx = _conflicting_ci_fix_ctx(tmp_path, monkeypatch, mergeable=False)
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.REBASING
+    assert "conflicts" in out.note
+
+
+@pytest.mark.parametrize("mergeable", [True, None])
+def test_ci_fix_runs_agent_when_pr_is_not_conflicting(tmp_path, monkeypatch, mergeable):
+    """mergeable=True, and the not-yet-computed None, must NOT divert."""
+    ctx = _conflicting_ci_fix_ctx(tmp_path, monkeypatch, mergeable=mergeable)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_ci_fix_mergeability_probe_failure_does_not_divert(tmp_path, monkeypatch):
+    """A pr_status blip must fall through to the agent, not strand the ticket."""
+    ctx = _conflicting_ci_fix_ctx(tmp_path, monkeypatch, mergeable=False)
+    calls = {"n": 0}
+
+    def flaky_pr_status(self, *, source_branch, require_checks=False):
+        calls["n"] += 1
+        # The first call resolves head_sha; the backstop's probe is the one
+        # that fails.
+        if calls["n"] > 1:
+            raise RuntimeError("transport blip")
+        return {"sha": "abc123", "mergeable": False}
+
+    monkeypatch.setattr(github.GitHubForge, "pr_status", flaky_pr_status)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE

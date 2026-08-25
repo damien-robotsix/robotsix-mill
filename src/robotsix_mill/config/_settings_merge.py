@@ -299,6 +299,21 @@ class _MergeSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Ceiling on consecutive merge polls where CI is fully green (nothing
+    # pending) yet the forge still refuses to promote the PR.  That pairing is
+    # normally a few seconds of settling, but it is *permanent* when a required
+    # status context can never report — e.g. a job was renamed, so branch
+    # protection waits for a context no workflow on this PR produces.  Without
+    # a ceiling the merge stage re-polls until the worker's stage timeout kills
+    # it and the ticket blocks with "stage merge timed out after Ns", which
+    # names neither the PR nor the missing check.  Set to 0 to disable.
+    green_unpromotable_max_polls: int = Field(
+        description="Ceiling on consecutive polls with green CI but an unpromotable PR before escalating. 0 disables.",
+        default=10,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(
         description="Maximum review-revision attempts per ticket before escalating to BLOCKED.",
