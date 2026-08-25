@@ -3488,10 +3488,12 @@ def test_refine_convergence_skips_agent_when_input_unchanged(ctx_factory, monkey
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
     )
 
-    # Pass 1: refine agent runs, writes spec, pass counter = 1.
+    # Pass 1: fast-path auto-approve returns NEEDS_APPROVAL by default
+    # (the mock default), so outcome is HUMAN_ISSUE_APPROVAL with the
+    # raw draft preserved (no refine-agent call).
     out1 = RefineStage().run(t, ctx)
     assert out1.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert len(refine_calls) == 1
+    assert len(refine_calls) == 0  # fast-path handled it
     ctx.service.transition(t.id, out1.next_state, out1.note)
 
     # Sendback without actual new feedback (empty reviewer_comments).

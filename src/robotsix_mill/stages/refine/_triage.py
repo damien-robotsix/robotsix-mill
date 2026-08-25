@@ -636,7 +636,7 @@ def triage_skip(
         # create an infinite loop (approve → refine produces empty
         # body → fast-path approves again).  Fall through to the
         # full refine agent instead.
-        if draft.strip() and (
+        if s.require_approval and draft.strip() and (
             ticket.source != "ci"
             or (ticket.source == "ci" and _draft_has_complete_spec(draft))
         ):
