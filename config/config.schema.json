@@ -2261,6 +2261,16 @@
           "title": "Repo Description Sync Interval Seconds",
           "type": "integer"
         },
+        "repo_visibility_default": {
+          "default": "public",
+          "description": "Default visibility for newly created repositories: public or private.",
+          "enum": [
+            "public",
+            "private"
+          ],
+          "title": "Repo Visibility Default",
+          "type": "string"
+        },
         "repos": {
           "anyOf": [
             {
