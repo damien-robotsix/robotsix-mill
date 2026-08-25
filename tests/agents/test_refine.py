@@ -5165,3 +5165,32 @@ def test_language_gating_python_repo_includes_markers(tmp_path):
     assert lang_block, "Expected non-empty language block for Python repo"
     # At least one Python marker should be present.
     assert "uv" in lang_block, "Python repo must include 'uv' marker"
+
+
+def test_language_gating_flutter_repo_includes_markers(tmp_path):
+    """A Flutter-declaring repo MUST include Flutter/Dart-convention markers
+    — ensures the flutter.md snippet is loaded and gated correctly."""
+    import yaml as _yaml
+
+    repo_dir = tmp_path / "flutter_repo"
+    repo_dir.mkdir()
+    config_dir = repo_dir / ".robotsix-mill"
+    config_dir.mkdir()
+    config = {"languages": ["flutter"]}
+    (config_dir / "config.yaml").write_text(_yaml.dump(config), encoding="utf-8")
+
+    from robotsix_mill.config import Settings as S
+    from robotsix_mill.config.repo_settings import resolve_language_instructions
+
+    settings = S(data_dir=str(tmp_path))
+    lang_block = resolve_language_instructions(settings, repo_dir)
+
+    assert lang_block, "Expected non-empty language block for Flutter repo"
+    # Key Flutter markers should be present.
+    assert "flutter analyze" in lang_block, (
+        "Flutter repo must include 'flutter analyze' marker"
+    )
+    assert "pubspec.yaml" in lang_block, (
+        "Flutter repo must include 'pubspec.yaml' marker"
+    )
+    assert "Dart SDK" in lang_block, "Flutter repo must include 'Dart SDK' marker"
