@@ -3408,6 +3408,9 @@ def test_refine_pass_cap_escalates_on_exhaustion(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_varying_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test pass-cap escalation.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine rewrites description.md → output differs → pass counter = 1.
@@ -3486,14 +3489,17 @@ def test_refine_convergence_skips_agent_when_input_unchanged(ctx_factory, monkey
         monkeypatch,
         run_refine_agent=_tracking_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called in pass 1 — description.md gets the
+        # spec output and refine_output_hash is set, which the
+        # convergence guard in pass 2 relies on.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
-    # Pass 1: fast-path auto-approve returns NEEDS_APPROVAL by default
-    # (the mock default), so outcome is HUMAN_ISSUE_APPROVAL with the
-    # raw draft preserved (no refine-agent call).
+    # Pass 1: refine agent runs, writes spec, pass counter = 1.
     out1 = RefineStage().run(t, ctx)
     assert out1.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert len(refine_calls) == 0  # fast-path handled it
+    assert len(refine_calls) == 1
     ctx.service.transition(t.id, out1.next_state, out1.note)
 
     # Sendback without actual new feedback (empty reviewer_comments).
@@ -3539,6 +3545,9 @@ def test_refine_sendback_with_feedback_still_runs_agent(ctx_factory, monkeypatch
         monkeypatch,
         run_refine_agent=_tracking_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test convergence guard.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine runs normally.
@@ -3596,6 +3605,9 @@ def test_refine_output_convergence_stops_counting(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_same_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test output convergence.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine runs, output hash stored, pass counter = 1.
@@ -3654,6 +3666,9 @@ def test_refine_pass_cap_disabled_when_zero(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_varying_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test pass-cap disabled.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Run refine many times — cap is disabled so agent always called.
