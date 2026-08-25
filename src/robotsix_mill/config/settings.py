@@ -29,8 +29,10 @@ from pydantic_settings import (
 )
 
 from ._settings_core import _CoreSettings
+from ._settings_merge import _MergeSettings
 from ._settings_observability import _ObservabilitySettings
 from ._settings_periodic import _PeriodicSettings
+from ._settings_review_gate import _ReviewGateSettings
 from ._settings_stages import _StagesSettings
 from .json_source import JsonSettingsSource
 
@@ -107,6 +109,8 @@ class Settings(
     # observability).
     _ObservabilitySettings,
     _PeriodicSettings,
+    _MergeSettings,
+    _ReviewGateSettings,
     _StagesSettings,
     _CoreSettings,
     BaseSettings,

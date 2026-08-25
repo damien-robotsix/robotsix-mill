@@ -213,6 +213,9 @@ modules:
       - src/robotsix_mill/runtime/static/*
       - docs/runtime/**/*
       - tests/runtime/test_api.py
+      - tests/runtime/test_api_cumulative_cost.py
+      - tests/runtime/test_api_depends_on.py
+      - tests/runtime/test_api_epic.py
       - tests/runtime/test_broadcaster.py
       - tests/runtime/test_cost_warm.py
       - tests/runtime/test_credential_status.py
@@ -323,6 +326,8 @@ modules:
       - tests/stages/refine/test_impl_ready.py
       - tests/stages/refine/__init__.py
       - tests/stages/merge/test_core.py
+      - tests/stages/merge/test_core_auto_merge.py
+      - tests/stages/merge/test_core_rebasing.py
       - tests/stages/merge/test_core_multi_repo.py
       - tests/stages/merge/__init__.py
       - tests/stages/merge/conftest.py
