@@ -323,6 +323,8 @@ modules:
       - tests/stages/refine/test_impl_ready.py
       - tests/stages/refine/__init__.py
       - tests/stages/merge/test_core.py
+      - tests/stages/merge/test_core_auto_merge.py
+      - tests/stages/merge/test_core_rebasing.py
       - tests/stages/merge/test_core_multi_repo.py
       - tests/stages/merge/__init__.py
       - tests/stages/merge/conftest.py
