@@ -584,7 +584,7 @@ def test_auto_approve_flag_off_never_called(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):
     """When require_approval=false, triage_auto_approve is never called
-    and the ticket follows normal gated behaviour."""
+    and the ticket goes straight to READY (no human gate)."""
     spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
 
     auto_approve_called = False
@@ -601,7 +601,7 @@ def test_auto_approve_flag_off_never_called(
 
     gated = Settings(
         data_dir=str(tmp_path),
-        require_approval="true",
+        require_approval="false",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 
@@ -609,7 +609,7 @@ def test_auto_approve_flag_off_never_called(
     out = RefineStage().run(t, gated_ctx)
 
     assert not auto_approve_called
-    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert out.next_state is State.READY
 
 
 def test_auto_approve_precise_multifile_feature_approved(
