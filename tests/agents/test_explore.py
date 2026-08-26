@@ -1032,6 +1032,16 @@ class TestExtractExploredPaths:
         )
         assert len(result) == 1
 
+    def test_path_at_end_of_string(self, tmp_path):
+        """Paths at the very end of the response string are matched."""
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("pass\n")
+        result = explore._extract_explored_paths(
+            "The entry point is src/main.py", tmp_path
+        )
+        assert len(result) == 1
+        assert str((tmp_path / "src" / "main.py").resolve()) in result
+
 
 # ===================================================================
 # explore_served_files integration
@@ -1175,3 +1185,26 @@ class TestExploreServedFiles:
         result = read_file(path="src/app.py")
         assert "x = 1" in result
         assert "already in context" not in result
+
+    def test_parallel_explore_populates_served_files(self, tmp_path, monkeypatch):
+        """After parallel_explore returns, paths from the combined
+        result appear in ``explore_served_files``."""
+        s = _settings(tmp_path, OPENROUTER_API_KEY="test-key")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("print('hi')\n")
+        (tmp_path / "src" / "utils.py").write_text("def helper(): pass\n")
+
+        async def fake_run_explore(*, settings, repo_dir, question, **kw):
+            # Simulate a batched response mentioning both files
+            return "src/app.py has the main entry. src/utils.py has helpers."
+
+        monkeypatch.setattr(explore, "run_explore", fake_run_explore)
+
+        served: set[str] = set()
+        tool = explore.make_parallel_explore_tool(s, tmp_path, explore_served_files=served)
+        asyncio.run(tool(["find the app", "find the utils"]))
+
+        expected_app = str((tmp_path / "src" / "app.py").resolve())
+        expected_utils = str((tmp_path / "src" / "utils.py").resolve())
+        assert expected_app in served
+        assert expected_utils in served

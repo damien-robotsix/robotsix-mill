@@ -856,7 +856,7 @@ def build_fs_tools(
             for cand in candidates[1:]:
                 try:
                     alt = _safe(root, cand, extra_roots=extra_roots)
-                except ValueError, OSError:
+                except (ValueError, OSError):
                     continue
                 if alt.is_file():
                     p = alt
@@ -927,7 +927,7 @@ def build_fs_tools(
                     try:
                         _text = _read_cached(p)
                         line_count: int | str = _text.count("\n")
-                    except ValueError, OSError:
+                    except (ValueError, OSError):
                         line_count = "?"
                     return (
                         f"REFUSED (do NOT retry): {path} "
