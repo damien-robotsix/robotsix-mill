@@ -107,7 +107,7 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     out = asyncio.run(wr.run_web_research(settings=s, query="q"))
     assert out == "ok"
     # The cheap level-1 model carries the :online surcharge for web search.
-    assert captured["model"] == "deepseek/deepseek-v4-flash-20260731:online"
+    assert captured["model"] == "deepseek/deepseek-v4-flash-latest:online"
     assert captured["limit"] == 5
     assert captured["name"] == "web_research"
 
