@@ -1201,7 +1201,9 @@ class TestExploreServedFiles:
         monkeypatch.setattr(explore, "run_explore", fake_run_explore)
 
         served: set[str] = set()
-        tool = explore.make_parallel_explore_tool(s, tmp_path, explore_served_files=served)
+        tool = explore.make_parallel_explore_tool(
+            s, tmp_path, explore_served_files=served
+        )
         asyncio.run(tool(["find the app", "find the utils"]))
 
         expected_app = str((tmp_path / "src" / "app.py").resolve())
