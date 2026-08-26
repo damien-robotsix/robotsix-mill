@@ -533,7 +533,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("repo_visibility_default", "MILL_REPO_VISIBILITY_DEFAULT", "private", "private"),
     # --- enable_repo_creation ---
     ("enable_repo_creation", "MILL_ENABLE_REPO_CREATION", "1", True),
-    # --- meta_periodic + meta_interval_seconds ---
+    # --- meta_interval_seconds ---
     ("meta_interval_seconds", "MILL_META_INTERVAL_SECONDS", "43200", 43200),
     # --- web_knowledge_* ---
     ("web_knowledge_stale_days", "MILL_WEB_KNOWLEDGE_STALE_DAYS", "15", 15),

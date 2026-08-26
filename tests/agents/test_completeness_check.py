@@ -327,16 +327,12 @@ def test_run_completeness_check_pass_skips_empty_title_or_body(tmp_path, monkeyp
 def test_completeness_check_config_defaults():
     """Completeness-check config has correct defaults."""
     s = Settings()
-    assert s.completeness_check_periodic is True
     assert s.completeness_check_interval_seconds == 1209600
 
 
-def test_completeness_check_periodic_config():
-    """Completeness-check periodic can be enabled."""
-    s = Settings(
-        completeness_check_periodic="true", completeness_check_interval_seconds="43200"
-    )
-    assert s.completeness_check_periodic is True
+def test_completeness_check_interval_config():
+    """Completeness-check interval can be configured."""
+    s = Settings(completeness_check_interval_seconds="43200")
     assert s.completeness_check_interval_seconds == 43200
 
 

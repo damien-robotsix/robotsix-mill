@@ -188,14 +188,12 @@ def test_config_sync_config_defaults():
     from robotsix_mill.config import Settings
 
     s = Settings()
-    assert s.config_sync_periodic is True
     assert s.config_sync_interval_seconds == 86400
 
 
-def test_config_sync_periodic_config():
-    """Config-sync periodic can be enabled."""
+def test_config_sync_interval_config():
+    """Config-sync interval can be configured."""
     from robotsix_mill.config import Settings
 
-    s = Settings(config_sync_periodic="true", config_sync_interval_seconds="43200")
-    assert s.config_sync_periodic is True
+    s = Settings(config_sync_interval_seconds="43200")
     assert s.config_sync_interval_seconds == 43200

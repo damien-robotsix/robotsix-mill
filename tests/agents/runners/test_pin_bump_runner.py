@@ -84,6 +84,7 @@ class TestRunPinBumpPass:
         with (
             patch(
                 "robotsix_mill.agents.runners.pin_bump_runner.Settings",
+                return_value=MagicMock(pin_bump_interval_seconds=86400),
             ),
             patch(
                 "robotsix_mill.agents.runners.pin_bump_runner.get_repos_config",
@@ -116,7 +117,7 @@ class TestRunPinBumpPass:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(
                 runner_mod, "github_token", side_effect=RuntimeError("no token")
@@ -161,7 +162,7 @@ class TestRunPinBumpPass:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -208,7 +209,7 @@ class TestRunPinBumpPass:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -250,7 +251,7 @@ class TestRunPinBumpPass:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -302,7 +303,7 @@ class TestRunPinBumpPass:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -410,7 +411,7 @@ class TestActuator:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -471,7 +472,7 @@ class TestActuator:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -547,7 +548,7 @@ class TestActuator:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -611,7 +612,7 @@ class TestActuator:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -677,7 +678,7 @@ class TestActuator:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
@@ -737,7 +738,7 @@ class TestActuator:
         import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
         with (
-            patch.object(runner_mod, "Settings"),
+            patch.object(runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=86400)),
             patch.object(runner_mod, "get_repos_config", return_value=registry),
             patch.object(runner_mod, "github_token", return_value="fake-token"),
             patch.object(runner_mod, "github_push_token", return_value="fake-token"),
