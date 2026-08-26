@@ -393,7 +393,7 @@ def _extract_explored_paths(result: str, repo_dir: Path) -> set[str]:
             resolved = candidate.resolve()
             if resolved.is_file() and str(resolved).startswith(str(repo_dir.resolve())):
                 paths.add(str(resolved))
-        except ValueError, OSError:
+        except (ValueError, OSError):
             continue
     return paths
 

@@ -825,7 +825,7 @@ def build_fs_tools(
                 if rel_tail:
                     try:
                         p = _safe(root, rel_tail, extra_roots=extra_roots)
-                    except ValueError, OSError:
+                    except (ValueError, OSError):
                         return f"error: {e}"
                     # Only accept the fallback if the relative form
                     # actually exists — otherwise the agent truly
@@ -1196,7 +1196,7 @@ def build_fs_tools(
                     for cand in candidates[1:]:
                         try:
                             alt = _safe(root, cand, extra_roots=extra_roots)
-                        except ValueError, OSError:
+                        except (ValueError, OSError):
                             continue
                         if alt.is_dir():
                             listing = "\n".join(
