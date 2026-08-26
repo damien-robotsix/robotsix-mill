@@ -306,6 +306,9 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
 
     expected = parse_model_identifier(default_tier_config().for_level(1).model).model_name
     assert captured_kwargs[0]["effective_model"] == expected
+
+
+def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
     """build_agent level 2 (the default) resolves to the concrete pro model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
