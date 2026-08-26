@@ -37,6 +37,8 @@ docker-compose.override.yml
 =8
 # actionlint binary downloaded by security-audit.yml at runtime
 actionlint
+# Mill agent output artifacts (diagnostic/periodic agent runs)
+.mill-output.json
 # Stray doc-agent scratch artifacts — the real ledger is runtime-managed
 # via settings.memory_file_for("doc", board_id). These are one-off commits.
 /doc_agent_output.json
