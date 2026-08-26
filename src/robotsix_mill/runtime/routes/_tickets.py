@@ -12,7 +12,6 @@ from typing import Any
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Body,
     Depends,
     File,
@@ -134,7 +133,6 @@ def create_ticket(
 
 @router.get("/tickets", response_model=list[TicketRead])
 def list_tickets(
-    background: BackgroundTasks,
     state: State | None = None,
     include_closed: bool = False,
     repo_id: str | None = None,
@@ -159,9 +157,11 @@ def list_tickets(
     unresponsive board; callers that genuinely need them must opt in
     with ``include_closed=true``.  Enrichment is downgraded for
     performance — cost is cache-only and PR URLs are skipped —
-    because the board polls this every few seconds.  A background
-    cost-warming task refreshes the rows on each poll so subsequent
-    requests show real values.
+    because the board polls this every few seconds.  The Langfuse
+    cost cache is warmed inline (parallelized via
+    ThreadPoolExecutor) before enrichment, so every response shows
+    real cost_usd values — not the misleading 0.0 that a pure
+    background-task approach would return on cold caches.
 
     An explicit *state* filter (e.g. ``state=closed``) takes
     precedence over the default exclusion — the terminal state is
@@ -223,7 +223,6 @@ def list_tickets(
             if hit is not None and (time.monotonic() - hit[0]) < ttl:
                 return hit[1]
             result = _list_tickets_compute(
-                background,
                 state,
                 include_closed,
                 repo_id,
@@ -239,7 +238,6 @@ def list_tickets(
             _LIST_CACHE[cache_key] = (time.monotonic(), result)
             return result
     return _list_tickets_compute(
-        background,
         state,
         include_closed,
         repo_id,
@@ -255,7 +253,6 @@ def list_tickets(
 
 
 def _list_tickets_compute(
-    background: BackgroundTasks,
     state: State | None,
     include_closed: bool,
     repo_id: str | None,
@@ -357,10 +354,14 @@ def _list_tickets_compute(
         except Exception:
             log.exception("list_tickets: failed to query board %r", s.board_id)
 
-    # Demand-driven cost warming (replaces the old cost_warmer daemon): the
-    # list serves cost cache-only for speed, then fire-and-forgets a refresh
-    # of the rows it just returned so the next poll shows real values. Runs
-    # only when the board is actually being polled.
+    # Inline cost warming: warm the Langfuse cost cache for every
+    # non-terminal ticket *before* enriching, so the cache-only cost
+    # lookup in enrichment returns real values (not 0.0). The warmer
+    # uses a ThreadPoolExecutor internally, giving us parallelized
+    # Langfuse calls instead of a serial N+1.  The old approach used
+    # a BackgroundTask for this, which returned 0.0 on every cold
+    # first poll — making the list endpoint's cost_usd field
+    # perennially wrong for all but the most-heavily-polled boards.
     from ..cost_warm import warm_ticket_costs
 
     rc_by_board = {rc.board_id: rc for rc in repos.repos.values()}
@@ -368,7 +369,7 @@ def _list_tickets_compute(
     warm_items = [
         (t.id, rc_by_board.get(t.board_id)) for t in tickets if t.state not in terminal
     ]
-    background.add_task(warm_ticket_costs, settings, warm_items)
+    warm_ticket_costs(settings, warm_items)
 
     enriched: list[TicketRead] = []
     for t in tickets:
