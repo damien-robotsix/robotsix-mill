@@ -1020,7 +1020,10 @@ def test_build_openrouter_model_resolves_level_to_model(monkeypatch, settings):
     assert model is fake_model
     assert client is fake_client
     # Level 1 resolves to the flash model via llmio's tier defaults.
-    assert captured == {"model_name": "deepseek/deepseek-v4-flash-latest", "level": 1}
+    assert captured == {
+        "model_name": "deepseek/deepseek-v4-flash-latest",
+        "level": 1,
+    }
 
 
 def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
