@@ -297,9 +297,7 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
         tools=[],
     )
 
-    assert (
-        captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash-latest"
-    )
+    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash-latest"
 
 
 def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
