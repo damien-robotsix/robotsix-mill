@@ -56,7 +56,6 @@ def _patch_repos(monkeypatch, *repo_ids):
 
 def test_settings_expose_diagnostic_fields():
     s = Settings()
-    assert s.diagnostic_periodic is False
     assert s.diagnostic_interval_seconds == 604800
     assert s.diagnostic_target_repo_id == "robotsix-mill"
     assert s.diagnostic_monitored_repo_ids == []
@@ -70,8 +69,7 @@ def test_config_example_json_has_diagnostic_settings():
     with open(config_path) as fh:
         data = json.load(fh)
     settings = data["settings"]
-    assert settings["diagnostic_periodic"] is False
-    assert settings["diagnostic_interval_seconds"] == 604800
+    assert settings["diagnostic_interval_seconds"] == 0
     assert settings["diagnostic_target_repo_id"] == "robotsix-mill"
     assert settings["diagnostic_monitored_repo_ids"] == []
 
@@ -260,10 +258,9 @@ def test_diagnostic_is_a_valid_run_kind():
 # --- worker poll-loop gating ----------------------------------------------
 
 
-def _fake_worker(diagnostic_periodic):
+def _fake_worker(enabled):
     settings = SimpleNamespace(
-        diagnostic_periodic=diagnostic_periodic,
-        diagnostic_interval_seconds=604800,
+        diagnostic_interval_seconds=604800 if enabled else 0,
     )
     return SimpleNamespace(
         ctx=SimpleNamespace(settings=settings),

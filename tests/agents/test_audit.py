@@ -342,7 +342,6 @@ def test_audit_pass_result_structure(tmp_path, monkeypatch):
 def test_audit_config_defaults():
     """Audit config has correct defaults."""
     s = Settings()
-    assert s.audit_periodic is True
     assert s.audit_interval_seconds == 1209600
 
 

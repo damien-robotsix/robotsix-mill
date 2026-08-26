@@ -219,8 +219,8 @@ class RepoConfig(BaseModel):
     # periodic workflow now runs for a repo iff the repo ships
     # ``.robotsix-mill/periodic/<name>.yaml`` (file presence = enabled; see
     # agents/periodic_loader.py + the worker's periodic supervisor). The
-    # global ``Settings.<name>_periodic`` switches remain as fleet-wide
-    # kill-switches.
+    # global ``Settings.<name>_interval_seconds`` fields (0 = disabled)
+    # serve as fleet-wide kill-switches.
 
     @field_validator("repo_id", "board_id")
     @classmethod

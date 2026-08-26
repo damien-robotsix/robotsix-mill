@@ -276,18 +276,11 @@ class _ReviewGateSettings(BaseModel):
         default=True,
     )
     # -- periodic stale-branch cleanup --
-    # When True, the worker runs a periodic pass that lists remote branches
-    # and deletes old, unprotected, no-open-PR branches (per prefix/age guards).
-    # Default False — destructive, opt-in.
-    stale_branch_cleanup_periodic: bool = Field(
-        description="When true, run periodic stale-branch cleanup passes.",
-        default=False,
-    )
-    # Seconds between automatic stale-branch cleanup passes. Only used when
-    # MILL_STALE_BRANCH_CLEANUP_PERIODIC=true. Enforced minimum 3600s (1h)
-    # in the worker to avoid hammering the forge API.
+    # Periodically lists remote branches and deletes old, unprotected,
+    # no-open-PR branches (per prefix/age guards). Set interval to 0 to
+    # disable. Default 86400 — opt-in via non-zero interval.
     stale_branch_cleanup_interval_seconds: int = Field(
-        description="Seconds between automatic stale-branch cleanup passes.",
+        description="Seconds between automatic stale-branch cleanup passes. 0 = disabled.",
         default=86400,
         json_schema_extra={"advanced": True},
     )

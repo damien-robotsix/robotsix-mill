@@ -14,73 +14,42 @@ from pydantic import BaseModel, Field
 
 class _PeriodicSettings(BaseModel):
     # --- bespoke per-repo periodic agents ---
-    # When True, the worker spawns a supervisor per repo that clones the
-    # repo, scans ``.robotsix-mill/agents/<name>.yaml``, and runs each
-    # bespoke agent on its own declared interval. Master switch — set
-    # False to disable bespoke-agent discovery for the entire process
-    # (per-repo opt-out is controlled by RepoConfig.bespoke_periodic).
-    bespoke_periodic: bool = Field(
-        default=True,
-        description="Master switch: when true, spawn a supervisor per repo that runs bespoke per-repo periodic agents.",
-    )
+    # Master switch: spawns a supervisor per repo that runs bespoke
+    # per-repo periodic agents. Set discovery interval to 0 to disable.
     # How often (seconds) the bespoke supervisor refreshes its clone
     # and reconciles which YAMLs are scheduled. A new YAML committed
     # to the managed repo lands within this window; one removed gets
     # its loop cancelled in the same cycle.
     bespoke_discovery_interval_seconds: int = Field(
         default=600,
-        description="Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles.",
+        description="Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- audit agent (meta-audit for quality/security coverage) ---
-    # When True, the worker runs periodic audit passes at the configured
-    # interval. Default False (opt-in).
-    audit_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic meta-audit passes for quality/security coverage.",
-    )
-    # Interval between periodic audit passes (seconds). Only used when
-    # MILL_AUDIT_PERIODIC=true.
+    # Interval between periodic audit passes (seconds). Set to 0 to disable.
     audit_interval_seconds: int = Field(
         default=1209600,  # 14d — per-repo override via YAML
-        description="Seconds between periodic audit passes.",
+        description="Seconds between periodic audit passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- trace-health check ---
-    # When True, the worker runs periodic trace-health checks at the
-    # configured interval. Default False (opt-in).
-    trace_health_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic trace-health checks.",
-    )
-    # Interval between automatic trace-health checks (seconds). Only
-    # used when MILL_TRACE_HEALTH_PERIODIC=true. Enforced minimum 3600s
-    # (1h) in the worker to avoid hammering Langfuse.
+    # Interval between automatic trace-health checks (seconds).
+    # Enforced minimum 3600s (1h) in the worker to avoid hammering Langfuse.
+    # Set interval to 0 to disable.
     trace_health_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between automatic trace-health checks.",
+        description="Seconds between automatic trace-health checks. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- trace-review ---
-    # When True, the worker runs periodic trace-review passes at the
-    # configured interval. Scans recent Langfuse traces, flags outliers
-    # statistically (cost / observation count vs. batch median ×
-    # multiplier) and absolutely (tool errors, rejected generations,
-    # ask_user loops, explore storms, repeated-tool ceilings), runs
-    # the cheap flash inspector over the flagged subset, and files
-    # draft tickets with proposed solutions. Default True (opt-out).
-    trace_review_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic trace-review passes (scans traces, flags outliers, files drafts).",
-    )
     # Interval between automatic trace-review passes (seconds). Default
-    # 14 days. Enforced minimum 3600s (1h) in the worker.
+    # 14 days. Enforced minimum 3600s (1h) in the worker. Set to 0 to disable.
     trace_review_interval_seconds: int = Field(
         default=1209600,  # 14d — per-repo override via YAML
-        description="Seconds between automatic trace-review passes.",
+        description="Seconds between automatic trace-review passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
@@ -88,18 +57,12 @@ class _PeriodicSettings(BaseModel):
     # /tickets poll drives it on demand via runtime/cost_warm.py.)
 
     # --- timeout escalation ---
-    # When True, the worker runs periodic timeout-escalation passes at the
-    # configured interval. Default True (opt-out). Detects tickets stuck in
-    # AWAITING_USER_REPLY longer than the threshold and escalates to BLOCKED.
-    timeout_escalation_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic timeout-escalation passes for stuck AWAITING_USER_REPLY tickets.",
-    )
-    # Interval between timeout-escalation passes (seconds). Only used when
-    # MILL_TIMEOUT_ESCALATION_PERIODIC=true.
+    # Interval between timeout-escalation passes (seconds). Default 3600.
+    # Set to 0 to disable. Detects tickets stuck in AWAITING_USER_REPLY
+    # longer than the threshold and escalates to BLOCKED.
     timeout_escalation_interval_seconds: int = Field(
         default=3600,
-        description="Seconds between timeout-escalation passes.",
+        description="Seconds between timeout-escalation passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Staleness threshold: tickets in AWAITING_USER_REPLY with updated_at
@@ -113,79 +76,44 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- docstring-coverage agent (public-API documentation oversight) ---
-    # When True, the worker runs periodic docstring-coverage passes.
-    docstring_coverage_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic docstring-coverage passes for public-API documentation oversight.",
-    )
     # Interval between periodic docstring-coverage passes (seconds).
+    # Set to 0 to disable.
     docstring_coverage_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic docstring-coverage passes.",
+        description="Seconds between periodic docstring-coverage passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- test-gap agent (dedicated test-coverage oversight) ---
-    # Model for the test-gap agent. Defaults to the same capable model
-    # as audit/health. Override with MILL_TEST_GAP_MODEL.
-    # When True, the worker runs periodic test-gap passes at the
-    # configured interval. Default False (opt-in).
-    test_gap_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic test-gap passes for test-coverage oversight.",
-    )
-    # Interval between periodic test-gap passes (seconds). Only used
-    # when MILL_TEST_GAP_PERIODIC=true.
+    # Interval between periodic test-gap passes (seconds). Set to 0 to disable.
     test_gap_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic test-gap passes.",
+        description="Seconds between periodic test-gap passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- module-size agent (oversized-file oversight) ---
-    # When True, the worker runs periodic module-size passes.
-    module_size_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic module-size passes for oversized-file oversight.",
-    )
-    # Interval between periodic module-size passes (seconds).
+    # Interval between periodic module-size passes (seconds). Set to 0 to disable.
     module_size_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic module-size passes.",
+        description="Seconds between periodic module-size passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- agent-check agent (agent-definition coherence) ---
-    # Opt-in periodic agent-check pass. Defaults to False (off); flip
-    # to true to schedule the pass every ``agent_check_interval_seconds``
-    # in addition to the on-demand POST /agent-check and CLI.
-    agent_check_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic agent-check passes for agent-definition coherence.",
-    )
-    # Seconds between periodic agent-check passes when
-    # MILL_AGENT_CHECK_PERIODIC=true. Minimum enforced at 60s in the
-    # worker loop.
+    # Interval between periodic agent-check passes (seconds). Set to 0 to
+    # disable. Minimum enforced at 60s in the worker loop.
     agent_check_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic agent-check passes.",
+        description="Seconds between periodic agent-check passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- health agent (codebase-health inspection) ---
-    # Model for the health agent. Defaults to the same capable model as
-    # audit. Override with MILL_HEALTH_MODEL.
-    # When True, the worker runs periodic health passes at the
-    # configured interval. Default False (opt-in).
-    health_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic health passes for codebase-health inspection.",
-    )
-    # Interval between periodic health passes (seconds). Only used when
     # MILL_HEALTH_PERIODIC=true.
     health_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic health passes.",
+        description="Seconds between periodic health passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
@@ -244,54 +172,29 @@ class _PeriodicSettings(BaseModel):
         description="Maximum web_search calls per survey run.",
         json_schema_extra={"advanced": True},
     )
-    # Opt-in periodic survey pass. Defaults to True (on by default —
-    # "default yes"). Flip to false to disable the automatic weekly
-    # cadence while still allowing on-demand POST /survey and
-    # board-button triggers.
-    survey_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic survey passes for OSS project discovery.",
-    )
-    # Seconds between automatic survey passes when
     # MILL_SURVEY_PERIODIC=true. Default 1209600 (14 days). Minimum
     # enforced at 60s in the worker loop.
     survey_interval_seconds: int = Field(
         default=1209600,  # 14d — per-repo override via YAML
-        description="Seconds between automatic survey passes.",
+        description="Seconds between automatic survey passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- bc_check agent (backward-compatibility inspection) ---
-    # Opt-in periodic bc-check pass. Defaults to False (off); flip to
-    # true to schedule the pass every ``bc_check_interval_seconds`` in
-    # addition to the on-demand CLI.
-    bc_check_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic backward-compatibility inspection passes.",
-    )
-    # Seconds between periodic bc-check passes when
     # MILL_BC_CHECK_PERIODIC=true. Minimum enforced at 60s in the
     # worker loop.
     bc_check_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic bc-check passes.",
+        description="Seconds between periodic bc-check passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- module_curator agent (module-taxonomy drift detection) ---
-    # Opt-in periodic module-curator pass. Defaults to True (opt-out);
-    # set false to disable the daily module-taxonomy drift check on
-    # this repo.
-    module_curator_periodic: bool = Field(
-        default=True,
-        description="When true, run daily module-taxonomy drift detection.",
-    )
-    # Seconds between periodic module-curator passes when
     # MILL_MODULE_CURATOR_PERIODIC=true. Minimum enforced at 60s in
     # the worker loop.
     module_curator_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic module-curator passes.",
+        description="Seconds between periodic module-curator passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Request budget for the module-curator run.  The agent walks the
@@ -308,31 +211,18 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- mypy-baseline agent (mypy type-check baseline management) ---
-    # When True, the worker runs periodic mypy-baseline passes.
-    mypy_baseline_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic mypy-baseline passes for type-check baseline management.",
-    )
-    # Interval between periodic mypy-baseline passes (seconds).
     mypy_baseline_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic mypy-baseline passes.",
+        description="Seconds between periodic mypy-baseline passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- data-dir GC — deterministic periodic disk reclamation ---
-    # Master switch for the periodic data-dir GC pass.
-    # Default True — the agent is harmless when idle (no findings).
-    data_dir_gc_periodic: bool = Field(
-        default=True,
-        description="Master switch for the periodic data-dir GC pass.",
-    )
-    # Seconds between periodic data-dir GC passes when
     # MILL_DATA_DIR_GC_PERIODIC=true. Minimum enforced at 60 s
     # in the worker loop.
     data_dir_gc_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between periodic data-dir GC passes.",
+        description="Seconds between periodic data-dir GC passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Opt-in GC: prune workspace directories of tickets in a terminal
@@ -447,22 +337,12 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- dependabot-alert ingest (deterministic cross-repo poll) ---
-    # Master switch for the Dependabot vulnerability-alert ingest poll loop.
-    # When on, the worker iterates every registered repo, lists its OPEN
-    # GitHub Dependabot alerts, and files one deduped draft per new alert.
-    # Default True — harmless when idle (no alerts → no drafts).
-    # Override with MILL_DEPENDABOT_INGEST_PERIODIC.
-    dependabot_ingest_periodic: bool = Field(
-        default=True,
-        description="When true, iterate registered repos and file deduped drafts for new Dependabot alerts.",
-    )
-    # Seconds between Dependabot ingest passes when
     # MILL_DEPENDABOT_INGEST_PERIODIC=true. Minimum enforced at 60 s in the
     # worker loop. Default 86400 (1 day).
     # Override with MILL_DEPENDABOT_INGEST_INTERVAL_SECONDS.
     dependabot_ingest_interval_seconds: int = Field(
         default=86_400,
-        description="Seconds between Dependabot ingest passes.",
+        description="Seconds between Dependabot ingest passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Maximum number of Dependabot drafts created per ingest pass (across all
@@ -497,20 +377,11 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- completeness_check agent (feature-wiring completeness) ---
-    # Opt-in periodic completeness-check pass. Defaults to False (off);
-    # flip to true to schedule the pass every
-    # ``completeness_check_interval_seconds`` in addition to the
-    # on-demand CLI.
-    completeness_check_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic feature-wiring completeness checks.",
-    )
-    # Seconds between periodic completeness-check passes when
     # MILL_COMPLETENESS_CHECK_PERIODIC=true. Minimum enforced at 60s
     # in the worker loop.
     completeness_check_interval_seconds: int = Field(
         default=1209600,  # 14d — per-repo override via YAML
-        description="Seconds between periodic completeness-check passes.",
+        description="Seconds between periodic completeness-check passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     completeness_check_request_limit: int = Field(
@@ -520,166 +391,89 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- forge-parity agent (forge adapter drift detection) ---
-    # Opt-in periodic forge-parity pass. Defaults to True (opt-out);
-    # set false to disable the weekly forge-adapter drift detection.
-    forge_parity_periodic: bool = Field(
-        default=True,
-        description="When true, run weekly forge-adapter drift detection.",
-    )
-    # Seconds between periodic forge-parity passes when
     # MILL_FORGE_PARITY_PERIODIC=true. Default 604800 (1 week). Minimum
     # enforced at 60s in the worker loop.
     forge_parity_interval_seconds: int = Field(
         default=604800,
-        description="Seconds between periodic forge-parity passes.",
+        description="Seconds between periodic forge-parity passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- copy-paste agent (deterministic clone detection and triage) ---
-    # Opt-in periodic copy-paste pass. Defaults to True (opt-out);
-    # set false to disable the weekly clone-detection sweep.
-    copy_paste_periodic: bool = Field(
-        default=True,
-        description="When true, run weekly clone-detection sweeps.",
-    )
-    # Seconds between periodic copy-paste passes when
     # MILL_COPY_PASTE_PERIODIC=true. Default 604800 (1 week). Minimum
     # enforced at 60s in the worker loop.
     copy_paste_interval_seconds: int = Field(
         default=604800,
-        description="Seconds between periodic copy-paste passes.",
+        description="Seconds between periodic copy-paste passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- state-sync agent (cross-surface State enum consistency) ---
-    # Opt-in periodic state-sync pass. Defaults to True (opt-out);
-    # set false to disable the daily State-enum consistency check.
-    state_sync_periodic: bool = Field(
-        default=True,
-        description="When true, run daily State-enum consistency checks.",
-    )
-    # Seconds between periodic state-sync passes when
     # MILL_STATE_SYNC_PERIODIC=true. Default 604800 (7 days). Minimum
     # enforced at 60s in the worker loop.
     state_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic state-sync passes.",
+        description="Seconds between periodic state-sync passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- frontend-sync agent (board frontend → ticket system sync) ---
-    # Opt-in periodic frontend-sync pass. Defaults to True (opt-out);
-    # set false to disable the daily board frontend sync pass.
-    frontend_sync_periodic: bool = Field(
-        default=True,
-        description="When true, run daily board frontend sync checks.",
-    )
-    # Seconds between periodic frontend-sync passes when
     # MILL_FRONTEND_SYNC_PERIODIC=true. Default 604800 (7 days). Minimum
     # enforced at 60s in the worker loop.
     frontend_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between periodic frontend-sync passes.",
+        description="Seconds between periodic frontend-sync passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- pin-bump agent (scheduled dependency pin-bump PR actuator) ---
-    # Opt-in periodic pin-bump pass. Defaults to False (off).
-    # The PR actuator (SHA-latest resolution → pyproject.toml edit →
-    # uv lock → cross-repo PR) is now delivered.
-    pin_bump_periodic: bool = Field(
-        default=False,
-        description="When true, run scheduled dependency pin-bump PR actuator passes.",
-    )
-    # Seconds between periodic pin-bump passes when
     # MILL_PIN_BUMP_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     pin_bump_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between periodic pin-bump passes.",
+        description="Seconds between periodic pin-bump passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- triage-boilerplate agent (recurring triage pattern detection) ---
-    # Opt-in periodic triage-boilerplate pass. Defaults to True (opt-out);
-    # set false to disable the weekly triage-pattern scan.
-    triage_boilerplate_periodic: bool = Field(
-        default=True,
-        description="When true, run weekly triage-pattern scans.",
-    )
-    # Seconds between periodic triage-boilerplate passes when
     # MILL_TRIAGE_BOILERPLATE_PERIODIC=true. Default 604800 (1 week). Minimum
     # enforced at 60s in the worker loop.
     triage_boilerplate_interval_seconds: int = Field(
         default=604800,
-        description="Seconds between periodic triage-boilerplate passes.",
+        description="Seconds between periodic triage-boilerplate passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- config-sync agent (config ↔ .env ↔ docs drift detection) ---
-    # Opt-in periodic config-sync pass. Default false (agents default off
-    # unless noted). Set true to enable automatic daily drift detection.
-    config_sync_periodic: bool = Field(
-        default=True,
-        description="When true, run daily config ↔ .env ↔ docs drift detection.",
-    )
-    # Seconds between automatic config-sync passes when
     # MILL_CONFIG_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     config_sync_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between automatic config-sync passes.",
+        description="Seconds between automatic config-sync passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- member-sync (deterministic workspace-member discovery/registration) ---
-    # Opt-in periodic member-sync pass. Default true: workspace members are
-    # auto-discovered from each managed repo's vcs2l manifest and registered
-    # in config/repos.yaml. Deterministic — no model, no memory ledger.
-    member_sync_periodic: bool = Field(
-        default=True,
-        description="When true, auto-discover workspace members from managed repo vcs2l manifests.",
-    )
-    # Seconds between automatic member-sync passes when
     # MILL_MEMBER_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60s in the worker loop.
     member_sync_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between automatic member-sync passes.",
+        description="Seconds between automatic member-sync passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- meta-agent (cross-repo extraction/alignment survey) ---
-    # Master switch for the daily meta-agent pass. Defaults to False
-    # (off) — the operator must register the meta board in repos.yaml
-    # first.  Flip to True to enable the global daily schedule.
-    meta_periodic: bool = Field(
-        default=False,
-        description="When true, run the daily cross-repo meta-agent pass for extraction/alignment proposals.",
-    )
-    # Seconds between automatic meta-agent passes. Default 604800 (7 days).
     # Minimum enforced at 60 s in the worker loop.
     meta_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between automatic meta-agent passes.",
+        description="Seconds between automatic meta-agent passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- run-health (global, cross-board run-registry monitor) ---
-    # When True, a global daily pass reads every board's run registry over a
-    # window, flags failed/degraded runs deterministically, runs one LLM pass
-    # to separate real failures from legitimate empties, and files
-    # high-confidence draft tickets to the mill board. On by default: this is
-    # the meta-checker that watches the OTHER periodic agents' health, so it
-    # should run everywhere unless a deployment explicitly opts out.
-    run_health_periodic: bool = Field(
-        default=True,
-        description="When true, run daily cross-board run-registry health monitoring.",
-    )
-    # Seconds between automatic run-health passes. Default 604800 (7 days).
     run_health_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between automatic run-health passes.",
+        description="Seconds between automatic run-health passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Lookback window (hours) over which run registries are scanned.
@@ -701,52 +495,27 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- CI-debt recheck (auto-resume tickets blocked by pre-existing CI debt) ---
-    # When True, a periodic pass re-checks BLOCKED tickets whose block note
-    # cites pre-existing target-branch CI debt.  When all the named workflows
-    # have turned green on the target branch, the ticket is auto-resumed back
-    # to IMPLEMENT_COMPLETE.  On by default — harmless when idle (no matching
-    # BLOCKED tickets → no-op).
-    ci_debt_recheck_periodic: bool = Field(
-        default=True,
-        description="When true, periodically re-check BLOCKED tickets with pre-existing CI debt and auto-resume when debt clears.",
-    )
-    # Seconds between CI-debt recheck passes when
     # MILL_CI_DEBT_RECHECK_PERIODIC=true.  Default 3600 (1 hour).
     # Minimum enforced at 60 s in the worker loop.
     ci_debt_recheck_interval_seconds: int = Field(
         default=3600,
-        description="Seconds between CI-debt recheck passes.",
+        description="Seconds between CI-debt recheck passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- changelog-autofill (schedule-only pass that updates changelogs from merged PRs) ---
-    # Master switch for the changelog-autofill schedule-only pass. Defaults to
-    # True (opt-out) — the pass reads merged PRs and writes CHANGELOG entries.
-    changelog_autofill_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic changelog-autofill passes that update changelogs from merged PRs.",
-    )
-    # Seconds between automatic changelog-autofill passes when
     # MILL_CHANGELOG_AUTOFILL_PERIODIC=true. Default 86400 (1 day). Minimum
     # enforced at 60 s in the worker loop.
     changelog_autofill_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between changelog-autofill passes.",
+        description="Seconds between changelog-autofill passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- diagnostic (daily deterministic diagnostic agent) ---
-    # When True, a global daily pass iterates the pluggable diagnostic check
-    # registry. Off by default — the skeleton ships with zero checks; later
-    # tickets add checks then operators opt in.
-    diagnostic_periodic: bool = Field(
-        default=False,
-        description="When true, run daily deterministic diagnostic checks.",
-    )
-    # Seconds between automatic diagnostic passes. Default 604800 (7 days).
     diagnostic_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between automatic diagnostic passes.",
+        description="Seconds between automatic diagnostic passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Board the diagnostic agent routes board/trace activity to.
@@ -758,16 +527,6 @@ class _PeriodicSettings(BaseModel):
     # falls back to the single `diagnostic_target_repo_id` for backward
     # compatibility. Add/remove repos here — no code change required.
     # --- config pin-drift check -------------------------------------------
-    # config/config.json pins ~288 settings explicitly, and a pin always beats
-    # the model default — so changing a Field(default=...) is a NO-OP in
-    # production until someone edits the pin too. That silently reverted a
-    # move to weekly periodics (twelve generators ran daily for weeks, ~7x the
-    # intended ticket volume) and a change disabling the per-ticket spend caps.
-    # Both were found by hand, long after. This pass makes the class visible.
-    config_pin_drift_periodic: bool = Field(
-        default=True,
-        description="Enable the periodic config pin-drift check.",
-    )
     config_pin_drift_interval_seconds: int = Field(
         default=86_400,
         ge=60,
@@ -812,19 +571,11 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- orphaned-PR check (deterministic per-repo stale-PR cleanup) ---
-    # Master switch for the orphaned-PR check pass. Defaults to False
-    # (opt-in) — closing PRs and filing tracking tickets are destructive
-    # actions.  Flip to True to enable the periodic pass.
-    orphaned_pr_check_periodic: bool = Field(
-        default=False,
-        description="When true, run periodic orphaned-PR detection and cleanup.",
-    )
-    # Seconds between orphaned-PR check passes when
     # MILL_ORPHANED_PR_CHECK_PERIODIC=true.  Minimum enforced at 3600 s
     # (1 hour) in the worker loop.
     orphaned_pr_check_interval_seconds: int = Field(
         default=86400,
-        description="Seconds between orphaned-PR check passes.",
+        description="Seconds between orphaned-PR check passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
     # Minimum age (hours) of a ticket before its PR is considered for
@@ -887,48 +638,22 @@ class _PeriodicSettings(BaseModel):
     )
 
     # --- repo-description-sync (keeps forge description in sync with README) ---
-    # When True, the worker runs periodic repo-description-sync passes at the
-    # configured interval. Default True (opt-out). Reads the repo's README,
-    # compares against the forge description, and updates it when empty/stale.
-    repo_description_sync_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic repo-description-sync passes.",
-    )
-    # Interval between repo-description-sync passes (seconds). Default 604800
     # (7 days). Enforced minimum 3600s (1 hour) in the worker.
     repo_description_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between repo-description-sync passes.",
+        description="Seconds between repo-description-sync passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- roadmap-sync (keeps forge roadmap project in sync with board epics) ---
-    # When True, the worker runs periodic roadmap-sync passes at the
-    # configured interval. Default True (opt-out). Reads the board's epics
-    # and the forge roadmap project, reconciling items bidirectionally.
-    roadmap_sync_periodic: bool = Field(
-        default=True,
-        description="When true, run periodic roadmap-sync passes.",
-    )
-    # Interval between roadmap-sync passes (seconds). Default 604800 (7 days).
     # Enforced minimum 3600s (1 hour) in the worker.
     roadmap_sync_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
-        description="Seconds between roadmap-sync passes.",
+        description="Seconds between roadmap-sync passes. 0 = disabled.",
         json_schema_extra={"advanced": True},
     )
 
     # --- board-hygiene (draft TTL auto-close + open-ticket cap) ---
-
-    # When True, the board-hygiene pass runs during the existing
-    # db-maintenance tick (``db_maintenance_periodic``).  When False,
-    # draft TTL auto-close is skipped entirely regardless of the TTL
-    # setting below.
-    board_hygiene_periodic: bool = Field(
-        default=True,
-        description="When true, run board-hygiene draft TTL auto-close during db-maintenance passes.",
-    )
-    # Maximum age (days) a draft ticket can remain untouched before it is
     # auto-closed by the board-hygiene pass.  "Untouched" means no state
     # transition, comment, or event has updated ``Ticket.updated_at``.
     # Drafts that are children of an epic (``parent_id IS NOT NULL``) and

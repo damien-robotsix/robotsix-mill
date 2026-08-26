@@ -644,15 +644,9 @@
         "agent_check_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic agent-check passes.",
+          "description": "Seconds between periodic agent-check passes. 0 = disabled.",
           "title": "Agent Check Interval Seconds",
           "type": "integer"
-        },
-        "agent_check_periodic": {
-          "default": true,
-          "description": "When true, run periodic agent-check passes for agent-definition coherence.",
-          "title": "Agent Check Periodic",
-          "type": "boolean"
         },
         "allow_runtime_repo_registration": {
           "default": false,
@@ -682,15 +676,9 @@
         "audit_interval_seconds": {
           "advanced": true,
           "default": 1209600,
-          "description": "Seconds between periodic audit passes.",
+          "description": "Seconds between periodic audit passes. 0 = disabled.",
           "title": "Audit Interval Seconds",
           "type": "integer"
-        },
-        "audit_periodic": {
-          "default": true,
-          "description": "When true, run periodic meta-audit passes for quality/security coverage.",
-          "title": "Audit Periodic",
-          "type": "boolean"
         },
         "audit_request_limit": {
           "advanced": true,
@@ -699,12 +687,6 @@
           "minimum": 1,
           "title": "Audit Request Limit",
           "type": "integer"
-        },
-        "auto_approve_enabled": {
-          "default": false,
-          "description": "When true, obviously-safe changes skip the human approval gate.",
-          "title": "Auto Approve Enabled",
-          "type": "boolean"
         },
         "auto_fix_max_cycles": {
           "advanced": true,
@@ -758,28 +740,16 @@
         "bc_check_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic bc-check passes.",
+          "description": "Seconds between periodic bc-check passes. 0 = disabled.",
           "title": "Bc Check Interval Seconds",
           "type": "integer"
-        },
-        "bc_check_periodic": {
-          "default": true,
-          "description": "When true, run periodic backward-compatibility inspection passes.",
-          "title": "Bc Check Periodic",
-          "type": "boolean"
         },
         "bespoke_discovery_interval_seconds": {
           "advanced": true,
           "default": 600,
-          "description": "Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles.",
+          "description": "Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles. 0 = disabled.",
           "title": "Bespoke Discovery Interval Seconds",
           "type": "integer"
-        },
-        "bespoke_periodic": {
-          "default": true,
-          "description": "Master switch: when true, spawn a supervisor per repo that runs bespoke per-repo periodic agents.",
-          "title": "Bespoke Periodic",
-          "type": "boolean"
         },
         "board_hygiene_draft_ttl_days": {
           "default": 7,
@@ -794,12 +764,6 @@
           "minimum": 0,
           "title": "Board Hygiene Max Open Tickets",
           "type": "integer"
-        },
-        "board_hygiene_periodic": {
-          "default": true,
-          "description": "When true, run board-hygiene draft TTL auto-close during db-maintenance passes.",
-          "title": "Board Hygiene Periodic",
-          "type": "boolean"
         },
         "board_list_cache_ttl_seconds": {
           "advanced": true,
@@ -818,28 +782,16 @@
         "changelog_autofill_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between changelog-autofill passes.",
+          "description": "Seconds between changelog-autofill passes. 0 = disabled.",
           "title": "Changelog Autofill Interval Seconds",
           "type": "integer"
-        },
-        "changelog_autofill_periodic": {
-          "default": true,
-          "description": "When true, run periodic changelog-autofill passes that update changelogs from merged PRs.",
-          "title": "Changelog Autofill Periodic",
-          "type": "boolean"
         },
         "ci_debt_recheck_interval_seconds": {
           "advanced": true,
           "default": 3600,
-          "description": "Seconds between CI-debt recheck passes.",
+          "description": "Seconds between CI-debt recheck passes. 0 = disabled.",
           "title": "Ci Debt Recheck Interval Seconds",
           "type": "integer"
-        },
-        "ci_debt_recheck_periodic": {
-          "default": true,
-          "description": "When true, periodically re-check BLOCKED tickets with pre-existing CI debt and auto-resume when debt clears.",
-          "title": "Ci Debt Recheck Periodic",
-          "type": "boolean"
         },
         "ci_fix_agent_timeout_seconds": {
           "advanced": true,
@@ -1019,15 +971,9 @@
         "completeness_check_interval_seconds": {
           "advanced": true,
           "default": 1209600,
-          "description": "Seconds between periodic completeness-check passes.",
+          "description": "Seconds between periodic completeness-check passes. 0 = disabled.",
           "title": "Completeness Check Interval Seconds",
           "type": "integer"
-        },
-        "completeness_check_periodic": {
-          "default": true,
-          "description": "When true, run periodic feature-wiring completeness checks.",
-          "title": "Completeness Check Periodic",
-          "type": "boolean"
         },
         "completeness_check_request_limit": {
           "advanced": true,
@@ -1052,24 +998,12 @@
           "title": "Config Pin Drift Interval Seconds",
           "type": "integer"
         },
-        "config_pin_drift_periodic": {
-          "default": true,
-          "description": "Enable the periodic config pin-drift check.",
-          "title": "Config Pin Drift Periodic",
-          "type": "boolean"
-        },
         "config_sync_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between automatic config-sync passes.",
+          "description": "Seconds between automatic config-sync passes. 0 = disabled.",
           "title": "Config Sync Interval Seconds",
           "type": "integer"
-        },
-        "config_sync_periodic": {
-          "default": true,
-          "description": "When true, run daily config \u2194 .env \u2194 docs drift detection.",
-          "title": "Config Sync Periodic",
-          "type": "boolean"
         },
         "consult_request_limit": {
           "advanced": true,
@@ -1116,15 +1050,9 @@
         "copy_paste_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic copy-paste passes.",
+          "description": "Seconds between periodic copy-paste passes. 0 = disabled.",
           "title": "Copy Paste Interval Seconds",
           "type": "integer"
-        },
-        "copy_paste_periodic": {
-          "default": true,
-          "description": "When true, run weekly clone-detection sweeps.",
-          "title": "Copy Paste Periodic",
-          "type": "boolean"
         },
         "data_dir": {
           "default": ".data",
@@ -1136,15 +1064,9 @@
         "data_dir_gc_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between periodic data-dir GC passes.",
+          "description": "Seconds between periodic data-dir GC passes. 0 = disabled.",
           "title": "Data Dir Gc Interval Seconds",
           "type": "integer"
-        },
-        "data_dir_gc_periodic": {
-          "default": true,
-          "description": "Master switch for the periodic data-dir GC pass.",
-          "title": "Data Dir Gc Periodic",
-          "type": "boolean"
         },
         "data_dir_gc_prune_closed": {
           "default": false,
@@ -1223,15 +1145,9 @@
         "db_maintenance_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between periodic DB maintenance passes.",
+          "description": "Seconds between periodic DB maintenance passes. 0 = disabled.",
           "title": "Db Maintenance Interval Seconds",
           "type": "integer"
-        },
-        "db_maintenance_periodic": {
-          "default": true,
-          "description": "When true, run periodic DB maintenance (archive purge, event capping, PRAGMA optimize).",
-          "title": "Db Maintenance Periodic",
-          "type": "boolean"
         },
         "dedup_candidate_body_max_chars": {
           "advanced": true,
@@ -1300,7 +1216,7 @@
         "dependabot_ingest_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between Dependabot ingest passes.",
+          "description": "Seconds between Dependabot ingest passes. 0 = disabled.",
           "title": "Dependabot Ingest Interval Seconds",
           "type": "integer"
         },
@@ -1311,12 +1227,6 @@
           "minimum": 0,
           "title": "Dependabot Ingest Max Drafts Per Pass",
           "type": "integer"
-        },
-        "dependabot_ingest_periodic": {
-          "default": true,
-          "description": "When true, iterate registered repos and file deduped drafts for new Dependabot alerts.",
-          "title": "Dependabot Ingest Periodic",
-          "type": "boolean"
         },
         "deploy_api_url": {
           "anyOf": [
@@ -1357,7 +1267,7 @@
         "diagnostic_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between automatic diagnostic passes.",
+          "description": "Seconds between automatic diagnostic passes. 0 = disabled.",
           "title": "Diagnostic Interval Seconds",
           "type": "integer"
         },
@@ -1368,12 +1278,6 @@
           },
           "title": "Diagnostic Monitored Repo Ids",
           "type": "array"
-        },
-        "diagnostic_periodic": {
-          "default": false,
-          "description": "When true, run daily deterministic diagnostic checks.",
-          "title": "Diagnostic Periodic",
-          "type": "boolean"
         },
         "diagnostic_target_repo_id": {
           "default": "robotsix-mill",
@@ -1442,7 +1346,7 @@
         "docstring_coverage_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic docstring-coverage passes.",
+          "description": "Seconds between periodic docstring-coverage passes. 0 = disabled.",
           "title": "Docstring Coverage Interval Seconds",
           "type": "integer"
         },
@@ -1461,12 +1365,6 @@
           "minimum": 1,
           "title": "Docstring Coverage Max Tool Calls",
           "type": "integer"
-        },
-        "docstring_coverage_periodic": {
-          "default": true,
-          "description": "When true, run periodic docstring-coverage passes for public-API documentation oversight.",
-          "title": "Docstring Coverage Periodic",
-          "type": "boolean"
         },
         "docstring_coverage_request_limit": {
           "advanced": true,
@@ -1561,15 +1459,9 @@
         "forge_parity_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic forge-parity passes.",
+          "description": "Seconds between periodic forge-parity passes. 0 = disabled.",
           "title": "Forge Parity Interval Seconds",
           "type": "integer"
-        },
-        "forge_parity_periodic": {
-          "default": true,
-          "description": "When true, run weekly forge-adapter drift detection.",
-          "title": "Forge Parity Periodic",
-          "type": "boolean"
         },
         "forge_repo_create_token": {
           "anyOf": [
@@ -1595,15 +1487,9 @@
         "frontend_sync_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic frontend-sync passes.",
+          "description": "Seconds between periodic frontend-sync passes. 0 = disabled.",
           "title": "Frontend Sync Interval Seconds",
           "type": "integer"
-        },
-        "frontend_sync_periodic": {
-          "default": true,
-          "description": "When true, run daily board frontend sync checks.",
-          "title": "Frontend Sync Periodic",
-          "type": "boolean"
         },
         "github_api_url": {
           "default": "https://api.github.com",
@@ -1630,15 +1516,9 @@
         "health_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic health passes.",
+          "description": "Seconds between periodic health passes. 0 = disabled.",
           "title": "Health Interval Seconds",
           "type": "integer"
-        },
-        "health_periodic": {
-          "default": true,
-          "description": "When true, run periodic health passes for codebase-health inspection.",
-          "title": "Health Periodic",
-          "type": "boolean"
         },
         "implement_history_max_turns": {
           "advanced": true,
@@ -1717,7 +1597,7 @@
         "langfuse_cleanup_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between Langfuse trace cleanup passes.",
+          "description": "Seconds between Langfuse trace cleanup passes. 0 = disabled.",
           "title": "Langfuse Cleanup Interval Seconds",
           "type": "integer"
         },
@@ -1727,12 +1607,6 @@
           "description": "Maximum traces to retain in the Langfuse project during cleanup.",
           "title": "Langfuse Cleanup Max Traces",
           "type": "integer"
-        },
-        "langfuse_cleanup_periodic": {
-          "default": true,
-          "description": "When true, run periodic Langfuse trace cleanup (delete oldest traces).",
-          "title": "Langfuse Cleanup Periodic",
-          "type": "boolean"
         },
         "language_instructions_dir": {
           "description": "Directory of per-language instruction Markdown snippets.",
@@ -1887,15 +1761,9 @@
         "member_sync_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between automatic member-sync passes.",
+          "description": "Seconds between automatic member-sync passes. 0 = disabled.",
           "title": "Member Sync Interval Seconds",
           "type": "integer"
-        },
-        "member_sync_periodic": {
-          "default": true,
-          "description": "When true, auto-discover workspace members from managed repo vcs2l manifests.",
-          "title": "Member Sync Periodic",
-          "type": "boolean"
         },
         "merge_poll_seconds": {
           "advanced": true,
@@ -1908,15 +1776,9 @@
         "meta_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between automatic meta-agent passes.",
+          "description": "Seconds between automatic meta-agent passes. 0 = disabled.",
           "title": "Meta Interval Seconds",
           "type": "integer"
-        },
-        "meta_periodic": {
-          "default": false,
-          "description": "When true, run the daily cross-repo meta-agent pass for extraction/alignment proposals.",
-          "title": "Meta Periodic",
-          "type": "boolean"
         },
         "model_outage_max_parks": {
           "advanced": true,
@@ -1937,15 +1799,9 @@
         "module_curator_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic module-curator passes.",
+          "description": "Seconds between periodic module-curator passes. 0 = disabled.",
           "title": "Module Curator Interval Seconds",
           "type": "integer"
-        },
-        "module_curator_periodic": {
-          "default": true,
-          "description": "When true, run daily module-taxonomy drift detection.",
-          "title": "Module Curator Periodic",
-          "type": "boolean"
         },
         "module_curator_request_limit": {
           "advanced": true,
@@ -1958,7 +1814,7 @@
         "module_size_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic module-size passes.",
+          "description": "Seconds between periodic module-size passes. 0 = disabled.",
           "title": "Module Size Interval Seconds",
           "type": "integer"
         },
@@ -1978,12 +1834,6 @@
           "title": "Module Size Max Tool Calls",
           "type": "integer"
         },
-        "module_size_periodic": {
-          "default": true,
-          "description": "When true, run periodic module-size passes for oversized-file oversight.",
-          "title": "Module Size Periodic",
-          "type": "boolean"
-        },
         "module_size_request_limit": {
           "advanced": true,
           "default": 60,
@@ -1995,15 +1845,9 @@
         "mypy_baseline_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic mypy-baseline passes.",
+          "description": "Seconds between periodic mypy-baseline passes. 0 = disabled.",
           "title": "Mypy Baseline Interval Seconds",
           "type": "integer"
-        },
-        "mypy_baseline_periodic": {
-          "default": true,
-          "description": "When true, run periodic mypy-baseline passes for type-check baseline management.",
-          "title": "Mypy Baseline Periodic",
-          "type": "boolean"
         },
         "network_outage_retry_seconds": {
           "advanced": true,
@@ -2071,15 +1915,9 @@
         "orphaned_pr_check_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between orphaned-PR check passes.",
+          "description": "Seconds between orphaned-PR check passes. 0 = disabled.",
           "title": "Orphaned Pr Check Interval Seconds",
           "type": "integer"
-        },
-        "orphaned_pr_check_periodic": {
-          "default": false,
-          "description": "When true, run periodic orphaned-PR detection and cleanup.",
-          "title": "Orphaned Pr Check Periodic",
-          "type": "boolean"
         },
         "orphaned_pr_dry_run": {
           "default": true,
@@ -2144,15 +1982,9 @@
         "pin_bump_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between periodic pin-bump passes.",
+          "description": "Seconds between periodic pin-bump passes. 0 = disabled.",
           "title": "Pin Bump Interval Seconds",
           "type": "integer"
-        },
-        "pin_bump_periodic": {
-          "default": false,
-          "description": "When true, run scheduled dependency pin-bump PR actuator passes.",
-          "title": "Pin Bump Periodic",
-          "type": "boolean"
         },
         "ping_pong_max_alternations": {
           "advanced": true,
@@ -2425,15 +2257,9 @@
         "repo_description_sync_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between repo-description-sync passes.",
+          "description": "Seconds between repo-description-sync passes. 0 = disabled.",
           "title": "Repo Description Sync Interval Seconds",
           "type": "integer"
-        },
-        "repo_description_sync_periodic": {
-          "default": true,
-          "description": "When true, run periodic repo-description-sync passes.",
-          "title": "Repo Description Sync Periodic",
-          "type": "boolean"
         },
         "repo_visibility_default": {
           "default": "public",
@@ -2475,7 +2301,7 @@
         },
         "require_approval": {
           "default": true,
-          "description": "When true, refined tickets require human approval before implement stage.",
+          "description": "When true, refined tickets require human approval before implement stage (auto-approve skips the human gate for obviously-safe changes).",
           "title": "Require Approval",
           "type": "boolean"
         },
@@ -2627,20 +2453,14 @@
         "roadmap_sync_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between roadmap-sync passes.",
+          "description": "Seconds between roadmap-sync passes. 0 = disabled.",
           "title": "Roadmap Sync Interval Seconds",
           "type": "integer"
-        },
-        "roadmap_sync_periodic": {
-          "default": true,
-          "description": "When true, run periodic roadmap-sync passes.",
-          "title": "Roadmap Sync Periodic",
-          "type": "boolean"
         },
         "run_health_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between automatic run-health passes.",
+          "description": "Seconds between automatic run-health passes. 0 = disabled.",
           "title": "Run Health Interval Seconds",
           "type": "integer"
         },
@@ -2657,12 +2477,6 @@
           "default": null,
           "description": "Path to the run-health agent's Markdown memory ledger.",
           "title": "Run Health Memory Path"
-        },
-        "run_health_periodic": {
-          "default": true,
-          "description": "When true, run daily cross-board run-registry health monitoring.",
-          "title": "Run Health Periodic",
-          "type": "boolean"
         },
         "run_health_target_repo_id": {
           "default": "robotsix-mill",
@@ -2771,15 +2585,9 @@
         "sandbox_reaper_interval_seconds": {
           "advanced": true,
           "default": 3600,
-          "description": "Seconds between sandbox reaper passes.",
+          "description": "Seconds between sandbox reaper passes. 0 = disabled.",
           "title": "Sandbox Reaper Interval Seconds",
           "type": "integer"
-        },
-        "sandbox_reaper_periodic": {
-          "default": true,
-          "description": "When true, periodically force-remove leaked/orphaned sandbox containers.",
-          "title": "Sandbox Reaper Periodic",
-          "type": "boolean"
         },
         "sandbox_slot_timeout": {
           "advanced": true,
@@ -2896,15 +2704,9 @@
         "stale_branch_cleanup_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between automatic stale-branch cleanup passes.",
+          "description": "Seconds between automatic stale-branch cleanup passes. 0 = disabled.",
           "title": "Stale Branch Cleanup Interval Seconds",
           "type": "integer"
-        },
-        "stale_branch_cleanup_periodic": {
-          "default": false,
-          "description": "When true, run periodic stale-branch cleanup passes.",
-          "title": "Stale Branch Cleanup Periodic",
-          "type": "boolean"
         },
         "stale_branch_cleanup_prefix_only": {
           "advanced": true,
@@ -2937,15 +2739,9 @@
         "state_sync_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic state-sync passes.",
+          "description": "Seconds between periodic state-sync passes. 0 = disabled.",
           "title": "State Sync Interval Seconds",
           "type": "integer"
-        },
-        "state_sync_periodic": {
-          "default": true,
-          "description": "When true, run daily State-enum consistency checks.",
-          "title": "State Sync Periodic",
-          "type": "boolean"
         },
         "subscriber_shared_secret": {
           "anyOf": [
@@ -2980,15 +2776,9 @@
         "survey_interval_seconds": {
           "advanced": true,
           "default": 1209600,
-          "description": "Seconds between automatic survey passes.",
+          "description": "Seconds between automatic survey passes. 0 = disabled.",
           "title": "Survey Interval Seconds",
           "type": "integer"
-        },
-        "survey_periodic": {
-          "default": true,
-          "description": "When true, run periodic survey passes for OSS project discovery.",
-          "title": "Survey Periodic",
-          "type": "boolean"
         },
         "survey_request_limit": {
           "advanced": true,
@@ -3030,7 +2820,7 @@
         "test_gap_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic test-gap passes.",
+          "description": "Seconds between periodic test-gap passes. 0 = disabled.",
           "title": "Test Gap Interval Seconds",
           "type": "integer"
         },
@@ -3049,12 +2839,6 @@
           "minimum": 1,
           "title": "Test Gap Max Tool Calls",
           "type": "integer"
-        },
-        "test_gap_periodic": {
-          "default": true,
-          "description": "When true, run periodic test-gap passes for test-coverage oversight.",
-          "title": "Test Gap Periodic",
-          "type": "boolean"
         },
         "test_gap_request_limit": {
           "advanced": true,
@@ -3083,15 +2867,9 @@
         "timeout_escalation_interval_seconds": {
           "advanced": true,
           "default": 3600,
-          "description": "Seconds between timeout-escalation passes.",
+          "description": "Seconds between timeout-escalation passes. 0 = disabled.",
           "title": "Timeout Escalation Interval Seconds",
           "type": "integer"
-        },
-        "timeout_escalation_periodic": {
-          "default": true,
-          "description": "When true, run periodic timeout-escalation passes for stuck AWAITING_USER_REPLY tickets.",
-          "title": "Timeout Escalation Periodic",
-          "type": "boolean"
         },
         "timeout_escalation_threshold_seconds": {
           "advanced": true,
@@ -3103,15 +2881,9 @@
         "token_metrics_aggregation_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between token-metrics aggregation passes.",
+          "description": "Seconds between token-metrics aggregation passes. 0 = disabled.",
           "title": "Token Metrics Aggregation Interval Seconds",
           "type": "integer"
-        },
-        "token_metrics_aggregation_periodic": {
-          "default": true,
-          "description": "When true, run periodic token-metrics aggregation (stage\u00d7model token percentiles).",
-          "title": "Token Metrics Aggregation Periodic",
-          "type": "boolean"
         },
         "token_metrics_aggregation_window_seconds": {
           "advanced": true,
@@ -3123,15 +2895,9 @@
         "trace_health_interval_seconds": {
           "advanced": true,
           "default": 86400,
-          "description": "Seconds between automatic trace-health checks.",
+          "description": "Seconds between automatic trace-health checks. 0 = disabled.",
           "title": "Trace Health Interval Seconds",
           "type": "integer"
-        },
-        "trace_health_periodic": {
-          "default": true,
-          "description": "When true, run periodic trace-health checks.",
-          "title": "Trace Health Periodic",
-          "type": "boolean"
         },
         "trace_review_cost_multiplier": {
           "advanced": true,
@@ -3192,7 +2958,7 @@
         "trace_review_interval_seconds": {
           "advanced": true,
           "default": 1209600,
-          "description": "Seconds between automatic trace-review passes.",
+          "description": "Seconds between automatic trace-review passes. 0 = disabled.",
           "title": "Trace Review Interval Seconds",
           "type": "integer"
         },
@@ -3273,12 +3039,6 @@
           "title": "Trace Review Per Obs Cost Threshold",
           "type": "number"
         },
-        "trace_review_periodic": {
-          "default": true,
-          "description": "When true, run periodic trace-review passes (scans traces, flags outliers, files drafts).",
-          "title": "Trace Review Periodic",
-          "type": "boolean"
-        },
         "trace_review_restart_correlation_window_seconds": {
           "advanced": true,
           "default": 60,
@@ -3302,15 +3062,9 @@
         "triage_boilerplate_interval_seconds": {
           "advanced": true,
           "default": 604800,
-          "description": "Seconds between periodic triage-boilerplate passes.",
+          "description": "Seconds between periodic triage-boilerplate passes. 0 = disabled.",
           "title": "Triage Boilerplate Interval Seconds",
           "type": "integer"
-        },
-        "triage_boilerplate_periodic": {
-          "default": true,
-          "description": "When true, run weekly triage-pattern scans.",
-          "title": "Triage Boilerplate Periodic",
-          "type": "boolean"
         },
         "triage_request_limit": {
           "advanced": true,

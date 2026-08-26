@@ -636,13 +636,12 @@ def triage_skip(
         # create an infinite loop (approve → refine produces empty
         # body → fast-path approves again).  Fall through to the
         # full refine agent instead.
-        if (
-            s.auto_approve_enabled
-            and draft.strip()
-            and (
-                ticket.source != "ci"
-                or (ticket.source == "ci" and _draft_has_complete_spec(draft))
-            )
+        # Deterministic sources (CI) always fast-path.  For other
+        # sources, the auto-approve pre-check only runs when
+        # require_approval is True (there must be a gate to skip).
+        if draft.strip() and (
+            ticket.source != "ci"
+            or (ticket.source == "ci" and _draft_has_complete_spec(draft))
         ):
             # --- fast-path pre-checks: emptiness + scope ---
             scope_checks = _fast_path_scope_checks(draft)
@@ -682,44 +681,49 @@ def triage_skip(
                             extract_paths_from_draft=True,
                         )
 
-                    auto = refining.triage_auto_approve(
-                        settings=s,
-                        spec=_summarize_spec_for_auto_approve(
-                            f"{ticket.title}\n\n{draft}"
-                        ),
-                    )
-                    if auto.decision == "APPROVE":
-                        return _triage_outcome(
-                            ctx,
-                            ws,
-                            draft,
-                            ticket.id,
-                            f"mechanical draft fast-path — "
-                            f"auto-approve APPROVE: {auto.reason} "
-                            f"[checks: {checks_summary}]",
-                            source=ticket.source,
-                            triage_note=(
-                                f"triage REFINE → auto-approve APPROVE: {auto.reason}"
-                                f" | fast-path checks: {checks_summary}"
+                    # Auto-approve only makes sense when there's an
+                    # approval gate to skip.
+                    if not s.require_approval:
+                        pass  # fall through to full refine
+                    else:
+                        auto = refining.triage_auto_approve(
+                            settings=s,
+                            spec=_summarize_spec_for_auto_approve(
+                                f"{ticket.title}\n\n{draft}"
                             ),
-                            extract_paths_from_draft=True,
                         )
-                    elif auto.decision == "NEEDS_APPROVAL":
-                        return _triage_outcome(
-                            ctx,
-                            ws,
-                            draft,
-                            ticket.id,
-                            f"mechanical draft fast-path — "
-                            f"auto-approve NEEDS_APPROVAL (skipped refine): "
-                            f"{auto.reason} "
-                            f"[checks: {checks_summary}]",
-                            source=ticket.source,
-                            triage_note=(
-                                f"{triage.reason} | fast-path checks: {checks_summary}"
-                            ),
-                            extract_paths_from_draft=True,
-                        )
+                        if auto.decision == "APPROVE":
+                            return _triage_outcome(
+                                ctx,
+                                ws,
+                                draft,
+                                ticket.id,
+                                f"mechanical draft fast-path — "
+                                f"auto-approve APPROVE: {auto.reason} "
+                                f"[checks: {checks_summary}]",
+                                source=ticket.source,
+                                triage_note=(
+                                    f"triage REFINE → auto-approve APPROVE: {auto.reason}"
+                                    f" | fast-path checks: {checks_summary}"
+                                ),
+                                extract_paths_from_draft=True,
+                            )
+                        elif auto.decision == "NEEDS_APPROVAL":
+                            return _triage_outcome(
+                                ctx,
+                                ws,
+                                draft,
+                                ticket.id,
+                                f"mechanical draft fast-path — "
+                                f"auto-approve NEEDS_APPROVAL (skipped refine): "
+                                f"{auto.reason} "
+                                f"[checks: {checks_summary}]",
+                                source=ticket.source,
+                                triage_note=(
+                                    f"{triage.reason} | fast-path checks: {checks_summary}"
+                                ),
+                                extract_paths_from_draft=True,
+                            )
                 except Exception:
                     log.warning(
                         "%s: mechanical fast-path auto-approve failed, falling through",

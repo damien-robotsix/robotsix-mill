@@ -333,14 +333,12 @@ def test_test_gap_pass_result_structure(tmp_path, monkeypatch):
 def test_test_gap_config_defaults():
     """Test-gap config has correct defaults."""
     s = Settings()
-    assert s.test_gap_periodic is True
     assert s.test_gap_interval_seconds == 604800
 
 
 def test_test_gap_periodic_config():
-    """Test-gap periodic can be enabled."""
-    s = Settings(test_gap_periodic="true", test_gap_interval_seconds="43200")
-    assert s.test_gap_periodic is True
+    """Test-gap interval can be overridden."""
+    s = Settings(test_gap_interval_seconds="43200")
     assert s.test_gap_interval_seconds == 43200
 
 

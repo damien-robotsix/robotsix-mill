@@ -285,14 +285,13 @@ def test_no_ask_thread_still_escalates(settings, service, monkeypatch):
 async def test_worker_timeout_escalation_task_created_when_periodic(
     tmp_path, monkeypatch, repo_config
 ):
-    """Worker._timeout_escalation_task is created when timeout_escalation_periodic=true."""
+    """Worker._timeout_escalation_task is created when the interval is > 0."""
     from robotsix_mill.core.service import TicketService
     from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.stages import StageContext
 
     s = Settings(
         data_dir=str(tmp_path / "data"),
-        timeout_escalation_periodic="true",
         timeout_escalation_interval_seconds="1",
     )
     db.reset_engine()
@@ -320,14 +319,14 @@ async def test_worker_timeout_escalation_task_created_when_periodic(
 async def test_worker_timeout_escalation_task_not_created_when_periodic_false(
     tmp_path, monkeypatch, repo_config
 ):
-    """Worker._timeout_escalation_task is NOT created when timeout_escalation_periodic=false."""
+    """Worker._timeout_escalation_task is NOT created when the interval is 0."""
     from robotsix_mill.core.service import TicketService
     from robotsix_mill.runtime.worker import Worker
     from robotsix_mill.stages import StageContext
 
     s = Settings(
         data_dir=str(tmp_path / "data"),
-        timeout_escalation_periodic="false",
+        timeout_escalation_interval_seconds="0",
     )
     db.reset_engine()
     db.init_db(s, board_id="test-board")

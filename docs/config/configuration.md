@@ -485,8 +485,7 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `gates.require_approval` | `MILL_REQUIRE_APPROVAL` | `true` | Pause after refine for human approval (`human_issue_approval` state) |
-| `gates.auto_approve_enabled` | `MILL_AUTO_APPROVE_ENABLED` | `false` | Enable conservative auto-approve triage |
+| `gates.require_approval` | `MILL_REQUIRE_APPROVAL` | `true` | Pause after refine for human approval (`human_issue_approval` state). A cheap conservative LLM auto-approval check runs before the gate: obviously-safe changes (cosmetic, doc-only, single-file, no logic changes) skip the human step automatically. |
 | `gates.review_enabled` | `MILL_REVIEW_ENABLED` | `false` | Enable dual-model code review stage before deliver |
 | `gates.review_max_rounds` | `MILL_REVIEW_MAX_ROUNDS` | `3` | Max CODE_REVIEW round-trips before escalate |
 | `gates.max_implement_review_cycles` | `MILL_MAX_IMPLEMENT_REVIEW_CYCLES` | `10` | Backstop ceiling on total implement passes per ticket across all review rounds; `0` disables |
@@ -668,8 +667,7 @@ Each periodic agent shares this pattern:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.<name>.enabled` | `MILL_<NAME>_PERIODIC` | `true`¹ | Enable periodic passes |
-| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `1209600`² | Seconds between automatic passes |
+| `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `1209600`¹ | Seconds between automatic passes (`0` = disabled) |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
@@ -677,9 +675,7 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `token_metrics_aggregation`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
-> ¹ Most agents default to `enabled: true`. Exceptions: `diagnostic`, `stale_branch_cleanup`, and `meta_periodic` default to `false`.
->
-> ² The **primary** interval now lives in each agent's base YAML definition
+> ¹ The **primary** interval now lives in each agent's base YAML definition
 > (``agent_definitions/periodic/<name>.yaml``), defaulting to **14 days**
 > (``interval: 14d``, i.e. 1,209,600 seconds) for all built-in periodic
 > agents.  Per-repo overlays (``.robotsix-mill/periodic/<name>.yaml``)
@@ -707,18 +703,15 @@ Additional fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.bespoke_periodic` | `MILL_BESPOKE_PERIODIC` | `true` | Master toggle for the per-repo bespoke periodic agent supervisor (default `true` — enabled) |
-| `periodic.config_pin_drift_periodic` | `MILL_CONFIG_PIN_DRIFT_PERIODIC` | `true` | Master toggle for the config pin-drift check — reports pinned settings whose value shadows a changed code default. A pin always beats a `Field(default=…)`, so without this a code-side default change is a silent no-op in production. |
-| `periodic.config_pin_drift_interval_seconds` | `MILL_CONFIG_PIN_DRIFT_INTERVAL_SECONDS` | `86400` | Seconds between config pin-drift passes. |
+| `periodic.bespoke_discovery_interval_seconds` | `MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS` | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. Set to `0` to disable. |
+| `periodic.config_pin_drift_interval_seconds` | `MILL_CONFIG_PIN_DRIFT_INTERVAL_SECONDS` | `86400` | Seconds between config pin-drift passes. Set to `0` to disable. |
 | `periodic.config_pin_drift_baseline` | `MILL_CONFIG_PIN_DRIFT_BASELINE` | `[]` | Settings keys whose pinned value deliberately differs from the code default; excluded from pin-drift reporting (ratchet baseline, same idea as the mypy baseline). |
-| `periodic.bespoke_discovery_interval_seconds` | `MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS` | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |
 | `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](../agents/diagnostic-agent.md) |
 | `periodic.langfuse_cleanup.max_traces` | `MILL_LANGFUSE_CLEANUP_MAX_TRACES` | `5000` | Max traces retained in the shared workspace Langfuse project when `langfuse_cleanup_periodic` is enabled; oldest traces are deleted to stay under this cap. Centralized (global-only) — one pass per interval, not per-repo. |
-| `periodic.token_metrics_aggregation.interval_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_INTERVAL_SECONDS` | `86400` | Seconds between token-metrics aggregation passes. Centralized (global-only) — one pass per interval, not per-repo. |
+| `periodic.token_metrics_aggregation.interval_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_INTERVAL_SECONDS` | `86400` | Seconds between token-metrics aggregation passes. Centralized (global-only) — one pass per interval, not per-repo. Set to `0` to disable. |
 | `periodic.token_metrics_aggregation.window_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_WINDOW_SECONDS` | `86400` | Lookback window of Langfuse traces aggregated each token-metrics pass; per-call stage×model input/output-token percentiles (p50/p95/max) are written to `<data_dir>/token_metrics/<YYYY-MM-DD>.json`. |
-| `periodic.token_metrics_aggregation.enabled` | `MILL_TOKEN_METRICS_AGGREGATION_PERIODIC` | `true` | Enable the daily token-metrics aggregation pass. |
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
 | `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board. |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
@@ -733,8 +726,7 @@ variable and its dotted YAML path.
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.trace_review.enabled` | `MILL_TRACE_REVIEW_PERIODIC` | `true` | Enable periodic trace-review passes |
-| `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `1209600` | Seconds between trace-review passes (minimum 3600) |
+| `periodic.trace_review.interval_seconds` | `MILL_TRACE_REVIEW_INTERVAL_SECONDS` | `1209600` | Seconds between trace-review passes (minimum 3600). Set to `0` to disable. |
 | `periodic.trace_review.cost_multiplier` | `MILL_TRACE_REVIEW_COST_MULTIPLIER` | `3.0` | Outlier threshold: cost > batch median × N → flagged |
 | `periodic.trace_review.per_obs_cost_threshold` | `MILL_TRACE_REVIEW_PER_OBS_COST_THRESHOLD` | `0.001` | Per-observation cost threshold for flagging |
 | `periodic.trace_review.obs_multiplier` | `MILL_TRACE_REVIEW_OBS_MULTIPLIER` | `3.0` | Outlier threshold: observation count > batch median × N → flagged |
@@ -763,8 +755,7 @@ The `data_dir_gc` periodic agent reclaims disk space through deterministic GC st
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.data_dir_gc.enabled` | `MILL_DATA_DIR_GC_PERIODIC` | `true` | Master switch for the periodic data-dir GC pass. Default `true` — the agent is harmless when idle (nothing to reclaim). |
-| `periodic.data_dir_gc.interval_seconds` | `MILL_DATA_DIR_GC_INTERVAL_SECONDS` | `86400` | Seconds between periodic data-dir GC passes. Minimum enforced at 60 s in the worker loop. |
+| `periodic.data_dir_gc.interval_seconds` | `MILL_DATA_DIR_GC_INTERVAL_SECONDS` | `86400` | Seconds between periodic data-dir GC passes. Minimum enforced at 60 s in the worker loop. Set to `0` to disable. |
 | `periodic.data_dir_gc.prune_closed` | `MILL_DATA_DIR_GC_PRUNE_CLOSED` | `false` | Opt-in GC: prune workspace directories of terminal-state tickets during the data-dir GC pass. Default `false`. |
 | `periodic.data_dir_gc.prune_closed_age_seconds` | `MILL_DATA_DIR_GC_PRUNE_CLOSED_AGE_SECONDS` | `604800` | Minimum age (seconds since the ticket entered its terminal state) before its workspace becomes eligible for prune_closed GC. Recent closures are kept for post-mortems. Default 7 days. |
 | `periodic.data_dir_gc.prune_terminal_clones` | `MILL_DATA_DIR_GC_PRUNE_TERMINAL_CLONES` | `true` | Default-on GC: prune the reproducible git clones (`repo/` and `repos/`) inside workspaces of terminal-state tickets at the start of each data-dir GC pass. |
@@ -789,8 +780,7 @@ YAML path.
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.run_health.enabled` | `MILL_RUN_HEALTH_PERIODIC` | `true` | Enable periodic run-health passes |
-| `periodic.run_health.interval_seconds` | `MILL_RUN_HEALTH_INTERVAL_SECONDS` | `604800` | Seconds between run-health passes |
+| `periodic.run_health.interval_seconds` | `MILL_RUN_HEALTH_INTERVAL_SECONDS` | `604800` | Seconds between run-health passes. Set to `0` to disable. |
 | `periodic.run_health.window_hours` | `MILL_RUN_HEALTH_WINDOW_HOURS` | `168` | Lookback window (hours) over which run registries are scanned |
 | `periodic.run_health.target_repo_id` | `MILL_RUN_HEALTH_TARGET_REPO_ID` | `robotsix-mill` | Board the run-health agent files its drafts to |
 | `periodic.run_health.memory_path` | `MILL_RUN_HEALTH_MEMORY_PATH` | `None` | Override path for the run-health memory ledger; defaults to `<data_dir>/<board>/run_health_memory.md` |
@@ -803,8 +793,7 @@ The `db_maintenance` periodic agent runs SQLite maintenance (`VACUUM`,
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_DB_MAINTENANCE_PERIODIC` | `true` | Enable periodic database maintenance passes |
-| `MILL_DB_MAINTENANCE_INTERVAL_SECONDS` | `86400` | Seconds between database maintenance passes |
+| `MILL_DB_MAINTENANCE_INTERVAL_SECONDS` | `86400` | Seconds between database maintenance passes. Set to `0` to disable. |
 
 #### docstring_coverage
 
@@ -815,8 +804,7 @@ pattern control its request budget and tool-call guardrails:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_DOCSTRING_COVERAGE_PERIODIC` | `true` | Enable periodic docstring-coverage passes |
-| `MILL_DOCSTRING_COVERAGE_INTERVAL_SECONDS` | `604800` | Seconds between docstring-coverage passes |
+| `MILL_DOCSTRING_COVERAGE_INTERVAL_SECONDS` | `604800` | Seconds between docstring-coverage passes. Set to `0` to disable. |
 | `MILL_DOCSTRING_COVERAGE_REQUEST_LIMIT` | `80` | Per-call request cap for the docstring-coverage agent |
 | `MILL_DOCSTRING_COVERAGE_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per docstring-coverage trace |
 | `MILL_DOCSTRING_COVERAGE_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
@@ -831,8 +819,7 @@ these agent-specific settings are available:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_META_PERIODIC` | `false` | Master switch for the weekly meta-agent pass. Default `false` (off) — the operator must register the meta board in `repos.yaml` first. Flip to `true` to enable the global weekly schedule. |
-| `MILL_META_INTERVAL_SECONDS` | `604800` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. |
+| `MILL_META_INTERVAL_SECONDS` | `604800` | Seconds between automatic meta-agent passes. Minimum enforced at 60 s in the worker loop. Set to `0` to disable. |
 
 #### mypy_baseline
 
@@ -842,8 +829,7 @@ only the standard two periodic-agent fields:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_MYPY_BASELINE_PERIODIC` | `true` | Enable periodic mypy-baseline passes |
-| `MILL_MYPY_BASELINE_INTERVAL_SECONDS` | `604800` | Seconds between mypy-baseline passes |
+| `MILL_MYPY_BASELINE_INTERVAL_SECONDS` | `604800` | Seconds between mypy-baseline passes. Set to `0` to disable. |
 
 #### module_size
 
@@ -854,8 +840,7 @@ pattern control its request budget and tool-call guardrails:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_MODULE_SIZE_PERIODIC` | `true` | Enable periodic module-size passes |
-| `MILL_MODULE_SIZE_INTERVAL_SECONDS` | `604800` | Seconds between module-size passes |
+| `MILL_MODULE_SIZE_INTERVAL_SECONDS` | `604800` | Seconds between module-size passes. Set to `0` to disable. |
 | `MILL_MODULE_SIZE_REQUEST_LIMIT` | `60` | Per-call request cap for the module-size agent |
 | `MILL_MODULE_SIZE_MAX_TOOL_CALLS` | `80` | Hard cap on total tool calls per module-size trace |
 | `MILL_MODULE_SIZE_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
@@ -869,8 +854,7 @@ and environment variables are both available:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_SANDBOX_REAPER_PERIODIC` | `true` | Enable periodic sandbox-container reaping |
-| `MILL_SANDBOX_REAPER_INTERVAL_SECONDS` | `3600` | Seconds between sandbox-reaper passes |
+| `MILL_SANDBOX_REAPER_INTERVAL_SECONDS` | `3600` | Seconds between sandbox-reaper passes. Set to `0` to disable. |
 
 #### survey
 
@@ -880,8 +864,7 @@ pattern control its tool-call and web-fetch budgets:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_SURVEY_PERIODIC` | `true` | Enable periodic survey passes |
-| `MILL_SURVEY_INTERVAL_SECONDS` | `1209600` | Seconds between survey passes |
+| `MILL_SURVEY_INTERVAL_SECONDS` | `1209600` | Seconds between survey passes. Set to `0` to disable. |
 | `MILL_SURVEY_REQUEST_LIMIT` | `40` | Per-call request cap for the survey agent |
 | `MILL_SURVEY_WEB_FETCH_MAX_CALLS` | `5` | Max real (cache-miss) web_fetch calls per survey run |
 | `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
@@ -896,8 +879,7 @@ controls its request budget:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_AUDIT_PERIODIC` | `true` | Enable periodic audit passes |
-| `MILL_AUDIT_INTERVAL_SECONDS` | `1209600` | Seconds between audit passes |
+| `MILL_AUDIT_INTERVAL_SECONDS` | `1209600` | Seconds between audit passes. Set to `0` to disable. |
 | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the audit agent |
 
 #### test_gap
@@ -909,8 +891,7 @@ budget and tool-call guardrails:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_TEST_GAP_PERIODIC` | `true` | Enable periodic test-gap passes |
-| `MILL_TEST_GAP_INTERVAL_SECONDS` | `604800` | Seconds between test-gap passes |
+| `MILL_TEST_GAP_INTERVAL_SECONDS` | `604800` | Seconds between test-gap passes. Set to `0` to disable. |
 | `MILL_TEST_GAP_REQUEST_LIMIT` | `80` | Per-call request cap for the test-gap agent |
 | `MILL_TEST_GAP_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per test-gap trace |
 | `MILL_TEST_GAP_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
@@ -923,8 +904,7 @@ standard two periodic-agent fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.triage_boilerplate.enabled` | `MILL_TRIAGE_BOILERPLATE_PERIODIC` | `true` | Enable periodic triage-boilerplate passes |
-| `periodic.triage_boilerplate.interval_seconds` | `MILL_TRIAGE_BOILERPLATE_INTERVAL_SECONDS` | `604800` | Seconds between triage-boilerplate passes (1 week) |
+| `periodic.triage_boilerplate.interval_seconds` | `MILL_TRIAGE_BOILERPLATE_INTERVAL_SECONDS` | `604800` | Seconds between triage-boilerplate passes (1 week). Set to `0` to disable. |
 
 #### orphaned_pr_check
 
@@ -938,8 +918,7 @@ Configure via environment variables or YAML paths under
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.orphaned_pr_check.enabled` | `MILL_ORPHANED_PR_CHECK_PERIODIC` | `false` | Master switch for the orphaned-PR check pass. Default `false` (opt-in) — closing PRs and filing tracking tickets are destructive actions. |
-| `periodic.orphaned_pr_check.interval_seconds` | `MILL_ORPHANED_PR_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between orphaned-PR check passes. Minimum enforced at 3600 s (1 hour) in the worker loop. |
+| `periodic.orphaned_pr_check.interval_seconds` | `MILL_ORPHANED_PR_CHECK_INTERVAL_SECONDS` | `86400` | Seconds between orphaned-PR check passes. Minimum enforced at 3600 s (1 hour) in the worker loop. Set to `0` to disable. |
 | `periodic.orphaned_pr_check.min_age_hours` | `MILL_ORPHANED_PR_MIN_AGE_HOURS` | `4` | Minimum age (hours) of a ticket before its PR is considered for orphan classification. Skips tickets younger than this to avoid racing the deliver stage. |
 | `periodic.orphaned_pr_check.max_actions_per_pass` | `MILL_ORPHANED_PR_MAX_ACTIONS_PER_PASS` | `5` | Maximum number of combined close+file actions per pass run. Findings beyond this cap are deferred to the next scheduled pass. |
 | `periodic.orphaned_pr_check.dry_run` | `MILL_ORPHANED_PR_DRY_RUN` | `true` | Dry-run mode: log intent only, make zero forge mutations. Default `true` for safety — flip to `false` to enable real actions. |
@@ -956,39 +935,28 @@ standard two periodic-agent fields:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `periodic.changelog_autofill.enabled` | `MILL_CHANGELOG_AUTOFILL_PERIODIC` | `true` | Enable periodic changelog-autofill passes |
-| `periodic.changelog_autofill.interval_seconds` | `MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS` | `86400` | Seconds between changelog-autofill passes (1 day) |
+| `periodic.changelog_autofill.interval_seconds` | `MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS` | `86400` | Seconds between changelog-autofill passes (1 day). Set to `0` to disable. |
 
 #### Env-var-only periodic agents
 
-`bc_check`, `completeness_check`, `frontend_sync`, `pin_bump`, `repo_description_sync`, and `roadmap_sync` enabled and interval
+`bc_check`, `completeness_check`, `frontend_sync`, `pin_bump`, `repo_description_sync`, and `roadmap_sync` interval
 fields are available as YAML paths (`periodic.bc_check.*`, `periodic.completeness_check.*`, `periodic.frontend_sync.*`, `periodic.pin_bump.*`, `periodic.repo_description_sync.*`, `periodic.roadmap_sync.*`)
 and as environment variables:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_BC_CHECK_PERIODIC` | `true` | Enable periodic backward-compatibility inspection |
-| `MILL_BC_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between bc-check passes |
-| `MILL_CI_DEBT_RECHECK_PERIODIC` | `true` | Enable periodic CI-debt recheck passes (auto-resumes BLOCKED tickets when target-branch CI debt clears) |
-| `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` | `3600` | Seconds between CI-debt recheck passes (1 hour) |
-| `MILL_COMPLETENESS_CHECK_PERIODIC` | `true` | Enable periodic feature-wiring completeness inspection |
-| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `1209600` | Seconds between completeness-check passes |
+| `MILL_BC_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between bc-check passes. Set to `0` to disable. |
+| `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` | `3600` | Seconds between CI-debt recheck passes (1 hour). Set to `0` to disable. |
+| `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `1209600` | Seconds between completeness-check passes. Set to `0` to disable. |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
-| `MILL_CONFIG_SYNC_PERIODIC` | `true` | Enable periodic config/drift detection passes |
-| `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day) |
+| `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day). Set to `0` to disable. |
 | `MILL_DIAGNOSTIC_EVENTS_PATH` | `None` | Explicit file path for the diagnostic event store JSONL file |
-| `MILL_FRONTEND_SYNC_PERIODIC` | `true` | Enable periodic frontend-sync passes |
-| `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes |
-| `MILL_MEMBER_SYNC_PERIODIC` | `true` | Enable periodic team-member-sync passes |
-| `MILL_MEMBER_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between member-sync passes |
-| `MILL_PIN_BUMP_PERIODIC` | `false` | Enable periodic pin-bump passes |
-| `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes |
-| `MILL_ROADMAP_SYNC_PERIODIC` | `true` | Enable periodic roadmap-sync passes |
-| `MILL_ROADMAP_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between roadmap-sync passes |
-| `MILL_STATE_SYNC_PERIODIC` | `true` | Enable periodic state-sync passes |
-| `MILL_STATE_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between state-sync passes |
-| `MILL_REPO_DESCRIPTION_SYNC_PERIODIC` | `true` | Enable periodic repo-description-sync passes |
-| `MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between repo-description-sync passes |
+| `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes. Set to `0` to disable. |
+| `MILL_MEMBER_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between member-sync passes. Set to `0` to disable. |
+| `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes. Set to `0` to disable. |
+| `MILL_ROADMAP_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between roadmap-sync passes. Set to `0` to disable. |
+| `MILL_STATE_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between state-sync passes. Set to `0` to disable. |
+| `MILL_REPO_DESCRIPTION_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between repo-description-sync passes. Set to `0` to disable. |
 
 #### Stale branch cleanup, timeout escalation, dependabot ingest, module curator
 
@@ -1012,7 +980,6 @@ control the behaviour:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `MILL_BOARD_HYGIENE_PERIODIC` | `true` | Master toggle — when `false`, draft TTL auto-close is skipped entirely regardless of the TTL setting |
 | `MILL_BOARD_HYGIENE_DRAFT_TTL_DAYS` | `7` | Maximum age (days) an untouched draft can remain before auto-close. Only standalone drafts (no parent epic) are eligible; epics and their children are skipped. Set to `0` to disable (no drafts auto-closed regardless of age) |
 | `MILL_BOARD_HYGIENE_MAX_OPEN_TICKETS` | `0` | Ceiling on total open (non-terminal) tickets per board. When reached, `POST /tickets/ingest` findings are appended to a rollup epic instead of creating standalone tickets. Human-created tickets are exempt. Set to `0` to disable the cap |
 
@@ -1283,8 +1250,8 @@ turn. This means:
   `?repo_id=X` to filter by repo.
 - **CI monitor** dedup state is per-repo:
   `<data_dir>/<repo_id>/ci_monitor_state.json`.
-- **Agent toggles** (e.g. `MILL_AUDIT_PERIODIC`) remain global — all
-  repos share the same enabled/disabled flags.
+- **Agent intervals** (e.g. `MILL_AUDIT_INTERVAL_SECONDS`) remain global — all
+  repos share the same interval settings. Set to `0` to disable.
 
 In single-repo mode (`--repo-id` on serve or one entry in
 `config/config.json`'s `"repos"` key) periodic agents run only for that repo, and memory

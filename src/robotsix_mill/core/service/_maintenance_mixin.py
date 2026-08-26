@@ -192,10 +192,8 @@ class _MaintenanceMixin(_ServiceBase):
     def _maybe_auto_close_stale_drafts(self) -> int:
         """Auto-close DRAFT tickets untouched longer than the TTL.
 
-        Reads ``board_hygiene_draft_ttl_days`` and
-        ``board_hygiene_periodic`` from settings.  When either is
-        disabled (ttl_days <= 0 or periodic is False) this is a no-op.
-
+        Reads ``board_hygiene_draft_ttl_days`` from settings.
+        When <= 0 this is a no-op.
         Only standalone DRAFT tickets are eligible — epics and children
         of epics are skipped (the parent epic governs their lifecycle).
         Each closed ticket receives a history note explaining the TTL
@@ -203,8 +201,6 @@ class _MaintenanceMixin(_ServiceBase):
 
         Returns the number of drafts closed.
         """
-        if not self.settings.board_hygiene_periodic:
-            return 0
         ttl_days = self.settings.board_hygiene_draft_ttl_days
         if ttl_days <= 0:
             return 0

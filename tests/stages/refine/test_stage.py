@@ -801,7 +801,6 @@ def test_tracked_file_map_reaches_ready(ctx_factory, monkeypatch):
 def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="false",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Implement the thing")
@@ -823,7 +822,6 @@ def test_successful_refine_to_human_issue_approval_gated(ctx_factory, monkeypatc
 def test_auto_approve_approve_routes_to_ready(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Add a docstring to utils.py")
@@ -858,7 +856,6 @@ def test_auto_approve_test_gap_source_short_circuits_to_ready(
     rubber-stamped."""
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = ctx.service.create(
@@ -908,7 +905,6 @@ def test_auto_approve_audit_source_also_short_circuits(
     ):
         ctx = ctx_factory(
             require_approval="true",
-            auto_approve_enabled="true",
             refine_triage_enabled="false",
         )
         t = ctx.service.create(
@@ -951,7 +947,6 @@ def test_auto_approve_audit_source_also_short_circuits(
 def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Redesign the auth module")
@@ -978,7 +973,6 @@ def test_auto_approve_needs_approval_routes_to_human(ctx_factory, monkeypatch):
 def test_auto_approve_triage_failure_falls_back_to_human(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="true",
         refine_triage_enabled="false",
     )
     t = _ticket(ctx, body="Update config defaults")
@@ -1672,7 +1666,6 @@ def test_epic_body_applied_in_autonomous_mode(ctx_factory, monkeypatch):
 def test_epic_body_stored_as_artifact_in_gated_mode(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="true",
-        auto_approve_enabled="false",
         refine_triage_enabled="false",
     )
     epic = ctx.service.create("Epic", "Original epic goal", kind=TicketKind.EPIC)
@@ -3415,6 +3408,9 @@ def test_refine_pass_cap_escalates_on_exhaustion(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_varying_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test pass-cap escalation.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine rewrites description.md → output differs → pass counter = 1.
@@ -3493,6 +3489,11 @@ def test_refine_convergence_skips_agent_when_input_unchanged(ctx_factory, monkey
         monkeypatch,
         run_refine_agent=_tracking_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called in pass 1 — description.md gets the
+        # spec output and refine_output_hash is set, which the
+        # convergence guard in pass 2 relies on.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine agent runs, writes spec, pass counter = 1.
@@ -3544,6 +3545,9 @@ def test_refine_sendback_with_feedback_still_runs_agent(ctx_factory, monkeypatch
         monkeypatch,
         run_refine_agent=_tracking_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test convergence guard.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine runs normally.
@@ -3601,6 +3605,9 @@ def test_refine_output_convergence_stops_counting(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_same_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test output convergence.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Pass 1: refine runs, output hash stored, pass counter = 1.
@@ -3659,6 +3666,9 @@ def test_refine_pass_cap_disabled_when_zero(ctx_factory, monkeypatch):
         monkeypatch,
         run_refine_agent=_varying_refine,
         triage_refine=_mock_triage_refine(decision="REFINE", reason="needs refinement"),
+        # Return "REFINE" so the fast-path falls through and the refine
+        # agent is actually called — needed to test pass-cap disabled.
+        triage_auto_approve=_mock_auto_approve(decision="REFINE"),
     )
 
     # Run refine many times — cap is disabled so agent always called.

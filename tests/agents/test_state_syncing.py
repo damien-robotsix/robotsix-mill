@@ -81,18 +81,16 @@ def test_state_sync_result_field_types():
 def test_state_sync_config_defaults():
     """State-sync config has correct defaults."""
     s = Settings()
-    assert s.state_sync_periodic is True
     assert s.state_sync_interval_seconds == 604800
 
 
-def test_state_sync_periodic_config():
-    """State-sync periodic can be enabled/disabled and interval overridden."""
-    s = Settings(state_sync_periodic="true", state_sync_interval_seconds="43200")
-    assert s.state_sync_periodic is True
+def test_state_sync_interval_config():
+    """State-sync interval can be overridden (0 disables)."""
+    s = Settings(state_sync_interval_seconds="43200")
     assert s.state_sync_interval_seconds == 43200
 
-    s2 = Settings(state_sync_periodic="false")
-    assert s2.state_sync_periodic is False
+    s2 = Settings(state_sync_interval_seconds="0")
+    assert s2.state_sync_interval_seconds == 0
 
 
 # --- SourceKind tests ---

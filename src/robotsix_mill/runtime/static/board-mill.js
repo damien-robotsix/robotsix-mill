@@ -472,9 +472,6 @@
     var gatesEl = document.getElementById("gates");
     if (!gatesEl) return;
     gatesEl.innerHTML = [
-      { key: "auto_approve", label: "auto-approve", on: g.auto_approve,
-        yaml: "gates.auto_approve_enabled",
-        tip: "Cheap-LLM auto-approves safe refined specs; when off, every ticket pauses at human_issue_approval" },
       { key: "review", label: "review", on: g.review,
         yaml: "gates.review_enabled",
         tip: "Dual-model code review before deliver; when off, tickets skip code_review" },

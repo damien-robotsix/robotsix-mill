@@ -185,20 +185,13 @@ class _StagesSettings(BaseModel):
     # --- human approval gate (refine -> implement) ---
     # When true (default), the refine stage transitions to
     # human_issue_approval instead of ready — a human must approve before
-    # the implement stage kicks in. Set false for fully-autonomous mode.
+    # the implement stage kicks in. A cheap conservative LLM auto-approval
+    # check runs before the gate: obviously-safe changes (cosmetic, doc-only,
+    # single-file, no logic changes) skip the human step automatically.
+    # Set false for fully-autonomous mode.
     require_approval: bool = Field(
-        description="When true, refined tickets require human approval before implement stage.",
+        description="When true, refined tickets require human approval before implement stage (auto-approve skips the human gate for obviously-safe changes).",
         default=True,
-    )
-
-    # When true, a cheap conservative LLM call inspects the refined spec
-    # after refinement.  If the change is "obviously safe" (cosmetic,
-    # doc-only, single-file, no logic changes) the ticket skips the
-    # human approval gate and goes straight to READY.  When false
-    # (default), every gated ticket waits for a human click.
-    auto_approve_enabled: bool = Field(
-        description="When true, obviously-safe changes skip the human approval gate.",
-        default=False,
     )
 
     # --- retrospect stage (done -> reviewed) ---
@@ -611,34 +604,26 @@ class _StagesSettings(BaseModel):
     )
 
     # --- db maintenance (periodic archive purge + per-ticket event cap) ---
-    # When True (default), the worker runs a periodic sweep that (a) purges
-    # terminal tickets exceeding max_archived_tickets, (b) prunes oldest
-    # TicketEvent rows on non-terminal tickets exceeding max_events_per_ticket,
-    # and (c) runs PRAGMA optimize to reclaim freed pages.
-    db_maintenance_periodic: bool = Field(
-        description="When true, run periodic DB maintenance (archive purge, event capping, PRAGMA optimize).",
-        default=True,
-    )
+    # Runs a periodic sweep that (a) purges terminal tickets exceeding
+    # max_archived_tickets, (b) prunes oldest TicketEvent rows on
+    # non-terminal tickets exceeding max_events_per_ticket, and (c) runs
+    # PRAGMA optimize to reclaim freed pages. Set interval to 0 to disable.
     db_maintenance_interval_seconds: int = Field(
-        description="Seconds between periodic DB maintenance passes.",
+        description="Seconds between periodic DB maintenance passes. 0 = disabled.",
         default=86400,
         json_schema_extra={"advanced": True},
     )
 
     # --- sandbox reaper (periodic orphan-container cleanup) ---
-    # When True (default), the worker periodically force-removes leaked
-    # mill-sbx-*/mill-fetch-* sandbox containers whose uptime exceeds twice
-    # command_timeout (a live sandbox is bounded by command_timeout, so
-    # anything older is provably orphaned). Defends against containers
-    # orphaned by a mill crash/restart mid-run, which otherwise run forever
-    # (--rm only fires on container exit, and the timeout is parent-process
-    # enforced). The startup reaper in lifespan is the complementary guard.
-    sandbox_reaper_periodic: bool = Field(
-        description="When true, periodically force-remove leaked/orphaned sandbox containers.",
-        default=True,
-    )
+    # Periodically force-removes leaked mill-sbx-*/mill-fetch-* sandbox
+    # containers whose uptime exceeds twice command_timeout (a live sandbox
+    # is bounded by command_timeout, so anything older is provably orphaned).
+    # Defends against containers orphaned by a mill crash/restart mid-run,
+    # which otherwise run forever (--rm only fires on container exit, and
+    # the timeout is parent-process enforced). The startup reaper in lifespan
+    # is the complementary guard. Set interval to 0 to disable.
     sandbox_reaper_interval_seconds: int = Field(
-        description="Seconds between sandbox reaper passes.",
+        description="Seconds between sandbox reaper passes. 0 = disabled.",
         default=3600,
         json_schema_extra={"advanced": True},
     )
@@ -674,15 +659,11 @@ class _StagesSettings(BaseModel):
     )
 
     # --- langfuse cleanup (caps trace count for the shared workspace project) ---
-    # When True, the worker runs a periodic sweep that deletes the oldest
-    # traces from the shared workspace Langfuse project, keeping at most
-    # langfuse_cleanup_max_traces rows. Default True (enabled out of the box).
-    langfuse_cleanup_periodic: bool = Field(
-        description="When true, run periodic Langfuse trace cleanup (delete oldest traces).",
-        default=True,
-    )
+    # Periodically deletes the oldest traces from the shared workspace
+    # Langfuse project, keeping at most langfuse_cleanup_max_traces rows.
+    # Set interval to 0 to disable.
     langfuse_cleanup_interval_seconds: int = Field(
-        description="Seconds between Langfuse trace cleanup passes.",
+        description="Seconds between Langfuse trace cleanup passes. 0 = disabled.",
         default=86400,
         json_schema_extra={"advanced": True},
     )
@@ -694,14 +675,10 @@ class _StagesSettings(BaseModel):
     # --- token-metrics aggregation (daily stage×model token percentiles) ---
     # A global, no-LLM pass that reads per-step mill.step_usage metadata
     # from the shared Langfuse project's list endpoint and writes a compact
-    # per-call token histogram snapshot to <data_dir>/token_metrics/. Default
-    # True (enabled out of the box), like langfuse_cleanup.
-    token_metrics_aggregation_periodic: bool = Field(
-        description="When true, run periodic token-metrics aggregation (stage×model token percentiles).",
-        default=True,
-    )
+    # per-call token histogram snapshot to <data_dir>/token_metrics/. Set
+    # interval to 0 to disable.
     token_metrics_aggregation_interval_seconds: int = Field(
-        description="Seconds between token-metrics aggregation passes.",
+        description="Seconds between token-metrics aggregation passes. 0 = disabled.",
         default=86400,
         json_schema_extra={"advanced": True},
     )

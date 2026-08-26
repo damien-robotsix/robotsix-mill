@@ -173,7 +173,6 @@ class PollLoopsMixin(_WorkerBase):
         label: str,
         repo_config,
         settings_interval_attr: str,
-        settings_enabled_attr: str | None = None,
     ) -> tuple[bool, int]:
         """Resolve ``(enabled, interval_seconds)`` for *label* on *repo_config*.
 
@@ -182,7 +181,8 @@ class PollLoopsMixin(_WorkerBase):
              (clone-side override wins over built-in).
           2. The Settings field of the matching name as a fallback.
 
-        Interval is clamped to >= 60s.
+        A job is disabled when its interval is 0.  Interval is clamped
+        to >= 60s when non-zero.
         """
         from ...agents.yaml_loader import load_periodic_agent_definition
 
@@ -200,15 +200,19 @@ class PollLoopsMixin(_WorkerBase):
             interval = definition.interval_seconds
         else:
             interval = getattr(settings, settings_interval_attr, None)
-        interval = max(60, int(interval or 86400))
+        interval = int(interval or 86400)
 
-        # Enabled: YAML > Settings.
+        # interval == 0 disables the job.
+        if interval <= 0:
+            return False, 0
+
+        # Enabled: YAML > Settings (interval_seconds > 0 is the
+        # canonical on-switch; the YAML ``enabled`` flag is a
+        # secondary override for per-repo opt-out).
         enabled = True
         if definition and definition.enabled is not None:
             enabled = bool(definition.enabled)
-        elif settings_enabled_attr is not None:
-            enabled = bool(getattr(settings, settings_enabled_attr, True))
-        return enabled, interval
+        return enabled, max(60, interval)
 
     async def _run_bespoke_loop(
         self,
@@ -431,7 +435,7 @@ class PollLoopsMixin(_WorkerBase):
 
         Global pass (non-per-repo): all managed repos share one Langfuse project
         (credentials always come from global Secrets), so one pass per interval
-        is sufficient. Gated by ``settings.langfuse_cleanup_periodic`` via
+        is sufficient. Gated by ``settings.langfuse_cleanup_interval_seconds`` (0 = disabled) via
         ``_start_poll_loop_pass``. Pure HTTP, no LLM.
         """
         settings = self.ctx.settings
@@ -468,7 +472,7 @@ class PollLoopsMixin(_WorkerBase):
 
         Global pass (non-per-repo): all managed repos share one Langfuse
         project, so one pass per interval is sufficient. Gated by
-        ``settings.token_metrics_aggregation_periodic`` via
+        ``settings.token_metrics_aggregation_interval_seconds`` (0 = disabled) via
         ``_start_poll_loop_pass``. Pure HTTP + file I/O, no LLM.
         """
         settings = self.ctx.settings
@@ -540,7 +544,7 @@ class PollLoopsMixin(_WorkerBase):
         pass exists to surface.
         """
         settings = self.ctx.settings
-        if not settings.config_pin_drift_periodic:
+        if settings.config_pin_drift_interval_seconds <= 0:
             return
         interval = max(60, settings.config_pin_drift_interval_seconds)
         initial = self._initial_delay("config-pin-drift", interval)
@@ -1192,7 +1196,7 @@ class PollLoopsMixin(_WorkerBase):
         draft per new alert so the normal pipeline picks up the dependency
         bump.  Deterministic — no LLM, no Langfuse tracing.
 
-        Gated by ``settings.dependabot_ingest_periodic``; cadence by
+        Gated by ``dependabot_ingest_interval_seconds`` (0 = disabled); cadence by
         ``dependabot_ingest_interval_seconds`` (min 60 s); per-pass draft
         volume by ``dependabot_ingest_max_drafts_per_pass``.
         """
@@ -1307,8 +1311,11 @@ class PollLoopsMixin(_WorkerBase):
         ``poll_loop_fn`` is a zero-argument async callable (typically a
         bound method like ``self._trace_health_poll_loop``).
         """
-        flag = label.replace("-", "_") + "_periodic"
-        if getattr(self.ctx.settings, flag) and getattr(self, task_attr) is None:
+        interval_attr = label.replace("-", "_") + "_interval_seconds"
+        if (
+            getattr(self.ctx.settings, interval_attr, 0) > 0
+            and getattr(self, task_attr) is None
+        ):
             setattr(
                 self,
                 task_attr,

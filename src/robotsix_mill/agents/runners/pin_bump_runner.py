@@ -107,8 +107,8 @@ def run_pin_bump_pass(
         return
 
     settings = Settings()
-    if not settings.pin_bump_periodic:
-        log.info("pin_bump: periodic pin bump is disabled — nothing to do")
+    if settings.pin_bump_interval_seconds <= 0:
+        log.info("pin_bump: periodic pin bump is disabled (interval=0) — nothing to do")
         return
 
     registry = get_repos_config()
@@ -226,8 +226,8 @@ def run_pin_bump_pr_actuator(
         return
 
     settings = Settings()
-    if not settings.pin_bump_periodic:
-        log.info("pin_bump: periodic pin bump is disabled — nothing to do")
+    if settings.pin_bump_interval_seconds <= 0:
+        log.info("pin_bump: periodic pin bump is disabled (interval=0) — nothing to do")
         return
 
     registry = get_repos_config()

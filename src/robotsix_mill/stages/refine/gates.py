@@ -491,17 +491,12 @@ class RefineGatesMixin:
     ) -> Outcome | None:
         """Deterministic doc-only gate — skip refine for documentation-only changes.
 
-        When *auto_approve_enabled* and every file path extracted from
-        the draft is a docs/Markdown path (``docs/**``, ``*.md``,
-        ``CHANGELOG.md``) with no code/config files (``.py``, ``.ts``,
-        ``.js``, ``.yaml``, ``.yml``), short-circuit directly to READY
-        with a templated verdict — no LLM calls.  Returns ``None``
-        when the draft is not doc-only or *auto_approve_enabled* is off
-        (fall through to normal refine).
+        When every file path extracted from the draft is a docs/Markdown
+        path (``docs/**``, ``*.md``, ``CHANGELOG.md``) with no code/config
+        files (``.py``, ``.ts``, ``.js``, ``.yaml``, ``.yml``), short-circuit
+        directly to READY with a templated verdict — no LLM calls.  Returns
+        ``None`` when the draft is not doc-only (fall through to normal refine).
         """
-        if not s.auto_approve_enabled:
-            return None
-
         from . import _reconcile
         from .helpers import _is_doc_only_change
 

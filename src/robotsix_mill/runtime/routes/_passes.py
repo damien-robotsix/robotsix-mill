@@ -421,7 +421,7 @@ def list_passes(
             for wf in discover_periodic_workflows(clone_dir):
                 if not wf.enabled:
                     continue
-                if getattr(settings, f"{wf.name}_periodic", True) is False:
+                if getattr(settings, f"{wf.name}_interval_seconds", 0) <= 0:
                     continue
                 enabled_names.add(wf.name)
 

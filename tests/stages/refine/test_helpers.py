@@ -161,11 +161,10 @@ def test_rationale_info_only_marker_suppresses_fuzzy_rule():
 # ---------------------------------------------------------------------------
 
 
-def _ctx(require_approval=True, auto_approve_enabled=False):
+def _ctx(require_approval=True):
     return SimpleNamespace(
         settings=SimpleNamespace(
             require_approval=require_approval,
-            auto_approve_enabled=auto_approve_enabled,
         )
     )
 
@@ -184,17 +183,18 @@ def test_resolve_next_state_degenerate_spec_gated():
     assert note == "refine produced no spec"
 
 
-def test_resolve_next_state_auto_approve_disabled():
+def test_resolve_next_state_no_approval_required_with_auto_approve():
+    """When require_approval=False, the response is always READY (auto-approve
+    is always-on, but the whole gate is skipped when require_approval is off)."""
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=False), "## Problem\nA genuine, real spec body", "t1"
+        _ctx(require_approval=False), "## Problem\nA genuine, real spec body", "t1"
     )
-    assert state is State.HUMAN_ISSUE_APPROVAL
-    assert note is None
+    assert state is State.READY
 
 
 def test_resolve_next_state_deterministic_source():
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
         source="test_gap",
@@ -214,7 +214,7 @@ def test_resolve_next_state_triage_approve(monkeypatch):
         ),
     )
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
     )
@@ -231,7 +231,7 @@ def test_resolve_next_state_triage_needs_approval(monkeypatch):
         ),
     )
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
     )
@@ -245,7 +245,7 @@ def test_resolve_next_state_triage_error_falls_back(monkeypatch):
 
     monkeypatch.setattr(refining, "triage_auto_approve", _boom)
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
     )
@@ -277,7 +277,7 @@ def test_suspicious_pattern_defers_to_classifier(pattern, monkeypatch):
         ),
     )
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
         source="test_gap",  # deterministic source — shortcut must be skipped
@@ -303,7 +303,7 @@ def test_suspicious_pattern_still_reaches_ready_when_classifier_approves(monkeyp
         ),
     )
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
         source="audit",
@@ -319,7 +319,7 @@ def test_suspicious_pattern_still_reaches_ready_when_classifier_approves(monkeyp
 def test_resolve_next_state_triage_note_clean_passes():
     """A triage note with no rejection signal does NOT block auto-approve."""
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
         source="audit",
@@ -333,7 +333,7 @@ def test_resolve_next_state_triage_note_clean_passes():
 def test_resolve_next_state_triage_note_none_passes():
     """triage_note=None (default) behaves identically to before."""
     state, note = refine_module._resolve_next_state(
-        _ctx(auto_approve_enabled=True),
+        _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
         source="audit",
@@ -494,11 +494,11 @@ def test_auto_approve_sources_is_module_level_constant():
 
 def test_auto_approve_sources_resolve_next_state_deterministic():
     """For every source in _AUTO_APPROVE_SOURCES, _resolve_next_state
-    returns State.READY and an APPROVE note when auto_approve_enabled=True
+    returns State.READY and an APPROVE note when require_approval=True
     and require_approval=True — guarding against accidental value drift."""
     for source in refine_module._AUTO_APPROVE_SOURCES:
         state, note = refine_module._resolve_next_state(
-            _ctx(auto_approve_enabled=True),
+            _ctx(),
             "## Problem\nA genuine, real spec body",
             "t1",
             source=source,
