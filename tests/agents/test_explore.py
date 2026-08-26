@@ -965,3 +965,248 @@ def test_no_continuation_when_response_is_none(tmp_path, monkeypatch):
     )
     assert out == "answer without response"
     assert len(cap["runs"]) == 1
+
+
+# ===================================================================
+# _extract_explored_paths
+# ===================================================================
+
+
+class TestExtractExploredPaths:
+    """Tests for the path-extraction heuristic used by the explore
+    tool wrapper to populate ``explore_served_files``."""
+
+    def test_extracts_repo_relative_paths(self, tmp_path):
+        """Paths like ``src/foo/bar.py`` that exist on disk are extracted."""
+        (tmp_path / "src" / "foo").mkdir(parents=True)
+        (tmp_path / "src" / "foo" / "bar.py").write_text("x = 1\n")
+        result = explore._extract_explored_paths(
+            "The relevant file is src/foo/bar.py at line 1.", tmp_path
+        )
+        assert len(result) == 1
+        assert str((tmp_path / "src" / "foo" / "bar.py").resolve()) in result
+
+    def test_ignores_nonexistent_paths(self, tmp_path):
+        """Paths that don't exist on disk are silently skipped."""
+        result = explore._extract_explored_paths(
+            "Check src/missing/file.py for details.", tmp_path
+        )
+        assert len(result) == 0
+
+    def test_extracts_multiple_paths(self, tmp_path):
+        """Multiple paths in one response are all extracted."""
+        (tmp_path / "lib").mkdir()
+        (tmp_path / "lib" / "a.dart").write_text("a\n")
+        (tmp_path / "lib" / "b.dart").write_text("b\n")
+        result = explore._extract_explored_paths(
+            "See lib/a.dart and lib/b.dart for the implementation.", tmp_path
+        )
+        assert len(result) == 2
+
+    def test_empty_result(self, tmp_path):
+        """Empty string returns empty set."""
+        assert explore._extract_explored_paths("", tmp_path) == set()
+
+    def test_no_paths_in_text(self, tmp_path):
+        """Text with no path-like tokens returns empty set."""
+        assert (
+            explore._extract_explored_paths("No relevant files found.", tmp_path)
+            == set()
+        )
+
+    def test_backtick_delimited_paths(self, tmp_path):
+        """Paths wrapped in backticks are extracted."""
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "pkg" / "mod.py").write_text("pass\n")
+        result = explore._extract_explored_paths(
+            "The function lives in `pkg/mod.py`.", tmp_path
+        )
+        assert len(result) == 1
+
+    def test_paths_with_dashes_and_underscores(self, tmp_path):
+        """Paths containing dashes and underscores are matched."""
+        (tmp_path / "my_dir").mkdir()
+        (tmp_path / "my_dir" / "my_file-v2.py").write_text("pass\n")
+        result = explore._extract_explored_paths(
+            "Found in my_dir/my_file-v2.py.", tmp_path
+        )
+        assert len(result) == 1
+
+    def test_path_at_end_of_string(self, tmp_path):
+        """Paths at the very end of the response string are matched."""
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("pass\n")
+        result = explore._extract_explored_paths(
+            "The entry point is src/main.py", tmp_path
+        )
+        assert len(result) == 1
+        assert str((tmp_path / "src" / "main.py").resolve()) in result
+
+
+# ===================================================================
+# explore_served_files integration
+# ===================================================================
+
+
+class TestExploreServedFiles:
+    """Integration tests for the explore→read_file dedup bridge."""
+
+    def test_explore_populates_served_files(self, tmp_path, monkeypatch):
+        """After explore returns, paths from its result appear in
+        ``explore_served_files``."""
+        s = _settings(tmp_path, OPENROUTER_API_KEY="test-key")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("print('hi')\n")
+
+        async def fake_run_explore(*, settings, repo_dir, question, **kw):
+            return "The relevant file is src/app.py at line 1."
+
+        monkeypatch.setattr(explore, "run_explore", fake_run_explore)
+
+        served: set[str] = set()
+        tool = explore.make_explore_tool(s, tmp_path, explore_served_files=served)
+        asyncio.run(tool("find the app"))
+
+        expected = str((tmp_path / "src" / "app.py").resolve())
+        assert expected in served
+
+    def test_read_file_refuses_explore_served_full_read(self, tmp_path, settings):
+        """read_file returns a short marker for a file already served
+        by explore when the request is a full/default read."""
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n")
+
+        served: set[str] = set()
+        resolved = str((tmp_path / "src" / "app.py").resolve())
+        served.add(resolved)
+
+        tools = build_fs_tools(tmp_path, settings, explore_served_files=served)
+        read_file = next(t for t in tools if t.__name__ == "read_file")
+
+        result = read_file(path="src/app.py")
+        assert "already in context" in result
+        assert "explore sub-agent" in result
+
+    def test_read_file_allows_explore_served_specific_range(self, tmp_path, settings):
+        """read_file with explicit offset/limit still works even when
+        the file is in explore_served_files — the explore snippet may
+        not cover the requested region."""
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+
+        content = "\n".join(f"line {i}" for i in range(1, 101))
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "big.py").write_text(content + "\n")
+
+        served: set[str] = set()
+        resolved = str((tmp_path / "src" / "big.py").resolve())
+        served.add(resolved)
+
+        tools = build_fs_tools(tmp_path, settings, explore_served_files=served)
+        read_file = next(t for t in tools if t.__name__ == "read_file")
+
+        # Explicit offset/limit should still work.
+        result = read_file(path="src/big.py", offset=50, limit=10)
+        assert "line 50" in result
+        assert "already in context" not in result
+
+    def test_write_invalidates_explore_served(self, tmp_path, settings):
+        """After write_file, the path is removed from
+        explore_served_files so a subsequent read_file succeeds."""
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n")
+
+        served: set[str] = set()
+        resolved = str((tmp_path / "src" / "app.py").resolve())
+        served.add(resolved)
+
+        tools = build_fs_tools(tmp_path, settings, explore_served_files=served)
+        tool_map = {t.__name__: t for t in tools}
+
+        # Write new content.
+        tool_map["write_file"](path="src/app.py", content="x = 2\n")
+        assert resolved not in served
+
+        # Subsequent read_file should succeed (not refused).
+        result = tool_map["read_file"](path="src/app.py")
+        assert "x = 2" in result
+        assert "already in context" not in result
+
+    def test_edit_invalidates_explore_served(self, tmp_path, settings):
+        """After edit_file, the path is removed from
+        explore_served_files."""
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n")
+
+        served: set[str] = set()
+        resolved = str((tmp_path / "src" / "app.py").resolve())
+        served.add(resolved)
+
+        tools = build_fs_tools(tmp_path, settings, explore_served_files=served)
+        tool_map = {t.__name__: t for t in tools}
+
+        tool_map["edit_file"](path="src/app.py", old_string="x = 1", new_string="x = 2")
+        assert resolved not in served
+
+    def test_delete_invalidates_explore_served(self, tmp_path, settings):
+        """After delete_file, the path is removed from
+        explore_served_files."""
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n")
+
+        served: set[str] = set()
+        resolved = str((tmp_path / "src" / "app.py").resolve())
+        served.add(resolved)
+
+        tools = build_fs_tools(tmp_path, settings, explore_served_files=served)
+        tool_map = {t.__name__: t for t in tools}
+
+        tool_map["delete_file"](path="src/app.py")
+        assert resolved not in served
+
+    def test_none_explore_served_files_no_effect(self, tmp_path, settings):
+        """When explore_served_files is None (default), read_file
+        behaves normally — no refusal."""
+        from robotsix_mill.agents.fs_tools import build_fs_tools
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n")
+
+        tools = build_fs_tools(tmp_path, settings)
+        read_file = next(t for t in tools if t.__name__ == "read_file")
+
+        result = read_file(path="src/app.py")
+        assert "x = 1" in result
+        assert "already in context" not in result
+
+    def test_parallel_explore_populates_served_files(self, tmp_path, monkeypatch):
+        """After parallel_explore returns, paths from the combined
+        result appear in ``explore_served_files``."""
+        s = _settings(tmp_path, OPENROUTER_API_KEY="test-key")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("print('hi')\n")
+        (tmp_path / "src" / "utils.py").write_text("def helper(): pass\n")
+
+        async def fake_run_explore(*, settings, repo_dir, question, **kw):
+            # Simulate a batched response mentioning both files
+            return "src/app.py has the main entry. src/utils.py has helpers."
+
+        monkeypatch.setattr(explore, "run_explore", fake_run_explore)
+
+        served: set[str] = set()
+        tool = explore.make_parallel_explore_tool(
+            s, tmp_path, explore_served_files=served
+        )
+        asyncio.run(tool(["find the app", "find the utils"]))
+
+        expected_app = str((tmp_path / "src" / "app.py").resolve())
+        expected_utils = str((tmp_path / "src" / "utils.py").resolve())
+        assert expected_app in served
+        assert expected_utils in served

@@ -402,6 +402,7 @@ def build_fs_tools(
     sandbox_image: str | None = None,
     read_file_max_calls: int | None = None,
     write_blocked_prefixes: list[str] | None = None,
+    explore_served_files: set[str] | None = None,
 ) -> list[Any]:
     """Build the filesystem + shell tool closures sandboxed to *root*.
 
@@ -439,6 +440,16 @@ def build_fs_tools(
             writes allowed). Used by the document agent to block writes
             under ``www/``, ``src/``, and ``tests/`` so that a document
             pass cannot overwrite source-code changes from implement.
+        explore_served_files: Optional set of resolved file path strings
+            that the explore sub-agent has already loaded into the
+            coordinator's context. When a ``read_file`` call targets a
+            path present in this set (and the request covers the
+            explored range), the tool returns a short "already in
+            context" marker instead of re-reading the file from disk.
+            Entries are invalidated on ``write_file`` / ``edit_file`` /
+            ``delete_file`` so stale markers don't mask mutations.
+            Shared across the coordinator and all explore sub-agents
+            within one ``run_coordinator`` invocation.
 
     Returns:
         A list of the seven tool closures, in the order ``read_file``,
@@ -871,6 +882,27 @@ def build_fs_tools(
         _offset = max(offset, 1)
         is_full_read = _offset == 1 and limit is None
 
+        # --- explore-served dedup: refuse re-reads of files the explore
+        # sub-agent has already loaded into the coordinator's context.  ---
+        # When the coordinator calls explore, the sub-agent reads files
+        # via its own isolated build_fs_tools instance; those reads are
+        # invisible to the coordinator's own _served_reads / _find_covering_read.
+        # This check closes that gap: paths in explore_served_files were
+        # loaded by explore and their content is already in the prompt
+        # prefix. Re-reading them wastes tokens and grows the uncached
+        # suffix.  Entries are invalidated by write_file/edit_file/delete_file
+        # so stale markers don't mask mutations.
+        if (
+            explore_served_files is not None
+            and str(p.resolve()) in explore_served_files
+            and (is_full_read or (_offset == 1 and limit == _DEFAULT_READ_LIMIT))
+        ):
+            return (
+                f"already in context above — {path} was read by the "
+                f"explore sub-agent. Scroll back to find it; synthesise "
+                f"from context instead of re-reading."
+            )
+
         # Refuse partial slices when the file's content (or the
         # requested range) is already present earlier in the
         # conversation — either as a full-file read (including
@@ -1058,6 +1090,8 @@ def build_fs_tools(
             return f"error: {e}"
         _file_cache.pop(p.resolve(), None)
         _served_reads.pop(str(p.resolve()), None)
+        if explore_served_files is not None:
+            explore_served_files.discard(str(p.resolve()))
         return f"wrote {len(content)} bytes to {path}"
 
     def edit_file(path: str, old_string: str, new_string: str, count: int = 1) -> str:
@@ -1099,6 +1133,8 @@ def build_fs_tools(
                 p.write_text(new_content, encoding="utf-8")
                 _file_cache.pop(p.resolve(), None)
                 _served_reads.pop(str(p.resolve()), None)
+                if explore_served_files is not None:
+                    explore_served_files.discard(str(p.resolve()))
                 return f"edit_file: replaced {count} occurrence(s) in {path}"
         except (ValueError, OSError) as e:
             return f"error: {e}"
@@ -1116,6 +1152,8 @@ def build_fs_tools(
             return f"error: {e}"
         _file_cache.pop(p.resolve(), None)
         _served_reads.pop(str(p.resolve()), None)
+        if explore_served_files is not None:
+            explore_served_files.discard(str(p.resolve()))
         return f"deleted {path}"
 
     def list_dir(path: str = ".") -> str:

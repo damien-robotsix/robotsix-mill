@@ -359,6 +359,45 @@ async def _run_single_explore_attempt(
     return output
 
 
+def _extract_explored_paths(result: str, repo_dir: Path) -> set[str]:
+    """Extract repo-relative file paths mentioned in an explore response.
+
+    Returns a set of resolved ``Path`` strings (via ``str(p.resolve())``)
+    suitable for insertion into the coordinator's ``explore_served_files``
+    set.  Only paths that exist as regular files under *repo_dir* are
+    returned — false-positive matches on strings that happen to look like
+    paths are silently filtered out.
+
+    The heuristic is deliberately broad: any ``path/to/file.ext`` token
+    that resolves to an existing file is captured.  This trades a small
+    amount of over-registration (a file mentioned but not actually loaded
+    by the scout) for comprehensive coverage of the real dedup wins.
+    """
+    if not result:
+        return set()
+
+    # Match path-like tokens: at least one directory separator and a file
+    # extension (2-5 chars).  This avoids matching common English words
+    # like "test.py" in prose, while catching real source paths.
+    _PATH_RE = re.compile(
+        r"(?:^|\s|`|\")"  # start / whitespace / backtick / quote
+        r"((?:[A-Za-z0-9_\-]+/)+[A-Za-z0-9_\-]+\.[a-z]{1,6})"  # path.ext
+        r"(?:\"|`|[\s,;)\].]|$)",  # closing quote / whitespace / punct / period / end
+        re.MULTILINE,
+    )
+    paths: set[str] = set()
+    for m in _PATH_RE.finditer(result):
+        raw = m.group(1).strip('`"')
+        candidate = repo_dir / raw
+        try:
+            resolved = candidate.resolve()
+            if resolved.is_file() and str(resolved).startswith(str(repo_dir.resolve())):
+                paths.add(str(resolved))
+        except ValueError, OSError:
+            continue
+    return paths
+
+
 async def run_explore(
     *,
     settings: Settings,
@@ -511,6 +550,7 @@ def make_explore_tool(
     repo_dir: Path,
     extra_roots: list[Path] | None = None,
     pre_seeded_paths: list[str] | None = None,
+    explore_served_files: set[str] | None = None,
 ):
     """Return the ``explore(question)`` closure.
 
@@ -522,6 +562,11 @@ def make_explore_tool(
     already loaded into its own context; the factory forwards them to
     :func:`run_explore` so the scout is told NOT to re-read them. It is
     injected by the factory, not a parameter the LLM supplies.
+
+    ``explore_served_files`` is a shared mutable set of resolved file path
+    strings.  After each explore call, paths mentioned in the scout's
+    response are added to this set so the coordinator's ``read_file``
+    can refuse redundant re-reads of the same content.
     """
 
     async def explore(question: str, known_context: str | None = None) -> str:
@@ -551,13 +596,18 @@ def make_explore_tool(
         )
         if pre_seeded_paths is not None:
             extra["pre_seeded_paths"] = pre_seeded_paths
-        return await run_explore(
+        result = await run_explore(
             settings=settings,
             repo_dir=repo_dir,
             question=question,
             extra_roots=extra_roots,
             **extra,
         )
+        # Track file paths the scout loaded so the coordinator's
+        # read_file can refuse redundant re-reads.
+        if explore_served_files is not None:
+            explore_served_files.update(_extract_explored_paths(result, repo_dir))
+        return result
 
     from .tool_registry import ToolInfo, ToolRegistry
 
@@ -714,7 +764,10 @@ def _try_grep_prefilter(question: str, repo_dir: Path) -> str | None:
 
 
 def make_parallel_explore_tool(
-    settings: Settings, repo_dir: Path, extra_roots: list[Path] | None = None
+    settings: Settings,
+    repo_dir: Path,
+    extra_roots: list[Path] | None = None,
+    explore_served_files: set[str] | None = None,
 ):
     """Return a ``parallel_explore(questions)`` closure that batches
     questions into a single scout call.
@@ -826,7 +879,12 @@ def make_parallel_explore_tool(
                 )
                 parts.append(f"{prefix}\n\n{result}")
 
-        return "\n\n".join(parts)
+        combined = "\n\n".join(parts)
+        # Track file paths the scout loaded so the coordinator's
+        # read_file can refuse redundant re-reads.
+        if explore_served_files is not None:
+            explore_served_files.update(_extract_explored_paths(combined, repo_dir))
+        return combined
 
     from .tool_registry import ToolInfo, ToolRegistry
 
