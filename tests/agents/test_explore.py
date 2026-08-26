@@ -424,7 +424,11 @@ def test_explore_subagent_is_read_only_and_uses_flash_model(tmp_path, monkeypatc
     )
     assert out == "answer"
     # level-1 (flash) DeepSeek model — resolved from llmio's tier defaults.
-    assert cap["model"] == "deepseek/deepseek-v4-flash-latest"
+    from robotsix_llmio.core.factory import default_tier_config
+    from robotsix_llmio.core.identifier import parse_model_identifier
+
+    expected = parse_model_identifier(default_tier_config().for_level(1).model).model_name
+    assert cap["model"] == expected
     assert cap["tools"] == [
         "list_dir",
         "parallel_commands",
