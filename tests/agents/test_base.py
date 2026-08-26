@@ -125,7 +125,7 @@ def test_default_tier_config_maps_levels():
 
     parsed1 = parse_model_identifier(default_tier_config().for_level(1).model)
     assert parsed1.provider == "openrouter"
-    assert parsed1.model_name == "deepseek/deepseek-v4-flash-20260731"
+    assert parsed1.model_name == "deepseek/deepseek-v4-flash-latest"
 
     parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
     assert parsed2.provider == "openrouter"
@@ -264,7 +264,7 @@ def test_build_agent_deepseek_default_path(monkeypatch, settings):
     assert len(captured_kwargs) == 1
     kw = captured_kwargs[0]
     # level 1 resolves to the flash model via llmio's tier defaults.
-    assert kw["effective_model"] == "deepseek/deepseek-v4-flash-20260731"
+    assert kw["effective_model"] == "deepseek/deepseek-v4-flash-latest"
     assert kw["level"] == 1
     assert _cfg._secrets.openrouter_api_key == "sk-test"
 
@@ -298,7 +298,7 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
     )
 
     assert (
-        captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash-20260731"
+        captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash-latest"
     )
 
 
@@ -1022,4 +1022,27 @@ def test_build_openrouter_model_resolves_level_to_model(monkeypatch, settings):
     assert model is fake_model
     assert client is fake_client
     # Level 1 resolves to the flash model via llmio's tier defaults.
-    assert captured == {"model_name": "deepseek/deepseek-v4-flash-20260731", "level": 1}
+    assert captured == {"model_name": "deepseek/deepseek-v4-flash-latest", "level": 1}
+
+
+def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
+    """When online=True, the resolved model carries the ``:online`` suffix
+    that bills the OpenRouter web-search surcharge."""
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.config import Secrets, _reset_secrets
+
+    _reset_secrets()
+    import robotsix_mill.config as _cfg
+
+    _cfg._secrets = Secrets(openrouter_api_key="sk-test")
+
+    captured: dict = {}
+
+    def fake_new_deepseek(model_name, level):
+        captured["model_name"] = model_name
+        return MagicMock(), MagicMock()
+
+    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
+
+    bmod.build_openrouter_model(1, online=True)
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash-latest:online"
