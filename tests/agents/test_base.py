@@ -125,9 +125,7 @@ def test_default_tier_config_maps_levels():
 
     parsed1 = parse_model_identifier(default_tier_config().for_level(1).model)
     assert parsed1.provider == "openrouter"
-    assert parsed1.model_name == parse_model_identifier(
-        default_tier_config().for_level(1).model
-    ).model_name
+    assert parsed1.model_name == "deepseek/deepseek-v4-flash-20260731"
 
     parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
     assert parsed2.provider == "openrouter"
