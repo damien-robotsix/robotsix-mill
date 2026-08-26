@@ -125,7 +125,7 @@ def test_default_tier_config_maps_levels():
 
     parsed1 = parse_model_identifier(default_tier_config().for_level(1).model)
     assert parsed1.provider == "openrouter"
-    assert parsed1.model_name == "deepseek/deepseek-v4-flash"
+    assert parsed1.model_name == "deepseek/deepseek-v4-flash-latest"
 
     parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
     assert parsed2.provider == "openrouter"
@@ -264,7 +264,7 @@ def test_build_agent_deepseek_default_path(monkeypatch, settings):
     assert len(captured_kwargs) == 1
     kw = captured_kwargs[0]
     # level 1 resolves to the flash model via llmio's tier defaults.
-    assert kw["effective_model"] == "deepseek/deepseek-v4-flash"
+    assert kw["effective_model"] == "deepseek/deepseek-v4-flash-latest"
     assert kw["level"] == 1
     assert _cfg._secrets.openrouter_api_key == "sk-test"
 
@@ -297,7 +297,7 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
         tools=[],
     )
 
-    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash"
+    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash-latest"
 
 
 def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
@@ -1020,7 +1020,7 @@ def test_build_openrouter_model_resolves_level_to_model(monkeypatch, settings):
     assert model is fake_model
     assert client is fake_client
     # Level 1 resolves to the flash model via llmio's tier defaults.
-    assert captured == {"model_name": "deepseek/deepseek-v4-flash", "level": 1}
+    assert captured == {"model_name": "deepseek/deepseek-v4-flash-latest", "level": 1}
 
 
 def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
@@ -1043,4 +1043,4 @@ def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
     monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
 
     bmod.build_openrouter_model(1, online=True)
-    assert captured["model_name"] == "deepseek/deepseek-v4-flash:online"
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash-latest:online"
