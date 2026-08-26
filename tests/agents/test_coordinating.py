@@ -242,11 +242,18 @@ class TestRunCoordinator:
         from robotsix_mill.agents import fs_tools as _fs
 
         def _fake_build_fs_tools(
-            root, settings, *, pre_seeded=None, extra_roots=None, sandbox_image=None
+            root,
+            settings,
+            *,
+            pre_seeded=None,
+            extra_roots=None,
+            sandbox_image=None,
+            explore_served_files=None,
         ):
             self.captured["fs_pre_seeded"] = pre_seeded
             self.captured["fs_extra_roots"] = extra_roots
             self.captured["fs_sandbox_image"] = sandbox_image
+            self.captured["fs_explore_served_files"] = explore_served_files
 
             # Return a single read_file tool so the filtering in
             # run_coordinator doesn't blow up.
@@ -262,10 +269,15 @@ class TestRunCoordinator:
         from robotsix_mill.agents import explore as _expl
 
         def _fake_make_explore_tool(
-            settings, repo_dir, extra_roots=None, pre_seeded_paths=None
+            settings,
+            repo_dir,
+            extra_roots=None,
+            pre_seeded_paths=None,
+            explore_served_files=None,
         ):
             self.captured["explore_extra_roots"] = extra_roots
             self.captured["explore_pre_seeded_paths"] = pre_seeded_paths
+            self.captured["explore_served_files"] = explore_served_files
 
             def _explore(question):
                 return "explored"

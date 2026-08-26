@@ -447,12 +447,22 @@ def run_coordinator(
                     rf["path"],
                 )
 
+    # Shared set tracking files the explore sub-agent has loaded into the
+    # coordinator's context.  When a file appears here, the coordinator's
+    # read_file returns a short "already in context" marker instead of
+    # re-reading the full content — preventing the same file from
+    # inflating the uncached prompt suffix on every subsequent request.
+    # Populated by the explore tool wrapper (post-parse of the scout's
+    # response) and checked / invalidated by the fs_tools closures.
+    _explore_served_files: set[str] = set()
+
     fs = build_fs_tools(
         repo_dir,
         settings,
         pre_seeded=pre_seeded,
         extra_roots=extra_roots,
         sandbox_image=sandbox_image,
+        explore_served_files=_explore_served_files,
     )
     # the main agent reads + writes itself and includes run_command for
     # focused diagnosis (re-run a single failing test, run a linter,
@@ -498,11 +508,13 @@ def run_coordinator(
             repo_dir,
             extra_roots=extra_roots,
             pre_seeded_paths=pre_seeded_paths,
+            explore_served_files=_explore_served_files,
         ),
         make_parallel_explore_tool(
             settings,
             repo_dir,
             extra_roots=extra_roots,
+            explore_served_files=_explore_served_files,
         ),
         make_consult_expert_tool(settings, repo_dir, board_id=board_id),
         make_spawn_subtask_tool(settings, repo_dir),

@@ -99,6 +99,13 @@ system_prompt: |
      workspace `repo/` unless you confirm they are the ones the
      Python interpreter will import.
   1. `explore` to orient; `read_file` the specific files you'll change.
+  1b. **Never re-read files explore already loaded.** When `explore`
+      returns content for a file path, that content is already in your
+      context. If `read_file` returns "already in context above —
+      <path> was read by the explore sub-agent", do NOT retry with
+      `run_command cat` or any other shell command — the content is
+      already there. Only call `read_file` with explicit `offset`/`limit`
+      if you need a specific region the explore result didn't cover.
   1a. **Dependency-pinning ticket — verify the target exists first.**
       If the ticket asks you to pin, bump, or change an external
       dependency (npm, pip, Docker, etc.), the very first thing you
