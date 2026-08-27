@@ -59,12 +59,22 @@ class _MergeSettings(BaseModel):
     # agent's verify loop (it would never be allowed to wait).
     # Sized against observed runs, not guesswork: sampled successful ci_fix
     # stages completed in 300-900 s, all of them on a SINGLE verify iteration.
-    # 3 leaves two retries for the "fix reveals the next failure" case while
-    # keeping the derived stage ceiling (see Settings.stage_timeout_for) inside
-    # what a 3-slot worker pool can afford to hold.
+    # The retries are for the "fix reveals the next failure" cascade, which is
+    # routine in Flutter/Dart (SDK mismatch -> dependency fix -> analyze fix ->
+    # test fix, each surfacing the next), so 3 was not enough to finish one.
+    #
+    # Cost of the 4th and 5th, stated plainly because it is not free: this
+    # multiplies into the derived stage ceiling (Settings.stage_timeout_for).
+    # On the shipped defaults (900 s per wait + a 600 s coordinator budget) the
+    # agent budget goes 3300 -> 5100 s and the ci_fix stage ceiling 3600 ->
+    # 5400 s, so a worker slot can be held for 90 min instead of 60. Only a
+    # ticket genuinely looping on CI ever spends it, but on a 3-slot pool that
+    # is a third of the pool for an hour and a half -- revisit here first if
+    # ci_fix starts starving other stages. (A deployment that pins a larger
+    # coordinator_timeout_seconds scales both numbers up accordingly.)
     ci_fix_max_iterations: int = Field(
         description="Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-        default=3,
+        default=5,
         ge=0,
         json_schema_extra={"advanced": True},
     )
