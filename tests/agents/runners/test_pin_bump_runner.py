@@ -402,6 +402,39 @@ class TestActuator:
         assert 'rev = "new_b"' in result
         assert 'rev = "sha_b"' not in result
 
+    @pytest.mark.parametrize(
+        "new_rev",
+        [
+            # Crash path: "\\1" + "9a…" parsed as backreference 19.
+            "9a3f2293faf7b2ea6f6cde02f24ae813a0875e07",
+            "1a1f2293faf7b2ea6f6cde02f24ae813a0875e07",
+            # Silent-corruption path: "\\1" + "21…" parsed as octal "\\121".
+            "211f2293faf7b2ea6f6cde02f24ae813a0875e07",
+            "02005ecc9e86aa9c6645252eea72a24083e8b445",
+            # Control: a SHA starting with a hex letter always worked.
+            "e5509fd1e675516f4fd00a603d7921cdfa2b779b",
+        ],
+    )
+    def test_update_pin_rev_numeric_leading_sha(self, new_rev):
+        """A SHA whose leading characters are digits is substituted verbatim.
+
+        Regression: the replacement used to be the template ``rf"\\1{new_rev}\\2"``,
+        so ``re`` re-read the SHA's own digits as part of the group reference —
+        raising "invalid group reference N" for 96 of the 256 two-hex-char
+        prefixes and silently emitting an octal escape (dropping the group-1
+        prefix) for another 64. Only the 6 hex-letter leads worked, which is
+        why every pre-existing test here passed.
+        """
+        from robotsix_mill.agents.runners.pin_bump_runner import _update_pin_rev
+
+        content = _pyproject({"b": _internal_pin("b", "old_sha")})
+        result = _update_pin_rev(content, "b", new_rev)
+        assert f'rev = "{new_rev}"' in result
+        assert 'rev = "old_sha"' not in result
+        # The group-1 prefix must survive intact — the octal-escape path used
+        # to swallow it along with two characters of the SHA.
+        assert content.replace('rev = "old_sha"', f'rev = "{new_rev}"') == result
+
     def test_update_pin_rev_missing_raises(self):
         """_update_pin_rev raises ValueError when the dep is not found."""
         from robotsix_mill.agents.runners.pin_bump_runner import _update_pin_rev

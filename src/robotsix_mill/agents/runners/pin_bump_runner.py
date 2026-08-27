@@ -169,7 +169,15 @@ def _update_pin_rev(pyproject_text: str, dep_name: str, new_rev: str) -> str:
     )
     if not pattern.search(pyproject_text):
         raise ValueError(f"Could not find rev for {dep_name} in [tool.uv.sources]")
-    return pattern.sub(rf"\1{new_rev}\2", pyproject_text)
+    # Substitute via a function, NOT a template string. A template interpolating
+    # *new_rev* after ``\1`` re-parses the digits of the SHA as part of the
+    # backreference: ``\1`` + ``9a3f…`` becomes ``\19`` (group 19 — "invalid
+    # group reference"), and ``\1`` + ``21f2…`` becomes the octal escape
+    # ``\121`` ("Q"), silently swallowing the group-1 prefix and two SHA
+    # characters. 160 of the 256 possible two-hex-char SHA prefixes are
+    # affected — 62.5% of real bumps. A function replacement is not parsed at
+    # all, so no SHA can be mistaken for a reference.
+    return pattern.sub(lambda m: f"{m.group(1)}{new_rev}{m.group(2)}", pyproject_text)
 
 
 def _compute_actuator_graph(
