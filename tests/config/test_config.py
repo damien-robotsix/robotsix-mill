@@ -477,7 +477,7 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- delete_branch_on_merge ---
     ("delete_branch_on_merge", "MILL_DELETE_BRANCH_ON_MERGE", "0", False),
     # --- ci_fix_max_iterations ---
-    ("ci_fix_max_iterations", "MILL_CI_FIX_MAX_ITERATIONS", "3", 3),
+    ("ci_fix_max_iterations", "MILL_CI_FIX_MAX_ITERATIONS", "5", 5),
     # --- ci_fix_request_limit via YAML alias ---
     ("ci_fix_request_limit", "MILL_CI_FIX_REQUEST_LIMIT", "80", 80),
     # --- network probe ---

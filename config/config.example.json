@@ -64,7 +64,7 @@
         "ci_fix_max_attempts": 2,
         "ci_fix_max_cycles": 3,
         "ci_fix_max_identical_failures": 2,
-        "ci_fix_max_iterations": 3,
+        "ci_fix_max_iterations": 5,
         "ci_fix_memory_path": null,
         "ci_fix_request_limit": 120,
         "ci_fix_wait_poll_interval_s": 30.0,
