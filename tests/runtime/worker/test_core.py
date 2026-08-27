@@ -4024,3 +4024,61 @@ async def test_retrospect_stage_timeout_closes_instead_of_blocking(
     note = service.history(t.id)[-1].note
     assert "timed out" in note
     assert "retrospect" in note
+
+
+# -- duplicate (ticket, stage) dispatch guard (ticket …-8ec0) -----------
+
+
+def test_try_claim_rejects_a_second_run_of_the_same_ticket_stage(ctx):
+    """The same ticket+stage can only be claimed once at a time.
+
+    `_pending` guards the queue against duplicate *enqueues*; before this
+    guard nothing stopped two consumers *dispatching* the same ticket+stage.
+    Observed on prod 2026-08-25: one ticket had three distinct implement
+    runs in a 3h window, two live simultaneously, racing on the same
+    `mill/<ticket>` branch and holding a sandbox slot each.
+    """
+    w = Worker(ctx)
+
+    first = w._try_claim("t-1", State.READY)
+    assert first == ("t-1", State.READY.value)
+    assert w._try_claim("t-1", State.READY) is None
+
+
+def test_try_claim_allows_a_different_stage_of_the_same_ticket(ctx):
+    """Only the identical (ticket, stage) pair is blocked.
+
+    A ticket that has genuinely moved on is a different unit of work and
+    must not be held back by the claim its previous stage took.
+    """
+    w = Worker(ctx)
+
+    assert w._try_claim("t-1", State.READY) is not None
+    assert w._try_claim("t-1", State.FIXING_CI) is not None
+
+
+def test_try_claim_is_reusable_after_release(ctx):
+    """Releasing a claim frees the pair again.
+
+    The release lives in the consumer's `finally`, so this is the property
+    that keeps a leaked claim from silently blocking every future run of a
+    ticket+stage.
+    """
+    w = Worker(ctx)
+
+    claim = w._try_claim("t-1", State.DRAFT)
+    assert claim is not None
+    w._in_flight.discard(claim)
+    assert w._try_claim("t-1", State.DRAFT) == claim
+
+
+def test_try_claim_handles_a_ticket_with_no_state(ctx):
+    """A ticket the service could not read still claims, under an empty key.
+
+    The consumer reads state before dispatch; when that read comes back
+    None the run still needs a claim, otherwise two of them could proceed.
+    """
+    w = Worker(ctx)
+
+    assert w._try_claim("t-1", None) == ("t-1", "")
+    assert w._try_claim("t-1", None) is None

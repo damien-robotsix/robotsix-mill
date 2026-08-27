@@ -82,9 +82,14 @@ def list_active(
     ``?repo_id=X`` filters to active tickets belonging to that repo.
     When omitted, returns all (current behaviour preserved).
     """
+    # worker._active is keyed by (ticket_id, stage) so concurrent runs of the
+    # same ticket each get their own row.  Before that, two runs shared one
+    # key: /active reported a single run and understated real concurrency,
+    # which is how three simultaneous implement runs on one ticket stayed
+    # invisible to the API and the UI on 2026-08-25.
     active = [
         {"ticket_id": tid, "stage": info["stage"], "started_at": info["started_at"]}
-        for tid, info in worker._active.items()
+        for (tid, _stage), info in worker._active.items()
     ]
     if repo_id is not None:
         repos = request.app.state.repos

@@ -347,8 +347,8 @@ def test_active_with_items(client):
 
     class FakeWorker:
         _active = {
-            "ticket-1": {"stage": "implement", "started_at": now},
-            "ticket-2": {"stage": "refine", "started_at": now},
+            ("ticket-1", "implement"): {"stage": "implement", "started_at": now},
+            ("ticket-2", "refine"): {"stage": "refine", "started_at": now},
         }
 
     from robotsix_mill.runtime.deps import get_worker as _get_worker
@@ -385,8 +385,8 @@ def test_active_repo_id_meta_filters_by_board(client):
 
     class FakeWorker:
         _active = {
-            "ticket-meta": {"stage": "implement", "started_at": "t0"},
-            "ticket-other": {"stage": "refine", "started_at": "t0"},
+            ("ticket-meta", "implement"): {"stage": "implement", "started_at": "t0"},
+            ("ticket-other", "refine"): {"stage": "refine", "started_at": "t0"},
         }
         ctx = SimpleNamespace(service=SimpleNamespace(get=tickets.get))
 
@@ -400,6 +400,36 @@ def test_active_repo_id_meta_filters_by_board(client):
         data = r.json()
         ids = {e["ticket_id"] for e in data}
         assert ids == {"ticket-meta"}
+    finally:
+        client.app.dependency_overrides.clear()
+
+
+def test_active_reports_every_concurrent_run_of_one_ticket(client):
+    """Two live runs of the same ticket produce two rows, not one.
+
+    Regression guard for ticket …-8ec0: ``_active`` was keyed by ticket_id
+    alone, so a duplicate dispatch overwrote the first run's entry and
+    /active reported a single run — which is why three simultaneous
+    implement runs on one ticket stayed invisible to the API and the UI.
+    """
+
+    class FakeWorker:
+        _active = {
+            ("ticket-1", "implement"): {"stage": "implement", "started_at": "t0"},
+            ("ticket-1", "fixing_ci"): {"stage": "fixing_ci", "started_at": "t1"},
+        }
+
+    from robotsix_mill.runtime.deps import get_worker as _get_worker
+
+    client.app.dependency_overrides[_get_worker] = lambda: FakeWorker()
+
+    try:
+        r = client.get("/active")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2, data
+        assert {e["ticket_id"] for e in data} == {"ticket-1"}
+        assert {e["stage"] for e in data} == {"implement", "fixing_ci"}
     finally:
         client.app.dependency_overrides.clear()
 

@@ -91,7 +91,9 @@ class _StageDeadlineExceeded(Exception):
 
 
 async def process_ticket(
-    ticket_id: str, ctx: StageContext, active_map: dict[str, Any] | None = None
+    ticket_id: str,
+    ctx: StageContext,
+    active_map: dict[tuple[str, str], Any] | None = None,
 ) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain.
@@ -462,7 +464,9 @@ def _root_output_summary(outcome: Outcome | None, ticket: Ticket) -> dict[str, A
 
 
 async def _process_ticket_inner(
-    ticket_id: str, ctx: StageContext, active_map: dict[str, Any] | None = None
+    ticket_id: str,
+    ctx: StageContext,
+    active_map: dict[tuple[str, str], Any] | None = None,
 ) -> None:
     dispatch_counts: Counter[str] = Counter()
     while True:
@@ -643,8 +647,13 @@ async def _process_ticket_inner(
             # span is still active when attributes are stamped ---
             try:
                 # stage.run is sync (LLM/tool) — keep the loop responsive
+                # Keyed by (ticket_id, stage_name), not ticket_id: two runs
+                # of the same ticket+stage used to share one key, so the
+                # second overwrote the first and whichever finished first
+                # popped it — /active then reported ONE run and, worse, the
+                # surviving run vanished from /active while still executing.
                 if active_map is not None:
-                    active_map[ticket_id] = {
+                    active_map[ticket_id, stage_name] = {
                         "stage": stage_name,
                         "started_at": datetime.now(UTC).isoformat(),
                     }
@@ -697,7 +706,7 @@ async def _process_ticket_inner(
                     if _heartbeat_task is not None:
                         _heartbeat_task.cancel()
                     if active_map is not None:
-                        active_map.pop(ticket_id, None)
+                        active_map.pop((ticket_id, stage_name), None)
                 # Attach the outcome to the root span — visible at the
                 # top of the trace in Langfuse alongside the input.
                 if root_io is not None:
