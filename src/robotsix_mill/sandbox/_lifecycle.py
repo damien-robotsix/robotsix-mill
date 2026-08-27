@@ -75,6 +75,15 @@ def run(
         "docker",
         "run",
         "--rm",
+        # Sandboxes must not inherit the image's HEALTHCHECK. sandbox_image is
+        # routinely the mill image itself (that is what the deployed mill pins),
+        # and mill's HEALTHCHECK curls its own API on localhost:8077 every 30s.
+        # No mill server runs inside a sandbox, so it is ConnectionRefused
+        # forever: Docker spawns a fresh CPython in every sandbox every 30s
+        # purely to fail, and `docker ps` shows every sandbox as (unhealthy) —
+        # actively misleading during triage, since the sandboxes are fine.
+        # Observed 2026-08-25: five live sandboxes, FailingStreak up to 49.
+        "--no-healthcheck",
         "--name",
         name,
         "--network",

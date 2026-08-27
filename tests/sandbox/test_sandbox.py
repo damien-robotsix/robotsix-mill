@@ -57,7 +57,7 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     a = seen["argv"]
     assert rc == 0
     assert out == "ok"
-    assert a[:3] == ["docker", "run", "--rm"]
+    assert a[:4] == ["docker", "run", "--rm", "--no-healthcheck"]
     assert "--network" in a
     assert a[a.index("--network") + 1] == "none"
     assert "--read-only" in a
@@ -67,6 +67,43 @@ def test_argv_is_isolated(tmp_path, monkeypatch):
     assert a[a.index("-w") + 1] == "/data/work/repo"
     assert a[a.index("--entrypoint") + 1] == "sh"  # image ENTRYPOINT bypassed
     assert a[-3:] == ["python:3.14-slim", "-lc", PATH_EXPORT + "pytest -q"]
+
+
+def test_sandbox_disables_inherited_healthcheck(tmp_path, monkeypatch):
+    """A sandbox must never inherit the image's HEALTHCHECK.
+
+    ``sandbox_image`` is routinely the mill image itself — that is what the
+    deployed mill pins — and mill's Dockerfile declares
+    ``HEALTHCHECK --interval=30s`` probing its own API on localhost:8077.
+    Nothing serves that inside a sandbox, so the probe fails forever: Docker
+    spawns a fresh CPython in every sandbox every 30s just to fail, and every
+    sandbox reads ``(unhealthy)`` in ``docker ps``, which misleads triage.
+    """
+    s = _settings(
+        tmp_path,
+        data_dir="/data",
+        data_volume="mill_data",
+        sandbox_image="ghcr.io/damien-robotsix/robotsix-mill:main",
+        sandbox_proxy_url="",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: [
+            "--mount",
+            "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo",
+        ],
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
+
+    assert "--no-healthcheck" in seen["argv"]
 
 
 def test_sandbox_image_override(tmp_path, monkeypatch):
