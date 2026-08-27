@@ -22,8 +22,8 @@ class _CoreSettings(BaseModel):
     # --- Capability levels (llmio tier defaults) -------------------------
     # Per-agent model selection lives entirely in the agent definitions'
     # ``level: 1|2|3|4`` field (resolved to a (transport, model) by
-    # ``build_agent`` via llmio's baked tier defaults — L1 DeepSeek flash,
-    # L2 DeepSeek pro, L3 Claude Opus, L4 Claude fable-5). There is no
+    # ``build_agent`` via llmio's baked tier defaults (see llmio tier config
+    # for current mapping). There is no
     # global backend toggle.
     #
     # Process-wide cap on how many Claude Agent SDK runs may execute at once.
@@ -149,8 +149,9 @@ class _CoreSettings(BaseModel):
     # tier-1 flash model; override to route this agent to a different
     # model without changing the global tier defaults.
     web_knowledge_model: str = Field(
-        default="deepseek/deepseek-v4-flash-20260731",
-        description="Model alias for the web-knowledge gateway sub-agent.",
+        default="",
+        description="Model alias for the web-knowledge gateway sub-agent. "
+        "When empty, resolves to the llmio tier-1 model at use time.",
         json_schema_extra={"advanced": True},
     )
     # Per-pass request budget for the implement (coordinator) agent.
@@ -244,7 +245,7 @@ class _CoreSettings(BaseModel):
     # so a worker can't be stalled long.
     # Hard per-request timeout on EVERY model call — catches a truly
     # hung connection, but must sit ABOVE the model's tail latency or
-    # it aborts legitimate long generations. deepseek-v4-pro routinely
+    # it aborts legitimate long generations. Some models routinely
     # runs 60-130s and was observed up to ~190s per generation; complex
     # tickets push higher. 900s comfortably clears that while still
     # bounding a real hang. On timeout the call raises -> transient ->

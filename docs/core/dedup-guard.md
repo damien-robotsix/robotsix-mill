@@ -15,7 +15,7 @@ failure. It inspects recent commits on the forge target branch
 
 | Variable | Default | Description |
 |---|---|---|
-| `MILL_DEDUP_MODEL` | `deepseek/deepseek-v4-pro` | Model for the dedup check |
+| `MILL_DEDUP_MODEL` | *(level 2)* | Model for the dedup check |
 | `MILL_DEDUP_REQUEST_LIMIT` | `4` | Per-call request cap (kept tight) |
 | `MILL_DEDUP_LOOKBACK_DAYS` | `30` | Days back to consider closed tickets as dup candidates |
 | `MILL_DEDUP_LOOKBACK_COMMITS` | `20` | Recent commits to inspect for "already done" |

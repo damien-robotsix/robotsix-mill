@@ -298,7 +298,7 @@ def run_periodic_agent(
         The fallback agent gets the same prompt, tools, and system
         prompt as the primary but uses the model configured for the
         given level.  Guards against persistent provider-side outages
-        (e.g. DeepSeek 503 on OpenRouter) by falling back to a
+        (e.g. provider 503 on OpenRouter) by falling back to a
         different provider.  Defaults to ``None`` (no fallback).
 
     Returns:

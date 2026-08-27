@@ -263,8 +263,8 @@ class _StagesSettings(BaseModel):
         default=20,
         json_schema_extra={"advanced": True},
     )
-    # Model tier for the trace inspector.  Level 1 = DeepSeek flash
-    # (cheapest), the default; raising it costs more and is opt-in only.
+    # Model tier for the trace inspector.  Level 1 (cheapest flash), the default;
+    # raising it costs more and is opt-in only.
     trace_review_model_level: int = Field(
         description="Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
         default=1,
@@ -281,7 +281,7 @@ class _StagesSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
     # Model level used for trivial-scope refines.  Default 2 =
-    # pay-per-token DeepSeek Pro (OpenRouter, ~$0.001+/run) — cheap
+    # pay-per-token level-2 model (OpenRouter, ~$0.001+/run) — cheap
     # enough for straightforward gap-fill tickets while still capable.
     # Set to 3 for flat-cost Claude subscription (sonnet, marginal $0)
     # or 1 for the cheapest flash model.
@@ -295,7 +295,7 @@ class _StagesSettings(BaseModel):
     # Claude model alias used when a trivial/forced-cheap refine routes to
     # the level-3 subscription.  ``sonnet`` is the cheapest alias already
     # trusted by the ``"simple"`` path.  Only the Claude-SDK branch (level 3)
-    # consumes this; DeepSeek levels 1/2 ignore it.
+    # consumes this; OpenRouter levels 1/2 ignore it.
     refine_trivial_subscription_model: str = Field(
         description="Claude model alias for trivial/forced-cheap refines on the subscription tier.",
         default="sonnet",
@@ -311,14 +311,14 @@ class _StagesSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
     # Claude model alias for non-escalated level-3 refines (complexity="simple").
-    # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    # Only the Claude-SDK branch (level 3) consumes this; OpenRouter levels 1/2 ignore it.
     refine_subscription_model_default: str = Field(
         description="Claude model alias for non-escalated level-3 refines (complexity=simple).",
         default="sonnet",
         json_schema_extra={"advanced": True},
     )
     # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
-    # Only the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    # Only the Claude-SDK branch (level 3) consumes this; OpenRouter levels 1/2 ignore it.
     refine_subscription_model_complex: str = Field(
         description="Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
         default="opus",
@@ -346,7 +346,7 @@ class _StagesSettings(BaseModel):
     )
     # Claude model alias used when the findings-present downgrade fires.
     # Defaults to sonnet (same tier the "simple" path already trusts). Only
-    # the Claude-SDK branch (level 3) consumes this; DeepSeek levels 1/2 ignore it.
+    # the Claude-SDK branch (level 3) consumes this; OpenRouter levels 1/2 ignore it.
     refine_subscription_model_findings: str = Field(
         description="Claude model alias used when the findings-present downgrade fires.",
         default="sonnet",

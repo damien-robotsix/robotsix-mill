@@ -92,7 +92,7 @@ def _export_openrouter_key_to_env() -> None:
     The mill stores the key in the config.yaml ``secrets:`` block and passes it *explicitly*
     to its own provider, so it is never exported to the process env. But
     in-process llmio consumers that go through ``build_agent_for_level``
-    construct ``OpenRouterDeepseekProvider()`` with no key, so the provider
+    construct the OpenRouter provider with no key, so the provider
     falls back to reading ``OPENROUTER_API_KEY`` from the environment. Without
     this export those consumers (e.g. the board-manager's recall agent) fail
     with "OpenRouter API key missing".

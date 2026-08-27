@@ -292,7 +292,7 @@ def triage_reviewer_agreement(
     Checks whether the reviewer's feedback on a sendback ticket already
     agrees with the draft's no-change-needed conclusion.  When AGREE,
     the pipeline short-circuits to DONE — skipping the expensive Opus
-    refine agent (~$0.28 vs ~$0.0003 for this DeepSeek flash call).
+    refine agent (~$0.28 vs ~$0.0003 for this level-1 model call).
 
     NO tools, NO web, NO explore — just a tiny prompt and a
     structured classification.

@@ -359,7 +359,7 @@
         "web_fetch_raw": false,
         "web_fetch_timeout": 30,
         "web_knowledge_cache_ttl_hours": 72,
-        "web_knowledge_model": "deepseek/deepseek-v4-flash-20260731",
+        "web_knowledge_model": "",
         "web_knowledge_request_limit": 16,
         "web_knowledge_stale_days": 30,
         "web_research_fetch_max_calls": 4,

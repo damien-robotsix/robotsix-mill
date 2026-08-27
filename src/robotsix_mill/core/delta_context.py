@@ -67,7 +67,7 @@ def compact_message_history(
     ``ToolCallPart``s and the immediately following ``ModelRequest``
     carrying their ``ToolReturnPart``s are always removed together, so no
     tool return is ever orphaned from its tool call (a 400 failure mode on
-    the DeepSeek capable tier).  Conversations with no tool exchanges are
+    the OpenRouter capable tier).  Conversations with no tool exchanges are
     returned unchanged, and the kept suffix always begins at the start of
     an assistant tool-call message so its returns follow intact.
     """

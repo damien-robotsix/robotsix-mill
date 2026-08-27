@@ -162,7 +162,7 @@ Each trace in ``/traces/recent`` carries:
 
 | Field | Type | Description |
 |---|---|---|
-| ``model`` | string | Trace-level model (e.g. ``"openai/gpt-4o"``), or first GENERATION model |
+| ``model`` | string | Trace-level model (e.g. ``"provider/model-name"``), or first GENERATION model |
 | ``input_tokens`` | int | Total prompt/input tokens across all GENERATION observations |
 | ``output_tokens`` | int | Total completion/output tokens across all GENERATION observations |
 | ``total_tokens`` | int | ``input_tokens + output_tokens`` |

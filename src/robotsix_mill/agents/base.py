@@ -84,14 +84,14 @@ def level_uses_claude(level: int) -> bool:
     return tlc.model.startswith(_CLAUDE_SDK_PROVIDER)
 
 
-def new_deepseek_model(model_name: str, level: int):
-    """Build a DeepSeek-on-OpenRouter ``(model, http_client)`` via llmio.
+def new_openrouter_model(model_name: str, level: int):
+    """Build an OpenRouter ``(model, http_client)`` via llmio.
 
     llmio's ``get_provider_for_level`` resolves the provider from the baked tier
-    defaults (L1/L2 → OpenRouterDeepseekProvider). Cost recording, the DeepSeek
-    provider pin, and the per-level reasoning policy (level 1 → reasoning off,
-    else xhigh) are all baked into the provider. The caller owns closing the
-    returned client (pair with :func:`_aclose_async_client`).
+    defaults (L1/L2 → OpenRouter providers). Cost recording, the provider pin,
+    and the per-level reasoning policy (level 1 → reasoning off, else xhigh)
+    are all baked into the provider. The caller owns closing the returned
+    client (pair with :func:`_aclose_async_client`).
     """
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
@@ -102,7 +102,7 @@ def new_deepseek_model(model_name: str, level: int):
 
 
 def build_openrouter_model(level: int | str = 1, *, online: bool = False):
-    """``(model, http_client)`` for a DeepSeek (L1/L2) agent built directly
+    """``(model, http_client)`` for an OpenRouter (L1/L2) agent built directly
     (web_research, web_knowledge, trace_inspector, consult_expert).
 
     When *level* is an int, resolves the concrete model via llmio's tier
@@ -121,7 +121,7 @@ def build_openrouter_model(level: int | str = 1, *, online: bool = False):
         level_int = level
     if online:
         model_name = f"{model_name}:online"
-    return new_deepseek_model(model_name, level_int)
+    return new_openrouter_model(model_name, level_int)
 
 
 class AgentHandle:
@@ -398,7 +398,7 @@ def compose_prompt(
     return prompt
 
 
-def _build_deepseek_handle(
+def _build_openrouter_handle(
     settings: Settings,
     *,
     effective_model: str,
@@ -410,16 +410,17 @@ def _build_deepseek_handle(
     retries: int,
     max_tokens: int | None = None,
 ) -> AgentHandle:
-    """Build the DeepSeek/OpenRouter ``AgentHandle`` for an agent.
+    """Build the OpenRouter ``AgentHandle`` for an agent.
 
-    The model (cost recording + DeepSeek pin + per-level reasoning policy) comes
-    from llmio via :func:`new_deepseek_model`; this function only assembles the
-    pydantic-ai ``Agent`` so per-agent ``max_tokens``/tools/name are preserved.
+    The model (cost recording + provider pin + per-level reasoning policy)
+    comes from llmio via :func:`new_openrouter_model`; this function only
+    assembles the pydantic-ai ``Agent`` so per-agent
+    ``max_tokens``/tools/name are preserved.
     """
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings
 
-    model, http_client = new_deepseek_model(effective_model, level)
+    model, http_client = new_openrouter_model(effective_model, level)
     agent_kwargs: dict[str, Any] = {
         "model": model,
         "system_prompt": composed_system,
@@ -465,8 +466,7 @@ def build_agent(
     """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4).
 
     The level resolves to ``(transport, model)`` via llmio's baked tier
-    defaults: L1 → DeepSeek flash, L2 → Xiaomi Mimo pro, L3 → Claude SDK opus,
-    L4 → Claude SDK fable-5.
+    defaults (see llmio tier config for current mapping).
     The transport is what selects the backend — there is no separate toggle.
 
     Set ``report_issue=False`` for agents that already emit draft
@@ -575,9 +575,8 @@ def build_agent(
             f"{', '.join(sorted(unreg))}"
         )
     # llmio levels are the single source of provider+model: the baked
-    # tier config maps L1 → DeepSeek flash, L2 → Xiaomi Mimo pro,
-    # L3 → Claude SDK opus.  The tier config is read from llmio — mill
-    # no longer re-implements it.
+    # tier config maps levels to providers and models.  The tier
+    # config is read from llmio — mill no longer re-implements it.
     from robotsix_llmio import get_provider_for_level
     from robotsix_llmio.core.factory import default_tier_config
 
@@ -623,8 +622,8 @@ def build_agent(
         # fanning out many runs at startup can't stall on spawn contention.
         return bound_claude_handle(handle, settings.claude_max_concurrency)
 
-    # --- DeepSeek / OpenRouter (L1/L2) -----------------------------------
-    return _build_deepseek_handle(
+    # --- OpenRouter (L1/L2) ------------------------------------------------
+    return _build_openrouter_handle(
         settings,
         effective_model=tlc.model_name,
         level=level,

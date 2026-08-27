@@ -238,8 +238,8 @@ def test_agent_handle_close_is_idempotent():
 # ---------------------------------------------------------------------------
 
 
-def test_build_agent_deepseek_default_path(monkeypatch, settings, level1_model):
-    """build_agent constructs an AgentHandle via _build_deepseek_handle when
+def test_build_agent_openrouter_default_path(monkeypatch, settings, level1_model):
+    """build_agent constructs an AgentHandle via _build_openrouter_handle when
     the resolved transport is DeepSeek/OpenRouter (levels 1 & 2)."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -249,17 +249,17 @@ def test_build_agent_deepseek_default_path(monkeypatch, settings, level1_model):
 
     _cfg._secrets = Secrets(openrouter_api_key="sk-test")
 
-    # Capture the kwargs passed to _build_deepseek_handle.
+    # Capture the kwargs passed to _build_openrouter_handle.
     captured_kwargs: list[dict] = []
 
-    def fake_build_deepseek(settings, **kwargs):
+    def fake_build_openrouter(settings, **kwargs):
         captured_kwargs.append(kwargs)
         handle = MagicMock()
         handle._agent = MagicMock()
         handle._http_client = MagicMock()
         return handle
 
-    monkeypatch.setattr(bmod, "_build_deepseek_handle", fake_build_deepseek)
+    monkeypatch.setattr(bmod, "_build_openrouter_handle", fake_build_openrouter)
 
     bmod.build_agent(
         settings,
@@ -291,14 +291,14 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings, level1_mod
 
     captured_kwargs: list[dict] = []
 
-    def fake_build_deepseek(settings, **kwargs):
+    def fake_build_openrouter(settings, **kwargs):
         captured_kwargs.append(kwargs)
         handle = MagicMock()
         handle._agent = MagicMock()
         handle._http_client = MagicMock()
         return handle
 
-    monkeypatch.setattr(bmod, "_build_deepseek_handle", fake_build_deepseek)
+    monkeypatch.setattr(bmod, "_build_openrouter_handle", fake_build_openrouter)
 
     bmod.build_agent(
         settings,
@@ -322,14 +322,14 @@ def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
 
     captured_kwargs: list[dict] = []
 
-    def fake_build_deepseek(settings, **kwargs):
+    def fake_build_openrouter(settings, **kwargs):
         captured_kwargs.append(kwargs)
         handle = MagicMock()
         handle._agent = MagicMock()
         handle._http_client = MagicMock()
         return handle
 
-    monkeypatch.setattr(bmod, "_build_deepseek_handle", fake_build_deepseek)
+    monkeypatch.setattr(bmod, "_build_openrouter_handle", fake_build_openrouter)
 
     bmod.build_agent(
         settings,
@@ -353,14 +353,14 @@ def test_build_agent_injects_report_issue_tool_by_default(monkeypatch, settings)
 
     captured_tools: list[list] = []
 
-    def fake_build_deepseek(settings, **kwargs):
+    def fake_build_openrouter(settings, **kwargs):
         captured_tools.append(kwargs["all_tools"])
         handle = MagicMock()
         handle._agent = MagicMock()
         handle._http_client = MagicMock()
         return handle
 
-    monkeypatch.setattr(bmod, "_build_deepseek_handle", fake_build_deepseek)
+    monkeypatch.setattr(bmod, "_build_openrouter_handle", fake_build_openrouter)
 
     bmod.build_agent(
         settings,
@@ -385,14 +385,14 @@ def test_build_agent_report_issue_false_omits_tool(monkeypatch, settings):
 
     captured_tools: list[list] = []
 
-    def fake_build_deepseek(settings, **kwargs):
+    def fake_build_openrouter(settings, **kwargs):
         captured_tools.append(kwargs["all_tools"])
         handle = MagicMock()
         handle._agent = MagicMock()
         handle._http_client = MagicMock()
         return handle
 
-    monkeypatch.setattr(bmod, "_build_deepseek_handle", fake_build_deepseek)
+    monkeypatch.setattr(bmod, "_build_openrouter_handle", fake_build_openrouter)
 
     explicit_tool = MagicMock()
     bmod.build_agent(
@@ -437,7 +437,7 @@ def test_build_agent_composes_prompt(monkeypatch, settings):
 
     monkeypatch.setattr(bmod, "compose_prompt", fake_compose_prompt)
     monkeypatch.setattr(
-        bmod, "_build_deepseek_handle", lambda settings, **kw: MagicMock()
+        bmod, "_build_openrouter_handle", lambda settings, **kw: MagicMock()
     )
 
     bmod.build_agent(
@@ -569,14 +569,14 @@ def test_build_agent_claude_sdk_path(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _build_deepseek_handle
+# _build_openrouter_handle
 # ---------------------------------------------------------------------------
 
 
-def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
-    """_build_deepseek_handle constructs a pydantic-ai Agent with the
+def test_build_openrouter_handle_constructs_agent(monkeypatch, settings):
+    """_build_openrouter_handle constructs a pydantic-ai Agent with the
     correct parameters and returns an AgentHandle. The model + http client
-    come from llmio via new_deepseek_model."""
+    come from llmio via new_openrouter_model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -585,7 +585,7 @@ def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
 
     _cfg._secrets = Secrets(openrouter_api_key="sk-test")
 
-    # Mock pydantic_ai.Agent (local import inside _build_deepseek_handle).
+    # Mock pydantic_ai.Agent (local import inside _build_openrouter_handle).
     fake_agent = MagicMock()
     fake_agent_cls = MagicMock(return_value=fake_agent)
     monkeypatch.setattr("pydantic_ai.Agent", fake_agent_cls, raising=False)
@@ -595,17 +595,17 @@ def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
     fake_client = MagicMock()
     captured_call: dict = {}
 
-    def fake_new_deepseek(model_name, level):
+    def fake_new_openrouter(model_name, level):
         captured_call["model_name"] = model_name
         captured_call["level"] = level
         return fake_model, fake_client
 
-    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
+    monkeypatch.setattr(bmod, "new_openrouter_model", fake_new_openrouter)
 
     fake_tool = MagicMock()
     fake_tool.__name__ = "fake_tool"
 
-    handle = bmod._build_deepseek_handle(
+    handle = bmod._build_openrouter_handle(
         settings,
         effective_model="deepseek/deepseek-v4-flash",
         level=1,
@@ -633,7 +633,7 @@ def test_build_deepseek_handle_constructs_agent(monkeypatch, settings):
     assert agent_kwargs["name"] == "test-agent"
 
 
-def test_build_deepseek_handle_with_max_tokens(monkeypatch, settings):
+def test_build_openrouter_handle_with_max_tokens(monkeypatch, settings):
     """When max_tokens is provided, ModelSettings is included in Agent kwargs."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -646,10 +646,12 @@ def test_build_deepseek_handle_with_max_tokens(monkeypatch, settings):
     fake_agent_cls = MagicMock()
     monkeypatch.setattr("pydantic_ai.Agent", fake_agent_cls, raising=False)
     monkeypatch.setattr(
-        bmod, "new_deepseek_model", lambda model_name, level: (MagicMock(), MagicMock())
+        bmod,
+        "new_openrouter_model",
+        lambda model_name, level: (MagicMock(), MagicMock()),
     )
 
-    bmod._build_deepseek_handle(
+    bmod._build_openrouter_handle(
         settings,
         effective_model="deepseek/deepseek-v4-flash",
         level=1,
@@ -667,16 +669,16 @@ def test_build_deepseek_handle_with_max_tokens(monkeypatch, settings):
     assert agent_kwargs["model_settings"]["max_tokens"] == 4096
 
 
-def test_build_deepseek_handle_requires_api_key(monkeypatch, settings):
-    """_build_deepseek_handle raises RuntimeError when no API key is set —
-    new_deepseek_model guards on the key."""
+def test_build_openrouter_handle_requires_api_key(monkeypatch, settings):
+    """_build_openrouter_handle raises RuntimeError when no API key is set —
+    new_openrouter_model guards on the key."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import _reset_secrets
 
     _reset_secrets()
 
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
-        bmod._build_deepseek_handle(
+        bmod._build_openrouter_handle(
             settings,
             effective_model="deepseek/deepseek-v4-flash",
             level=1,
@@ -1007,7 +1009,7 @@ def test_build_openrouter_model_resolves_level_to_model(
     monkeypatch, settings, level1_model
 ):
     """build_openrouter_model resolves the level to a concrete model and
-    delegates to new_deepseek_model, returning its (model, client)."""
+    delegates to new_openrouter_model, returning its (model, client)."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -1020,12 +1022,12 @@ def test_build_openrouter_model_resolves_level_to_model(
     fake_client = MagicMock()
     captured: dict = {}
 
-    def fake_new_deepseek(model_name, level):
+    def fake_new_openrouter(model_name, level):
         captured["model_name"] = model_name
         captured["level"] = level
         return fake_model, fake_client
 
-    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
+    monkeypatch.setattr(bmod, "new_openrouter_model", fake_new_openrouter)
 
     model, client = bmod.build_openrouter_model(1)
 
@@ -1053,11 +1055,11 @@ def test_build_openrouter_model_online_appends_suffix(
 
     captured: dict = {}
 
-    def fake_new_deepseek(model_name, level):
+    def fake_new_openrouter(model_name, level):
         captured["model_name"] = model_name
         return MagicMock(), MagicMock()
 
-    monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
+    monkeypatch.setattr(bmod, "new_openrouter_model", fake_new_openrouter)
 
     bmod.build_openrouter_model(1, online=True)
     assert captured["model_name"] == f"{level1_model}:online"

@@ -360,12 +360,16 @@ Per-agent model selection is declared in each **agent definition's**
 is no per-agent model config in the JSON config file and no global backend
 toggle. The level *is* the backend choice.
 
-| Level | Transport | Model | Intent |
-|-------|-----------|-------|--------|
-| 1 | `openrouter[deepseek]` | `deepseek/deepseek-v4-flash` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
-| 2 | `openrouter[deepseek]` | `deepseek/deepseek-v4-pro` | intermediate — implement, ci_fix, review, test, … |
-| 3 | `claude-sdk` | `opus` | high-level planning — refine, meta_triage |
-| 4 | `claude-sdk` | `fable-5` | intermediate planning — epic_breakdown |
+| Level | Transport | Intent |
+|-------|-----------|--------|
+| 1 | `openrouter` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
+| 2 | `openrouter` | intermediate — implement, ci_fix, review, test, … |
+| 3 | `claude-sdk` | high-level planning — refine, meta_triage |
+| 4 | `claude-sdk` | intermediate planning — epic_breakdown |
+
+> **Note:** The concrete model behind each level is owned by robotsix-llmio's
+> tier defaults and may change without notice in mill.  To see or override the
+> current binding, consult llmio's tier configuration.
 
 Level-3 agents run on the Claude Agent SDK (subscription auth; needs Node +
 the `claude` CLI in the container). These knobs govern that path:
@@ -557,7 +561,7 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| — | `MILL_WEB_KNOWLEDGE_MODEL` | `deepseek/deepseek-v4-flash-20260731` | Web-knowledge gateway sub-agent model — multi-turn flash agent that owns the per-library Markdown knowledge base and decides autonomously whether to answer from cache or web-search. Every agent's route to the internet flows through this gateway. |
+| — | `MILL_WEB_KNOWLEDGE_MODEL` | `""` | Web-knowledge gateway sub-agent model — multi-turn flash agent that owns the per-library Markdown knowledge base and decides autonomously whether to answer from cache or web-search. Every agent's route to the internet flows through this gateway. When empty, resolves to the llmio tier-1 model at use time. |
 | — | `MILL_WEB_KNOWLEDGE_STALE_DAYS` | `30` | Days before a cached web-knowledge .md file is considered stale. A consult that hits a stale file is allowed to web-search and update it. Users can tune this to match their tolerance for stale documentation. |
 | `core.web_knowledge_cache_ttl_hours` | — | `72` | (config-file-only) Hours since the last `last_verified` touch before a cached knowledge file is flagged `[STALE]` in the agent's index. When flagged, the web_knowledge agent's system prompt warns it to cross-check claims with `web_search` before trusting cached data. |
 | — | `MILL_WEB_KNOWLEDGE_REQUEST_LIMIT` | `16` | Per-consult request cap for the web-knowledge sub-agent. Each request is one Markdown read, one web-search, or one Markdown write. |

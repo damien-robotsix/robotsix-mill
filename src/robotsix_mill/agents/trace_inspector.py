@@ -91,7 +91,7 @@ trace's own per-observation ``model`` / ``usage`` /
 below:
 
 - **``cost_outlier``**: confirm the cost concentrates in genuinely
-  expensive work, NOT a high-volume *cheap* model. A ``deepseek`` /
+  expensive work, NOT a high-volume *cheap* model. An L1/flash /
   flash sub-agent can rack up huge token counts while its
   ``calculatedTotalCost`` stays negligible — often because of a high
   prompt-cache hit rate. A high token count on a cheap model is **not**
@@ -610,7 +610,7 @@ def run_trace_inspector(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
         # PromptedOutput tolerates providers that 404 on forced
-        # tool_choice (DeepSeek's OpenRouter endpoint among others).
+        # tool_choice (some OpenRouter endpoints among others).
         output_type=PromptedOutput(TraceInspectResult),
         tools=tools,
     )

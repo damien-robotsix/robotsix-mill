@@ -299,7 +299,7 @@ def run_retrospect_agent(
     # model has no OpenRouter endpoint for the forced `tool_choice`
     # ToolOutput needs (404), and it doesn't support NativeOutput
     # either — but it produces schema-valid JSON from a prompt fine.
-    # This keeps retrospect on the cheap model (no deepseek cost).
+    # This keeps retrospect on the cheap model (no per-token cost).
     agent = build_agent_from_definition(
         settings,
         definition,
@@ -314,7 +314,7 @@ def run_retrospect_agent(
     # JSON parsing, avoiding the retry loop for this class of error.
     from pydantic_ai.capabilities import Hooks
 
-    # The pre-parse repair hook is a pydantic-ai capability AND a DeepSeek-
+    # The pre-parse repair hook is a pydantic-ai capability AND an
     # output-quirk workaround. It only applies on the pydantic-ai/OpenRouter
     # path; the Claude SDK transport handle has no ``root_capability`` (and
     # the SDK owns its own loop + emits clean JSON), so skip it there.

@@ -156,14 +156,14 @@ def run_implement_agent(
             log.warning(
                 "implement: provider error on primary model "
                 "(finish_reason='error') (%s) — not output-token "
-                "exhaustion; falling back to level-1 (deepseek flash), "
+                "exhaustion; falling back to level-1 (OpenRouter), "
                 "which may also fail",
                 e,
             )
         else:
             log.warning(
                 "implement: output retries exhausted on primary model, "
-                "falling back to level-1 (deepseek flash)",
+                "falling back to level-1 (OpenRouter)",
             )
         # Capture partial progress: the pro model may have written valid
         # edits before its structured output was rejected.  Tell the flash

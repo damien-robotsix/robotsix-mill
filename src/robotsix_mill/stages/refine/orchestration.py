@@ -595,9 +595,7 @@ class RefineAgentMixin:
                     "refine.model_alias", refine_model if refine_model else "opus"
                 )
             else:
-                set_current_span_attribute(
-                    "refine.model_alias", f"deepseek-l{resolved_level}"
-                )
+                set_current_span_attribute("refine.model_alias", f"l{resolved_level}")
 
             _sendback = bool(reviewer_comments)
 
@@ -638,7 +636,7 @@ class RefineAgentMixin:
 
             if _is_claude_sdk_degenerate_result(e):
                 log.info(
-                    "%s: Claude SDK degenerate success result — retrying with DeepSeek",
+                    "%s: Claude SDK degenerate success result — retrying with OpenRouter",
                     ticket.id,
                 )
                 try:

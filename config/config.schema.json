@@ -3143,8 +3143,8 @@
         },
         "web_knowledge_model": {
           "advanced": true,
-          "default": "deepseek/deepseek-v4-flash-20260731",
-          "description": "Model alias for the web-knowledge gateway sub-agent.",
+          "default": "",
+          "description": "Model alias for the web-knowledge gateway sub-agent. When empty, resolves to the llmio tier-1 model at use time.",
           "title": "Web Knowledge Model",
           "type": "string"
         },
