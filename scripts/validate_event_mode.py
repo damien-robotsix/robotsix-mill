@@ -44,7 +44,7 @@ def main() -> int:
 
     # --- cheap/fast model override --------------------------------------
     # Use a flash-tier model to keep cost minimal — configurable via env.
-    model_name = os.environ.get("VALIDATE_MODEL", "deepseek/deepseek-v4-flash")
+    model_name = os.environ.get("VALIDATE_MODEL", "deepseek/deepseek-v4-flash-20260731")
 
     # --- enable event-mode tracing --------------------------------------
     from robotsix_mill.runtime.tracing import (

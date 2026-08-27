@@ -44,7 +44,7 @@ def main() -> int:
         s,
         system_prompt="You are terse. Reply with a single word.",
         name="fallback-live",
-        model_name="deepseek/deepseek-v4-flash",
+        model_name="deepseek/deepseek-v4-flash-20260731",
         report_issue=False,
         reply_to_thread=False,
         close_thread=False,
